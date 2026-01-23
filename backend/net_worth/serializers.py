@@ -4,14 +4,40 @@ from rest_framework import serializers
 from .models import Asset, Liability, NetWorthSnapshot
 
 
+class EmptySerializer(serializers.Serializer):
+    pass
+
+
 class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
-        fields = ["id", "name", "category", "amount", "notes", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "name",
+            "category",
+            "tracking_mode",
+            "accounting_account_id",
+            "currency",
+            "amount",
+            "is_active",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
+        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
+
+        # si está en modo contabilidad, recomendamos tener referencia
+        if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
+            raise serializers.ValidationError(
+                {"accounting_account_id": "Requerido si tracking_mode=accounting (placeholder hasta que exista contabilidad)."}
+            )
+        return attrs
+
     def create(self, validated_data):
-        # Forzamos usuario desde request
         request = self.context["request"]
         return Asset.objects.create(user=request.user, **validated_data)
 
@@ -19,8 +45,30 @@ class AssetSerializer(serializers.ModelSerializer):
 class LiabilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Liability
-        fields = ["id", "name", "category", "amount", "notes", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "name",
+            "category",
+            "tracking_mode",
+            "accounting_account_id",
+            "currency",
+            "amount",
+            "is_active",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
+        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
+
+        if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
+            raise serializers.ValidationError(
+                {"accounting_account_id": "Requerido si tracking_mode=accounting (placeholder hasta que exista contabilidad)."}
+            )
+        return attrs
 
     def create(self, validated_data):
         request = self.context["request"]
@@ -41,7 +89,6 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
     def validate(self, attrs):
-        # Si no viene net_worth lo calculamos; si viene, validamos coherencia
         total_assets = attrs.get("total_assets")
         total_liabilities = attrs.get("total_liabilities")
         net_worth = attrs.get("net_worth")
@@ -52,9 +99,7 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
                 attrs["net_worth"] = computed
             else:
                 if net_worth != computed:
-                    raise serializers.ValidationError(
-                        {"net_worth": "net_worth debe ser total_assets - total_liabilities"}
-                    )
+                    raise serializers.ValidationError({"net_worth": "net_worth debe ser total_assets - total_liabilities"})
         return attrs
 
     def create(self, validated_data):
