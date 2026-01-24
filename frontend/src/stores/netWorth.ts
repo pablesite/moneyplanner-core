@@ -77,5 +77,66 @@ export const useNetWorthStore = defineStore("netWorth", {
         this.loading = false;
       }
     },
+
+    async createAsset(payload: Partial<Asset>) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await api.post("/api/net-worth/assets/", payload);
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateAsset(id: number, payload: Partial<Asset>) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await api.patch(`/api/net-worth/assets/${id}/`, payload);
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async archiveAsset(id: number) {
+      return this.updateAsset(id, { is_active: false });
+    },
+
+    async createLiability(payload: Partial<Liability>) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await api.post("/api/net-worth/liabilities/", payload);
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateLiability(id: number, payload: Partial<Liability>) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await api.patch(`/api/net-worth/liabilities/${id}/`, payload);
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async archiveLiability(id: number) {
+      return this.updateLiability(id, { is_active: false });
+    },
+
   },
 });
