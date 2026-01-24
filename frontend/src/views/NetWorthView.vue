@@ -6,6 +6,13 @@ import ItemList from "@/components/ItemList.vue";
 
 const store = useNetWorthStore();
 
+const currencies = [
+  { value: "EUR", label: "EUR" },
+  { value: "USD", label: "USD" },
+  { value: "BTC", label: "BTC" },
+  { value: "ETH", label: "ETH" },
+];
+
 const assetCategories = [
   { value: "cash", label: "Liquidez" },
   { value: "investments", label: "Inversiones" },
@@ -21,8 +28,20 @@ const liabilityCategories = [
   { value: "other", label: "Otros" },
 ];
 
-onMounted(() => {
-  store.refreshAll();
+const prettyError = () => {
+  if (!store.error) return null;
+  try {
+    const parsed = JSON.parse(store.error);
+    if (parsed?.detail) return parsed.detail;
+    return store.error;
+  } catch {
+    return store.error;
+  }
+};
+
+onMounted(async () => {
+  await store.fetchSettings();
+  await store.refreshAll();
 });
 </script>
 
@@ -31,25 +50,53 @@ onMounted(() => {
     <h1 class="h1">Patrimonio</h1>
 
     <div v-if="store.error" class="alert">
-      {{ store.error }}
+      {{ prettyError() }}
     </div>
 
     <div class="toolbar">
       <div class="grid-3" style="flex: 1; min-width: 320px;">
         <div class="card">
           <div class="card-title">Total activos</div>
-          <div class="card-value">{{ store.summary?.total_assets ?? "-" }}</div>
+          <div class="card-value">
+            {{ store.summary?.total_assets ?? "-" }}
+            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+          </div>
         </div>
 
         <div class="card">
           <div class="card-title">Total pasivos</div>
-          <div class="card-value">{{ store.summary?.total_liabilities ?? "-" }}</div>
+          <div class="card-value">
+            {{ store.summary?.total_liabilities ?? "-" }}
+            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+          </div>
         </div>
 
         <div class="card">
           <div class="card-title">Patrimonio neto</div>
-          <div class="card-value">{{ store.summary?.net_worth ?? "-" }}</div>
+          <div class="card-value">
+            {{ store.summary?.net_worth ?? "-" }}
+            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+          </div>          
         </div>
+      </div>
+
+      <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 14px;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <div class="card-title">Moneda base</div>
+          <div class="subtle" style="font-size:12px;">Totales y snapshots en esta moneda</div>
+        </div>
+
+        <select
+          class="input"
+          style="width: 110px;"
+          :value="store.baseCurrency ?? 'EUR'"
+          @change="store.updateBaseCurrency(($event.target as HTMLSelectElement).value)"
+          :disabled="store.loading"
+        >
+          <option v-for="c in currencies" :key="c.value" :value="c.value">
+            {{ c.label }}
+          </option>
+        </select>
       </div>
 
       <button class="btn btn-primary" @click="store.createTodaySnapshot()" :disabled="store.loading">
@@ -90,8 +137,10 @@ onMounted(() => {
 
       <ul v-if="store.snapshots.length" style="margin: 0; padding-left: 18px; display: grid; gap: 8px;">
         <li v-for="s in store.snapshots" :key="s.id">
-          {{ s.snapshot_date }} — neto: {{ s.net_worth }}
-          <span class="subtle">(activos {{ s.total_assets }}, pasivos {{ s.total_liabilities }})</span>
+          {{ s.snapshot_date }} — neto: {{ s.net_worth }} {{ s.base_currency }}
+          <span class="subtle">
+            (activos {{ s.total_assets }} {{ s.base_currency }}, pasivos {{ s.total_liabilities }} {{ s.base_currency }})
+          </span>
         </li>
       </ul>
 

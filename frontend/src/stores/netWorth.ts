@@ -18,6 +18,7 @@ export type Liability = Asset;
 export type Snapshot = {
   id: number;
   snapshot_date: string;
+  base_currency: string;
   total_assets: string;
   total_liabilities: string;
   net_worth: string;
@@ -25,6 +26,7 @@ export type Snapshot = {
 };
 
 export type Summary = {
+  base_currency: string;
   total_assets: string;
   total_liabilities: string;
   net_worth: string;
@@ -36,6 +38,8 @@ export const useNetWorthStore = defineStore("netWorth", {
   state: () => ({
     loading: false as boolean,
     error: null as string | null,
+
+    baseCurrency: null as string | null,
 
     summary: null as Summary | null,
     assets: [] as Asset[],
@@ -56,6 +60,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         ]);
 
         this.summary = summaryRes.data;
+        this.baseCurrency = summaryRes.data.base_currency;
         this.assets = assetsRes.data;
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
@@ -138,5 +143,36 @@ export const useNetWorthStore = defineStore("netWorth", {
       return this.updateLiability(id, { is_active: false });
     },
 
+
+    async fetchSettings() {
+      try {
+        const res = await api.get("/api/auth/settings/");
+        this.baseCurrency = res.data.base_currency;
+      } catch (e: any) {
+        this.error = e?.response?.data
+          ? JSON.stringify(e.response.data)
+          : (e?.message || "Error");
+      }
+    },
+
+    async updateBaseCurrency(currency: string) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const res = await api.put("/api/auth/settings/", {
+          base_currency: currency,
+        });
+        this.baseCurrency = res.data.base_currency;
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data
+          ? JSON.stringify(e.response.data)
+          : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
   },
+
 });

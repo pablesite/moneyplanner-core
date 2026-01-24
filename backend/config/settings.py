@@ -22,7 +22,7 @@ INSTALLED_APPS = [
 
     # apps
     "core",
-    "accounts",
+    "accounts.apps.AccountsConfig",
     "net_worth",
 ]
 

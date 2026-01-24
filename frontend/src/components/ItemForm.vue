@@ -9,6 +9,14 @@ type Props = {
 
 const props = defineProps<Props>();
 
+const currencies = [
+  { value: "EUR", label: "EUR" },
+  { value: "USD", label: "USD" },
+  { value: "BTC", label: "BTC" },
+  { value: "ETH", label: "ETH" },
+];
+
+
 const form = reactive({
   name: "",
   category: "",
@@ -53,6 +61,12 @@ async function submit() {
         </option>
       </select>
 
+      <select v-model="form.currency" class="select">
+        <option v-for="c in currencies" :key="c.value" :value="c.value">
+          {{ c.label }}
+        </option>
+      </select>
+      
       <input v-model="form.amount" type="number" step="0.01" placeholder="Importe" class="input" />
 
       <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>

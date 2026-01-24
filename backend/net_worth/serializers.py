@@ -81,6 +81,7 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "snapshot_date",
+            "base_currency",
             "total_assets",
             "total_liabilities",
             "net_worth",

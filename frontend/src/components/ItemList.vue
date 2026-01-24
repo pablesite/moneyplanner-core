@@ -21,6 +21,13 @@ type Props = {
 
 const props = defineProps<Props>();
 
+const currencies = [
+  { value: "EUR", label: "EUR" },
+  { value: "USD", label: "USD" },
+  { value: "BTC", label: "BTC" },
+  { value: "ETH", label: "ETH" },
+];
+
 const editingId = ref<number | null>(null);
 const draft = ref<any>({});
 
@@ -30,6 +37,7 @@ function startEdit(item: Item) {
     name: item.name,
     category: item.category,
     amount: item.amount,
+    currency: item.currency,
     notes: item.notes,
     is_active: item.is_active,
   };
@@ -74,7 +82,13 @@ async function saveEdit(id: number) {
             </option>
           </select>
 
-          <input v-model="draft.amount" type="number" step="0.01" class="input" />
+          <select v-model="draft.currency" class="select">
+            <option v-for="c in currencies" :key="c.value" :value="c.value">
+              {{ c.label }}
+            </option>
+          </select>
+
+          <input v-model="draft.amount" type="number" step="0.01" class="input" />          
 
           <textarea v-model="draft.notes" rows="2" class="textarea"></textarea>
 

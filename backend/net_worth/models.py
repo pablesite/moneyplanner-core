@@ -100,6 +100,8 @@ class NetWorthSnapshot(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_worth_snapshots")
     snapshot_date = models.DateField(default=timezone.now)
 
+    base_currency = models.CharField(max_length=3, default="EUR")
+
     total_assets = models.DecimalField(max_digits=14, decimal_places=2)
     total_liabilities = models.DecimalField(max_digits=14, decimal_places=2)
     net_worth = models.DecimalField(max_digits=14, decimal_places=2)
