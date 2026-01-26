@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import FxRate
+from .models import FxRate, InflationIndex
 
 
 @admin.register(FxRate)
@@ -27,3 +27,21 @@ class FxRateAdmin(admin.ModelAdmin):
         "to_currency",
     )
     date_hierarchy = "rate_date"
+
+
+@admin.register(InflationIndex)
+class InflationIndexAdmin(admin.ModelAdmin):
+    list_display = (
+        "region",
+        "period",
+        "index",
+        "updated_at",
+    )
+    list_filter = (
+        "region",
+        "period",
+    )
+    ordering = (
+        "-period",
+    )
+    date_hierarchy = "period"

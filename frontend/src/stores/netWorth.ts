@@ -27,11 +27,25 @@ export type Snapshot = {
 
 export type Summary = {
   base_currency: string;
+
   total_assets: string;
   total_liabilities: string;
   net_worth: string;
+
   assets_by_category: Record<string, string>;
   liabilities_by_category: Record<string, string>;
+
+  // IPC (solo si base_currency === "EUR")
+  inflation_region: string | null;
+  inflation_base_period: string | null;
+
+  total_assets_real: string | null;
+  total_liabilities_real: string | null;
+  net_worth_real: string | null;
+
+  assets_by_category_real: Record<string, string> | null;
+  liabilities_by_category_real: Record<string, string> | null;
+
 };
 
 export const useNetWorthStore = defineStore("netWorth", {

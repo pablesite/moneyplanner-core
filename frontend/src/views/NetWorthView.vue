@@ -1,10 +1,24 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useNetWorthStore } from "@/stores/netWorth";
 import ItemForm from "@/components/ItemForm.vue";
 import ItemList from "@/components/ItemList.vue";
 
+
 const store = useNetWorthStore();
+
+const valueMode = ref<"nominal" | "real">("nominal");
+
+const canShowReal = () => store.baseCurrency === "EUR" && !!store.summary?.net_worth_real;
+
+watch(
+  () => store.baseCurrency,
+  (c) => {
+    if (c !== "EUR" && valueMode.value === "real") {
+      valueMode.value = "nominal";
+    }
+  }
+);
 
 const currencies = [
   { value: "EUR", label: "EUR" },
@@ -39,6 +53,12 @@ const prettyError = () => {
   }
 };
 
+const pick = (nominal?: string, real?: string) => {
+  if (valueMode.value === "real") return real ?? "-";
+  return nominal ?? "-";
+};
+
+
 onMounted(async () => {
   await store.fetchSettings();
   await store.refreshAll();
@@ -58,7 +78,7 @@ onMounted(async () => {
         <div class="card">
           <div class="card-title">Total activos</div>
           <div class="card-value">
-            {{ store.summary?.total_assets ?? "-" }}
+            {{ pick(store.summary?.total_assets, store.summary?.total_assets_real) }}
             <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
           </div>
         </div>
@@ -66,7 +86,7 @@ onMounted(async () => {
         <div class="card">
           <div class="card-title">Total pasivos</div>
           <div class="card-value">
-            {{ store.summary?.total_liabilities ?? "-" }}
+            {{ pick(store.summary?.total_liabilities, store.summary?.total_liabilities_real) }}
             <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
           </div>
         </div>
@@ -74,12 +94,13 @@ onMounted(async () => {
         <div class="card">
           <div class="card-title">Patrimonio neto</div>
           <div class="card-value">
-            {{ store.summary?.net_worth ?? "-" }}
+            {{ pick(store.summary?.net_worth, store.summary?.net_worth_real) }}
             <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
-          </div>          
+          </div>
         </div>
       </div>
 
+      <!-- Moneda base -->
       <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 14px;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <div class="card-title">Moneda base</div>
@@ -97,6 +118,32 @@ onMounted(async () => {
             {{ c.label }}
           </option>
         </select>
+      </div>
+
+      <!-- Modo nominal/real -->
+      <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 14px;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <div class="card-title">Modo</div>
+          <div class="subtle" style="font-size:12px;">
+            {{ valueMode === "real" ? "Euros constantes (IPC)" : "Nominal" }}
+          </div>
+          <div
+            v-if="valueMode === 'real' && store.summary?.inflation_base_period"
+            class="subtle"
+            style="font-size:12px;"
+          >
+            Base: {{ store.summary.inflation_base_period }}
+          </div>
+        </div>
+
+        <select class="input" style="width: 150px;" v-model="valueMode">
+          <option value="nominal">Nominal</option>
+          <option value="real" :disabled="!canShowReal()">Real (IPC)</option>
+        </select>
+
+        <div v-if="store.baseCurrency !== 'EUR'" class="subtle" style="font-size:12px;">
+          Solo disponible con EUR
+        </div>
       </div>
 
       <button class="btn btn-primary" @click="store.createTodaySnapshot()" :disabled="store.loading">

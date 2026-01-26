@@ -3,13 +3,30 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import FxRate
+from .models import FxRate, InflationIndex
 
 
 def _quantize_2(amount: Decimal) -> Decimal:
     # Redondeo estándar financiero a 2 decimales (v1).
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+def _month_start(d) -> timezone.datetime.date:
+    # Normaliza a primer día del mes (YYYY-MM-01)
+    return d.replace(day=1)
+
+def _get_inflation_index(region: str, period_month) -> Decimal:
+    """
+    Devuelve el índice del mes 'period_month' (YYYY-MM-01) con fallback:
+    último índice con period <= period_month.
+    """
+    row = (
+        InflationIndex.objects.filter(region=region, period__lte=period_month)
+        .order_by("-period")
+        .first()
+    )
+    if not row:
+        raise ValidationError(f"Missing inflation index for region={region} on or before {period_month}.")
+    return Decimal(row.index)
 
 def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date=None) -> Decimal:
     """
@@ -68,3 +85,52 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
         return _quantize_2(amount / inverse.rate)
 
     raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
+
+
+def get_latest_inflation_period(region: str = InflationIndex.Region.ES):
+    row = InflationIndex.objects.filter(region=region).order_by("-period").first()
+    if not row:
+        raise ValidationError(f"Missing inflation index for region={region}.")
+    return row.period
+
+
+def adjust_for_inflation(
+    amount: Decimal,
+    date=None,
+    region: str = InflationIndex.Region.ES,
+    base_period=None,
+) -> Decimal:
+    """
+    Convierte un valor nominal en 'date' a euros constantes del 'base_period' (mes base).
+
+    Fórmula:
+      real = nominal * (index_base / index_date)
+
+    - date: si None -> hoy
+    - base_period: si None -> último índice disponible (más reciente) para esa región
+    - Fallback: si falta índice exacto, usa el último anterior.
+    """
+    if amount is None:
+        raise ValidationError("Amount is required.")
+
+    amount = Decimal(amount)
+    d = date or timezone.localdate()
+    d_month = _month_start(d)
+
+    if base_period is None:
+        base_row = InflationIndex.objects.filter(region=region).order_by("-period").first()
+        if not base_row:
+            raise ValidationError(f"Missing inflation index for region={region}.")
+        base_month = base_row.period
+        index_base = Decimal(base_row.index)
+    else:
+        base_month = _month_start(base_period)
+        index_base = _get_inflation_index(region, base_month)
+
+    index_date = _get_inflation_index(region, d_month)
+
+    if index_date == 0:
+        raise ValidationError(f"Invalid inflation index: region={region} period={d_month} is 0.")
+
+    real = amount * (index_base / index_date)
+    return _quantize_2(real)
