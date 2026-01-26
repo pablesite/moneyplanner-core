@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.utils import timezone
 
 class FxRate(models.Model):
     """
@@ -9,6 +9,8 @@ class FxRate(models.Model):
     Ej: USD -> EUR, rate=0.92  =>  1 USD = 0.92 EUR
     """
 
+    rate_date = models.DateField(default=timezone.localdate)
+
     from_currency = models.CharField(max_length=3)
     to_currency = models.CharField(max_length=3)
     rate = models.DecimalField(max_digits=18, decimal_places=8)
@@ -16,10 +18,10 @@ class FxRate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("from_currency", "to_currency")
+        unique_together = ("from_currency", "to_currency", "rate_date")
         indexes = [
-            models.Index(fields=["from_currency", "to_currency"]),
+            models.Index(fields=["from_currency", "to_currency", "rate_date"]),
         ]
 
     def __str__(self) -> str:
-        return f"{self.from_currency} -> {self.to_currency} ({self.rate})"
+        return f"{self.from_currency}->{self.to_currency} {self.rate} ({self.rate_date})"

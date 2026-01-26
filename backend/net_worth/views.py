@@ -72,13 +72,15 @@ class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, viewsets.ReadOnlyModelVie
             tracking_mode=Liability.TrackingMode.MANUAL,
         )
 
+        snapshot_date = timezone.localdate()
+
         try:
             assets_total = sum(
-                (convert_currency(a.amount, a.currency, base_currency) for a in assets_qs),
+                (convert_currency(a.amount, a.currency, base_currency, date=snapshot_date) for a in assets_qs),
                 start=Decimal("0"),
             )
             liabilities_total = sum(
-                (convert_currency(l.amount, l.currency, base_currency) for l in liabilities_qs),
+                (convert_currency(l.amount, l.currency, base_currency, date=snapshot_date) for l in liabilities_qs),
                 start=Decimal("0"),
             )
         except ValidationError as e:
@@ -88,7 +90,6 @@ class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, viewsets.ReadOnlyModelVie
             )
 
         net = assets_total - liabilities_total
-        snapshot_date = timezone.localdate()
 
         snapshot, created = NetWorthSnapshot.objects.update_or_create(
             user=request.user,
@@ -125,26 +126,29 @@ class NetWorthSummaryAPIView(APIView):
             tracking_mode=Liability.TrackingMode.MANUAL,
         )
 
+        today = timezone.localdate()
+
         try:
             assets_total = sum(
-                (convert_currency(a.amount, a.currency, base_currency) for a in assets_qs),
+                (convert_currency(a.amount, a.currency, base_currency, date=today) for a in assets_qs),
                 start=Decimal("0"),
             )
             liabilities_total = sum(
-                (convert_currency(l.amount, l.currency, base_currency) for l in liabilities_qs),
+                (convert_currency(l.amount, l.currency, base_currency, date=today) for l in liabilities_qs),
                 start=Decimal("0"),
             )
 
             # Breakdown por categorías en moneda base
             assets_by_category = {}
+            
             for a in assets_qs:
                 assets_by_category.setdefault(a.category, Decimal("0"))
-                assets_by_category[a.category] += convert_currency(a.amount, a.currency, base_currency)
+                assets_by_category[a.category] += convert_currency(a.amount, a.currency, base_currency, date=today)
 
             liabilities_by_category = {}
             for l in liabilities_qs:
                 liabilities_by_category.setdefault(l.category, Decimal("0"))
-                liabilities_by_category[l.category] += convert_currency(l.amount, l.currency, base_currency)
+                liabilities_by_category[l.category] += convert_currency(l.amount, l.currency, base_currency, date=today)
 
         except ValidationError as e:
             return Response(

@@ -1,6 +1,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from .models import FxRate
 
@@ -10,12 +11,16 @@ def _quantize_2(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def convert_currency(amount: Decimal, from_currency: str, to_currency: str) -> Decimal:
+def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date=None) -> Decimal:
     """
     Convierte 'amount' de from_currency a to_currency usando FxRate.
 
     Convención FxRate:
       1 unit de from_currency = rate units de to_currency
+
+    date:
+      - si no se indica, usa hoy (timezone.localdate())
+      - usa fallback: último rate conocido con rate_date <= date
 
     Soporta:
     - rate directo (from->to)
@@ -34,15 +39,32 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str) -> D
         return _quantize_2(Decimal(amount))
 
     amount = Decimal(amount)
+    rate_date = date or timezone.localdate()
 
-    direct = FxRate.objects.filter(from_currency=from_c, to_currency=to_c).first()
+    direct = (
+        FxRate.objects.filter(
+            from_currency=from_c,
+            to_currency=to_c,
+            rate_date__lte=rate_date,
+        )
+        .order_by("-rate_date")
+        .first()
+    )
     if direct:
         return _quantize_2(amount * direct.rate)
 
-    inverse = FxRate.objects.filter(from_currency=to_c, to_currency=from_c).first()
+    inverse = (
+        FxRate.objects.filter(
+            from_currency=to_c,
+            to_currency=from_c,
+            rate_date__lte=rate_date,
+        )
+        .order_by("-rate_date")
+        .first()
+    )
     if inverse:
         if inverse.rate == 0:
             raise ValidationError(f"Invalid FX rate: {to_c}->{from_c} is 0.")
         return _quantize_2(amount / inverse.rate)
 
-    raise ValidationError(f"Missing FX rate for {from_c}->{to_c}.")
+    raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
