@@ -8,12 +8,15 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Asset, Liability, NetWorthSnapshot
+from .models import Asset, Liability, NetWorthSnapshot, FamilyMember, Ownership
 from .serializers import (
     AssetSerializer,
     LiabilitySerializer,
     NetWorthSnapshotSerializer,
     EmptySerializer,
+    FamilyMemberSerializer,
+    OwnershipWriteSerializer,
+    OwnershipReadSerializer, 
 )
 
 from accounts.models import UserSettings
@@ -203,21 +206,16 @@ class NetWorthSummaryAPIView(APIView):
         return Response(
             {
                 "base_currency": base_currency,
-
                 "total_assets": str(assets_total),
                 "total_liabilities": str(liabilities_total),
                 "net_worth": str(net),
-
                 "assets_by_category": {k: str(v) for k, v in assets_by_category.items()},
                 "liabilities_by_category": {k: str(v) for k, v in liabilities_by_category.items()},
-
                 "inflation_region": inflation_region if base_currency == "EUR" else None,
                 "inflation_base_period": str(inflation_base_period) if inflation_base_period else None,
-
                 "total_assets_real": str(total_assets_real) if total_assets_real is not None else None,
                 "total_liabilities_real": str(total_liabilities_real) if total_liabilities_real is not None else None,
                 "net_worth_real": str(net_worth_real) if net_worth_real is not None else None,
-
                 "assets_by_category_real": (
                     {k: str(v) for k, v in assets_by_category_real.items()} if assets_by_category_real is not None else None
                 ),
@@ -226,3 +224,29 @@ class NetWorthSummaryAPIView(APIView):
                 ),
             }
         )
+
+
+class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    serializer_class = FamilyMemberSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = FamilyMember.objects.all()
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Ownership.objects.all()
+
+    def get_queryset(self):
+        # UserScopedQuerySetMixin filtra por user, pero aquí además optimizamos lectura de splits+member
+        qs = super().get_queryset()
+        return qs.select_related("member").prefetch_related("splits", "splits__member")
+
+    def get_serializer_class(self):
+        # Lectura bonita
+        if self.action in ("list", "retrieve"):
+            return OwnershipReadSerializer
+        # Escritura/validación
+        return OwnershipWriteSerializer
