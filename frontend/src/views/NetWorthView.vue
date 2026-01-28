@@ -4,17 +4,29 @@ import { useNetWorthStore } from "@/stores/netWorth";
 import ItemForm from "@/components/ItemForm.vue";
 import ItemList from "@/components/ItemList.vue";
 
-
 const store = useNetWorthStore();
 
 const valueMode = ref<"nominal" | "real">("nominal");
 
-const canShowReal = () => store.baseCurrency === "EUR" && !!store.summary?.net_worth_real;
+// Real solo si: EUR + tenemos base_period + tenemos net_worth_real
+const canShowReal = () =>
+  store.baseCurrency === "EUR" &&
+  !!store.summary?.inflation_base_period &&
+  store.summary?.net_worth_real !== null;
 
 watch(
   () => store.baseCurrency,
   (c) => {
     if (c !== "EUR" && valueMode.value === "real") {
+      valueMode.value = "nominal";
+    }
+  }
+);
+
+watch(
+  () => store.summary?.inflation_base_period,
+  () => {
+    if (!canShowReal() && valueMode.value === "real") {
       valueMode.value = "nominal";
     }
   }
@@ -53,11 +65,23 @@ const prettyError = () => {
   }
 };
 
-const pick = (nominal?: string, real?: string) => {
+const pick = (nominal?: string | null, real?: string | null) => {
   if (valueMode.value === "real") return real ?? "-";
   return nominal ?? "-";
 };
 
+const unitLabel = () => {
+  const c = store.baseCurrency ?? "";
+  if (valueMode.value !== "real") return c;
+  const base = store.summary?.inflation_base_period;
+  return base ? `${c} (${base})` : `${c} (IPC)`;
+};
+
+const modeLabel = () => {
+  if (valueMode.value === "nominal") return "Nominal (euros de hoy)";
+  const base = store.summary?.inflation_base_period;
+  return base ? `IPC: euros de ${base}` : "IPC: euros del mes base";
+};
 
 onMounted(async () => {
   await store.fetchSettings();
@@ -79,7 +103,7 @@ onMounted(async () => {
           <div class="card-title">Total activos</div>
           <div class="card-value">
             {{ pick(store.summary?.total_assets, store.summary?.total_assets_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
           </div>
         </div>
 
@@ -87,7 +111,7 @@ onMounted(async () => {
           <div class="card-title">Total pasivos</div>
           <div class="card-value">
             {{ pick(store.summary?.total_liabilities, store.summary?.total_liabilities_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
           </div>
         </div>
 
@@ -95,7 +119,7 @@ onMounted(async () => {
           <div class="card-title">Patrimonio neto</div>
           <div class="card-value">
             {{ pick(store.summary?.net_worth, store.summary?.net_worth_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ store.baseCurrency ?? "" }}</span>
+            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
           </div>
         </div>
       </div>
@@ -125,7 +149,7 @@ onMounted(async () => {
         <div style="display:flex; flex-direction:column; gap:4px;">
           <div class="card-title">Modo</div>
           <div class="subtle" style="font-size:12px;">
-            {{ valueMode === "real" ? "Euros constantes (IPC)" : "Nominal" }}
+            {{ modeLabel() }}
           </div>
           <div
             v-if="valueMode === 'real' && store.summary?.inflation_base_period"
@@ -136,13 +160,22 @@ onMounted(async () => {
           </div>
         </div>
 
-        <select class="input" style="width: 150px;" v-model="valueMode">
+        <select
+          class="input"
+          style="width: 170px;"
+          v-model="valueMode"
+          :disabled="store.loading"
+        >
           <option value="nominal">Nominal</option>
-          <option value="real" :disabled="!canShowReal()">Real (IPC)</option>
+          <option value="real" :disabled="!canShowReal()">IPC (euros mes base)</option>
         </select>
 
         <div v-if="store.baseCurrency !== 'EUR'" class="subtle" style="font-size:12px;">
           Solo disponible con EUR
+        </div>
+
+        <div v-else-if="!canShowReal()" class="subtle" style="font-size:12px;">
+          Requiere IPC cargado
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import date
 
 from django.core.exceptions import ValidationError
+
 from django.utils import timezone
 
 from .models import FxRate, InflationIndex
@@ -14,19 +16,55 @@ def _month_start(d) -> timezone.datetime.date:
     # Normaliza a primer día del mes (YYYY-MM-01)
     return d.replace(day=1)
 
+
+
+def _normalize_month_start(d) -> date:
+    """
+    Acepta date o string YYYY-MM-DD y lo normaliza a YYYY-MM-01.
+    """
+    if isinstance(d, str):
+        # Python 3.11+: date.fromisoformat
+        d = date.fromisoformat(d)
+    if not isinstance(d, date):
+        raise ValidationError("Invalid period_month type. Expected date or ISO string.")
+    return d.replace(day=1)
+
 def _get_inflation_index(region: str, period_month) -> Decimal:
     """
     Devuelve el índice del mes 'period_month' (YYYY-MM-01) con fallback:
-    último índice con period <= period_month.
+
+    1) último índice con period <= period_month
+    2) si no existe (period_month anterior al primer dato), usa el primer índice disponible
     """
+    region = (region or "").strip()
+    if not region:
+        raise ValidationError("Region is required.")
+
+    period_month = _normalize_month_start(period_month)
+
+    # 1) Fallback hacia atrás (último conocido anterior)
     row = (
-        InflationIndex.objects.filter(region=region, period__lte=period_month)
+        InflationIndex.objects
+        .filter(region=region, period__lte=period_month)
         .order_by("-period")
         .first()
     )
-    if not row:
-        raise ValidationError(f"Missing inflation index for region={region} on or before {period_month}.")
-    return Decimal(row.index)
+    if row:
+        return Decimal(row.index)
+
+    # 2) Si period_month es anterior al primer dato, usamos el primer dato disponible
+    first_row = (
+        InflationIndex.objects
+        .filter(region=region)
+        .order_by("period")
+        .first()
+    )
+    if first_row:
+        return Decimal(first_row.index)
+
+    # No hay IPC cargado para esa región
+    raise ValidationError(f"Missing inflation index for region={region}.")
+
 
 def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date=None) -> Decimal:
     """
