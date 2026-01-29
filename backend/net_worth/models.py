@@ -38,8 +38,8 @@ class Asset(models.Model):
 
     currency = models.CharField(max_length=3, default="EUR")
     amount = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
+        max_digits=20,
+        decimal_places=8,
         validators=[MinValueValidator(0)],
         help_text="Valor actual (positivo). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
     )
@@ -92,8 +92,8 @@ class Liability(models.Model):
 
     currency = models.CharField(max_length=3, default="EUR")
     amount = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
+        max_digits=20,
+        decimal_places=8,
         validators=[MinValueValidator(0)],
         help_text="Deuda pendiente (positiva). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
     )
@@ -219,3 +219,4 @@ class OwnershipSplit(models.Model):
 
     def __str__(self) -> str:
         return f"{self.ownership_id} - {self.member_id} - {self.percent}%"
+    

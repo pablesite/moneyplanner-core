@@ -48,6 +48,44 @@ export type Summary = {
 
 };
 
+export type MemberMini = {
+  id: number;
+  name: string;
+  role: "adult" | "child";
+};
+
+export type ByMemberRow = {
+  member: MemberMini;
+  total_assets: string;
+  total_liabilities: string;
+  net_worth: string;
+};
+
+export type ByMemberSummary = {
+  base_currency: string;
+  totals: {
+    total_assets: string;
+    total_liabilities: string;
+    net_worth: string;
+  };
+  by_member: ByMemberRow[];
+  unassigned: {
+    assets: string;
+    liabilities: string;
+    net_worth: string;
+  };
+};
+
+
+export type Ownership = {
+  id: number;
+  kind: "individual" | "shared";
+  member: { id: number; name: string; role: "adult" | "child" } | null;
+  splits: { member: { id: number; name: string; role: "adult" | "child" }; percent: string }[];
+  notes: string;
+};
+
+
 export const useNetWorthStore = defineStore("netWorth", {
   state: () => ({
     loading: false as boolean,
@@ -59,6 +97,10 @@ export const useNetWorthStore = defineStore("netWorth", {
     assets: [] as Asset[],
     liabilities: [] as Liability[],
     snapshots: [] as Snapshot[],
+
+    byMemberSummary: null as ByMemberSummary | null,
+    ownerships: [] as Ownership[],
+
   }),
 
   actions: {
@@ -66,11 +108,13 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        const [summaryRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
+        const [summaryRes, assetsRes, liabilitiesRes, snapshotsRes, byMemberRes, ownershipsRes] = await Promise.all([
           api.get("/api/net-worth/summary/"),
           api.get("/api/net-worth/assets/"),
           api.get("/api/net-worth/liabilities/"),
           api.get("/api/net-worth/snapshots/"),
+          api.get("/api/net-worth/summary/by-member/"),
+          api.get("/api/net-worth/ownerships/"),
         ]);
 
         this.summary = summaryRes.data;
@@ -78,6 +122,9 @@ export const useNetWorthStore = defineStore("netWorth", {
         this.assets = assetsRes.data;
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
+        this.byMemberSummary = byMemberRes.data;
+        this.ownerships = ownershipsRes.data;
+
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
       } finally {
@@ -182,6 +229,19 @@ export const useNetWorthStore = defineStore("netWorth", {
         this.error = e?.response?.data
           ? JSON.stringify(e.response.data)
           : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchByMemberSummary() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const res = await api.get("/api/net-worth/summary/by-member/");
+        this.byMemberSummary = res.data;
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
       } finally {
         this.loading = false;
       }

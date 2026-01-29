@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from .views import AssetViewSet, LiabilityViewSet, NetWorthSnapshotViewSet, NetWorthSummaryAPIView, FamilyMemberViewSet, OwnershipViewSet
+from .views import AssetViewSet, LiabilityViewSet, NetWorthSnapshotViewSet, NetWorthSummaryAPIView, FamilyMemberViewSet, OwnershipViewSet, NetWorthByMemberSummaryAPIView
 
 router = DefaultRouter()
 router.register(r"assets", AssetViewSet, basename="assets")
@@ -13,4 +13,6 @@ router.register(r"ownerships", OwnershipViewSet, basename="ownership")
 urlpatterns = [
     path("", include(router.urls)),
     path("summary/", NetWorthSummaryAPIView.as_view(), name="net-worth-summary"),
+    path("summary/by-member/", NetWorthByMemberSummaryAPIView.as_view(), name="net-worth-by-member-summary"),
+
 ]

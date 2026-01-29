@@ -250,3 +250,129 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
             return OwnershipReadSerializer
         # Escritura/validación
         return OwnershipWriteSerializer
+
+
+class NetWorthByMemberSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        base_currency = _get_base_currency(request.user)
+        today = timezone.localdate()
+
+        members = list(
+            FamilyMember.objects.filter(user=request.user, is_active=True).only("id", "name", "role")
+        )
+        member_map = {m.id: {"id": m.id, "name": m.name, "role": m.role} for m in members}
+
+        # buckets
+        assets_by_member = {m.id: Decimal("0") for m in members}
+        liabilities_by_member = {m.id: Decimal("0") for m in members}
+        unassigned_assets = Decimal("0")
+        unassigned_liabilities = Decimal("0")
+
+        # precargar ownerships para no hacer N+1
+        assets_qs = (
+            Asset.objects.filter(user=request.user, is_active=True, tracking_mode=Asset.TrackingMode.MANUAL)
+            .select_related("ownership", "ownership__member")
+            .prefetch_related("ownership__splits", "ownership__splits__member")
+        )
+        liabilities_qs = (
+            Liability.objects.filter(user=request.user, is_active=True, tracking_mode=Liability.TrackingMode.MANUAL)
+            .select_related("ownership", "ownership__member")
+            .prefetch_related("ownership__splits", "ownership__splits__member")
+        )
+
+        def allocate_amount(amount_base: Decimal, ownership: Ownership | None, is_asset: bool):
+            nonlocal unassigned_assets, unassigned_liabilities
+
+            if ownership is None:
+                if is_asset:
+                    unassigned_assets += amount_base
+                else:
+                    unassigned_liabilities += amount_base
+                return
+
+            if ownership.kind == Ownership.Kind.INDIVIDUAL:
+                if ownership.member_id is None:
+                    # inconsistente con constraint, pero por seguridad
+                    if is_asset:
+                        unassigned_assets += amount_base
+                    else:
+                        unassigned_liabilities += amount_base
+                    return
+                if is_asset:
+                    assets_by_member[ownership.member_id] += amount_base
+                else:
+                    liabilities_by_member[ownership.member_id] += amount_base
+                return
+
+            if ownership.kind == Ownership.Kind.SHARED:
+                splits = list(ownership.splits.all())
+                if not splits:
+                    # shared sin splits => lo tratamos como unassigned
+                    if is_asset:
+                        unassigned_assets += amount_base
+                    else:
+                        unassigned_liabilities += amount_base
+                    return
+
+                for s in splits:
+                    portion = (amount_base * Decimal(str(s.percent))) / Decimal("100")
+                    if is_asset:
+                        assets_by_member[s.member_id] += portion
+                    else:
+                        liabilities_by_member[s.member_id] += portion
+                return
+
+            # kind desconocido
+            if is_asset:
+                unassigned_assets += amount_base
+            else:
+                unassigned_liabilities += amount_base
+
+        # assets
+        try:
+            for a in assets_qs:
+                amt = convert_currency(a.amount, a.currency, base_currency, date=today)
+                allocate_amount(amt, a.ownership, is_asset=True)
+
+            for l in liabilities_qs:
+                amt = convert_currency(l.amount, l.currency, base_currency, date=today)
+                allocate_amount(amt, l.ownership, is_asset=False)
+
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # construir salida
+        rows = []
+        for m in members:
+            a = assets_by_member[m.id]
+            d = liabilities_by_member[m.id]
+            rows.append(
+                {
+                    "member": member_map[m.id],
+                    "total_assets": str(a),
+                    "total_liabilities": str(d),
+                    "net_worth": str(a - d),
+                }
+            )
+
+        total_assets = sum(assets_by_member.values(), start=Decimal("0")) + unassigned_assets
+        total_liabilities = sum(liabilities_by_member.values(), start=Decimal("0")) + unassigned_liabilities
+
+        return Response(
+            {
+                "base_currency": base_currency,
+                "totals": {
+                    "total_assets": str(total_assets),
+                    "total_liabilities": str(total_liabilities),
+                    "net_worth": str(total_assets - total_liabilities),
+                },
+                "by_member": rows,
+                "unassigned": {
+                    "assets": str(unassigned_assets),
+                    "liabilities": str(unassigned_liabilities),
+                    "net_worth": str(unassigned_assets - unassigned_liabilities),
+                },
+            }
+        )

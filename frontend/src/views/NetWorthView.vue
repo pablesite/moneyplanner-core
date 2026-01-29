@@ -83,6 +83,15 @@ const modeLabel = () => {
   return base ? `IPC: euros de ${base}` : "IPC: euros del mes base";
 };
 
+const money = (v?: string | null) => (v ?? "-");
+
+const hasUnassigned = () => {
+  const u = store.byMemberSummary?.unassigned;
+  if (!u) return false;
+  return (u.assets !== "0" && u.assets !== "0.00") || (u.liabilities !== "0" && u.liabilities !== "0.00");
+};
+
+
 onMounted(async () => {
   await store.fetchSettings();
   await store.refreshAll();
@@ -188,24 +197,93 @@ onMounted(async () => {
       </button>
     </div>
 
+
+    <div class="section card" v-if="store.byMemberSummary">
+      <h2 style="margin-top: 0;">Por miembro</h2>
+
+      <div v-if="hasUnassigned()" class="alert" style="margin-bottom: 12px;">
+        Hay activos/pasivos sin titularidad asignada (ownership = null).
+        <div class="subtle" style="margin-top:6px;">
+          Sin asignar — Activos: {{ money(store.byMemberSummary.unassigned.assets) }} {{ store.byMemberSummary.base_currency }},
+          Pasivos: {{ money(store.byMemberSummary.unassigned.liabilities) }} {{ store.byMemberSummary.base_currency }}
+        </div>
+      </div>
+
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Miembro</th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Activos ({{ store.byMemberSummary.base_currency }})</th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Pasivos ({{ store.byMemberSummary.base_currency }})</th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Neto ({{ store.byMemberSummary.base_currency }})</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr v-for="row in store.byMemberSummary.by_member" :key="row.member.id">
+            <td style="padding:8px 6px;">
+              {{ row.member.name }}
+              <span class="subtle" style="margin-left:6px; font-size:12px;">
+                ({{ row.member.role === 'adult' ? 'Adulto' : 'Niño' }})
+              </span>
+            </td>
+            <td style="padding:8px 6px; text-align:right;">{{ money(row.total_assets) }}</td>
+            <td style="padding:8px 6px; text-align:right;">{{ money(row.total_liabilities) }}</td>
+            <td style="padding:8px 6px; text-align:right;">{{ money(row.net_worth) }}</td>
+          </tr>
+
+          <tr>
+            <td style="padding:10px 6px; text-align:left; border-top: 1px solid rgba(0,0,0,.08);">
+              <span class="subtle">Total</span>
+            </td>
+            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
+              {{ money(store.byMemberSummary.totals.total_assets) }}
+            </td>
+            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
+              {{ money(store.byMemberSummary.totals.total_liabilities) }}
+            </td>
+            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
+              {{ money(store.byMemberSummary.totals.net_worth) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+
     <div class="grid-2">
       <div>
-        <ItemForm title="Nuevo activo" :categories="assetCategories" :onSubmit="store.createAsset" />
+
+        <ItemForm
+          title="Nuevo activo"
+          :categories="assetCategories"
+          :ownerships="store.ownerships"
+          :onSubmit="store.createAsset"
+        />
+
         <ItemList
           title="Activos"
           :items="store.assets"
           :categories="assetCategories"
+          :ownerships="store.ownerships"
           :onUpdate="store.updateAsset"
           :onArchive="store.archiveAsset"
         />
       </div>
 
       <div>
-        <ItemForm title="Nuevo pasivo" :categories="liabilityCategories" :onSubmit="store.createLiability" />
+        <ItemForm
+          title="Nuevo pasivo"
+          :categories="liabilityCategories"
+          :ownerships="store.ownerships"
+          :onSubmit="store.createLiability"
+        />
+
         <ItemList
           title="Pasivos"
           :items="store.liabilities"
           :categories="liabilityCategories"
+          :ownerships="store.ownerships"
           :onUpdate="store.updateLiability"
           :onArchive="store.archiveLiability"
         />
