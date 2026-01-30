@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { formatAmount } from "@/lib/format";
+
 
 type Ownership = {
   id: number;
@@ -79,13 +81,46 @@ const ownershipOptions = computed(() => {
   ];
 });
 
+const decimalsByCurrency: Record<string, number> = {
+  EUR: 2,
+  USD: 2,
+  BTC: 8,
+  ETH: 8,
+};
+
+const amountHint = computed(() => {
+  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+  return `Hasta ${max} decimales`;
+});
+
+const amountError = computed(() => {
+  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+  const clamped = clampDecimals(draft.value.amount, max);
+
+  if (!draft.value.amount) return "";
+  if ((normalizeAmountInput(draft.value.amount).match(/\./g) || []).length > 1) return "Importe inválido";
+  if (Number.isNaN(Number(normalizeAmountInput(clamped)))) return "Importe inválido";
+  return "";
+});
+
+
+function getMaxDecimals(currency: string, category?: string) {
+  // si quieres overrides por categoría, aquí:
+  // if (category === "investments") return 6;
+  return decimalsByCurrency[currency] ?? 2;
+}
+
 
 function startEdit(item: Item) {
   editingId.value = item.id;
+
+  const max = getMaxDecimals(item.currency, item.category);
+  const prettyAmount = trimTrailingZeros(clampDecimals(item.amount, max));
+
   draft.value = {
     name: item.name,
     category: item.category,
-    amount: item.amount,
+    amount: prettyAmount, // <-- aquí está la clave
     currency: item.currency,
     notes: item.notes,
     is_active: item.is_active,
@@ -93,21 +128,70 @@ function startEdit(item: Item) {
   };
 }
 
+watch(
+  () => [draft.value.currency, draft.value.category],
+  () => {
+    if (!draft.value?.amount) return;
+    const max = getMaxDecimals(draft.value.currency, draft.value.category);
+    draft.value.amount = trimTrailingZeros(clampDecimals(draft.value.amount, max));
+  }
+);
+
+
 function cancelEdit() {
   editingId.value = null;
   draft.value = {};
 }
 
+function normalizeAmountInput(raw: unknown) {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/,/g, ".");
+}
+
+function clampDecimals(amount: string, maxDecimals: number) {
+  const s = normalizeAmountInput(amount);
+  if (!s) return "";
+  if ((s.match(/\./g) || []).length > 1) return s; // ya lo validaremos aparte
+
+  const [i, d = ""] = s.split(".");
+  return d ? `${i}.${d.slice(0, maxDecimals)}` : i;
+}
+
+function trimTrailingZeros(amount: string) {
+  // "123.4500" -> "123.45", "10.0000" -> "10"
+  if (!amount.includes(".")) return amount;
+  return amount.replace(/\.?0+$/, "");
+}
+
+
+function isValidAmountString(amount: string) {
+  const s = normalizeAmountInput(amount);
+  if (!s) return false;
+  if ((s.match(/\./g) || []).length > 1) return false;
+  if (s === "." || s === "-" || s === "-.") return false;
+  return !Number.isNaN(Number(s));
+}
+
 async function saveEdit(id: number) {
-    const payload = {
+  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+
+  const normalized = normalizeAmountInput(draft.value.amount);
+  const clamped = clampDecimals(normalized, max);
+
+  if (!isValidAmountString(clamped)) return; // aquí luego metemos error inline
+
+  const payload = {
     ...draft.value,
-    amount: String(draft.value.amount).replace(",", "."),
+    amount: clamped,
   };
 
-  // await props.onUpdate(id, draft.value);
   await props.onUpdate(id, payload);
   cancelEdit();
 }
+
+
 </script>
 
 <template>
@@ -118,7 +202,8 @@ async function saveEdit(id: number) {
       <li v-for="it in items" :key="it.id">
         <div v-if="editingId !== it.id" class="row">
           <span>
-            {{ it.name }} — {{ it.amount }} {{ it.currency }}
+            {{ it.name }} — {{ formatAmount(it.amount, { currency: it.currency }) }} {{ it.currency }}
+
             <span class="badge">{{ it.category }}</span>
             <span v-if="!it.is_active" class="badge">archivado</span>
             <span v-if="it.ownership_ref" class="badge">own #{{ it.ownership_ref }}</span>
@@ -165,8 +250,16 @@ async function saveEdit(id: number) {
             Activo
           </label>
 
+          <div style="grid-column: 1 / -1; font-size: 12px; opacity: 0.7;">
+            {{ amountHint }}
+          </div>
+
+          <div v-if="amountError" style="grid-column: 1 / -1; font-size: 12px; color: #b00020;">
+            {{ amountError }}
+          </div>
+
           <div class="actions">
-            <button @click="saveEdit(it.id)" class="btn btn-primary">Guardar</button>
+            <button @click="saveEdit(it.id)" class="btn btn-primary" :disabled="!!amountError"> Guardar </button>
             <button @click="cancelEdit" class="btn">Cancelar</button>
           </div>
         </div>

@@ -3,7 +3,9 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
+  /* Fuerza coherencia en controles nativos */
+  color-scheme: dark;
+
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
@@ -24,8 +26,16 @@ a:hover {
 
 body {
   margin: 0;
+
+  /* Importante: fondo y color en el body para que hereden bien los controles */
+  background: #0f1012;
+  color: rgba(255, 255, 255, 0.87);
+
+  /* Esto es el default de Vite, si te va bien lo de centrar todo, déjalo.
+     Si te está molestando con layouts/modals, cámbialo a display:block. */
   display: flex;
   place-items: center;
+
   min-width: 320px;
   min-height: 100vh;
 }
@@ -33,6 +43,45 @@ body {
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
+}
+
+/* Controles base: aquí está la clave del problema */
+input,
+select,
+textarea {
+  font: inherit;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(130, 190, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(130, 190, 255, 0.18);
+}
+
+/* Select dropdown (limitado por navegador, pero ayuda mucho) */
+select option {
+  background: #111;
+  color: #fff;
 }
 
 button {
@@ -62,18 +111,46 @@ button:focus-visible {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
+
+  /* Si tienes tablas/listas, suele verse mejor alineado a la izquierda */
+  text-align: left;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
+    color-scheme: light;
     color: #213547;
     background-color: #ffffff;
   }
+
+  body {
+    background: #ffffff;
+    color: #213547;
+  }
+
   a:hover {
     color: #747bff;
   }
+
   button {
     background-color: #f9f9f9;
+  }
+
+  input,
+  select,
+  textarea {
+    color: #213547;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.14);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  select option {
+    background: #fff;
+    color: #213547;
   }
 }

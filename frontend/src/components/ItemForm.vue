@@ -40,6 +40,19 @@ const ownershipOptions = computed(() => {
   ];
 });
 
+/** -------------------------
+ * Amount handling
+ * - Accept thousands separators (1.234,56 or 1,234.56)
+ * - Normalize to dot decimal for API
+ * - Limit decimals by currency
+ * ------------------------- */
+const decimalsByCurrency: Record<string, number> = {
+  EUR: 2,
+  USD: 2,
+  BTC: 8,
+  ETH: 8,
+};
+
 const form = reactive({
   name: "",
   category: "",
@@ -51,21 +64,82 @@ const form = reactive({
   ownership_id: null as number | null,
 });
 
+const maxDecimals = computed(() => decimalsByCurrency[form.currency] ?? 2);
+
+function normalizeLooseNumber(raw: unknown) {
+  // Allow only digits and separators, remove spaces (including NBSP)
+  let s = String(raw ?? "").trim().replace(/\s/g, "");
+  s = s.replace(/[^\d.,]/g, "");
+  return s;
+}
+
+function sanitizeAmount(raw: unknown, decimals: number) {
+  let s = normalizeLooseNumber(raw);
+
+  if (!s) return { value: "", error: "" };
+
+  // If contains both ',' and '.', assume last separator is decimal and the other is thousands
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimalSep = lastComma > lastDot ? "," : ".";
+    const thousandSep = decimalSep === "," ? "." : ",";
+    s = s.split(thousandSep).join(""); // remove thousand separators
+    s = s.replace(decimalSep, "."); // normalize decimal to dot
+  } else {
+    // Only comma -> decimal comma
+    s = s.replace(/,/g, ".");
+  }
+
+  // More than one dot => invalid
+  if ((s.match(/\./g) || []).length > 1) return { value: "", error: "Importe inválido" };
+
+  // Limit decimals
+  const [intPart, decPart = ""] = s.split(".");
+  const limitedDec = decPart.slice(0, decimals);
+  const normalized = decPart.length ? `${intPart}.${limitedDec}` : intPart;
+
+  // Avoid weird states
+  if (!normalized || normalized === ".") return { value: "", error: "" };
+
+  // If starts with dot, prefix 0
+  const finalValue = normalized.startsWith(".") ? `0${normalized}` : normalized;
+
+  // Validate numeric
+  if (Number.isNaN(Number(finalValue))) return { value: "", error: "Importe inválido" };
+
+  // Block negatives (we removed '-' already, but keep for safety)
+  if (finalValue.includes("-")) return { value: "", error: "No se permiten importes negativos" };
+
+  return { value: finalValue, error: "" };
+}
+
+const amountError = computed(() => {
+  const { error } = sanitizeAmount(form.amount, maxDecimals.value);
+  return error;
+});
+
+const amountHint = computed(() => {
+  return form.currency === "BTC" || form.currency === "ETH"
+    ? `Hasta ${maxDecimals.value} decimales (ej: 0.00123456)`
+    : `Hasta ${maxDecimals.value} decimales`;
+});
+
 async function submit() {
   if (!form.name || !form.category || !form.amount) return;
 
-  const normalizedAmount = String(form.amount).replace(",", ".");
+  const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
+  if (!normalizedAmount || error) return;
 
   await props.onSubmit({
     name: form.name,
     category: form.category,
-    // amount: form.amount,
-    amount: normalizedAmount,
+    amount: normalizedAmount, // normalized dot-decimal string
     notes: form.notes,
     currency: form.currency,
     tracking_mode: form.tracking_mode,
     is_active: form.is_active,
-    ownership_id: form.ownership_id, // <-- clave
+    ownership_id: form.ownership_id,
   });
 
   form.name = "";
@@ -96,9 +170,20 @@ async function submit() {
         </option>
       </select>
 
-      <!-- <input v-model="form.amount" type="number" step="0.01" placeholder="Importe" class="input" /> -->
-      <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input" />
-      
+      <input
+        v-model="form.amount"
+        inputmode="decimal"
+        placeholder="Importe"
+        class="input"
+      />
+
+      <div style="grid-column: 1 / -1; font-size: 12px; opacity: 0.75;">
+        {{ amountHint }}
+      </div>
+
+      <div v-if="amountError" style="grid-column: 1 / -1; font-size: 12px; color: #b00020;">
+        {{ amountError }}
+      </div>
 
       <!-- Ownership -->
       <select v-model="form.ownership_id" class="select">
@@ -109,7 +194,7 @@ async function submit() {
 
       <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
 
-      <button @click="submit" class="btn btn-primary">
+      <button @click="submit" class="btn btn-primary" :disabled="!!amountError">
         Crear
       </button>
     </div>

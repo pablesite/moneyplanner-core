@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, ref, watch, computed } from "vue";
 import { useNetWorthStore } from "@/stores/netWorth";
 import ItemForm from "@/components/ItemForm.vue";
 import ItemList from "@/components/ItemList.vue";
+import BaseModal from "@/components/BaseModal.vue";
+import NetWorthDonut from "@/components/NetWorthDonut.vue";
+import SettingsPopover from "@/components/SettingsPopover.vue";
 
 const store = useNetWorthStore();
 
 const valueMode = ref<"nominal" | "real">("nominal");
 
-// Real solo si: EUR + tenemos base_period + tenemos net_worth_real
+/**
+ * Real solo si:
+ * - EUR
+ * - tenemos inflation_base_period
+ * - tenemos net_worth_real (no null)
+ */
 const canShowReal = () =>
   store.baseCurrency === "EUR" &&
   !!store.summary?.inflation_base_period &&
@@ -17,18 +25,14 @@ const canShowReal = () =>
 watch(
   () => store.baseCurrency,
   (c) => {
-    if (c !== "EUR" && valueMode.value === "real") {
-      valueMode.value = "nominal";
-    }
+    if (c !== "EUR" && valueMode.value === "real") valueMode.value = "nominal";
   }
 );
 
 watch(
   () => store.summary?.inflation_base_period,
   () => {
-    if (!canShowReal() && valueMode.value === "real") {
-      valueMode.value = "nominal";
-    }
+    if (!canShowReal() && valueMode.value === "real") valueMode.value = "nominal";
   }
 );
 
@@ -65,10 +69,48 @@ const prettyError = () => {
   }
 };
 
-const pick = (nominal?: string | null, real?: string | null) => {
-  if (valueMode.value === "real") return real ?? "-";
-  return nominal ?? "-";
-};
+/** -------------------------
+ * Modales crear activo/pasivo
+ * ------------------------- */
+const showAssetModal = ref(false);
+const showLiabilityModal = ref(false);
+
+async function submitAsset(payload: any) {
+  await store.createAsset(payload);
+  showAssetModal.value = false;
+}
+
+async function submitLiability(payload: any) {
+  await store.createLiability(payload);
+  showLiabilityModal.value = false;
+}
+
+/** -------------------------
+ * Formatting (one place)
+ * - Force thousands grouping everywhere
+ * - Default 2 decimals (summary/snapshots in base currency)
+ * ------------------------- */
+function normalizeNumberInput(raw: unknown) {
+  return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+}
+
+function formatMoney(v?: string | null, decimals = 2) {
+  if (v == null) return "-";
+  const s = normalizeNumberInput(v);
+  const n = Number(s);
+  if (Number.isNaN(n)) return v;
+
+  return new Intl.NumberFormat("es-ES", {
+    useGrouping: true,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
+function pickMoney(nominal?: string | null, real?: string | null, decimals = 2) {
+  const raw = valueMode.value === "real" ? real : nominal;
+  return formatMoney(raw, decimals);
+}
 
 const unitLabel = () => {
   const c = store.baseCurrency ?? "";
@@ -83,7 +125,9 @@ const modeLabel = () => {
   return base ? `IPC: euros de ${base}` : "IPC: euros del mes base";
 };
 
-const money = (v?: string | null) => (v ?? "-");
+const realBaseLabel = computed(() =>
+  store.summary?.inflation_base_period ? `Base: ${store.summary.inflation_base_period}` : ""
+);
 
 const hasUnassigned = () => {
   const u = store.byMemberSummary?.unassigned;
@@ -91,6 +135,16 @@ const hasUnassigned = () => {
   return (u.assets !== "0" && u.assets !== "0.00") || (u.liabilities !== "0" && u.liabilities !== "0.00");
 };
 
+// Resumen “grande” (donut usa estos)
+const summaryAssets = computed(() =>
+  valueMode.value === "real" ? store.summary?.total_assets_real : store.summary?.total_assets
+);
+const summaryLiabilities = computed(() =>
+  valueMode.value === "real" ? store.summary?.total_liabilities_real : store.summary?.total_liabilities
+);
+const summaryNetWorth = computed(() =>
+  valueMode.value === "real" ? store.summary?.net_worth_real : store.summary?.net_worth
+);
 
 onMounted(async () => {
   await store.fetchSettings();
@@ -100,112 +154,48 @@ onMounted(async () => {
 
 <template>
   <div class="container">
-    <h1 class="h1">Patrimonio</h1>
+    <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
+      <h1 class="h1" style="margin: 0;">Patrimonio</h1>
 
-    <div v-if="store.error" class="alert">
+      <SettingsPopover
+        :loading="store.loading"
+        :baseCurrency="store.baseCurrency ?? 'EUR'"
+        :currencies="currencies"
+        :valueMode="valueMode"
+        :canShowReal="canShowReal()"
+        :modeHelp="modeLabel()"
+        :realBaseLabel="realBaseLabel"
+        @update:baseCurrency="store.updateBaseCurrency"
+        @update:valueMode="(v) => (valueMode = v)"
+        @snapshot="store.createTodaySnapshot()"
+        @refresh="store.refreshAll()"
+      />
+    </div>
+
+    <div v-if="store.error" class="alert" style="margin-top: 12px;">
       {{ prettyError() }}
     </div>
 
-    <div class="toolbar">
-      <div class="grid-3" style="flex: 1; min-width: 320px;">
-        <div class="card">
-          <div class="card-title">Total activos</div>
-          <div class="card-value">
-            {{ pick(store.summary?.total_assets, store.summary?.total_assets_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Total pasivos</div>
-          <div class="card-value">
-            {{ pick(store.summary?.total_liabilities, store.summary?.total_liabilities_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Patrimonio neto</div>
-          <div class="card-value">
-            {{ pick(store.summary?.net_worth, store.summary?.net_worth_real) }}
-            <span class="subtle" style="margin-left:6px;">{{ unitLabel() }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Moneda base -->
-      <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 14px;">
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <div class="card-title">Moneda base</div>
-          <div class="subtle" style="font-size:12px;">Totales y snapshots en esta moneda</div>
-        </div>
-
-        <select
-          class="input"
-          style="width: 110px;"
-          :value="store.baseCurrency ?? 'EUR'"
-          @change="store.updateBaseCurrency(($event.target as HTMLSelectElement).value)"
-          :disabled="store.loading"
-        >
-          <option v-for="c in currencies" :key="c.value" :value="c.value">
-            {{ c.label }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Modo nominal/real -->
-      <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 14px;">
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <div class="card-title">Modo</div>
-          <div class="subtle" style="font-size:12px;">
-            {{ modeLabel() }}
-          </div>
-          <div
-            v-if="valueMode === 'real' && store.summary?.inflation_base_period"
-            class="subtle"
-            style="font-size:12px;"
-          >
-            Base: {{ store.summary.inflation_base_period }}
-          </div>
-        </div>
-
-        <select
-          class="input"
-          style="width: 170px;"
-          v-model="valueMode"
-          :disabled="store.loading"
-        >
-          <option value="nominal">Nominal</option>
-          <option value="real" :disabled="!canShowReal()">IPC (euros mes base)</option>
-        </select>
-
-        <div v-if="store.baseCurrency !== 'EUR'" class="subtle" style="font-size:12px;">
-          Solo disponible con EUR
-        </div>
-
-        <div v-else-if="!canShowReal()" class="subtle" style="font-size:12px;">
-          Requiere IPC cargado
-        </div>
-      </div>
-
-      <button class="btn btn-primary" @click="store.createTodaySnapshot()" :disabled="store.loading">
-        Guardar snapshot de hoy
-      </button>
-
-      <button class="btn" @click="store.refreshAll()" :disabled="store.loading">
-        Refrescar
-      </button>
+    <!-- Resumen principal -->
+    <div class="card" style="margin-top: 14px; margin-bottom: 14px;">
+  
+      <NetWorthDonut
+        :totalAssets="summaryAssets"
+        :totalLiabilities="summaryLiabilities"
+        :netWorth="summaryNetWorth"
+        :unit="unitLabel()"
+      />
     </div>
 
-
+    <!-- Por miembro -->
     <div class="section card" v-if="store.byMemberSummary">
       <h2 style="margin-top: 0;">Por miembro</h2>
 
       <div v-if="hasUnassigned()" class="alert" style="margin-bottom: 12px;">
         Hay activos/pasivos sin titularidad asignada (ownership = null).
         <div class="subtle" style="margin-top:6px;">
-          Sin asignar — Activos: {{ money(store.byMemberSummary.unassigned.assets) }} {{ store.byMemberSummary.base_currency }},
-          Pasivos: {{ money(store.byMemberSummary.unassigned.liabilities) }} {{ store.byMemberSummary.base_currency }}
+          Sin asignar — Activos: {{ formatMoney(store.byMemberSummary.unassigned.assets, 2) }} {{ store.byMemberSummary.base_currency }},
+          Pasivos: {{ formatMoney(store.byMemberSummary.unassigned.liabilities, 2) }} {{ store.byMemberSummary.base_currency }}
         </div>
       </div>
 
@@ -213,9 +203,15 @@ onMounted(async () => {
         <thead>
           <tr>
             <th style="text-align:left; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Miembro</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Activos ({{ store.byMemberSummary.base_currency }})</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Pasivos ({{ store.byMemberSummary.base_currency }})</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Neto ({{ store.byMemberSummary.base_currency }})</th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
+              Activos ({{ store.byMemberSummary.base_currency }})
+            </th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
+              Pasivos ({{ store.byMemberSummary.base_currency }})
+            </th>
+            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
+              Neto ({{ store.byMemberSummary.base_currency }})
+            </th>
           </tr>
         </thead>
 
@@ -227,9 +223,9 @@ onMounted(async () => {
                 ({{ row.member.role === 'adult' ? 'Adulto' : 'Niño' }})
               </span>
             </td>
-            <td style="padding:8px 6px; text-align:right;">{{ money(row.total_assets) }}</td>
-            <td style="padding:8px 6px; text-align:right;">{{ money(row.total_liabilities) }}</td>
-            <td style="padding:8px 6px; text-align:right;">{{ money(row.net_worth) }}</td>
+            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.total_assets, 2) }}</td>
+            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.total_liabilities, 2) }}</td>
+            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.net_worth, 2) }}</td>
           </tr>
 
           <tr>
@@ -237,29 +233,25 @@ onMounted(async () => {
               <span class="subtle">Total</span>
             </td>
             <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ money(store.byMemberSummary.totals.total_assets) }}
+              {{ formatMoney(store.byMemberSummary.totals.total_assets, 2) }}
             </td>
             <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ money(store.byMemberSummary.totals.total_liabilities) }}
+              {{ formatMoney(store.byMemberSummary.totals.total_liabilities, 2) }}
             </td>
             <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ money(store.byMemberSummary.totals.net_worth) }}
+              {{ formatMoney(store.byMemberSummary.totals.net_worth, 2) }}
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-
+    <!-- Activos / Pasivos -->
     <div class="grid-2">
       <div>
-
-        <ItemForm
-          title="Nuevo activo"
-          :categories="assetCategories"
-          :ownerships="store.ownerships"
-          :onSubmit="store.createAsset"
-        />
+        <button class="btn btn-primary" @click="showAssetModal = true" :disabled="store.loading">
+          Añadir activo
+        </button>
 
         <ItemList
           title="Activos"
@@ -272,12 +264,9 @@ onMounted(async () => {
       </div>
 
       <div>
-        <ItemForm
-          title="Nuevo pasivo"
-          :categories="liabilityCategories"
-          :ownerships="store.ownerships"
-          :onSubmit="store.createLiability"
-        />
+        <button class="btn btn-primary" @click="showLiabilityModal = true" :disabled="store.loading">
+          Añadir pasivo
+        </button>
 
         <ItemList
           title="Pasivos"
@@ -290,14 +279,16 @@ onMounted(async () => {
       </div>
     </div>
 
+    <!-- Snapshots -->
     <div class="section card">
       <h2 style="margin-top: 0;">Snapshots</h2>
 
       <ul v-if="store.snapshots.length" style="margin: 0; padding-left: 18px; display: grid; gap: 8px;">
         <li v-for="s in store.snapshots" :key="s.id">
-          {{ s.snapshot_date }} — neto: {{ s.net_worth }} {{ s.base_currency }}
+          {{ s.snapshot_date }} — neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
           <span class="subtle">
-            (activos {{ s.total_assets }} {{ s.base_currency }}, pasivos {{ s.total_liabilities }} {{ s.base_currency }})
+            (activos {{ formatMoney(s.total_assets, 2) }} {{ s.base_currency }},
+            pasivos {{ formatMoney(s.total_liabilities, 2) }} {{ s.base_currency }})
           </span>
         </li>
       </ul>
@@ -306,5 +297,24 @@ onMounted(async () => {
     </div>
 
     <div v-if="store.loading" class="section subtle">Cargando...</div>
+
+    <!-- Modales -->
+    <BaseModal :open="showAssetModal" title="Nuevo activo" @close="showAssetModal = false">
+      <ItemForm
+        title="Nuevo activo"
+        :categories="assetCategories"
+        :ownerships="store.ownerships"
+        :onSubmit="submitAsset"
+      />
+    </BaseModal>
+
+    <BaseModal :open="showLiabilityModal" title="Nuevo pasivo" @close="showLiabilityModal = false">
+      <ItemForm
+        title="Nuevo pasivo"
+        :categories="liabilityCategories"
+        :ownerships="store.ownerships"
+        :onSubmit="submitLiability"
+      />
+    </BaseModal>
   </div>
 </template>
