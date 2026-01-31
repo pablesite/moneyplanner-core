@@ -86,6 +86,15 @@ export type Ownership = {
 };
 
 
+function normalizeNumberInput(raw: unknown) {
+  return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+}
+
+function toNumber(v: unknown) {
+  const n = Number(normalizeNumberInput(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export const useNetWorthStore = defineStore("netWorth", {
   state: () => ({
     loading: false as boolean,
@@ -102,6 +111,46 @@ export const useNetWorthStore = defineStore("netWorth", {
     ownerships: [] as Ownership[],
 
   }),
+
+  getters: {
+    byMemberRows(state): ByMemberRow[] {
+      return state.byMemberSummary?.by_member ?? [];
+    },
+
+    byMemberChart(state) {
+      const rows = state.byMemberSummary?.by_member ?? [];
+      const unit = state.byMemberSummary?.base_currency ?? state.baseCurrency ?? "EUR";
+
+      return {
+        unit,
+        labels: rows.map(r => r.member.name),
+        assets: rows.map(r => Math.max(0, toNumber(r.total_assets))),
+        liabilities: rows.map(r => Math.max(0, toNumber(r.total_liabilities))),
+        net: rows.map(r => toNumber(r.net_worth)),
+      };
+    },
+
+    byCategoryChart(state) {
+        const s = state.summary;
+        const unit = state.baseCurrency ?? s?.base_currency ?? "EUR";
+
+        const assetsBy = s?.assets_by_category ?? {};
+        const liabsBy = s?.liabilities_by_category ?? {};
+
+        // Unificamos claves para que el gráfico tenga filas consistentes
+        const keys = Array.from(
+          new Set<string>([...Object.keys(assetsBy), ...Object.keys(liabsBy)])
+        );
+
+        return {
+          unit,
+          keys,
+          assets: keys.map((k) => Math.max(0, toNumber(assetsBy[k]))),
+          liabilities: keys.map((k) => Math.max(0, toNumber(liabsBy[k]))),
+        };
+      },
+
+  },
 
   actions: {
     async refreshAll() {

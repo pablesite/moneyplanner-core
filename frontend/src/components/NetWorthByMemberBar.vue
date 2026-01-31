@@ -1,0 +1,116 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { Bar } from "vue-chartjs";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Tooltip,
+  Legend,
+  type ChartData,
+  type ChartOptions,
+} from "chart.js";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+
+type Props = {
+  labels: string[];
+  assets: number[];
+  liabilities: number[];
+  unit: string;
+};
+
+const props = defineProps<Props>();
+
+function formatMoney(n: number, decimals = 2) {
+  return new Intl.NumberFormat("es-ES", {
+    useGrouping: true,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
+const data = computed<ChartData<"bar">>(() => ({
+  labels: props.labels,
+  datasets: [
+    {
+      label: "Activos",
+      data: props.assets,
+      backgroundColor: "rgba(90, 200, 250, 0.85)",
+      borderRadius: 8,
+      barThickness: 28,
+    },
+    {
+      label: "Pasivos",
+      data: props.liabilities.map(v => -Math.abs(v)),
+      backgroundColor: "rgba(255, 99, 132, 0.80)",
+      borderRadius: 8,
+      barThickness: 28,
+    },
+  ],
+}));
+
+const options = computed<ChartOptions<"bar">>(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+      labels: { color: "rgba(255,255,255,0.75)" },
+    },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => {
+          const label = ctx.dataset.label ?? "";
+          const raw = typeof ctx.raw === "number" ? ctx.raw : 0;
+          const v = Math.abs(raw);
+          return `${label}: ${formatMoney(v, 2)} ${props.unit}`;
+        },
+      },
+    },
+  },
+  scales: {
+    x: {
+      stacked: true,
+      ticks: { color: "rgba(255,255,255,0.65)" },
+      grid: { display: false },
+    },
+    y: {
+      stacked: true,
+      ticks: {
+        color: "rgba(255,255,255,0.65)",
+        callback: (value) => {
+          const v = typeof value === "number" ? value : Number(value);
+          return formatMoney(Math.abs(v), 0);
+        },
+      },
+      grid: { color: "rgba(255,255,255,0.08)" },
+    },
+  },
+}));
+</script>
+
+<template>
+  <div class="wrap">
+    <div class="title">Activos vs pasivos por miembro</div>
+    <div class="chart">
+      <Bar :data="data" :options="options" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.wrap {
+  display: grid;
+  gap: 10px;
+}
+.title {
+  font-size: 14px;
+  opacity: 0.85;
+}
+.chart {
+  height: 260px;
+}
+</style>
+B

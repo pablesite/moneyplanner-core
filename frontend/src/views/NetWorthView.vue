@@ -6,6 +6,9 @@ import ItemList from "@/components/ItemList.vue";
 import BaseModal from "@/components/BaseModal.vue";
 import NetWorthDonut from "@/components/NetWorthDonut.vue";
 import SettingsPopover from "@/components/SettingsPopover.vue";
+import NetWorthByMemberBar from "@/components/NetWorthByMemberBar.vue";
+import NetWorthByCategoryBar from "@/components/NetWorthByCategoryBar.vue";
+
 
 const store = useNetWorthStore();
 
@@ -146,10 +149,45 @@ const summaryNetWorth = computed(() =>
   valueMode.value === "real" ? store.summary?.net_worth_real : store.summary?.net_worth
 );
 
+const byMemberChart = computed(() => store.byMemberChart);
+
+const byCategoryChart = computed(() => store.byCategoryChart);
+
+const categoryLabelMap = computed(() => {
+  const m = new Map<string, string>();
+  assetCategories.forEach(c => m.set(c.value, c.label));
+  liabilityCategories.forEach(c => m.set(c.value, c.label));
+  return m;
+});
+
+const byCategoryFiltered = computed(() => {
+  const keys = byCategoryChart.value.keys;
+  const assets = byCategoryChart.value.assets;
+  const liabs = byCategoryChart.value.liabilities;
+
+  const out = [];
+  for (let i = 0; i < keys.length; i++) {
+    if ((assets[i] ?? 0) !== 0 || (liabs[i] ?? 0) !== 0) {
+      out.push({ key: keys[i], a: assets[i] ?? 0, l: liabs[i] ?? 0 });
+    }
+  }
+  return out;
+});
+
+const byCategoryLabels = computed(() =>
+  byCategoryFiltered.value.map(r => categoryLabelMap.value.get(r.key) ?? r.key)
+);
+const byCategoryAssets = computed(() => byCategoryFiltered.value.map(r => r.a));
+const byCategoryLiabilities = computed(() => byCategoryFiltered.value.map(r => r.l));
+const byCategoryUnit = computed(() => byCategoryChart.value.unit);
+
+
+
 onMounted(async () => {
   await store.fetchSettings();
   await store.refreshAll();
 });
+
 </script>
 
 <template>
@@ -187,9 +225,35 @@ onMounted(async () => {
       />
     </div>
 
+    <!-- Por categoría -->
+    <div class="section card" v-if="store.summary">
+      <h2 style="margin-top: 0;">Por categoría</h2>
+
+      <NetWorthByCategoryBar
+        :labels="byCategoryLabels"
+        :assets="byCategoryAssets"
+        :liabilities="byCategoryLiabilities"
+        :unit="byCategoryUnit"
+      />
+
+      <div class="subtle" style="margin-top: 8px;">
+        {{ byCategoryUnit }} — Activos a la derecha, pasivos a la izquierda.
+      </div>
+    </div>
+
+
     <!-- Por miembro -->
     <div class="section card" v-if="store.byMemberSummary">
       <h2 style="margin-top: 0;">Por miembro</h2>
+
+      <div v-if="byMemberChart && byMemberChart.labels.length" style="margin: 12px 0 16px;">
+        <NetWorthByMemberBar
+          :labels="byMemberChart.labels"
+          :assets="byMemberChart.assets"
+          :liabilities="byMemberChart.liabilities"
+          :unit="byMemberChart.unit"
+        />
+      </div>
 
       <div v-if="hasUnassigned()" class="alert" style="margin-bottom: 12px;">
         Hay activos/pasivos sin titularidad asignada (ownership = null).
