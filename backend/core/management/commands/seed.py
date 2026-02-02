@@ -2,6 +2,13 @@ import os
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from decimal import Decimal
+from datetime import timedelta
+from django.utils import timezone
+from core.models import FxRate, InflationIndex
+
+def _d(v: str) -> Decimal:
+    return Decimal(str(v).strip().replace(",", "."))
 
 
 class Command(BaseCommand):
@@ -56,3 +63,42 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created admin user '{username}'."))
         else:
             self.stdout.write(self.style.WARNING(f"Admin user '{username}' already exists (ensured flags)."))
+
+        
+
+
+        # Seed FX + IPC (mínimo viable)
+        rate_date = timezone.localdate() - timedelta(days=1)
+
+        # FX (triangulación vía USD)
+        fx_rows = [
+            ("USD", "EUR", _d("0,85")),
+            ("BTC", "USD", _d("78281")),
+            ("ETH", "USD", _d("2332,96")),
+        ]
+
+        for f, t, r in fx_rows:
+            FxRate.objects.update_or_create(
+                from_currency=f,
+                to_currency=t,
+                rate_date=rate_date,
+                defaults={"rate": r},
+            )
+
+        # IPC mensual (period siempre YYYY-MM-01)
+        base_period = timezone.datetime(2012, 6, 1).date()
+        current_period = timezone.datetime(2025, 12, 1).date()
+
+        InflationIndex.objects.update_or_create(
+            region=InflationIndex.Region.ES,
+            period=base_period,
+            defaults={"index": _d("100")},
+        )
+        InflationIndex.objects.update_or_create(
+            region=InflationIndex.Region.ES,
+            period=current_period,
+            defaults={"index": _d("126")},
+        )
+
+        self.stdout.write(self.style.SUCCESS(f"Seed FX + IPC done for rate_date={rate_date}."))
+
