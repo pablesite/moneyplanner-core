@@ -101,6 +101,21 @@ class Liability(models.Model):
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True, default="")
 
+    is_asset_backed = models.BooleanField(
+        default=False,
+        help_text="True si esta deuda está asociada a un activo (hipoteca, préstamo coche, etc.). False si es deuda de gasto/consumo (clínica, tarjeta, etc.).",
+    )
+
+    financed_asset = models.ForeignKey(
+        "Asset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="financing_liabilities",
+        help_text="Activo que financia esta deuda (si aplica). Si es null, es deuda sin activo asociado.",
+    )
+
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

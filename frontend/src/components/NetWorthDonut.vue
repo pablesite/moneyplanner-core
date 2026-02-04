@@ -18,6 +18,8 @@ type Props = {
   totalLiabilities: string | number | null | undefined;
   netWorth: string | number | null | undefined;
   unit: string; // "EUR" o "EUR (IPC)" etc.
+  assetBackedLiabilities?: string | number | null | undefined;
+  unbackedLiabilities?: string | number | null | undefined;
 };
 
 const props = defineProps<Props>();
@@ -51,14 +53,37 @@ const assets = computed(() => Math.max(0, toNumber(props.totalAssets)));
 const liabilities = computed(() => Math.max(0, toNumber(props.totalLiabilities)));
 const net = computed(() => toNumber(props.netWorth));
 
-// Donut de balance:
-// - el círculo representa los activos
-// - parte financiada con deuda dentro de activos = min(pasivos, activos)
-// - capital propio dentro de activos = max(activos - pasivos, 0)
-// - si pasivos > activos, la deuda excedente se muestra fuera (no cabe en el 100% del donut)
-const debtInsideAssets = computed(() => Math.min(liabilities.value, assets.value));
-const equityInsideAssets = computed(() => Math.max(assets.value - liabilities.value, 0));
-const debtOverflow = computed(() => Math.max(liabilities.value - assets.value, 0));
+const backedRaw = computed(() => Math.max(0, toNumber(props.assetBackedLiabilities)));
+const unbackedRaw = computed(() => Math.max(0, toNumber(props.unbackedLiabilities)));
+
+/**
+ * Donut representa el total de ACTIVOS (100% = activos).
+ * Se descompone en:
+ * - Capital propio (neto): activos - pasivos (puede ser 0 si neto negativo)
+ * - Deuda con activo (financia): pasivos asignados a activos
+ * - Deuda sin activo: pasivos no asignados (reduce tu equity en activos, aunque no “financie” un activo)
+ *
+ * Así: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
+ * Si pasivos > activos -> overflow.
+ */
+const backedSlice = computed(() => Math.min(backedRaw.value, assets.value));
+
+const unbackedSlice = computed(() => {
+  // No dejamos que la suma de slices supere assets (lo demás va a overflow)
+  const room = Math.max(assets.value - backedSlice.value, 0);
+  return Math.min(unbackedRaw.value, room);
+});
+
+const equitySlice = computed(() => {
+  // Esto es el “capital propio” dentro de los activos, ya restando TODO tipo de deuda
+  return Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0);
+});
+
+const liabilityOverflow = computed(() => {
+  // Si total deuda (backed+unbacked) supera activos, el neto sería negativo.
+  const totalDebt = backedRaw.value + unbackedRaw.value;
+  return Math.max(totalDebt - assets.value, 0);
+});
 
 const debtRatio = computed(() => {
   if (assets.value <= 0) return null;
@@ -66,15 +91,16 @@ const debtRatio = computed(() => {
 });
 
 const data = computed<ChartData<"doughnut">>(() => ({
-  labels: ["Capital propio (en activos)", "Activos financiados con deuda"],
+  labels: ["Capital propio (neto)", "Activos financiados con deuda", "Deuda sin activo"],
   datasets: [
     {
-      data: [equityInsideAssets.value, debtInsideAssets.value],
+      data: [equitySlice.value, backedSlice.value, unbackedSlice.value],
       backgroundColor: [
-        "rgba(90, 200, 250, 0.85)",  // equity
-        "rgba(255, 99, 132, 0.80)",  // deuda
+        "rgba(90, 200, 250, 0.85)",  // equity (neto)
+        "rgba(255, 99, 132, 0.80)",  // deuda con activo
+        "rgba(255, 159, 64, 0.80)",  // deuda sin activo
       ],
-      borderColor: ["rgba(0,0,0,0)", "rgba(0,0,0,0)"],
+      borderColor: ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"],
       borderWidth: 0,
       hoverOffset: 6,
       spacing: 2,
@@ -115,23 +141,22 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
     const netStr = formatMoney(net.value, 2);
 
     const isNeg = net.value < 0;
-    const netColor = isNeg ? "rgba(255, 120, 140, 0.95)" : "rgba(140, 240, 180, 0.95)";
+    const netColor = isNeg
+      ? "rgba(255, 120, 140, 0.95)"
+      : "rgba(140, 240, 180, 0.95)";
 
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    // Neto
     ctx.font = "700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.fillStyle = netColor;
     ctx.fillText(netStr, cx, cy - 10);
 
-    // Etiqueta
     ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.70)";
     ctx.fillText("Patrimonio neto", cx, cy + 8);
 
-    // Unidad
     ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.60)";
     ctx.fillText(props.unit, cx, cy + 26);
@@ -164,18 +189,24 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
 
       <div class="legend-row">
         <span class="dot dot-equity"></span>
-        <span>Capital propio (en activos)</span>
-        <span class="legend-val">{{ formatMoney(equityInsideAssets, 2) }} {{ unit }}</span>
+        <span>Capital propio (neto)</span>
+        <span class="legend-val">{{ formatMoney(net, 2) }} {{ unit }}</span>
       </div>
 
       <div class="legend-row subtle-row">
         <span class="dot dot-debt"></span>
         <span>Activos financiados con deuda</span>
-        <span class="legend-val">{{ formatMoney(debtInsideAssets, 2) }} {{ unit }}</span>
+        <span class="legend-val">{{ formatMoney(backedSlice, 2) }} {{ unit }}</span>
       </div>
 
-      <div v-if="debtOverflow > 0" class="overflow">
-        La deuda excede a los activos en {{ formatMoney(debtOverflow, 2) }} {{ unit }}.
+      <div class="legend-row">
+        <span class="dot dot-unbacked"></span>
+        <span>Deuda sin activo</span>
+        <span class="legend-val">{{ formatMoney(unbackedRaw, 2) }} {{ unit }}</span>
+      </div>
+
+      <div v-if="liabilityOverflow > 0" class="overflow">
+        Aviso: la deuda total excede a los activos en {{ formatMoney(liabilityOverflow, 2) }} {{ unit }}.
       </div>
 
       <div v-if="debtRatio !== null" class="ratio">
@@ -242,6 +273,10 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
 
 .dot-debt {
   background: rgba(255, 99, 132, 0.65);
+}
+
+.dot-unbacked {
+  background: rgba(255, 159, 64, 0.85);
 }
 
 .overflow {

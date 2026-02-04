@@ -181,6 +181,18 @@ const byCategoryAssets = computed(() => byCategoryFiltered.value.map(r => r.a));
 const byCategoryLiabilities = computed(() => byCategoryFiltered.value.map(r => r.l));
 const byCategoryUnit = computed(() => byCategoryChart.value.unit);
 
+const summaryAssetBackedLiabilities = computed(() =>
+  valueMode.value === "real"
+    ? (store.summary as any)?.liabilities_asset_backed_real
+    : (store.summary as any)?.liabilities_asset_backed
+);
+
+const summaryUnbackedLiabilities = computed(() =>
+  valueMode.value === "real"
+    ? (store.summary as any)?.liabilities_unbacked_real
+    : (store.summary as any)?.liabilities_unbacked
+);
+
 
 
 onMounted(async () => {
@@ -217,12 +229,14 @@ onMounted(async () => {
     <!-- Resumen principal -->
     <div class="card" style="margin-top: 14px; margin-bottom: 14px;">
   
-      <NetWorthDonut
-        :totalAssets="summaryAssets"
-        :totalLiabilities="summaryLiabilities"
-        :netWorth="summaryNetWorth"
-        :unit="unitLabel()"
-      />
+    <NetWorthDonut
+      :totalAssets="summaryAssets"
+      :totalLiabilities="summaryLiabilities"
+      :assetBackedLiabilities="summaryAssetBackedLiabilities"
+      :unbackedLiabilities="summaryUnbackedLiabilities"
+      :netWorth="summaryNetWorth"
+      :unit="unitLabel()"
+    />
     </div>
 
     <!-- Por categoría -->
@@ -311,37 +325,29 @@ onMounted(async () => {
     </div>
 
     <!-- Activos / Pasivos -->
-    <div class="grid-2">
-      <div>
-        <button class="btn btn-primary" @click="showAssetModal = true" :disabled="store.loading">
-          Añadir activo
-        </button>
+    <div class="grid-2 section">
+      <ItemList
+        title="Activos"
+        :items="store.assets"
+        :categories="assetCategories"
+        :ownerships="store.ownerships"
+        :onUpdate="store.updateAsset"
+        :onArchive="store.archiveAsset"
+        :onAdd="() => (showAssetModal = true)"
+      />
 
-        <ItemList
-          title="Activos"
-          :items="store.assets"
-          :categories="assetCategories"
-          :ownerships="store.ownerships"
-          :onUpdate="store.updateAsset"
-          :onArchive="store.archiveAsset"
-        />
-      </div>
-
-      <div>
-        <button class="btn btn-primary" @click="showLiabilityModal = true" :disabled="store.loading">
-          Añadir pasivo
-        </button>
-
-        <ItemList
-          title="Pasivos"
-          :items="store.liabilities"
-          :categories="liabilityCategories"
-          :ownerships="store.ownerships"
-          :onUpdate="store.updateLiability"
-          :onArchive="store.archiveLiability"
-        />
-      </div>
+      <ItemList
+        title="Pasivos"
+        :items="store.liabilities"
+        :categories="liabilityCategories"
+        :ownerships="store.ownerships"
+        :assets="store.assets"  
+        :onUpdate="store.updateLiability"
+        :onArchive="store.archiveLiability"
+        :onAdd="() => (showLiabilityModal = true)"
+      />
     </div>
+
 
     <!-- Snapshots -->
     <div class="section card">

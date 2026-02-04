@@ -145,11 +145,20 @@ class NetWorthSummaryAPIView(APIView):
                 (convert_currency(a.amount, a.currency, base_currency, date=today) for a in assets_qs),
                 start=Decimal("0"),
             )
-            liabilities_total = sum(
-                (convert_currency(l.amount, l.currency, base_currency, date=today) for l in liabilities_qs),
-                start=Decimal("0"),
-            )
+            liabilities_total = Decimal("0")
+            liabilities_asset_backed = Decimal("0")
+            liabilities_unbacked = Decimal("0")
+
+            for l in liabilities_qs:
+                v = convert_currency(l.amount, l.currency, base_currency, date=today)
+                liabilities_total += v
+                if l.financed_asset_id is not None:
+                    liabilities_asset_backed += v
+                else:
+                    liabilities_unbacked += v
+
             net = assets_total - liabilities_total
+
 
             # Breakdown nominal por categoría en moneda base
             assets_by_category: dict[str, Decimal] = {}
@@ -174,6 +183,9 @@ class NetWorthSummaryAPIView(APIView):
         net_worth_real = None
         assets_by_category_real = None
         liabilities_by_category_real = None
+        liabilities_asset_backed_real = None
+        liabilities_unbacked_real = None
+        
 
         if base_currency == "EUR":
             try:
@@ -200,6 +212,14 @@ class NetWorthSummaryAPIView(APIView):
                     for k, v in liabilities_by_category.items()
                 }
 
+                liabilities_asset_backed_real = adjust_for_inflation(
+                    liabilities_asset_backed, date=today, region=inflation_region, base_period=inflation_base_period
+                )
+                liabilities_unbacked_real = adjust_for_inflation(
+                    liabilities_unbacked, date=today, region=inflation_region, base_period=inflation_base_period
+                )
+
+
             except ValidationError as e:
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -222,6 +242,11 @@ class NetWorthSummaryAPIView(APIView):
                 "liabilities_by_category_real": (
                     {k: str(v) for k, v in liabilities_by_category_real.items()} if liabilities_by_category_real is not None else None
                 ),
+                "liabilities_asset_backed": str(liabilities_asset_backed),
+                "liabilities_unbacked": str(liabilities_unbacked),
+                "liabilities_asset_backed_real": str(liabilities_asset_backed_real) if liabilities_asset_backed_real is not None else None,
+                "liabilities_unbacked_real": str(liabilities_unbacked_real) if liabilities_unbacked_real is not None else None,
+
             }
         )
 

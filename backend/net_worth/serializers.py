@@ -285,6 +285,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "currency",
             "amount",
             "is_active",
+            "is_asset_backed",   
             "notes",
             "ownership_id",       # input
             "ownership",          # input nested
@@ -377,3 +378,117 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context["request"]
         return NetWorthSnapshot.objects.create(user=request.user, **validated_data)
+
+
+class AssetMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Asset
+        fields = ["id", "name", "category"]
+
+
+class LiabilitySerializer(serializers.ModelSerializer):
+    # INPUTS
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        queryset=Ownership.objects.none(),
+        source="ownership",
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    ownership = OwnershipWriteSerializer(required=False, write_only=True)
+
+    financed_asset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects.none(),   # se setea en __init__
+        source="financed_asset",
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+
+    # OUTPUTS
+    ownership_ref = serializers.IntegerField(source="ownership_id", read_only=True)
+    ownership_detail = OwnershipReadSerializer(source="ownership", read_only=True)
+
+    financed_asset_ref = serializers.IntegerField(source="financed_asset_id", read_only=True)
+    financed_asset_detail = AssetMiniSerializer(source="financed_asset", read_only=True)
+
+    class Meta:
+        model = Liability
+        fields = [
+            "id",
+            "name",
+            "category",
+            "tracking_mode",
+            "accounting_account_id",
+            "currency",
+            "amount",
+            "is_active",
+            "is_asset_backed",        # lo mantenemos, pero lo autogestionamos
+            "financed_asset_id",      # input
+            "financed_asset_ref",     # output
+            "financed_asset_detail",  # output mini
+            "notes",
+            "ownership_id",           # input
+            "ownership",              # input nested
+            "ownership_ref",          # output
+            "ownership_detail",       # output
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            self.fields["ownership_id"].queryset = Ownership.objects.filter(user=request.user)
+            self.fields["financed_asset_id"].queryset = Asset.objects.filter(
+                user=request.user,
+                is_active=True,  # <-- SOLO ACTIVOS ACTIVOS
+            )
+
+    def _has_nested_ownership(self):
+        data = getattr(self, "initial_data", {}) or {}
+        return isinstance(data.get("ownership"), dict)
+
+    def _has_ownership_id(self):
+        data = getattr(self, "initial_data", {}) or {}
+        return "ownership_id" in data and data.get("ownership_id") not in (None, "", [])
+
+    def validate(self, attrs):
+        tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
+        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
+
+        if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
+            raise serializers.ValidationError(
+                {"accounting_account_id": "Requerido si tracking_mode=accounting (placeholder hasta que exista contabilidad)."}
+            )
+
+        if self._has_nested_ownership() and self._has_ownership_id():
+            raise serializers.ValidationError("Usa solo ownership_id o ownership (no ambos).")
+
+        # --- coherencia: si hay activo financiado => deuda respaldada; si no => no respaldada
+        financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))
+        attrs["is_asset_backed"] = financed_asset is not None
+
+        return attrs
+
+    def _create_ownership_from_nested(self):
+        data = self.initial_data.get("ownership")
+        serializer = OwnershipWriteSerializer(data=data, context=self.context)
+        serializer.is_valid(raise_exception=True)
+        return serializer.save()
+
+    def create(self, validated_data):
+        request = self.context["request"]
+
+        if self._has_nested_ownership():
+            validated_data["ownership"] = self._create_ownership_from_nested()
+
+        return Liability.objects.create(user=request.user, **validated_data)
+
+    def update(self, instance, validated_data):
+        if self._has_nested_ownership():
+            validated_data["ownership"] = self._create_ownership_from_nested()
+
+        return super().update(instance, validated_data)
