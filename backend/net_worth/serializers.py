@@ -40,10 +40,19 @@ class OwnershipSplitReadSerializer(serializers.ModelSerializer):
 class OwnershipReadSerializer(serializers.ModelSerializer):
     member = FamilyMemberMiniSerializer(read_only=True)
     splits = OwnershipSplitReadSerializer(many=True, read_only=True)
+    is_in_use = serializers.SerializerMethodField()
 
     class Meta:
         model = Ownership
-        fields = ["id", "kind", "member", "splits", "notes"]
+        fields = ["id", "kind", "member", "splits", "notes", "is_in_use"]
+
+    def get_is_in_use(self, obj):
+        # usa related_name="assets"/"liabilities" que ya tienes
+        return obj.assets.exists() or obj.liabilities.exists()
+    
+
+
+
 
 
 # ---------- Ownership (WRITE) ----------
@@ -259,91 +268,6 @@ class AssetSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class LiabilitySerializer(serializers.ModelSerializer):
-    # INPUTS
-    ownership_id = serializers.PrimaryKeyRelatedField(
-        queryset=Ownership.objects.none(),  # se setea en __init__
-        source="ownership",
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
-    ownership = OwnershipWriteSerializer(required=False, write_only=True)
-
-    # OUTPUTS
-    ownership_ref = serializers.IntegerField(source="ownership_id", read_only=True)
-    ownership_detail = OwnershipReadSerializer(source="ownership", read_only=True)
-
-    class Meta:
-        model = Liability
-        fields = [
-            "id",
-            "name",
-            "category",
-            "tracking_mode",
-            "accounting_account_id",
-            "currency",
-            "amount",
-            "is_active",
-            "is_asset_backed",   
-            "notes",
-            "ownership_id",       # input
-            "ownership",          # input nested
-            "ownership_ref",      # output
-            "ownership_detail",   # output
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "created_at", "updated_at"]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        request = self.context.get("request")
-        if request and request.user and request.user.is_authenticated:
-            self.fields["ownership_id"].queryset = Ownership.objects.filter(user=request.user)
-
-    def _has_nested_ownership(self):
-        data = getattr(self, "initial_data", {}) or {}
-        return isinstance(data.get("ownership"), dict)
-
-    def _has_ownership_id(self):
-        data = getattr(self, "initial_data", {}) or {}
-        return "ownership_id" in data and data.get("ownership_id") not in (None, "", [])
-
-    def validate(self, attrs):
-        tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
-        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
-
-        if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
-            raise serializers.ValidationError(
-                {"accounting_account_id": "Requerido si tracking_mode=accounting (placeholder hasta que exista contabilidad)."}
-            )
-
-        if self._has_nested_ownership() and self._has_ownership_id():
-            raise serializers.ValidationError("Usa solo ownership_id o ownership (no ambos).")
-
-        return attrs
-
-    def _create_ownership_from_nested(self):
-        data = self.initial_data.get("ownership")
-        serializer = OwnershipWriteSerializer(data=data, context=self.context)
-        serializer.is_valid(raise_exception=True)
-        return serializer.save()
-
-    def create(self, validated_data):
-        request = self.context["request"]
-
-        if self._has_nested_ownership():
-            validated_data["ownership"] = self._create_ownership_from_nested()
-
-        return Liability.objects.create(user=request.user, **validated_data)
-
-    def update(self, instance, validated_data):
-        if self._has_nested_ownership():
-            validated_data["ownership"] = self._create_ownership_from_nested()
-
-        return super().update(instance, validated_data)
-
 
 # ---------- Snapshot ----------
 
@@ -387,7 +311,6 @@ class AssetMiniSerializer(serializers.ModelSerializer):
 
 
 class LiabilitySerializer(serializers.ModelSerializer):
-    # INPUTS
     ownership_id = serializers.PrimaryKeyRelatedField(
         queryset=Ownership.objects.none(),
         source="ownership",
@@ -492,3 +415,5 @@ class LiabilitySerializer(serializers.ModelSerializer):
             validated_data["ownership"] = self._create_ownership_from_nested()
 
         return super().update(instance, validated_data)
+    
+    

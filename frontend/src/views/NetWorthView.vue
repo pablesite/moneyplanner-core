@@ -207,19 +207,24 @@ onMounted(async () => {
     <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
       <h1 class="h1" style="margin: 0;">Patrimonio</h1>
 
-      <SettingsPopover
-        :loading="store.loading"
-        :baseCurrency="store.baseCurrency ?? 'EUR'"
-        :currencies="currencies"
-        :valueMode="valueMode"
-        :canShowReal="canShowReal()"
-        :modeHelp="modeLabel()"
-        :realBaseLabel="realBaseLabel"
-        @update:baseCurrency="store.updateBaseCurrency"
-        @update:valueMode="(v) => (valueMode = v)"
-        @snapshot="store.createTodaySnapshot()"
-        @refresh="store.refreshAll()"
-      />
+      <div style="display:flex; align-items:center; gap: 10px;"></div>
+        <button class="btn" type="button" @click="$router.push('/people')">
+          Personas
+        </button>
+
+        <SettingsPopover
+          :loading="store.loading"
+          :baseCurrency="store.baseCurrency ?? 'EUR'"
+          :currencies="currencies"
+          :valueMode="valueMode"
+          :canShowReal="canShowReal()"
+          :modeHelp="modeLabel()"
+          :realBaseLabel="realBaseLabel"
+          @update:baseCurrency="store.updateBaseCurrency"
+          @update:valueMode="(v) => (valueMode = v)"
+          @snapshot="store.createTodaySnapshot()"
+          @refresh="store.refreshAll()"
+        />
     </div>
 
     <div v-if="store.error" class="alert" style="margin-top: 12px;">

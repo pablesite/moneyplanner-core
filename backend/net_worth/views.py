@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -22,6 +23,38 @@ from .serializers import (
 from accounts.models import UserSettings
 from core.services import convert_currency, adjust_for_inflation
 from core.models import InflationIndex  # ajusta el import si InflationIndex vive en otro sitio
+
+from django.db.models import Q
+
+
+
+def ownership_is_used(ownership: Ownership) -> bool:
+    # usado si algún asset o liability referencia este ownership
+    return (
+        Asset.objects.filter(user=ownership.user, ownership=ownership).exists()
+        or Liability.objects.filter(user=ownership.user, ownership=ownership).exists()
+    )
+
+
+def member_is_used(member: FamilyMember) -> bool:
+    """
+    Un miembro está 'en uso' si existe algún Asset/Liability cuyo ownership:
+    - sea individual de ese miembro, o
+    - sea shared donde el miembro aparece en splits
+    """
+    user = member.user
+
+    ownership_ids = Ownership.objects.filter(
+        user=user
+    ).filter(
+        Q(kind=Ownership.Kind.INDIVIDUAL, member=member)
+        | Q(kind=Ownership.Kind.SHARED, splits__member=member)
+    ).values_list("id", flat=True).distinct()
+
+    return (
+        Asset.objects.filter(user=user, ownership_id__in=ownership_ids).exists()
+        or Liability.objects.filter(user=user, ownership_id__in=ownership_ids).exists()
+    )
 
 
 def _get_base_currency(user) -> str:
@@ -251,32 +284,108 @@ class NetWorthSummaryAPIView(APIView):
         )
 
 
+
+
 class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     serializer_class = FamilyMemberSerializer
     permission_classes = [IsAuthenticated]
     queryset = FamilyMember.objects.all()
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        member = serializer.save(user=self.request.user)
 
+        # crea ownership individual por defecto (idempotente)
+        Ownership.objects.get_or_create(
+            user=self.request.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+            defaults={"notes": ""},
+        )
+
+    def perform_update(self, serializer):
+        instance: FamilyMember = self.get_object()
+        prev_active = instance.is_active
+
+        updated = serializer.save()
+
+        # si intentan desactivar
+        if prev_active and updated.is_active is False:
+            if member_is_used(updated):
+                # revertimos el cambio para no dejar estado inconsistente
+                updated.is_active = True
+                updated.save(update_fields=["is_active"])
+
+                raise DRFValidationError(
+                    {
+                        "is_active": (
+                            "No se puede desactivar este miembro porque está en uso "
+                            "en activos/pasivos o en una titularidad asignada."
+                        )
+                    }
+                )
+
+    def destroy(self, request, *args, **kwargs):
+        member = self.get_object()
+
+        # si participa en alguna shared, bloquea (aunque no esté en uso)
+        if Ownership.objects.filter(user=request.user, kind=Ownership.Kind.SHARED, splits__member=member).exists():
+            raise DRFValidationError(
+                {"detail": "Este miembro aparece en una titularidad compartida. Elimina/ajusta esa titularidad antes."}
+            )
+
+        # si está en uso (assets/liabs por su individual o por shared usadas), bloquea
+        if member_is_used(member):
+            raise DRFValidationError(
+                {"detail": "No se puede eliminar este miembro porque está en uso en activos/pasivos o titularidades asignadas."}
+            )
+
+        # borrar su ownership individual (no usada)
+        Ownership.objects.filter(user=request.user, kind=Ownership.Kind.INDIVIDUAL, member=member).delete()
+
+        return super().destroy(request, *args, **kwargs)
+    
 
 class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Ownership.objects.all()
 
     def get_queryset(self):
-        # UserScopedQuerySetMixin filtra por user, pero aquí además optimizamos lectura de splits+member
         qs = super().get_queryset()
         return qs.select_related("member").prefetch_related("splits", "splits__member")
 
     def get_serializer_class(self):
-        # Lectura bonita
         if self.action in ("list", "retrieve"):
             return OwnershipReadSerializer
-        # Escritura/validación
         return OwnershipWriteSerializer
 
+    def perform_update(self, serializer):
+        instance = self.get_object()
 
+        # Individual: no tocar member/kind (si quieres, podríamos permitir solo notes)
+        if instance.kind == Ownership.Kind.INDIVIDUAL:
+            raise DRFValidationError({"detail": "La titularidad individual no se puede editar."})
+
+        # Shared: solo editable si NO está en uso
+        if instance.kind == Ownership.Kind.SHARED and (instance.assets.exists() or instance.liabilities.exists()):
+            raise DRFValidationError({"detail": "Esta titularidad ya está en uso. Crea una nueva en lugar de editarla."})
+
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # no borrar individual nunca
+        if instance.kind == Ownership.Kind.INDIVIDUAL:
+            raise DRFValidationError({"detail": "La titularidad individual no se puede eliminar."})
+
+        # no borrar si está en uso
+        if instance.assets.exists() or instance.liabilities.exists():
+            raise DRFValidationError({"detail": "Esta titularidad ya está en uso. No se puede eliminar."})
+
+        return super().destroy(request, *args, **kwargs)
+
+
+        
 class NetWorthByMemberSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
