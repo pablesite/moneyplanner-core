@@ -24,7 +24,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       <div class="modal-card">
         <div class="modal-header">
           <div class="modal-title">{{ title }}</div>
-          <button class="btn" @click="emit('close')">Cerrar</button>
         </div>
 
         <div class="modal-body">

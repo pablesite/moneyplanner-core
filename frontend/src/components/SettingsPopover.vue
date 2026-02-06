@@ -18,10 +18,12 @@ type Props = {
 
   // acciones
   showRefresh?: boolean; // por defecto true
+  iconOnly?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
   showRefresh: true,
+  iconOnly: false,
 });
 
 const emit = defineEmits<{
@@ -75,8 +77,16 @@ function onSelectMode(e: Event) {
 
 <template>
   <div ref="rootEl" class="popover-root">
-    <button class="btn" type="button" @click="toggle" :disabled="loading">
-      ⚙️ Ajustes
+    <button
+      class="btn"
+      :class="{ 'icon-only': iconOnly }"
+      type="button"
+      @click="toggle"
+      :disabled="loading"
+      aria-label="Ajustes"
+    >
+      <span class="btn-icon" aria-hidden="true">&#9881;&#65039;</span>
+      <span v-if="!iconOnly">Ajustes</span>
     </button>
 
     <div v-if="open" class="popover-panel">
@@ -134,6 +144,18 @@ function onSelectMode(e: Event) {
 .popover-root {
   position: relative;
   display: inline-block;
+}
+
+.icon-only{
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.btn-icon{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
 }
 
 /* panel con fondo sólido/legible */

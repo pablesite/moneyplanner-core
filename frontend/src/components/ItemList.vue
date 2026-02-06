@@ -42,6 +42,7 @@ type Props = {
   onArchive: (id: number) => Promise<void>;
   onAdd?: () => void;
   addLabel?: string;
+  onEdit?: (item: Item) => void;
 
   // SOLO para pasivos: lista de activos activos del usuario
   assets?: AssetMini[];
@@ -345,7 +346,7 @@ async function saveEdit(id: number) {
               <div class="item-main">
                 <div class="item-name">
                   <span>{{ it.name }}</span>
-                  <span class="subtle">—</span>
+                  <span class="item-sep" aria-hidden="true">|</span>
                   <span>{{ formatAmount(it.amount, { currency: it.currency }) }} {{ it.currency }}</span>
                 </div>
 
@@ -362,8 +363,15 @@ async function saveEdit(id: number) {
               </div>
 
               <div class="actions">
-                <button @click="startEdit(it)" class="icon-btn" title="Editar" aria-label="Editar">✏️</button>
-                <button @click="onArchive(it.id)" class="icon-btn" title="Archivar" aria-label="Archivar">🗑️</button>
+                <button
+                  @click="onEdit ? onEdit(it) : startEdit(it)"
+                  class="icon-btn"
+                  title="Editar"
+                  aria-label="Editar"
+                >
+                  &#9998;&#65039;
+                </button>
+                <button @click="onArchive(it.id)" class="icon-btn" title="Archivar" aria-label="Archivar">&#128465;&#65039;</button>
               </div>
             </div>
 
@@ -427,3 +435,10 @@ async function saveEdit(id: number) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.item-sep {
+  margin: 0 8px;
+  color: rgba(255, 255, 255, 0.25);
+}
+</style>

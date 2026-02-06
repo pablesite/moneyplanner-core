@@ -77,6 +77,10 @@ const prettyError = () => {
  * ------------------------- */
 const showAssetModal = ref(false);
 const showLiabilityModal = ref(false);
+const showBreakdown = ref(false);
+const showEditModal = ref(false);
+const editItem = ref<any>(null);
+const editKind = ref<"asset" | "liability" | null>(null);
 
 async function submitAsset(payload: any) {
   await store.createAsset(payload);
@@ -86,6 +90,82 @@ async function submitAsset(payload: any) {
 async function submitLiability(payload: any) {
   await store.createLiability(payload);
   showLiabilityModal.value = false;
+}
+
+function openEdit(item: any, kind: "asset" | "liability") {
+  editItem.value = item;
+  editKind.value = kind;
+  showEditModal.value = true;
+}
+
+function closeEdit() {
+  showEditModal.value = false;
+  editItem.value = null;
+  editKind.value = null;
+}
+
+const editTitle = computed(() =>
+  editKind.value === "liability" ? "Editar pasivo" : "Editar activo"
+);
+
+const editCategories = computed(() =>
+  editKind.value === "liability" ? liabilityCategories : assetCategories
+);
+
+const decimalsByCurrency: Record<string, number> = {
+  EUR: 2,
+  USD: 2,
+  BTC: 8,
+  ETH: 8,
+};
+
+function formatEditAmount(raw: unknown, currency: string) {
+  const max = decimalsByCurrency[currency] ?? 2;
+  let s = String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+  if (!s) return "";
+
+  const isNegative = s.startsWith("-");
+  if (isNegative) s = s.slice(1);
+
+  if ((s.match(/\./g) || []).length > 1) {
+    return isNegative ? `-${s}` : s;
+  }
+
+  const [i, d = ""] = s.split(".");
+  let out = d ? `${i}.${d.slice(0, max)}` : i;
+  out = out.replace(/\.?0+$/, "");
+  if (out.startsWith(".")) out = `0${out}`;
+  return isNegative ? `-${out}` : out;
+}
+
+const editInitial = computed(() => {
+  const item = editItem.value;
+  if (!item) return null;
+  return {
+    name: item.name ?? "",
+    category: item.category ?? "",
+    amount: formatEditAmount(item.amount, item.currency ?? "EUR"),
+    notes: item.notes ?? "",
+    currency: item.currency ?? "",
+    tracking_mode: item.tracking_mode ?? "manual",
+    is_active: item.is_active ?? true,
+    ownership_id: item.ownership_ref ?? null,
+    financed_asset_id: item.financed_asset_ref ?? null,
+  };
+});
+
+async function submitEdit(payload: any) {
+  if (!editItem.value || !editKind.value) return;
+  const id = editItem.value.id;
+
+  if (editKind.value === "asset") {
+    delete payload.financed_asset_id;
+    await store.updateAsset(id, payload);
+  } else {
+    await store.updateLiability(id, payload);
+  }
+
+  closeEdit();
 }
 
 /** -------------------------
@@ -203,36 +283,40 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="container">
-    <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
-      <h1 class="h1" style="margin: 0;">Patrimonio</h1>
+  <div class="container networth-container">
+    <div class="networth-top-right">
+      <SettingsPopover
+        :loading="store.loading"
+        :baseCurrency="store.baseCurrency ?? 'EUR'"
+        :currencies="currencies"
+        :valueMode="valueMode"
+        :canShowReal="canShowReal()"
+        :modeHelp="modeLabel()"
+        :realBaseLabel="realBaseLabel"
+        :iconOnly="true"
+        @update:baseCurrency="store.updateBaseCurrency"
+        @update:valueMode="(v) => (valueMode = v)"
+        @snapshot="store.createTodaySnapshot()"
+        @refresh="store.refreshAll()"
+      />
+    </div>
 
-      <div style="display:flex; align-items:center; gap: 10px;"></div>
+    <div class="networth-header">
+      <h1 class="h1 networth-title">Patrimonio</h1>
+
+      <div class="networth-actions">
         <button class="btn" type="button" @click="$router.push('/people')">
           Personas
         </button>
-
-        <SettingsPopover
-          :loading="store.loading"
-          :baseCurrency="store.baseCurrency ?? 'EUR'"
-          :currencies="currencies"
-          :valueMode="valueMode"
-          :canShowReal="canShowReal()"
-          :modeHelp="modeLabel()"
-          :realBaseLabel="realBaseLabel"
-          @update:baseCurrency="store.updateBaseCurrency"
-          @update:valueMode="(v) => (valueMode = v)"
-          @snapshot="store.createTodaySnapshot()"
-          @refresh="store.refreshAll()"
-        />
+      </div>
     </div>
 
-    <div v-if="store.error" class="alert" style="margin-top: 12px;">
+    <div v-if="store.error" class="alert networth-alert">
       {{ prettyError() }}
     </div>
 
     <!-- Resumen principal -->
-    <div class="card" style="margin-top: 14px; margin-bottom: 14px;">
+    <div class="card networth-summary-card">
   
     <NetWorthDonut
       :totalAssets="summaryAssets"
@@ -242,94 +326,104 @@ onMounted(async () => {
       :netWorth="summaryNetWorth"
       :unit="unitLabel()"
     />
-    </div>
+    
 
-    <!-- Por categoría -->
-    <div class="section card" v-if="store.summary">
-      <h2 style="margin-top: 0;">Por categoría</h2>
-
-      <NetWorthByCategoryBar
-        :labels="byCategoryLabels"
-        :assets="byCategoryAssets"
-        :liabilities="byCategoryLiabilities"
-        :unit="byCategoryUnit"
-      />
-
-      <div class="subtle" style="margin-top: 8px;">
-        {{ byCategoryUnit }} — Activos a la derecha, pasivos a la izquierda.
-      </div>
-    </div>
-
-
-    <!-- Por miembro -->
-    <div class="section card" v-if="store.byMemberSummary">
-      <h2 style="margin-top: 0;">Por miembro</h2>
-
-      <div v-if="byMemberChart && byMemberChart.labels.length" style="margin: 12px 0 16px;">
-        <NetWorthByMemberBar
-          :labels="byMemberChart.labels"
-          :assets="byMemberChart.assets"
-          :liabilities="byMemberChart.liabilities"
-          :unit="byMemberChart.unit"
-        />
+    <div class="networth-breakdown-inline">
+      <div class="networth-breakdown" v-if="store.summary || store.byMemberSummary">
+      <div class="panel-header">
+        <h2 class="panel-title">Desglose</h2>
+        <button class="btn btn-sm panel-toggle" type="button" @click="showBreakdown = !showBreakdown">
+          <span aria-hidden="true">{{ showBreakdown ? "&#9660;" : "&#9654;" }}</span>
+          <span>{{ showBreakdown ? "Ocultar" : "Mostrar" }}</span>
+        </button>
       </div>
 
-      <div v-if="hasUnassigned()" class="alert" style="margin-bottom: 12px;">
-        Hay activos/pasivos sin titularidad asignada (ownership = null).
-        <div class="subtle" style="margin-top:6px;">
-          Sin asignar — Activos: {{ formatMoney(store.byMemberSummary.unassigned.assets, 2) }} {{ store.byMemberSummary.base_currency }},
-          Pasivos: {{ formatMoney(store.byMemberSummary.unassigned.liabilities, 2) }} {{ store.byMemberSummary.base_currency }}
+      <div v-if="showBreakdown" class="networth-panels">
+        <div v-if="store.summary">
+          <h3 class="panel-subtitle">Por categoria</h3>
+          <NetWorthByCategoryBar
+            :labels="byCategoryLabels"
+            :assets="byCategoryAssets"
+            :liabilities="byCategoryLiabilities"
+            :unit="byCategoryUnit"
+          />
+
+          
+        </div>
+
+        <div v-if="store.byMemberSummary">
+          <h3 class="panel-subtitle">Por miembro</h3>
+          <div v-if="byMemberChart && byMemberChart.labels.length" class="panel-chart">
+            <NetWorthByMemberBar
+              :labels="byMemberChart.labels"
+              :assets="byMemberChart.assets"
+              :liabilities="byMemberChart.liabilities"
+              :unit="byMemberChart.unit"
+            />
+          </div>
+
+          <div v-if="hasUnassigned()" class="alert panel-alert">
+            Hay activos/pasivos sin titularidad asignada (ownership = null).
+            <div class="subtle panel-help">
+              Sin asignar &mdash; Activos: {{ formatMoney(store.byMemberSummary.unassigned.assets, 2) }} {{ store.byMemberSummary.base_currency }},
+              Pasivos: {{ formatMoney(store.byMemberSummary.unassigned.liabilities, 2) }} {{ store.byMemberSummary.base_currency }}
+            </div>
+          </div>
+
+          <table class="panel-table">
+            <thead>
+              <tr>
+                <th class="panel-th">Miembro</th>
+                <th class="panel-th panel-th-right">
+                  Activos ({{ store.byMemberSummary.base_currency }})
+                </th>
+                <th class="panel-th panel-th-right">
+                  Pasivos ({{ store.byMemberSummary.base_currency }})
+                </th>
+                <th class="panel-th panel-th-right">
+                  Neto ({{ store.byMemberSummary.base_currency }})
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr v-for="row in store.byMemberSummary.by_member" :key="row.member.id">
+                <td class="panel-td">
+                  {{ row.member.name }}
+                  <span class="subtle panel-role">
+                    ({{ row.member.role === 'adult' ? 'Adulto' : 'Nino' }})
+                  </span>
+                </td>
+                <td class="panel-td panel-td-right">{{ formatMoney(row.total_assets, 2) }}</td>
+                <td class="panel-td panel-td-right">{{ formatMoney(row.total_liabilities, 2) }}</td>
+                <td class="panel-td panel-td-right">{{ formatMoney(row.net_worth, 2) }}</td>
+              </tr>
+
+              <tr>
+                <td class="panel-td panel-total-left">
+                  <span class="subtle">Total</span>
+                </td>
+                <td class="panel-td panel-td-right panel-total">
+                  {{ formatMoney(store.byMemberSummary.totals.total_assets, 2) }}
+                </td>
+                <td class="panel-td panel-td-right panel-total">
+                  {{ formatMoney(store.byMemberSummary.totals.total_liabilities, 2) }}
+                </td>
+                <td class="panel-td panel-td-right panel-total">
+                  {{ formatMoney(store.byMemberSummary.totals.net_worth, 2) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <table style="width:100%; border-collapse: collapse;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Miembro</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
-              Activos ({{ store.byMemberSummary.base_currency }})
-            </th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
-              Pasivos ({{ store.byMemberSummary.base_currency }})
-            </th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">
-              Neto ({{ store.byMemberSummary.base_currency }})
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr v-for="row in store.byMemberSummary.by_member" :key="row.member.id">
-            <td style="padding:8px 6px;">
-              {{ row.member.name }}
-              <span class="subtle" style="margin-left:6px; font-size:12px;">
-                ({{ row.member.role === 'adult' ? 'Adulto' : 'Niño' }})
-              </span>
-            </td>
-            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.total_assets, 2) }}</td>
-            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.total_liabilities, 2) }}</td>
-            <td style="padding:8px 6px; text-align:right;">{{ formatMoney(row.net_worth, 2) }}</td>
-          </tr>
-
-          <tr>
-            <td style="padding:10px 6px; text-align:left; border-top: 1px solid rgba(0,0,0,.08);">
-              <span class="subtle">Total</span>
-            </td>
-            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ formatMoney(store.byMemberSummary.totals.total_assets, 2) }}
-            </td>
-            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ formatMoney(store.byMemberSummary.totals.total_liabilities, 2) }}
-            </td>
-            <td style="padding:10px 6px; text-align:right; border-top: 1px solid rgba(0,0,0,.08);">
-              {{ formatMoney(store.byMemberSummary.totals.net_worth, 2) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
     </div>
+    </div>
+</div>
 
-    <!-- Activos / Pasivos -->
+        <!-- Activos / Pasivos -->
+
+
     <div class="grid-2 section">
       <ItemList
         title="Activos"
@@ -339,6 +433,7 @@ onMounted(async () => {
         :onUpdate="store.updateAsset"
         :onArchive="store.archiveAsset"
         :onAdd="() => (showAssetModal = true)"
+        :onEdit="(it) => openEdit(it, 'asset')"
       />
 
       <ItemList
@@ -350,6 +445,7 @@ onMounted(async () => {
         :onUpdate="store.updateLiability"
         :onArchive="store.archiveLiability"
         :onAdd="() => (showLiabilityModal = true)"
+        :onEdit="(it) => openEdit(it, 'liability')"
       />
     </div>
 
@@ -379,7 +475,9 @@ onMounted(async () => {
         title="Nuevo activo"
         :categories="assetCategories"
         :ownerships="store.ownerships"
+        :allowNegative="true"
         :onSubmit="submitAsset"
+        :onCancel="() => (showAssetModal = false)"
       />
     </BaseModal>
 
@@ -388,8 +486,164 @@ onMounted(async () => {
         title="Nuevo pasivo"
         :categories="liabilityCategories"
         :ownerships="store.ownerships"
+        :assets="store.assets"
+        :showFinancedAsset="true"
         :onSubmit="submitLiability"
+        :onCancel="() => (showLiabilityModal = false)"
+      />
+    </BaseModal>
+
+    <BaseModal :open="showEditModal" :title="editTitle" @close="closeEdit">
+      <ItemForm
+        v-if="editInitial"
+        :title="editTitle"
+        :categories="editCategories"
+        :ownerships="store.ownerships"
+        :assets="editKind === 'liability' ? store.assets : []"
+        :showFinancedAsset="editKind === 'liability'"
+        :allowNegative="editKind === 'asset'"
+        mode="edit"
+        :initial="editInitial"
+        :onSubmit="submitEdit"
+        :onCancel="closeEdit"
       />
     </BaseModal>
   </div>
 </template>
+
+<style scoped>
+.networth-container{
+  position: relative;
+}
+
+.networth-top-right{
+  position: absolute;
+  right: 0;
+  top: -52px;
+}
+
+.networth-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.networth-title{
+  margin: 0;
+}
+
+.networth-actions{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.networth-alert{
+  margin-top: 12px;
+}
+
+.networth-summary-card{
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.networth-breakdown-inline{
+  margin-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 14px;
+}
+
+.networth-panels{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.networth-panels > .card{
+  min-width: 0;
+}
+
+.panel-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.panel-title{
+  margin: 0;
+  font-size: 16px;
+}
+
+.panel-toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-help{
+  margin-top: 8px;
+}
+
+.panel-chart{
+  margin: 12px 0 16px;
+}
+
+.panel-alert{
+  margin-bottom: 12px;
+}
+
+.panel-table{
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.panel-th{
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+}
+
+.panel-th-right{
+  text-align: right;
+}
+
+.panel-td{
+  padding: 8px 6px;
+}
+
+.panel-td-right{
+  text-align: right;
+}
+
+.panel-role{
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.panel-total-left{
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+.panel-total{
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+.panel-subtitle{
+  margin: 0 0 8px 0;
+  font-size: 15px;
+}
+
+.networth-breakdown{
+}
+
+@media (max-width: 700px){
+  .networth-panels{
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -105,9 +105,6 @@ const options = computed<ChartOptions<"bar">>(() => ({
 
 <template>
   <div class="wrap">
-    <div class="title">Por categoría</div>
-    <div class="sub">Activos (derecha) vs pasivos (izquierda)</div>
-
     <div class="chart">
       <Bar :data="data" :options="options" />
     </div>
@@ -120,16 +117,6 @@ const options = computed<ChartOptions<"bar">>(() => ({
   gap: 6px;
 }
 
-.title {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.sub {
-  font-size: 12px;
-  opacity: 0.65;
-  margin-bottom: 6px;
-}
 
 .chart {
   height: 320px;

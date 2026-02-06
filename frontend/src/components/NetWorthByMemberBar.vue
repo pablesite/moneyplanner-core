@@ -31,6 +31,13 @@ function formatMoney(n: number, decimals = 2) {
   }).format(n);
 }
 
+function formatTickCompact(value: number) {
+  const v = Math.abs(value);
+  if (v >= 1_000_000) return `${formatMoney(v / 1_000_000, 1)}M`;
+  if (v >= 1_000) return `${formatMoney(v / 1_000, 1)}k`;
+  return formatMoney(v, 0);
+}
+
 const data = computed<ChartData<"bar">>(() => ({
   labels: props.labels,
   datasets: [
@@ -82,7 +89,7 @@ const options = computed<ChartOptions<"bar">>(() => ({
         color: "rgba(255,255,255,0.65)",
         callback: (value) => {
           const v = typeof value === "number" ? value : Number(value);
-          return formatMoney(Math.abs(v), 0);
+          return formatTickCompact(v);
         },
       },
       grid: { color: "rgba(255,255,255,0.08)" },
@@ -93,7 +100,6 @@ const options = computed<ChartOptions<"bar">>(() => ({
 
 <template>
   <div class="wrap">
-    <div class="title">Activos vs pasivos por miembro</div>
     <div class="chart">
       <Bar :data="data" :options="options" />
     </div>
@@ -105,12 +111,7 @@ const options = computed<ChartOptions<"bar">>(() => ({
   display: grid;
   gap: 10px;
 }
-.title {
-  font-size: 14px;
-  opacity: 0.85;
-}
 .chart {
   height: 260px;
 }
 </style>
-B

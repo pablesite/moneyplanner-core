@@ -12,6 +12,7 @@ const form = reactive({
 
 const saving = ref(false);
 const rowBusy = ref<Record<number, boolean>>({});
+const createOpen = ref(false);
 
 // modal edición
 const editOpen = ref(false);
@@ -44,9 +45,21 @@ async function submit() {
     await store.createMember({ name, role: form.role });
     form.name = "";
     form.role = "adult";
+    createOpen.value = false;
   } finally {
     saving.value = false;
   }
+}
+
+function openCreate() {
+  store.clearError();
+  form.name = "";
+  form.role = "adult";
+  createOpen.value = true;
+}
+
+function closeCreate() {
+  createOpen.value = false;
 }
 
 async function toggleActive(id: number, next: boolean) {
@@ -107,111 +120,138 @@ onMounted(async () => {
 
 <template>
   <div>
-    <div v-if="prettyError" class="alert" style="margin-bottom: 12px;">
+    <div v-if="prettyError" class="alert member-alert">
       {{ prettyError }}
     </div>
-
-    <!-- Crear -->
-    <div class="card" style="padding: 14px; margin-bottom: 14px;">
-      <div class="subtle" style="margin-bottom: 10px;">
-        Crea miembros de la familia. Al crear un adulto, se generará automáticamente su titularidad individual.
-      </div>
-
-      <div style="display:flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        <input v-model="form.name" placeholder="Nombre (ej. Pablo)" style="min-width: 240px;" />
-
-        <select v-model="form.role" style="min-width: 160px;">
-          <option value="adult">Adulto</option>
-          <option value="child">Niño</option>
-        </select>
-
-        <button class="btn" type="button" :disabled="saving || store.loading" @click="submit">
-          Crear
-        </button>
-      </div>
-    </div>
-
     <!-- Lista -->
-    <div class="card" style="padding: 14px;">
-      <div style="display:flex; align-items:center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
-        <div class="subtle">Miembros</div>
-        <button class="btn" type="button" :disabled="store.loading" @click="store.fetchMembers()">
-          Refrescar
-        </button>
+    <section class="card member-section">
+      <div class="card-header">
+        <h2 class="card-header-title">Miembros</h2>
+        <div class="member-header-actions">
+          <button class="btn" type="button" :disabled="store.loading" @click="store.fetchMembers()">
+            Refrescar
+          </button>
+          <button class="btn btn-primary" type="button" :disabled="store.loading" @click="openCreate">
+            Nuevo miembro
+          </button>
+        </div>
       </div>
 
-      <table style="width:100%; border-collapse: collapse;">
+      <table class="member-table">
         <thead>
           <tr>
-            <th style="text-align:left; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Nombre</th>
-            <th style="text-align:left; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Rol</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Estado</th>
-            <th style="text-align:right; padding:8px 6px; border-bottom: 1px solid rgba(0,0,0,.08);">Acciones</th>
+            <th class="member-th">Nombre</th>
+            <th class="member-th">Rol</th>
+            <th class="member-th member-th-right">Estado</th>
+            <th class="member-th member-th-right">Acciones</th>
           </tr>
         </thead>
 
         <tbody>
           <tr v-for="m in membersSorted" :key="m.id">
-            <td style="padding:8px 6px;">
+            <td class="member-td">
               {{ m.name }}
             </td>
 
-            <td style="padding:8px 6px;">
+            <td class="member-td">
               <span class="subtle">
                 {{ m.role === 'adult' ? 'Adulto' : 'Niño' }}
               </span>
             </td>
 
-            <td style="padding:8px 6px; text-align:right;">
+            <td class="member-td member-td-right">
               <button
                 class="btn"
                 type="button"
                 :disabled="store.loading || rowBusy[m.id]"
                 @click="toggleActive(m.id, !m.is_active)"
-                :style="m.is_active ? '' : 'opacity:.7'"
+                :class="{ 'member-status-inactive': !m.is_active }"
               >
                 {{ m.is_active ? 'Activo' : 'Inactivo' }}
               </button>
             </td>
 
-            <td style="padding:8px 6px; text-align:right;">
-              <div style="display:inline-flex; gap: 10px;">
-                <button class="btn" type="button" :disabled="store.loading || rowBusy[m.id]" @click="openEdit(m)">
-                  Editar
+            <td class="member-td member-td-right">
+              <div class="member-actions">
+                <button
+                  class="icon-btn"
+                  type="button"
+                  title="Editar"
+                  aria-label="Editar"
+                  :disabled="store.loading || rowBusy[m.id]"
+                  @click="openEdit(m)"
+                >
+                  &#9998;&#65039;
                 </button>
-                <button class="btn" type="button" :disabled="store.loading || rowBusy[m.id]" @click="removeMember(m)">
-                  Eliminar
+                <button
+                  class="icon-btn"
+                  type="button"
+                  title="Eliminar"
+                  aria-label="Eliminar"
+                  :disabled="store.loading || rowBusy[m.id]"
+                  @click="removeMember(m)"
+                >
+                  &#128465;&#65039;
                 </button>
               </div>
             </td>
           </tr>
 
           <tr v-if="!membersSorted.length">
-            <td colspan="4" class="subtle" style="padding: 10px 6px;">
+            <td colspan="4" class="subtle member-empty">
               No hay miembros todavía.
             </td>
           </tr>
         </tbody>
       </table>
-    </div>
+    </section>
+
+    <!-- Modal crear -->
+    <BaseModal :open="createOpen" title="Nuevo miembro" @close="closeCreate">
+      <div class="member-edit-grid">
+        <div class="subtle member-card-subtitle">
+          Crea miembros de la familia. Al crear un adulto, se generara automaticamente su titularidad individual.
+        </div>
+
+        <div>
+          <div class="subtle member-field-label">Nombre</div>
+          <input v-model="form.name" placeholder="Nombre (ej. Pablo)" />
+        </div>
+
+        <div>
+          <div class="subtle member-field-label">Rol</div>
+          <select v-model="form.role">
+            <option value="adult">Adulto</option>
+            <option value="child">Nino</option>
+          </select>
+        </div>
+
+        <div class="member-edit-actions">
+          <button class="btn" type="button" @click="closeCreate">Cancelar</button>
+          <button class="btn btn-primary" type="button" :disabled="saving || store.loading" @click="submit">
+            Crear
+          </button>
+        </div>
+      </div>
+    </BaseModal>
 
     <!-- Modal editar -->
     <BaseModal :open="editOpen" title="Editar miembro" @close="editOpen = false">
-      <div style="display:grid; gap: 12px;">
+      <div class="member-edit-grid">
         <div>
-          <div class="subtle" style="margin-bottom: 6px;">Nombre</div>
+          <div class="subtle member-field-label">Nombre</div>
           <input v-model="editForm.name" />
         </div>
 
         <div>
-          <div class="subtle" style="margin-bottom: 6px;">Rol</div>
+          <div class="subtle member-field-label">Rol</div>
           <select v-model="editForm.role">
             <option value="adult">Adulto</option>
             <option value="child">Niño</option>
           </select>
         </div>
 
-        <div style="display:flex; justify-content: flex-end; gap: 10px;">
+        <div class="member-edit-actions">
           <button class="btn" type="button" @click="editOpen = false">Cancelar</button>
           <button
             class="btn"
@@ -226,3 +266,70 @@ onMounted(async () => {
     </BaseModal>
   </div>
 </template>
+
+<style scoped>
+.member-alert{
+  margin-bottom: 12px;
+}
+
+.member-card-subtitle{
+  margin-bottom: 10px;
+}
+
+.member-header-actions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.member-table{
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.member-th{
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.member-th-right{
+  text-align: right;
+}
+
+.member-td{
+  padding: 8px 6px;
+}
+
+.member-td-right{
+  text-align: right;
+}
+
+.member-actions{
+  display: inline-flex;
+  gap: 10px;
+}
+
+.member-empty{
+  padding: 10px 6px;
+}
+
+.member-status-inactive{
+  opacity: 0.7;
+}
+
+.member-edit-grid{
+  display: grid;
+  gap: 12px;
+}
+
+.member-field-label{
+  margin-bottom: 6px;
+}
+
+.member-edit-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+</style>

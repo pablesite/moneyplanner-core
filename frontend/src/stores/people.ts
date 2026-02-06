@@ -16,7 +16,6 @@ export type OwnershipRead = {
   kind: OwnershipKind;
   member: { id: number; name: string; role: "adult" | "child" } | null;
   splits: { member: { id: number; name: string; role: "adult" | "child" }; percent: string }[];
-  notes: string;
   is_in_use: boolean;
 };
 
@@ -141,7 +140,7 @@ export const usePeopleStore = defineStore("people", {
       }
     },
 
-    async createSharedOwnership(payload: { splits: { member_id: number; percent: string }[]; notes?: string }) {
+    async createSharedOwnership(payload: { splits: { member_id: number; percent: string }[] }) {
       this.loading = true;
       this.error = null;
       try {
@@ -149,7 +148,6 @@ export const usePeopleStore = defineStore("people", {
           kind: "shared",
           member: null,
           splits: payload.splits,
-          notes: payload.notes ?? "",
         });
 
         await this.fetchOwnerships();
@@ -161,10 +159,7 @@ export const usePeopleStore = defineStore("people", {
       }
     },
 
-    async updateSharedOwnership(
-      id: number,
-      payload: { splits: { member_id: number; percent: string }[]; notes?: string }
-    ) {
+    async updateSharedOwnership(id: number, payload: { splits: { member_id: number; percent: string }[] }) {
       this.loading = true;
       this.error = null;
       try {
@@ -172,7 +167,6 @@ export const usePeopleStore = defineStore("people", {
           kind: "shared",
           member: null,
           splits: payload.splits,
-          notes: payload.notes ?? "",
         });
         await this.fetchOwnerships();
       } catch (e) {

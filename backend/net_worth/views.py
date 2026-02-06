@@ -299,7 +299,6 @@ class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
             user=self.request.user,
             kind=Ownership.Kind.INDIVIDUAL,
             member=member,
-            defaults={"notes": ""},
         )
 
     def perform_update(self, serializer):
@@ -361,7 +360,7 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = self.get_object()
 
-        # Individual: no tocar member/kind (si quieres, podríamos permitir solo notes)
+        # Individual: no tocar member/kind
         if instance.kind == Ownership.Kind.INDIVIDUAL:
             raise DRFValidationError({"detail": "La titularidad individual no se puede editar."})
 

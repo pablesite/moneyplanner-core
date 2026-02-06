@@ -44,7 +44,7 @@ class OwnershipReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ownership
-        fields = ["id", "kind", "member", "splits", "notes", "is_in_use"]
+        fields = ["id", "kind", "member", "splits", "is_in_use"]
 
     def get_is_in_use(self, obj):
         # usa related_name="assets"/"liabilities" que ya tienes
@@ -74,7 +74,7 @@ class OwnershipWriteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ownership
-        fields = ["id", "kind", "member", "splits", "notes"]
+        fields = ["id", "kind", "member", "splits"]
 
     def _get_user(self):
         req = self.context.get("request")
@@ -207,7 +207,6 @@ class AssetSerializer(serializers.ModelSerializer):
             "currency",
             "amount",
             "is_active",
-            "notes",
             "ownership_id",       # input
             "ownership",          # input nested
             "ownership_ref",      # output

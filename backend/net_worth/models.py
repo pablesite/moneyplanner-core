@@ -40,8 +40,8 @@ class Asset(models.Model):
     amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
-        validators=[MinValueValidator(0)],
-        help_text="Valor actual (positivo). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
+        validators=[],
+        help_text="Valor actual (puede ser negativo). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
     )
 
     is_active = models.BooleanField(default=True)
@@ -198,7 +198,6 @@ class Ownership(models.Model):
         related_name="individual_ownerships",
     )
 
-    notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

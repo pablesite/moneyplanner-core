@@ -11,22 +11,22 @@ const tab = ref<Tab>("members");
 
 <template>
   <div class="container">
-    <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px;">
-      <h1 class="h1" style="margin: 0;">Personas</h1>
+    <div class="page-header">
+      <h1 class="h1 page-title">Personas</h1>
 
-      <div style="display:flex; align-items:center; gap: 10px;">
+      <div class="page-actions">
         <button class="btn" type="button" @click="router.push('/')">
           Volver a Patrimonio
         </button>
       </div>
     </div>
 
-    <div class="card" style="margin-top: 14px;">
-      <div style="display:flex; gap: 10px; margin-bottom: 14px;">
+    <div class="card people-content-card">
+      <div class="people-tabs">
         <button
           class="btn"
           type="button"
-          :style="tab === 'members' ? 'opacity:1' : 'opacity:.6'"
+          :class="['tab-btn', { 'is-active': tab === 'members' }]"
           @click="tab = 'members'"
         >
           Miembros
@@ -35,20 +35,59 @@ const tab = ref<Tab>("members");
         <button
           class="btn"
           type="button"
-          :style="tab === 'ownerships' ? 'opacity:1' : 'opacity:.6'"
+          :class="['tab-btn', { 'is-active': tab === 'ownerships' }]"
           @click="tab = 'ownerships'"
         >
           Titularidades
         </button>
       </div>
 
-      <div v-if="tab === 'members'">
-        <FamilyMemberManager />
-      </div>
-
-      <div v-else>
-        <OwnershipManager />
+      <div class="people-panel">
+        <FamilyMemberManager v-if="tab === 'members'" />
+        <OwnershipManager v-else />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.page-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.page-title{
+  margin: 0;
+}
+
+.page-actions{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.people-content-card{
+  margin-top: 14px;
+}
+
+.people-tabs{
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.tab-btn{
+  opacity: 0.6;
+}
+
+.tab-btn.is-active{
+  opacity: 1;
+}
+
+.people-panel{
+  display: grid;
+  gap: 14px;
+}
+</style>

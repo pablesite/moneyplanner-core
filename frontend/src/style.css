@@ -33,8 +33,7 @@ body {
 
   /* Esto es el default de Vite, si te va bien lo de centrar todo, déjalo.
      Si te está molestando con layouts/modals, cámbialo a display:block. */
-  display: flex;
-  place-items: center;
+  display: block;
 
   min-width: 320px;
   min-height: 100vh;
