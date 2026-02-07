@@ -50,8 +50,40 @@ const assetCategories = [
   { value: "cash", label: "Liquidez" },
   { value: "investments", label: "Inversiones" },
   { value: "real_estate", label: "Inmuebles" },
-  { value: "vehicle", label: "Vehículo" },
+  { value: "furnishings", label: "Mobiliario" },
   { value: "other", label: "Otros" },
+];
+
+const assetSubcategories = [
+  { category: "cash", value: "bank_account", label: "Cuenta bancaria" },
+  { category: "cash", value: "wallet", label: "Monedero" },
+  { category: "cash", value: "crypto_spot_earn", label: "Spot/Earn Cripto" },
+  { category: "cash", value: "other", label: "Otros" },
+
+  { category: "investments", value: "deposits", label: "Depósitos" },
+  { category: "investments", value: "funds", label: "Fondos" },
+  { category: "investments", value: "etfs", label: "ETFs" },
+  { category: "investments", value: "roboadvisor", label: "Roboadvisor" },
+  { category: "investments", value: "stocks", label: "Stocks" },
+  { category: "investments", value: "pension_plans", label: "Planes de pensiones" },
+  { category: "investments", value: "cryptocurrencies", label: "Criptomonedas" },
+  { category: "investments", value: "real_estate_crowd", label: "Crowdfunding Inmobiliario" },
+  { category: "investments", value: "crowdlending", label: "Crowdlending" },
+  { category: "investments", value: "other", label: "Otros" },
+
+  { category: "real_estate", value: "primary_home", label: "Vivienda habitual" },
+  { category: "real_estate", value: "second_home", label: "Segunda vivienda" },
+  { category: "real_estate", value: "rental", label: "Rentas" },
+  { category: "real_estate", value: "other", label: "Otros" },
+
+  { category: "furnishings", value: "vehicles", label: "Vehículos" },
+  { category: "furnishings", value: "technology", label: "Tecnología" },
+  { category: "furnishings", value: "home_furnishings", label: "Muebles vivienda" },
+  { category: "furnishings", value: "sports_equipment", label: "Equipamiento deportivo" },
+  { category: "furnishings", value: "jewelry", label: "Joyería" },
+  { category: "furnishings", value: "other", label: "Otros" },
+
+  { category: "other", value: "other", label: "Otros" },
 ];
 
 const liabilityCategories = [
@@ -104,6 +136,13 @@ function closeEdit() {
   editKind.value = null;
 }
 
+function confirmDeleteSnapshot(id: number) {
+  if (store.loading) return;
+  if (confirm("Eliminar este snapshot?")) {
+    store.deleteSnapshot(id);
+  }
+}
+
 const editTitle = computed(() =>
   editKind.value === "liability" ? "Editar pasivo" : "Editar activo"
 );
@@ -144,6 +183,7 @@ const editInitial = computed(() => {
   return {
     name: item.name ?? "",
     category: item.category ?? "",
+    subcategory: item.subcategory ?? "",
     amount: formatEditAmount(item.amount, item.currency ?? "EUR"),
     notes: item.notes ?? "",
     currency: item.currency ?? "",
@@ -284,30 +324,51 @@ onMounted(async () => {
 
 <template>
   <div class="container networth-container">
-    <div class="networth-top-right">
-      <SettingsPopover
-        :loading="store.loading"
-        :baseCurrency="store.baseCurrency ?? 'EUR'"
-        :currencies="currencies"
-        :valueMode="valueMode"
-        :canShowReal="canShowReal()"
-        :modeHelp="modeLabel()"
-        :realBaseLabel="realBaseLabel"
-        :iconOnly="true"
-        @update:baseCurrency="store.updateBaseCurrency"
-        @update:valueMode="(v) => (valueMode = v)"
-        @snapshot="store.createTodaySnapshot()"
-        @refresh="store.refreshAll()"
-      />
-    </div>
-
     <div class="networth-header">
+      <div class="networth-title-row">
       <h1 class="h1 networth-title">Patrimonio</h1>
+      <button
+        class="icon-btn networth-refresh"
+        type="button"
+        @click="store.refreshAll()"
+        :disabled="store.loading"
+        aria-label="Refrescar"
+      >
+        <span class="icon" aria-hidden="true">&#8635;</span>
+      </button>
+      <button
+        class="icon-btn networth-snapshot"
+        type="button"
+        @click="store.createTodaySnapshot()"
+        :disabled="store.loading"
+        aria-label="Guardar snapshot"
+        title="Guardar snapshot"
+      >
+        <span class="icon" aria-hidden="true">&#128190;</span>
+      </button>
+    </div>
 
       <div class="networth-actions">
         <button class="btn" type="button" @click="$router.push('/people')">
           Personas
         </button>
+
+        <SettingsPopover
+          :loading="store.loading"
+          :baseCurrency="store.baseCurrency ?? 'EUR'"
+          :currencies="currencies"
+          :valueMode="valueMode"
+          :canShowReal="canShowReal()"
+          :modeHelp="modeLabel()"
+          :realBaseLabel="realBaseLabel"
+          :showRefresh="false"
+          :showSnapshot="false"
+          :iconOnly="true"
+          @update:baseCurrency="store.updateBaseCurrency"
+          @update:valueMode="(v) => (valueMode = v)"
+          @snapshot="store.createTodaySnapshot()"
+          @refresh="store.refreshAll()"
+        />
       </div>
     </div>
 
@@ -429,6 +490,11 @@ onMounted(async () => {
         title="Activos"
         :items="store.assets"
         :categories="assetCategories"
+        :subcategories="assetSubcategories"
+        :baseCurrency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
+        :categoryTotalsBase="store.summary?.assets_by_category ?? {}"
+        :subcategoryTotalsBase="store.summary?.assets_by_subcategory ?? {}"
+        :totalBase="store.summary?.total_assets ?? '0'"
         :ownerships="store.ownerships"
         :onUpdate="store.updateAsset"
         :onArchive="store.archiveAsset"
@@ -440,6 +506,9 @@ onMounted(async () => {
         title="Pasivos"
         :items="store.liabilities"
         :categories="liabilityCategories"
+        :baseCurrency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
+        :categoryTotalsBase="store.summary?.liabilities_by_category ?? {}"
+        :totalBase="store.summary?.total_liabilities ?? '0'"
         :ownerships="store.ownerships"
         :assets="store.assets"  
         :onUpdate="store.updateLiability"
@@ -454,13 +523,25 @@ onMounted(async () => {
     <div class="section card">
       <h2 style="margin-top: 0;">Snapshots</h2>
 
-      <ul v-if="store.snapshots.length" style="margin: 0; padding-left: 18px; display: grid; gap: 8px;">
-        <li v-for="s in store.snapshots" :key="s.id">
-          {{ s.snapshot_date }} — neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
-          <span class="subtle">
-            (activos {{ formatMoney(s.total_assets, 2) }} {{ s.base_currency }},
-            pasivos {{ formatMoney(s.total_liabilities, 2) }} {{ s.base_currency }})
-          </span>
+      <ul v-if="store.snapshots.length" class="snapshot-list">
+        <li v-for="s in store.snapshots" :key="s.id" class="snapshot-row">
+          <div class="snapshot-main">
+            {{ s.snapshot_date }} — neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
+            <span class="subtle">
+              (activos {{ formatMoney(s.total_assets, 2) }} {{ s.base_currency }},
+              pasivos {{ formatMoney(s.total_liabilities, 2) }} {{ s.base_currency }})
+            </span>
+          </div>
+          <button
+            class="icon-btn snapshot-delete"
+            type="button"
+            @click="confirmDeleteSnapshot(s.id)"
+            :disabled="store.loading"
+            aria-label="Eliminar snapshot"
+            title="Eliminar snapshot"
+          >
+            <span class="icon" aria-hidden="true">&#128465;</span>
+          </button>
         </li>
       </ul>
 
@@ -474,6 +555,7 @@ onMounted(async () => {
       <ItemForm
         title="Nuevo activo"
         :categories="assetCategories"
+        :subcategories="assetSubcategories"
         :ownerships="store.ownerships"
         :allowNegative="true"
         :onSubmit="submitAsset"
@@ -498,6 +580,7 @@ onMounted(async () => {
         v-if="editInitial"
         :title="editTitle"
         :categories="editCategories"
+        :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
         :ownerships="store.ownerships"
         :assets="editKind === 'liability' ? store.assets : []"
         :showFinancedAsset="editKind === 'liability'"
@@ -531,6 +614,22 @@ onMounted(async () => {
 
 .networth-title{
   margin: 0;
+}
+
+.networth-title-row{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.networth-refresh:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.networth-snapshot:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .networth-actions{
@@ -639,6 +738,30 @@ onMounted(async () => {
 }
 
 .networth-breakdown{
+}
+
+.snapshot-list{
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.snapshot-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.snapshot-main{
+  min-width: 0;
+}
+
+.snapshot-delete:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 700px){

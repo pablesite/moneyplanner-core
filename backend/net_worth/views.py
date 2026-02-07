@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, mixins
 from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -84,14 +84,24 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     serializer_class = AssetSerializer
     queryset = Asset.objects.all()
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["base_currency"] = _get_base_currency(self.request.user)
+        return ctx
+
 
 class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LiabilitySerializer
     queryset = Liability.objects.all()
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["base_currency"] = _get_base_currency(self.request.user)
+        return ctx
 
-class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+
+class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     """
     Solo lectura. La creación/actualización se hace únicamente con from-current.
     """
@@ -195,9 +205,13 @@ class NetWorthSummaryAPIView(APIView):
 
             # Breakdown nominal por categoría en moneda base
             assets_by_category: dict[str, Decimal] = {}
+            assets_by_subcategory: dict[str, Decimal] = {}
             for a in assets_qs:
                 assets_by_category.setdefault(a.category, Decimal("0"))
                 assets_by_category[a.category] += convert_currency(a.amount, a.currency, base_currency, date=today)
+                subkey = f"{a.category}:{a.subcategory or 'other'}"
+                assets_by_subcategory.setdefault(subkey, Decimal("0"))
+                assets_by_subcategory[subkey] += convert_currency(a.amount, a.currency, base_currency, date=today)
 
             liabilities_by_category: dict[str, Decimal] = {}
             for l in liabilities_qs:
@@ -263,6 +277,7 @@ class NetWorthSummaryAPIView(APIView):
                 "total_liabilities": str(liabilities_total),
                 "net_worth": str(net),
                 "assets_by_category": {k: str(v) for k, v in assets_by_category.items()},
+                "assets_by_subcategory": {k: str(v) for k, v in assets_by_subcategory.items()},
                 "liabilities_by_category": {k: str(v) for k, v in liabilities_by_category.items()},
                 "inflation_region": inflation_region if base_currency == "EUR" else None,
                 "inflation_base_period": str(inflation_base_period) if inflation_base_period else None,

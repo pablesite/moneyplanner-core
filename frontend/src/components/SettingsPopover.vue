@@ -18,11 +18,13 @@ type Props = {
 
   // acciones
   showRefresh?: boolean; // por defecto true
+  showSnapshot?: boolean; // por defecto true
   iconOnly?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
   showRefresh: true,
+  showSnapshot: true,
   iconOnly: false,
 });
 
@@ -123,8 +125,8 @@ function onSelectMode(e: Event) {
         </div>
       </div>
 
-      <div class="popover-block" style="display:flex; gap:10px; flex-wrap: wrap;">
-        <button class="btn btn-primary" type="button" @click="emit('snapshot')" :disabled="loading">
+      <div class="popover-block popover-actions">
+        <button v-if="showSnapshot" class="btn btn-primary" type="button" @click="emit('snapshot')" :disabled="loading">
           Guardar snapshot
         </button>
 
@@ -132,7 +134,7 @@ function onSelectMode(e: Event) {
           Refrescar
         </button>
 
-        <button class="btn" type="button" @click="close">
+        <button class="btn popover-close" type="button" @click="close">
           Cerrar
         </button>
       </div>
@@ -195,6 +197,20 @@ function onSelectMode(e: Event) {
 .popover-block {
   padding: 10px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-actions{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.popover-actions .btn{
+  width: 100%;
+}
+
+.popover-close{
+  grid-column: 1 / -1;
 }
 
 .popover-block:first-of-type {

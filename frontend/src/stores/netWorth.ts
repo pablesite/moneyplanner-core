@@ -5,11 +5,13 @@ export type Asset = {
   id: number;
   name: string;
   category: string;
+  subcategory: string;
   tracking_mode: string;
-  accounting_account_id: number | null;
-  currency: string;
-  amount: string;
-  is_active: boolean;
+    accounting_account_id: number | null;
+    currency: string;
+    amount: string;
+    amount_base?: string;
+    is_active: boolean;
   notes: string;
 };
 
@@ -33,6 +35,7 @@ export type Summary = {
   net_worth: string;
 
   assets_by_category: Record<string, string>;
+  assets_by_subcategory: Record<string, string>;
   liabilities_by_category: Record<string, string>;
 
   // IPC (solo si base_currency === "EUR")
@@ -193,6 +196,19 @@ export const useNetWorthStore = defineStore("netWorth", {
       }
     },
 
+    async deleteSnapshot(id: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await api.delete(`/api/net-worth/snapshots/${id}/`);
+        await this.refreshAll();
+      } catch (e: any) {
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+      } finally {
+        this.loading = false;
+      }
+    },
+
     async createAsset(payload: Partial<Asset>) {
       this.loading = true;
       this.error = null;
@@ -299,3 +315,4 @@ export const useNetWorthStore = defineStore("netWorth", {
   },
 
 });
+

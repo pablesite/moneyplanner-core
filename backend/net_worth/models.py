@@ -11,9 +11,37 @@ class Asset(models.Model):
         CASH = "cash", "Liquidez"
         INVESTMENTS = "investments", "Inversiones"
         REAL_ESTATE = "real_estate", "Inmuebles"
-        VEHICLE = "vehicle", "Vehículo"
+        VEHICLE = "vehicle", "Veh�culo"
+        FURNISHINGS = "furnishings", "Mobiliario"
         OTHER = "other", "Otros"
 
+    
+    class Subcategory(models.TextChoices):
+        BANK_ACCOUNT = "bank_account", "Cuenta bancaria"
+        WALLET = "wallet", "Monedero"
+        CRYPTO_SPOT_EARN = "crypto_spot_earn", "Spot/Earn Cripto"
+
+        DEPOSITS = "deposits", "Depósitos"
+        FUNDS = "funds", "Fondos"
+        ETFS = "etfs", "ETFs"
+        ROBOADVISOR = "roboadvisor", "Roboadvisor"
+        STOCKS = "stocks", "Stocks"
+        PENSION_PLANS = "pension_plans", "Planes de pensiones"
+        CRYPTOCURRENCIES = "cryptocurrencies", "Criptomonedas"
+        REAL_ESTATE_CROWD = "real_estate_crowd", "Crowdfunding Inmobiliario"
+        CROWDLENDING = "crowdlending", "Crowdlending"
+
+        PRIMARY_HOME = "primary_home", "Vivienda habitual"
+        SECOND_HOME = "second_home", "Segunda vivienda"
+        RENTAL = "rental", "Rentas"
+
+        VEHICLES = "vehicles", "Vehículos"
+        TECHNOLOGY = "technology", "Tecnología"
+        HOME_FURNISHINGS = "home_furnishings", "Muebles vivienda"
+        SPORTS_EQUIPMENT = "sports_equipment", "Equipamiento deportivo"
+        JEWELRY = "jewelry", "Joyería"
+
+        OTHER = "other", "Otros"
     class TrackingMode(models.TextChoices):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
@@ -31,6 +59,7 @@ class Asset(models.Model):
 
     name = models.CharField(max_length=120)
     category = models.CharField(max_length=32, choices=Category.choices, default=Category.CASH)
+    subcategory = models.CharField(max_length=48, choices=Subcategory.choices, default=Subcategory.OTHER)
 
     tracking_mode = models.CharField(max_length=16, choices=TrackingMode.choices, default=TrackingMode.MANUAL)
     # placeholder para enlazar con el módulo contabilidad (cuando exista)
@@ -61,6 +90,47 @@ class Asset(models.Model):
     def __str__(self) -> str:
         return f"{self.user_id} - {self.name} ({self.amount} {self.currency})"
 
+ASSET_SUBCATEGORY_MAP = {
+    Asset.Category.CASH: {
+        Asset.Subcategory.BANK_ACCOUNT,
+        Asset.Subcategory.WALLET,
+        Asset.Subcategory.CRYPTO_SPOT_EARN,
+        Asset.Subcategory.OTHER,
+    },
+    Asset.Category.INVESTMENTS: {
+        Asset.Subcategory.DEPOSITS,
+        Asset.Subcategory.FUNDS,
+        Asset.Subcategory.ETFS,
+        Asset.Subcategory.ROBOADVISOR,
+        Asset.Subcategory.STOCKS,
+        Asset.Subcategory.PENSION_PLANS,
+        Asset.Subcategory.CRYPTOCURRENCIES,
+        Asset.Subcategory.REAL_ESTATE_CROWD,
+        Asset.Subcategory.CROWDLENDING,
+        Asset.Subcategory.OTHER,
+    },
+    Asset.Category.REAL_ESTATE: {
+        Asset.Subcategory.PRIMARY_HOME,
+        Asset.Subcategory.SECOND_HOME,
+        Asset.Subcategory.RENTAL,
+        Asset.Subcategory.OTHER,
+    },
+    Asset.Category.FURNISHINGS: {
+        Asset.Subcategory.VEHICLES,
+        Asset.Subcategory.TECHNOLOGY,
+        Asset.Subcategory.HOME_FURNISHINGS,
+        Asset.Subcategory.SPORTS_EQUIPMENT,
+        Asset.Subcategory.JEWELRY,
+        Asset.Subcategory.OTHER,
+    },
+    Asset.Category.VEHICLE: {
+        Asset.Subcategory.VEHICLES,
+        Asset.Subcategory.OTHER,
+    },
+    Asset.Category.OTHER: {
+        Asset.Subcategory.OTHER,
+    },
+}
 
 class Liability(models.Model):
     class Category(models.TextChoices):
@@ -69,6 +139,33 @@ class Liability(models.Model):
         CREDIT_CARD = "credit_card", "Tarjeta"
         OTHER = "other", "Otros"
 
+    
+    class Subcategory(models.TextChoices):
+        BANK_ACCOUNT = "bank_account", "Cuenta bancaria"
+        WALLET = "wallet", "Monedero"
+        CRYPTO_SPOT_EARN = "crypto_spot_earn", "Spot/Earn Cripto"
+
+        DEPOSITS = "deposits", "Dep�sitos"
+        FUNDS = "funds", "Fondos"
+        ETFS = "etfs", "ETFs"
+        ROBOADVISOR = "roboadvisor", "Roboadvisor"
+        STOCKS = "stocks", "Stocks"
+        PENSION_PLANS = "pension_plans", "Planes de pensiones"
+        CRYPTOCURRENCIES = "cryptocurrencies", "Criptomonedas"
+        REAL_ESTATE_CROWD = "real_estate_crowd", "Crowdfunding Inmobiliario"
+        CROWDLENDING = "crowdlending", "Crowdlending"
+
+        PRIMARY_HOME = "primary_home", "Vivienda habitual"
+        SECOND_HOME = "second_home", "Segunda vivienda"
+        RENTAL = "rental", "Rentas"
+
+        VEHICLES = "vehicles", "Veh�culos"
+        TECHNOLOGY = "technology", "Tecnolog�a"
+        HOME_FURNISHINGS = "home_furnishings", "Muebles vivienda"
+        SPORTS_EQUIPMENT = "sports_equipment", "Equipamiento deportivo"
+        JEWELRY = "jewelry", "Joyer�a"
+
+        OTHER = "other", "Otros"
     class TrackingMode(models.TextChoices):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
@@ -234,3 +331,7 @@ class OwnershipSplit(models.Model):
     def __str__(self) -> str:
         return f"{self.ownership_id} - {self.member_id} - {self.percent}%"
     
+
+
+
+

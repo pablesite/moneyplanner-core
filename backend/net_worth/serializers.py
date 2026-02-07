@@ -1,14 +1,17 @@
 from decimal import Decimal
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
     Asset,
     Liability,
+    ASSET_SUBCATEGORY_MAP,
     NetWorthSnapshot,
     FamilyMember,
     Ownership,
     OwnershipSplit,
 )
+from core.services import convert_currency
 
 
 class EmptySerializer(serializers.Serializer):
@@ -182,6 +185,7 @@ class OwnershipWriteSerializer(serializers.ModelSerializer):
 # ---------- Asset / Liability ----------
 
 class AssetSerializer(serializers.ModelSerializer):
+    amount_base = serializers.SerializerMethodField()
     # INPUTS
     ownership_id = serializers.PrimaryKeyRelatedField(
         queryset=Ownership.objects.none(),  # se setea en __init__
@@ -202,10 +206,12 @@ class AssetSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "category",
+            "subcategory",
             "tracking_mode",
             "accounting_account_id",
             "currency",
             "amount",
+            "amount_base",
             "is_active",
             "ownership_id",       # input
             "ownership",          # input nested
@@ -244,7 +250,24 @@ class AssetSerializer(serializers.ModelSerializer):
         if self._has_nested_ownership() and self._has_ownership_id():
             raise serializers.ValidationError("Usa solo ownership_id o ownership (no ambos).")
 
+        category = attrs.get("category", getattr(self.instance, "category", None))
+        subcategory = attrs.get("subcategory", getattr(self.instance, "subcategory", None))
+        if category and subcategory:
+            allowed = ASSET_SUBCATEGORY_MAP.get(category)
+            if allowed and subcategory not in allowed:
+                raise serializers.ValidationError({"subcategory": "Subcategoría inválida para esta categoría."})
+
         return attrs
+
+    def get_amount_base(self, obj):
+        base_currency = self.context.get("base_currency")
+        if not base_currency:
+            return None
+        try:
+            today = timezone.localdate()
+            return str(convert_currency(obj.amount, obj.currency, base_currency, date=today))
+        except Exception:
+            return None
 
     def _create_ownership_from_nested(self):
         data = self.initial_data.get("ownership")
@@ -306,10 +329,11 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
 class AssetMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
-        fields = ["id", "name", "category"]
+        fields = ["id", "name", "category", "subcategory"]
 
 
 class LiabilitySerializer(serializers.ModelSerializer):
+    amount_base = serializers.SerializerMethodField()
     ownership_id = serializers.PrimaryKeyRelatedField(
         queryset=Ownership.objects.none(),
         source="ownership",
@@ -344,6 +368,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "accounting_account_id",
             "currency",
             "amount",
+            "amount_base",
             "is_active",
             "is_asset_backed",        # lo mantenemos, pero lo autogestionamos
             "financed_asset_id",      # input
@@ -395,6 +420,16 @@ class LiabilitySerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def get_amount_base(self, obj):
+        base_currency = self.context.get("base_currency")
+        if not base_currency:
+            return None
+        try:
+            today = timezone.localdate()
+            return str(convert_currency(obj.amount, obj.currency, base_currency, date=today))
+        except Exception:
+            return None
+
     def _create_ownership_from_nested(self):
         data = self.initial_data.get("ownership")
         serializer = OwnershipWriteSerializer(data=data, context=self.context)
@@ -416,3 +451,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
     
     
+
+
+
+

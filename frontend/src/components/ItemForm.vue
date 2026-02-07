@@ -12,6 +12,7 @@ type Ownership = {
 type Props = {
   title: string;
   categories: { value: string; label: string }[];
+  subcategories?: { value: string; label: string; category: string }[];
   ownerships: Ownership[];
   onSubmit: (payload: any) => Promise<void>;
   onCancel?: () => void;
@@ -22,6 +23,7 @@ type Props = {
   initial?: Partial<{
     name: string;
     category: string;
+    subcategory?: string;
     amount: string;
     notes: string;
     currency: string;
@@ -72,6 +74,7 @@ const decimalsByCurrency: Record<string, number> = {
 const form = reactive({
   name: "",
   category: "",
+  subcategory: "",
   amount: "",
   notes: "",
   currency: "",
@@ -95,8 +98,21 @@ const financedAssetOptions = computed(() => {
 });
 
 const showFinancedAsset = computed(() => !!props.showFinancedAsset);
+const subcategoriesForCategory = computed(() => {
+  if (!props.subcategories || !form.category) return [];
+  return props.subcategories.filter((s) => s.category === form.category);
+});
 
 const maxDecimals = computed(() => decimalsByCurrency[form.currency] ?? 2);
+
+watch(
+  () => form.category,
+  () => {
+    if (!props.subcategories) return;
+    const valid = subcategoriesForCategory.value.some((s) => s.value === form.subcategory);
+    if (!valid) form.subcategory = "";
+  }
+);
 
 function normalizeLooseNumber(raw: unknown) {
   // Allow only digits and separators, remove spaces (including NBSP)
@@ -169,6 +185,7 @@ const amountHint = computed(() => {
 
 async function submit() {
   if (!form.name || !form.category || !form.currency || !form.amount) return;
+  if (props.subcategories && !form.subcategory) return;
 
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
@@ -176,6 +193,7 @@ async function submit() {
   const payload: any = {
     name: form.name,
     category: form.category,
+    subcategory: form.subcategory || undefined,
     amount: normalizedAmount, // normalized dot-decimal string
     notes: form.notes,
     currency: form.currency,
@@ -192,6 +210,7 @@ async function submit() {
 
   form.name = "";
   form.category = "";
+  form.subcategory = "";
   form.amount = "";
   form.notes = "";
   form.currency = "";
@@ -205,6 +224,7 @@ watch(
     if (!initial) return;
     form.name = initial.name ?? "";
     form.category = initial.category ?? "";
+    form.subcategory = initial.subcategory ?? "";
     form.amount = initial.amount ?? "";
     form.notes = initial.notes ?? "";
     form.currency = initial.currency ?? "";
@@ -228,6 +248,13 @@ watch(
         <option value="" disabled>Selecciona categoria</option>
         <option v-for="c in categories" :key="c.value" :value="c.value">
           {{ c.label }}
+        </option>
+      </select>
+
+      <select v-if="props.subcategories" v-model="form.subcategory" :class="['select', { 'is-placeholder': !form.subcategory }]">
+        <option value="" disabled>Selecciona subcategoria</option>
+        <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">
+          {{ s.label }}
         </option>
       </select>
 
