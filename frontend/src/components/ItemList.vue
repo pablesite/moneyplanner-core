@@ -131,7 +131,7 @@ const ownershipById = computed(() => {
 });
 
 function ownershipShortLabel(ownershipRef?: number | null) {
-  if (!ownershipRef) return null;
+  if (ownershipRef == null) return null;
 
   const o = ownershipById.value.get(ownershipRef);
   if (!o) return `own #${ownershipRef}`;
@@ -241,13 +241,13 @@ const filteredItems = computed(() => {
   const list = Array.isArray(props.items) ? props.items : [];
   if (ownershipFilter.value === "all") return list;
   if (ownershipFilter.value === "unassigned") {
-    return list.filter((it) => !it.ownership_ref);
+    return list.filter((it) => it.ownership_ref == null);
   }
   const memberId = ownershipFilter.value;
   if (typeof memberId !== "number") return list;
   const out: Item[] = [];
   for (const it of list) {
-    if (!it.ownership_ref) continue;
+    if (it.ownership_ref == null) continue;
     const o = ownershipById.value.get(it.ownership_ref);
     if (!o) continue;
     let pct = 0;
@@ -269,7 +269,21 @@ const filteredItems = computed(() => {
   return out;
 });
 
-const grouped = computed(() => {
+type Subgroup = {
+  subcategory: string | null;
+  label: string | null;
+  items: Item[];
+};
+
+type Group = {
+  category: string;
+  label: string;
+  items: Item[];
+  subgroups: Subgroup[];
+  hasSubgroups: boolean;
+};
+
+const grouped = computed<Group[]>(() => {
   const list = filteredItems.value;
   const map = new Map<string, Item[]>();
 
@@ -286,9 +300,20 @@ const grouped = computed(() => {
         category,
         label: categoryLabel(category),
         items: items.sort((x, y) => x.name.localeCompare(y.name)),
-      } as any;
+        subgroups: [] as Subgroup[],
+        hasSubgroups: false,
+      } as Group;
 
-      if (!props.subcategories) return base;
+      if (!props.subcategories) {
+        base.subgroups = [
+          {
+            subcategory: null,
+            label: null,
+            items: base.items,
+          },
+        ];
+        return base;
+      }
 
       const subMap = new Map<string, Item[]>();
       for (const it of items) {
@@ -304,10 +329,21 @@ const grouped = computed(() => {
           label: subcategoryLabel(subcategory),
           items: subitems.sort((x, y) => x.name.localeCompare(y.name)),
         }));
+      base.hasSubgroups = true;
 
       return base;
       });
 });
+
+function shouldShowGroupDetails(group: Group) {
+  if (group.hasSubgroups) return expandedCats.value.has(group.category);
+  return !isLiabilitiesList.value || expandedCats.value.has(group.category);
+}
+
+function subgroupKey(group: Group, subgroup: Subgroup, index: number) {
+  if (group.hasSubgroups) return subgroup.subcategory ?? `sub-${index}`;
+  return `${group.category}-all`;
+}
 
 const headerTotals = computed(() => categoryTotals(filteredItems.value));
 const headerBaseValue = computed(() => totalBaseAll());
@@ -540,6 +576,7 @@ async function saveEdit(id: number) {
         <h2 style="margin-top: 0" class="card-header-title">{{ title }}</h2>
         <select v-model="ownershipFilter" class="select select-sm">
           <option value="all">Todos los miembros</option>
+          <option value="unassigned">Sin asignar</option>
           <option v-for="m in memberFilterOptions" :key="String(m.id)" :value="m.id">
             {{ m.name }}
           </option>
@@ -550,7 +587,7 @@ async function saveEdit(id: number) {
           <span v-if="headerBaseLabel()">{{ headerBaseLabel() }}</span>
           <span v-else>{{ formatTotalsLine(headerTotals) }}</span>
         </div>
-        <button v-if="onAdd" class="btn btn-primary btn-sm add-icon-only" type="button" @click="onAdd" aria-label="A�adir">
+        <button v-if="onAdd" class="btn btn-primary btn-sm add-icon-only" type="button" @click="onAdd" aria-label="Añadir">
           <span class="btn-icon">+</span>
         </button>
       </div>
@@ -574,27 +611,29 @@ async function saveEdit(id: number) {
           </div>
           <div class="cat-right">
             <div class="cat-total">
-              <div>
+              <div
+                v-if="shouldShowBaseTotal(categoryTotals(g.items), categoryBaseValue(g.category, g.items)) && baseTotalLabel(g.category, g.items)"
+                class="cat-total-primary"
+              >
+                {{ baseTotalLabel(g.category, g.items) }}
+                <span v-if="categoryPercent(g.category, g.items)" class="cat-percent">
+                  . {{ categoryPercent(g.category, g.items) }}%
+                </span>
+              </div>
+              <div
+                :class="shouldShowBaseTotal(categoryTotals(g.items), categoryBaseValue(g.category, g.items)) && baseTotalLabel(g.category, g.items) ? 'cat-total-details' : 'cat-total-primary'"
+              >
                 {{ formatTotalsLine(categoryTotals(g.items)) }}
                 <span
                   v-if="!shouldShowBaseTotal(categoryTotals(g.items), categoryBaseValue(g.category, g.items)) && categoryPercent(g.category, g.items)"
                   class="cat-percent"
                 >
-                  � {{ categoryPercent(g.category, g.items) }}%
-                </span>
-              </div>
-              <div
-                v-if="shouldShowBaseTotal(categoryTotals(g.items), categoryBaseValue(g.category, g.items)) && baseTotalLabel(g.category, g.items)"
-                class="cat-total-base"
-              >
-                &asymp; {{ baseTotalLabel(g.category, g.items) }}
-                <span v-if="categoryPercent(g.category, g.items)" class="cat-percent">
-                  � {{ categoryPercent(g.category, g.items) }}%
+                  . {{ categoryPercent(g.category, g.items) }}%
                 </span>
               </div>
             </div>
             <button
-              v-if="g.subgroups || isLiabilitiesList"
+              v-if="g.hasSubgroups || isLiabilitiesList"
               class="icon-btn cat-toggle"
               type="button"
               @click="toggleCategory(g.category)"
@@ -606,12 +645,27 @@ async function saveEdit(id: number) {
           </div>
         </div>
 
-        <div v-if="g.subgroups && expandedCats.has(g.category)" class="subcat-list">
-          <div v-for="sg in g.subgroups" :key="sg.subcategory" class="subcat-block">
-            <div class="subcat-header">
+        <div v-if="shouldShowGroupDetails(g)" :class="g.hasSubgroups ? 'subcat-list' : ''">
+          <div
+            v-for="(sg, sgIndex) in g.subgroups"
+            :key="subgroupKey(g, sg, sgIndex)"
+            :class="g.hasSubgroups ? 'subcat-block' : ''"
+          >
+            <div v-if="g.hasSubgroups" class="subcat-header">
               <div class="subcat-title">{{ sg.label }}</div>
               <div class="subcat-total">
-                <div>
+                <div
+                  v-if="shouldShowBaseTotal(categoryTotals(sg.items), subcategoryBaseValue(g.category, sg.subcategory, sg.items)) && subcategoryBaseLabel(g.category, sg.subcategory, sg.items)"
+                  class="subcat-total-primary"
+                >
+                  {{ subcategoryBaseLabel(g.category, sg.subcategory, sg.items) }}
+                  <span v-if="subcategoryPercent(g.category, sg.subcategory, sg.items, g.items)" class="subcat-percent">
+                    · {{ subcategoryPercent(g.category, sg.subcategory, sg.items, g.items) }}%
+                  </span>
+                </div>
+                <div
+                  :class="shouldShowBaseTotal(categoryTotals(sg.items), subcategoryBaseValue(g.category, sg.subcategory, sg.items)) && subcategoryBaseLabel(g.category, sg.subcategory, sg.items) ? 'subcat-total-details' : 'subcat-total-primary'"
+                >
                   {{ formatTotalsLine(categoryTotals(sg.items)) }}
                   <span
                     v-if="!shouldShowBaseTotal(categoryTotals(sg.items), subcategoryBaseValue(g.category, sg.subcategory, sg.items)) && subcategoryPercent(g.category, sg.subcategory, sg.items, g.items)"
@@ -620,16 +674,8 @@ async function saveEdit(id: number) {
                     · {{ subcategoryPercent(g.category, sg.subcategory, sg.items, g.items) }}%
                   </span>
                 </div>
-                <div
-                  v-if="shouldShowBaseTotal(categoryTotals(sg.items), subcategoryBaseValue(g.category, sg.subcategory, sg.items)) && subcategoryBaseLabel(g.category, sg.subcategory, sg.items)"
-                  class="subcat-total-base"
-                >
-                  ≈ {{ subcategoryBaseLabel(g.category, sg.subcategory, sg.items) }}
-                  <span v-if="subcategoryPercent(g.category, sg.subcategory, sg.items, g.items)" class="subcat-percent">
-                    · {{ subcategoryPercent(g.category, sg.subcategory, sg.items, g.items) }}%
-                  </span>
-                </div>
               </div>
+              <div class="subcat-actions-spacer" aria-hidden="true"></div>
             </div>
 
             <ul class="list list-plain subcat-items">
@@ -646,16 +692,16 @@ async function saveEdit(id: number) {
                       <span v-if="it._sharePercent && it._sharePercent < 100" class="badge">
                         {{ it._sharePercent }}%
                       </span>
-
-                      <span v-if="isLiabilitiesList && it.financed_asset_ref" class="badge">
-                        Financia: {{ financedAssetName(it.financed_asset_ref) }}
+                    </div>
+                    <div v-if="isLiabilitiesList && it.financed_asset_ref" class="item-submeta inline">
+                      <span class="financed-text">
+                        · Financia: {{ financedAssetName(it.financed_asset_ref) }}
                       </span>
                     </div>
-                    <div class="item-amount">
-                      {{ formatAmount(String(displayAmount(it)), { currency: it.currency }) }} {{ it.currency }}
-                    </div>
                   </div>
-
+                  <div class="item-amount">
+                    {{ formatAmount(String(displayAmount(it)), { currency: it.currency }) }} {{ it.currency }}
+                  </div>
                   <div class="actions">
                     <button
                       @click="onEdit ? onEdit(editTarget(it)) : startEdit(editTarget(it))"
@@ -732,102 +778,6 @@ async function saveEdit(id: number) {
             </ul>
           </div>
         </div>
-
-        <ul
-          v-else-if="!g.subgroups && (!isLiabilitiesList || expandedCats.has(g.category))"
-          class="list list-plain subcat-items"
-        >
-          <li v-for="it in g.items" :key="it.id">
-            <div v-if="editingId !== it.id" class="item-row">
-              <div class="item-main">
-                <div class="item-name">
-                  <span class="item-name-text">{{ it.name }}</span>
-                  <span v-if="!it.is_active" class="badge">archivado</span>
-
-                  <span v-if="ownershipShortLabel(it.ownership_ref)" class="badge">
-                    {{ ownershipShortLabel(it.ownership_ref) }}
-                  </span>
-                  <span v-if="it._sharePercent && it._sharePercent < 100" class="badge">
-                    {{ it._sharePercent }}%
-                  </span>
-
-                  <span v-if="isLiabilitiesList && it.financed_asset_ref" class="badge">
-                    Financia: {{ financedAssetName(it.financed_asset_ref) }}
-                  </span>
-                </div>
-                <div class="item-amount">
-                  {{ formatAmount(String(displayAmount(it)), { currency: it.currency }) }} {{ it.currency }}
-                </div>
-              </div>
-
-              <div class="actions">
-                <button
-                  @click="onEdit ? onEdit(editTarget(it)) : startEdit(editTarget(it))"
-                  class="icon-btn"
-                  title="Editar"
-                  aria-label="Editar"
-                >
-                  &#9998;&#65039;
-                </button>
-                <button @click="onArchive(it.id)" class="icon-btn" title="Archivar" aria-label="Archivar">&#128465;&#65039;</button>
-              </div>
-            </div>
-
-            <div v-else class="form-grid" style="max-width: 520px;">
-              <input v-model="draft.name" class="input" />
-
-              <select v-model="draft.category" class="select">
-                <option v-for="c in categories" :key="c.value" :value="c.value">
-                  {{ c.label }}
-                </option>
-              </select>
-
-              <select v-model="draft.currency" class="select">
-                <option v-for="c in currencies" :key="c.value" :value="c.value">
-                  {{ c.label }}
-                </option>
-              </select>
-
-              <input v-model="draft.amount" inputmode="decimal" class="input" />
-
-              <select v-model="draft.ownership_id" class="select">
-                <option v-for="o in ownershipOptions" :key="String(o.value)" :value="o.value">
-                  {{ o.label }}
-                </option>
-              </select>
-
-              <select
-                v-if="isLiabilitiesList"
-                v-model="draft.financed_asset_id"
-                class="select"
-              >
-                <option v-for="a in financedAssetOptions" :key="String(a.value)" :value="a.value">
-                  {{ a.label }}
-                </option>
-              </select>
-
-              <textarea v-model="draft.notes" rows="2" class="textarea"></textarea>
-
-              <label class="checkbox-row">
-                <input v-model="draft.is_active" type="checkbox" />
-                Activo
-              </label>
-
-              <div style="grid-column: 1 / -1; font-size: 12px; opacity: 0.7;">
-                {{ amountHint }}
-              </div>
-
-              <div v-if="amountError" style="grid-column: 1 / -1; font-size: 12px; color: #b00020;">
-                {{ amountError }}
-              </div>
-
-              <div class="actions">
-                <button @click="saveEdit(it.id)" class="btn btn-primary" :disabled="!!amountError">Guardar</button>
-                <button @click="cancelEdit" class="btn">Cancelar</button>
-              </div>
-            </div>
-          </li>
-        </ul>
       </section>
     </div>
   </div>
@@ -900,7 +850,7 @@ async function saveEdit(id: number) {
 
 .cat-right{
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
 }
 
@@ -910,7 +860,7 @@ async function saveEdit(id: number) {
 
 .cat-header{
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
@@ -927,17 +877,20 @@ async function saveEdit(id: number) {
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
-  font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.15;
   max-width: 280px;
-  font-size: 12px;
 }
 .cat-total > div{
   word-break: break-word;
 }
-.cat-total-base{
+.cat-total-primary{
+  color: rgba(255,255,255,0.92);
+  font-size: 13px;
+  font-weight: 700;
+}
+.cat-total-details{
   color: rgba(255,255,255,0.55);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -946,33 +899,48 @@ async function saveEdit(id: number) {
 }
 .subcat-header{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
   gap: 12px;
+  margin-top: 12px;
+  padding-top: 6px;
 }
 .subcat-title{
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: none;
   min-width: 0;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.75);
+}
+.subcat-block{
+  --item-actions-width: 72px;
 }
 .subcat-total{
   display: grid;
   justify-items: end;
   text-align: right;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;
 }
-.subcat-total-base{
+.subcat-total-primary{
+  color: rgba(255,255,255,0.9);
+  font-size: 11px;
+  font-weight: 700;
+}
+.subcat-total-details{
   color: rgba(255,255,255,0.55);
   font-size: 10px;
   font-weight: 500;
 }
 .subcat-percent{
   color: rgba(255,255,255,0.55);
+}
+.subcat-actions-spacer{
+  width: var(--item-actions-width, 72px);
 }
 
 .item-sep {
@@ -984,10 +952,54 @@ async function saveEdit(id: number) {
   background: transparent;
   box-shadow: none;
   border-radius: 0;
-  padding: 6px 2px;
+  padding: 3px 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 12px;
 }
 .subcat-items .item-row + .item-row{
   border-top: 1px solid rgba(255,255,255,0.06);
-  padding-top: 10px;
-  margin-top: 6px;
+  padding-top: 6px;
+  margin-top: 4px;
+}
+.subcat-items .item-main{
+  min-width: 0;
+  padding-left: 12px;
+}
+.subcat-items .item-name{
+  font-size: 14px;
+  font-weight: 500;
+}
+.subcat-items .item-submeta{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+}
+.subcat-items .item-submeta .financed-text{
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.subcat-items .item-submeta.inline{
+  display: inline;
+  margin-top: 0;
+}
+.subcat-items .item-amount{
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.subcat-items .actions{
+  justify-self: end;
+  min-width: var(--item-actions-width, 72px);
+}
+.subcat-items .actions .icon-btn{
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 12px;
 }</style>
