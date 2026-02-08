@@ -295,6 +295,11 @@ watch(
 
       <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
 
+      <label class="checkbox-row">
+        <input v-model="form.is_active" type="checkbox" />
+        Activo
+      </label>
+
       <div class="form-actions">
         <button v-if="onCancel" class="btn" type="button" @click="onCancel">
           Cancelar
@@ -331,4 +336,3 @@ watch(
   min-width: 140px;
 }
 </style>
-

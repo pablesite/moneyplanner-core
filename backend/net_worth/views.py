@@ -118,16 +118,10 @@ class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, mixins.DestroyModelMixin,
     def from_current(self, request):
         base_currency = _get_base_currency(request.user)
 
-        assets_qs = Asset.objects.filter(
-            user=request.user,
-            is_active=True,
-            tracking_mode=Asset.TrackingMode.MANUAL,
-        )
-        liabilities_qs = Liability.objects.filter(
-            user=request.user,
-            is_active=True,
-            tracking_mode=Liability.TrackingMode.MANUAL,
-        )
+        # Include all active items. Accounting mode is not implemented yet,
+        # so it should still contribute to totals.
+        assets_qs = Asset.objects.filter(user=request.user, is_active=True)
+        liabilities_qs = Liability.objects.filter(user=request.user, is_active=True)
 
         snapshot_date = timezone.localdate()
 
@@ -169,16 +163,10 @@ class NetWorthSummaryAPIView(APIView):
     def get(self, request):
         base_currency = _get_base_currency(request.user)
 
-        assets_qs = Asset.objects.filter(
-            user=request.user,
-            is_active=True,
-            tracking_mode=Asset.TrackingMode.MANUAL,
-        )
-        liabilities_qs = Liability.objects.filter(
-            user=request.user,
-            is_active=True,
-            tracking_mode=Liability.TrackingMode.MANUAL,
-        )
+        # Include all active items. Accounting mode is not implemented yet,
+        # so it should still contribute to totals.
+        assets_qs = Asset.objects.filter(user=request.user, is_active=True)
+        liabilities_qs = Liability.objects.filter(user=request.user, is_active=True)
 
         today = timezone.localdate()
 
@@ -419,13 +407,15 @@ class NetWorthByMemberSummaryAPIView(APIView):
         unassigned_liabilities = Decimal("0")
 
         # precargar ownerships para no hacer N+1
+        # Include all active items. Accounting mode is not implemented yet,
+        # so it should still contribute to totals.
         assets_qs = (
-            Asset.objects.filter(user=request.user, is_active=True, tracking_mode=Asset.TrackingMode.MANUAL)
+            Asset.objects.filter(user=request.user, is_active=True)
             .select_related("ownership", "ownership__member")
             .prefetch_related("ownership__splits", "ownership__splits__member")
         )
         liabilities_qs = (
-            Liability.objects.filter(user=request.user, is_active=True, tracking_mode=Liability.TrackingMode.MANUAL)
+            Liability.objects.filter(user=request.user, is_active=True)
             .select_related("ownership", "ownership__member")
             .prefetch_related("ownership__splits", "ownership__splits__member")
         )

@@ -23,6 +23,34 @@ type Props = {
 
 const props = defineProps<Props>();
 
+const ASSET_COLOR_BY_LABEL: Record<string, string> = {
+  liquidez: "rgba(92, 192, 255, 0.9)",
+  inversiones: "rgba(74, 209, 179, 0.9)",
+  inmuebles: "rgba(111, 211, 122, 0.9)",
+  mobiliario: "rgba(138, 203, 136, 0.85)",
+  otros: "rgba(122, 161, 194, 0.85)",
+};
+
+const LIAB_COLOR_BY_LABEL: Record<string, string> = {
+  hipoteca: "rgba(255, 99, 132, 0.85)",
+  "préstamo personal": "rgba(255, 120, 150, 0.85)",
+  "prestamo personal": "rgba(255, 120, 150, 0.85)",
+  tarjeta: "rgba(255, 140, 110, 0.85)",
+  otros: "rgba(255, 130, 130, 0.8)",
+};
+
+function labelKey(label: string) {
+  return (label || "").trim().toLowerCase();
+}
+
+function assetColorFor(label: string) {
+  return ASSET_COLOR_BY_LABEL[labelKey(label)] ?? "rgba(92, 192, 255, 0.9)";
+}
+
+function liabilityColorFor(label: string) {
+  return LIAB_COLOR_BY_LABEL[labelKey(label)] ?? "rgba(255, 99, 132, 0.85)";
+}
+
 function formatMoney(n: number, decimals = 0) {
   return new Intl.NumberFormat("es-ES", {
     useGrouping: true,
@@ -39,24 +67,64 @@ function formatTickCompact(value: number) {
 }
 
 const data = computed<ChartData<"bar">>(() => ({
-  labels: props.labels,
+  labels: orderedLabels.value,
   datasets: [
     {
       label: "Activos",
-      data: props.assets,
-      backgroundColor: "rgba(90, 200, 250, 0.85)",
+      data: orderedAssets.value,
+      backgroundColor: orderedLabels.value.map((l) => assetColorFor(l)),
       borderRadius: 8,
       barThickness: 18,
     },
     {
       label: "Pasivos",
-      data: props.liabilities.map((v) => -Math.abs(v)),
-      backgroundColor: "rgba(255, 99, 132, 0.80)",
+      data: orderedLiabilities.value.map((v) => -Math.abs(v)),
+      backgroundColor: orderedLabels.value.map((l) => liabilityColorFor(l)),
       borderRadius: 8,
       barThickness: 18,
     },
   ],
 }));
+
+const ASSET_ORDER = ["liquidez", "inversiones", "inmuebles", "mobiliario", "otros"];
+const LIAB_ORDER = ["tarjeta", "préstamo personal", "prestamo personal", "hipoteca", "otros"];
+
+const assetRank = new Map<string, number>(ASSET_ORDER.map((k, i) => [k, i]));
+const liabRank = new Map<string, number>(LIAB_ORDER.map((k, i) => [k, i]));
+
+const orderedIndex = computed(() => {
+  const indexed = props.labels.map((label, i) => ({ label, i }));
+  return indexed.sort((a, b) => {
+    const ak = labelKey(a.label);
+    const bk = labelKey(b.label);
+    const aIsAsset = assetRank.has(ak);
+    const bIsAsset = assetRank.has(bk);
+    const aIsLiab = liabRank.has(ak);
+    const bIsLiab = liabRank.has(bk);
+
+    // 1) Activos primero, luego pasivos, luego resto
+    const aGroup = aIsAsset ? 0 : aIsLiab ? 1 : 2;
+    const bGroup = bIsAsset ? 0 : bIsLiab ? 1 : 2;
+    if (aGroup !== bGroup) return aGroup - bGroup;
+
+    // 2) Dentro de activos/pasivos, usar su orden fijo
+    if (aGroup === 0) {
+      const ai = assetRank.get(ak) ?? Number.MAX_SAFE_INTEGER;
+      const bi = assetRank.get(bk) ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+    } else if (aGroup === 1) {
+      const ai = liabRank.get(ak) ?? Number.MAX_SAFE_INTEGER;
+      const bi = liabRank.get(bk) ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+    }
+
+    return a.label.localeCompare(b.label);
+  });
+});
+
+const orderedLabels = computed(() => orderedIndex.value.map((x) => x.label));
+const orderedAssets = computed(() => orderedIndex.value.map((x) => props.assets[x.i] ?? 0));
+const orderedLiabilities = computed(() => orderedIndex.value.map((x) => props.liabilities[x.i] ?? 0));
 
 const options = computed<ChartOptions<"bar">>(() => ({
   responsive: true,

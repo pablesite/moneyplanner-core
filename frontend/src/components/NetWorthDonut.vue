@@ -96,9 +96,9 @@ const data = computed<ChartData<"doughnut">>(() => ({
     {
       data: [equitySlice.value, backedSlice.value, unbackedSlice.value],
       backgroundColor: [
-        "rgba(90, 200, 250, 0.85)",  // equity (neto)
-        "rgba(255, 99, 132, 0.80)",  // deuda con activo
-        "rgba(255, 159, 64, 0.80)",  // deuda sin activo
+        "rgba(92, 192, 255, 0.9)",   // equity (neto) - activos
+        "rgba(255, 99, 132, 0.85)",  // deuda con activo
+        "rgba(255, 140, 110, 0.85)", // deuda sin activo
       ],
       borderColor: ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"],
       borderWidth: 0,
@@ -260,7 +260,7 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
 }
 
 .dot-assets {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(92, 192, 255, 0.9);
 }
 
 .dot-liab {
@@ -268,7 +268,7 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
 }
 
 .dot-equity {
-  background: rgba(90, 200, 250, 0.9);
+  background: rgba(92, 192, 255, 0.9);
 }
 
 .dot-debt {
@@ -276,7 +276,7 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
 }
 
 .dot-unbacked {
-  background: rgba(255, 159, 64, 0.85);
+  background: rgba(255, 140, 110, 0.85);
 }
 
 .overflow {

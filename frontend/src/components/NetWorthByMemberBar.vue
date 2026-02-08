@@ -23,6 +23,9 @@ type Props = {
 
 const props = defineProps<Props>();
 
+const ASSET_COLOR = "rgba(92, 192, 255, 0.9)";
+const LIABILITY_COLOR = "rgba(255, 99, 132, 0.85)";
+
 function formatMoney(n: number, decimals = 2) {
   return new Intl.NumberFormat("es-ES", {
     useGrouping: true,
@@ -44,14 +47,14 @@ const data = computed<ChartData<"bar">>(() => ({
     {
       label: "Activos",
       data: props.assets,
-      backgroundColor: "rgba(90, 200, 250, 0.85)",
+      backgroundColor: ASSET_COLOR,
       borderRadius: 8,
       barThickness: 28,
     },
     {
       label: "Pasivos",
       data: props.liabilities.map(v => -Math.abs(v)),
-      backgroundColor: "rgba(255, 99, 132, 0.80)",
+      backgroundColor: LIABILITY_COLOR,
       borderRadius: 8,
       barThickness: 28,
     },

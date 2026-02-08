@@ -352,6 +352,9 @@ onMounted(async () => {
         <button class="btn" type="button" @click="$router.push('/people')">
           Personas
         </button>
+        <button class="btn" type="button" @click="$router.push('/data')">
+          Datos auxiliares
+        </button>
 
         <SettingsPopover
           :loading="store.loading"

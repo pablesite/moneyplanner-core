@@ -237,6 +237,13 @@ const subcategoryLabel = (key: string) => {
   return found?.label ?? key;
 };
 
+function categoryClass(category: string) {
+  if (isLiabilitiesList.value) {
+    return `liab-cat-${category || "other"}`;
+  }
+  return `asset-cat-${category || "other"}`;
+}
+
 const filteredItems = computed(() => {
   const list = Array.isArray(props.items) ? props.items : [];
   if (ownershipFilter.value === "all") return list;
@@ -293,8 +300,24 @@ const grouped = computed<Group[]>(() => {
     map.get(key)!.push(it);
   }
 
+  const orderedAssetCats = ["cash", "investments", "real_estate", "furnishings", "other"];
+  const orderedLiabCats = ["credit_card", "personal_loan", "mortgage", "other"];
+  const assetOrder = new Map<string, number>(orderedAssetCats.map((k, i) => [k, i]));
+  const liabOrder = new Map<string, number>(orderedLiabCats.map((k, i) => [k, i]));
+
   return Array.from(map.entries())
-    .sort(([a], [b]) => categoryLabel(a).localeCompare(categoryLabel(b)))
+    .sort(([a], [b]) => {
+      if (!isLiabilitiesList.value) {
+        const ai = assetOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+        const bi = assetOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+      } else {
+        const ai = liabOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+        const bi = liabOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+      }
+      return categoryLabel(a).localeCompare(categoryLabel(b));
+    })
     .map(([category, items]) => {
       const base = {
         category,
@@ -603,7 +626,12 @@ async function saveEdit(id: number) {
 
     <div v-else-if="!filteredItems.length" class="subtle">No hay elementos con este filtro.</div>
     <div v-else style="display:grid; gap:16px;">
-            <section v-for="g in grouped" :key="g.category" class="cat-block">
+            <section
+              v-for="g in grouped"
+              :key="g.category"
+              class="cat-block"
+              :class="categoryClass(g.category)"
+            >
         <div class="cat-header">
           <div class="cat-left">
             <div style="font-size:16px;">{{ g.label }}</div>
@@ -863,6 +891,71 @@ async function saveEdit(id: number) {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.cat-block{
+  position: relative;
+  padding-left: 10px;
+}
+.cat-block::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--cat-accent, rgba(255,255,255,0.2));
+}
+.cat-left{
+  position: relative;
+}
+.cat-left > div{
+  color: var(--cat-accent-text, rgba(255,255,255,0.92));
+}
+.cat-left .badge{
+  border: 1px solid var(--cat-accent, rgba(255,255,255,0.2));
+  color: var(--cat-accent-text, rgba(255,255,255,0.85));
+}
+
+/* Activos: familia frío/verde */
+.asset-cat-cash{
+  --cat-accent: rgba(92, 192, 255, 0.9);
+  --cat-accent-text: rgba(180, 230, 255, 0.95);
+}
+.asset-cat-investments{
+  --cat-accent: rgba(74, 209, 179, 0.9);
+  --cat-accent-text: rgba(168, 241, 224, 0.95);
+}
+.asset-cat-real_estate{
+  --cat-accent: rgba(111, 211, 122, 0.9);
+  --cat-accent-text: rgba(190, 244, 200, 0.95);
+}
+.asset-cat-furnishings{
+  --cat-accent: rgba(138, 203, 136, 0.85);
+  --cat-accent-text: rgba(200, 238, 200, 0.95);
+}
+.asset-cat-other{
+  --cat-accent: rgba(122, 161, 194, 0.85);
+  --cat-accent-text: rgba(198, 216, 232, 0.95);
+}
+
+/* Pasivos: rojo estable para diferenciar */
+.liab-cat-mortgage{
+  --cat-accent: rgba(255, 99, 132, 0.85);
+  --cat-accent-text: rgba(255, 200, 210, 0.95);
+}
+.liab-cat-personal_loan{
+  --cat-accent: rgba(255, 120, 150, 0.85);
+  --cat-accent-text: rgba(255, 210, 220, 0.95);
+}
+.liab-cat-credit_card{
+  --cat-accent: rgba(255, 140, 110, 0.85);
+  --cat-accent-text: rgba(255, 215, 200, 0.95);
+}
+.liab-cat-other{
+  --cat-accent: rgba(255, 130, 130, 0.8);
+  --cat-accent-text: rgba(255, 210, 210, 0.95);
 }
 
 .cat-left{
