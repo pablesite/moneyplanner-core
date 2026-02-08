@@ -721,7 +721,7 @@ async function saveEdit(id: number) {
                         {{ it._sharePercent }}%
                       </span>
                     </div>
-                    <div v-if="isLiabilitiesList && it.financed_asset_ref" class="item-submeta inline">
+                    <div v-if="isLiabilitiesList && it.financed_asset_ref" class="item-submeta">
                       <span class="financed-text">
                         · Financia: {{ financedAssetName(it.financed_asset_ref) }}
                       </span>
@@ -1059,6 +1059,7 @@ async function saveEdit(id: number) {
 .subcat-items .item-main{
   min-width: 0;
   padding-left: 12px;
+  display: block;
 }
 .subcat-items .item-name{
   font-size: 14px;
@@ -1074,10 +1075,6 @@ async function saveEdit(id: number) {
   padding: 0;
   border: none;
   background: transparent;
-}
-.subcat-items .item-submeta.inline{
-  display: inline;
-  margin-top: 0;
 }
 .subcat-items .item-amount{
   text-align: right;

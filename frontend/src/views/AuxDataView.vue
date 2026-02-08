@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { api } from "@/lib/api";
 
@@ -31,9 +31,19 @@ const inflation = ref<InflationIndex[]>([]);
 
 const fxForm = ref({
   rate_date: "",
-  from_currency: "USD",
-  to_currency: "EUR",
+  pair: "USD_EUR",
   rate: "",
+});
+
+const fxPairs = [
+  { value: "BTC_USD", label: "BTC \u2192 USD", from: "BTC", to: "USD", hint: "70000" },
+  { value: "ETH_USD", label: "ETH \u2192 USD", from: "ETH", to: "USD", hint: "2000" },
+  { value: "USD_EUR", label: "USD \u2192 EUR", from: "USD", to: "EUR", hint: "0.92" },
+];
+
+const fxRatePlaceholder = computed(() => {
+  const pair = fxPairs.find((p) => p.value === fxForm.value.pair);
+  return pair?.hint ?? "0.00";
 });
 
 const ipcForm = ref({
@@ -60,14 +70,16 @@ async function loadAll() {
 }
 
 async function createFxRate() {
-  if (!fxForm.value.rate_date || !fxForm.value.from_currency || !fxForm.value.to_currency || !fxForm.value.rate) return;
+  if (!fxForm.value.rate_date || !fxForm.value.pair || !fxForm.value.rate) return;
   loading.value = true;
   error.value = null;
+  const pair = fxPairs.find((p) => p.value === fxForm.value.pair);
+  if (!pair) return;
   try {
     await api.post("/api/core/fx-rates/", {
       rate_date: fxForm.value.rate_date,
-      from_currency: fxForm.value.from_currency,
-      to_currency: fxForm.value.to_currency,
+      from_currency: pair.from,
+      to_currency: pair.to,
       rate: fxForm.value.rate,
     });
     fxForm.value.rate = "";
@@ -97,10 +109,12 @@ async function createInflation() {
   if (!ipcForm.value.region || !ipcForm.value.period || !ipcForm.value.index) return;
   loading.value = true;
   error.value = null;
+  const monthValue = ipcForm.value.period;
+  const period = monthValue.includes("-") ? `${monthValue}-01` : monthValue;
   try {
     await api.post("/api/core/inflation/", {
       region: ipcForm.value.region,
-      period: ipcForm.value.period,
+      period,
       index: ipcForm.value.index,
     });
     ipcForm.value.index = "";
@@ -127,6 +141,21 @@ async function deleteInflation(id: number) {
 }
 
 onMounted(loadAll);
+
+function formatFxRate(rate: string, from: string, to: string) {
+  const n = Number(String(rate ?? "").replace(",", "."));
+  if (!Number.isFinite(n)) return rate;
+  if (from === "BTC" && to === "USD") return n.toFixed(2);
+  if (from === "ETH" && to === "USD") return n.toFixed(2);
+  if (from === "USD" && to === "EUR") return n.toFixed(4);
+  return String(rate);
+}
+
+function formatInflationIndex(value: string) {
+  const n = Number(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(n)) return value;
+  return n.toFixed(1);
+}
 </script>
 
 <template>
@@ -147,14 +176,22 @@ onMounted(loadAll);
       <div class="card">
         <div class="section-header">
           <h2 class="h2">FX rates</h2>
-          <div class="subtle">1 {from} = rate {to}</div>
         </div>
 
         <div class="form-grid">
-          <input v-model="fxForm.rate_date" type="date" class="input" />
-          <input v-model="fxForm.from_currency" class="input" placeholder="USD" />
-          <input v-model="fxForm.to_currency" class="input" placeholder="EUR" />
-          <input v-model="fxForm.rate" class="input" inputmode="decimal" placeholder="0.92" />
+          <input
+            v-model="fxForm.rate_date"
+            type="date"
+            class="input date-input"
+            :class="{ 'is-empty': !fxForm.rate_date }"
+            placeholder="dd/mm/aa"
+          />
+          <select v-model="fxForm.pair" class="select">
+            <option v-for="p in fxPairs" :key="p.value" :value="p.value">
+              {{ p.label }}
+            </option>
+          </select>
+          <input v-model="fxForm.rate" class="input" inputmode="decimal" :placeholder="fxRatePlaceholder" />
           <button class="btn btn-primary" type="button" @click="createFxRate" :disabled="loading">
             Añadir
           </button>
@@ -173,7 +210,7 @@ onMounted(loadAll);
             <tr v-for="r in fxRates" :key="r.id">
               <td>{{ r.rate_date }}</td>
               <td>{{ r.from_currency }} → {{ r.to_currency }}</td>
-              <td>{{ r.rate }}</td>
+              <td>{{ formatFxRate(r.rate, r.from_currency, r.to_currency) }}</td>
               <td class="cell-actions">
                 <button class="icon-btn" @click="deleteFxRate(r.id)" title="Eliminar">🗑️</button>
               </td>
@@ -185,14 +222,19 @@ onMounted(loadAll);
       <div class="card">
         <div class="section-header">
           <h2 class="h2">IPC</h2>
-          <div class="subtle">Periodo debe ser YYYY-MM-01</div>
         </div>
 
         <div class="form-grid">
           <select v-model="ipcForm.region" class="select">
             <option value="ES">España</option>
           </select>
-          <input v-model="ipcForm.period" type="date" class="input" />
+          <input
+            v-model="ipcForm.period"
+            type="month"
+            class="input month-input"
+            :class="{ 'is-empty': !ipcForm.period }"
+            placeholder="mm/aaaa"
+          />
           <input v-model="ipcForm.index" class="input" inputmode="decimal" placeholder="118.0" />
           <button class="btn btn-primary" type="button" @click="createInflation" :disabled="loading">
             Añadir
@@ -212,7 +254,7 @@ onMounted(loadAll);
             <tr v-for="r in inflation" :key="r.id">
               <td>{{ r.period }}</td>
               <td>{{ r.region }}</td>
-              <td>{{ r.index }}</td>
+              <td>{{ formatInflationIndex(r.index) }}</td>
               <td class="cell-actions">
                 <button class="icon-btn" @click="deleteInflation(r.id)" title="Eliminar">🗑️</button>
               </td>
@@ -252,6 +294,46 @@ onMounted(loadAll);
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
+}
+.form-grid .input,
+.form-grid .select,
+.form-grid .btn{
+  font-size: 13px;
+  height: 38px;
+  line-height: normal;
+}
+.form-grid .input,
+.form-grid .select{
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.form-grid .btn{
+  line-height: 38px;
+}
+.form-grid .btn{
+  padding: 0 14px;
+}
+.form-grid > *{
+  min-width: 0;
+}
+.date-input,
+.month-input{
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 30px;
+}
+.date-input.is-empty,
+.month-input.is-empty{
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.04);
+}
+.date-input::-webkit-datetime-edit,
+.month-input::-webkit-datetime-edit{
+  white-space: nowrap;
+}
+.date-input::-webkit-datetime-edit-fields-wrapper,
+.month-input::-webkit-datetime-edit-fields-wrapper{
+  padding-right: 6px;
 }
 .table{
   width: 100%;
