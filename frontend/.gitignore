@@ -4,23 +4,13 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Python
-__pycache__/
-*.pyc
-.env
-.venv/
-
-# Django
-db.sqlite3
-staticfiles/
-
-# Docker
+# Vite env
 .env
 .env.*
+!.env.example
 
 # OS
 .DS_Store
 Thumbs.db
-
 
 
