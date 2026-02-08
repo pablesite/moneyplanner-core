@@ -1,6 +1,6 @@
 # moneyplanner
 
-Gestor de patrimonio personal con frontend en Vue y backend en Django/DRF. Incluye docker-compose para desarrollo local, seeders mínimos y utilidades de backup/restore de PostgreSQL.
+Gestor de patrimonio personal con frontend en Vue y backend en Django/DRF. Incluye docker-compose para desarrollo local y seeders mínimos.
 
 **Stack**
 1. Frontend: Vue 3 + Vite
@@ -10,11 +10,11 @@ Gestor de patrimonio personal con frontend en Vue y backend en Django/DRF. Inclu
 
 **Requisitos**
 1. Docker Desktop
-2. Git Bash (solo para scripts de backup/restore en Windows)
 
 **Arranque rápido (Docker)**
-1. Crea el archivo `backend/.env` con las variables mínimas.
-2. Levanta todo con Docker Compose.
+1. Crea el archivo `backend/.env` copiando `backend/.env.example`.
+2. (Opcional) Crea `.env` en la raíz si quieres sobrescribir `POSTGRES_*` de Docker.
+3. Levanta todo con Docker Compose.
 
 ```bash
 docker compose up --build
@@ -44,11 +44,14 @@ SEED_ADMIN_USERNAME=admin
 SEED_ADMIN_EMAIL=admin@example.com
 SEED_ADMIN_PASSWORD=admin
 SEED_FORCE_ADMIN_PASSWORD=0
+
+FX_PIVOT=USD
 ```
 
 Notas:
 1. Si cambias `DB_*`, asegúrate de alinear también `POSTGRES_*` en `docker-compose.yml` o usa los valores por defecto.
 2. `CORS_ALLOWED_ORIGINS` debe incluir el origen del frontend.
+3. Si quieres ajustar `POSTGRES_*` para Docker, copia `.env.example` a `.env` en la raíz.
 
 **Seeders (datos iniciales)**
 Al arrancar con Docker, el backend ejecuta automáticamente:
@@ -73,44 +76,6 @@ En Docker se ejecutan automáticamente al arrancar. Si cambias modelos:
 docker compose exec backend python manage.py makemigrations
 docker compose exec backend python manage.py migrate
 ```
-
-**Backup y restore de base de datos (local dev)**
-Scripts seguros para PostgreSQL en Docker. Recomendado usar Git Bash en Windows.
-
-Crear backup:
-
-```bash
-"C:\Program Files\Git\usr\bin\bash.exe" scripts/db_dump.sh
-```
-
-Alternativa en Windows (CMD directo):
-
-```bat
-dump-db.cmd
-```
-
-Restaurar el último backup:
-
-```bash
-"C:\Program Files\Git\usr\bin\bash.exe" scripts/db_restore_latest.sh
-```
-
-Alternativa en Windows (CMD directo):
-
-```bat
-restore-db.cmd
-```
-
-Puedes configurar opciones locales en `scripts/.env`:
-1. `DB_CONTAINER` (por defecto `saas_db`)
-2. `DB_NAME` (por defecto `saas`)
-3. `DB_USER` (por defecto `saas`)
-4. `DB_DUMP_DIR` (por defecto `backups`)
-
-Notas:
-1. Los dumps se verifican con `pg_restore -l` antes de restaurar.
-2. Se crea un backup de seguridad automáticamente antes de restaurar.
-3. La restauración reinicia el contenedor `backend`.
 
 **Primeros pasos en la app**
 1. Inicia sesión con el usuario admin creado por el seeder.
