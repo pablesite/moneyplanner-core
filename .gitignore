@@ -1,2 +1,4 @@
 backups/
-scripts/.env
+.env
+backend/.env
+frontend/.env
