@@ -97,8 +97,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "SaaS Finanzas Personales API",
-    "DESCRIPTION": "API para el módulo de patrimonio y siguientes.",
+    "TITLE": "MoneyPlanner Core API",
+    "DESCRIPTION": "API del core de MoneyPlanner.",
     "VERSION": "0.1.0",
 }
 
