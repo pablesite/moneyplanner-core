@@ -177,12 +177,6 @@ const amountError = computed(() => {
   return error;
 });
 
-const amountHint = computed(() => {
-  return form.currency === "BTC" || form.currency === "ETH"
-    ? `Hasta ${maxDecimals.value} decimales (ej: 0.00123456)`
-    : `Hasta ${maxDecimals.value} decimales`;
-});
-
 async function submit() {
   if (!form.name || !form.category || !form.currency || !form.amount) return;
   if (props.subcategories && !form.subcategory) return;

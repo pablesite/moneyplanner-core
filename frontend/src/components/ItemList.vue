@@ -68,7 +68,18 @@ const currencies = [
 ];
 
 const editingId = ref<number | null>(null);
-const draft = ref<any>({});
+type EditDraft = {
+  name?: string;
+  category?: string;
+  subcategory?: string;
+  amount?: string;
+  currency?: string;
+  notes?: string;
+  is_active?: boolean;
+  ownership_id?: number | null;
+  financed_asset_id?: number | null;
+};
+const draft = ref<EditDraft>({});
 const ownershipFilter = ref<number | "all" | "unassigned">("all");
 const expandedCats = ref<Set<string>>(new Set());
 
@@ -116,7 +127,8 @@ const memberFilterOptions = computed(() => {
   const list = Array.isArray(props.ownerships) ? props.ownerships : [];
   const members = list
     .filter((o) => o.kind === "individual" && o.member)
-    .map((o) => o.member);
+    .map((o) => o.member)
+    .filter((m): m is NonNullable<typeof m> => m != null);
   const unique = new Map<number, { id: number; name: string }>();
   for (const m of members) {
     if (!unique.has(m.id)) unique.set(m.id, { id: m.id, name: m.name });
@@ -144,10 +156,14 @@ function ownershipShortLabel(ownershipRef?: number | null) {
   const splits = Array.isArray(o.splits) ? o.splits : [];
   if (!splits.length) return "Compartido";
 
+  const first = splits[0];
+  const second = splits[1];
   const isAllHalf =
     splits.length === 2 &&
-    String(splits[0].percent) === "50.00" &&
-    String(splits[1].percent) === "50.00";
+    first != null &&
+    second != null &&
+    String(first.percent) === "50.00" &&
+    String(second.percent) === "50.00";
 
   const names = splits.map((s) => s.member?.name ?? "?");
   if (isAllHalf) return names.join("/");
@@ -190,12 +206,12 @@ const decimalsByCurrency: Record<string, number> = {
   ETH: 8,
 };
 
-function getMaxDecimals(currency: string, category?: string) {
-  return decimalsByCurrency[currency] ?? 2;
+function getMaxDecimals(currency: unknown) {
+  return decimalsByCurrency[String(currency ?? "")] ?? 2;
 }
 
 const amountHint = computed(() => {
-  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+  const max = getMaxDecimals(draft.value.currency);
   return `Hasta ${max} decimales`;
 });
 
@@ -203,12 +219,12 @@ function normalizeAmountInput(raw: unknown) {
   return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
 }
 
-function clampDecimals(amount: string, maxDecimals: number) {
+function clampDecimals(amount: unknown, maxDecimals: number) {
   const s = normalizeAmountInput(amount);
   if (!s) return "";
   if ((s.match(/\./g) || []).length > 1) return s;
 
-  const [i, d = ""] = s.split(".");
+  const [i = "", d = ""] = s.split(".");
   return d ? `${i}.${d.slice(0, maxDecimals)}` : i;
 }
 
@@ -218,7 +234,7 @@ function trimTrailingZeros(amount: string) {
 }
 
 const amountError = computed(() => {
-  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+  const max = getMaxDecimals(draft.value.currency);
   const clamped = clampDecimals(draft.value.amount, max);
 
   if (!draft.value.amount) return "";
@@ -388,7 +404,7 @@ function categoryTotals(items: Item[]) {
   const acc: Record<string, number> = {};
   for (const it of items) {
     const cur = it.currency || "???";
-    acc[cur] = (acc[cur] ?? 0) + toNumberAmount(displayAmount(it));
+    acc[cur] = (acc[cur] ?? 0) + toNumberAmount(String(displayAmount(it)));
   }
   return acc;
 }
@@ -446,10 +462,11 @@ function categoryBaseValue(category: string, items: Item[]) {
   return totalBaseForItems(items);
 }
 
-function subcategoryBaseValue(category: string, subcategory: string, items: Item[]) {
+function subcategoryBaseValue(category: string, subcategory: string | null, items: Item[]) {
+  const subKey = subcategory ?? "other";
   if (ownershipFilter.value === "all") {
     if (!props.subcategoryTotalsBase) return null;
-    const raw = props.subcategoryTotalsBase[`${category}:${subcategory}`];
+    const raw = props.subcategoryTotalsBase[`${category}:${subKey}`];
     if (!raw) return null;
     const v = Number(rawValue(raw));
     return Number.isFinite(v) ? v : null;
@@ -472,7 +489,7 @@ function baseTotalLabel(category: string, items: Item[]) {
   return `${formatAmount(String(v), { currency: props.baseCurrency })} ${props.baseCurrency}`;
 }
 
-function subcategoryBaseLabel(category: string, subcategory: string, items: Item[]) {
+function subcategoryBaseLabel(category: string, subcategory: string | null, items: Item[]) {
   if (!props.baseCurrency) return null;
   const v = subcategoryBaseValue(category, subcategory, items);
   if (v == null) return null;
@@ -481,7 +498,7 @@ function subcategoryBaseLabel(category: string, subcategory: string, items: Item
 
 function subcategoryPercent(
   category: string,
-  subcategory: string,
+  subcategory: string | null,
   items: Item[],
   categoryItems: Item[]
 ) {
@@ -505,7 +522,7 @@ function categoryPercent(category: string, items: Item[]) {
 function startEdit(item: Item) {
   editingId.value = item.id;
 
-  const max = getMaxDecimals(item.currency, item.category);
+  const max = getMaxDecimals(item.currency);
   const prettyAmount = trimTrailingZeros(clampDecimals(item.amount, max));
 
   draft.value = {
@@ -542,7 +559,7 @@ watch(
   () => [draft.value.currency, draft.value.category],
   () => {
     if (!draft.value?.amount) return;
-    const max = getMaxDecimals(draft.value.currency, draft.value.category);
+    const max = getMaxDecimals(draft.value.currency);
     draft.value.amount = trimTrailingZeros(clampDecimals(draft.value.amount, max));
   }
 );
@@ -569,7 +586,7 @@ function isValidAmountString(amount: string) {
 }
 
 async function saveEdit(id: number) {
-  const max = getMaxDecimals(draft.value.currency, draft.value.category);
+  const max = getMaxDecimals(draft.value.currency);
 
   const normalized = normalizeAmountInput(draft.value.amount);
   const clamped = clampDecimals(normalized, max);

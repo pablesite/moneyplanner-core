@@ -170,7 +170,7 @@ function formatEditAmount(raw: unknown, currency: string) {
     return isNegative ? `-${s}` : s;
   }
 
-  const [i, d = ""] = s.split(".");
+  const [i = "", d = ""] = s.split(".");
   let out = d ? `${i}.${d.slice(0, max)}` : i;
   out = out.replace(/\.?0+$/, "");
   if (out.startsWith(".")) out = `0${out}`;
@@ -230,11 +230,6 @@ function formatMoney(v?: string | null, decimals = 2) {
   }).format(n);
 }
 
-function pickMoney(nominal?: string | null, real?: string | null, decimals = 2) {
-  const raw = valueMode.value === "real" ? real : nominal;
-  return formatMoney(raw, decimals);
-}
-
 const unitLabel = () => {
   const c = store.baseCurrency ?? "";
   if (valueMode.value !== "real") return c;
@@ -280,15 +275,19 @@ const categoryLabelMap = computed(() => {
   return m;
 });
 
-const byCategoryFiltered = computed(() => {
+type ByCategoryRow = { key: string; a: number; l: number };
+
+const byCategoryFiltered = computed<ByCategoryRow[]>(() => {
   const keys = byCategoryChart.value.keys;
   const assets = byCategoryChart.value.assets;
   const liabs = byCategoryChart.value.liabilities;
 
-  const out = [];
+  const out: ByCategoryRow[] = [];
   for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (!key) continue;
     if ((assets[i] ?? 0) !== 0 || (liabs[i] ?? 0) !== 0) {
-      out.push({ key: keys[i], a: assets[i] ?? 0, l: liabs[i] ?? 0 });
+      out.push({ key, a: assets[i] ?? 0, l: liabs[i] ?? 0 });
     }
   }
   return out;

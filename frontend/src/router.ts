@@ -41,7 +41,7 @@ async function ensureAuthValid(): Promise<boolean> {
       });
   }
 
-  return authCheckPromise;
+  return authCheckPromise ?? false;
 }
 
 router.beforeEach(async (to) => {
