@@ -29,6 +29,7 @@ function extractAxiosError(err: unknown): string {
   if (data.detail) return data.detail;
 
   const firstKey = Object.keys(data)[0];
+  if (!firstKey) return err.message;
   const v = data[firstKey];
   if (Array.isArray(v)) return v[0] ?? err.message;
   if (typeof v === "string") return v;
@@ -192,3 +193,4 @@ export const usePeopleStore = defineStore("people", {
     },
   },
 });
+

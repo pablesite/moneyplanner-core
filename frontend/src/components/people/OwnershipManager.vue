@@ -50,7 +50,9 @@ function setEqualSplit() {
 
   const sum = (form.memberIds.length - 1) * Number(each);
   const last = (100 - sum).toFixed(2);
-  form.percents[form.memberIds[form.memberIds.length - 1]] = last;
+  const lastMemberId = form.memberIds[form.memberIds.length - 1];
+  if (lastMemberId == null) return;
+  form.percents[lastMemberId] = last;
 }
 
 async function submit() {
