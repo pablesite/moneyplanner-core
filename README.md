@@ -1,31 +1,31 @@
-# moneyplanner
+# moneyplanner core
 
-Gestor de patrimonio personal con frontend en Vue y backend en Django/DRF. Incluye docker-compose para desarrollo local y seeders mínimos.
+Open-source basic net-worth manager with Vue frontend and Django/DRF backend.
 
-**Stack**
+## Stack
 1. Frontend: Vue 3 + Vite
 2. Backend: Django + DRF + SimpleJWT
 3. DB: PostgreSQL 16
-4. Infra local: Docker Compose
+4. Local infra: Docker Compose
 
-**Requisitos**
+## Requirements
 1. Docker Desktop
 
-**Arranque rápido (Docker)**
-1. Crea el archivo `backend/.env` copiando `backend/.env.example`.
-2. (Opcional) Crea `.env` en la raíz si quieres sobrescribir `POSTGRES_*` de Docker.
-3. Levanta todo con Docker Compose.
+## Quick Start (Docker)
+1. Create `backend/.env` from `backend/.env.example`.
+2. (Optional) Create root `.env` if you want to override `POSTGRES_*` in Docker.
+3. Start all services:
 
 ```bash
 docker compose up --build
 ```
 
-Endpoints locales:
+Local endpoints:
 1. Frontend: `http://localhost:5173`
 2. Backend API: `http://localhost:8000`
 
-**Variables de entorno**
-El backend lee `backend/.env`. Ejemplo mínimo recomendado:
+## Backend Env Vars
+Backend reads `backend/.env`. Minimal example:
 
 ```env
 DJANGO_SECRET_KEY=dev-insecure-secret
@@ -48,46 +48,51 @@ SEED_FORCE_ADMIN_PASSWORD=0
 FX_PIVOT=USD
 ```
 
-Notas:
-1. Si cambias `DB_*`, asegúrate de alinear también `POSTGRES_*` en `docker-compose.yml` o usa los valores por defecto.
-2. `CORS_ALLOWED_ORIGINS` debe incluir el origen del frontend.
-3. Si quieres ajustar `POSTGRES_*` para Docker, copia `.env.example` a `.env` en la raíz.
-
-**Seeders (datos iniciales)**
-Al arrancar con Docker, el backend ejecuta automáticamente:
+## Seed Data
+On Docker startup backend runs:
 1. `python manage.py migrate`
 2. `python manage.py seed`
 
-El seeder crea o asegura:
-1. Un usuario admin (configurable por `SEED_*`).
-2. Tipos de cambio FX mínimos.
-3. Índices de IPC base y actual.
-
-Puedes ejecutarlo manualmente así:
+Manual run:
 
 ```bash
 docker compose exec backend python manage.py seed
 ```
 
-**Migraciones**
-En Docker se ejecutan automáticamente al arrancar. Si cambias modelos:
+## Migrations
 
 ```bash
 docker compose exec backend python manage.py makemigrations
 docker compose exec backend python manage.py migrate
 ```
 
-**Primeros pasos en la app**
-1. Inicia sesión con el usuario admin creado por el seeder.
-2. Ve a Personas y crea miembros familiares.
-3. Revisa Titularidades: las individuales se generan automáticamente.
-4. Crea Activos y Pasivos y asígnales una titularidad.
-5. Vuelve a Patrimonio para ver el resumen y desglose.
+## Core Scope (Current)
+1. Authentication + user settings
+2. Assets
+3. Liabilities
+4. Net-worth summary
+5. Daily snapshots
 
-**Troubleshooting rápido**
-1. Puertos ocupados: cambia los puertos en `docker-compose.yml`.
-2. La API no responde: revisa logs con `docker compose logs -f backend`.
-3. Problemas de CORS: ajusta `CORS_ALLOWED_ORIGINS` en `backend/.env`.
+Core no longer includes premium ownership/member domain.
 
-**Deprecaciones (transicion a SaaS)**
-1. Los endpoints de titularidades y miembros en `api/net-worth/family-members/`, `api/net-worth/ownerships/` y `api/net-worth/summary/by-member/` estan marcados como deprecados en `core` y migraran a la capa SaaS.
+## Release 0.2.0 - Migration Notes
+This release removes premium domain entities from core:
+1. Removed models: `FamilyMember`, `Ownership`, `OwnershipSplit`
+2. Removed fields: `Asset.ownership`, `Liability.ownership`
+3. Removed premium endpoints previously under `api/net-worth/*` for members/ownership
+
+If you are upgrading an existing core deployment:
+1. Backup your database before migrating.
+2. Run migrations:
+
+```bash
+docker compose exec backend python manage.py migrate
+```
+
+3. Update clients to stop sending/reading ownership/member fields on core endpoints.
+4. Move premium ownership data/workflows to SaaS extension before upgrade.
+
+## Troubleshooting
+1. API not responding: `docker compose logs -f backend`
+2. CORS issues: verify `CORS_ALLOWED_ORIGINS` in `backend/.env`
+3. Port conflicts: adjust ports in `docker-compose.yml`
