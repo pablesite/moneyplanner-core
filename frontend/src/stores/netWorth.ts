@@ -98,6 +98,15 @@ function toNumber(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function stripOwnershipFields<T extends Record<string, unknown>>(payload: T): T {
+  const clean = { ...payload };
+  delete clean.ownership_id;
+  delete clean.ownership;
+  delete clean.ownership_ref;
+  delete clean.ownership_detail;
+  return clean;
+}
+
 export const useNetWorthStore = defineStore("netWorth", {
   state: () => ({
     loading: false as boolean,
@@ -167,18 +176,13 @@ export const useNetWorthStore = defineStore("netWorth", {
           api.get("/api/net-worth/snapshots/"),
         ]);
 
-        const [byMemberRes, ownershipsRes] = await Promise.allSettled([
-          api.get("/api/net-worth/summary/by-member/"),
-          api.get("/api/net-worth/ownerships/"),
-        ]);
-
         this.summary = summaryRes.data;
         this.baseCurrency = summaryRes.data.base_currency;
         this.assets = assetsRes.data;
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
-        this.byMemberSummary = byMemberRes.status === "fulfilled" ? byMemberRes.value.data : null;
-        this.ownerships = ownershipsRes.status === "fulfilled" ? ownershipsRes.value.data : [];
+        this.byMemberSummary = null;
+        this.ownerships = [];
 
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
@@ -216,7 +220,7 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/assets/", payload);
+        await api.post("/api/net-worth/assets/", stripOwnershipFields(payload));
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
@@ -229,7 +233,7 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/assets/${id}/`, payload);
+        await api.patch(`/api/net-worth/assets/${id}/`, stripOwnershipFields(payload));
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
@@ -246,7 +250,7 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/liabilities/", payload);
+        await api.post("/api/net-worth/liabilities/", stripOwnershipFields(payload));
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
@@ -259,7 +263,7 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/liabilities/${id}/`, payload);
+        await api.patch(`/api/net-worth/liabilities/${id}/`, stripOwnershipFields(payload));
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
@@ -303,16 +307,7 @@ export const useNetWorthStore = defineStore("netWorth", {
     },
 
     async fetchByMemberSummary() {
-      this.loading = true;
-      this.error = null;
-      try {
-        const res = await api.get("/api/net-worth/summary/by-member/");
-        this.byMemberSummary = res.data;
-      } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
-      } finally {
-        this.loading = false;
-      }
+      this.byMemberSummary = null;
     },
 
   },
