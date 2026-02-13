@@ -349,9 +349,6 @@ onMounted(async () => {
     </div>
 
       <div class="networth-actions">
-        <button class="btn" type="button" @click="$router.push('/people')">
-          Personas
-        </button>
         <button class="btn" type="button" @click="$router.push('/data')">
           Datos auxiliares
         </button>
