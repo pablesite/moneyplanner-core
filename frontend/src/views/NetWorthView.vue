@@ -6,7 +6,6 @@ import ItemList from "@/components/ItemList.vue";
 import BaseModal from "@/components/BaseModal.vue";
 import NetWorthDonut from "@/components/NetWorthDonut.vue";
 import SettingsPopover from "@/components/SettingsPopover.vue";
-import NetWorthByMemberBar from "@/components/NetWorthByMemberBar.vue";
 import NetWorthByCategoryBar from "@/components/NetWorthByCategoryBar.vue";
 
 
@@ -189,7 +188,6 @@ const editInitial = computed(() => {
     currency: item.currency ?? "",
     tracking_mode: item.tracking_mode ?? "manual",
     is_active: item.is_active ?? true,
-    ownership_id: item.ownership_ref ?? null,
     financed_asset_id: item.financed_asset_ref ?? null,
   };
 });
@@ -247,12 +245,6 @@ const realBaseLabel = computed(() =>
   store.summary?.inflation_base_period ? `Base: ${store.summary.inflation_base_period}` : ""
 );
 
-const hasUnassigned = () => {
-  const u = store.byMemberSummary?.unassigned;
-  if (!u) return false;
-  return (u.assets !== "0" && u.assets !== "0.00") || (u.liabilities !== "0" && u.liabilities !== "0.00");
-};
-
 // Resumen “grande” (donut usa estos)
 const summaryAssets = computed(() =>
   valueMode.value === "real" ? store.summary?.total_assets_real : store.summary?.total_assets
@@ -263,8 +255,6 @@ const summaryLiabilities = computed(() =>
 const summaryNetWorth = computed(() =>
   valueMode.value === "real" ? store.summary?.net_worth_real : store.summary?.net_worth
 );
-
-const byMemberChart = computed(() => store.byMemberChart);
 
 const byCategoryChart = computed(() => store.byCategoryChart);
 
@@ -389,7 +379,7 @@ onMounted(async () => {
     
 
     <div class="networth-breakdown-inline">
-      <div class="networth-breakdown" v-if="store.summary || store.byMemberSummary">
+      <div class="networth-breakdown" v-if="store.summary">
       <div class="panel-header">
         <h2 class="panel-title">Desglose</h2>
         <button class="btn btn-sm panel-toggle" type="button" @click="showBreakdown = !showBreakdown">
@@ -411,71 +401,6 @@ onMounted(async () => {
           
         </div>
 
-        <div v-if="store.byMemberSummary">
-          <h3 class="panel-subtitle">Por miembro</h3>
-          <div v-if="byMemberChart && byMemberChart.labels.length" class="panel-chart">
-            <NetWorthByMemberBar
-              :labels="byMemberChart.labels"
-              :assets="byMemberChart.assets"
-              :liabilities="byMemberChart.liabilities"
-              :unit="byMemberChart.unit"
-            />
-          </div>
-
-          <div v-if="hasUnassigned()" class="alert panel-alert">
-            Hay activos/pasivos sin titularidad asignada (ownership = null).
-            <div class="subtle panel-help">
-              Sin asignar &mdash; Activos: {{ formatMoney(store.byMemberSummary.unassigned.assets, 2) }} {{ store.byMemberSummary.base_currency }},
-              Pasivos: {{ formatMoney(store.byMemberSummary.unassigned.liabilities, 2) }} {{ store.byMemberSummary.base_currency }}
-            </div>
-          </div>
-
-          <table class="panel-table">
-            <thead>
-              <tr>
-                <th class="panel-th">Miembro</th>
-                <th class="panel-th panel-th-right">
-                  Activos ({{ store.byMemberSummary.base_currency }})
-                </th>
-                <th class="panel-th panel-th-right">
-                  Pasivos ({{ store.byMemberSummary.base_currency }})
-                </th>
-                <th class="panel-th panel-th-right">
-                  Neto ({{ store.byMemberSummary.base_currency }})
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="row in store.byMemberSummary.by_member" :key="row.member.id">
-                <td class="panel-td">
-                  {{ row.member.name }}
-                  <span class="subtle panel-role">
-                    ({{ row.member.role === 'adult' ? 'Adulto' : 'Nino' }})
-                  </span>
-                </td>
-                <td class="panel-td panel-td-right">{{ formatMoney(row.total_assets, 2) }}</td>
-                <td class="panel-td panel-td-right">{{ formatMoney(row.total_liabilities, 2) }}</td>
-                <td class="panel-td panel-td-right">{{ formatMoney(row.net_worth, 2) }}</td>
-              </tr>
-
-              <tr>
-                <td class="panel-td panel-total-left">
-                  <span class="subtle">Total</span>
-                </td>
-                <td class="panel-td panel-td-right panel-total">
-                  {{ formatMoney(store.byMemberSummary.totals.total_assets, 2) }}
-                </td>
-                <td class="panel-td panel-td-right panel-total">
-                  {{ formatMoney(store.byMemberSummary.totals.total_liabilities, 2) }}
-                </td>
-                <td class="panel-td panel-td-right panel-total">
-                  {{ formatMoney(store.byMemberSummary.totals.net_worth, 2) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
     </div>
@@ -494,7 +419,6 @@ onMounted(async () => {
         :categoryTotalsBase="store.summary?.assets_by_category ?? {}"
         :subcategoryTotalsBase="store.summary?.assets_by_subcategory ?? {}"
         :totalBase="store.summary?.total_assets ?? '0'"
-        :ownerships="store.ownerships"
         :onUpdate="store.updateAsset"
         :onArchive="store.archiveAsset"
         :onAdd="() => (showAssetModal = true)"
@@ -508,7 +432,6 @@ onMounted(async () => {
         :baseCurrency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
         :categoryTotalsBase="store.summary?.liabilities_by_category ?? {}"
         :totalBase="store.summary?.total_liabilities ?? '0'"
-        :ownerships="store.ownerships"
         :assets="store.assets"  
         :onUpdate="store.updateLiability"
         :onArchive="store.archiveLiability"
@@ -555,7 +478,6 @@ onMounted(async () => {
         title="Nuevo activo"
         :categories="assetCategories"
         :subcategories="assetSubcategories"
-        :ownerships="store.ownerships"
         :allowNegative="true"
         :onSubmit="submitAsset"
         :onCancel="() => (showAssetModal = false)"
@@ -566,7 +488,6 @@ onMounted(async () => {
       <ItemForm
         title="Nuevo pasivo"
         :categories="liabilityCategories"
-        :ownerships="store.ownerships"
         :assets="store.assets"
         :showFinancedAsset="true"
         :onSubmit="submitLiability"
@@ -580,7 +501,6 @@ onMounted(async () => {
         :title="editTitle"
         :categories="editCategories"
         :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
-        :ownerships="store.ownerships"
         :assets="editKind === 'liability' ? store.assets : []"
         :showFinancedAsset="editKind === 'liability'"
         :allowNegative="editKind === 'asset'"
@@ -769,3 +689,4 @@ onMounted(async () => {
   }
 }
 </style>
+

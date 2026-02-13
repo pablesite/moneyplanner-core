@@ -1,19 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 
-type Ownership = {
-  id: number;
-  kind: "individual" | "shared";
-  member: { id: number; name: string; role: "adult" | "child" } | null;
-  splits: { member: { id: number; name: string; role: "adult" | "child" }; percent: string }[];
-  notes: string;
-};
-
 type Props = {
   title: string;
   categories: { value: string; label: string }[];
   subcategories?: { value: string; label: string; category: string }[];
-  ownerships: Ownership[];
   onSubmit: (payload: any) => Promise<void>;
   onCancel?: () => void;
   assets?: { id: number; name: string; category: string }[];
@@ -29,7 +20,6 @@ type Props = {
     currency: string;
     tracking_mode: string;
     is_active: boolean;
-    ownership_id: number | null;
     financed_asset_id: number | null;
   }>;
 };
@@ -43,27 +33,6 @@ const currencies = [
   { value: "ETH", label: "ETH" },
 ];
 
-const ownershipLabel = (o: Ownership) => {
-  if (o.kind === "individual") {
-    return o.member ? `Individual · ${o.member.name}` : "Individual";
-  }
-  const parts = (o.splits || []).map((s) => `${s.member.name} ${s.percent}%`);
-  return `Compartido · ${parts.join(" · ") || "sin splits"}`;
-};
-
-const ownershipOptions = computed(() => {
-  return [
-    { value: null, label: "Selecciona titularidad" },
-    ...(props.ownerships || []).map((o) => ({ value: o.id, label: ownershipLabel(o) })),
-  ];
-});
-
-/** -------------------------
- * Amount handling
- * - Accept thousands separators (1.234,56 or 1,234.56)
- * - Normalize to dot decimal for API
- * - Limit decimals by currency
- * ------------------------- */
 const decimalsByCurrency: Record<string, number> = {
   EUR: 2,
   USD: 2,
@@ -80,7 +49,6 @@ const form = reactive({
   currency: "",
   tracking_mode: "manual",
   is_active: true,
-  ownership_id: null as number | null,
   financed_asset_id: null as number | null,
 });
 
@@ -115,7 +83,6 @@ watch(
 );
 
 function normalizeLooseNumber(raw: unknown) {
-  // Allow only digits and separators, remove spaces (including NBSP)
   let s = String(raw ?? "").trim().replace(/\s/g, "");
   if (props.allowNegative && s.startsWith("-")) {
     s = `-${s.slice(1).replace(/[^\d.,]/g, "")}`;
@@ -127,44 +94,33 @@ function normalizeLooseNumber(raw: unknown) {
 
 function sanitizeAmount(raw: unknown, decimals: number) {
   let s = normalizeLooseNumber(raw);
-
   if (!s) return { value: "", error: "" };
 
   const isNegative = props.allowNegative && s.startsWith("-");
   if (isNegative) s = s.slice(1);
 
-  // If contains both ',' and '.', assume last separator is decimal and the other is thousands
   const lastComma = s.lastIndexOf(",");
   const lastDot = s.lastIndexOf(".");
   if (lastComma !== -1 && lastDot !== -1) {
     const decimalSep = lastComma > lastDot ? "," : ".";
     const thousandSep = decimalSep === "," ? "." : ",";
-    s = s.split(thousandSep).join(""); // remove thousand separators
-    s = s.replace(decimalSep, "."); // normalize decimal to dot
+    s = s.split(thousandSep).join("");
+    s = s.replace(decimalSep, ".");
   } else {
-    // Only comma -> decimal comma
     s = s.replace(/,/g, ".");
   }
 
-  // More than one dot => invalid
-  if ((s.match(/\./g) || []).length > 1) return { value: "", error: "Importe inválido" };
+  if ((s.match(/\./g) || []).length > 1) return { value: "", error: "Importe invalido" };
 
-  // Limit decimals
   const [intPart, decPart = ""] = s.split(".");
   const limitedDec = decPart.slice(0, decimals);
   const normalized = decPart.length ? `${intPart}.${limitedDec}` : intPart;
-
-  // Avoid weird states
   if (!normalized || normalized === ".") return { value: "", error: "" };
 
-  // If starts with dot, prefix 0
   const finalValue = normalized.startsWith(".") ? `0${normalized}` : normalized;
   const signedValue = isNegative ? `-${finalValue}` : finalValue;
 
-  // Validate numeric
-  if (Number.isNaN(Number(signedValue))) return { value: "", error: "Importe inválido" };
-
-  // Block negatives (we removed '-' already, but keep for safety)
+  if (Number.isNaN(Number(signedValue))) return { value: "", error: "Importe invalido" };
   if (!props.allowNegative && finalValue.includes("-")) {
     return { value: "", error: "No se permiten importes negativos" };
   }
@@ -188,12 +144,11 @@ async function submit() {
     name: form.name,
     category: form.category,
     subcategory: form.subcategory || undefined,
-    amount: normalizedAmount, // normalized dot-decimal string
+    amount: normalizedAmount,
     notes: form.notes,
     currency: form.currency,
     tracking_mode: form.tracking_mode,
     is_active: form.is_active,
-    ownership_id: form.ownership_id,
   };
 
   if (showFinancedAsset.value) {
@@ -208,7 +163,6 @@ async function submit() {
   form.amount = "";
   form.notes = "";
   form.currency = "";
-  form.ownership_id = null;
   form.financed_asset_id = null;
 }
 
@@ -224,7 +178,6 @@ watch(
     form.currency = initial.currency ?? "";
     form.tracking_mode = initial.tracking_mode ?? "manual";
     form.is_active = initial.is_active ?? true;
-    form.ownership_id = initial.ownership_id ?? null;
     form.financed_asset_id = initial.financed_asset_id ?? null;
   },
   { immediate: true, deep: true }
@@ -269,13 +222,6 @@ watch(
       <div v-if="amountError" class="form-help form-help-error">
         {{ amountError }}
       </div>
-
-      <!-- Ownership -->
-      <select v-model="form.ownership_id" :class="['select', { 'is-placeholder': form.ownership_id == null }]">
-        <option v-for="o in ownershipOptions" :key="String(o.value)" :value="o.value">
-          {{ o.label }}
-        </option>
-      </select>
 
       <select
         v-if="showFinancedAsset"
