@@ -88,3 +88,6 @@ docker compose exec backend python manage.py migrate
 1. Puertos ocupados: cambia los puertos en `docker-compose.yml`.
 2. La API no responde: revisa logs con `docker compose logs -f backend`.
 3. Problemas de CORS: ajusta `CORS_ALLOWED_ORIGINS` en `backend/.env`.
+
+**Deprecaciones (transicion a SaaS)**
+1. Los endpoints de titularidades y miembros en `api/net-worth/family-members/`, `api/net-worth/ownerships/` y `api/net-worth/summary/by-member/` estan marcados como deprecados en `core` y migraran a la capa SaaS.

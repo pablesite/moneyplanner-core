@@ -79,6 +79,21 @@ class UserScopedQuerySetMixin:
         return qs.filter(user=self.request.user)
 
 
+class DeprecatedEndpointMixin:
+    """
+    Transitional marker for endpoints that will move out of core.
+    """
+    deprecation_message = (
+        "Deprecated in core: this ownership-related endpoint will move to SaaS."
+    )
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["X-MoneyPlanner-Deprecated"] = "true"
+        response["X-MoneyPlanner-Deprecation-Message"] = self.deprecation_message
+        return response
+
+
 class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = AssetSerializer
@@ -289,7 +304,7 @@ class NetWorthSummaryAPIView(APIView):
 
 
 
-class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+class FamilyMemberViewSet(DeprecatedEndpointMixin, UserScopedQuerySetMixin, viewsets.ModelViewSet):
     serializer_class = FamilyMemberSerializer
     permission_classes = [IsAuthenticated]
     queryset = FamilyMember.objects.all()
@@ -347,7 +362,7 @@ class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
     
 
-class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+class OwnershipViewSet(DeprecatedEndpointMixin, UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Ownership.objects.all()
 
@@ -388,7 +403,7 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 
 
         
-class NetWorthByMemberSummaryAPIView(APIView):
+class NetWorthByMemberSummaryAPIView(DeprecatedEndpointMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
