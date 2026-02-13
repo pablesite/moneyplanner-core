@@ -10,7 +10,6 @@ export const router = createRouter({
   routes: [
     { path: "/login", name: "login", component: LoginView },
     { path: "/", name: "networth", component: NetWorthView },
-    { path: "/people", redirect: "/" },
     { path: "/data", name: "aux-data", component: AuxDataView },
   ],
 });

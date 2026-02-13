@@ -7,11 +7,11 @@ export type Asset = {
   category: string;
   subcategory: string;
   tracking_mode: string;
-    accounting_account_id: number | null;
-    currency: string;
-    amount: string;
-    amount_base?: string;
-    is_active: boolean;
+  accounting_account_id: number | null;
+  currency: string;
+  amount: string;
+  amount_base?: string;
+  is_active: boolean;
   notes: string;
 };
 
@@ -29,65 +29,20 @@ export type Snapshot = {
 
 export type Summary = {
   base_currency: string;
-
   total_assets: string;
   total_liabilities: string;
   net_worth: string;
-
   assets_by_category: Record<string, string>;
   assets_by_subcategory: Record<string, string>;
   liabilities_by_category: Record<string, string>;
-
-  // IPC (solo si base_currency === "EUR")
   inflation_region: string | null;
   inflation_base_period: string | null;
-
   total_assets_real: string | null;
   total_liabilities_real: string | null;
   net_worth_real: string | null;
-
   assets_by_category_real: Record<string, string> | null;
   liabilities_by_category_real: Record<string, string> | null;
-
 };
-
-export type MemberMini = {
-  id: number;
-  name: string;
-  role: "adult" | "child";
-};
-
-export type ByMemberRow = {
-  member: MemberMini;
-  total_assets: string;
-  total_liabilities: string;
-  net_worth: string;
-};
-
-export type ByMemberSummary = {
-  base_currency: string;
-  totals: {
-    total_assets: string;
-    total_liabilities: string;
-    net_worth: string;
-  };
-  by_member: ByMemberRow[];
-  unassigned: {
-    assets: string;
-    liabilities: string;
-    net_worth: string;
-  };
-};
-
-
-export type Ownership = {
-  id: number;
-  kind: "individual" | "shared";
-  member: { id: number; name: string; role: "adult" | "child" } | null;
-  splits: { member: { id: number; name: string; role: "adult" | "child" }; percent: string }[];
-  notes: string;
-};
-
 
 function normalizeNumberInput(raw: unknown) {
   return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
@@ -98,70 +53,34 @@ function toNumber(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function stripOwnershipFields<T extends Record<string, unknown>>(payload: T): T {
-  const clean = { ...payload };
-  delete clean.ownership_id;
-  delete clean.ownership;
-  delete clean.ownership_ref;
-  delete clean.ownership_detail;
-  return clean;
-}
-
 export const useNetWorthStore = defineStore("netWorth", {
   state: () => ({
     loading: false as boolean,
     error: null as string | null,
-
     baseCurrency: null as string | null,
-
     summary: null as Summary | null,
     assets: [] as Asset[],
     liabilities: [] as Liability[],
     snapshots: [] as Snapshot[],
-
-    byMemberSummary: null as ByMemberSummary | null,
-    ownerships: [] as Ownership[],
-
   }),
 
   getters: {
-    byMemberRows(state): ByMemberRow[] {
-      return state.byMemberSummary?.by_member ?? [];
-    },
+    byCategoryChart(state) {
+      const s = state.summary;
+      const unit = state.baseCurrency ?? s?.base_currency ?? "EUR";
 
-    byMemberChart(state) {
-      const rows = state.byMemberSummary?.by_member ?? [];
-      const unit = state.byMemberSummary?.base_currency ?? state.baseCurrency ?? "EUR";
+      const assetsBy = s?.assets_by_category ?? {};
+      const liabsBy = s?.liabilities_by_category ?? {};
+
+      const keys = Array.from(new Set<string>([...Object.keys(assetsBy), ...Object.keys(liabsBy)]));
 
       return {
         unit,
-        labels: rows.map(r => r.member.name),
-        assets: rows.map(r => Math.max(0, toNumber(r.total_assets))),
-        liabilities: rows.map(r => Math.max(0, toNumber(r.total_liabilities))),
-        net: rows.map(r => toNumber(r.net_worth)),
+        keys,
+        assets: keys.map((k) => Math.max(0, toNumber(assetsBy[k]))),
+        liabilities: keys.map((k) => Math.max(0, toNumber(liabsBy[k]))),
       };
     },
-
-    byCategoryChart(state) {
-        const s = state.summary;
-        const unit = state.baseCurrency ?? s?.base_currency ?? "EUR";
-
-        const assetsBy = s?.assets_by_category ?? {};
-        const liabsBy = s?.liabilities_by_category ?? {};
-
-        // Unificamos claves para que el gráfico tenga filas consistentes
-        const keys = Array.from(
-          new Set<string>([...Object.keys(assetsBy), ...Object.keys(liabsBy)])
-        );
-
-        return {
-          unit,
-          keys,
-          assets: keys.map((k) => Math.max(0, toNumber(assetsBy[k]))),
-          liabilities: keys.map((k) => Math.max(0, toNumber(liabsBy[k]))),
-        };
-      },
-
   },
 
   actions: {
@@ -181,11 +100,8 @@ export const useNetWorthStore = defineStore("netWorth", {
         this.assets = assetsRes.data;
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
-        this.byMemberSummary = null;
-        this.ownerships = [];
-
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -198,7 +114,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         await api.post("/api/net-worth/snapshots/from-current/");
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
         this.loading = false;
       }
     },
@@ -210,7 +126,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         await api.delete(`/api/net-worth/snapshots/${id}/`);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -220,10 +136,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/assets/", stripOwnershipFields(payload));
+        await api.post("/api/net-worth/assets/", payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -233,10 +149,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/assets/${id}/`, stripOwnershipFields(payload));
+        await api.patch(`/api/net-worth/assets/${id}/`, payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -250,10 +166,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/liabilities/", stripOwnershipFields(payload));
+        await api.post("/api/net-worth/liabilities/", payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -263,10 +179,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/liabilities/${id}/`, stripOwnershipFields(payload));
+        await api.patch(`/api/net-worth/liabilities/${id}/`, payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
@@ -276,15 +192,12 @@ export const useNetWorthStore = defineStore("netWorth", {
       return this.updateLiability(id, { is_active: false });
     },
 
-
     async fetchSettings() {
       try {
         const res = await api.get("/api/auth/settings/");
         this.baseCurrency = res.data.base_currency;
       } catch (e: any) {
-        this.error = e?.response?.data
-          ? JSON.stringify(e.response.data)
-          : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       }
     },
 
@@ -292,25 +205,14 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        const res = await api.put("/api/auth/settings/", {
-          base_currency: currency,
-        });
+        const res = await api.put("/api/auth/settings/", { base_currency: currency });
         this.baseCurrency = res.data.base_currency;
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data
-          ? JSON.stringify(e.response.data)
-          : (e?.message || "Error");
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
       } finally {
         this.loading = false;
       }
     },
-
-    async fetchByMemberSummary() {
-      this.byMemberSummary = null;
-    },
-
   },
-
 });
-
