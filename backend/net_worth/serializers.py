@@ -1,5 +1,4 @@
-from decimal import Decimal
-
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from .models import Asset, Liability, NetWorthSnapshot
@@ -9,6 +8,7 @@ from .services import (
     create_snapshot_for_user,
     get_amount_base_value,
     infer_liability_is_asset_backed,
+    validate_snapshot_payload,
     validate_asset_payload,
     validate_liability_payload,
 )
@@ -85,14 +85,14 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
         total_liabilities = attrs.get("total_liabilities")
         net_worth = attrs.get("net_worth")
 
-        if total_assets is not None and total_liabilities is not None:
-            computed = (total_assets or Decimal("0")) - (total_liabilities or Decimal("0"))
-            if net_worth is None:
-                attrs["net_worth"] = computed
-            elif net_worth != computed:
-                raise serializers.ValidationError(
-                    {"net_worth": "net_worth debe ser total_assets - total_liabilities"}
-                )
+        try:
+            attrs["net_worth"] = validate_snapshot_payload(
+                total_assets=total_assets,
+                total_liabilities=total_liabilities,
+                net_worth=net_worth,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
 
     def create(self, validated_data):
