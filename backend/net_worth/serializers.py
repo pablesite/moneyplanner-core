@@ -5,7 +5,12 @@ from rest_framework import serializers
 
 from core.services import convert_currency
 
-from .models import ASSET_SUBCATEGORY_MAP, Asset, Liability, NetWorthSnapshot
+from .models import Asset, Liability, NetWorthSnapshot
+from .services import (
+    infer_liability_is_asset_backed,
+    validate_asset_payload,
+    validate_liability_payload,
+)
 
 
 class EmptySerializer(serializers.Serializer):
@@ -38,26 +43,14 @@ class AssetSerializer(serializers.ModelSerializer):
         accounting_account_id = attrs.get(
             "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
         )
-
-        if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
-            raise serializers.ValidationError(
-                {
-                    "accounting_account_id": (
-                        "Requerido si tracking_mode=accounting "
-                        "(placeholder hasta que exista contabilidad)."
-                    )
-                }
-            )
-
         category = attrs.get("category", getattr(self.instance, "category", None))
         subcategory = attrs.get("subcategory", getattr(self.instance, "subcategory", None))
-        if category and subcategory:
-            allowed = ASSET_SUBCATEGORY_MAP.get(category)
-            if allowed and subcategory not in allowed:
-                raise serializers.ValidationError(
-                    {"subcategory": "Subcategoria invalida para esta categoria."}
-                )
-
+        validate_asset_payload(
+            tracking_mode=tracking_mode,
+            accounting_account_id=accounting_account_id,
+            category=category,
+            subcategory=subcategory,
+        )
         return attrs
 
     def get_amount_base(self, obj):
@@ -165,19 +158,13 @@ class LiabilitySerializer(serializers.ModelSerializer):
         accounting_account_id = attrs.get(
             "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
         )
-
-        if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
-            raise serializers.ValidationError(
-                {
-                    "accounting_account_id": (
-                        "Requerido si tracking_mode=accounting "
-                        "(placeholder hasta que exista contabilidad)."
-                    )
-                }
-            )
+        validate_liability_payload(
+            tracking_mode=tracking_mode,
+            accounting_account_id=accounting_account_id,
+        )
 
         financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))
-        attrs["is_asset_backed"] = financed_asset is not None
+        attrs["is_asset_backed"] = infer_liability_is_asset_backed(financed_asset=financed_asset)
         return attrs
 
     def get_amount_base(self, obj):
