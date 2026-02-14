@@ -14,10 +14,10 @@ def _quantize_2(amount: Decimal) -> Decimal:
     # Redondeo estándar financiero a 2 decimales (v1).
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+
 def _month_start(d) -> timezone.datetime.date:
     # Normaliza a primer día del mes (YYYY-MM-01)
     return d.replace(day=1)
-
 
 
 def _normalize_month_start(d) -> date:
@@ -30,6 +30,7 @@ def _normalize_month_start(d) -> date:
     if not isinstance(d, date):
         raise ValidationError("Invalid period_month type. Expected date or ISO string.")
     return d.replace(day=1)
+
 
 def _get_inflation_index(region: str, period_month) -> Decimal:
     """
@@ -46,8 +47,7 @@ def _get_inflation_index(region: str, period_month) -> Decimal:
 
     # 1) Fallback hacia atrás (último conocido anterior)
     row = (
-        InflationIndex.objects
-        .filter(region=region, period__lte=period_month)
+        InflationIndex.objects.filter(region=region, period__lte=period_month)
         .order_by("-period")
         .first()
     )
@@ -55,19 +55,12 @@ def _get_inflation_index(region: str, period_month) -> Decimal:
         return Decimal(row.index)
 
     # 2) Si period_month es anterior al primer dato, usamos el primer dato disponible
-    first_row = (
-        InflationIndex.objects
-        .filter(region=region)
-        .order_by("period")
-        .first()
-    )
+    first_row = InflationIndex.objects.filter(region=region).order_by("period").first()
     if first_row:
         return Decimal(first_row.index)
 
     # No hay IPC cargado para esa región
     raise ValidationError(f"Missing inflation index for region={region}.")
-
-
 
 
 def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date=None) -> Decimal:
@@ -184,7 +177,6 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
         return _quantize_2(amount * factor1 * factor2)
 
     raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
-
 
 
 def get_latest_inflation_period(region: str = InflationIndex.Region.ES):

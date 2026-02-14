@@ -44,13 +44,19 @@ class Asset(models.Model):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets"
+    )
 
     name = models.CharField(max_length=120)
     category = models.CharField(max_length=32, choices=Category.choices, default=Category.CASH)
-    subcategory = models.CharField(max_length=48, choices=Subcategory.choices, default=Subcategory.OTHER)
+    subcategory = models.CharField(
+        max_length=48, choices=Subcategory.choices, default=Subcategory.OTHER
+    )
 
-    tracking_mode = models.CharField(max_length=16, choices=TrackingMode.choices, default=TrackingMode.MANUAL)
+    tracking_mode = models.CharField(
+        max_length=16, choices=TrackingMode.choices, default=TrackingMode.MANUAL
+    )
     accounting_account_id = models.IntegerField(null=True, blank=True)
 
     currency = models.CharField(max_length=3, default="EUR")
@@ -133,12 +139,16 @@ class Liability(models.Model):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liabilities")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liabilities"
+    )
 
     name = models.CharField(max_length=120)
     category = models.CharField(max_length=32, choices=Category.choices, default=Category.OTHER)
 
-    tracking_mode = models.CharField(max_length=16, choices=TrackingMode.choices, default=TrackingMode.MANUAL)
+    tracking_mode = models.CharField(
+        max_length=16, choices=TrackingMode.choices, default=TrackingMode.MANUAL
+    )
     accounting_account_id = models.IntegerField(null=True, blank=True)
 
     currency = models.CharField(max_length=3, default="EUR")
@@ -185,7 +195,9 @@ class Liability(models.Model):
 
 
 class NetWorthSnapshot(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_worth_snapshots")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_worth_snapshots"
+    )
     snapshot_date = models.DateField(default=timezone.now)
 
     base_currency = models.CharField(max_length=3, default="EUR")
@@ -200,7 +212,9 @@ class NetWorthSnapshot(models.Model):
         indexes = [models.Index(fields=["user", "snapshot_date"])]
         ordering = ["-snapshot_date", "-created_at"]
         constraints = [
-            models.UniqueConstraint(fields=["user", "snapshot_date"], name="unique_snapshot_per_user_and_date")
+            models.UniqueConstraint(
+                fields=["user", "snapshot_date"], name="unique_snapshot_per_user_and_date"
+            )
         ]
 
     def __str__(self) -> str:

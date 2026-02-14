@@ -48,5 +48,7 @@ class Migration(migrations.Migration):
                 max_length=48,
             ),
         ),
-        migrations.RunPython(migrate_vehicle_to_furnishings, reverse_code=migrations.RunPython.noop),
+        migrations.RunPython(
+            migrate_vehicle_to_furnishings, reverse_code=migrations.RunPython.noop
+        ),
     ]

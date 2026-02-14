@@ -5,31 +5,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0001_initial'),
+        ("core", "0001_initial"),
     ]
 
     operations = [
         migrations.RemoveIndex(
-            model_name='fxrate',
-            name='core_fxrate_from_cu_677796_idx',
+            model_name="fxrate",
+            name="core_fxrate_from_cu_677796_idx",
         ),
         migrations.AlterUniqueTogether(
-            name='fxrate',
+            name="fxrate",
             unique_together=set(),
         ),
         migrations.AddField(
-            model_name='fxrate',
-            name='rate_date',
+            model_name="fxrate",
+            name="rate_date",
             field=models.DateField(default=django.utils.timezone.localdate),
         ),
         migrations.AlterUniqueTogether(
-            name='fxrate',
-            unique_together={('from_currency', 'to_currency', 'rate_date')},
+            name="fxrate",
+            unique_together={("from_currency", "to_currency", "rate_date")},
         ),
         migrations.AddIndex(
-            model_name='fxrate',
-            index=models.Index(fields=['from_currency', 'to_currency', 'rate_date'], name='core_fxrate_from_cu_d4e797_idx'),
+            model_name="fxrate",
+            index=models.Index(
+                fields=["from_currency", "to_currency", "rate_date"],
+                name="core_fxrate_from_cu_d4e797_idx",
+            ),
         ),
     ]

@@ -35,7 +35,9 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
-        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
+        accounting_account_id = attrs.get(
+            "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
+        )
 
         if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
             raise serializers.ValidationError(
@@ -52,7 +54,9 @@ class AssetSerializer(serializers.ModelSerializer):
         if category and subcategory:
             allowed = ASSET_SUBCATEGORY_MAP.get(category)
             if allowed and subcategory not in allowed:
-                raise serializers.ValidationError({"subcategory": "Subcategoria invalida para esta categoria."})
+                raise serializers.ValidationError(
+                    {"subcategory": "Subcategoria invalida para esta categoria."}
+                )
 
         return attrs
 
@@ -95,7 +99,9 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
             if net_worth is None:
                 attrs["net_worth"] = computed
             elif net_worth != computed:
-                raise serializers.ValidationError({"net_worth": "net_worth debe ser total_assets - total_liabilities"})
+                raise serializers.ValidationError(
+                    {"net_worth": "net_worth debe ser total_assets - total_liabilities"}
+                )
         return attrs
 
     def create(self, validated_data):
@@ -156,7 +162,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
-        accounting_account_id = attrs.get("accounting_account_id", getattr(self.instance, "accounting_account_id", None))
+        accounting_account_id = attrs.get(
+            "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
+        )
 
         if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
             raise serializers.ValidationError(

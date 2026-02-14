@@ -4,63 +4,111 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0011_asset_subcategory_and_furnishings'),
+        ("net_worth", "0011_asset_subcategory_and_furnishings"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='ownershipsplit',
-            name='member',
+            model_name="ownershipsplit",
+            name="member",
         ),
         migrations.RemoveField(
-            model_name='ownership',
-            name='member',
+            model_name="ownership",
+            name="member",
         ),
         migrations.RemoveField(
-            model_name='ownership',
-            name='user',
+            model_name="ownership",
+            name="user",
         ),
         migrations.RemoveField(
-            model_name='asset',
-            name='ownership',
+            model_name="asset",
+            name="ownership",
         ),
         migrations.RemoveField(
-            model_name='liability',
-            name='ownership',
+            model_name="liability",
+            name="ownership",
         ),
         migrations.RemoveField(
-            model_name='ownershipsplit',
-            name='ownership',
+            model_name="ownershipsplit",
+            name="ownership",
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='category',
-            field=models.CharField(choices=[('cash', 'Liquidez'), ('investments', 'Inversiones'), ('real_estate', 'Inmuebles'), ('vehicle', 'Vehiculo'), ('furnishings', 'Mobiliario'), ('other', 'Otros')], default='cash', max_length=32),
+            model_name="asset",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("cash", "Liquidez"),
+                    ("investments", "Inversiones"),
+                    ("real_estate", "Inmuebles"),
+                    ("vehicle", "Vehiculo"),
+                    ("furnishings", "Mobiliario"),
+                    ("other", "Otros"),
+                ],
+                default="cash",
+                max_length=32,
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='subcategory',
-            field=models.CharField(choices=[('bank_account', 'Cuenta bancaria'), ('wallet', 'Monedero'), ('crypto_spot_earn', 'Spot/Earn Cripto'), ('deposits', 'Depositos'), ('funds', 'Fondos'), ('etfs', 'ETFs'), ('roboadvisor', 'Roboadvisor'), ('stocks', 'Stocks'), ('pension_plans', 'Planes de pensiones'), ('cryptocurrencies', 'Criptomonedas'), ('real_estate_crowd', 'Crowdfunding Inmobiliario'), ('crowdlending', 'Crowdlending'), ('primary_home', 'Vivienda habitual'), ('second_home', 'Segunda vivienda'), ('rental', 'Rentas'), ('vehicles', 'Vehiculos'), ('technology', 'Tecnologia'), ('home_furnishings', 'Muebles vivienda'), ('sports_equipment', 'Equipamiento deportivo'), ('jewelry', 'Joyeria'), ('other', 'Otros')], default='other', max_length=48),
+            model_name="asset",
+            name="subcategory",
+            field=models.CharField(
+                choices=[
+                    ("bank_account", "Cuenta bancaria"),
+                    ("wallet", "Monedero"),
+                    ("crypto_spot_earn", "Spot/Earn Cripto"),
+                    ("deposits", "Depositos"),
+                    ("funds", "Fondos"),
+                    ("etfs", "ETFs"),
+                    ("roboadvisor", "Roboadvisor"),
+                    ("stocks", "Stocks"),
+                    ("pension_plans", "Planes de pensiones"),
+                    ("cryptocurrencies", "Criptomonedas"),
+                    ("real_estate_crowd", "Crowdfunding Inmobiliario"),
+                    ("crowdlending", "Crowdlending"),
+                    ("primary_home", "Vivienda habitual"),
+                    ("second_home", "Segunda vivienda"),
+                    ("rental", "Rentas"),
+                    ("vehicles", "Vehiculos"),
+                    ("technology", "Tecnologia"),
+                    ("home_furnishings", "Muebles vivienda"),
+                    ("sports_equipment", "Equipamiento deportivo"),
+                    ("jewelry", "Joyeria"),
+                    ("other", "Otros"),
+                ],
+                default="other",
+                max_length=48,
+            ),
         ),
         migrations.AlterField(
-            model_name='liability',
-            name='category',
-            field=models.CharField(choices=[('mortgage', 'Hipoteca'), ('personal_loan', 'Prestamo personal'), ('credit_card', 'Tarjeta'), ('other', 'Otros')], default='other', max_length=32),
+            model_name="liability",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("mortgage", "Hipoteca"),
+                    ("personal_loan", "Prestamo personal"),
+                    ("credit_card", "Tarjeta"),
+                    ("other", "Otros"),
+                ],
+                default="other",
+                max_length=32,
+            ),
         ),
         migrations.AlterField(
-            model_name='liability',
-            name='is_asset_backed',
-            field=models.BooleanField(default=False, help_text='True si esta deuda esta asociada a un activo (hipoteca, prestamo coche, etc.). False si es deuda de gasto/consumo (clinica, tarjeta, etc.).'),
+            model_name="liability",
+            name="is_asset_backed",
+            field=models.BooleanField(
+                default=False,
+                help_text="True si esta deuda esta asociada a un activo (hipoteca, prestamo coche, etc.). False si es deuda de gasto/consumo (clinica, tarjeta, etc.).",
+            ),
         ),
         migrations.DeleteModel(
-            name='FamilyMember',
+            name="FamilyMember",
         ),
         migrations.DeleteModel(
-            name='Ownership',
+            name="Ownership",
         ),
         migrations.DeleteModel(
-            name='OwnershipSplit',
+            name="OwnershipSplit",
         ),
     ]

@@ -16,4 +16,5 @@ class InflationIndexViewSet(viewsets.ModelViewSet):
     serializer_class = InflationIndexSerializer
     queryset = InflationIndex.objects.all().order_by("-period")
 
+
 # Create your views here.

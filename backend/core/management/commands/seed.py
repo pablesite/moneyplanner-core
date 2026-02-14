@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.utils import timezone
 from core.models import FxRate, InflationIndex
 
+
 def _d(v: str) -> Decimal:
     return Decimal(str(v).strip().replace(",", "."))
 
@@ -62,10 +63,9 @@ class Command(BaseCommand):
         if created:
             self.stdout.write(self.style.SUCCESS(f"Created admin user '{username}'."))
         else:
-            self.stdout.write(self.style.WARNING(f"Admin user '{username}' already exists (ensured flags)."))
-
-        
-
+            self.stdout.write(
+                self.style.WARNING(f"Admin user '{username}' already exists (ensured flags).")
+            )
 
         # Seed FX + IPC (mínimo viable)
         rate_date = timezone.localdate() - timedelta(days=1)
@@ -101,4 +101,3 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS(f"Seed FX + IPC done for rate_date={rate_date}."))
-
