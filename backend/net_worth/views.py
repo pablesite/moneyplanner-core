@@ -16,6 +16,7 @@ from .serializers import (
 from .services import (
     build_net_worth_summary,
     create_or_update_snapshot_from_current,
+    get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     serialize_net_worth_summary,
 )
@@ -51,6 +52,7 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx["base_currency"] = get_base_currency_for_user(user=self.request.user)
+        ctx["financed_asset_queryset"] = get_financed_asset_queryset_for_user(user=self.request.user)
         return ctx
 
 
