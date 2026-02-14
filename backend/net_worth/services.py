@@ -6,12 +6,13 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from accounts.models import UserSettings
 from core.models import InflationIndex
 from core.services import adjust_for_inflation, convert_currency
 
-from .models import Asset, Liability, NetWorthSnapshot
+from .models import ASSET_SUBCATEGORY_MAP, Asset, Liability, NetWorthSnapshot
 
 
 @dataclass
@@ -23,6 +24,39 @@ class NetWorthTotals:
     assets_by_category: dict[str, Decimal]
     assets_by_subcategory: dict[str, Decimal]
     liabilities_by_category: dict[str, Decimal]
+
+
+def validate_asset_payload(*, tracking_mode: str | None, accounting_account_id, category, subcategory) -> None:
+    if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
+        raise DRFValidationError(
+            {
+                "accounting_account_id": (
+                    "Requerido si tracking_mode=accounting "
+                    "(placeholder hasta que exista contabilidad)."
+                )
+            }
+        )
+
+    if category and subcategory:
+        allowed = ASSET_SUBCATEGORY_MAP.get(category)
+        if allowed and subcategory not in allowed:
+            raise DRFValidationError({"subcategory": "Subcategoria invalida para esta categoria."})
+
+
+def validate_liability_payload(*, tracking_mode: str | None, accounting_account_id) -> None:
+    if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
+        raise DRFValidationError(
+            {
+                "accounting_account_id": (
+                    "Requerido si tracking_mode=accounting "
+                    "(placeholder hasta que exista contabilidad)."
+                )
+            }
+        )
+
+
+def infer_liability_is_asset_backed(*, financed_asset) -> bool:
+    return financed_asset is not None
 
 
 def get_base_currency_for_user(*, user) -> str:
