@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 type CurrencyOption = { value: string; label: string };
 
@@ -11,7 +11,7 @@ type Props = {
   currencies: CurrencyOption[];
 
   // modo nominal/real (vista)
-  valueMode: "nominal" | "real";
+  valueMode: 'nominal' | 'real';
   canShowReal: boolean;
   modeHelp: string; // texto tipo: "Nominal (euros de hoy)" / "IPC: euros..."
   realBaseLabel?: string; // "Base: 2024-01" etc.
@@ -29,10 +29,10 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  (e: "update:baseCurrency", value: string): void;
-  (e: "update:valueMode", value: "nominal" | "real"): void;
-  (e: "snapshot"): void;
-  (e: "refresh"): void;
+  (e: 'update:baseCurrency', value: string): void;
+  (e: 'update:valueMode', value: 'nominal' | 'real'): void;
+  (e: 'snapshot'): void;
+  (e: 'refresh'): void;
 }>();
 
 const open = ref(false);
@@ -54,26 +54,26 @@ function onDocClick(e: MouseEvent) {
 
 function onKeydown(e: KeyboardEvent) {
   if (!open.value) return;
-  if (e.key === "Escape") close();
+  if (e.key === 'Escape') close();
 }
 
 onMounted(() => {
-  document.addEventListener("click", onDocClick);
-  window.addEventListener("keydown", onKeydown);
+  document.addEventListener('click', onDocClick);
+  window.addEventListener('keydown', onKeydown);
 });
 onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocClick);
-  window.removeEventListener("keydown", onKeydown);
+  document.removeEventListener('click', onDocClick);
+  window.removeEventListener('keydown', onKeydown);
 });
 
 function onSelectBaseCurrency(e: Event) {
   const v = (e.target as HTMLSelectElement).value;
-  emit("update:baseCurrency", v);
+  emit('update:baseCurrency', v);
 }
 
 function onSelectMode(e: Event) {
-  const v = (e.target as HTMLSelectElement).value as "nominal" | "real";
-  emit("update:valueMode", v);
+  const v = (e.target as HTMLSelectElement).value as 'nominal' | 'real';
+  emit('update:valueMode', v);
 }
 </script>
 
@@ -83,9 +83,9 @@ function onSelectMode(e: Event) {
       class="btn"
       :class="{ 'icon-only': iconOnly }"
       type="button"
-      @click="toggle"
       :disabled="loading"
       aria-label="Ajustes"
+      @click="toggle"
     >
       <span class="btn-icon" aria-hidden="true">&#9881;&#65039;</span>
       <span v-if="!iconOnly">Ajustes</span>
@@ -97,7 +97,13 @@ function onSelectMode(e: Event) {
       <div class="popover-block">
         <div class="field">
           <div class="label">Moneda base</div>
-          <select class="input" style="width: 140px;" :value="baseCurrency" @change="onSelectBaseCurrency" :disabled="loading">
+          <select
+            class="input"
+            style="width: 140px"
+            :value="baseCurrency"
+            :disabled="loading"
+            @change="onSelectBaseCurrency"
+          >
             <option v-for="c in currencies" :key="c.value" :value="c.value">
               {{ c.label }}
             </option>
@@ -109,7 +115,13 @@ function onSelectMode(e: Event) {
       <div class="popover-block">
         <div class="field">
           <div class="label">Modo</div>
-          <select class="input" style="width: 180px;" :value="valueMode" @change="onSelectMode" :disabled="loading">
+          <select
+            class="input"
+            style="width: 180px"
+            :value="valueMode"
+            :disabled="loading"
+            @change="onSelectMode"
+          >
             <option value="nominal">Nominal</option>
             <option value="real" :disabled="!canShowReal">IPC (euros mes base)</option>
           </select>
@@ -119,24 +131,34 @@ function onSelectMode(e: Event) {
             <span v-if="valueMode === 'real' && realBaseLabel"> · {{ realBaseLabel }}</span>
           </div>
 
-          <div v-if="!canShowReal" class="hint" style="color: rgba(255, 140, 160, 0.95);">
+          <div v-if="!canShowReal" class="hint" style="color: rgba(255, 140, 160, 0.95)">
             El modo IPC solo está disponible cuando se puede calcular (EUR + IPC cargado).
           </div>
         </div>
       </div>
 
       <div class="popover-block popover-actions">
-        <button v-if="showSnapshot" class="btn btn-primary" type="button" @click="emit('snapshot')" :disabled="loading">
+        <button
+          v-if="showSnapshot"
+          class="btn btn-primary"
+          type="button"
+          :disabled="loading"
+          @click="emit('snapshot')"
+        >
           Guardar snapshot
         </button>
 
-        <button v-if="showRefresh" class="btn" type="button" @click="emit('refresh')" :disabled="loading">
+        <button
+          v-if="showRefresh"
+          class="btn"
+          type="button"
+          :disabled="loading"
+          @click="emit('refresh')"
+        >
           Refrescar
         </button>
 
-        <button class="btn popover-close" type="button" @click="close">
-          Cerrar
-        </button>
+        <button class="btn popover-close" type="button" @click="close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -148,12 +170,12 @@ function onSelectMode(e: Event) {
   display: inline-block;
 }
 
-.icon-only{
+.icon-only {
   padding: 8px 10px;
   border-radius: 10px;
 }
 
-.btn-icon{
+.btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -199,17 +221,17 @@ function onSelectMode(e: Event) {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.popover-actions{
+.popover-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.popover-actions .btn{
+.popover-actions .btn {
   width: 100%;
 }
 
-.popover-close{
+.popover-close {
   grid-column: 1 / -1;
 }
 
@@ -233,4 +255,3 @@ function onSelectMode(e: Event) {
   opacity: 0.72;
 }
 </style>
-
