@@ -72,6 +72,16 @@ def create_snapshot_for_user(*, user, validated_data: dict) -> NetWorthSnapshot:
     return NetWorthSnapshot.objects.create(user=user, **validated_data)
 
 
+def get_amount_base_value(*, amount, currency: str, base_currency: str | None, as_of_date: date | None = None):
+    if not base_currency:
+        return None
+    try:
+        ref_date = as_of_date or timezone.localdate()
+        return str(convert_currency(amount, currency, base_currency, date=ref_date))
+    except Exception:
+        return None
+
+
 def get_base_currency_for_user(*, user) -> str:
     UserSettings.objects.get_or_create(user=user)
     return user.settings.base_currency
