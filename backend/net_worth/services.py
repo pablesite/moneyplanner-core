@@ -72,6 +72,18 @@ def create_snapshot_for_user(*, user, validated_data: dict) -> NetWorthSnapshot:
     return NetWorthSnapshot.objects.create(user=user, **validated_data)
 
 
+def validate_snapshot_payload(*, total_assets, total_liabilities, net_worth):
+    if total_assets is None or total_liabilities is None:
+        return net_worth
+
+    computed = (total_assets or Decimal("0")) - (total_liabilities or Decimal("0"))
+    if net_worth is None:
+        return computed
+    if net_worth != computed:
+        raise ValidationError({"net_worth": "net_worth debe ser total_assets - total_liabilities"})
+    return net_worth
+
+
 def get_financed_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True)
 

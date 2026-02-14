@@ -1,11 +1,11 @@
 from django.core.exceptions import ValidationError
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .api import raise_api_validation_error
 from .models import Asset, Liability, NetWorthSnapshot
 from .serializers import (
     AssetSerializer,
@@ -20,12 +20,6 @@ from .services import (
     get_base_currency_for_user,
     serialize_net_worth_summary,
 )
-
-
-def _raise_api_validation_error(exc: ValidationError) -> None:
-    message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
-    raise DRFValidationError({"detail": message}) from exc
-
 
 class UserScopedQuerySetMixin:
     def get_queryset(self):
@@ -77,7 +71,7 @@ class NetWorthSnapshotViewSet(
         try:
             snapshot, created = create_or_update_snapshot_from_current(user=request.user)
         except ValidationError as exc:
-            _raise_api_validation_error(exc)
+            raise_api_validation_error(exc)
 
         data = NetWorthSnapshotSerializer(snapshot).data
         return Response(
@@ -93,6 +87,6 @@ class NetWorthSummaryAPIView(APIView):
         try:
             summary = build_net_worth_summary(user=request.user)
         except ValidationError as exc:
-            _raise_api_validation_error(exc)
+            raise_api_validation_error(exc)
 
         return Response(serialize_net_worth_summary(summary))
