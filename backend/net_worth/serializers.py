@@ -7,6 +7,9 @@ from core.services import convert_currency
 
 from .models import Asset, Liability, NetWorthSnapshot
 from .services import (
+    create_asset_for_user,
+    create_liability_for_user,
+    create_snapshot_for_user,
     infer_liability_is_asset_backed,
     validate_asset_payload,
     validate_liability_payload,
@@ -65,7 +68,7 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context["request"]
-        return Asset.objects.create(user=request.user, **validated_data)
+        return create_asset_for_user(user=request.user, validated_data=validated_data)
 
 
 class NetWorthSnapshotSerializer(serializers.ModelSerializer):
@@ -99,7 +102,7 @@ class NetWorthSnapshotSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context["request"]
-        return NetWorthSnapshot.objects.create(user=request.user, **validated_data)
+        return create_snapshot_for_user(user=request.user, validated_data=validated_data)
 
 
 class AssetMiniSerializer(serializers.ModelSerializer):
@@ -179,4 +182,4 @@ class LiabilitySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context["request"]
-        return Liability.objects.create(user=request.user, **validated_data)
+        return create_liability_for_user(user=request.user, validated_data=validated_data)
