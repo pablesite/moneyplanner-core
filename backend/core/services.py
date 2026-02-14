@@ -15,6 +15,20 @@ def _quantize_2(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def normalize_currency_code(value: str | None) -> str:
+    return (value or "").upper().strip()
+
+
+def validate_fx_currency_pair(*, from_currency: str, to_currency: str) -> None:
+    if len(from_currency) != 3 or len(to_currency) != 3:
+        raise ValidationError("Moneda invalida. Usa codigos ISO de 3 letras.")
+
+
+def validate_inflation_period_start(*, period: date) -> None:
+    if period.day != 1:
+        raise ValidationError("El periodo debe ser el primer dia del mes (YYYY-MM-01).")
+
+
 def _month_start(d) -> timezone.datetime.date:
     # Normaliza a primer día del mes (YYYY-MM-01)
     return d.replace(day=1)
