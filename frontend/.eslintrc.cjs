@@ -23,5 +23,7 @@ module.exports = {
     'vue/require-default-prop': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-unused-vars': 'off',
+    complexity: ['error', 20],
+    'spaced-comment': ['error', 'always'],
   },
 };
