@@ -144,12 +144,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        request = self.context.get("request")
-        if request and request.user and request.user.is_authenticated:
-            self.fields["financed_asset_id"].queryset = Asset.objects.filter(
-                user=request.user,
-                is_active=True,
-            )
+        financed_asset_queryset = self.context.get("financed_asset_queryset")
+        if financed_asset_queryset is not None:
+            self.fields["financed_asset_id"].queryset = financed_asset_queryset
 
     def validate(self, attrs):
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))

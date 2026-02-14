@@ -72,6 +72,10 @@ def create_snapshot_for_user(*, user, validated_data: dict) -> NetWorthSnapshot:
     return NetWorthSnapshot.objects.create(user=user, **validated_data)
 
 
+def get_financed_asset_queryset_for_user(*, user):
+    return Asset.objects.filter(user=user, is_active=True)
+
+
 def get_amount_base_value(*, amount, currency: str, base_currency: str | None, as_of_date: date | None = None):
     if not base_currency:
         return None
