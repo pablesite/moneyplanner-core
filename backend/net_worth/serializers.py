@@ -1,15 +1,13 @@
 from decimal import Decimal
 
-from django.utils import timezone
 from rest_framework import serializers
-
-from core.services import convert_currency
 
 from .models import Asset, Liability, NetWorthSnapshot
 from .services import (
     create_asset_for_user,
     create_liability_for_user,
     create_snapshot_for_user,
+    get_amount_base_value,
     infer_liability_is_asset_backed,
     validate_asset_payload,
     validate_liability_payload,
@@ -57,14 +55,11 @@ class AssetSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        base_currency = self.context.get("base_currency")
-        if not base_currency:
-            return None
-        try:
-            today = timezone.localdate()
-            return str(convert_currency(obj.amount, obj.currency, base_currency, date=today))
-        except Exception:
-            return None
+        return get_amount_base_value(
+            amount=obj.amount,
+            currency=obj.currency,
+            base_currency=self.context.get("base_currency"),
+        )
 
     def create(self, validated_data):
         request = self.context["request"]
@@ -171,14 +166,11 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        base_currency = self.context.get("base_currency")
-        if not base_currency:
-            return None
-        try:
-            today = timezone.localdate()
-            return str(convert_currency(obj.amount, obj.currency, base_currency, date=today))
-        except Exception:
-            return None
+        return get_amount_base_value(
+            amount=obj.amount,
+            currency=obj.currency,
+            base_currency=self.context.get("base_currency"),
+        )
 
     def create(self, validated_data):
         request = self.context["request"]
