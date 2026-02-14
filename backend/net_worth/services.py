@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -57,6 +58,18 @@ def validate_liability_payload(*, tracking_mode: str | None, accounting_account_
 
 def infer_liability_is_asset_backed(*, financed_asset) -> bool:
     return financed_asset is not None
+
+
+def create_asset_for_user(*, user, validated_data: dict) -> Asset:
+    return Asset.objects.create(user=user, **validated_data)
+
+
+def create_liability_for_user(*, user, validated_data: dict) -> Liability:
+    return Liability.objects.create(user=user, **validated_data)
+
+
+def create_snapshot_for_user(*, user, validated_data: dict) -> NetWorthSnapshot:
+    return NetWorthSnapshot.objects.create(user=user, **validated_data)
 
 
 def get_base_currency_for_user(*, user) -> str:
@@ -243,4 +256,61 @@ def build_net_worth_summary(*, user) -> dict[str, object]:
         "liabilities_unbacked": totals.liabilities_unbacked,
         "liabilities_asset_backed_real": liabilities_asset_backed_real,
         "liabilities_unbacked_real": liabilities_unbacked_real,
+    }
+
+
+def serialize_net_worth_summary(summary: dict[str, object]) -> dict[str, object]:
+    assets_by_category = cast(dict[str, Decimal], summary["assets_by_category"])
+    assets_by_subcategory = cast(dict[str, Decimal], summary["assets_by_subcategory"])
+    liabilities_by_category = cast(dict[str, Decimal], summary["liabilities_by_category"])
+    assets_by_category_real = cast(dict[str, Decimal] | None, summary["assets_by_category_real"])
+    liabilities_by_category_real = cast(
+        dict[str, Decimal] | None, summary["liabilities_by_category_real"]
+    )
+
+    return {
+        "base_currency": summary["base_currency"],
+        "total_assets": str(summary["total_assets"]),
+        "total_liabilities": str(summary["total_liabilities"]),
+        "net_worth": str(summary["net_worth"]),
+        "assets_by_category": {k: str(v) for k, v in assets_by_category.items()},
+        "assets_by_subcategory": {k: str(v) for k, v in assets_by_subcategory.items()},
+        "liabilities_by_category": {k: str(v) for k, v in liabilities_by_category.items()},
+        "inflation_region": summary["inflation_region"],
+        "inflation_base_period": (
+            str(summary["inflation_base_period"]) if summary["inflation_base_period"] else None
+        ),
+        "total_assets_real": (
+            str(summary["total_assets_real"]) if summary["total_assets_real"] is not None else None
+        ),
+        "total_liabilities_real": (
+            str(summary["total_liabilities_real"])
+            if summary["total_liabilities_real"] is not None
+            else None
+        ),
+        "net_worth_real": (
+            str(summary["net_worth_real"]) if summary["net_worth_real"] is not None else None
+        ),
+        "assets_by_category_real": (
+            {k: str(v) for k, v in assets_by_category_real.items()}
+            if assets_by_category_real is not None
+            else None
+        ),
+        "liabilities_by_category_real": (
+            {k: str(v) for k, v in liabilities_by_category_real.items()}
+            if liabilities_by_category_real is not None
+            else None
+        ),
+        "liabilities_asset_backed": str(summary["liabilities_asset_backed"]),
+        "liabilities_unbacked": str(summary["liabilities_unbacked"]),
+        "liabilities_asset_backed_real": (
+            str(summary["liabilities_asset_backed_real"])
+            if summary["liabilities_asset_backed_real"] is not None
+            else None
+        ),
+        "liabilities_unbacked_real": (
+            str(summary["liabilities_unbacked_real"])
+            if summary["liabilities_unbacked_real"] is not None
+            else None
+        ),
     }

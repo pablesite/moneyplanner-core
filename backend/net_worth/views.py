@@ -17,6 +17,7 @@ from .services import (
     build_net_worth_summary,
     create_or_update_snapshot_from_current,
     get_base_currency_for_user,
+    serialize_net_worth_summary,
 )
 
 
@@ -92,57 +93,4 @@ class NetWorthSummaryAPIView(APIView):
         except ValidationError as exc:
             _raise_api_validation_error(exc)
 
-        return Response(
-            {
-                "base_currency": summary["base_currency"],
-                "total_assets": str(summary["total_assets"]),
-                "total_liabilities": str(summary["total_liabilities"]),
-                "net_worth": str(summary["net_worth"]),
-                "assets_by_category": {
-                    k: str(v) for k, v in summary["assets_by_category"].items()
-                },
-                "assets_by_subcategory": {
-                    k: str(v) for k, v in summary["assets_by_subcategory"].items()
-                },
-                "liabilities_by_category": {
-                    k: str(v) for k, v in summary["liabilities_by_category"].items()
-                },
-                "inflation_region": summary["inflation_region"],
-                "inflation_base_period": (
-                    str(summary["inflation_base_period"]) if summary["inflation_base_period"] else None
-                ),
-                "total_assets_real": (
-                    str(summary["total_assets_real"]) if summary["total_assets_real"] is not None else None
-                ),
-                "total_liabilities_real": (
-                    str(summary["total_liabilities_real"])
-                    if summary["total_liabilities_real"] is not None
-                    else None
-                ),
-                "net_worth_real": (
-                    str(summary["net_worth_real"]) if summary["net_worth_real"] is not None else None
-                ),
-                "assets_by_category_real": (
-                    {k: str(v) for k, v in summary["assets_by_category_real"].items()}
-                    if summary["assets_by_category_real"] is not None
-                    else None
-                ),
-                "liabilities_by_category_real": (
-                    {k: str(v) for k, v in summary["liabilities_by_category_real"].items()}
-                    if summary["liabilities_by_category_real"] is not None
-                    else None
-                ),
-                "liabilities_asset_backed": str(summary["liabilities_asset_backed"]),
-                "liabilities_unbacked": str(summary["liabilities_unbacked"]),
-                "liabilities_asset_backed_real": (
-                    str(summary["liabilities_asset_backed_real"])
-                    if summary["liabilities_asset_backed_real"] is not None
-                    else None
-                ),
-                "liabilities_unbacked_real": (
-                    str(summary["liabilities_unbacked_real"])
-                    if summary["liabilities_unbacked_real"] is not None
-                    else None
-                ),
-            }
-        )
+        return Response(serialize_net_worth_summary(summary))
