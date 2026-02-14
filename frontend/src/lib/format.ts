@@ -1,6 +1,6 @@
 type FormatOpts = {
-  currency?: string;     // "EUR" | "USD" | "BTC" | "ETH" ...
-  maxDecimals?: number;  // override manual
+  currency?: string; // "EUR" | "USD" | "BTC" | "ETH" ...
+  maxDecimals?: number; // override manual
 };
 
 const decimalsByCurrency: Record<string, number> = {
@@ -11,7 +11,10 @@ const decimalsByCurrency: Record<string, number> = {
 };
 
 export function normalizeNumberInput(raw: unknown) {
-  return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+  return String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
 }
 
 export function getMaxDecimals(currency?: string) {
@@ -23,11 +26,11 @@ export function getMaxDecimals(currency?: string) {
 export function formatAmount(value: unknown, opts: FormatOpts = {}) {
   const s = normalizeNumberInput(value);
   const n = Number(s);
-  if (Number.isNaN(n)) return String(value ?? "");
+  if (Number.isNaN(n)) return String(value ?? '');
 
   const max = opts.maxDecimals ?? getMaxDecimals(opts.currency);
 
-  return new Intl.NumberFormat("es-ES", {
+  return new Intl.NumberFormat('es-ES', {
     useGrouping: true,
     minimumFractionDigits: 0,
     maximumFractionDigits: max,
@@ -35,15 +38,15 @@ export function formatAmount(value: unknown, opts: FormatOpts = {}) {
 }
 
 // Para dinero fiat con símbolo opcional (si lo quieres)
-export function formatMoney(value: unknown, currency: "EUR" | "USD" = "EUR") {
+export function formatMoney(value: unknown, currency: 'EUR' | 'USD' = 'EUR') {
   const s = normalizeNumberInput(value);
   const n = Number(s);
-  if (Number.isNaN(n)) return String(value ?? "");
+  if (Number.isNaN(n)) return String(value ?? '');
 
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
     currency,
-    currencyDisplay: "symbol",
+    currencyDisplay: 'symbol',
     useGrouping: true,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

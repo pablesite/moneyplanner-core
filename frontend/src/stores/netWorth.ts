@@ -1,5 +1,5 @@
-import { defineStore } from "pinia";
-import { api } from "@/lib/api";
+import { defineStore } from 'pinia';
+import { api } from '@/lib/api';
 
 export type Asset = {
   id: number;
@@ -45,7 +45,10 @@ export type Summary = {
 };
 
 function normalizeNumberInput(raw: unknown) {
-  return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+  return String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
 }
 
 function toNumber(v: unknown) {
@@ -53,7 +56,7 @@ function toNumber(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export const useNetWorthStore = defineStore("netWorth", {
+export const useNetWorthStore = defineStore('netWorth', {
   state: () => ({
     loading: false as boolean,
     error: null as string | null,
@@ -67,7 +70,7 @@ export const useNetWorthStore = defineStore("netWorth", {
   getters: {
     byCategoryChart(state) {
       const s = state.summary;
-      const unit = state.baseCurrency ?? s?.base_currency ?? "EUR";
+      const unit = state.baseCurrency ?? s?.base_currency ?? 'EUR';
 
       const assetsBy = s?.assets_by_category ?? {};
       const liabsBy = s?.liabilities_by_category ?? {};
@@ -89,10 +92,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.error = null;
       try {
         const [summaryRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
-          api.get("/api/net-worth/summary/"),
-          api.get("/api/net-worth/assets/"),
-          api.get("/api/net-worth/liabilities/"),
-          api.get("/api/net-worth/snapshots/"),
+          api.get('/api/net-worth/summary/'),
+          api.get('/api/net-worth/assets/'),
+          api.get('/api/net-worth/liabilities/'),
+          api.get('/api/net-worth/snapshots/'),
         ]);
 
         this.summary = summaryRes.data;
@@ -101,7 +104,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -111,10 +114,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/snapshots/from-current/");
+        await api.post('/api/net-worth/snapshots/from-current/');
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
         this.loading = false;
       }
     },
@@ -126,7 +129,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         await api.delete(`/api/net-worth/snapshots/${id}/`);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -136,10 +139,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/assets/", payload);
+        await api.post('/api/net-worth/assets/', payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -152,7 +155,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         await api.patch(`/api/net-worth/assets/${id}/`, payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -166,10 +169,10 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        await api.post("/api/net-worth/liabilities/", payload);
+        await api.post('/api/net-worth/liabilities/', payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -182,7 +185,7 @@ export const useNetWorthStore = defineStore("netWorth", {
         await api.patch(`/api/net-worth/liabilities/${id}/`, payload);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }
@@ -194,10 +197,10 @@ export const useNetWorthStore = defineStore("netWorth", {
 
     async fetchSettings() {
       try {
-        const res = await api.get("/api/auth/settings/");
+        const res = await api.get('/api/auth/settings/');
         this.baseCurrency = res.data.base_currency;
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       }
     },
 
@@ -205,11 +208,11 @@ export const useNetWorthStore = defineStore("netWorth", {
       this.loading = true;
       this.error = null;
       try {
-        const res = await api.put("/api/auth/settings/", { base_currency: currency });
+        const res = await api.put('/api/auth/settings/', { base_currency: currency });
         this.baseCurrency = res.data.base_currency;
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || "Error";
+        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
       } finally {
         this.loading = false;
       }

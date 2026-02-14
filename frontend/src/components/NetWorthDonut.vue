@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { Doughnut } from "vue-chartjs";
+import { computed } from 'vue';
+import { Doughnut } from 'vue-chartjs';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -9,7 +9,7 @@ import {
   type ChartData,
   type ChartOptions,
   type Plugin,
-} from "chart.js";
+} from 'chart.js';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -25,7 +25,10 @@ type Props = {
 const props = defineProps<Props>();
 
 function normalizeNumberInput(raw: unknown) {
-  return String(raw ?? "").trim().replace(/\s/g, "").replace(/,/g, ".");
+  return String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
 }
 
 function toNumber(v: unknown) {
@@ -34,7 +37,7 @@ function toNumber(v: unknown) {
 }
 
 function formatMoney(n: number, decimals = 2) {
-  return new Intl.NumberFormat("es-ES", {
+  return new Intl.NumberFormat('es-ES', {
     useGrouping: true,
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -42,8 +45,8 @@ function formatMoney(n: number, decimals = 2) {
 }
 
 function formatPercent(n: number, decimals = 0) {
-  return new Intl.NumberFormat("es-ES", {
-    style: "percent",
+  return new Intl.NumberFormat('es-ES', {
+    style: 'percent',
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(n);
@@ -90,26 +93,26 @@ const debtRatio = computed(() => {
   return liabilities.value / assets.value;
 });
 
-const data = computed<ChartData<"doughnut">>(() => ({
-  labels: ["Capital propio (neto)", "Activos financiados con deuda", "Deuda sin activo"],
+const data = computed<ChartData<'doughnut'>>(() => ({
+  labels: ['Capital propio (neto)', 'Activos financiados con deuda', 'Deuda sin activo'],
   datasets: [
     {
       data: [equitySlice.value, backedSlice.value, unbackedSlice.value],
       backgroundColor: [
-        "rgba(92, 192, 255, 0.9)",   // equity (neto) - activos
-        "rgba(255, 99, 132, 0.85)",  // deuda con activo
-        "rgba(255, 140, 110, 0.85)", // deuda sin activo
+        'rgba(92, 192, 255, 0.9)', // equity (neto) - activos
+        'rgba(255, 99, 132, 0.85)', // deuda con activo
+        'rgba(255, 140, 110, 0.85)', // deuda sin activo
       ],
-      borderColor: ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"],
+      borderColor: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)'],
       borderWidth: 0,
       hoverOffset: 6,
       spacing: 2,
-      cutout: "72%",
+      cutout: '72%',
     },
   ],
 }));
 
-const options = computed<ChartOptions<"doughnut">>(() => ({
+const options = computed<ChartOptions<'doughnut'>>(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -117,10 +120,9 @@ const options = computed<ChartOptions<"doughnut">>(() => ({
     tooltip: {
       callbacks: {
         label: (ctx) => {
-          const label = ctx.label ?? "";
-          const v = typeof ctx.raw === "number" ? ctx.raw : 0;
-          const pct =
-            assets.value > 0 ? ` (${formatPercent(v / assets.value, 0)})` : "";
+          const label = ctx.label ?? '';
+          const v = typeof ctx.raw === 'number' ? ctx.raw : 0;
+          const pct = assets.value > 0 ? ` (${formatPercent(v / assets.value, 0)})` : '';
           return `${label}: ${formatMoney(v, 2)} ${props.unit}${pct}`;
         },
       },
@@ -129,8 +131,8 @@ const options = computed<ChartOptions<"doughnut">>(() => ({
 }));
 
 // Texto centrado (Neto) con color por signo
-const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
-  id: "centerText",
+const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
+  id: 'centerText',
   afterDraw(chart) {
     const { ctx, chartArea } = chart;
     if (!chartArea) return;
@@ -141,24 +143,22 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
     const netStr = formatMoney(net.value, 2);
 
     const isNeg = net.value < 0;
-    const netColor = isNeg
-      ? "rgba(255, 120, 140, 0.95)"
-      : "rgba(140, 240, 180, 0.95)";
+    const netColor = isNeg ? 'rgba(255, 120, 140, 0.95)' : 'rgba(140, 240, 180, 0.95)';
 
     ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-    ctx.font = "700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.font = '700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     ctx.fillStyle = netColor;
     ctx.fillText(netStr, cx, cy - 10);
 
-    ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.70)";
-    ctx.fillText("Patrimonio neto", cx, cy + 8);
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.fillText('Patrimonio neto', cx, cy + 8);
 
-    ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.60)";
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.60)';
     ctx.fillText(props.unit, cx, cy + 26);
 
     ctx.restore();
@@ -206,7 +206,8 @@ const centerTextPlugin = computed<Plugin<"doughnut">>(() => ({
       </div>
 
       <div v-if="liabilityOverflow > 0" class="overflow">
-        Aviso: la deuda total excede a los activos en {{ formatMoney(liabilityOverflow, 2) }} {{ unit }}.
+        Aviso: la deuda total excede a los activos en {{ formatMoney(liabilityOverflow, 2) }}
+        {{ unit }}.
       </div>
 
       <div v-if="debtRatio !== null" class="ratio">

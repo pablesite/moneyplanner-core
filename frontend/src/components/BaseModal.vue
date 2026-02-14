@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from "vue";
+import { onMounted, onBeforeUnmount } from 'vue';
 
 const props = defineProps<{
   open: boolean;
@@ -7,15 +7,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "close"): void;
+  (e: 'close'): void;
 }>();
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") emit("close");
+  if (e.key === 'Escape') emit('close');
 }
 
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
@@ -38,7 +38,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.55);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48,10 +48,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 .modal-card {
   width: min(720px, 100%);
-  background: rgba(18,18,18,.98);
-  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(18, 18, 18, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 
@@ -61,7 +61,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .modal-title {
