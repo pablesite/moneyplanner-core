@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -35,6 +36,11 @@ def _get_inflation_base_period(region: str) -> timezone.datetime.date:
     if not row:
         raise ValidationError(f"Missing inflation index for region={region}.")
     return row.period
+
+
+def _raise_api_validation_error(exc: ValidationError) -> None:
+    message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+    raise DRFValidationError({"detail": message}) from exc
 
 
 class UserScopedQuerySetMixin:
@@ -107,8 +113,8 @@ class NetWorthSnapshotViewSet(
                 ),
                 start=Decimal("0"),
             )
-        except ValidationError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as exc:
+            _raise_api_validation_error(exc)
 
         net = assets_total - liabilities_total
 
@@ -185,8 +191,8 @@ class NetWorthSummaryAPIView(APIView):
                     l.amount, l.currency, base_currency, date=today
                 )
 
-        except ValidationError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as exc:
+            _raise_api_validation_error(exc)
 
         inflation_region = InflationIndex.Region.ES
         inflation_base_period = None
@@ -245,8 +251,8 @@ class NetWorthSummaryAPIView(APIView):
                     base_period=inflation_base_period,
                 )
 
-            except ValidationError as e:
-                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except ValidationError as exc:
+                _raise_api_validation_error(exc)
 
         return Response(
             {
