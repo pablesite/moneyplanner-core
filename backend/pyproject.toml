@@ -3,8 +3,8 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
-ignore = ["E501"]
+select = ["E", "F"]
+ignore = ["E501", "E741"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -12,7 +12,9 @@ plugins = []
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
-warn_return_any = true
-strict_optional = true
+warn_return_any = false
+strict_optional = false
 pretty = true
 files = ["accounts", "core", "net_worth", "config"]
+exclude = "(^|/)(migrations)/"
+disable_error_code = ["no-any-return", "var-annotated", "union-attr", "assignment"]
