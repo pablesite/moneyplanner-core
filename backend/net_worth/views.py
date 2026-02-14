@@ -65,7 +65,9 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         return ctx
 
 
-class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
+class NetWorthSnapshotViewSet(
+    UserScopedQuerySetMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet
+):
     """
     Read-only snapshots. Creation/update only through from-current.
     """
@@ -92,11 +94,17 @@ class NetWorthSnapshotViewSet(UserScopedQuerySetMixin, mixins.DestroyModelMixin,
 
         try:
             assets_total = sum(
-                (convert_currency(a.amount, a.currency, base_currency, date=snapshot_date) for a in assets_qs),
+                (
+                    convert_currency(a.amount, a.currency, base_currency, date=snapshot_date)
+                    for a in assets_qs
+                ),
                 start=Decimal("0"),
             )
             liabilities_total = sum(
-                (convert_currency(l.amount, l.currency, base_currency, date=snapshot_date) for l in liabilities_qs),
+                (
+                    convert_currency(l.amount, l.currency, base_currency, date=snapshot_date)
+                    for l in liabilities_qs
+                ),
                 start=Decimal("0"),
             )
         except ValidationError as e:
@@ -137,7 +145,10 @@ class NetWorthSummaryAPIView(APIView):
 
         try:
             assets_total = sum(
-                (convert_currency(a.amount, a.currency, base_currency, date=today) for a in assets_qs),
+                (
+                    convert_currency(a.amount, a.currency, base_currency, date=today)
+                    for a in assets_qs
+                ),
                 start=Decimal("0"),
             )
             liabilities_total = Decimal("0")
@@ -158,15 +169,21 @@ class NetWorthSummaryAPIView(APIView):
             assets_by_subcategory: dict[str, Decimal] = {}
             for a in assets_qs:
                 assets_by_category.setdefault(a.category, Decimal("0"))
-                assets_by_category[a.category] += convert_currency(a.amount, a.currency, base_currency, date=today)
+                assets_by_category[a.category] += convert_currency(
+                    a.amount, a.currency, base_currency, date=today
+                )
                 subkey = f"{a.category}:{a.subcategory or 'other'}"
                 assets_by_subcategory.setdefault(subkey, Decimal("0"))
-                assets_by_subcategory[subkey] += convert_currency(a.amount, a.currency, base_currency, date=today)
+                assets_by_subcategory[subkey] += convert_currency(
+                    a.amount, a.currency, base_currency, date=today
+                )
 
             liabilities_by_category: dict[str, Decimal] = {}
             for l in liabilities_qs:
                 liabilities_by_category.setdefault(l.category, Decimal("0"))
-                liabilities_by_category[l.category] += convert_currency(l.amount, l.currency, base_currency, date=today)
+                liabilities_by_category[l.category] += convert_currency(
+                    l.amount, l.currency, base_currency, date=today
+                )
 
         except ValidationError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -187,29 +204,45 @@ class NetWorthSummaryAPIView(APIView):
                 inflation_base_period = _get_inflation_base_period(inflation_region)
 
                 total_assets_real = adjust_for_inflation(
-                    assets_total, date=today, region=inflation_region, base_period=inflation_base_period
+                    assets_total,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
                 )
                 total_liabilities_real = adjust_for_inflation(
-                    liabilities_total, date=today, region=inflation_region, base_period=inflation_base_period
+                    liabilities_total,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
                 )
                 net_worth_real = adjust_for_inflation(
                     net, date=today, region=inflation_region, base_period=inflation_base_period
                 )
 
                 assets_by_category_real = {
-                    k: adjust_for_inflation(v, date=today, region=inflation_region, base_period=inflation_base_period)
+                    k: adjust_for_inflation(
+                        v, date=today, region=inflation_region, base_period=inflation_base_period
+                    )
                     for k, v in assets_by_category.items()
                 }
                 liabilities_by_category_real = {
-                    k: adjust_for_inflation(v, date=today, region=inflation_region, base_period=inflation_base_period)
+                    k: adjust_for_inflation(
+                        v, date=today, region=inflation_region, base_period=inflation_base_period
+                    )
                     for k, v in liabilities_by_category.items()
                 }
 
                 liabilities_asset_backed_real = adjust_for_inflation(
-                    liabilities_asset_backed, date=today, region=inflation_region, base_period=inflation_base_period
+                    liabilities_asset_backed,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
                 )
                 liabilities_unbacked_real = adjust_for_inflation(
-                    liabilities_unbacked, date=today, region=inflation_region, base_period=inflation_base_period
+                    liabilities_unbacked,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
                 )
 
             except ValidationError as e:
@@ -225,15 +258,25 @@ class NetWorthSummaryAPIView(APIView):
                 "assets_by_subcategory": {k: str(v) for k, v in assets_by_subcategory.items()},
                 "liabilities_by_category": {k: str(v) for k, v in liabilities_by_category.items()},
                 "inflation_region": inflation_region if base_currency == "EUR" else None,
-                "inflation_base_period": str(inflation_base_period) if inflation_base_period else None,
-                "total_assets_real": str(total_assets_real) if total_assets_real is not None else None,
-                "total_liabilities_real": str(total_liabilities_real) if total_liabilities_real is not None else None,
+                "inflation_base_period": str(inflation_base_period)
+                if inflation_base_period
+                else None,
+                "total_assets_real": str(total_assets_real)
+                if total_assets_real is not None
+                else None,
+                "total_liabilities_real": str(total_liabilities_real)
+                if total_liabilities_real is not None
+                else None,
                 "net_worth_real": str(net_worth_real) if net_worth_real is not None else None,
                 "assets_by_category_real": (
-                    {k: str(v) for k, v in assets_by_category_real.items()} if assets_by_category_real is not None else None
+                    {k: str(v) for k, v in assets_by_category_real.items()}
+                    if assets_by_category_real is not None
+                    else None
                 ),
                 "liabilities_by_category_real": (
-                    {k: str(v) for k, v in liabilities_by_category_real.items()} if liabilities_by_category_real is not None else None
+                    {k: str(v) for k, v in liabilities_by_category_real.items()}
+                    if liabilities_by_category_real is not None
+                    else None
                 ),
                 "liabilities_asset_backed": str(liabilities_asset_backed),
                 "liabilities_unbacked": str(liabilities_unbacked),

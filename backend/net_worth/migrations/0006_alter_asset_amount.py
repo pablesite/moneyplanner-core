@@ -5,15 +5,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0005_alter_liability_amount'),
+        ("net_worth", "0005_alter_liability_amount"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='asset',
-            name='amount',
-            field=models.DecimalField(decimal_places=8, help_text='Valor actual (positivo). Si tracking_mode=accounting, este campo puede ignorarse en summary.', max_digits=20, validators=[django.core.validators.MinValueValidator(0)]),
+            model_name="asset",
+            name="amount",
+            field=models.DecimalField(
+                decimal_places=8,
+                help_text="Valor actual (positivo). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
+                max_digits=20,
+                validators=[django.core.validators.MinValueValidator(0)],
+            ),
         ),
     ]

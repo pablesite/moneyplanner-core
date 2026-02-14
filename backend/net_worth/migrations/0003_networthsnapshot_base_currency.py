@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0002_alter_asset_options_alter_liability_options_and_more'),
+        ("net_worth", "0002_alter_asset_options_alter_liability_options_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='networthsnapshot',
-            name='base_currency',
-            field=models.CharField(default='EUR', max_length=3),
+            model_name="networthsnapshot",
+            name="base_currency",
+            field=models.CharField(default="EUR", max_length=3),
         ),
     ]

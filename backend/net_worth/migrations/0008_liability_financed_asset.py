@@ -5,15 +5,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0007_liability_is_asset_backed'),
+        ("net_worth", "0007_liability_is_asset_backed"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='liability',
-            name='financed_asset',
-            field=models.ForeignKey(blank=True, help_text='Activo que financia esta deuda (si aplica). Si es null, es deuda sin activo asociado.', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='financing_liabilities', to='net_worth.asset'),
+            model_name="liability",
+            name="financed_asset",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Activo que financia esta deuda (si aplica). Si es null, es deuda sin activo asociado.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="financing_liabilities",
+                to="net_worth.asset",
+            ),
         ),
     ]

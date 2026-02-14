@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
+
 class FxRate(models.Model):
     """
     Tipo de cambio simple.
@@ -53,7 +54,9 @@ class InflationIndex(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["region", "period"], name="unique_inflation_region_period"),
+            models.UniqueConstraint(
+                fields=["region", "period"], name="unique_inflation_region_period"
+            ),
         ]
         indexes = [
             models.Index(fields=["region", "period"]),

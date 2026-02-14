@@ -41,7 +41,5 @@ class InflationIndexAdmin(admin.ModelAdmin):
         "region",
         "period",
     )
-    ordering = (
-        "-period",
-    )
+    ordering = ("-period",)
     date_hierarchy = "period"

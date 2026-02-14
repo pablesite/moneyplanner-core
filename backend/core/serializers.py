@@ -31,5 +31,7 @@ class InflationIndexSerializer(serializers.ModelSerializer):
 
     def validate_period(self, value):
         if value.day != 1:
-            raise serializers.ValidationError("El periodo debe ser el primer día del mes (YYYY-MM-01).")
+            raise serializers.ValidationError(
+                "El periodo debe ser el primer día del mes (YYYY-MM-01)."
+            )
         return value
