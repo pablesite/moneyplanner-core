@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { api } from '@/lib/api';
+import { coreNetWorthApi } from '@/lib/netWorthApi';
 import { buildByCategoryChart } from '@/lib/netWorthCharts';
 
 export type Asset = {
@@ -68,10 +68,10 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.error = null;
       try {
         const [summaryRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
-          api.get('/api/net-worth/summary/'),
-          api.get('/api/net-worth/assets/'),
-          api.get('/api/net-worth/liabilities/'),
-          api.get('/api/net-worth/snapshots/'),
+          coreNetWorthApi.getSummary(),
+          coreNetWorthApi.getAssets(),
+          coreNetWorthApi.getLiabilities(),
+          coreNetWorthApi.getSnapshots(),
         ]);
 
         this.summary = summaryRes.data;
@@ -90,7 +90,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.post('/api/net-worth/snapshots/from-current/');
+        await coreNetWorthApi.createSnapshotFromCurrent();
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -102,7 +102,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.delete(`/api/net-worth/snapshots/${id}/`);
+        await coreNetWorthApi.deleteSnapshot(id);
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -115,7 +115,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.post('/api/net-worth/assets/', payload);
+        await coreNetWorthApi.createAsset(payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -128,7 +128,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/assets/${id}/`, payload);
+        await coreNetWorthApi.updateAsset(id, payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -145,7 +145,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.post('/api/net-worth/liabilities/', payload);
+        await coreNetWorthApi.createLiability(payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -158,7 +158,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        await api.patch(`/api/net-worth/liabilities/${id}/`, payload);
+        await coreNetWorthApi.updateLiability(id, payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -173,7 +173,7 @@ export const useNetWorthStore = defineStore('netWorth', {
 
     async fetchSettings() {
       try {
-        const res = await api.get('/api/auth/settings/');
+        const res = await coreNetWorthApi.getSettings();
         this.baseCurrency = res.data.base_currency;
       } catch (e: any) {
         this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -184,7 +184,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        const res = await api.put('/api/auth/settings/', { base_currency: currency });
+        const res = await coreNetWorthApi.updateSettings({ base_currency: currency });
         this.baseCurrency = res.data.base_currency;
         await this.refreshAll();
       } catch (e: any) {
