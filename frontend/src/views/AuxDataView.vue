@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/lib/api';
+import { auxDataApi } from '@/lib/auxDataApi';
 
 type FxRate = {
   id: number;
@@ -57,8 +57,8 @@ async function loadAll() {
   error.value = null;
   try {
     const [fxRes, ipcRes] = await Promise.all([
-      api.get('/api/core/fx-rates/'),
-      api.get('/api/core/inflation/'),
+      auxDataApi.getFxRates(),
+      auxDataApi.getInflation(),
     ]);
     fxRates.value = fxRes.data ?? [];
     inflation.value = ipcRes.data ?? [];
@@ -76,7 +76,7 @@ async function createFxRate() {
   const pair = fxPairs.find((p) => p.value === fxForm.value.pair);
   if (!pair) return;
   try {
-    await api.post('/api/core/fx-rates/', {
+    await auxDataApi.createFxRate({
       rate_date: fxForm.value.rate_date,
       from_currency: pair.from,
       to_currency: pair.to,
@@ -96,7 +96,7 @@ async function deleteFxRate(id: number) {
   loading.value = true;
   error.value = null;
   try {
-    await api.delete(`/api/core/fx-rates/${id}/`);
+    await auxDataApi.deleteFxRate(id);
     await loadAll();
   } catch (e: any) {
     error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
@@ -112,7 +112,7 @@ async function createInflation() {
   const monthValue = ipcForm.value.period;
   const period = monthValue.includes('-') ? `${monthValue}-01` : monthValue;
   try {
-    await api.post('/api/core/inflation/', {
+    await auxDataApi.createInflation({
       region: ipcForm.value.region,
       period,
       index: ipcForm.value.index,
@@ -131,7 +131,7 @@ async function deleteInflation(id: number) {
   loading.value = true;
   error.value = null;
   try {
-    await api.delete(`/api/core/inflation/${id}/`);
+    await auxDataApi.deleteInflation(id);
     await loadAll();
   } catch (e: any) {
     error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
