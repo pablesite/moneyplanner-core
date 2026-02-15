@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/lib/api';
+import { authApi } from '@/lib/authApi';
+import { setAccessToken, setRefreshToken } from '@/lib/authSession';
 import { toApiErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
@@ -15,13 +16,10 @@ async function login() {
   loading.value = true;
   error.value = null;
   try {
-    const res = await api.post('/api/auth/token/', {
-      username: username.value,
-      password: password.value,
-    });
+    const res = await authApi.login({ username: username.value, password: password.value });
 
-    localStorage.setItem('access_token', res.data.access);
-    if (res.data.refresh) localStorage.setItem('refresh_token', res.data.refresh);
+    setAccessToken(res.data.access);
+    if (res.data.refresh) setRefreshToken(res.data.refresh);
 
     await router.push('/');
   } catch (e: any) {
