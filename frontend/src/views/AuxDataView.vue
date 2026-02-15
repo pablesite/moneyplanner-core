@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { auxDataApi } from '@/lib/auxDataApi';
+import { toApiErrorMessage } from '@/lib/errors';
 
 type FxRate = {
   id: number;
@@ -63,7 +64,7 @@ async function loadAll() {
     fxRates.value = fxRes.data ?? [];
     inflation.value = ipcRes.data ?? [];
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }
@@ -85,7 +86,7 @@ async function createFxRate() {
     fxForm.value.rate = '';
     await loadAll();
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }
@@ -99,7 +100,7 @@ async function deleteFxRate(id: number) {
     await auxDataApi.deleteFxRate(id);
     await loadAll();
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }
@@ -120,7 +121,7 @@ async function createInflation() {
     ipcForm.value.index = '';
     await loadAll();
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }
@@ -134,7 +135,7 @@ async function deleteInflation(id: number) {
     await auxDataApi.deleteInflation(id);
     await loadAll();
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }

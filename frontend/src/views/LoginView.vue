@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/lib/api';
+import { toApiErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
 
@@ -24,7 +25,7 @@ async function login() {
 
     await router.push('/');
   } catch (e: any) {
-    error.value = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+    error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
   }

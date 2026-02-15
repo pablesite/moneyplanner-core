@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { coreNetWorthApi } from '@/lib/netWorthApi';
 import { buildByCategoryChart } from '@/lib/netWorthCharts';
+import { toApiErrorMessage } from '@/lib/errors';
 
 export type Asset = {
   id: number;
@@ -80,7 +81,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -93,7 +94,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.createSnapshotFromCurrent();
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
         this.loading = false;
       }
     },
@@ -105,7 +106,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.deleteSnapshot(id);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -118,7 +119,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.createAsset(payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -131,7 +132,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.updateAsset(id, payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -148,7 +149,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.createLiability(payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -161,7 +162,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         await coreNetWorthApi.updateLiability(id, payload as Record<string, unknown>);
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
@@ -176,7 +177,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         const res = await coreNetWorthApi.getSettings();
         this.baseCurrency = res.data.base_currency;
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       }
     },
 
@@ -188,7 +189,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.baseCurrency = res.data.base_currency;
         await this.refreshAll();
       } catch (e: any) {
-        this.error = e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'Error';
+        this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
