@@ -22,4 +22,81 @@
   .ui-form-action-btn {
     @apply min-w-[140px];
   }
+
+  .nw-donut-wrap {
+    @apply grid grid-cols-1 items-center gap-4 md:grid-cols-[240px_minmax(0,1fr)];
+  }
+
+  .nw-donut-chart {
+    @apply h-[230px] md:h-[190px];
+  }
+
+  .nw-donut-legend {
+    @apply grid gap-2.5;
+  }
+
+  .nw-donut-legend-title {
+    @apply mb-0.5 text-sm text-white/85;
+  }
+
+  .nw-donut-legend-row {
+    @apply grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm;
+  }
+
+  .nw-donut-legend-val {
+    @apply whitespace-nowrap text-right tabular-nums text-white/90;
+  }
+
+  .nw-donut-dot {
+    @apply h-2.5 w-2.5 rounded-full;
+  }
+
+  .nw-donut-dot-equity {
+    @apply bg-sky-400/90;
+  }
+
+  .nw-donut-dot-liability {
+    @apply bg-rose-500/85;
+  }
+
+  .nw-donut-dot-unbacked {
+    @apply bg-orange-400/85;
+  }
+
+  .nw-donut-overflow {
+    @apply mt-1.5 text-[13px] text-rose-300;
+  }
+
+  .nw-donut-ratio {
+    @apply mt-0.5 text-[13px] text-white/75;
+  }
+
+  .nw-item-row {
+    @apply grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-none border-none bg-transparent px-0.5 py-0.5 shadow-none;
+  }
+
+  .nw-item-main {
+    @apply min-w-0 pl-3;
+  }
+
+  .nw-item-name {
+    @apply text-sm font-medium;
+  }
+
+  .nw-item-submeta {
+    @apply mt-0.5 text-xs text-white/65;
+  }
+
+  .nw-item-amount {
+    @apply whitespace-nowrap text-right text-[13px] font-semibold tabular-nums;
+  }
+
+  .nw-item-actions {
+    @apply justify-self-end;
+    min-width: var(--item-actions-width, 72px);
+  }
+
+  .nw-item-actions .icon-btn {
+    @apply h-7 w-7 p-0 text-xs;
+  }
 }

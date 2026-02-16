@@ -60,30 +60,30 @@ const backedRaw = computed(() => Math.max(0, toNumber(props.assetBackedLiabiliti
 const unbackedRaw = computed(() => Math.max(0, toNumber(props.unbackedLiabilities)));
 
 /**
- * Donut representa el total de ACTIVOS (100% = activos).
+ * Donut representa el total de activos (100% = activos).
  * Se descompone en:
  * - Capital propio (neto): activos - pasivos (puede ser 0 si neto negativo)
  * - Deuda con activo (financia): pasivos asignados a activos
- * - Deuda sin activo: pasivos no asignados (reduce tu equity en activos, aunque no “financie” un activo)
+ * - Deuda sin activo: pasivos no asignados (reduce el equity, aunque no financie un activo)
  *
- * Así: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
+ * Asi: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
  * Si pasivos > activos -> overflow.
  */
 const backedSlice = computed(() => Math.min(backedRaw.value, assets.value));
 
 const unbackedSlice = computed(() => {
-  // No dejamos que la suma de slices supere assets (lo demás va a overflow)
+  // No dejamos que la suma de slices supere assets (lo demas va a overflow)
   const room = Math.max(assets.value - backedSlice.value, 0);
   return Math.min(unbackedRaw.value, room);
 });
 
 const equitySlice = computed(() => {
-  // Esto es el “capital propio” dentro de los activos, ya restando TODO tipo de deuda
+  // Capital propio dentro de activos, restando todo tipo de deuda
   return Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0);
 });
 
 const liabilityOverflow = computed(() => {
-  // Si total deuda (backed+unbacked) supera activos, el neto sería negativo.
+  // Si la deuda total supera activos, el neto seria negativo.
   const totalDebt = backedRaw.value + unbackedRaw.value;
   return Math.max(totalDebt - assets.value, 0);
 });
@@ -99,9 +99,9 @@ const data = computed<ChartData<'doughnut'>>(() => ({
     {
       data: [equitySlice.value, backedSlice.value, unbackedSlice.value],
       backgroundColor: [
-        'rgba(92, 192, 255, 0.9)', // equity (neto) - activos
-        'rgba(255, 99, 132, 0.85)', // deuda con activo
-        'rgba(255, 140, 110, 0.85)', // deuda sin activo
+        'rgba(92, 192, 255, 0.9)',
+        'rgba(255, 99, 132, 0.85)',
+        'rgba(255, 140, 110, 0.85)',
       ],
       borderColor: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)'],
       borderWidth: 0,
@@ -130,7 +130,6 @@ const options = computed<ChartOptions<'doughnut'>>(() => ({
   },
 }));
 
-// Texto centrado (Neto) con color por signo
 const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   id: 'centerText',
   afterDraw(chart) {
@@ -149,15 +148,15 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    ctx.font = '700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.font = '700 16px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     ctx.fillStyle = netColor;
     ctx.fillText(netStr, cx, cy - 10);
 
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.70)';
     ctx.fillText('Patrimonio neto', cx, cy + 8);
 
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.60)';
     ctx.fillText(props.unit, cx, cy + 26);
 
@@ -167,137 +166,52 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 </script>
 
 <template>
-  <div class="donut-wrap">
-    <div class="donut-chart">
+  <div class="nw-donut-wrap">
+    <div class="nw-donut-chart">
       <Doughnut :data="data" :options="options" :plugins="[centerTextPlugin]" />
     </div>
 
-    <div class="donut-legend">
-      <div class="legend-title">Estructura del balance</div>
+    <div class="nw-donut-legend">
+      <div class="nw-donut-legend-title">Estructura del balance</div>
 
-      <div class="legend-row">
-        <span class="dot dot-assets"></span>
+      <div class="nw-donut-legend-row">
+        <span class="nw-donut-dot nw-donut-dot-equity"></span>
         <span>Activos</span>
-        <span class="legend-val">{{ formatMoney(assets, 2) }} {{ unit }}</span>
+        <span class="nw-donut-legend-val">{{ formatMoney(assets, 2) }} {{ unit }}</span>
       </div>
 
-      <div class="legend-row">
-        <span class="dot dot-liab"></span>
+      <div class="nw-donut-legend-row">
+        <span class="nw-donut-dot nw-donut-dot-liability"></span>
         <span>Pasivos</span>
-        <span class="legend-val">{{ formatMoney(liabilities, 2) }} {{ unit }}</span>
+        <span class="nw-donut-legend-val">{{ formatMoney(liabilities, 2) }} {{ unit }}</span>
       </div>
 
-      <div class="legend-row">
-        <span class="dot dot-equity"></span>
+      <div class="nw-donut-legend-row">
+        <span class="nw-donut-dot nw-donut-dot-equity"></span>
         <span>Capital propio (neto)</span>
-        <span class="legend-val">{{ formatMoney(net, 2) }} {{ unit }}</span>
+        <span class="nw-donut-legend-val">{{ formatMoney(net, 2) }} {{ unit }}</span>
       </div>
 
-      <div class="legend-row subtle-row">
-        <span class="dot dot-debt"></span>
+      <div class="nw-donut-legend-row">
+        <span class="nw-donut-dot nw-donut-dot-liability"></span>
         <span>Activos financiados con deuda</span>
-        <span class="legend-val">{{ formatMoney(backedSlice, 2) }} {{ unit }}</span>
+        <span class="nw-donut-legend-val">{{ formatMoney(backedSlice, 2) }} {{ unit }}</span>
       </div>
 
-      <div class="legend-row">
-        <span class="dot dot-unbacked"></span>
+      <div class="nw-donut-legend-row">
+        <span class="nw-donut-dot nw-donut-dot-unbacked"></span>
         <span>Deuda sin activo</span>
-        <span class="legend-val">{{ formatMoney(unbackedRaw, 2) }} {{ unit }}</span>
+        <span class="nw-donut-legend-val">{{ formatMoney(unbackedRaw, 2) }} {{ unit }}</span>
       </div>
 
-      <div v-if="liabilityOverflow > 0" class="overflow">
+      <div v-if="liabilityOverflow > 0" class="nw-donut-overflow">
         Aviso: la deuda total excede a los activos en {{ formatMoney(liabilityOverflow, 2) }}
         {{ unit }}.
       </div>
 
-      <div v-if="debtRatio !== null" class="ratio">
+      <div v-if="debtRatio !== null" class="nw-donut-ratio">
         Ratio deuda / activos: {{ formatPercent(debtRatio, 0) }}
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.donut-wrap {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 16px;
-  align-items: center;
-}
-
-.donut-chart {
-  height: 190px;
-}
-
-.donut-legend {
-  display: grid;
-  gap: 10px;
-}
-
-.legend-title {
-  font-size: 14px;
-  opacity: 0.85;
-  margin-bottom: 2px;
-}
-
-.legend-row {
-  display: grid;
-  grid-template-columns: 14px 1fr auto;
-  gap: 10px;
-  align-items: center;
-  font-size: 14px;
-}
-
-.legend-val {
-  opacity: 0.9;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
-.dot-assets {
-  background: rgba(92, 192, 255, 0.9);
-}
-
-.dot-liab {
-  background: rgba(255, 99, 132, 0.85);
-}
-
-.dot-equity {
-  background: rgba(92, 192, 255, 0.9);
-}
-
-.dot-debt {
-  background: rgba(255, 99, 132, 0.65);
-}
-
-.dot-unbacked {
-  background: rgba(255, 140, 110, 0.85);
-}
-
-.overflow {
-  margin-top: 6px;
-  font-size: 13px;
-  color: rgba(255, 140, 160, 0.95);
-}
-
-.ratio {
-  margin-top: 2px;
-  font-size: 13px;
-  opacity: 0.75;
-}
-
-@media (max-width: 720px) {
-  .donut-wrap {
-    grid-template-columns: 1fr;
-  }
-  .donut-chart {
-    height: 230px;
-  }
-}
-</style>
