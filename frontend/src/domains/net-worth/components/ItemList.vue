@@ -4,6 +4,7 @@ import { formatAmount } from '@/lib/format';
 import type { Asset, NetWorthWritePayload } from '@/domains/net-worth/models';
 import EditableItemRow from './EditableItemRow.vue';
 import ItemCategoryHeader from './ItemCategoryHeader.vue';
+import ItemSubgroupHeader from './ItemSubgroupHeader.vue';
 
 type AssetMini = {
   id: number;
@@ -499,41 +500,19 @@ async function saveEdit(id: number) {
             :key="subgroupKey(g, sg, sgIndex)"
             :class="g.hasSubgroups ? 'subcat-block' : ''"
           >
-            <div v-if="g.hasSubgroups" class="subcat-header">
-              <div class="subcat-title">{{ sg.label }}</div>
-              <div class="subcat-total">
-                <div
-                  v-if="
-                    shouldShowBaseTotal(
-                      categoryTotals(sg.items),
-                      subcategoryBaseValue(g.category, sg.subcategory, sg.items),
-                    ) && subcategoryBaseLabel(g.category, sg.subcategory, sg.items)
-                  "
-                  class="subcat-total-primary"
-                >
-                  {{ subcategoryBaseLabel(g.category, sg.subcategory, sg.items) }}
-                  <span
-                    v-if="subcategoryPercent(g.category, sg.subcategory, sg.items, g.items)"
-                    class="subcat-percent"
-                  >
-                    � {{ subcategoryPercent(g.category, sg.subcategory, sg.items, g.items) }}%
-                  </span>
-                </div>
-                <div
-                  :class="
-                    shouldShowBaseTotal(
-                      categoryTotals(sg.items),
-                      subcategoryBaseValue(g.category, sg.subcategory, sg.items),
-                    ) && subcategoryBaseLabel(g.category, sg.subcategory, sg.items)
-                      ? 'subcat-total-details'
-                      : 'subcat-total-primary'
-                  "
-                >
-                  {{ formatTotalsLine(categoryTotals(sg.items)) }}
-                </div>
-              </div>
-              <div class="subcat-actions-spacer" aria-hidden="true"></div>
-            </div>
+            <ItemSubgroupHeader
+              v-if="g.hasSubgroups"
+              :label="sg.label"
+              :totals-line="formatTotalsLine(categoryTotals(sg.items))"
+              :base-label="subcategoryBaseLabel(g.category, sg.subcategory, sg.items)"
+              :percent="subcategoryPercent(g.category, sg.subcategory, sg.items, g.items)"
+              :show-base-total="
+                shouldShowBaseTotal(
+                  categoryTotals(sg.items),
+                  subcategoryBaseValue(g.category, sg.subcategory, sg.items),
+                )
+              "
+            />
 
             <ul class="list list-plain subcat-items">
               <li v-for="it in sg.items" :key="it.id">
@@ -706,48 +685,8 @@ async function saveEdit(id: number) {
   --cat-accent-text: rgba(255, 210, 210, 0.95);
 }
 
-.subcat-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  gap: 12px;
-  margin-top: 12px;
-  padding-top: 6px;
-}
-.subcat-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
-}
 .subcat-block {
   --item-actions-width: 72px;
-}
-.subcat-total {
-  display: grid;
-  justify-items: end;
-  text-align: right;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-.subcat-total-primary {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 11px;
-  font-weight: 700;
-}
-.subcat-total-details {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 10px;
-  font-weight: 500;
-}
-.subcat-percent {
-  color: rgba(255, 255, 255, 0.55);
-}
-.subcat-actions-spacer {
-  width: var(--item-actions-width, 72px);
 }
 
 .subcat-items .item-row {
@@ -804,3 +743,4 @@ async function saveEdit(id: number) {
   font-size: 12px;
 }
 </style>
+
