@@ -5,13 +5,13 @@ import {
   NetWorthByCategoryBar,
   NetWorthDonut,
   SettingsPopover,
+  useNetWorthViewExtensions,
   useNetWorthViewState,
 } from '@/domains/net-worth';
 import { BaseModal } from '@/domains/ui';
 
 const {
   store,
-  hasPeopleAccess,
   valueMode,
   currencies,
   assetCategories,
@@ -47,6 +47,8 @@ const {
   summaryAssetBackedLiabilities,
   summaryUnbackedLiabilities,
 } = useNetWorthViewState();
+
+const { HeaderActions } = useNetWorthViewExtensions();
 </script>
 
 <template>
@@ -76,9 +78,7 @@ const {
       </div>
 
       <div class="networth-actions">
-        <button v-if="hasPeopleAccess" class="btn" type="button" @click="$router.push('/people')">
-          Personas
-        </button>
+        <component :is="HeaderActions" v-if="HeaderActions" />
         <button class="btn" type="button" @click="$router.push('/data')">Datos auxiliares</button>
 
         <SettingsPopover

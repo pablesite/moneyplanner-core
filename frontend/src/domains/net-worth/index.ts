@@ -1,6 +1,7 @@
 export * from './api';
 export * from './charts';
 export * from './composables';
+export * from './extensions';
 export * from './models';
 export * from './store';
 export { default as ItemForm } from './components/ItemForm.vue';
