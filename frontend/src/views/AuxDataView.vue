@@ -7,6 +7,7 @@ const router = useRouter();
 const {
   loading,
   error,
+  successMessage,
   fxRates,
   inflation,
   fxForm,
@@ -33,6 +34,7 @@ const {
     </div>
 
     <div v-if="error" class="alert mt-3">{{ error }}</div>
+    <div v-if="successMessage" class="ui-alert-success">{{ successMessage }}</div>
 
     <div class="grid-2 section">
       <div class="card">
@@ -86,6 +88,9 @@ const {
               <td class="ui-data-table-actions">
                 <button class="icon-btn" title="Eliminar" @click="deleteFxRate(r.id)">&#128465;</button>
               </td>
+            </tr>
+            <tr v-if="!fxRates.length && !loading">
+              <td colspan="4" class="ui-table-empty">No hay FX rates todavia.</td>
             </tr>
           </tbody>
         </table>
@@ -142,6 +147,9 @@ const {
                   &#128465;
                 </button>
               </td>
+            </tr>
+            <tr v-if="!inflation.length && !loading">
+              <td colspan="4" class="ui-table-empty">No hay indices IPC todavia.</td>
             </tr>
           </tbody>
         </table>

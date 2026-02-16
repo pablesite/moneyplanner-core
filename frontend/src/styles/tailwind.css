@@ -144,4 +144,12 @@
   .ui-data-date-empty {
     @apply bg-white/5 text-white/50;
   }
+
+  .ui-alert-success {
+    @apply mt-3 rounded-[var(--radius-md)] border border-emerald-300/55 bg-emerald-500/10 p-3 text-sm text-emerald-100;
+  }
+
+  .ui-table-empty {
+    @apply px-1.5 py-2 text-sm text-white/65;
+  }
 }
