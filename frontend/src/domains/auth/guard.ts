@@ -1,5 +1,5 @@
 import type { Router } from 'vue-router';
-import { api } from '@/lib/api';
+import { authApi } from '@/domains/auth/api';
 import { clearAuthTokens, getAccessToken } from '@/domains/auth/session';
 
 let authChecked = false;
@@ -11,8 +11,8 @@ async function ensureAuthValid(): Promise<boolean> {
   if (authChecked) return true;
 
   if (!authCheckPromise) {
-    authCheckPromise = api
-      .get('/api/auth/settings/')
+    authCheckPromise = authApi
+      .validateSession()
       .then(() => {
         authChecked = true;
         return true;

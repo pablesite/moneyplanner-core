@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useLoginForm } from '@/domains/auth/composables';
+import { useLoginForm } from '@/domains/auth';
 
 const { username, password, error, loading, login } = useLoginForm();
 </script>
