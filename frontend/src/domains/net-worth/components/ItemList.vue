@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { formatAmount } from '@/lib/format';
+import type { Asset, NetWorthWritePayload } from '@/domains/net-worth/models';
 
 type AssetMini = {
   id: number;
@@ -8,16 +9,7 @@ type AssetMini = {
   category: string;
 };
 
-type Item = {
-  id: number;
-  name: string;
-  category: string;
-  subcategory?: string;
-  amount: string;
-  amount_base?: string;
-  currency: string;
-  notes: string;
-  is_active: boolean;
+type Item = Asset & {
   financed_asset_ref?: number | null;
 };
 
@@ -32,7 +24,7 @@ type Props = {
   totalBase?: string;
   onUpdate: (
     id: number,
-    payload: Partial<Item> & { financed_asset_id?: number | null },
+    payload: NetWorthWritePayload,
   ) => Promise<void>;
   onArchive: (id: number) => Promise<void>;
   onAdd?: () => void;
@@ -432,7 +424,7 @@ async function saveEdit(id: number) {
   const clamped = clampDecimals(normalized, max);
   if (!isValidAmountString(clamped)) return;
 
-  const payload: any = {
+  const payload: NetWorthWritePayload = {
     ...draft.value,
     amount: clamped,
     subcategory: draft.value.subcategory || undefined,

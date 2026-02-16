@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
+import type { NetWorthWritePayload } from '@/domains/net-worth/models';
 
 type Props = {
   title: string;
   categories: { value: string; label: string }[];
   subcategories?: { value: string; label: string; category: string }[];
-  onSubmit: (payload: any) => Promise<void>;
+  onSubmit: (payload: NetWorthWritePayload) => Promise<void>;
   onCancel?: () => void;
   assets?: { id: number; name: string; category: string }[];
   showFinancedAsset?: boolean;
@@ -142,7 +143,7 @@ async function submit() {
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
 
-  const payload: any = {
+  const payload: NetWorthWritePayload = {
     name: form.name,
     category: form.category,
     subcategory: form.subcategory || undefined,
