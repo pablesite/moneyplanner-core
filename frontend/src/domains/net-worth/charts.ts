@@ -23,7 +23,10 @@ function toNumber(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function buildByCategoryChart(summary: SummaryLike | null, baseCurrency: string | null): ByCategoryChart {
+export function buildByCategoryChart(
+  summary: SummaryLike | null,
+  baseCurrency: string | null,
+): ByCategoryChart {
   const unit = baseCurrency ?? summary?.base_currency ?? 'EUR';
   const assetsBy = summary?.assets_by_category ?? {};
   const liabsBy = summary?.liabilities_by_category ?? {};

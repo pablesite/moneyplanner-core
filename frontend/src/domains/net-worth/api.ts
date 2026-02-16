@@ -1,5 +1,11 @@
 import { api } from '@/lib/api';
-import type { Asset, Liability, NetWorthWritePayload, Snapshot, Summary } from '@/domains/net-worth/models';
+import type {
+  Asset,
+  Liability,
+  NetWorthWritePayload,
+  Snapshot,
+  Summary,
+} from '@/domains/net-worth/models';
 
 type Settings = { base_currency: string };
 

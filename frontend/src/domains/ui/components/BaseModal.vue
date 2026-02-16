@@ -25,7 +25,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-4 sm:p-5"
       @click.self="emit('close')"
     >
-      <div class="w-full max-w-[720px] overflow-hidden rounded-lg border border-white/10 bg-[#121212fa] shadow-2xl">
+      <div
+        class="w-full max-w-[720px] overflow-hidden rounded-lg border border-white/10 bg-[#121212fa] shadow-2xl"
+      >
         <div class="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
           <div class="text-base font-semibold">{{ title }}</div>
         </div>

@@ -180,7 +180,11 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
       <h2 class="mt-0 text-base">Snapshots</h2>
 
       <ul v-if="store.snapshots.length" class="m-0 grid list-none gap-2 pl-0">
-        <li v-for="s in store.snapshots" :key="s.id" class="flex items-center justify-between gap-3">
+        <li
+          v-for="s in store.snapshots"
+          :key="s.id"
+          class="flex items-center justify-between gap-3"
+        >
           <div class="min-w-0">
             {{ s.snapshot_date }} - neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
             <span class="subtle">
@@ -248,4 +252,3 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
     </BaseModal>
   </div>
 </template>
-

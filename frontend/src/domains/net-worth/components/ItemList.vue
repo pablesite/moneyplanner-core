@@ -26,10 +26,7 @@ type Props = {
   categoryTotalsBase?: Record<string, string>;
   subcategoryTotalsBase?: Record<string, string>;
   totalBase?: string;
-  onUpdate: (
-    id: number,
-    payload: NetWorthWritePayload,
-  ) => Promise<void>;
+  onUpdate: (id: number, payload: NetWorthWritePayload) => Promise<void>;
   onArchive: (id: number) => Promise<void>;
   onAdd?: () => void;
   onEdit?: (item: Item) => void;
@@ -548,7 +545,3 @@ async function saveEdit(id: number) {
     </div>
   </div>
 </template>
-
-
-
-

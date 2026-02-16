@@ -2,7 +2,13 @@ import { defineStore } from 'pinia';
 import { toApiErrorMessage } from '@/lib/errors';
 import { coreNetWorthApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
-import type { Asset, Liability, NetWorthWritePayload, Snapshot, Summary } from '@/domains/net-worth/models';
+import type {
+  Asset,
+  Liability,
+  NetWorthWritePayload,
+  Snapshot,
+  Summary,
+} from '@/domains/net-worth/models';
 
 export type { Asset, Liability, Snapshot, Summary } from '@/domains/net-worth/models';
 
