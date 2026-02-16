@@ -6,6 +6,7 @@ import type { FxPair, FxRate, InflationIndex } from '@/domains/aux-data/types';
 export function useAuxData() {
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const successMessage = ref<string | null>(null);
 
   const fxRates = ref<FxRate[]>([]);
   const inflation = ref<InflationIndex[]>([]);
@@ -51,6 +52,7 @@ export function useAuxData() {
     if (!fxForm.value.rate_date || !fxForm.value.pair || !fxForm.value.rate) return;
     loading.value = true;
     error.value = null;
+    successMessage.value = null;
     const pair = fxPairs.find((p) => p.value === fxForm.value.pair);
     if (!pair) return;
     try {
@@ -62,6 +64,7 @@ export function useAuxData() {
       });
       fxForm.value.rate = '';
       await loadAll();
+      successMessage.value = 'FX rate creado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -73,9 +76,11 @@ export function useAuxData() {
     if (!confirm('Eliminar este FX rate?')) return;
     loading.value = true;
     error.value = null;
+    successMessage.value = null;
     try {
       await auxDataApi.deleteFxRate(id);
       await loadAll();
+      successMessage.value = 'FX rate eliminado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -87,6 +92,7 @@ export function useAuxData() {
     if (!ipcForm.value.region || !ipcForm.value.period || !ipcForm.value.index) return;
     loading.value = true;
     error.value = null;
+    successMessage.value = null;
     const monthValue = ipcForm.value.period;
     const period = monthValue.includes('-') ? `${monthValue}-01` : monthValue;
     try {
@@ -97,6 +103,7 @@ export function useAuxData() {
       });
       ipcForm.value.index = '';
       await loadAll();
+      successMessage.value = 'Indice IPC creado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -108,9 +115,11 @@ export function useAuxData() {
     if (!confirm('Eliminar este IPC?')) return;
     loading.value = true;
     error.value = null;
+    successMessage.value = null;
     try {
       await auxDataApi.deleteInflation(id);
       await loadAll();
+      successMessage.value = 'Indice IPC eliminado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -136,6 +145,7 @@ export function useAuxData() {
   return {
     loading,
     error,
+    successMessage,
     fxRates,
     inflation,
     fxForm,
