@@ -66,13 +66,13 @@ const unbackedRaw = computed(() => Math.max(0, toNumber(props.unbackedLiabilitie
  * - Deuda con activo (financia): pasivos asignados a activos
  * - Deuda sin activo: pasivos no asignados (reduce el equity, aunque no financie un activo)
  *
- * Asi: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
+ * Así: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
  * Si pasivos > activos -> overflow.
  */
 const backedSlice = computed(() => Math.min(backedRaw.value, assets.value));
 
 const unbackedSlice = computed(() => {
-  // No dejamos que la suma de slices supere assets (lo demas va a overflow)
+  // No dejamos que la suma de slices supere assets (lo demás va a overflow)
   const room = Math.max(assets.value - backedSlice.value, 0);
   return Math.min(unbackedRaw.value, room);
 });
@@ -83,7 +83,7 @@ const equitySlice = computed(() => {
 });
 
 const liabilityOverflow = computed(() => {
-  // Si la deuda total supera activos, el neto seria negativo.
+  // Si la deuda total supera activos, el neto sería negativo.
   const totalDebt = backedRaw.value + unbackedRaw.value;
   return Math.max(totalDebt - assets.value, 0);
 });
@@ -215,3 +215,4 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     </div>
   </div>
 </template>
+

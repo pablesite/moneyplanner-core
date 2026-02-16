@@ -67,7 +67,7 @@ const {
             :disabled="loading"
             @click="createFxRate"
           >
-            Anadir
+            Añadir
           </button>
         </div>
 
@@ -90,7 +90,7 @@ const {
               </td>
             </tr>
             <tr v-if="!fxRates.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay FX rates todavia.</td>
+              <td colspan="4" class="ui-table-empty">No hay FX rates todavía.</td>
             </tr>
           </tbody>
         </table>
@@ -103,7 +103,7 @@ const {
 
         <div class="ui-data-form-grid">
           <select v-model="ipcForm.region" class="select ui-data-field">
-            <option value="ES">Espana</option>
+            <option value="ES">España</option>
           </select>
           <input
             v-model="ipcForm.period"
@@ -124,7 +124,7 @@ const {
             :disabled="loading"
             @click="createInflation"
           >
-            Anadir
+            Añadir
           </button>
         </div>
 
@@ -132,8 +132,8 @@ const {
           <thead>
             <tr>
               <th>Periodo</th>
-              <th>Region</th>
-              <th>Indice</th>
+              <th>Región</th>
+              <th>Índice</th>
               <th></th>
             </tr>
           </thead>
@@ -149,7 +149,7 @@ const {
               </td>
             </tr>
             <tr v-if="!inflation.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay indices IPC todavia.</td>
+              <td colspan="4" class="ui-table-empty">No hay índices IPC todavía.</td>
             </tr>
           </tbody>
         </table>
@@ -159,3 +159,4 @@ const {
     <div v-if="loading" class="ui-status-line">Cargando datos auxiliares...</div>
   </div>
 </template>
+
