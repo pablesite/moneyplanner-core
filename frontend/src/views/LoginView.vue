@@ -22,7 +22,7 @@ async function login() {
     if (res.data.refresh) setRefreshToken(res.data.refresh);
 
     await router.push('/');
-  } catch (e: any) {
+  } catch (e: unknown) {
     error.value = toApiErrorMessage(e);
   } finally {
     loading.value = false;
