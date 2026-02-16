@@ -142,6 +142,16 @@ body {
   outline: none;
 }
 
+.select.ui-select-placeholder {
+  color: var(--muted);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
 .textarea {
   resize: vertical;
 }
@@ -151,6 +161,22 @@ body {
 .textarea:focus {
   border-color: var(--focus-border);
   box-shadow: var(--focus-ring);
+}
+
+.select {
+  color-scheme: dark;
+}
+
+.input option,
+.select option {
+  color: #e5e7eb;
+  background: #111827;
+}
+
+.input option:checked,
+.select option:checked {
+  color: #f9fafb;
+  background: #1f2937;
 }
 
 .form-grid {
