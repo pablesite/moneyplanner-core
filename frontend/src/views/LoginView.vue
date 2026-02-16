@@ -1,33 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { authApi } from '@/lib/authApi';
-import { setAccessToken, setRefreshToken } from '@/lib/authSession';
-import { toApiErrorMessage } from '@/lib/errors';
+import { useLoginForm } from '@/domains/auth/composables';
 
-const router = useRouter();
-
-const username = ref('');
-const password = ref('');
-const error = ref<string | null>(null);
-const loading = ref(false);
-
-async function login() {
-  loading.value = true;
-  error.value = null;
-  try {
-    const res = await authApi.login({ username: username.value, password: password.value });
-
-    setAccessToken(res.data.access);
-    if (res.data.refresh) setRefreshToken(res.data.refresh);
-
-    await router.push('/');
-  } catch (e: unknown) {
-    error.value = toApiErrorMessage(e);
-  } finally {
-    loading.value = false;
-  }
-}
+const { username, password, error, loading, login } = useLoginForm();
 </script>
 
 <template>
