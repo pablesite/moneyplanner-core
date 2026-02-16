@@ -99,4 +99,49 @@
   .nw-item-actions .icon-btn {
     @apply h-7 w-7 p-0 text-xs;
   }
+
+  .ui-page-header {
+    @apply flex items-center justify-between gap-3;
+  }
+
+  .ui-page-title {
+    @apply m-0;
+  }
+
+  .ui-page-actions {
+    @apply flex items-center gap-2.5;
+  }
+
+  .ui-section-header {
+    @apply mb-3 grid gap-1;
+  }
+
+  .ui-status-line {
+    @apply section text-sm text-white/75;
+  }
+
+  .ui-data-form-grid {
+    @apply mb-3.5 grid items-end gap-2.5 grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto];
+  }
+
+  .ui-data-field {
+    @apply h-[38px] text-[13px] leading-normal;
+  }
+
+  .ui-data-table {
+    @apply w-full border-collapse;
+  }
+
+  .ui-data-table th,
+  .ui-data-table td {
+    @apply border-b border-white/10 px-1.5 py-2 text-left text-[13px];
+  }
+
+  .ui-data-table-actions {
+    @apply w-[1%] whitespace-nowrap text-right;
+  }
+
+  .ui-data-date-empty {
+    @apply bg-white/5 text-white/50;
+  }
 }
