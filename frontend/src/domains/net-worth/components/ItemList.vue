@@ -443,7 +443,7 @@ async function saveEdit(id: number) {
   <div class="card">
     <div class="card-header">
       <div class="card-header-left">
-        <h2 style="margin-top: 0" class="card-header-title">{{ title }}</h2>
+        <h2 class="card-header-title mt-0">{{ title }}</h2>
       </div>
       <div class="card-header-right">
         <div class="header-total-inline">
@@ -470,7 +470,7 @@ async function saveEdit(id: number) {
 
     <div v-if="!items.length" class="subtle">No hay elementos todavia.</div>
 
-    <div v-else style="display: grid; gap: 16px">
+    <div v-else class="grid gap-4">
       <section
         v-for="g in grouped"
         :key="g.category"
@@ -479,7 +479,7 @@ async function saveEdit(id: number) {
       >
         <div class="cat-header">
           <div class="cat-left">
-            <div style="font-size: 16px">{{ g.label }}</div>
+            <div class="text-base">{{ g.label }}</div>
             <span class="badge">{{ g.items.length }}</span>
           </div>
           <div class="cat-right">
@@ -618,7 +618,7 @@ async function saveEdit(id: number) {
                   </div>
                 </div>
 
-                <div v-else class="form-grid" style="max-width: 520px">
+                <div v-else class="form-grid max-w-[520px]">
                   <input v-model="draft.name" class="input" />
 
                   <select v-model="draft.category" class="select">
@@ -664,14 +664,11 @@ async function saveEdit(id: number) {
                     Activo
                   </label>
 
-                  <div style="grid-column: 1 / -1; font-size: 12px; opacity: 0.7">
+                  <div class="ui-form-help">
                     {{ amountHint }}
                   </div>
 
-                  <div
-                    v-if="amountError"
-                    style="grid-column: 1 / -1; font-size: 12px; color: #b00020"
-                  >
+                  <div v-if="amountError" class="ui-form-help ui-form-help-error">
                     {{ amountError }}
                   </div>
 

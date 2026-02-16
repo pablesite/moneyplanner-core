@@ -188,13 +188,16 @@ watch(
 </script>
 
 <template>
-  <div class="card" style="margin-bottom: 12px">
+  <div class="card mb-3">
     <h3 class="h3">{{ title }}</h3>
 
     <div class="form-grid">
       <input v-model="form.name" placeholder="Nombre" class="input" />
 
-      <select v-model="form.category" :class="['select', { 'is-placeholder': !form.category }]">
+      <select
+        v-model="form.category"
+        :class="['select', { 'ui-select-placeholder': !form.category }]"
+      >
         <option value="" disabled>Selecciona categoria</option>
         <option v-for="c in categories" :key="c.value" :value="c.value">
           {{ c.label }}
@@ -204,7 +207,7 @@ watch(
       <select
         v-if="props.subcategories"
         v-model="form.subcategory"
-        :class="['select', { 'is-placeholder': !form.subcategory }]"
+        :class="['select', { 'ui-select-placeholder': !form.subcategory }]"
       >
         <option value="" disabled>Selecciona subcategoria</option>
         <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">
@@ -212,7 +215,10 @@ watch(
         </option>
       </select>
 
-      <select v-model="form.currency" :class="['select', { 'is-placeholder': !form.currency }]">
+      <select
+        v-model="form.currency"
+        :class="['select', { 'ui-select-placeholder': !form.currency }]"
+      >
         <option value="" disabled>Selecciona moneda</option>
         <option v-for="c in currencies" :key="c.value" :value="c.value">
           {{ c.label }}
@@ -221,14 +227,14 @@ watch(
 
       <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input" />
 
-      <div v-if="amountError" class="form-help form-help-error">
+      <div v-if="amountError" class="ui-form-help ui-form-help-error">
         {{ amountError }}
       </div>
 
       <select
         v-if="showFinancedAsset"
         v-model="form.financed_asset_id"
-        :class="['select', { 'is-placeholder': form.financed_asset_id == null }]"
+        :class="['select', { 'ui-select-placeholder': form.financed_asset_id == null }]"
       >
         <option v-for="a in financedAssetOptions" :key="String(a.value)" :value="a.value">
           {{ a.label }}
@@ -242,37 +248,14 @@ watch(
         Activo
       </label>
 
-      <div class="form-actions">
-        <button v-if="onCancel" class="btn" type="button" @click="onCancel">Cancelar</button>
-        <button class="btn btn-primary" :disabled="!!amountError" @click="submit">
+      <div class="ui-form-actions">
+        <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">
+          Cancelar
+        </button>
+        <button class="btn btn-primary ui-form-action-btn" :disabled="!!amountError" @click="submit">
           {{ isEdit ? 'Guardar' : 'Crear' }}
         </button>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.form-help {
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.form-help-error {
-  color: #b00020;
-}
-.select.is-placeholder {
-  color: rgba(255, 255, 255, 0.45);
-}
-.form-actions {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-.form-actions .btn {
-  width: auto;
-  min-width: 140px;
-}
-</style>
