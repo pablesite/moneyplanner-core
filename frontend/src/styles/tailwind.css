@@ -1,3 +1,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .ui-form-help {
+    @apply col-span-full text-xs text-white/60;
+  }
+
+  .ui-form-help-error {
+    @apply text-red-400;
+  }
+
+  .ui-select-placeholder {
+    @apply text-white/45;
+  }
+
+  .ui-form-actions {
+    @apply col-span-full flex justify-center gap-2.5;
+  }
+
+  .ui-form-action-btn {
+    @apply min-w-[140px];
+  }
+}
