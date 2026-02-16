@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import { formatAmount } from '@/lib/format';
 import type { Asset, NetWorthWritePayload } from '@/domains/net-worth/models';
+import EditableItemRow from './EditableItemRow.vue';
+import ItemCategoryHeader from './ItemCategoryHeader.vue';
 
 type AssetMini = {
   id: number;
@@ -477,66 +479,19 @@ async function saveEdit(id: number) {
         class="cat-block"
         :class="categoryClass(g.category)"
       >
-        <div class="cat-header">
-          <div class="cat-left">
-            <div class="text-base">{{ g.label }}</div>
-            <span class="badge">{{ g.items.length }}</span>
-          </div>
-          <div class="cat-right">
-            <div class="cat-total">
-              <div
-                v-if="
-                  shouldShowBaseTotal(
-                    categoryTotals(g.items),
-                    categoryBaseValue(g.category, g.items),
-                  ) && baseTotalLabel(g.category, g.items)
-                "
-                class="cat-total-primary"
-              >
-                {{ baseTotalLabel(g.category, g.items) }}
-                <span v-if="categoryPercent(g.category, g.items)" class="cat-percent">
-                  . {{ categoryPercent(g.category, g.items) }}%
-                </span>
-              </div>
-              <div
-                :class="
-                  shouldShowBaseTotal(
-                    categoryTotals(g.items),
-                    categoryBaseValue(g.category, g.items),
-                  ) && baseTotalLabel(g.category, g.items)
-                    ? 'cat-total-details'
-                    : 'cat-total-primary'
-                "
-              >
-                {{ formatTotalsLine(categoryTotals(g.items)) }}
-                <span
-                  v-if="
-                    !shouldShowBaseTotal(
-                      categoryTotals(g.items),
-                      categoryBaseValue(g.category, g.items),
-                    ) && categoryPercent(g.category, g.items)
-                  "
-                  class="cat-percent"
-                >
-                  . {{ categoryPercent(g.category, g.items) }}%
-                </span>
-              </div>
-            </div>
-            <button
-              v-if="g.hasSubgroups || isLiabilitiesList"
-              class="icon-btn cat-toggle"
-              type="button"
-              :aria-label="expandedCats.has(g.category) ? 'Ocultar desglose' : 'Mostrar desglose'"
-              :title="expandedCats.has(g.category) ? 'Ocultar desglose' : 'Mostrar desglose'"
-              @click="toggleCategory(g.category)"
-            >
-              <span v-if="expandedCats.has(g.category)" class="icon" aria-hidden="true"
-                >&#9662;</span
-              >
-              <span v-else class="icon" aria-hidden="true">&#9656;</span>
-            </button>
-          </div>
-        </div>
+        <ItemCategoryHeader
+          :label="g.label"
+          :count="g.items.length"
+          :totals-line="formatTotalsLine(categoryTotals(g.items))"
+          :base-label="baseTotalLabel(g.category, g.items)"
+          :percent="categoryPercent(g.category, g.items)"
+          :show-base-total="
+            shouldShowBaseTotal(categoryTotals(g.items), categoryBaseValue(g.category, g.items))
+          "
+          :show-toggle="g.hasSubgroups || isLiabilitiesList"
+          :expanded="expandedCats.has(g.category)"
+          @toggle="toggleCategory(g.category)"
+        />
 
         <div v-if="shouldShowGroupDetails(g)" :class="g.hasSubgroups ? 'subcat-list' : ''">
           <div
@@ -618,71 +573,19 @@ async function saveEdit(id: number) {
                   </div>
                 </div>
 
-                <div v-else class="form-grid max-w-[520px]">
-                  <input v-model="draft.name" class="input" />
-
-                  <select v-model="draft.category" class="select">
-                    <option v-for="c in categories" :key="c.value" :value="c.value">
-                      {{ c.label }}
-                    </option>
-                  </select>
-
-                  <select v-if="props.subcategories" v-model="draft.subcategory" class="select">
-                    <option
-                      v-for="s in props.subcategories.filter(
-                        (sc) => sc.category === draft.category,
-                      )"
-                      :key="s.value"
-                      :value="s.value"
-                    >
-                      {{ s.label }}
-                    </option>
-                  </select>
-
-                  <select v-model="draft.currency" class="select">
-                    <option v-for="c in currencies" :key="c.value" :value="c.value">
-                      {{ c.label }}
-                    </option>
-                  </select>
-
-                  <input v-model="draft.amount" inputmode="decimal" class="input" />
-
-                  <select v-if="isLiabilitiesList" v-model="draft.financed_asset_id" class="select">
-                    <option
-                      v-for="a in financedAssetOptions"
-                      :key="String(a.value)"
-                      :value="a.value"
-                    >
-                      {{ a.label }}
-                    </option>
-                  </select>
-
-                  <textarea v-model="draft.notes" rows="2" class="textarea"></textarea>
-
-                  <label class="checkbox-row">
-                    <input v-model="draft.is_active" type="checkbox" />
-                    Activo
-                  </label>
-
-                  <div class="ui-form-help">
-                    {{ amountHint }}
-                  </div>
-
-                  <div v-if="amountError" class="ui-form-help ui-form-help-error">
-                    {{ amountError }}
-                  </div>
-
-                  <div class="actions">
-                    <button
-                      class="btn btn-primary"
-                      :disabled="!!amountError"
-                      @click="saveEdit(it.id)"
-                    >
-                      Guardar
-                    </button>
-                    <button class="btn" @click="cancelEdit">Cancelar</button>
-                  </div>
-                </div>
+                <EditableItemRow
+                  v-else
+                  v-model:draft="draft"
+                  :categories="categories"
+                  :subcategories="props.subcategories"
+                  :currencies="currencies"
+                  :show-financed-asset="isLiabilitiesList"
+                  :financed-asset-options="financedAssetOptions"
+                  :amount-hint="amountHint"
+                  :amount-error="amountError"
+                  @save="saveEdit(it.id)"
+                  @cancel="cancelEdit"
+                />
               </li>
             </ul>
           </div>
@@ -750,23 +653,6 @@ async function saveEdit(id: number) {
   font-size: 16px;
 }
 
-.cat-right {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.cat-toggle {
-  margin-left: 0;
-}
-
-.cat-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .cat-block {
   position: relative;
   padding-left: 10px;
@@ -780,16 +666,6 @@ async function saveEdit(id: number) {
   width: 3px;
   border-radius: 999px;
   background: var(--cat-accent, rgba(255, 255, 255, 0.2));
-}
-.cat-left {
-  position: relative;
-}
-.cat-left > div {
-  color: var(--cat-accent-text, rgba(255, 255, 255, 0.92));
-}
-.cat-left .badge {
-  border: 1px solid var(--cat-accent, rgba(255, 255, 255, 0.2));
-  color: var(--cat-accent-text, rgba(255, 255, 255, 0.85));
 }
 
 .asset-cat-cash {
@@ -830,38 +706,6 @@ async function saveEdit(id: number) {
   --cat-accent-text: rgba(255, 210, 210, 0.95);
 }
 
-.cat-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.cat-total {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
-  line-height: 1.15;
-  max-width: 280px;
-}
-.cat-total > div {
-  word-break: break-word;
-}
-.cat-total-primary {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 13px;
-  font-weight: 700;
-}
-.cat-total-details {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.cat-percent {
-  color: rgba(255, 255, 255, 0.55);
-}
 .subcat-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
