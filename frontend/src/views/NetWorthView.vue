@@ -7,6 +7,7 @@ import BaseModal from '@/components/BaseModal.vue';
 import NetWorthDonut from '@/domains/net-worth/components/NetWorthDonut.vue';
 import SettingsPopover from '@/domains/net-worth/components/SettingsPopover.vue';
 import NetWorthByCategoryBar from '@/domains/net-worth/components/NetWorthByCategoryBar.vue';
+import type { Asset, Liability, NetWorthWritePayload, Summary } from '@/domains/net-worth/models';
 
 const store = useNetWorthStore();
 
@@ -109,20 +110,20 @@ const showAssetModal = ref(false);
 const showLiabilityModal = ref(false);
 const showBreakdown = ref(false);
 const showEditModal = ref(false);
-const editItem = ref<any>(null);
+const editItem = ref<Asset | Liability | null>(null);
 const editKind = ref<'asset' | 'liability' | null>(null);
 
-async function submitAsset(payload: any) {
+async function submitAsset(payload: NetWorthWritePayload) {
   await store.createAsset(payload);
   showAssetModal.value = false;
 }
 
-async function submitLiability(payload: any) {
+async function submitLiability(payload: NetWorthWritePayload) {
   await store.createLiability(payload);
   showLiabilityModal.value = false;
 }
 
-function openEdit(item: any, kind: 'asset' | 'liability') {
+function openEdit(item: Asset | Liability, kind: 'asset' | 'liability') {
   editItem.value = item;
   editKind.value = kind;
   showEditModal.value = true;
@@ -194,7 +195,7 @@ const editInitial = computed(() => {
   };
 });
 
-async function submitEdit(payload: any) {
+async function submitEdit(payload: NetWorthWritePayload) {
   if (!editItem.value || !editKind.value) return;
   const id = editItem.value.id;
 
@@ -297,16 +298,25 @@ const byCategoryAssets = computed(() => byCategoryFiltered.value.map((r) => r.a)
 const byCategoryLiabilities = computed(() => byCategoryFiltered.value.map((r) => r.l));
 const byCategoryUnit = computed(() => byCategoryChart.value.unit);
 
+type SummaryExtended = Summary & {
+  liabilities_asset_backed?: string | null;
+  liabilities_unbacked?: string | null;
+  liabilities_asset_backed_real?: string | null;
+  liabilities_unbacked_real?: string | null;
+};
+
+const summaryExtended = computed<SummaryExtended | null>(() => store.summary as SummaryExtended | null);
+
 const summaryAssetBackedLiabilities = computed(() =>
   valueMode.value === 'real'
-    ? (store.summary as any)?.liabilities_asset_backed_real
-    : (store.summary as any)?.liabilities_asset_backed,
+    ? summaryExtended.value?.liabilities_asset_backed_real
+    : summaryExtended.value?.liabilities_asset_backed,
 );
 
 const summaryUnbackedLiabilities = computed(() =>
   valueMode.value === 'real'
-    ? (store.summary as any)?.liabilities_unbacked_real
-    : (store.summary as any)?.liabilities_unbacked,
+    ? summaryExtended.value?.liabilities_unbacked_real
+    : summaryExtended.value?.liabilities_unbacked,
 );
 
 onMounted(async () => {
