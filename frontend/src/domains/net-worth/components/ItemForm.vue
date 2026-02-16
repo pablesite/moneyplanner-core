@@ -58,7 +58,7 @@ const isEdit = computed(() => props.mode === 'edit');
 const financedAssetOptions = computed(() => {
   const list = Array.isArray(props.assets) ? props.assets : [];
   return [
-    { value: null, label: 'No financia ningún activo' },
+    { value: null, label: 'No financia ningÃºn activo' },
     ...list
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -113,7 +113,7 @@ function sanitizeAmount(raw: unknown, decimals: number) {
     s = s.replace(/,/g, '.');
   }
 
-  if ((s.match(/\./g) || []).length > 1) return { value: '', error: 'Importe inválido' };
+  if ((s.match(/\./g) || []).length > 1) return { value: '', error: 'Importe invÃ¡lido' };
 
   const [intPart, decPart = ''] = s.split('.');
   const limitedDec = decPart.slice(0, decimals);
@@ -123,7 +123,7 @@ function sanitizeAmount(raw: unknown, decimals: number) {
   const finalValue = normalized.startsWith('.') ? `0${normalized}` : normalized;
   const signedValue = isNegative ? `-${finalValue}` : finalValue;
 
-  if (Number.isNaN(Number(signedValue))) return { value: '', error: 'Importe inválido' };
+  if (Number.isNaN(Number(signedValue))) return { value: '', error: 'Importe invÃ¡lido' };
   if (!props.allowNegative && finalValue.includes('-')) {
     return { value: '', error: 'No se permiten importes negativos' };
   }
@@ -198,7 +198,7 @@ watch(
         v-model="form.category"
         :class="['select', { 'ui-select-placeholder': !form.category }]"
       >
-        <option value="" disabled>Selecciona categoría</option>
+        <option value="" disabled>Selecciona categorÃ­a</option>
         <option v-for="c in categories" :key="c.value" :value="c.value">
           {{ c.label }}
         </option>
@@ -209,7 +209,7 @@ watch(
         v-model="form.subcategory"
         :class="['select', { 'ui-select-placeholder': !form.subcategory }]"
       >
-        <option value="" disabled>Selecciona subcategoría</option>
+        <option value="" disabled>Selecciona subcategorÃ­a</option>
         <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">
           {{ s.label }}
         </option>

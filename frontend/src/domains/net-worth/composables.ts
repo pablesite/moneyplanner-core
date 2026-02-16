@@ -32,7 +32,7 @@ const assetSubcategories = [
   { category: 'cash', value: 'crypto_spot_earn', label: 'Spot/Earn Cripto' },
   { category: 'cash', value: 'other', label: 'Otros' },
 
-  { category: 'investments', value: 'deposits', label: 'Depositos' },
+  { category: 'investments', value: 'deposits', label: 'Depósitos' },
   { category: 'investments', value: 'funds', label: 'Fondos' },
   { category: 'investments', value: 'etfs', label: 'ETFs' },
   { category: 'investments', value: 'roboadvisor', label: 'Roboadvisor' },
@@ -48,11 +48,11 @@ const assetSubcategories = [
   { category: 'real_estate', value: 'rental', label: 'Rentas' },
   { category: 'real_estate', value: 'other', label: 'Otros' },
 
-  { category: 'furnishings', value: 'vehicles', label: 'Vehiculos' },
-  { category: 'furnishings', value: 'technology', label: 'Tecnologia' },
+  { category: 'furnishings', value: 'vehicles', label: 'Vehículos' },
+  { category: 'furnishings', value: 'technology', label: 'Tecnología' },
   { category: 'furnishings', value: 'home_furnishings', label: 'Muebles vivienda' },
   { category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' },
-  { category: 'furnishings', value: 'jewelry', label: 'Joyeria' },
+  { category: 'furnishings', value: 'jewelry', label: 'Joyería' },
   { category: 'furnishings', value: 'other', label: 'Otros' },
 
   { category: 'other', value: 'other', label: 'Otros' },

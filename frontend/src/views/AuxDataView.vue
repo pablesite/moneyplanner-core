@@ -67,7 +67,7 @@ const {
             :disabled="loading"
             @click="createFxRate"
           >
-            Añadir
+            AÃ±adir
           </button>
         </div>
 
@@ -90,7 +90,7 @@ const {
               </td>
             </tr>
             <tr v-if="!fxRates.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay FX rates todavía.</td>
+              <td colspan="4" class="ui-table-empty">No hay FX rates todavÃ­a.</td>
             </tr>
           </tbody>
         </table>
@@ -103,7 +103,7 @@ const {
 
         <div class="ui-data-form-grid">
           <select v-model="ipcForm.region" class="select ui-data-field">
-            <option value="ES">España</option>
+            <option value="ES">EspaÃ±a</option>
           </select>
           <input
             v-model="ipcForm.period"
@@ -124,7 +124,7 @@ const {
             :disabled="loading"
             @click="createInflation"
           >
-            Añadir
+            AÃ±adir
           </button>
         </div>
 
@@ -132,8 +132,8 @@ const {
           <thead>
             <tr>
               <th>Periodo</th>
-              <th>Región</th>
-              <th>Índice</th>
+              <th>RegiÃ³n</th>
+              <th>Ãndice</th>
               <th></th>
             </tr>
           </thead>
@@ -149,7 +149,7 @@ const {
               </td>
             </tr>
             <tr v-if="!inflation.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay índices IPC todavía.</td>
+              <td colspan="4" class="ui-table-empty">No hay Ã­ndices IPC todavÃ­a.</td>
             </tr>
           </tbody>
         </table>
