@@ -1,6 +1,5 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useNetWorthStore } from '@/stores/netWorth';
-import { capabilities } from '@/domains/capabilities';
 import type { Asset, Liability, NetWorthWritePayload, Summary } from '@/domains/net-worth/models';
 
 type ByCategoryRow = { key: string; a: number; l: number };
@@ -115,7 +114,6 @@ function formatMoney(v?: string | null, decimals = 2) {
 export function useNetWorthViewState() {
   const store = useNetWorthStore();
   const valueMode = ref<'nominal' | 'real'>('nominal');
-  const hasPeopleAccess = capabilities.people;
 
   const showAssetModal = ref(false);
   const showLiabilityModal = ref(false);
@@ -303,7 +301,6 @@ export function useNetWorthViewState() {
 
   return {
     store,
-    hasPeopleAccess,
     valueMode,
     currencies,
     assetCategories,
