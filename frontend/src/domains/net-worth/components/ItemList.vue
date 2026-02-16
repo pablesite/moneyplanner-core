@@ -4,6 +4,7 @@ import { formatAmount } from '@/lib/format';
 import type { Asset, NetWorthWritePayload } from '@/domains/net-worth/models';
 import EditableItemRow from './EditableItemRow.vue';
 import ItemCategoryHeader from './ItemCategoryHeader.vue';
+import ItemDisplayRow from './ItemDisplayRow.vue';
 import ItemSubgroupHeader from './ItemSubgroupHeader.vue';
 
 type AssetMini = {
@@ -516,41 +517,15 @@ async function saveEdit(id: number) {
 
             <ul class="list list-plain subcat-items">
               <li v-for="it in sg.items" :key="it.id">
-                <div v-if="editingId !== it.id" class="item-row">
-                  <div class="item-main">
-                    <div class="item-name">
-                      <span class="item-name-text">{{ it.name }}</span>
-                      <span v-if="!it.is_active" class="badge">archivado</span>
-                    </div>
-                    <div v-if="isLiabilitiesList && it.financed_asset_ref" class="item-submeta">
-                      <span class="financed-text"
-                        >� Financia: {{ financedAssetName(it.financed_asset_ref) }}</span
-                      >
-                    </div>
-                  </div>
-                  <div class="item-amount">
-                    {{ formatAmount(String(it.amount), { currency: it.currency }) }}
-                    {{ it.currency }}
-                  </div>
-                  <div class="actions">
-                    <button
-                      class="icon-btn"
-                      title="Editar"
-                      aria-label="Editar"
-                      @click="onEdit ? onEdit(it) : startEdit(it)"
-                    >
-                      &#9998;&#65039;
-                    </button>
-                    <button
-                      class="icon-btn"
-                      title="Archivar"
-                      aria-label="Archivar"
-                      @click="onArchive(it.id)"
-                    >
-                      &#128465;&#65039;
-                    </button>
-                  </div>
-                </div>
+                <ItemDisplayRow
+                  v-if="editingId !== it.id"
+                  :item="it"
+                  :formatted-amount="formatAmount(String(it.amount), { currency: it.currency })"
+                  :is-liabilities-list="isLiabilitiesList"
+                  :financed-asset-name="financedAssetName(it.financed_asset_ref)"
+                  @edit="onEdit ? onEdit(it) : startEdit(it)"
+                  @archive="onArchive(it.id)"
+                />
 
                 <EditableItemRow
                   v-else
@@ -689,58 +664,11 @@ async function saveEdit(id: number) {
   --item-actions-width: 72px;
 }
 
-.subcat-items .item-row {
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 3px 2px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  column-gap: 12px;
-}
-.subcat-items .item-row + .item-row {
+.subcat-items > li + li {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 6px;
   margin-top: 4px;
 }
-.subcat-items .item-main {
-  min-width: 0;
-  padding-left: 12px;
-  display: block;
-}
-.subcat-items .item-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-.subcat-items .item-submeta {
-  margin-top: 2px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
-}
-.subcat-items .item-submeta .financed-text {
-  display: inline-block;
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-.subcat-items .item-amount {
-  text-align: right;
-  white-space: nowrap;
-  font-weight: 600;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.subcat-items .actions {
-  justify-self: end;
-  min-width: var(--item-actions-width, 72px);
-}
-.subcat-items .actions .icon-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 12px;
-}
 </style>
+
 
