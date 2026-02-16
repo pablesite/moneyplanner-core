@@ -38,7 +38,10 @@ export function useAuxData() {
     loading.value = true;
     error.value = null;
     try {
-      const [fxRes, ipcRes] = await Promise.all([auxDataApi.getFxRates(), auxDataApi.getInflation()]);
+      const [fxRes, ipcRes] = await Promise.all([
+        auxDataApi.getFxRates(),
+        auxDataApi.getInflation(),
+      ]);
       fxRates.value = fxRes.data ?? [];
       inflation.value = ipcRes.data ?? [];
     } catch (e: unknown) {
@@ -167,4 +170,3 @@ export function useAuxDataPage() {
   onMounted(state.loadAll);
   return state;
 }
-

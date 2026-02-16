@@ -41,7 +41,12 @@ const emit = defineEmits<{
       <button class="icon-btn" title="Editar" aria-label="Editar" @click="emit('edit', item.id)">
         &#9998;&#65039;
       </button>
-      <button class="icon-btn" title="Archivar" aria-label="Archivar" @click="emit('archive', item.id)">
+      <button
+        class="icon-btn"
+        title="Archivar"
+        aria-label="Archivar"
+        @click="emit('archive', item.id)"
+      >
         &#128465;&#65039;
       </button>
     </div>

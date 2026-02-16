@@ -215,4 +215,3 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     </div>
   </div>
 </template>
-

@@ -252,12 +252,14 @@ watch(
         <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">
           Cancelar
         </button>
-        <button class="btn btn-primary ui-form-action-btn" :disabled="!!amountError" @click="submit">
+        <button
+          class="btn btn-primary ui-form-action-btn"
+          :disabled="!!amountError"
+          @click="submit"
+        >
           {{ isEdit ? 'Guardar' : 'Crear' }}
         </button>
       </div>
     </div>
   </div>
 </template>
-
-

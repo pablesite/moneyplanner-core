@@ -280,7 +280,9 @@ export function useNetWorthViewState() {
   const byCategoryLiabilities = computed(() => byCategoryFiltered.value.map((r) => r.l));
   const byCategoryUnit = computed(() => byCategoryChart.value.unit);
 
-  const summaryExtended = computed<SummaryExtended | null>(() => store.summary as SummaryExtended | null);
+  const summaryExtended = computed<SummaryExtended | null>(
+    () => store.summary as SummaryExtended | null,
+  );
 
   const summaryAssetBackedLiabilities = computed(() =>
     valueMode.value === 'real'

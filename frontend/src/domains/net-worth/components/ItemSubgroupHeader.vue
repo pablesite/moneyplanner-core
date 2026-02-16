@@ -18,7 +18,9 @@ defineProps<Props>();
         {{ baseLabel }}
         <span v-if="percent" class="nw-subcat-percent">. {{ percent }}%</span>
       </div>
-      <div :class="showBaseTotal && baseLabel ? 'nw-subcat-total-details' : 'nw-subcat-total-primary'">
+      <div
+        :class="showBaseTotal && baseLabel ? 'nw-subcat-total-details' : 'nw-subcat-total-primary'"
+      >
         {{ totalsLine }}
       </div>
     </div>

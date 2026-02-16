@@ -86,7 +86,9 @@ const {
               <td>{{ r.from_currency }} &rarr; {{ r.to_currency }}</td>
               <td>{{ formatFxRate(r.rate, r.from_currency, r.to_currency) }}</td>
               <td class="ui-data-table-actions">
-                <button class="icon-btn" title="Eliminar" @click="deleteFxRate(r.id)">&#128465;</button>
+                <button class="icon-btn" title="Eliminar" @click="deleteFxRate(r.id)">
+                  &#128465;
+                </button>
               </td>
             </tr>
             <tr v-if="!fxRates.length && !loading">
@@ -159,4 +161,3 @@ const {
     <div v-if="loading" class="ui-status-line">Cargando datos auxiliares...</div>
   </div>
 </template>
-
