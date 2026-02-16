@@ -204,7 +204,7 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
       <div v-else class="subtle">No hay snapshots todavia.</div>
     </div>
 
-    <div v-if="store.loading" class="section subtle">Cargando...</div>
+    <div v-if="store.loading" class="ui-status-line">Cargando...</div>
 
     <BaseModal :open="showAssetModal" title="Nuevo activo" @close="showAssetModal = false">
       <ItemForm
