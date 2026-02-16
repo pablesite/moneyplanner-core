@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { auxDataApi } from '@/domains/aux-data/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import type { FxPair, FxRate, InflationIndex } from '@/domains/aux-data/types';
@@ -150,4 +150,10 @@ export function useAuxData() {
     formatFxRate,
     formatInflationIndex,
   };
+}
+
+export function useAuxDataPage() {
+  const state = useAuxData();
+  onMounted(state.loadAll);
+  return state;
 }

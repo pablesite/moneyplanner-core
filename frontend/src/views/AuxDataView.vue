@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAuxData } from '@/domains/aux-data/composables';
+import { useAuxDataPage } from '@/domains/aux-data/composables';
 
 const router = useRouter();
 
@@ -14,16 +13,13 @@ const {
   fxPairs,
   fxRatePlaceholder,
   ipcForm,
-  loadAll,
   createFxRate,
   deleteFxRate,
   createInflation,
   deleteInflation,
   formatFxRate,
   formatInflationIndex,
-} = useAuxData();
-
-onMounted(loadAll);
+} = useAuxDataPage();
 </script>
 
 <template>
