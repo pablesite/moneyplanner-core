@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from 'vue';
 import { useNetWorthStore } from '@/stores/netWorth';
-import ItemForm from '@/components/ItemForm.vue';
-import ItemList from '@/components/ItemList.vue';
+import ItemForm from '@/domains/net-worth/components/ItemForm.vue';
+import ItemList from '@/domains/net-worth/components/ItemList.vue';
 import BaseModal from '@/components/BaseModal.vue';
-import NetWorthDonut from '@/components/NetWorthDonut.vue';
-import SettingsPopover from '@/components/SettingsPopover.vue';
-import NetWorthByCategoryBar from '@/components/NetWorthByCategoryBar.vue';
+import NetWorthDonut from '@/domains/net-worth/components/NetWorthDonut.vue';
+import SettingsPopover from '@/domains/net-worth/components/SettingsPopover.vue';
+import NetWorthByCategoryBar from '@/domains/net-worth/components/NetWorthByCategoryBar.vue';
 
 const store = useNetWorthStore();
 
@@ -688,3 +688,4 @@ onMounted(async () => {
   }
 }
 </style>
+
