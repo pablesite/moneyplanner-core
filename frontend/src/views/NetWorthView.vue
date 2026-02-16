@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import ItemForm from '@/domains/net-worth/components/ItemForm.vue';
-import ItemList from '@/domains/net-worth/components/ItemList.vue';
-import BaseModal from '@/domains/ui/components/BaseModal.vue';
-import NetWorthDonut from '@/domains/net-worth/components/NetWorthDonut.vue';
-import SettingsPopover from '@/domains/net-worth/components/SettingsPopover.vue';
-import NetWorthByCategoryBar from '@/domains/net-worth/components/NetWorthByCategoryBar.vue';
-import { useNetWorthViewState } from '@/domains/net-worth/composables';
+import {
+  ItemForm,
+  ItemList,
+  NetWorthByCategoryBar,
+  NetWorthDonut,
+  SettingsPopover,
+  useNetWorthViewState,
+} from '@/domains/net-worth';
+import { BaseModal } from '@/domains/ui';
 
 const {
   store,
+  hasPeopleAccess,
   valueMode,
   currencies,
   assetCategories,
@@ -73,6 +76,9 @@ const {
       </div>
 
       <div class="networth-actions">
+        <button v-if="hasPeopleAccess" class="btn" type="button" @click="$router.push('/people')">
+          Personas
+        </button>
         <button class="btn" type="button" @click="$router.push('/data')">Datos auxiliares</button>
 
         <SettingsPopover

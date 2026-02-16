@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import NetWorthView from './views/NetWorthView.vue';
 import LoginView from './views/LoginView.vue';
 import AuxDataView from './views/AuxDataView.vue';
-import { registerAuthGuard } from '@/domains/auth/guard';
+import { registerAuthGuard } from '@/domains/auth';
 
 export const router = createRouter({
   history: createWebHistory(),

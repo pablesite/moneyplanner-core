@@ -6,5 +6,5 @@
 </template>
 
 <script setup lang="ts">
-import AppHeader from '@/domains/auth/components/AppHeader.vue';
+import { AppHeader } from '@/domains/auth';
 </script>

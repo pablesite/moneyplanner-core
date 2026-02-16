@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { useAuxDataPage } from '@/domains/aux-data/composables';
+import { useAuxDataPage } from '@/domains/aux-data';
 
 const router = useRouter();
 
