@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 type CurrencyOption = { value: string; label: string };
@@ -78,28 +78,27 @@ function onSelectMode(e: Event) {
 </script>
 
 <template>
-  <div ref="rootEl" class="popover-root">
+  <div ref="rootEl" class="nw-settings-root">
     <button
       class="btn"
-      :class="{ 'icon-only': iconOnly }"
+      :class="{ 'nw-settings-icon-only': iconOnly }"
       type="button"
       :disabled="loading"
       aria-label="Ajustes"
       @click="toggle"
     >
-      <span class="btn-icon" aria-hidden="true">&#9881;&#65039;</span>
+      <span class="nw-settings-btn-icon" aria-hidden="true">&#9881;&#65039;</span>
       <span v-if="!iconOnly">Ajustes</span>
     </button>
 
-    <div v-if="open" class="popover-panel">
-      <div class="popover-title">Ajustes</div>
+    <div v-if="open" class="nw-settings-panel">
+      <div class="nw-settings-title">Ajustes</div>
 
-      <div class="popover-block">
-        <div class="field">
-          <div class="label">Moneda base</div>
+      <div class="nw-settings-block">
+        <div class="nw-settings-field">
+          <div class="nw-settings-label">Moneda base</div>
           <select
-            class="input"
-            style="width: 140px"
+            class="input nw-settings-select-currency"
             :value="baseCurrency"
             :disabled="loading"
             @change="onSelectBaseCurrency"
@@ -108,16 +107,15 @@ function onSelectMode(e: Event) {
               {{ c.label }}
             </option>
           </select>
-          <div class="hint">Totales y snapshots en esta moneda</div>
+          <div class="nw-settings-hint">Totales y snapshots en esta moneda</div>
         </div>
       </div>
 
-      <div class="popover-block">
-        <div class="field">
-          <div class="label">Modo</div>
+      <div class="nw-settings-block">
+        <div class="nw-settings-field">
+          <div class="nw-settings-label">Modo</div>
           <select
-            class="input"
-            style="width: 180px"
+            class="input nw-settings-select-mode"
             :value="valueMode"
             :disabled="loading"
             @change="onSelectMode"
@@ -126,18 +124,18 @@ function onSelectMode(e: Event) {
             <option value="real" :disabled="!canShowReal">IPC (euros mes base)</option>
           </select>
 
-          <div class="hint">
+          <div class="nw-settings-hint">
             {{ modeHelp }}
-            <span v-if="valueMode === 'real' && realBaseLabel"> · {{ realBaseLabel }}</span>
+            <span v-if="valueMode === 'real' && realBaseLabel">. {{ realBaseLabel }}</span>
           </div>
 
-          <div v-if="!canShowReal" class="hint" style="color: rgba(255, 140, 160, 0.95)">
-            El modo IPC solo está disponible cuando se puede calcular (EUR + IPC cargado).
+          <div v-if="!canShowReal" class="nw-settings-hint nw-settings-hint-error">
+            El modo IPC solo esta disponible cuando se puede calcular (EUR + IPC cargado).
           </div>
         </div>
       </div>
 
-      <div class="popover-block popover-actions">
+      <div class="nw-settings-block nw-settings-actions">
         <button
           v-if="showSnapshot"
           class="btn btn-primary"
@@ -158,100 +156,8 @@ function onSelectMode(e: Event) {
           Refrescar
         </button>
 
-        <button class="btn popover-close" type="button" @click="close">Cerrar</button>
+        <button class="btn nw-settings-close" type="button" @click="close">Cerrar</button>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.popover-root {
-  position: relative;
-  display: inline-block;
-}
-
-.icon-only {
-  padding: 8px 10px;
-  border-radius: 10px;
-}
-
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-}
-
-/* panel con fondo sólido/legible */
-.popover-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  width: min(360px, 92vw);
-  padding: 14px;
-
-  z-index: 2000;
-
-  /* clave: fondo real (no transparente) */
-  background: rgba(20, 20, 22, 0.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-
-  /* sombra para separar del contenido de atrás */
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(0, 0, 0, 0.35);
-
-  /* evita que "herede" estilos raros de .card */
-  text-align: left;
-}
-
-/* título */
-.popover-title {
-  font-size: 14px;
-  opacity: 0.9;
-  margin-bottom: 10px;
-}
-
-.popover-block {
-  padding: 10px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.popover-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.popover-actions .btn {
-  width: 100%;
-}
-
-.popover-close {
-  grid-column: 1 / -1;
-}
-
-.popover-block:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.label {
-  font-size: 13px;
-  opacity: 0.85;
-}
-
-.hint {
-  font-size: 12px;
-  opacity: 0.72;
-}
-</style>

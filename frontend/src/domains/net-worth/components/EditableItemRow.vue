@@ -48,7 +48,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="form-grid max-w-[520px]">
+  <div class="form-grid nw-edit-grid">
     <input v-model="draft.name" class="input" />
 
     <select v-model="draft.category" class="select">
@@ -102,9 +102,15 @@ const emit = defineEmits<{
       {{ amountError }}
     </div>
 
-    <div class="actions">
-      <button class="btn btn-primary" :disabled="!!amountError" @click="emit('save')">Guardar</button>
-      <button class="btn" @click="emit('cancel')">Cancelar</button>
+    <div class="ui-form-actions">
+      <button
+        class="btn btn-primary ui-form-action-btn"
+        :disabled="!!amountError"
+        @click="emit('save')"
+      >
+        Guardar
+      </button>
+      <button class="btn ui-form-action-btn" @click="emit('cancel')">Cancelar</button>
     </div>
   </div>
 </template>
