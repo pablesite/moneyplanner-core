@@ -377,7 +377,7 @@
   }
 
   .ui-status-line {
-    @apply section text-sm text-white/75;
+    @apply mt-6 text-sm text-white/75;
   }
 
   .ui-data-form-grid {
