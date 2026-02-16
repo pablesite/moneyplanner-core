@@ -2,49 +2,9 @@ import { defineStore } from 'pinia';
 import { toApiErrorMessage } from '@/lib/errors';
 import { coreNetWorthApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
+import type { Asset, Liability, NetWorthWritePayload, Snapshot, Summary } from '@/domains/net-worth/models';
 
-export type Asset = {
-  id: number;
-  name: string;
-  category: string;
-  subcategory: string;
-  tracking_mode: string;
-  accounting_account_id: number | null;
-  currency: string;
-  amount: string;
-  amount_base?: string;
-  is_active: boolean;
-  notes: string;
-};
-
-export type Liability = Asset;
-
-export type Snapshot = {
-  id: number;
-  snapshot_date: string;
-  base_currency: string;
-  total_assets: string;
-  total_liabilities: string;
-  net_worth: string;
-  created_at: string;
-};
-
-export type Summary = {
-  base_currency: string;
-  total_assets: string;
-  total_liabilities: string;
-  net_worth: string;
-  assets_by_category: Record<string, string>;
-  assets_by_subcategory: Record<string, string>;
-  liabilities_by_category: Record<string, string>;
-  inflation_region: string | null;
-  inflation_base_period: string | null;
-  total_assets_real: string | null;
-  total_liabilities_real: string | null;
-  net_worth_real: string | null;
-  assets_by_category_real: Record<string, string> | null;
-  liabilities_by_category_real: Record<string, string> | null;
-};
+export type { Asset, Liability, Snapshot, Summary } from '@/domains/net-worth/models';
 
 export const useNetWorthStore = defineStore('netWorth', {
   state: () => ({
@@ -80,7 +40,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.assets = assetsRes.data;
         this.liabilities = liabilitiesRes.data;
         this.snapshots = snapshotsRes.data;
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
@@ -93,7 +53,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       try {
         await coreNetWorthApi.createSnapshotFromCurrent();
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
         this.loading = false;
       }
@@ -105,33 +65,33 @@ export const useNetWorthStore = defineStore('netWorth', {
       try {
         await coreNetWorthApi.deleteSnapshot(id);
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
     },
 
-    async createAsset(payload: Partial<Asset>) {
+    async createAsset(payload: NetWorthWritePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.createAsset(payload as Record<string, unknown>);
+        await coreNetWorthApi.createAsset(payload);
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
     },
 
-    async updateAsset(id: number, payload: Partial<Asset>) {
+    async updateAsset(id: number, payload: NetWorthWritePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.updateAsset(id, payload as Record<string, unknown>);
+        await coreNetWorthApi.updateAsset(id, payload);
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
@@ -142,26 +102,26 @@ export const useNetWorthStore = defineStore('netWorth', {
       return this.updateAsset(id, { is_active: false });
     },
 
-    async createLiability(payload: Partial<Liability>) {
+    async createLiability(payload: NetWorthWritePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.createLiability(payload as Record<string, unknown>);
+        await coreNetWorthApi.createLiability(payload);
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
     },
 
-    async updateLiability(id: number, payload: Partial<Liability>) {
+    async updateLiability(id: number, payload: NetWorthWritePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.updateLiability(id, payload as Record<string, unknown>);
+        await coreNetWorthApi.updateLiability(id, payload);
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
@@ -176,7 +136,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       try {
         const res = await coreNetWorthApi.getSettings();
         this.baseCurrency = res.data.base_currency;
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       }
     },
@@ -188,7 +148,7 @@ export const useNetWorthStore = defineStore('netWorth', {
         const res = await coreNetWorthApi.updateSettings({ base_currency: currency });
         this.baseCurrency = res.data.base_currency;
         await this.refreshAll();
-      } catch (e: any) {
+      } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
