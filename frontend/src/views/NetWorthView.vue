@@ -48,7 +48,7 @@ const {
   summaryUnbackedLiabilities,
 } = useNetWorthViewState();
 
-const { HeaderActions } = useNetWorthViewExtensions();
+const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtensions(store);
 </script>
 
 <template>
@@ -156,6 +156,7 @@ const { HeaderActions } = useNetWorthViewExtensions();
         :category-totals-base="store.summary?.assets_by_category ?? {}"
         :subcategory-totals-base="store.summary?.assets_by_subcategory ?? {}"
         :total-base="store.summary?.total_assets ?? '0'"
+        v-bind="itemListProps"
         :on-update="store.updateAsset"
         :on-archive="store.archiveAsset"
         :on-add="() => (showAssetModal = true)"
@@ -169,6 +170,7 @@ const { HeaderActions } = useNetWorthViewExtensions();
         :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
         :category-totals-base="store.summary?.liabilities_by_category ?? {}"
         :total-base="store.summary?.total_liabilities ?? '0'"
+        v-bind="itemListProps"
         :assets="store.assets"
         :on-update="store.updateLiability"
         :on-archive="store.archiveLiability"
@@ -214,6 +216,7 @@ const { HeaderActions } = useNetWorthViewExtensions();
         title="Nuevo activo"
         :categories="assetCategories"
         :subcategories="assetSubcategories"
+        v-bind="itemFormProps"
         :allow-negative="true"
         :on-submit="submitAsset"
         :on-cancel="() => (showAssetModal = false)"
@@ -224,6 +227,7 @@ const { HeaderActions } = useNetWorthViewExtensions();
       <ItemForm
         title="Nuevo pasivo"
         :categories="liabilityCategories"
+        v-bind="itemFormProps"
         :assets="store.assets"
         :show-financed-asset="true"
         :on-submit="submitLiability"
@@ -237,6 +241,7 @@ const { HeaderActions } = useNetWorthViewExtensions();
         :title="editTitle"
         :categories="editCategories"
         :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
+        v-bind="itemFormProps"
         :assets="editKind === 'liability' ? store.assets : []"
         :show-financed-asset="editKind === 'liability'"
         :allow-negative="editKind === 'asset'"
