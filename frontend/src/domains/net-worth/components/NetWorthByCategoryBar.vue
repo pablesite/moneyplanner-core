@@ -174,26 +174,9 @@ const options = computed<ChartOptions<'bar'>>(() => ({
 </script>
 
 <template>
-  <div class="wrap">
-    <div class="chart">
+  <div class="nw-bar-wrap">
+    <div class="nw-bar-chart-category">
       <Bar :data="data" :options="options" />
     </div>
   </div>
 </template>
-
-<style scoped>
-.wrap {
-  display: grid;
-  gap: 6px;
-}
-
-.chart {
-  height: 320px;
-}
-
-@media (max-width: 720px) {
-  .chart {
-    height: 380px;
-  }
-}
-</style>

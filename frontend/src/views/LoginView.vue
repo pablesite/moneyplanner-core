@@ -5,24 +5,24 @@ const { username, password, error, loading, login } = useLoginForm();
 </script>
 
 <template>
-  <div class="login-page">
-    <div class="login-shell">
-      <div class="login-card">
-        <h1 class="login-title">Acceso</h1>
-        <div class="login-subtitle">Gestiona tu patrimonio familiar con claridad.</div>
+  <div class="ui-auth-page">
+    <div class="ui-auth-shell">
+      <div class="ui-auth-card">
+        <h1 class="ui-auth-title">Acceso</h1>
+        <div class="ui-auth-subtitle">Gestiona tu patrimonio familiar con claridad.</div>
 
-        <div v-if="error" class="alert login-alert">
+        <div v-if="error" class="alert ui-auth-alert">
           {{ error }}
         </div>
 
-        <form class="login-form" @submit.prevent="login">
-          <label class="login-field">
-            <span class="login-label">Usuario</span>
+        <form class="ui-auth-form" @submit.prevent="login">
+          <label class="ui-auth-field">
+            <span class="ui-auth-label">Usuario</span>
             <input v-model="username" autocomplete="username" class="input" />
           </label>
 
-          <label class="login-field">
-            <span class="login-label">Contrasena</span>
+          <label class="ui-auth-field">
+            <span class="ui-auth-label">Contrasena</span>
             <input
               v-model="password"
               type="password"
@@ -31,7 +31,7 @@ const { username, password, error, loading, login } = useLoginForm();
             />
           </label>
 
-          <button :disabled="loading" type="submit" class="btn btn-primary login-submit">
+          <button :disabled="loading" type="submit" class="btn btn-primary ui-auth-submit">
             {{ loading ? 'Entrando...' : 'Entrar' }}
           </button>
         </form>
@@ -39,63 +39,3 @@ const { username, password, error, loading, login } = useLoginForm();
     </div>
   </div>
 </template>
-
-<style scoped>
-.login-page {
-  min-height: calc(100vh - 60px);
-  display: grid;
-  align-items: start;
-  justify-items: center;
-  padding: 24px;
-  background:
-    radial-gradient(800px 400px at 10% 0%, rgba(255, 255, 255, 0.06), transparent 60%),
-    radial-gradient(600px 300px at 90% 20%, rgba(255, 255, 255, 0.04), transparent 60%);
-}
-
-.login-shell {
-  width: min(520px, 100%);
-  margin-top: 96px;
-}
-
-.login-card {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  background: var(--panel);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
-}
-
-.login-title {
-  margin: 0 0 6px 0;
-  font-size: 24px;
-}
-
-.login-subtitle {
-  color: var(--muted);
-  margin-bottom: 18px;
-}
-
-.login-form {
-  display: grid;
-  gap: 14px;
-}
-
-.login-field {
-  display: grid;
-  gap: 6px;
-}
-
-.login-label {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.login-submit {
-  margin-top: 6px;
-  width: 100%;
-}
-
-.login-alert {
-  margin-bottom: 12px;
-}
-</style>
