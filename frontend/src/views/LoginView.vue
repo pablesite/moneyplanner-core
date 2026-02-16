@@ -22,7 +22,7 @@ const { username, password, error, loading, login } = useLoginForm();
           </label>
 
           <label class="ui-auth-field">
-            <span class="ui-auth-label">Contrasena</span>
+            <span class="ui-auth-label">Contraseña</span>
             <input
               v-model="password"
               type="password"

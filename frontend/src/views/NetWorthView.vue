@@ -201,7 +201,7 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
         </li>
       </ul>
 
-      <div v-else class="subtle">No hay snapshots todavía.</div>
+      <div v-else class="subtle">No hay snapshots todavÃ­a.</div>
     </div>
 
     <div v-if="store.loading" class="ui-status-line">Cargando...</div>
