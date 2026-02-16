@@ -10,6 +10,8 @@ export type Asset = {
   amount_base?: string;
   is_active: boolean;
   notes: string;
+  ownership_ref?: number | null;
+  financed_asset_ref?: number | null;
 };
 
 export type Liability = Asset;
