@@ -78,7 +78,7 @@ function financedAssetName(financedAssetRef?: number | null) {
 const financedAssetOptions = computed(() => {
   const list = Array.isArray(props.assets) ? props.assets : [];
   return [
-    { value: null, label: 'No financia ningun activo' },
+    { value: null, label: 'No financia ningún activo' },
     ...list
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -129,8 +129,8 @@ const amountError = computed(() => {
 
   if (!draft.value.amount) return '';
   if ((normalizeAmountInput(draft.value.amount).match(/\./g) || []).length > 1)
-    return 'Importe invalido';
-  if (Number.isNaN(Number(normalizeAmountInput(clamped)))) return 'Importe invalido';
+    return 'Importe inválido';
+  if (Number.isNaN(Number(normalizeAmountInput(clamped)))) return 'Importe inválido';
   return '';
 });
 
@@ -458,7 +458,7 @@ async function saveEdit(id: number) {
           v-if="onAdd"
           class="btn btn-primary btn-sm add-icon-only"
           type="button"
-          aria-label="Anadir"
+          aria-label="Añadir"
           @click="onAdd"
         >
           <span class="btn-icon">+</span>
@@ -472,7 +472,7 @@ async function saveEdit(id: number) {
       </div>
     </div>
 
-    <div v-if="!items.length" class="subtle">No hay elementos todavia.</div>
+    <div v-if="!items.length" class="subtle">No hay elementos todavía.</div>
 
     <div v-else class="grid gap-4">
       <section
@@ -670,5 +670,7 @@ async function saveEdit(id: number) {
   margin-top: 4px;
 }
 </style>
+
+
 
 

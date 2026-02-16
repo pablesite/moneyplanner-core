@@ -103,7 +103,7 @@ export function useAuxData() {
       });
       ipcForm.value.index = '';
       await loadAll();
-      successMessage.value = 'Indice IPC creado correctamente.';
+      successMessage.value = 'Índice IPC creado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -119,7 +119,7 @@ export function useAuxData() {
     try {
       await auxDataApi.deleteInflation(id);
       await loadAll();
-      successMessage.value = 'Indice IPC eliminado correctamente.';
+      successMessage.value = 'Índice IPC eliminado correctamente.';
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
@@ -167,3 +167,4 @@ export function useAuxDataPage() {
   onMounted(state.loadAll);
   return state;
 }
+
