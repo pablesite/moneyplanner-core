@@ -52,12 +52,12 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
 </script>
 
 <template>
-  <div class="container networth-container">
-    <div class="networth-header">
-      <div class="networth-title-row">
-        <h1 class="h1 networth-title">Patrimonio</h1>
+  <div class="container relative">
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div class="flex items-center gap-2">
+        <h1 class="h1 m-0">Patrimonio</h1>
         <button
-          class="icon-btn networth-refresh"
+          class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           :disabled="store.loading"
           aria-label="Refrescar"
@@ -66,7 +66,7 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
           <span class="icon" aria-hidden="true">&#8635;</span>
         </button>
         <button
-          class="icon-btn networth-snapshot"
+          class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           :disabled="store.loading"
           aria-label="Guardar snapshot"
@@ -77,7 +77,7 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
         </button>
       </div>
 
-      <div class="networth-actions">
+      <div class="flex flex-wrap items-center gap-2.5">
         <component :is="HeaderActions" v-if="HeaderActions" />
         <button class="btn" type="button" @click="$router.push('/data')">Datos auxiliares</button>
 
@@ -100,12 +100,11 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
       </div>
     </div>
 
-    <div v-if="store.error" class="alert networth-alert">
+    <div v-if="store.error" class="alert mt-3">
       {{ prettyError() }}
     </div>
 
-    <!-- Resumen principal -->
-    <div class="card networth-summary-card">
+    <div class="card my-4">
       <NetWorthDonut
         :total-assets="summaryAssets"
         :total-liabilities="summaryLiabilities"
@@ -115,12 +114,12 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
         :unit="unitLabel()"
       />
 
-      <div class="networth-breakdown-inline">
-        <div v-if="store.summary" class="networth-breakdown">
-          <div class="panel-header">
-            <h2 class="panel-title">Desglose</h2>
+      <div class="mt-4 border-t border-white/10 pt-4">
+        <div v-if="store.summary">
+          <div class="mb-2.5 flex items-center justify-between gap-2.5">
+            <h2 class="m-0 text-base">Desglose</h2>
             <button
-              class="btn btn-sm panel-toggle"
+              class="btn btn-sm inline-flex items-center gap-2"
               type="button"
               @click="showBreakdown = !showBreakdown"
             >
@@ -129,9 +128,9 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
             </button>
           </div>
 
-          <div v-if="showBreakdown" class="networth-panels">
+          <div v-if="showBreakdown" class="grid gap-3.5 md:grid-cols-2">
             <div v-if="store.summary">
-              <h3 class="panel-subtitle">Por categoria</h3>
+              <h3 class="mb-2 text-[15px]">Por categoria</h3>
               <NetWorthByCategoryBar
                 :labels="byCategoryLabels"
                 :assets="byCategoryAssets"
@@ -143,8 +142,6 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
         </div>
       </div>
     </div>
-
-    <!-- Activos / Pasivos -->
 
     <div class="grid-2 section">
       <ItemList
@@ -179,21 +176,20 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
       />
     </div>
 
-    <!-- Snapshots -->
     <div class="section card">
-      <h2 style="margin-top: 0">Snapshots</h2>
+      <h2 class="mt-0 text-base">Snapshots</h2>
 
-      <ul v-if="store.snapshots.length" class="snapshot-list">
-        <li v-for="s in store.snapshots" :key="s.id" class="snapshot-row">
-          <div class="snapshot-main">
-            {{ s.snapshot_date }} — neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
+      <ul v-if="store.snapshots.length" class="m-0 grid list-none gap-2 pl-0">
+        <li v-for="s in store.snapshots" :key="s.id" class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            {{ s.snapshot_date }} - neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
             <span class="subtle">
               (activos {{ formatMoney(s.total_assets, 2) }} {{ s.base_currency }}, pasivos
               {{ formatMoney(s.total_liabilities, 2) }} {{ s.base_currency }})
             </span>
           </div>
           <button
-            class="icon-btn snapshot-delete"
+            class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             :disabled="store.loading"
             aria-label="Eliminar snapshot"
@@ -205,12 +201,11 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
         </li>
       </ul>
 
-      <div v-else class="subtle">No hay snapshots todavía.</div>
+      <div v-else class="subtle">No hay snapshots todavia.</div>
     </div>
 
     <div v-if="store.loading" class="section subtle">Cargando...</div>
 
-    <!-- Modales -->
     <BaseModal :open="showAssetModal" title="Nuevo activo" @close="showAssetModal = false">
       <ItemForm
         title="Nuevo activo"
@@ -253,182 +248,3 @@ const { HeaderActions, itemFormProps, itemListProps } = useNetWorthViewExtension
     </BaseModal>
   </div>
 </template>
-
-<style scoped>
-.networth-container {
-  position: relative;
-}
-
-.networth-top-right {
-  position: absolute;
-  right: 0;
-  top: -52px;
-}
-
-.networth-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.networth-title {
-  margin: 0;
-}
-
-.networth-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.networth-refresh:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.networth-snapshot:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.networth-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.networth-alert {
-  margin-top: 12px;
-}
-
-.networth-summary-card {
-  margin-top: 14px;
-  margin-bottom: 14px;
-}
-
-.networth-breakdown-inline {
-  margin-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 14px;
-}
-
-.networth-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
-}
-
-.networth-panels > .card {
-  min-width: 0;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.panel-title {
-  margin: 0;
-  font-size: 16px;
-}
-
-.panel-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-help {
-  margin-top: 8px;
-}
-
-.panel-chart {
-  margin: 12px 0 16px;
-}
-
-.panel-alert {
-  margin-bottom: 12px;
-}
-
-.panel-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.panel-th {
-  text-align: left;
-  padding: 8px 6px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.panel-th-right {
-  text-align: right;
-}
-
-.panel-td {
-  padding: 8px 6px;
-}
-
-.panel-td-right {
-  text-align: right;
-}
-
-.panel-role {
-  margin-left: 6px;
-  font-size: 12px;
-}
-
-.panel-total-left {
-  padding-top: 10px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.panel-total {
-  padding-top: 10px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.panel-subtitle {
-  margin: 0 0 8px 0;
-  font-size: 15px;
-}
-
-.networth-breakdown {
-}
-
-.snapshot-list {
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-
-.snapshot-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.snapshot-main {
-  min-width: 0;
-}
-
-.snapshot-delete:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@media (max-width: 700px) {
-  .networth-panels {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-
-
