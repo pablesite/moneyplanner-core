@@ -103,6 +103,7 @@ REST_FRAMEWORK = {
         "auth_refresh": os.getenv("THROTTLE_AUTH_REFRESH", "60/min"),
         "auth_mode": os.getenv("THROTTLE_AUTH_MODE", "120/min"),
         "auth_settings": os.getenv("THROTTLE_AUTH_SETTINGS", "120/min"),
+        "auth_ops_metrics": os.getenv("THROTTLE_AUTH_OPS_METRICS", "60/min"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "config.exceptions.custom_exception_handler",
