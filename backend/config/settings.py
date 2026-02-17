@@ -122,6 +122,8 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
+    "ISSUER": os.getenv("JWT_ISSUER", "moneyplanner-core"),
+    "AUDIENCE": os.getenv("JWT_AUDIENCE", "moneyplanner-core-api"),
 }
 
 # Roadmap 03 flag: keep core auth standalone.
