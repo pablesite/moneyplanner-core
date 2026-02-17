@@ -104,6 +104,7 @@ REST_FRAMEWORK = {
         "auth_mode": os.getenv("THROTTLE_AUTH_MODE", "120/min"),
         "auth_settings": os.getenv("THROTTLE_AUTH_SETTINGS", "120/min"),
         "auth_ops_metrics": os.getenv("THROTTLE_AUTH_OPS_METRICS", "60/min"),
+        "auth_link_token": os.getenv("THROTTLE_AUTH_LINK_TOKEN", "30/min"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "config.exceptions.custom_exception_handler",
@@ -125,3 +126,5 @@ SIMPLE_JWT = {
 
 # Roadmap 03 flag: keep core auth standalone.
 AUTH_MODE_CORE_LOCAL = os.getenv("AUTH_MODE_CORE_LOCAL", "1") == "1"
+CORE_LINKING_SHARED_SECRET = os.getenv("CORE_LINKING_SHARED_SECRET", "").strip()
+CORE_LINKING_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CORE_LINKING_TOKEN_MAX_AGE_SECONDS", "300"))
