@@ -1,15 +1,21 @@
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { authApi } from '@/domains/auth/api';
 import { setAccessToken, setRefreshToken } from '@/domains/auth/session';
 import { toApiErrorMessage } from '@/lib/errors';
 
 export function useLoginForm() {
   const router = useRouter();
+  const route = useRoute();
   const username = ref('');
   const password = ref('');
   const error = ref<string | null>(null);
   const loading = ref(false);
+  const sessionNotice = ref<string | null>(null);
+
+  if (route.query.reason === 'session_expired') {
+    sessionNotice.value = 'Tu sesion expiro. Inicia sesion nuevamente.';
+  }
 
   async function login() {
     loading.value = true;
@@ -33,6 +39,7 @@ export function useLoginForm() {
     password,
     error,
     loading,
+    sessionNotice,
     login,
   };
 }

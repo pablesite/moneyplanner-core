@@ -15,6 +15,12 @@ type PendingCallback = (token: string | null) => void;
 let isRefreshing = false;
 let pending: PendingCallback[] = [];
 
+function redirectToLoginWithSessionExpiredReason() {
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login?reason=session_expired';
+  }
+}
+
 function notifyPending(token: string | null) {
   pending.forEach((cb) => cb(token));
   pending = [];
@@ -58,7 +64,7 @@ api.interceptors.response.use(
     const refresh = getRefreshToken();
     if (!refresh) {
       clearAuthTokens();
-      window.location.href = '/login';
+      redirectToLoginWithSessionExpiredReason();
       return Promise.reject(error);
     }
 
@@ -72,7 +78,7 @@ api.interceptors.response.use(
       if (!newToken) {
         clearAuthTokens();
         notifyPending(null);
-        window.location.href = '/login';
+        redirectToLoginWithSessionExpiredReason();
         return Promise.reject(error);
       }
 
