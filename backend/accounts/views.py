@@ -39,11 +39,22 @@ class CoreAuthModeAPIView(APIView):
     throttle_scope = "auth_mode"
 
     def get(self, request):
+        transition_mode = str(getattr(settings, "AUTH_TRANSITION_MODE", "stable")).lower()
+        session_compat = bool(getattr(settings, "AUTH_SESSION_COMPAT_ENABLED", True))
+        exit_criteria = {
+            "transition_mode_stable": transition_mode == "stable",
+            "session_compat_enabled": session_compat,
+            "core_local_auth_enabled": bool(getattr(settings, "AUTH_MODE_CORE_LOCAL", True)),
+        }
         return Response(
             {
                 "auth_mode": "core_local",
                 "auth_mode_enabled": bool(getattr(settings, "AUTH_MODE_CORE_LOCAL", True)),
                 "standalone": True,
+                "transition_mode": transition_mode,
+                "session_compat_enabled": session_compat,
+                "exit_criteria": exit_criteria,
+                "exit_ready": all(exit_criteria.values()),
             }
         )
 
