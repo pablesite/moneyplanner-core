@@ -7,7 +7,9 @@ from typing import Any
 logger = logging.getLogger("auth.audit")
 
 
-def log_auth_event(*, event: str, outcome: str, user_id: int | None = None, **metadata: Any) -> None:
+def log_auth_event(
+    *, event: str, outcome: str, user_id: int | None = None, **metadata: Any
+) -> None:
     payload = {
         "event": event,
         "outcome": outcome,

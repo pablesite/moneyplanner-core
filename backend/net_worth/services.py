@@ -27,7 +27,9 @@ class NetWorthTotals:
     liabilities_by_category: dict[str, Decimal]
 
 
-def validate_asset_payload(*, tracking_mode: str | None, accounting_account_id, category, subcategory) -> None:
+def validate_asset_payload(
+    *, tracking_mode: str | None, accounting_account_id, category, subcategory
+) -> None:
     if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
             {
@@ -88,7 +90,9 @@ def get_financed_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True)
 
 
-def get_amount_base_value(*, amount, currency: str, base_currency: str | None, as_of_date: date | None = None):
+def get_amount_base_value(
+    *, amount, currency: str, base_currency: str | None, as_of_date: date | None = None
+):
     if not base_currency:
         return None
     try:
