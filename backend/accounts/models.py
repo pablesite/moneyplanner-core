@@ -17,3 +17,33 @@ class UserSettings(models.Model):
 
     def __str__(self) -> str:
         return f"UserSettings(user_id={self.user_id}, base_currency={self.base_currency})"
+
+
+class ExternalIdentity(models.Model):
+    class Provider(models.TextChoices):
+        SAAS = "saas", "SaaS"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="external_identities",
+    )
+    provider = models.CharField(max_length=16, choices=Provider.choices)
+    external_user_id = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "external_user_id"],
+                name="accounts_ext_identity_provider_userid_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["provider", "external_user_id"]),
+            models.Index(fields=["user", "provider"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider}:{self.external_user_id} -> user:{self.user_id}"

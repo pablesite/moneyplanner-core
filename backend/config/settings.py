@@ -94,7 +94,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.authentication.CoreSaasJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
@@ -132,3 +132,9 @@ CORE_LINKING_SHARED_SECRET = os.getenv("CORE_LINKING_SHARED_SECRET", "").strip()
 CORE_LINKING_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CORE_LINKING_TOKEN_MAX_AGE_SECONDS", "300"))
 AUTH_TRANSITION_MODE = os.getenv("AUTH_TRANSITION_MODE", "stable").strip().lower()
 AUTH_SESSION_COMPAT_ENABLED = os.getenv("AUTH_SESSION_COMPAT_ENABLED", "1") == "1"
+
+# Hito 05B extension: allow SaaS JWT access in Core while keeping local Core identities.
+AUTH_ACCEPT_SAAS_TOKENS = os.getenv("AUTH_ACCEPT_SAAS_TOKENS", "1") == "1"
+SAAS_JWT_ISSUER = os.getenv("SAAS_JWT_ISSUER", "moneyplanner-saas")
+SAAS_JWT_AUDIENCE = os.getenv("SAAS_JWT_AUDIENCE", "moneyplanner-saas-api")
+SAAS_JWT_SIGNING_KEY = os.getenv("SAAS_JWT_SIGNING_KEY", SECRET_KEY)

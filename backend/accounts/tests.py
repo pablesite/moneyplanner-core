@@ -1,7 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.test.utils import override_settings
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
+from uuid import uuid4
+import jwt
+
+from .models import ExternalIdentity
 
 
 class CoreAuthModeApiTests(APITestCase):
@@ -69,3 +76,55 @@ class CoreAuthModeApiTests(APITestCase):
         )
         self.assertEqual(refresh_res.status_code, status.HTTP_200_OK)
         self.assertIn("access", refresh_res.data)
+
+
+@override_settings(
+    AUTH_ACCEPT_SAAS_TOKENS=True,
+    SAAS_JWT_ISSUER="moneyplanner-saas",
+    SAAS_JWT_AUDIENCE="moneyplanner-saas-api",
+    SAAS_JWT_SIGNING_KEY="saas-secret",
+)
+class CoreCrossStackSaasTokenTests(APITestCase):
+    def _build_saas_access_token(self, *, saas_user_id: int) -> str:
+        now = timezone.now()
+        payload = {
+            "token_type": "access",
+            "exp": int((now + timedelta(minutes=30)).timestamp()),
+            "iat": int(now.timestamp()),
+            "jti": str(uuid4()),
+            api_settings.USER_ID_CLAIM: saas_user_id,
+            "iss": "moneyplanner-saas",
+            "aud": "moneyplanner-saas-api",
+        }
+        return jwt.encode(payload, "saas-secret", algorithm=api_settings.ALGORITHM)
+
+    def test_saas_token_can_access_core_settings(self):
+        token = self._build_saas_access_token(saas_user_id=42)
+        response = self.client.get(
+            "/api/auth/settings/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["base_currency"], "EUR")
+
+        mapped = ExternalIdentity.objects.get(
+            provider=ExternalIdentity.Provider.SAAS,
+            external_user_id="42",
+        )
+        self.assertEqual(mapped.user.username, "saas_user_42")
+
+    def test_saas_token_never_reuses_core_user_id(self):
+        core_user = get_user_model().objects.create_user(username="root", password="pass1234")
+        token = self._build_saas_access_token(saas_user_id=core_user.id)
+        response = self.client.get(
+            "/api/auth/settings/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        mapped = ExternalIdentity.objects.get(
+            provider=ExternalIdentity.Provider.SAAS,
+            external_user_id=str(core_user.id),
+        )
+        self.assertNotEqual(mapped.user.id, core_user.id)
+        self.assertNotEqual(mapped.user.username, core_user.username)
