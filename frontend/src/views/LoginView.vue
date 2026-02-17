@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useLoginForm } from '@/domains/auth';
 
-const { username, password, error, loading, login } = useLoginForm();
+const { username, password, error, loading, sessionNotice, login } = useLoginForm();
 </script>
 
 <template>
@@ -10,6 +10,10 @@ const { username, password, error, loading, login } = useLoginForm();
       <div class="ui-auth-card">
         <h1 class="ui-auth-title">Acceso</h1>
         <div class="ui-auth-subtitle">Gestiona tu patrimonio familiar con claridad.</div>
+
+        <div v-if="sessionNotice" class="ui-status-line ui-auth-alert">
+          {{ sessionNotice }}
+        </div>
 
         <div v-if="error" class="alert ui-auth-alert">
           {{ error }}

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import LoginView from '../LoginView.vue';
@@ -15,6 +15,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     username: ref(''),
     password: ref(''),
     error: ref<string | null>(null),
+    sessionNotice: ref<string | null>(null),
     loading: ref(false),
     login: vi.fn(async () => {}),
     ...overrides,
@@ -48,6 +49,16 @@ describe('LoginView', () => {
     expect(wrapper.text()).toContain('Entrando...');
     expect(wrapper.text()).toContain('Credenciales inválidas');
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('renders session expired notice', () => {
+    mockUseLoginForm.mockReturnValue(
+      makeState({
+        sessionNotice: ref('Tu sesion expiro. Inicia sesion nuevamente.'),
+      }),
+    );
+    const wrapper = mount(LoginView);
+    expect(wrapper.text()).toContain('Tu sesion expiro. Inicia sesion nuevamente.');
   });
 
   it('submits credentials through composable login action', async () => {
