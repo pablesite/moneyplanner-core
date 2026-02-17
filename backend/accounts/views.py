@@ -1,4 +1,6 @@
 from rest_framework import status
+from django.conf import settings
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,3 +23,16 @@ class UserSettingsAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         updated = update_user_settings(user=request.user, validated_data=serializer.validated_data)
         return Response(UserSettingsSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class CoreAuthModeAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(
+            {
+                "auth_mode": "core_local",
+                "auth_mode_enabled": bool(getattr(settings, "AUTH_MODE_CORE_LOCAL", True)),
+                "standalone": True,
+            }
+        )
