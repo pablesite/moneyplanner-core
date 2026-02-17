@@ -107,3 +107,6 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
+
+# Roadmap 03 flag: keep core auth standalone.
+AUTH_MODE_CORE_LOCAL = os.getenv("AUTH_MODE_CORE_LOCAL", "1") == "1"
