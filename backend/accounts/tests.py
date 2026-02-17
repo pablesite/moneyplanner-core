@@ -12,3 +12,16 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["auth_mode"], "core_local")
         self.assertTrue(response.data["standalone"])
+
+    def test_auth_ops_metrics_requires_auth(self):
+        response = self.client.get("/api/auth/ops/metrics/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_auth_ops_metrics_returns_core_snapshot(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/auth/ops/metrics/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["service"], "core")
+        self.assertEqual(response.data["auth_mode"], "core_local")
+        self.assertIn("users_total", response.data)
+        self.assertIn("jwt_outstanding_tokens", response.data)
