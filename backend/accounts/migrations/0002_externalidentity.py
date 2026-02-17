@@ -13,7 +13,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ExternalIdentity",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
                 ("provider", models.CharField(choices=[("saas", "SaaS")], max_length=16)),
                 ("external_user_id", models.CharField(max_length=64)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
@@ -29,8 +34,13 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(fields=["provider", "external_user_id"], name="accounts_ex_provider_22f7f7_idx"),
-                    models.Index(fields=["user", "provider"], name="accounts_ex_user_id_8c3e28_idx"),
+                    models.Index(
+                        fields=["provider", "external_user_id"],
+                        name="accounts_ex_provider_22f7f7_idx",
+                    ),
+                    models.Index(
+                        fields=["user", "provider"], name="accounts_ex_user_id_8c3e28_idx"
+                    ),
                 ],
             },
         ),

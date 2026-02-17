@@ -18,6 +18,15 @@ module.exports = {
     sourceType: 'module',
   },
   ignorePatterns: ['dist', 'coverage'],
+  overrides: [
+    {
+      files: ['src/**/*.spec.ts', 'e2e/**/*.spec.ts'],
+      rules: {
+        complexity: 'off',
+        'vue/one-component-per-file': 'off',
+      },
+    },
+  ],
   rules: {
     'vue/multi-word-component-names': 'off',
     'vue/require-default-prop': 'off',

@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 Canonical API error contract handler for backend projects.
 
 When SaaS needs the same contract, mirror this module in
 `backend/saas/exceptions.py` without cross-repo imports.
 """
+
+from __future__ import annotations
 
 from rest_framework import status
 from rest_framework.exceptions import ErrorDetail, ValidationError

@@ -21,6 +21,7 @@ from .services import (
     serialize_net_worth_summary,
 )
 
+
 class UserScopedQuerySetMixin:
     def get_queryset(self):
         qs = super().get_queryset()
@@ -46,7 +47,9 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx["base_currency"] = get_base_currency_for_user(user=self.request.user)
-        ctx["financed_asset_queryset"] = get_financed_asset_queryset_for_user(user=self.request.user)
+        ctx["financed_asset_queryset"] = get_financed_asset_queryset_for_user(
+            user=self.request.user
+        )
         return ctx
 
 

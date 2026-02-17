@@ -1,7 +1,12 @@
 from django.urls import path
 
 from .auth_views import CoreTokenObtainPairView, CoreTokenRefreshView
-from .views import CoreAuthModeAPIView, CoreAuthOpsMetricsAPIView, CoreLinkTokenAPIView, UserSettingsAPIView
+from .views import (
+    CoreAuthModeAPIView,
+    CoreAuthOpsMetricsAPIView,
+    CoreLinkTokenAPIView,
+    UserSettingsAPIView,
+)
 
 urlpatterns = [
     path("token/", CoreTokenObtainPairView.as_view(), name="token_obtain_pair"),
