@@ -13,6 +13,7 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["auth_mode"], "core_local")
         self.assertTrue(response.data["standalone"])
+        self.assertIn("exit_ready", response.data)
 
     def test_auth_ops_metrics_requires_auth(self):
         response = self.client.get("/api/auth/ops/metrics/")
@@ -44,3 +45,27 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertIn("link_token", response.data)
         self.assertIn("expires_in_seconds", response.data)
         self.assertEqual(response.data["core_user_ref"], f"core_user:{self.user.id}")
+
+    def test_session_compatibility_token_and_refresh(self):
+        token_res = self.client.post(
+            "/api/auth/token/",
+            {"username": self.user.username, "password": "pass1234"},
+            format="json",
+        )
+        self.assertEqual(token_res.status_code, status.HTTP_200_OK)
+        access = token_res.data["access"]
+        refresh = token_res.data["refresh"]
+
+        settings_res = self.client.get(
+            "/api/auth/settings/",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
+        self.assertEqual(settings_res.status_code, status.HTTP_200_OK)
+
+        refresh_res = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh": refresh},
+            format="json",
+        )
+        self.assertEqual(refresh_res.status_code, status.HTTP_200_OK)
+        self.assertIn("access", refresh_res.data)
