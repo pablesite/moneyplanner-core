@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
+from core.models import InflationIndex
 from .models import Asset, Liability
 from .services import (
     NetWorthTotals,
@@ -57,6 +58,24 @@ class NetWorthServicesTests(TestCase):
                 accounting_account_id=None,
             )
 
+    def test_validate_asset_and_liability_payload_accept_valid_values(self):
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            accounting_account_id=None,
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+        )
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            accounting_account_id=None,
+            category=None,
+            subcategory=None,
+        )
+        validate_liability_payload(
+            tracking_mode=Liability.TrackingMode.MANUAL,
+            accounting_account_id=None,
+        )
+
     def test_infer_liability_is_asset_backed(self):
         self.assertTrue(infer_liability_is_asset_backed(financed_asset=object()))
         self.assertFalse(infer_liability_is_asset_backed(financed_asset=None))
@@ -83,6 +102,14 @@ class NetWorthServicesTests(TestCase):
                 net_worth=Decimal("80.00"),
             )
 
+    def test_validate_snapshot_payload_returns_net_worth_when_totals_missing(self):
+        value = validate_snapshot_payload(
+            total_assets=None,
+            total_liabilities=Decimal("30.00"),
+            net_worth=Decimal("10.00"),
+        )
+        self.assertEqual(value, Decimal("10.00"))
+
     @patch("net_worth.services.convert_currency", return_value=Decimal("90.50"))
     def test_get_amount_base_value_success(self, _convert_mock):
         value = get_amount_base_value(
@@ -99,6 +126,15 @@ class NetWorthServicesTests(TestCase):
             amount=Decimal("100.00"),
             currency="USD",
             base_currency="EUR",
+            as_of_date=date(2026, 2, 18),
+        )
+        self.assertIsNone(value)
+
+    def test_get_amount_base_value_returns_none_without_base_currency(self):
+        value = get_amount_base_value(
+            amount=Decimal("100.00"),
+            currency="USD",
+            base_currency=None,
             as_of_date=date(2026, 2, 18),
         )
         self.assertIsNone(value)
@@ -227,6 +263,13 @@ class NetWorthServicesTests(TestCase):
 
         with self.assertRaises(ValidationError):
             get_inflation_base_period(region="ES")
+
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 1, 1),
+            index=Decimal("100.0000"),
+        )
+        self.assertEqual(get_inflation_base_period(region="ES"), date(2026, 1, 1))
 
     @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
     @patch(
