@@ -9,6 +9,16 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from .models import Asset, Liability
 from .services import (
+    NetWorthTotals,
+    build_net_worth_summary,
+    calculate_totals,
+    create_asset_for_user,
+    create_liability_for_user,
+    create_or_update_snapshot_from_current,
+    create_snapshot_for_user,
+    get_base_currency_for_user,
+    get_financed_asset_queryset_for_user,
+    get_inflation_base_period,
     get_amount_base_value,
     infer_liability_is_asset_backed,
     serialize_net_worth_summary,
@@ -120,3 +130,172 @@ class NetWorthServicesTests(TestCase):
         self.assertEqual(payload["total_assets"], "100.00")
         self.assertEqual(payload["inflation_base_period"], "2026-01-01")
         self.assertEqual(payload["assets_by_category"]["cash"], "50.00")
+
+    def test_create_asset_liability_snapshot_and_financed_queryset(self):
+        asset = create_asset_for_user(
+            user=self.user,
+            validated_data={
+                "name": "Cuenta",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "currency": "EUR",
+                "amount": Decimal("100.00"),
+                "is_active": True,
+            },
+        )
+        liability = create_liability_for_user(
+            user=self.user,
+            validated_data={
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "currency": "EUR",
+                "amount": Decimal("50.00"),
+                "is_active": True,
+                "financed_asset": asset,
+            },
+        )
+        snapshot = create_snapshot_for_user(
+            user=self.user,
+            validated_data={
+                "snapshot_date": date(2026, 2, 18),
+                "base_currency": "EUR",
+                "total_assets": Decimal("100.00"),
+                "total_liabilities": Decimal("50.00"),
+                "net_worth": Decimal("50.00"),
+            },
+        )
+        financed_qs = get_financed_asset_queryset_for_user(user=self.user)
+
+        self.assertEqual(liability.financed_asset_id, asset.id)
+        self.assertEqual(snapshot.net_worth, Decimal("50.00"))
+        self.assertEqual(financed_qs.count(), 1)
+
+    def test_calculate_totals_groups_assets_and_liabilities(self):
+        asset_a = Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("200.00"),
+            is_active=True,
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            currency="EUR",
+            amount=Decimal("50.00"),
+            financed_asset=asset_a,
+            is_active=True,
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Tarjeta",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("20.00"),
+            financed_asset=None,
+            is_active=True,
+        )
+
+        totals = calculate_totals(
+            assets_qs=Asset.objects.filter(user=self.user, is_active=True),
+            liabilities_qs=Liability.objects.filter(user=self.user, is_active=True),
+            base_currency="EUR",
+            as_of_date=date(2026, 2, 18),
+        )
+
+        self.assertEqual(totals.total_assets, Decimal("300.00"))
+        self.assertEqual(totals.total_liabilities, Decimal("70.00"))
+        self.assertEqual(totals.liabilities_asset_backed, Decimal("50.00"))
+        self.assertEqual(totals.liabilities_unbacked, Decimal("20.00"))
+        self.assertIn("cash:bank_account", totals.assets_by_subcategory)
+
+    def test_get_base_currency_and_inflation_base_period(self):
+        base = get_base_currency_for_user(user=self.user)
+        self.assertEqual(base, "EUR")
+
+        with self.assertRaises(ValidationError):
+            get_inflation_base_period(region="ES")
+
+    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
+    @patch(
+        "net_worth.services.calculate_totals",
+        return_value=NetWorthTotals(
+            total_assets=Decimal("100.00"),
+            total_liabilities=Decimal("40.00"),
+            liabilities_asset_backed=Decimal("40.00"),
+            liabilities_unbacked=Decimal("0.00"),
+            assets_by_category={"cash": Decimal("100.00")},
+            assets_by_subcategory={"cash:bank_account": Decimal("100.00")},
+            liabilities_by_category={"mortgage": Decimal("40.00")},
+        ),
+    )
+    @patch("net_worth.services.get_base_currency_for_user", return_value="EUR")
+    def test_create_or_update_snapshot_from_current_upserts_snapshot(
+        self, _base_mock, _totals_mock, _date_mock
+    ):
+        snapshot, created = create_or_update_snapshot_from_current(user=self.user)
+        self.assertTrue(created)
+        self.assertEqual(snapshot.net_worth, Decimal("60.00"))
+
+        snapshot_2, created_2 = create_or_update_snapshot_from_current(user=self.user)
+        self.assertFalse(created_2)
+        self.assertEqual(snapshot_2.id, snapshot.id)
+
+    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
+    @patch(
+        "net_worth.services.calculate_totals",
+        return_value=NetWorthTotals(
+            total_assets=Decimal("300.00"),
+            total_liabilities=Decimal("120.00"),
+            liabilities_asset_backed=Decimal("80.00"),
+            liabilities_unbacked=Decimal("40.00"),
+            assets_by_category={"cash": Decimal("300.00")},
+            assets_by_subcategory={"cash:bank_account": Decimal("300.00")},
+            liabilities_by_category={"mortgage": Decimal("120.00")},
+        ),
+    )
+    @patch("net_worth.services.get_base_currency_for_user", return_value="EUR")
+    @patch("net_worth.services.get_inflation_base_period", return_value=date(2026, 1, 1))
+    @patch("net_worth.services.adjust_for_inflation", side_effect=lambda amount, **_: amount)
+    def test_build_net_worth_summary_with_inflation(
+        self, _adj_mock, _period_mock, _base_mock, _totals_mock, _date_mock
+    ):
+        summary = build_net_worth_summary(user=self.user)
+        self.assertEqual(summary["inflation_region"], "ES")
+        self.assertEqual(summary["net_worth"], Decimal("180.00"))
+        self.assertEqual(summary["net_worth_real"], Decimal("180.00"))
+        self.assertEqual(summary["liabilities_unbacked_real"], Decimal("40.00"))
+
+    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
+    @patch(
+        "net_worth.services.calculate_totals",
+        return_value=NetWorthTotals(
+            total_assets=Decimal("300.00"),
+            total_liabilities=Decimal("120.00"),
+            liabilities_asset_backed=Decimal("80.00"),
+            liabilities_unbacked=Decimal("40.00"),
+            assets_by_category={"cash": Decimal("300.00")},
+            assets_by_subcategory={"cash:bank_account": Decimal("300.00")},
+            liabilities_by_category={"mortgage": Decimal("120.00")},
+        ),
+    )
+    @patch("net_worth.services.get_base_currency_for_user", return_value="USD")
+    def test_build_net_worth_summary_without_inflation_for_non_eur(
+        self, _base_mock, _totals_mock, _date_mock
+    ):
+        summary = build_net_worth_summary(user=self.user)
+        self.assertIsNone(summary["inflation_region"])
+        self.assertIsNone(summary["net_worth_real"])
+        self.assertIsNone(summary["assets_by_category_real"])
