@@ -12,6 +12,11 @@ import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
   plugins: [vue()],
+  test: {
+    include: ['src/**/*.spec.ts'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    environment: 'jsdom',
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
