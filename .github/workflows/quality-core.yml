@@ -34,6 +34,29 @@ jobs:
       - name: Mypy
         run: mypy .
 
+      - name: Django tests (core apps)
+        run: python manage.py test accounts net_worth core
+        env:
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_NAME: saas
+          DB_USER: saas
+          DB_PASSWORD: saas
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: saas
+          POSTGRES_USER: saas
+          POSTGRES_PASSWORD: saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U saas -d saas"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -61,3 +84,6 @@ jobs:
 
       - name: Type check
         run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
