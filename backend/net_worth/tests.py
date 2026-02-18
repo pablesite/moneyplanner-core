@@ -13,7 +13,12 @@ from rest_framework.test import APIRequestFactory
 from accounts.models import UserSettings
 from core.models import InflationIndex
 from .models import Asset, Liability
-from .serializers import AssetSerializer, EmptySerializer, LiabilitySerializer, NetWorthSnapshotSerializer
+from .serializers import (
+    AssetSerializer,
+    EmptySerializer,
+    LiabilitySerializer,
+    NetWorthSnapshotSerializer,
+)
 from .services import (
     NetWorthTotals,
     build_net_worth_summary,
@@ -352,7 +357,9 @@ class NetWorthServicesTests(TestCase):
 
 class NetWorthApiTests(APITestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="api_nw_user", password="pass1234")
+        self.user = get_user_model().objects.create_user(
+            username="api_nw_user", password="pass1234"
+        )
         self.client.force_authenticate(user=self.user)
 
     def test_asset_create_rejects_invalid_subcategory(self):
@@ -434,7 +441,9 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_summary_returns_200_with_inflation_index(self):
-        InflationIndex.objects.create(region="ES", period=date(2026, 1, 1), index=Decimal("100.0000"))
+        InflationIndex.objects.create(
+            region="ES", period=date(2026, 1, 1), index=Decimal("100.0000")
+        )
         Asset.objects.create(
             user=self.user,
             name="Cuenta",
@@ -467,7 +476,9 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["inflation_region"])
 
-    @patch("net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x"))
+    @patch(
+        "net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x")
+    )
     def test_snapshot_from_current_returns_400_on_validation_error(self, _mock_create):
         response = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -475,7 +486,9 @@ class NetWorthApiTests(APITestCase):
 
 class NetWorthSerializerUnitTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="serializer_user", password="pass1234")
+        self.user = get_user_model().objects.create_user(
+            username="serializer_user", password="pass1234"
+        )
         self.factory = APIRequestFactory()
         self.request = self.factory.post("/api/net-worth/assets/")
         self.request.user = self.user

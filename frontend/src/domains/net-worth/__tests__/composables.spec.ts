@@ -50,7 +50,10 @@ function makeItem(overrides: Partial<Asset> = {}): Asset {
 describe('useNetWorthViewState (core)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
   });
 
   it('loads store on mount and maps submit/delete flows', async () => {
