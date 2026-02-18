@@ -21,3 +21,4 @@ python-dotenv>=1.0
 # Dev / quality (opcional pero recomendable)
 ruff>=0.4
 mypy>=1.15
+coverage>=7.8

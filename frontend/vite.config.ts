@@ -6,7 +6,7 @@
 //   plugins: [vue()],
 // })
 
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -16,6 +16,18 @@ export default defineConfig({
     include: ['src/**/*.spec.ts'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     environment: 'jsdom',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: ['src/**/*.{ts,vue}'],
+      exclude: ['src/**/*.spec.ts', 'src/**/__tests__/**', 'src/main.ts'],
+      thresholds: {
+        statements: 15,
+        branches: 40,
+        functions: 30,
+        lines: 15,
+      },
+    },
   },
   resolve: {
     alias: {
