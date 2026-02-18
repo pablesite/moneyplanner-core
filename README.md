@@ -8,6 +8,10 @@ Open-source basic net-worth manager with Vue frontend and Django/DRF backend.
 3. DB: PostgreSQL 16
 4. Local infra: Docker Compose
 
+## Version
+- Current version is defined in `VERSION`.
+- Releases are tagged as `vX.Y.Z` in Git.
+
 ## Requirements
 1. Docker Desktop
 

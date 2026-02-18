@@ -1,10 +1,6 @@
-# Contributing To moneyplanner-core
+# Contributing To moneyplanner
 
-Thanks for contributing to `moneyplanner-core`.
-
-## Scope
-- `core` is the OSS base product.
-- Premium domain logic (members/ownership/subscription) belongs in `saas`, not in `core`.
+Thanks for contributing to `moneyplanner`.
 
 ## Local Setup
 1. Copy env file:
@@ -27,7 +23,7 @@ Run checks inside Docker:
 
 ## Pull Request Guidelines
 1. Keep changes focused and small.
-2. Follow existing architecture boundaries (`views -> serializers -> services` in backend).
+2. Follow existing architecture patterns (`views -> serializers -> services` in backend).
 3. Add or update tests for behavior changes.
 4. Update docs when behavior/contracts change.
 5. Use Conventional Commits.
@@ -40,4 +36,3 @@ Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 - `test: ...`
 - `refactor: ...`
 - `chore: ...`
-
