@@ -77,25 +77,6 @@ docker compose exec backend python manage.py migrate
 4. Net-worth summary
 5. Daily snapshots
 
-Core no longer includes premium ownership/member domain.
-
-## Release 0.2.0 - Migration Notes
-This release removes premium domain entities from core:
-1. Removed models: `FamilyMember`, `Ownership`, `OwnershipSplit`
-2. Removed fields: `Asset.ownership`, `Liability.ownership`
-3. Removed premium endpoints previously under `api/net-worth/*` for members/ownership
-
-If you are upgrading an existing core deployment:
-1. Backup your database before migrating.
-2. Run migrations:
-
-```bash
-docker compose exec backend python manage.py migrate
-```
-
-3. Update clients to stop sending/reading ownership/member fields on core endpoints.
-4. Move premium ownership data/workflows to SaaS extension before upgrade.
-
 ## Troubleshooting
 1. API not responding: `docker compose logs -f backend`
 2. CORS issues: verify `CORS_ALLOWED_ORIGINS` in `backend/.env`
