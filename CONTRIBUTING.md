@@ -28,6 +28,24 @@ Run checks inside Docker:
 4. Update docs when behavior/contracts change.
 5. Use Conventional Commits.
 
+## Frontend Guidelines
+1. Organize code by domain under `frontend/src/domains/*`.
+2. Keep views declarative:
+   - put orchestration in composables/stores,
+   - keep API calls in domain adapters.
+3. Reuse shared UI primitives and style tokens:
+   - `src/styles/app.css`
+   - `src/styles/tailwind.css`
+4. Avoid duplicated scoped styles when a shared class already exists.
+5. For behavior changes, include or update tests in:
+   - `frontend/src/**/__tests__`
+   - component specs for critical UI flows.
+6. Validate frontend quality before PR:
+   - `docker compose exec frontend npm run lint`
+   - `docker compose exec frontend npm run format:check`
+   - `docker compose exec frontend npm run typecheck`
+   - `docker compose exec frontend npm run test:unit`
+
 ## Commit Conventions
 Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 - `feat: ...`
