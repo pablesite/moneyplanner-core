@@ -1,0 +1,14 @@
+[run]
+branch = True
+source =
+    accounts
+    net_worth
+    core
+
+[report]
+skip_covered = True
+show_missing = True
+omit =
+    */migrations/*
+    */tests.py
+    */tests/*
