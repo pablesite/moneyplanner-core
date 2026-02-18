@@ -5,10 +5,15 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from rest_framework import status
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.test import APITestCase
+from rest_framework.test import APIRequestFactory
 
+from accounts.models import UserSettings
 from core.models import InflationIndex
 from .models import Asset, Liability
+from .serializers import AssetSerializer, EmptySerializer, LiabilitySerializer, NetWorthSnapshotSerializer
 from .services import (
     NetWorthTotals,
     build_net_worth_summary,
@@ -27,6 +32,7 @@ from .services import (
     validate_liability_payload,
     validate_snapshot_payload,
 )
+from .views import NetWorthSnapshotViewSet
 
 
 class NetWorthServicesTests(TestCase):
@@ -342,3 +348,211 @@ class NetWorthServicesTests(TestCase):
         self.assertIsNone(summary["inflation_region"])
         self.assertIsNone(summary["net_worth_real"])
         self.assertIsNone(summary["assets_by_category_real"])
+
+
+class NetWorthApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="api_nw_user", password="pass1234")
+        self.client.force_authenticate(user=self.user)
+
+    def test_asset_create_rejects_invalid_subcategory(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cuenta",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.ETFS,
+                "currency": "EUR",
+                "amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_liability_create_rejects_accounting_without_account(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.ACCOUNTING,
+                "currency": "EUR",
+                "amount": "50.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_liability_create_with_financed_asset_sets_asset_backed(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("200000.00"),
+            is_active=True,
+        )
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "amount": "150000.00",
+                "financed_asset_id": asset.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["is_asset_backed"])
+        self.assertEqual(response.data["financed_asset_ref"], asset.id)
+
+    def test_snapshot_from_current_and_delete(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        create_res = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        snapshot_id = create_res.data["snapshot"]["id"]
+
+        update_res = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
+        self.assertEqual(update_res.status_code, status.HTTP_200_OK)
+
+        delete_res = self.client.delete(f"/api/net-worth/snapshots/{snapshot_id}/")
+        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_summary_returns_400_without_inflation_index_for_eur(self):
+        response = self.client.get("/api/net-worth/summary/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_summary_returns_200_with_inflation_index(self):
+        InflationIndex.objects.create(region="ES", period=date(2026, 1, 1), index=Decimal("100.0000"))
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        response = self.client.get("/api/net-worth/summary/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["base_currency"], "EUR")
+        self.assertIn("total_assets", response.data)
+
+    def test_summary_returns_200_without_inflation_when_base_currency_not_eur(self):
+        settings, _created = UserSettings.objects.get_or_create(user=self.user)
+        settings.base_currency = "USD"
+        settings.save(update_fields=["base_currency"])
+        self.user.refresh_from_db()
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="USD",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        response = self.client.get("/api/net-worth/summary/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["inflation_region"])
+
+    @patch("net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x"))
+    def test_snapshot_from_current_returns_400_on_validation_error(self, _mock_create):
+        response = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class NetWorthSerializerUnitTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="serializer_user", password="pass1234")
+        self.factory = APIRequestFactory()
+        self.request = self.factory.post("/api/net-worth/assets/")
+        self.request.user = self.user
+
+    def test_asset_serializer_create_and_validate(self):
+        serializer = AssetSerializer(
+            data={
+                "name": "Cuenta",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "tracking_mode": Asset.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "amount": "100.00",
+            },
+            context={"request": self.request, "base_currency": "EUR"},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        asset = serializer.save()
+        self.assertEqual(asset.user_id, self.user.id)
+
+    def test_snapshot_serializer_validate_and_create(self):
+        serializer = NetWorthSnapshotSerializer(
+            data={
+                "snapshot_date": "2026-02-18",
+                "base_currency": "EUR",
+                "total_assets": "100.00",
+                "total_liabilities": "30.00",
+                "net_worth": "70.00",
+            },
+            context={"request": self.request},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        snapshot = serializer.save()
+        self.assertEqual(snapshot.user_id, self.user.id)
+
+        invalid = NetWorthSnapshotSerializer(
+            data={
+                "snapshot_date": "2026-02-19",
+                "base_currency": "EUR",
+                "total_assets": "100.00",
+                "total_liabilities": "30.00",
+                "net_worth": "75.00",
+            },
+            context={"request": self.request},
+        )
+        self.assertFalse(invalid.is_valid())
+
+    def test_liability_serializer_context_queryset_and_validate(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("200000.00"),
+            is_active=True,
+        )
+        serializer = LiabilitySerializer(
+            data={
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "amount": "150000.00",
+                "financed_asset_id": asset.id,
+            },
+            context={
+                "request": self.request,
+                "base_currency": "EUR",
+                "financed_asset_queryset": Asset.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        liability = serializer.save()
+        self.assertTrue(liability.is_asset_backed)
+
+    def test_snapshot_viewset_serializer_class_switch(self):
+        view = NetWorthSnapshotViewSet()
+        view.action = "from_current"
+        self.assertIs(view.get_serializer_class(), EmptySerializer)

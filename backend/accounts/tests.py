@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.test.utils import override_settings
 from django.utils import timezone
 from datetime import timedelta
@@ -9,6 +10,7 @@ from uuid import uuid4
 import jwt
 
 from .models import ExternalIdentity
+from .services import get_or_create_user_settings, update_user_settings
 
 
 class CoreAuthModeApiTests(APITestCase):
@@ -128,3 +130,18 @@ class CoreCrossStackSaasTokenTests(APITestCase):
         )
         self.assertNotEqual(mapped.user.id, core_user.id)
         self.assertNotEqual(mapped.user.username, core_user.username)
+
+
+class CoreAccountServicesTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="svc_user", password="pass1234")
+
+    def test_get_or_create_user_settings_creates_and_reuses(self):
+        settings_a = get_or_create_user_settings(user=self.user)
+        settings_b = get_or_create_user_settings(user=self.user)
+        self.assertEqual(settings_a.id, settings_b.id)
+        self.assertEqual(settings_a.base_currency, "EUR")
+
+    def test_update_user_settings_persists_values(self):
+        updated = update_user_settings(user=self.user, validated_data={"base_currency": "USD"})
+        self.assertEqual(updated.base_currency, "USD")
