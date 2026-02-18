@@ -96,3 +96,7 @@ docker compose exec backend python manage.py migrate
 1. API not responding: `docker compose logs -f backend`
 2. CORS issues: verify `CORS_ALLOWED_ORIGINS` in `backend/.env`
 3. Port conflicts: adjust ports in `docker-compose.yml`
+
+## OSS Collaboration
+1. Contribution guide: `CONTRIBUTING.md`
+2. Release/versioning policy: `RELEASING.md`
