@@ -104,3 +104,4 @@ docker compose exec backend python manage.py migrate
 ## OSS Collaboration
 1. Contribution guide: `CONTRIBUTING.md`
 2. Release/versioning policy: `RELEASING.md`
+
