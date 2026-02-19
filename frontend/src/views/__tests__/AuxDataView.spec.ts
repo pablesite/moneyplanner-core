@@ -1,15 +1,10 @@
 /** @vitest-environment jsdom */
-import { ref } from 'vue';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { ref } from 'vue';
 import AuxDataView from '../AuxDataView.vue';
 
-const mockPush = vi.fn();
 const mockUseAuxDataPage = vi.fn();
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
 
 vi.mock('@/domains/aux-data', () => ({
   useAuxDataPage: () => mockUseAuxDataPage(),
@@ -38,17 +33,30 @@ function makeState(overrides: Record<string, unknown> = {}) {
 
 describe('AuxDataView', () => {
   beforeEach(() => {
-    mockPush.mockReset();
     mockUseAuxDataPage.mockReset();
   });
 
-  it('renders empty states for FX and IPC tables', () => {
+  it('renders settings and accordion sections', () => {
     mockUseAuxDataPage.mockReturnValue(makeState());
     const wrapper = mount(AuxDataView);
 
-    expect(wrapper.text()).toContain('No hay FX rates');
-    expect(wrapper.text()).toContain('No hay');
-    expect(wrapper.text()).toContain('IPC');
+    expect(wrapper.text()).toContain('Settings');
+    expect(wrapper.text()).toContain('Datos IPC');
+    expect(wrapper.text()).toContain('Tasas de conversion');
+    expect(wrapper.text()).toContain('No hay indices IPC todavia.');
+    expect(wrapper.text()).not.toContain('No hay FX rates todavia.');
+  });
+
+  it('toggles IPC and FX sections in place', async () => {
+    mockUseAuxDataPage.mockReturnValue(makeState());
+    const wrapper = mount(AuxDataView);
+
+    const toggles = wrapper.findAll('.ui-settings-toggle');
+    await toggles[0]!.trigger('click');
+    expect(wrapper.text()).not.toContain('No hay indices IPC todavia.');
+
+    await toggles[1]!.trigger('click');
+    expect(wrapper.text()).toContain('No hay FX rates todavia.');
   });
 
   it('renders loading, error and success messages', () => {
@@ -64,13 +72,5 @@ describe('AuxDataView', () => {
     expect(wrapper.text()).toContain('Error de red');
     expect(wrapper.text()).toContain('FX rate creado correctamente.');
     expect(wrapper.text()).toContain('Cargando datos auxiliares...');
-  });
-
-  it('navigates back to net-worth view', async () => {
-    mockUseAuxDataPage.mockReturnValue(makeState());
-    const wrapper = mount(AuxDataView);
-
-    await wrapper.get('button.btn').trigger('click');
-    expect(mockPush).toHaveBeenCalledWith('/');
   });
 });
