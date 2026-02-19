@@ -321,7 +321,6 @@ const analysis = computed(() => ({
 
       <div class="ui-pro-toolbar">
         <component :is="HeaderActions" v-if="HeaderActions" />
-        <button class="btn" type="button" @click="$router.push('/data')">Datos auxiliares</button>
 
         <SettingsPopover
           :loading="store.loading"
