@@ -89,15 +89,15 @@ function makeState(overrides: Record<string, unknown> = {}) {
     unitLabel: vi.fn(() => 'EUR'),
     modeLabel: vi.fn(() => 'Nominal'),
     realBaseLabel: ref(''),
-    summaryAssets: '1000',
-    summaryLiabilities: '250',
-    summaryNetWorth: '750',
-    byCategoryLabels: ['Liquidez'],
-    byCategoryAssets: [1000],
-    byCategoryLiabilities: [250],
-    byCategoryUnit: 'EUR',
-    summaryAssetBackedLiabilities: '150',
-    summaryUnbackedLiabilities: '100',
+    summaryAssets: ref('1000'),
+    summaryLiabilities: ref('250'),
+    summaryNetWorth: ref('750'),
+    byCategoryLabels: ref(['Liquidez']),
+    byCategoryAssets: ref([1000]),
+    byCategoryLiabilities: ref([250]),
+    byCategoryUnit: ref('EUR'),
+    summaryAssetBackedLiabilities: ref('150'),
+    summaryUnbackedLiabilities: ref('100'),
     ...overrides,
   };
 }
@@ -109,7 +109,7 @@ describe('NetWorthView', () => {
     mockPush.mockReset();
   });
 
-  it('renders key sections and toggles breakdown', async () => {
+  it('renders key sections and current analytics blocks', () => {
     mockUseNetWorthViewState.mockReturnValue(makeState());
     mockUseNetWorthViewExtensions.mockReturnValue({
       HeaderActions: null,
@@ -126,17 +126,11 @@ describe('NetWorthView', () => {
     });
 
     expect(wrapper.text()).toContain('Patrimonio');
-    expect(wrapper.text()).toContain('Desglose');
+    expect(wrapper.text()).toContain('Patrimonio neto');
+    expect(wrapper.text()).toContain('Riesgo patrimonial');
+    expect(wrapper.text()).toContain('Score de balance');
     expect(wrapper.findAll('[data-test="ItemList"]')).toHaveLength(2);
     expect(wrapper.text()).toContain('No hay snapshots');
-
-    const toggleButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('Mostrar'));
-    expect(toggleButton).toBeTruthy();
-
-    await toggleButton!.trigger('click');
-    expect(wrapper.text()).toContain('Ocultar');
   });
 
   it('wires header actions and snapshot deletion callback', async () => {
