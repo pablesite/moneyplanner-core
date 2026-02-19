@@ -17,9 +17,12 @@ type Props = {
   totalAssets: string | number | null | undefined;
   totalLiabilities: string | number | null | undefined;
   netWorth: string | number | null | undefined;
-  unit: string; // "EUR" o "EUR (IPC)" etc.
+  unit: string;
   assetBackedLiabilities?: string | number | null | undefined;
   unbackedLiabilities?: string | number | null | undefined;
+  categoryLabels?: string[] | null | undefined;
+  categoryAssets?: number[] | null | undefined;
+  categoryLiabilities?: number[] | null | undefined;
 };
 
 const props = defineProps<Props>();
@@ -59,39 +62,45 @@ const net = computed(() => toNumber(props.netWorth));
 const backedRaw = computed(() => Math.max(0, toNumber(props.assetBackedLiabilities)));
 const unbackedRaw = computed(() => Math.max(0, toNumber(props.unbackedLiabilities)));
 
-/**
- * Donut representa el total de activos (100% = activos).
- * Se descompone en:
- * - Capital propio (neto): activos - pasivos (puede ser 0 si neto negativo)
- * - Deuda con activo (financia): pasivos asignados a activos
- * - Deuda sin activo: pasivos no asignados (reduce el equity, aunque no financie un activo)
- *
- * Así: equitySlice + backedSlice + unbackedSlice = assets (si net>=0).
- * Si pasivos > activos -> overflow.
- */
 const backedSlice = computed(() => Math.min(backedRaw.value, assets.value));
 
 const unbackedSlice = computed(() => {
-  // No dejamos que la suma de slices supere assets (lo demás va a overflow)
   const room = Math.max(assets.value - backedSlice.value, 0);
   return Math.min(unbackedRaw.value, room);
 });
 
-const equitySlice = computed(() => {
-  // Capital propio dentro de activos, restando todo tipo de deuda
-  return Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0);
-});
+const equitySlice = computed(() =>
+  Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0),
+);
 
-const liabilityOverflow = computed(() => {
-  // Si la deuda total supera activos, el neto sería negativo.
-  const totalDebt = backedRaw.value + unbackedRaw.value;
-  return Math.max(totalDebt - assets.value, 0);
-});
+type CategoryShare = { label: string; value: number; share: number };
 
-const debtRatio = computed(() => {
-  if (assets.value <= 0) return null;
-  return liabilities.value / assets.value;
-});
+function buildCategoryShares(
+  labels: string[] | null | undefined,
+  values: number[] | null | undefined,
+  total: number,
+) {
+  if (!labels?.length || !values?.length || total <= 0) return [] as CategoryShare[];
+  return labels
+    .map((label, index) => {
+      const value = Math.max(0, values[index] ?? 0);
+      return {
+        label,
+        value,
+        share: total > 0 ? value / total : 0,
+      };
+    })
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+}
+
+const assetComposition = computed(() =>
+  buildCategoryShares(props.categoryLabels, props.categoryAssets, assets.value),
+);
+const liabilityComposition = computed(() =>
+  buildCategoryShares(props.categoryLabels, props.categoryLiabilities, liabilities.value),
+);
 
 const data = computed<ChartData<'doughnut'>>(() => ({
   labels: ['Capital propio (neto)', 'Activos financiados con deuda', 'Deuda sin activo'],
@@ -171,46 +180,53 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
       <Doughnut :data="data" :options="options" :plugins="[centerTextPlugin]" />
     </div>
 
-    <div class="nw-donut-legend">
-      <div class="nw-donut-legend-title">Estructura del balance</div>
+    <div class="nw-donut-side">
+      <div class="nw-donut-composition">
+        <div class="nw-donut-comp-block">
+          <div class="nw-donut-comp-title">Composicion de activos</div>
+          <div v-if="assetComposition.length" class="nw-donut-comp-list">
+            <div
+              v-for="row in assetComposition"
+              :key="`asset-${row.label}`"
+              class="nw-donut-comp-row"
+            >
+              <div class="nw-donut-comp-head">
+                <span>{{ row.label }}</span>
+                <strong>{{ formatPercent(row.share, 0) }}</strong>
+              </div>
+              <div class="nw-donut-comp-bar">
+                <span
+                  class="nw-donut-comp-fill nw-donut-comp-fill-asset"
+                  :style="{ width: `${row.share * 100}%` }"
+                ></span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="nw-donut-comp-empty">Sin datos de activos por categoria.</div>
+        </div>
 
-      <div class="nw-donut-legend-row">
-        <span class="nw-donut-dot nw-donut-dot-equity"></span>
-        <span>Activos</span>
-        <span class="nw-donut-legend-val">{{ formatMoney(assets, 2) }} {{ unit }}</span>
-      </div>
-
-      <div class="nw-donut-legend-row">
-        <span class="nw-donut-dot nw-donut-dot-liability"></span>
-        <span>Pasivos</span>
-        <span class="nw-donut-legend-val">{{ formatMoney(liabilities, 2) }} {{ unit }}</span>
-      </div>
-
-      <div class="nw-donut-legend-row">
-        <span class="nw-donut-dot nw-donut-dot-equity"></span>
-        <span>Capital propio (neto)</span>
-        <span class="nw-donut-legend-val">{{ formatMoney(net, 2) }} {{ unit }}</span>
-      </div>
-
-      <div class="nw-donut-legend-row">
-        <span class="nw-donut-dot nw-donut-dot-liability"></span>
-        <span>Activos financiados con deuda</span>
-        <span class="nw-donut-legend-val">{{ formatMoney(backedSlice, 2) }} {{ unit }}</span>
-      </div>
-
-      <div class="nw-donut-legend-row">
-        <span class="nw-donut-dot nw-donut-dot-unbacked"></span>
-        <span>Deuda sin activo</span>
-        <span class="nw-donut-legend-val">{{ formatMoney(unbackedRaw, 2) }} {{ unit }}</span>
-      </div>
-
-      <div v-if="liabilityOverflow > 0" class="nw-donut-overflow">
-        Aviso: la deuda total excede a los activos en {{ formatMoney(liabilityOverflow, 2) }}
-        {{ unit }}.
-      </div>
-
-      <div v-if="debtRatio !== null" class="nw-donut-ratio">
-        Ratio deuda / activos: {{ formatPercent(debtRatio, 0) }}
+        <div class="nw-donut-comp-block">
+          <div class="nw-donut-comp-title">Composicion de pasivos</div>
+          <div v-if="liabilityComposition.length" class="nw-donut-comp-list">
+            <div
+              v-for="row in liabilityComposition"
+              :key="`liability-${row.label}`"
+              class="nw-donut-comp-row"
+            >
+              <div class="nw-donut-comp-head">
+                <span>{{ row.label }}</span>
+                <strong>{{ formatPercent(row.share, 0) }}</strong>
+              </div>
+              <div class="nw-donut-comp-bar">
+                <span
+                  class="nw-donut-comp-fill nw-donut-comp-fill-liability"
+                  :style="{ width: `${row.share * 100}%` }"
+                ></span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="nw-donut-comp-empty">Sin datos de pasivos por categoria.</div>
+        </div>
       </div>
     </div>
   </div>
