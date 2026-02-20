@@ -68,7 +68,7 @@ describe('annual income store (core)', () => {
 
     expect(createResult.ok).toBe(true);
     expect(mocks.api.post).toHaveBeenCalledWith(
-      '/api/core/annual-income/',
+      '/api/budget/annual-income/',
       expect.objectContaining({
         name: 'CTN',
         category: 'salary',
@@ -78,6 +78,6 @@ describe('annual income store (core)', () => {
     );
 
     await store.deleteEntry(10);
-    expect(mocks.api.delete).toHaveBeenCalledWith('/api/core/annual-income/10/');
+    expect(mocks.api.delete).toHaveBeenCalledWith('/api/budget/annual-income/10/');
   });
 });
