@@ -34,6 +34,7 @@ describe('annual income store (core)', () => {
             owner_name: 'Pablo',
             income_type: 'recurrent',
             amount_annual: '32460.00',
+            fiscal_year: 2026,
             currency: 'EUR',
             notes: '',
             created_at: '2026-02-20T00:00:00Z',
@@ -43,7 +44,7 @@ describe('annual income store (core)', () => {
       .mockResolvedValueOnce({ data: { total_annual: '32460.00', currency_hint: 'mixed' } });
 
     const store = useAnnualIncomeStore('core');
-    await store.loadAll();
+    await store.loadAll(2026);
 
     expect(store.entries.value).toHaveLength(1);
     expect(store.totalAnnual.value).toBe(32460);
@@ -55,16 +56,19 @@ describe('annual income store (core)', () => {
     mocks.api.get.mockResolvedValue({ data: [] });
 
     const store = useAnnualIncomeStore('core');
-    const createResult = await store.addEntry({
-      name: 'CTN',
-      category: 'salary',
-      subcategory: 'employee_salary',
-      owner: 'Pablo',
-      incomeType: 'recurrent',
-      amountAnnual: '32460,00',
-      currency: 'EUR',
-      notes: '',
-    });
+    const createResult = await store.addEntry(
+      {
+        name: 'CTN',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        incomeType: 'recurrent',
+        amountAnnual: '32460,00',
+        fiscalYear: 2026,
+        currency: 'EUR',
+        notes: '',
+      },
+      2026,
+    );
 
     expect(createResult.ok).toBe(true);
     expect(mocks.api.post).toHaveBeenCalledWith(
@@ -74,10 +78,11 @@ describe('annual income store (core)', () => {
         category: 'salary',
         subcategory: 'employee_salary',
         amount_annual: '32460.00',
+        fiscal_year: 2026,
       }),
     );
 
-    await store.deleteEntry(10);
+    await store.deleteEntry(10, 2026);
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/budget/annual-income/10/');
   });
 });

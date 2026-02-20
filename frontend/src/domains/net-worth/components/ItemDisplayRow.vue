@@ -36,7 +36,7 @@ const emit = defineEmits<{
         <span>Financia: {{ financedAssetName }}</span>
       </div>
     </div>
-    <div class="nw-item-amount">{{ formattedAmount }} {{ item.currency }}</div>
+    <div class="nw-item-amount">{{ formattedAmount }}</div>
     <div class="nw-item-actions">
       <button class="icon-btn" title="Editar" aria-label="Editar" @click="emit('edit', item.id)">
         &#9998;&#65039;

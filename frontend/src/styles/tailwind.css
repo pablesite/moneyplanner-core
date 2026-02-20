@@ -83,46 +83,6 @@
     @apply text-xs text-white/55;
   }
 
-  .nw-donut-legend {
-    @apply grid gap-2.5;
-  }
-
-  .nw-donut-legend-title {
-    @apply mb-0.5 text-sm text-white/85;
-  }
-
-  .nw-donut-legend-row {
-    @apply grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm;
-  }
-
-  .nw-donut-legend-val {
-    @apply whitespace-nowrap text-right tabular-nums text-white/90;
-  }
-
-  .nw-donut-dot {
-    @apply h-2.5 w-2.5 rounded-full;
-  }
-
-  .nw-donut-dot-equity {
-    @apply bg-sky-400/90;
-  }
-
-  .nw-donut-dot-liability {
-    @apply bg-rose-500/85;
-  }
-
-  .nw-donut-dot-unbacked {
-    @apply bg-orange-400/85;
-  }
-
-  .nw-donut-overflow {
-    @apply mt-1.5 text-[13px] text-rose-300;
-  }
-
-  .nw-donut-ratio {
-    @apply mt-0.5 text-[13px] text-white/75;
-  }
-
   .nw-item-row {
     @apply grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-none border-none bg-transparent px-0.5 py-0.5 shadow-none;
   }
@@ -241,16 +201,20 @@
 
   .nw-settings-panel {
     @apply absolute right-0 top-[calc(100%+10px)] z-[2000] w-[min(360px,92vw)] rounded-[14px] border border-white/10 p-[14px] text-left;
-    background: rgba(20, 20, 22, 0.96);
+    border-color: rgba(45, 212, 191, 0.42);
+    background:
+      linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(45, 212, 191, 0.02)),
+      rgba(8, 12, 22, 0.97);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow:
-      0 16px 40px rgba(0, 0, 0, 0.55),
-      0 0 0 1px rgba(0, 0, 0, 0.35);
+      0 20px 42px rgba(0, 0, 0, 0.55),
+      inset 0 0 0 1px rgba(45, 212, 191, 0.12);
   }
 
   .nw-settings-title {
-    @apply mb-2.5 text-sm opacity-90;
+    @apply mb-2.5 text-[11px] font-bold uppercase tracking-[0.07em];
+    color: rgba(45, 212, 191, 0.9);
   }
 
   .nw-settings-block {
@@ -266,11 +230,11 @@
   }
 
   .nw-settings-label {
-    @apply text-[13px] opacity-85;
+    @apply text-[13px] font-semibold text-white/90;
   }
 
   .nw-settings-hint {
-    @apply text-xs opacity-70;
+    @apply text-xs text-white/70;
   }
 
   .nw-settings-hint-error {
@@ -283,6 +247,18 @@
 
   .nw-settings-select-mode {
     @apply w-[180px];
+  }
+
+  .nw-settings-panel .input,
+  .nw-settings-panel .select {
+    @apply border-white/15 bg-white/[0.03];
+    border-color: rgba(45, 212, 191, 0.28);
+  }
+
+  .nw-settings-panel .input:focus,
+  .nw-settings-panel .select:focus {
+    border-color: rgba(45, 212, 191, 0.62);
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
   }
 
   .nw-settings-actions {
@@ -466,19 +442,19 @@
   }
 
   .ui-page-header {
-    @apply flex items-center justify-between gap-3;
+    @apply rounded-2xl border border-white/15 bg-white/[0.03] px-4 py-3 shadow-[0_14px_30px_rgba(0,0,0,0.25)] backdrop-blur-[2px] flex items-center justify-between gap-3;
   }
 
   .ui-page-title {
-    @apply m-0;
+    @apply m-0 text-[24px] tracking-[0.01em];
   }
 
   .ui-page-actions {
-    @apply flex items-center gap-2.5;
+    @apply flex flex-wrap items-center gap-2.5;
   }
 
   .ui-section-header {
-    @apply mb-3 grid gap-1;
+    @apply mb-3 grid gap-1 border-b border-white/10 pb-2;
   }
 
   .ui-status-line {
@@ -571,5 +547,61 @@
 
   .ui-app-header-actions {
     @apply flex items-center gap-2.5;
+  }
+
+  .ui-people-alert {
+    @apply mb-3;
+  }
+
+  .ui-people-header-actions {
+    @apply flex flex-wrap gap-2.5;
+  }
+
+  .ui-people-row-actions {
+    @apply inline-flex items-center gap-2.5;
+  }
+
+  .ui-people-status-inactive {
+    @apply opacity-70;
+  }
+
+  .ui-people-field-label {
+    @apply mb-1.5;
+  }
+
+  .ui-people-card-subtitle {
+    @apply mb-2.5;
+  }
+
+  .ui-people-splits-card {
+    @apply p-3;
+  }
+
+  .ui-people-member-list {
+    @apply flex flex-wrap gap-2.5;
+  }
+
+  .ui-people-member-inactive {
+    @apply opacity-65;
+  }
+
+  .ui-people-splits {
+    @apply mt-3 grid gap-2.5;
+  }
+
+  .ui-people-splits-header {
+    @apply flex items-center justify-between gap-2.5;
+  }
+
+  .ui-people-split-row {
+    @apply flex flex-wrap items-center gap-2.5;
+  }
+
+  .ui-people-split-name {
+    @apply min-w-[160px];
+  }
+
+  .ui-people-percent-input {
+    @apply max-w-[140px];
   }
 }

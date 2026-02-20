@@ -76,6 +76,7 @@ docker compose exec backend python manage.py migrate
 3. Liabilities
 4. Net-worth summary
 5. Daily snapshots
+6. Annual income entries with fiscal year support and yearly totals
 
 ## Troubleshooting
 1. API not responding: `docker compose logs -f backend`

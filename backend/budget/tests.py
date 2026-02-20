@@ -45,6 +45,7 @@ class AnnualIncomeApiTests(APITestCase):
                 "owner_name": "Pablo",
                 "income_type": "recurrent",
                 "amount_annual": "32460.00",
+                "fiscal_year": 2026,
                 "currency": "eur",
                 "notes": "Nomina principal",
                 "is_active": True,
@@ -53,6 +54,7 @@ class AnnualIncomeApiTests(APITestCase):
         )
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(create_res.data["currency"], "EUR")
+        self.assertEqual(create_res.data["fiscal_year"], 2026)
 
         list_res = self.client.get("/api/budget/annual-income/")
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
@@ -62,6 +64,35 @@ class AnnualIncomeApiTests(APITestCase):
         totals_res = self.client.get("/api/budget/annual-income/totals/")
         self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
         self.assertEqual(totals_res.data["total_annual"], "32460.00")
+
+    def test_list_and_totals_can_be_filtered_by_fiscal_year(self):
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Ingreso 2025",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("1000.00"),
+            fiscal_year=2025,
+            currency="EUR",
+        )
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Ingreso 2026",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("2000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        list_res = self.client.get("/api/budget/annual-income/?year=2025")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["name"], "Ingreso 2025")
+
+        totals_res = self.client.get("/api/budget/annual-income/totals/?year=2025")
+        self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(totals_res.data["total_annual"], "1000.00")
 
     def test_create_rejects_invalid_subcategory(self):
         create_res = self.client.post(

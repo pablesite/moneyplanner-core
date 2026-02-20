@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class AnnualIncomeEntry(models.Model):
@@ -27,6 +28,7 @@ class AnnualIncomeEntry(models.Model):
         max_length=16, choices=IncomeType.choices, default=IncomeType.RECURRENT
     )
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
+    fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
     currency = models.CharField(max_length=3, default="EUR")
     notes = models.TextField(blank=True, default="")
     is_active = models.BooleanField(default=True)
@@ -38,6 +40,10 @@ class AnnualIncomeEntry(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["user", "is_active"]),
+            models.Index(
+                fields=["user", "fiscal_year"],
+                name="budget_ai_user_year_idx",
+            ),
             models.Index(fields=["user", "category"]),
             models.Index(fields=["user", "subcategory"]),
         ]
