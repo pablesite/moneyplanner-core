@@ -46,7 +46,13 @@ def validate_asset_payload(
             raise DRFValidationError({"subcategory": "Subcategoria invalida para esta categoria."})
 
 
-def validate_liability_payload(*, tracking_mode: str | None, accounting_account_id) -> None:
+def validate_liability_payload(
+    *,
+    tracking_mode: str | None,
+    accounting_account_id,
+    category: str | None,
+    annual_interest_tae,
+) -> None:
     if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
             {
@@ -55,6 +61,16 @@ def validate_liability_payload(*, tracking_mode: str | None, accounting_account_
                     "(placeholder hasta que exista contabilidad)."
                 )
             }
+        )
+
+    requires_tae = category in {
+        Liability.Category.MORTGAGE,
+        Liability.Category.PERSONAL_LOAN,
+        Liability.Category.CREDIT_CARD,
+    }
+    if requires_tae and annual_interest_tae is None:
+        raise DRFValidationError(
+            {"annual_interest_tae": "Requerido para hipoteca, prestamo personal y tarjeta."}
         )
 
 

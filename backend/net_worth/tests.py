@@ -67,6 +67,8 @@ class NetWorthServicesTests(TestCase):
             validate_liability_payload(
                 tracking_mode=Liability.TrackingMode.ACCOUNTING,
                 accounting_account_id=None,
+                category=Liability.Category.MORTGAGE,
+                annual_interest_tae=Decimal("2.50"),
             )
 
     def test_validate_asset_and_liability_payload_accept_valid_values(self):
@@ -85,7 +87,18 @@ class NetWorthServicesTests(TestCase):
         validate_liability_payload(
             tracking_mode=Liability.TrackingMode.MANUAL,
             accounting_account_id=None,
+            category=Liability.Category.OTHER,
+            annual_interest_tae=None,
         )
+
+    def test_validate_liability_payload_requires_tae_for_financial_debt(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.CREDIT_CARD,
+                annual_interest_tae=None,
+            )
 
     def test_infer_liability_is_asset_backed(self):
         self.assertTrue(infer_liability_is_asset_backed(financed_asset=object()))
@@ -241,6 +254,7 @@ class NetWorthServicesTests(TestCase):
             name="Hipoteca",
             category=Liability.Category.MORTGAGE,
             currency="EUR",
+            annual_interest_tae=Decimal("2.10"),
             amount=Decimal("50.00"),
             financed_asset=asset_a,
             is_active=True,
@@ -250,6 +264,7 @@ class NetWorthServicesTests(TestCase):
             name="Tarjeta",
             category=Liability.Category.CREDIT_CARD,
             currency="EUR",
+            annual_interest_tae=Decimal("22.50"),
             amount=Decimal("20.00"),
             financed_asset=None,
             is_active=True,
@@ -384,11 +399,27 @@ class NetWorthApiTests(APITestCase):
                 "category": Liability.Category.MORTGAGE,
                 "tracking_mode": Liability.TrackingMode.ACCOUNTING,
                 "currency": "EUR",
+                "annual_interest_tae": "2.50",
                 "amount": "50.00",
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_liability_create_rejects_missing_tae_for_mortgage(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "amount": "50.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("annual_interest_tae", response.data["error"]["details"])
 
     def test_liability_create_with_financed_asset_sets_asset_backed(self):
         asset = Asset.objects.create(
@@ -407,6 +438,7 @@ class NetWorthApiTests(APITestCase):
                 "category": Liability.Category.MORTGAGE,
                 "tracking_mode": Liability.TrackingMode.MANUAL,
                 "currency": "EUR",
+                "annual_interest_tae": "2.50",
                 "amount": "150000.00",
                 "financed_asset_id": asset.id,
             },
@@ -552,6 +584,7 @@ class NetWorthSerializerUnitTests(TestCase):
                 "category": Liability.Category.MORTGAGE,
                 "tracking_mode": Liability.TrackingMode.MANUAL,
                 "currency": "EUR",
+                "annual_interest_tae": "2.50",
                 "amount": "150000.00",
                 "financed_asset_id": asset.id,
             },

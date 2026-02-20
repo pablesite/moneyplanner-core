@@ -31,6 +31,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "tracking_mode",
             "accounting_account_id",
             "currency",
+            "start_date",
             "amount",
             "amount_base",
             "is_active",
@@ -129,6 +130,8 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "tracking_mode",
             "accounting_account_id",
             "currency",
+            "start_date",
+            "annual_interest_tae",
             "amount",
             "amount_base",
             "is_active",
@@ -153,9 +156,15 @@ class LiabilitySerializer(serializers.ModelSerializer):
         accounting_account_id = attrs.get(
             "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
         )
+        category = attrs.get("category", getattr(self.instance, "category", None))
+        annual_interest_tae = attrs.get(
+            "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
+        )
         validate_liability_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
+            category=category,
+            annual_interest_tae=annual_interest_tae,
         )
 
         financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))

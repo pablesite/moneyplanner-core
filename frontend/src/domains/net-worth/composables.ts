@@ -197,6 +197,8 @@ export function useNetWorthViewState() {
       category: item.category ?? '',
       subcategory: item.subcategory ?? '',
       amount: formatEditAmount(item.amount, item.currency ?? 'EUR'),
+      annual_interest_tae: item.annual_interest_tae ?? '',
+      start_date: item.start_date ?? '',
       notes: item.notes ?? '',
       currency: item.currency ?? '',
       tracking_mode: item.tracking_mode ?? 'manual',
