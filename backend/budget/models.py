@@ -60,7 +60,7 @@ class AnnualExpenseEntry(models.Model):
         FINANCIAL_INVESTMENTS = "financial_investments", "Inversion financiera"
         REAL_ESTATE_ASSETS = "real_estate_assets", "Activos inmobiliarios"
         TANGIBLE_ASSETS = "tangible_assets", "Activos mobiliarios"
-        CONSUMPTION_EXPENSES = "consumption_expenses", "Gasto puro y duro"
+        CONSUMPTION_EXPENSES = "consumption_expenses", "Gastos"
 
     class ExpenseType(models.TextChoices):
         RECURRENT = "recurrent", "Recurrente"
