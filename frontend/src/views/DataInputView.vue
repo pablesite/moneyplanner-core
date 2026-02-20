@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
 import {
   incomeCategories,
@@ -10,6 +10,9 @@ import {
 const {
   entries: annualIncomeEntries,
   totalAnnual,
+  loading: annualIncomeLoading,
+  error: annualIncomeApiError,
+  loadAll: loadAnnualIncome,
   addEntry,
   deleteEntry,
 } = useAnnualIncomeStore('core');
@@ -59,8 +62,8 @@ function resetIncomeForm(): void {
   annualIncomeForm.notes = '';
 }
 
-function submitAnnualIncome(): void {
-  const result = addEntry({
+async function submitAnnualIncome(): Promise<void> {
+  const result = await addEntry({
     name: annualIncomeForm.name,
     category: annualIncomeForm.category,
     subcategory: annualIncomeForm.subcategory,
@@ -77,6 +80,12 @@ function submitAnnualIncome(): void {
   annualIncomeError.value = null;
   resetIncomeForm();
 }
+
+async function removeAnnualIncome(id: number): Promise<void> {
+  await deleteEntry(id);
+}
+
+onMounted(loadAnnualIncome);
 </script>
 
 <template>
@@ -136,6 +145,7 @@ function submitAnnualIncome(): void {
         <button
           class="btn btn-primary ui-data-field px-[14px]"
           type="button"
+          :disabled="annualIncomeLoading"
           @click="submitAnnualIncome"
         >
           Anadir ingreso
@@ -150,6 +160,7 @@ function submitAnnualIncome(): void {
       />
 
       <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
+      <div v-else-if="annualIncomeApiError" class="alert mt-3">{{ annualIncomeApiError }}</div>
 
       <table class="ui-data-table mt-3">
         <thead>
@@ -178,16 +189,23 @@ function submitAnnualIncome(): void {
             <td>{{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}</td>
             <td>{{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}</td>
             <td class="ui-data-table-actions">
-              <button class="icon-btn" title="Eliminar" @click="deleteEntry(entry.id)">
+              <button
+                class="icon-btn"
+                title="Eliminar"
+                :disabled="annualIncomeLoading"
+                @click="removeAnnualIncome(entry.id)"
+              >
                 &#128465;
               </button>
             </td>
           </tr>
-          <tr v-if="!annualIncomeEntries.length">
+          <tr v-if="!annualIncomeEntries.length && !annualIncomeLoading">
             <td colspan="6" class="ui-table-empty">No hay ingresos anuales todavia.</td>
           </tr>
         </tbody>
       </table>
+
+      <div v-if="annualIncomeLoading" class="ui-status-line mt-2">Cargando ingresos anuales...</div>
 
       <div class="mt-3 text-right">
         <strong>Total anual:</strong> {{ formatMoneyAmount(totalAnnual, 'EUR') }}

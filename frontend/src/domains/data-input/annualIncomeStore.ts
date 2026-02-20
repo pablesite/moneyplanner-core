@@ -1,10 +1,12 @@
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
+import { api } from '@/lib/api';
+import { toApiErrorMessage } from '@/lib/errors';
 import { incomeSubcategories, type IncomeCategoryKey } from '@/domains/data-input/incomeTaxonomy';
 
 export type AnnualIncomeType = 'recurrent' | 'one_off';
 
 export type AnnualIncomeEntry = {
-  id: string;
+  id: number;
   name: string;
   category: IncomeCategoryKey;
   subcategory: string;
@@ -29,6 +31,24 @@ export type AnnualIncomeDraft = {
 
 type AddResult = { ok: true } | { ok: false; error: string };
 
+type AnnualIncomeApiItem = {
+  id: number;
+  name: string;
+  category: IncomeCategoryKey;
+  subcategory: string;
+  owner_name: string;
+  income_type: AnnualIncomeType;
+  amount_annual: string;
+  currency: string;
+  notes: string;
+  created_at: string;
+};
+
+type TotalsResponse = {
+  total_annual: string;
+  currency_hint: string;
+};
+
 function parseAmount(raw: string): number {
   const normalized = String(raw ?? '')
     .trim()
@@ -40,46 +60,45 @@ function parseAmount(raw: string): number {
   return value;
 }
 
-function makeId(): string {
-  return `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    subcategory: item.subcategory,
+    owner: item.owner_name || '',
+    incomeType: item.income_type,
+    amountAnnual: Number(item.amount_annual),
+    currency: item.currency,
+    notes: item.notes || '',
+    createdAt: item.created_at,
+  };
 }
 
-function isBrowser(): boolean {
-  return typeof window !== 'undefined' && !!window.localStorage;
-}
-
-export function useAnnualIncomeStore(scope: 'saas' | 'core' = 'core') {
-  const storageKey = `moneyplanner:${scope}:annual-income:v1`;
+export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
   const entries = ref<AnnualIncomeEntry[]>([]);
+  const totalAnnual = ref(0);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
 
-  if (isBrowser()) {
+  async function loadAll(): Promise<void> {
+    loading.value = true;
+    error.value = null;
     try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as AnnualIncomeEntry[];
-        if (Array.isArray(parsed)) {
-          entries.value = parsed;
-        }
-      }
-    } catch {
-      entries.value = [];
+      const [listRes, totalsRes] = await Promise.all([
+        api.get<AnnualIncomeApiItem[]>('/api/core/annual-income/'),
+        api.get<TotalsResponse>('/api/core/annual-income/totals/'),
+      ]);
+      entries.value = (listRes.data ?? []).map(mapApiItem);
+      totalAnnual.value = Number(totalsRes.data?.total_annual ?? '0');
+    } catch (e: unknown) {
+      error.value = toApiErrorMessage(e);
+    } finally {
+      loading.value = false;
     }
   }
 
-  watch(
-    entries,
-    (next) => {
-      if (!isBrowser()) return;
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
-    },
-    { deep: true },
-  );
-
-  const totalAnnual = computed(() =>
-    entries.value.reduce((acc, entry) => acc + Math.max(0, entry.amountAnnual), 0),
-  );
-
-  function addEntry(draft: AnnualIncomeDraft): AddResult {
+  async function addEntry(draft: AnnualIncomeDraft): Promise<AddResult> {
     const name = draft.name.trim();
     if (!name) return { ok: false, error: 'El nombre es obligatorio.' };
 
@@ -93,29 +112,50 @@ export function useAnnualIncomeStore(scope: 'saas' | 'core' = 'core') {
     const amount = parseAmount(draft.amountAnnual);
     if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
 
-    entries.value.unshift({
-      id: makeId(),
-      name,
-      category: draft.category,
-      subcategory: draft.subcategory,
-      owner: draft.owner.trim(),
-      incomeType: draft.incomeType,
-      amountAnnual: amount,
-      currency: draft.currency || 'EUR',
-      notes: draft.notes.trim(),
-      createdAt: new Date().toISOString(),
-    });
-
-    return { ok: true };
+    loading.value = true;
+    error.value = null;
+    try {
+      await api.post('/api/core/annual-income/', {
+        name,
+        category: draft.category,
+        subcategory: draft.subcategory,
+        owner_name: draft.owner.trim(),
+        income_type: draft.incomeType,
+        amount_annual: amount.toFixed(2),
+        currency: (draft.currency || 'EUR').toUpperCase(),
+        notes: draft.notes.trim(),
+        is_active: true,
+      });
+      await loadAll();
+      return { ok: true };
+    } catch (e: unknown) {
+      const message = toApiErrorMessage(e);
+      error.value = message;
+      return { ok: false, error: message };
+    } finally {
+      loading.value = false;
+    }
   }
 
-  function deleteEntry(id: string): void {
-    entries.value = entries.value.filter((entry) => entry.id !== id);
+  async function deleteEntry(id: number): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      await api.delete(`/api/core/annual-income/${id}/`);
+      await loadAll();
+    } catch (e: unknown) {
+      error.value = toApiErrorMessage(e);
+    } finally {
+      loading.value = false;
+    }
   }
 
   return {
     entries,
     totalAnnual,
+    loading,
+    error,
+    loadAll,
     addEntry,
     deleteEntry,
   };
