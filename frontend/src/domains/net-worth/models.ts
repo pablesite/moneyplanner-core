@@ -6,7 +6,9 @@ export type Asset = {
   tracking_mode: string;
   accounting_account_id: number | null;
   currency: string;
+  start_date?: string;
   amount: string;
+  annual_interest_tae?: string | null;
   amount_base?: string;
   is_active: boolean;
   notes: string;

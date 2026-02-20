@@ -60,6 +60,10 @@ class Asset(models.Model):
     accounting_account_id = models.IntegerField(null=True, blank=True)
 
     currency = models.CharField(max_length=3, default="EUR")
+    start_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha de inicio o adquisicion del activo.",
+    )
     amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
@@ -152,6 +156,21 @@ class Liability(models.Model):
     accounting_account_id = models.IntegerField(null=True, blank=True)
 
     currency = models.CharField(max_length=3, default="EUR")
+    start_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha de inicio o adquisicion del pasivo.",
+    )
+    annual_interest_tae = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "TAE anual en porcentaje. En esta iteracion se modela como tipo fijo "
+            "para hipoteca, prestamo personal y tarjeta."
+        ),
+    )
     amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
