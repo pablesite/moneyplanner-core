@@ -157,6 +157,48 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
     }
   }
 
+  async function updateEntry(
+    id: number,
+    draft: AnnualIncomeDraft,
+    year?: number,
+  ): Promise<AddResult> {
+    const name = draft.name.trim();
+    if (!name) return { ok: false, error: 'El nombre es obligatorio.' };
+
+    const validSubcategory = incomeSubcategories.some(
+      (row) => row.category === draft.category && row.value === draft.subcategory,
+    );
+    if (!validSubcategory) {
+      return { ok: false, error: 'La subcategoria no corresponde con la categoria elegida.' };
+    }
+
+    const amount = parseAmount(draft.amountAnnual);
+    if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
+
+    loading.value = true;
+    error.value = null;
+    try {
+      await api.patch(`/api/budget/annual-income/${id}/`, {
+        name,
+        category: draft.category,
+        subcategory: draft.subcategory,
+        income_type: draft.incomeType,
+        amount_annual: amount.toFixed(2),
+        fiscal_year: draft.fiscalYear,
+        currency: (draft.currency || 'EUR').toUpperCase(),
+        notes: draft.notes.trim(),
+      });
+      await loadAll(year ?? draft.fiscalYear);
+      return { ok: true };
+    } catch (e: unknown) {
+      const message = toApiErrorMessage(e);
+      error.value = message;
+      return { ok: false, error: message };
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function deleteEntry(id: number, year?: number): Promise<void> {
     loading.value = true;
     error.value = null;
@@ -177,6 +219,7 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
     error,
     loadAll,
     addEntry,
+    updateEntry,
     deleteEntry,
   };
 }
