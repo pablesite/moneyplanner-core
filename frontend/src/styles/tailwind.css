@@ -399,6 +399,31 @@
     --cat-accent-text: rgba(226, 232, 240, 0.95);
   }
 
+  .expense-cat-savings_allocation {
+    --cat-accent: rgba(56, 189, 248, 0.88);
+    --cat-accent-text: rgba(186, 230, 253, 0.95);
+  }
+
+  .expense-cat-financial_investments {
+    --cat-accent: rgba(74, 222, 128, 0.86);
+    --cat-accent-text: rgba(220, 252, 231, 0.95);
+  }
+
+  .expense-cat-real_estate_assets {
+    --cat-accent: rgba(251, 146, 60, 0.86);
+    --cat-accent-text: rgba(255, 237, 213, 0.95);
+  }
+
+  .expense-cat-tangible_assets {
+    --cat-accent: rgba(250, 204, 21, 0.86);
+    --cat-accent-text: rgba(254, 249, 195, 0.95);
+  }
+
+  .expense-cat-consumption_expenses {
+    --cat-accent: rgba(244, 114, 182, 0.86);
+    --cat-accent-text: rgba(251, 207, 232, 0.95);
+  }
+
   .income-item-name {
     @apply flex flex-wrap items-center gap-2;
   }

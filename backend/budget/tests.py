@@ -6,8 +6,13 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import AnnualIncomeEntry
-from .services import INCOME_TAXONOMY, validate_annual_income_taxonomy
+from .models import AnnualExpenseEntry, AnnualIncomeEntry
+from .services import (
+    EXPENSE_TAXONOMY,
+    INCOME_TAXONOMY,
+    validate_annual_expense_taxonomy,
+    validate_annual_income_taxonomy,
+)
 
 
 class BudgetServicesTests(TestCase):
@@ -23,6 +28,22 @@ class BudgetServicesTests(TestCase):
 
     def test_income_taxonomy_has_fallback_subcategories(self):
         for category, options in INCOME_TAXONOMY.items():
+            self.assertTrue(options, msg=f"{category} must define subcategories")
+            has_fallback = any(opt.startswith("other") or opt == "other" for opt in options)
+            self.assertTrue(has_fallback, msg=f"{category} must define fallback subcategory")
+
+    def test_validate_annual_expense_taxonomy(self):
+        validate_annual_expense_taxonomy(
+            category="consumption_expenses",
+            subcategory="living_expenses",
+        )
+        with self.assertRaises(ValidationError):
+            validate_annual_expense_taxonomy(category="consumption_expenses", subcategory="crypto")
+        with self.assertRaises(ValidationError):
+            validate_annual_expense_taxonomy(category="unknown", subcategory="other")
+
+    def test_expense_taxonomy_has_fallback_subcategories(self):
+        for category, options in EXPENSE_TAXONOMY.items():
             self.assertTrue(options, msg=f"{category} must define subcategories")
             has_fallback = any(opt.startswith("other") or opt == "other" for opt in options)
             self.assertTrue(has_fallback, msg=f"{category} must define fallback subcategory")
@@ -130,6 +151,113 @@ class AnnualIncomeApiTests(APITestCase):
             currency="EUR",
         )
         list_res = self.client.get("/api/budget/annual-income/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["id"], own.id)
+
+
+class AnnualExpenseApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="expense_api_user", password="pass1234"
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_list_and_totals_for_annual_expense(self):
+        create_res = self.client.post(
+            "/api/budget/annual-expense/",
+            {
+                "name": "Alimentacion",
+                "category": "consumption_expenses",
+                "subcategory": "living_expenses",
+                "owner_name": "Pablo",
+                "expense_type": "recurrent",
+                "amount_annual": "5500.00",
+                "fiscal_year": 2026,
+                "currency": "eur",
+                "notes": "Supermercado",
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_res.data["currency"], "EUR")
+        self.assertEqual(create_res.data["fiscal_year"], 2026)
+
+        list_res = self.client.get("/api/budget/annual-expense/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["name"], "Alimentacion")
+
+        totals_res = self.client.get("/api/budget/annual-expense/totals/")
+        self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(totals_res.data["total_annual"], "5500.00")
+
+    def test_list_and_totals_can_be_filtered_by_fiscal_year(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gasto 2025",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1000.00"),
+            fiscal_year=2025,
+            currency="EUR",
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gasto 2026",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("2000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        list_res = self.client.get("/api/budget/annual-expense/?year=2025")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["name"], "Gasto 2025")
+
+        totals_res = self.client.get("/api/budget/annual-expense/totals/?year=2025")
+        self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(totals_res.data["total_annual"], "1000.00")
+
+    def test_create_rejects_invalid_subcategory(self):
+        create_res = self.client.post(
+            "/api/budget/annual-expense/",
+            {
+                "name": "Linea invalida",
+                "category": "consumption_expenses",
+                "subcategory": "crypto",
+                "expense_type": "one_off",
+                "amount_annual": "1000.00",
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_queryset_is_user_scoped(self):
+        other_user = get_user_model().objects.create_user(
+            username="expense_other_user", password="pass1234"
+        )
+        AnnualExpenseEntry.objects.create(
+            user=other_user,
+            name="Otro gasto",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("100.00"),
+            currency="EUR",
+        )
+        own = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Mi gasto",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("200.00"),
+            currency="EUR",
+        )
+        list_res = self.client.get("/api/budget/annual-expense/")
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(list_res.data), 1)
         self.assertEqual(list_res.data[0]["id"], own.id)
