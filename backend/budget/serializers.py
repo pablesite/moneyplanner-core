@@ -16,6 +16,7 @@ class AnnualIncomeEntrySerializer(serializers.ModelSerializer):
             "owner_name",
             "income_type",
             "amount_annual",
+            "fiscal_year",
             "currency",
             "notes",
             "is_active",
@@ -33,6 +34,11 @@ class AnnualIncomeEntrySerializer(serializers.ModelSerializer):
     def validate_amount_annual(self, value):
         if value <= 0:
             raise serializers.ValidationError("El importe anual debe ser mayor que cero.")
+        return value
+
+    def validate_fiscal_year(self, value: int):
+        if value < 1900 or value > 3000:
+            raise serializers.ValidationError("Ejercicio fiscal invalido.")
         return value
 
     def validate(self, attrs):

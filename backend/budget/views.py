@@ -13,7 +13,16 @@ class AnnualIncomeEntryViewSet(viewsets.ModelViewSet):
     serializer_class = AnnualIncomeEntrySerializer
 
     def get_queryset(self):
-        return AnnualIncomeEntry.objects.filter(user=self.request.user).order_by("-created_at")
+        queryset = AnnualIncomeEntry.objects.filter(user=self.request.user)
+        year_param = (self.request.query_params.get("year") or "").strip()
+        if year_param:
+            try:
+                year = int(year_param)
+            except ValueError:
+                year = None
+            if year is not None:
+                queryset = queryset.filter(fiscal_year=year)
+        return queryset.order_by("-created_at")
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

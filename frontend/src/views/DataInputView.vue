@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
+import {
+  ItemForm,
+  ItemList,
+  useNetWorthViewExtensions,
+  useNetWorthViewState,
+} from '@/domains/net-worth';
 import { BaseModal } from '@/domains/ui';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
 import {
@@ -9,8 +15,29 @@ import {
 } from '@/domains/data-input/incomeTaxonomy';
 
 const {
+  store,
+  assetCategories,
+  assetSubcategories,
+  liabilityCategories,
+  prettyError,
+  showAssetModal,
+  showLiabilityModal,
+  showEditModal,
+  editKind,
+  submitAsset,
+  submitLiability,
+  openEdit,
+  closeEdit,
+  editTitle,
+  editCategories,
+  editInitial,
+  submitEdit,
+} = useNetWorthViewState();
+
+const { itemFormProps, itemListProps } = useNetWorthViewExtensions(store);
+
+const {
   entries: annualIncomeEntries,
-  totalAnnual,
   loading: annualIncomeLoading,
   error: annualIncomeApiError,
   loadAll: loadAnnualIncome,
@@ -19,12 +46,18 @@ const {
 } = useAnnualIncomeStore('core');
 const annualIncomeError = ref<string | null>(null);
 const showIncomeModal = ref(false);
+const expandedIncomeCats = ref<Set<string>>(new Set());
+const fiscalYear = ref(2026);
+const fiscalYearOptions = computed(() => {
+  const current = new Date().getFullYear();
+  const years = new Set<number>([current - 1, current, current + 1, 2026]);
+  return Array.from(years).sort((a, b) => b - a);
+});
 
 const annualIncomeForm = reactive({
   category: 'salary' as IncomeCategoryKey,
   subcategory: 'employee_salary',
   name: '',
-  owner: '',
   isRecurrent: true,
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
@@ -34,6 +67,11 @@ const annualIncomeForm = reactive({
 
 const annualSubcategoryOptions = computed(() =>
   incomeSubcategories.filter((row) => row.category === annualIncomeForm.category),
+);
+const filteredAnnualIncomeEntries = computed(() => annualIncomeEntries.value);
+
+const filteredAnnualIncomeTotal = computed(() =>
+  filteredAnnualIncomeEntries.value.reduce((sum, entry) => sum + entry.amountAnnual, 0),
 );
 
 watch(
@@ -53,6 +91,22 @@ function formatMoneyAmount(value: number, currency: string): string {
     maximumFractionDigits: 2,
   }).format(value);
 }
+
+function parseNumeric(raw: unknown): number {
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(',', '.');
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : 0;
+}
+
+const assetsTotalBase = computed(() => parseNumeric(store.summary?.total_assets ?? '0'));
+const liabilitiesTotalBase = computed(() => parseNumeric(store.summary?.total_liabilities ?? '0'));
+const netAssetsBase = computed(() => assetsTotalBase.value - liabilitiesTotalBase.value);
+const netAssetsCurrency = computed(
+  () => store.baseCurrency ?? store.summary?.base_currency ?? 'EUR',
+);
 
 type AnnualIncomeEntry = (typeof annualIncomeEntries.value)[number];
 type AnnualIncomeSubgroup = {
@@ -97,7 +151,7 @@ function sumByCurrency(entries: AnnualIncomeEntry[]): Record<string, number> {
 function formatTotalsLine(totals: Record<string, number>): string {
   return Object.entries(totals)
     .filter(([, amount]) => amount !== 0)
-    .map(([currency, amount]) => `${formatMoneyAmount(amount, currency)} ${currency}`)
+    .map(([currency, amount]) => formatMoneyAmount(amount, currency))
     .join(' | ');
 }
 
@@ -105,10 +159,32 @@ function incomeCategoryClass(category: string): string {
   return `income-cat-${category || 'other_income'}`;
 }
 
+function incomeCategoryPercent(entries: AnnualIncomeEntry[]): string | null {
+  if (!filteredAnnualIncomeTotal.value) return null;
+  const categoryTotal = entries.reduce((sum, entry) => sum + entry.amountAnnual, 0);
+  if (!categoryTotal) return null;
+  const pct = (categoryTotal / filteredAnnualIncomeTotal.value) * 100;
+  return new Intl.NumberFormat('es-ES', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  }).format(pct);
+}
+
+function isIncomeGroupExpanded(category: string): boolean {
+  return expandedIncomeCats.value.has(category);
+}
+
+function toggleIncomeCategory(category: string): void {
+  const next = new Set(expandedIncomeCats.value);
+  if (next.has(category)) next.delete(category);
+  else next.add(category);
+  expandedIncomeCats.value = next;
+}
+
 const annualIncomeGroups = computed<AnnualIncomeGroup[]>(() => {
   const categoryMap = new Map<string, AnnualIncomeEntry[]>();
 
-  for (const entry of annualIncomeEntries.value) {
+  for (const entry of filteredAnnualIncomeEntries.value) {
     if (!categoryMap.has(entry.category)) categoryMap.set(entry.category, []);
     categoryMap.get(entry.category)!.push(entry);
   }
@@ -153,7 +229,6 @@ function resetIncomeForm(): void {
   annualIncomeForm.category = 'salary';
   annualIncomeForm.subcategory = 'employee_salary';
   annualIncomeForm.name = '';
-  annualIncomeForm.owner = '';
   annualIncomeForm.isRecurrent = true;
   annualIncomeForm.amountInputPeriod = 'annual';
   annualIncomeForm.amountAnnual = '';
@@ -185,20 +260,23 @@ async function submitAnnualIncome(): Promise<void> {
   const rawAmount = Number(String(annualIncomeForm.amountAnnual).replace(',', '.'));
   const normalizedAmount = Number.isFinite(rawAmount)
     ? annualIncomeForm.amountInputPeriod === 'monthly'
-      ? rawAmount * 12
+      ? Math.round(rawAmount * 12 * 100) / 100
       : rawAmount
     : annualIncomeForm.amountAnnual;
 
-  const result = await addEntry({
-    name: annualIncomeForm.name,
-    category: annualIncomeForm.category,
-    subcategory: annualIncomeForm.subcategory,
-    owner: annualIncomeForm.owner,
-    incomeType: annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off',
-    amountAnnual: String(normalizedAmount),
-    currency: annualIncomeForm.currency,
-    notes: annualIncomeForm.notes,
-  });
+  const result = await addEntry(
+    {
+      name: annualIncomeForm.name,
+      category: annualIncomeForm.category,
+      subcategory: annualIncomeForm.subcategory,
+      incomeType: annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off',
+      amountAnnual: String(normalizedAmount),
+      fiscalYear: fiscalYear.value,
+      currency: annualIncomeForm.currency,
+      notes: annualIncomeForm.notes,
+    },
+    fiscalYear.value,
+  );
   if (!result.ok) {
     annualIncomeError.value = result.error;
     return;
@@ -209,29 +287,66 @@ async function submitAnnualIncome(): Promise<void> {
 }
 
 async function removeAnnualIncome(id: number): Promise<void> {
-  await deleteEntry(id);
+  await deleteEntry(id, fiscalYear.value);
 }
 
-onMounted(loadAnnualIncome);
+watch(
+  fiscalYear,
+  (year) => {
+    loadAnnualIncome(year);
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="container ui-pro-page">
-    <section class="card">
+    <section class="card ui-pro-panel grid gap-2.5">
+      <p class="ui-pro-kicker">Milestone 08</p>
       <h1 class="h1 m-0">Introduccion de datos</h1>
-      <p class="subtle mt-2">
-        Esta vista centraliza los datos de entrada. Primer bloque habilitado: ingresos anuales.
+      <p class="subtle m-0">
+        Esta vista centraliza la carga de datos base: ingresos anuales, gastos anuales, activos y
+        pasivos con interes.
       </p>
     </section>
 
     <div class="grid-2">
-      <section class="card ui-pro-panel">
+      <section class="section ui-flow-air md:col-span-2">
+        <div class="nw-list-header ui-flow-air-header">
+          <div class="nw-list-header-left ui-flow-air-left">
+            <h2 class="ui-flow-air-title">Balance anual</h2>
+            <div class="ui-flow-air-meta">
+              <span class="ui-flow-air-subtitle">Ingresos y gastos</span>
+              <select
+                id="fiscal-year-income-expense-core"
+                v-model.number="fiscalYear"
+                class="select nw-select-sm ui-flow-air-year-select"
+                aria-label="Ejercicio"
+              >
+                <option v-for="year in fiscalYearOptions" :key="year" :value="year">
+                  {{ year }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="nw-list-header-right ui-flow-air-right">
+            <div class="nw-list-total-inline ui-flow-air-total">
+              {{ formatMoneyAmount(filteredAnnualIncomeTotal, 'EUR') }}
+            </div>
+            <div class="nw-list-total-details">Ingresos del ejercicio {{ fiscalYear }}</div>
+          </div>
+        </div>
+      </section>
+
+      <article class="card ui-pro-panel">
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Ingresos anuales</h2>
           </div>
           <div class="nw-list-header-right">
-            <div class="nw-list-total-inline">{{ formatMoneyAmount(totalAnnual, 'EUR') }}</div>
+            <div class="nw-list-total-inline">
+              {{ formatMoneyAmount(filteredAnnualIncomeTotal, 'EUR') }}
+            </div>
             <button
               class="btn btn-primary btn-sm nw-list-add-icon-only"
               type="button"
@@ -254,6 +369,12 @@ onMounted(loadAnnualIncome);
         <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
           No hay ingresos anuales todavia.
         </div>
+        <div
+          v-else-if="!filteredAnnualIncomeEntries.length && !annualIncomeLoading"
+          class="subtle mt-3"
+        >
+          No hay ingresos en el ejercicio {{ fiscalYear }}.
+        </div>
 
         <div v-else class="mt-3 grid gap-4">
           <section
@@ -269,12 +390,33 @@ onMounted(loadAnnualIncome);
               </div>
               <div class="nw-cat-right">
                 <div class="nw-cat-total">
-                  <div class="nw-cat-total-primary">{{ formatTotalsLine(group.totals) }}</div>
+                  <div class="nw-cat-total-primary">
+                    {{ formatTotalsLine(group.totals) }}
+                    <span v-if="incomeCategoryPercent(group.entries)" class="nw-cat-percent">
+                      . {{ incomeCategoryPercent(group.entries) }}%
+                    </span>
+                  </div>
                 </div>
+                <button
+                  class="icon-btn nw-cat-toggle"
+                  type="button"
+                  :aria-label="
+                    isIncomeGroupExpanded(group.category) ? 'Ocultar desglose' : 'Mostrar desglose'
+                  "
+                  :title="
+                    isIncomeGroupExpanded(group.category) ? 'Ocultar desglose' : 'Mostrar desglose'
+                  "
+                  @click="toggleIncomeCategory(group.category)"
+                >
+                  <span v-if="isIncomeGroupExpanded(group.category)" class="icon" aria-hidden="true"
+                    >&#9662;</span
+                  >
+                  <span v-else class="icon" aria-hidden="true">&#9656;</span>
+                </button>
               </div>
             </div>
 
-            <div class="subcat-list">
+            <div v-if="isIncomeGroupExpanded(group.category)" class="subcat-list">
               <div
                 v-for="subgroup in group.subgroups"
                 :key="`${group.category}:${subgroup.subcategory}`"
@@ -305,7 +447,6 @@ onMounted(loadAnnualIncome);
                             aria-hidden="true"
                           ></span>
                           <span class="item-name-text">{{ entry.name }}</span>
-                          <span v-if="entry.owner" class="badge">{{ entry.owner }}</span>
                         </div>
                         <div class="nw-item-submeta">{{ incomeTypeLabel(entry.incomeType) }}</div>
                       </div>
@@ -333,17 +474,112 @@ onMounted(loadAnnualIncome);
         <div v-if="annualIncomeLoading" class="ui-status-line mt-2">
           Cargando ingresos anuales...
         </div>
-      </section>
+      </article>
 
-      <section class="card ui-pro-panel">
+      <article class="card ui-pro-panel">
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Gastos anuales</h2>
           </div>
         </div>
         <p class="subtle m-0">Proximamente en Milestone 08.</p>
-      </section>
+      </article>
     </div>
+
+    <div v-if="store.error" class="alert mt-3">
+      {{ prettyError() }}
+    </div>
+
+    <section class="section ui-balance-air">
+      <div class="nw-list-header ui-balance-air-header">
+        <div class="nw-list-header-left ui-balance-air-left">
+          <h2 class="ui-balance-air-title">Balance patrimonial</h2>
+          <span class="ui-balance-air-subtitle">Activos y pasivos</span>
+        </div>
+        <div class="nw-list-header-right ui-balance-air-right">
+          <div class="nw-list-total-inline ui-balance-air-total">
+            {{ formatMoneyAmount(netAssetsBase, netAssetsCurrency) }}
+          </div>
+          <div class="nw-list-total-details">Neto (activos - pasivos)</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <ItemList
+        title="Activos"
+        :items="store.assets"
+        :categories="assetCategories"
+        :subcategories="assetSubcategories"
+        :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
+        :category-totals-base="store.summary?.assets_by_category ?? {}"
+        :subcategory-totals-base="store.summary?.assets_by_subcategory ?? {}"
+        :total-base="store.summary?.total_assets ?? '0'"
+        v-bind="itemListProps"
+        :on-update="store.updateAsset"
+        :on-archive="store.archiveAsset"
+        :on-add="() => (showAssetModal = true)"
+        :on-edit="(it) => openEdit(it, 'asset')"
+      />
+
+      <ItemList
+        title="Pasivos"
+        :items="store.liabilities"
+        :categories="liabilityCategories"
+        :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
+        :category-totals-base="store.summary?.liabilities_by_category ?? {}"
+        :total-base="store.summary?.total_liabilities ?? '0'"
+        v-bind="itemListProps"
+        :assets="store.assets"
+        :on-update="store.updateLiability"
+        :on-archive="store.archiveLiability"
+        :on-add="() => (showLiabilityModal = true)"
+        :on-edit="(it) => openEdit(it, 'liability')"
+      />
+    </div>
+
+    <div v-if="store.loading" class="ui-status-line">Cargando...</div>
+
+    <BaseModal :open="showAssetModal" title="Nuevo activo" @close="showAssetModal = false">
+      <ItemForm
+        title="Nuevo activo"
+        :categories="assetCategories"
+        :subcategories="assetSubcategories"
+        v-bind="itemFormProps"
+        :allow-negative="true"
+        :on-submit="submitAsset"
+        :on-cancel="() => (showAssetModal = false)"
+      />
+    </BaseModal>
+
+    <BaseModal :open="showLiabilityModal" title="Nuevo pasivo" @close="showLiabilityModal = false">
+      <ItemForm
+        title="Nuevo pasivo"
+        :categories="liabilityCategories"
+        v-bind="itemFormProps"
+        :assets="store.assets"
+        :show-financed-asset="true"
+        :on-submit="submitLiability"
+        :on-cancel="() => (showLiabilityModal = false)"
+      />
+    </BaseModal>
+
+    <BaseModal :open="showEditModal" :title="editTitle" @close="closeEdit">
+      <ItemForm
+        v-if="editInitial"
+        :title="editTitle"
+        :categories="editCategories"
+        :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
+        v-bind="itemFormProps"
+        :assets="editKind === 'liability' ? store.assets : []"
+        :show-financed-asset="editKind === 'liability'"
+        :allow-negative="editKind === 'asset'"
+        mode="edit"
+        :initial="editInitial"
+        :on-submit="submitEdit"
+        :on-cancel="closeEdit"
+      />
+    </BaseModal>
 
     <BaseModal :open="showIncomeModal" title="Nuevo ingreso anual" @close="closeIncomeModal">
       <div class="grid gap-2.5 md:grid-cols-2">
@@ -367,13 +603,8 @@ onMounted(loadAnnualIncome);
         </select>
         <input
           v-model="annualIncomeForm.name"
-          class="input ui-data-field"
+          class="input ui-data-field md:col-span-2"
           placeholder="Concepto (ej: CTN, Regalos Pablo)"
-        />
-        <input
-          v-model="annualIncomeForm.owner"
-          class="input ui-data-field"
-          placeholder="Titular (opcional)"
         />
         <div
           class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_auto_120px]"
