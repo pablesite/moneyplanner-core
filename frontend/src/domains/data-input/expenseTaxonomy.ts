@@ -16,7 +16,7 @@ export const expenseCategories: { value: ExpenseCategoryKey; label: string }[] =
   { value: 'financial_investments', label: 'Inversion financiera' },
   { value: 'real_estate_assets', label: 'Activos inmobiliarios' },
   { value: 'tangible_assets', label: 'Activos mobiliarios' },
-  { value: 'consumption_expenses', label: 'Gasto puro y duro' },
+  { value: 'consumption_expenses', label: 'Gastos' },
 ];
 
 export const expenseSubcategories: ExpenseSubcategory[] = [
