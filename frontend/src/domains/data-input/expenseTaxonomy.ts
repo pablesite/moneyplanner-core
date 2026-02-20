@@ -79,7 +79,7 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
   },
 
   { category: 'consumption_expenses', value: 'housing_home', label: 'Vivienda y hogar' },
-  { category: 'consumption_expenses', value: 'living_expenses', label: 'Gastos corrientes' },
+  { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
   { category: 'consumption_expenses', value: 'family_childcare', label: 'Familia y bebe' },
   {
     category: 'consumption_expenses',
