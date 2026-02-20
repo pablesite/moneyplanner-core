@@ -46,7 +46,7 @@ class CoreAuthModeApiTests(APITestCase):
         response = self.client.get("/api/auth/link-token/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @override_settings(CORE_LINKING_SHARED_SECRET="test-shared-secret")
+    @override_settings(CORE_LINKING_SHARED_SECRET="test-shared-secret-32-bytes-minimum")
     def test_link_token_returns_one_time_payload(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get("/api/auth/link-token/")
@@ -84,7 +84,7 @@ class CoreAuthModeApiTests(APITestCase):
     AUTH_ACCEPT_SAAS_TOKENS=True,
     SAAS_JWT_ISSUER="moneyplanner-saas",
     SAAS_JWT_AUDIENCE="moneyplanner-saas-api",
-    SAAS_JWT_SIGNING_KEY="saas-secret",
+    SAAS_JWT_SIGNING_KEY="saas-signing-secret-32-bytes-minimum",
 )
 class CoreCrossStackSaasTokenTests(APITestCase):
     def _build_saas_access_token(self, *, saas_user_id: int) -> str:
@@ -98,7 +98,9 @@ class CoreCrossStackSaasTokenTests(APITestCase):
             "iss": "moneyplanner-saas",
             "aud": "moneyplanner-saas-api",
         }
-        return jwt.encode(payload, "saas-secret", algorithm=api_settings.ALGORITHM)
+        return jwt.encode(
+            payload, "saas-signing-secret-32-bytes-minimum", algorithm=api_settings.ALGORITHM
+        )
 
     def test_saas_token_can_access_core_settings(self):
         token = self._build_saas_access_token(saas_user_id=42)

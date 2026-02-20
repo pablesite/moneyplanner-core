@@ -1,10 +1,29 @@
 from pathlib import Path
 import os
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret")
+DEFAULT_DEV_SECRET_KEY = "dev-only-not-for-production-change-me-please-32b"
+INSECURE_SECRET_VALUES = {
+    "",
+    "changeme",
+    "dev-insecure-secret",
+    DEFAULT_DEV_SECRET_KEY,
+}
+
+
+def validate_secret(name: str, value: str, *, min_length: int = 32) -> None:
+    if DEBUG:
+        return
+    if value in INSECURE_SECRET_VALUES:
+        raise ImproperlyConfigured(f"{name} uses an insecure default value.")
+    if len(value) < min_length:
+        raise ImproperlyConfigured(f"{name} must be at least {min_length} characters long.")
+
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", DEFAULT_DEV_SECRET_KEY).strip()
 DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = [
     h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost").split(",") if h.strip()
@@ -117,12 +136,15 @@ SPECTACULAR_SETTINGS = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "SIGNING_KEY": "",
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
     "ISSUER": os.getenv("JWT_ISSUER", "moneyplanner-core"),
     "AUDIENCE": os.getenv("JWT_AUDIENCE", "moneyplanner-core-api"),
 }
+JWT_SIGNING_KEY = os.getenv("JWT_SIGNING_KEY", SECRET_KEY).strip()
+SIMPLE_JWT["SIGNING_KEY"] = JWT_SIGNING_KEY
 
 # Roadmap 03 flag: keep core auth standalone.
 AUTH_MODE_CORE_LOCAL = os.getenv("AUTH_MODE_CORE_LOCAL", "1") == "1"
@@ -135,4 +157,11 @@ AUTH_SESSION_COMPAT_ENABLED = os.getenv("AUTH_SESSION_COMPAT_ENABLED", "1") == "
 AUTH_ACCEPT_SAAS_TOKENS = os.getenv("AUTH_ACCEPT_SAAS_TOKENS", "1") == "1"
 SAAS_JWT_ISSUER = os.getenv("SAAS_JWT_ISSUER", "moneyplanner-saas")
 SAAS_JWT_AUDIENCE = os.getenv("SAAS_JWT_AUDIENCE", "moneyplanner-saas-api")
-SAAS_JWT_SIGNING_KEY = os.getenv("SAAS_JWT_SIGNING_KEY", SECRET_KEY)
+SAAS_JWT_SIGNING_KEY = os.getenv("SAAS_JWT_SIGNING_KEY", SECRET_KEY).strip()
+
+validate_secret("DJANGO_SECRET_KEY", SECRET_KEY)
+validate_secret("JWT_SIGNING_KEY", JWT_SIGNING_KEY)
+if AUTH_ACCEPT_SAAS_TOKENS:
+    validate_secret("SAAS_JWT_SIGNING_KEY", SAAS_JWT_SIGNING_KEY)
+if CORE_LINKING_SHARED_SECRET:
+    validate_secret("CORE_LINKING_SHARED_SECRET", CORE_LINKING_SHARED_SECRET)
