@@ -388,6 +388,59 @@
     --cat-accent-text: rgba(255, 210, 210, 0.95);
   }
 
+  .income-cat-salary {
+    --cat-accent: rgba(56, 189, 248, 0.9);
+    --cat-accent-text: rgba(186, 230, 253, 0.95);
+  }
+
+  .income-cat-business {
+    --cat-accent: rgba(45, 212, 191, 0.9);
+    --cat-accent-text: rgba(153, 246, 228, 0.95);
+  }
+
+  .income-cat-passive_income {
+    --cat-accent: rgba(132, 204, 22, 0.85);
+    --cat-accent-text: rgba(217, 249, 157, 0.95);
+  }
+
+  .income-cat-capital_gains {
+    --cat-accent: rgba(250, 204, 21, 0.85);
+    --cat-accent-text: rgba(254, 240, 138, 0.95);
+  }
+
+  .income-cat-transfers_support {
+    --cat-accent: rgba(167, 139, 250, 0.85);
+    --cat-accent-text: rgba(221, 214, 254, 0.95);
+  }
+
+  .income-cat-public_benefits {
+    --cat-accent: rgba(251, 146, 60, 0.85);
+    --cat-accent-text: rgba(254, 215, 170, 0.95);
+  }
+
+  .income-cat-other_income {
+    --cat-accent: rgba(148, 163, 184, 0.85);
+    --cat-accent-text: rgba(226, 232, 240, 0.95);
+  }
+
+  .income-item-name {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .income-rec-dot {
+    @apply inline-block h-2.5 w-2.5 rounded-full;
+  }
+
+  .income-rec-dot-recurrent {
+    background: rgba(45, 212, 191, 0.95);
+    box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35);
+  }
+
+  .income-rec-dot-one-off {
+    background: rgba(251, 146, 60, 0.95);
+    box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.35);
+  }
+
   .nw-subcat-block {
     --item-actions-width: 72px;
   }

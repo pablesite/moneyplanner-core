@@ -54,6 +54,101 @@ function formatMoneyAmount(value: number, currency: string): string {
   }).format(value);
 }
 
+type AnnualIncomeEntry = (typeof annualIncomeEntries.value)[number];
+type AnnualIncomeSubgroup = {
+  subcategory: string;
+  label: string;
+  entries: AnnualIncomeEntry[];
+  totals: Record<string, number>;
+};
+type AnnualIncomeGroup = {
+  category: string;
+  label: string;
+  entries: AnnualIncomeEntry[];
+  subgroups: AnnualIncomeSubgroup[];
+  totals: Record<string, number>;
+};
+
+const incomeCategoryOrder = new Map(
+  incomeCategories.map((category, index) => [category.value, index]),
+);
+
+function incomeCategoryLabel(key: string): string {
+  return incomeCategories.find((category) => category.value === key)?.label ?? key;
+}
+
+function incomeSubcategoryLabel(key: string): string {
+  return incomeSubcategories.find((subcategory) => subcategory.value === key)?.label ?? key;
+}
+
+function incomeTypeLabel(type: 'recurrent' | 'one_off'): string {
+  return type === 'recurrent' ? 'Recurrente' : 'Puntual';
+}
+
+function sumByCurrency(entries: AnnualIncomeEntry[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const entry of entries) {
+    const currency = entry.currency || 'EUR';
+    totals[currency] = (totals[currency] ?? 0) + entry.amountAnnual;
+  }
+  return totals;
+}
+
+function formatTotalsLine(totals: Record<string, number>): string {
+  return Object.entries(totals)
+    .filter(([, amount]) => amount !== 0)
+    .map(([currency, amount]) => `${formatMoneyAmount(amount, currency)} ${currency}`)
+    .join(' | ');
+}
+
+function incomeCategoryClass(category: string): string {
+  return `income-cat-${category || 'other_income'}`;
+}
+
+const annualIncomeGroups = computed<AnnualIncomeGroup[]>(() => {
+  const categoryMap = new Map<string, AnnualIncomeEntry[]>();
+
+  for (const entry of annualIncomeEntries.value) {
+    if (!categoryMap.has(entry.category)) categoryMap.set(entry.category, []);
+    categoryMap.get(entry.category)!.push(entry);
+  }
+
+  return Array.from(categoryMap.entries())
+    .sort(([a], [b]) => {
+      const aOrder = incomeCategoryOrder.get(a as IncomeCategoryKey) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = incomeCategoryOrder.get(b as IncomeCategoryKey) ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return incomeCategoryLabel(a).localeCompare(incomeCategoryLabel(b));
+    })
+    .map(([category, entries]) => {
+      const sortedEntries = entries.slice().sort((x, y) => x.name.localeCompare(y.name));
+      const subcategoryMap = new Map<string, AnnualIncomeEntry[]>();
+
+      for (const entry of sortedEntries) {
+        const subcategory = entry.subcategory || 'other';
+        if (!subcategoryMap.has(subcategory)) subcategoryMap.set(subcategory, []);
+        subcategoryMap.get(subcategory)!.push(entry);
+      }
+
+      const subgroups = Array.from(subcategoryMap.entries())
+        .sort(([a], [b]) => incomeSubcategoryLabel(a).localeCompare(incomeSubcategoryLabel(b)))
+        .map(([subcategory, subgroupEntries]) => ({
+          subcategory,
+          label: incomeSubcategoryLabel(subcategory),
+          entries: subgroupEntries,
+          totals: sumByCurrency(subgroupEntries),
+        }));
+
+      return {
+        category,
+        label: incomeCategoryLabel(category),
+        entries: sortedEntries,
+        subgroups,
+        totals: sumByCurrency(sortedEntries),
+      };
+    });
+});
+
 function resetIncomeForm(): void {
   annualIncomeForm.category = 'salary';
   annualIncomeForm.subcategory = 'employee_salary';
@@ -156,48 +251,84 @@ onMounted(loadAnnualIncome);
         <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
         <div v-else-if="annualIncomeApiError" class="alert mt-3">{{ annualIncomeApiError }}</div>
 
-        <table class="ui-data-table mt-3">
-          <thead>
-            <tr>
-              <th>Concepto</th>
-              <th>Categoria</th>
-              <th>Titular</th>
-              <th>Tipo</th>
-              <th>Importe anual</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in annualIncomeEntries" :key="entry.id">
-              <td>
-                <strong>{{ entry.name }}</strong>
-                <div class="subtle">{{ entry.subcategory }}</div>
-              </td>
-              <td>
-                {{
-                  incomeCategories.find((category) => category.value === entry.category)?.label ??
-                  entry.category
-                }}
-              </td>
-              <td>{{ entry.owner || '-' }}</td>
-              <td>{{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}</td>
-              <td>{{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}</td>
-              <td class="ui-data-table-actions">
-                <button
-                  class="icon-btn"
-                  title="Eliminar"
-                  :disabled="annualIncomeLoading"
-                  @click="removeAnnualIncome(entry.id)"
-                >
-                  &#128465;
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!annualIncomeEntries.length && !annualIncomeLoading">
-              <td colspan="6" class="ui-table-empty">No hay ingresos anuales todavia.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
+          No hay ingresos anuales todavia.
+        </div>
+
+        <div v-else class="mt-3 grid gap-4">
+          <section
+            v-for="group in annualIncomeGroups"
+            :key="group.category"
+            class="nw-cat-block"
+            :class="incomeCategoryClass(group.category)"
+          >
+            <div class="nw-cat-header">
+              <div class="nw-cat-left">
+                <div>{{ group.label }}</div>
+                <span class="badge">{{ group.entries.length }}</span>
+              </div>
+              <div class="nw-cat-right">
+                <div class="nw-cat-total">
+                  <div class="nw-cat-total-primary">{{ formatTotalsLine(group.totals) }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="subcat-list">
+              <div
+                v-for="subgroup in group.subgroups"
+                :key="`${group.category}:${subgroup.subcategory}`"
+                class="nw-subcat-block"
+              >
+                <div class="nw-subcat-header">
+                  <div class="nw-subcat-title">{{ subgroup.label }}</div>
+                  <div class="nw-subcat-total">
+                    <div class="nw-subcat-total-primary">
+                      {{ formatTotalsLine(subgroup.totals) }}
+                    </div>
+                  </div>
+                  <div class="nw-subcat-actions-spacer" aria-hidden="true"></div>
+                </div>
+
+                <ul class="list list-plain nw-subcat-items">
+                  <li v-for="entry in subgroup.entries" :key="entry.id">
+                    <div class="nw-item-row income-item-row">
+                      <div class="nw-item-main">
+                        <div class="nw-item-name income-item-name">
+                          <span
+                            class="income-rec-dot"
+                            :class="
+                              entry.incomeType === 'recurrent'
+                                ? 'income-rec-dot-recurrent'
+                                : 'income-rec-dot-one-off'
+                            "
+                            aria-hidden="true"
+                          ></span>
+                          <span class="item-name-text">{{ entry.name }}</span>
+                          <span v-if="entry.owner" class="badge">{{ entry.owner }}</span>
+                        </div>
+                        <div class="nw-item-submeta">{{ incomeTypeLabel(entry.incomeType) }}</div>
+                      </div>
+                      <div class="nw-item-amount">
+                        {{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}
+                      </div>
+                      <div class="nw-item-actions">
+                        <button
+                          class="icon-btn"
+                          title="Eliminar"
+                          :disabled="annualIncomeLoading"
+                          @click="removeAnnualIncome(entry.id)"
+                        >
+                          &#128465;
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
 
         <div v-if="annualIncomeLoading" class="ui-status-line mt-2">
           Cargando ingresos anuales...
@@ -236,8 +367,13 @@ onMounted(loadAnnualIncome);
         </select>
         <input
           v-model="annualIncomeForm.name"
-          class="input ui-data-field md:col-span-2"
+          class="input ui-data-field"
           placeholder="Concepto (ej: CTN, Regalos Pablo)"
+        />
+        <input
+          v-model="annualIncomeForm.owner"
+          class="input ui-data-field"
+          placeholder="Titular (opcional)"
         />
         <div
           class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_auto_120px]"
