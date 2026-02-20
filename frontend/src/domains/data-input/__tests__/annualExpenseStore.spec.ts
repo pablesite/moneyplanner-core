@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -50,8 +51,9 @@ describe('annual expense store (core)', () => {
     expect(store.totalAnnual.value).toBe(5500);
   });
 
-  it('creates and deletes entries via core api', async () => {
+  it('creates, updates and deletes entries via core api', async () => {
     mocks.api.post.mockResolvedValue({ data: { id: 1 } });
+    mocks.api.patch.mockResolvedValue({ data: { id: 1 } });
     mocks.api.delete.mockResolvedValue({ data: {} });
     mocks.api.get.mockResolvedValue({ data: [] });
 
@@ -79,6 +81,30 @@ describe('annual expense store (core)', () => {
         subcategory: 'living_expenses',
         amount_annual: '5500.00',
         fiscal_year: 2026,
+      }),
+    );
+
+    const updateResult = await store.updateEntry(
+      1,
+      {
+        name: 'Alimentacion actualizada',
+        category: 'consumption_expenses',
+        subcategory: 'living_expenses',
+        expenseType: 'recurrent',
+        amountAnnual: '1.234,56',
+        fiscalYear: 2026,
+        currency: 'EUR',
+        notes: 'update',
+      },
+      2026,
+    );
+
+    expect(updateResult.ok).toBe(true);
+    expect(mocks.api.patch).toHaveBeenCalledWith(
+      '/api/budget/annual-expense/1/',
+      expect.objectContaining({
+        name: 'Alimentacion actualizada',
+        amount_annual: '1234.56',
       }),
     );
 

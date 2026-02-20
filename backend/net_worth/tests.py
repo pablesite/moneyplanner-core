@@ -421,6 +421,54 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("annual_interest_tae", response.data["error"]["details"])
 
+    def test_liability_create_rejects_negative_tae(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Tarjeta",
+                "category": Liability.Category.CREDIT_CARD,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "annual_interest_tae": "-1.00",
+                "amount": "300.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("annual_interest_tae", response.data["error"]["details"])
+
+    def test_asset_and_liability_create_accept_explicit_start_date(self):
+        asset_res = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cuenta",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "currency": "EUR",
+                "start_date": "2020-01-01",
+                "amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(asset_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(asset_res.data["start_date"], "2020-01-01")
+
+        liability_res = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2021-06-15",
+                "annual_interest_tae": "5.20",
+                "amount": "12000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(liability_res.data["start_date"], "2021-06-15")
+
     def test_liability_create_with_financed_asset_sets_asset_backed(self):
         asset = Asset.objects.create(
             user=self.user,

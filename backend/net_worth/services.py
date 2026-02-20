@@ -15,6 +15,12 @@ from core.services import adjust_for_inflation, convert_currency
 
 from .models import ASSET_SUBCATEGORY_MAP, Asset, Liability, NetWorthSnapshot
 
+LIABILITY_CATEGORIES_REQUIRING_TAE = {
+    Liability.Category.MORTGAGE,
+    Liability.Category.PERSONAL_LOAN,
+    Liability.Category.CREDIT_CARD,
+}
+
 
 @dataclass
 class NetWorthTotals:
@@ -63,11 +69,7 @@ def validate_liability_payload(
             }
         )
 
-    requires_tae = category in {
-        Liability.Category.MORTGAGE,
-        Liability.Category.PERSONAL_LOAN,
-        Liability.Category.CREDIT_CARD,
-    }
+    requires_tae = category in LIABILITY_CATEGORIES_REQUIRING_TAE
     if requires_tae and annual_interest_tae is None:
         raise DRFValidationError(
             {"annual_interest_tae": "Requerido para hipoteca, prestamo personal y tarjeta."}
