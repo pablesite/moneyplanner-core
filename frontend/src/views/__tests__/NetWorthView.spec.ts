@@ -129,7 +129,7 @@ describe('NetWorthView', () => {
     expect(wrapper.text()).toContain('Patrimonio neto');
     expect(wrapper.text()).toContain('Riesgo patrimonial');
     expect(wrapper.text()).toContain('Score de balance');
-    expect(wrapper.findAll('[data-test="ItemList"]')).toHaveLength(2);
+    expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('No hay snapshots');
   });
 

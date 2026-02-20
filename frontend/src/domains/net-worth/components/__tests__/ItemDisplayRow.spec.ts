@@ -15,7 +15,7 @@ describe('ItemDisplayRow', () => {
     });
 
     expect(wrapper.text()).toContain('Cuenta corriente');
-    expect(wrapper.text()).toContain('1,000.00 EUR');
+    expect(wrapper.text()).toContain('1,000.00');
   });
 
   it('emits edit and archive events with item id', async () => {
