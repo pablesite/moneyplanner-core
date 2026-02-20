@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .models import AnnualExpenseEntry, AnnualIncomeEntry
+from .serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 from .services import (
     EXPENSE_TAXONOMY,
     INCOME_TAXONOMY,
@@ -261,3 +262,80 @@ class AnnualExpenseApiTests(APITestCase):
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(list_res.data), 1)
         self.assertEqual(list_res.data[0]["id"], own.id)
+
+
+class BudgetSerializerTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="budget_serializer_user", password="pass1234"
+        )
+
+    def test_income_serializer_normalizes_currency(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Nomina",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "income_type": "recurrent",
+                "amount_annual": "12000.00",
+                "fiscal_year": 2026,
+                "currency": "eur",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["currency"], "EUR")
+
+    def test_income_serializer_rejects_invalid_amount_currency_and_year(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Nomina",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "income_type": "recurrent",
+                "amount_annual": "0.00",
+                "fiscal_year": 1800,
+                "currency": "EURO",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("amount_annual", serializer.errors)
+        self.assertIn("fiscal_year", serializer.errors)
+        self.assertIn("currency", serializer.errors)
+
+    def test_income_serializer_validates_partial_update_with_instance_values(self):
+        entry = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            income_type="recurrent",
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        serializer = AnnualIncomeEntrySerializer(
+            entry,
+            data={"subcategory": "inheritance"},
+            partial=True,
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("non_field_errors", serializer.errors)
+
+    def test_expense_serializer_validates_partial_update_with_instance_values(self):
+        entry = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Alimentacion",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            expense_type="recurrent",
+            amount_annual=Decimal("5500.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        serializer = AnnualExpenseEntrySerializer(
+            entry,
+            data={"subcategory": "crypto"},
+            partial=True,
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("non_field_errors", serializer.errors)

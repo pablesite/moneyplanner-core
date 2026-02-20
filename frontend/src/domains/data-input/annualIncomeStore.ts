@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { api } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import { incomeSubcategories, type IncomeCategoryKey } from '@/domains/data-input/incomeTaxonomy';
+import { parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
 
 export type AnnualIncomeType = 'recurrent' | 'one_off';
 
@@ -50,30 +51,6 @@ type TotalsResponse = {
   total_annual: string;
   currency_hint: string;
 };
-
-function parseAmount(raw: string): number {
-  let normalized = String(raw ?? '')
-    .trim()
-    .replace(/\s/g, '');
-
-  const hasComma = normalized.includes(',');
-  const hasDot = normalized.includes('.');
-  if (hasComma && hasDot) {
-    const lastComma = normalized.lastIndexOf(',');
-    const lastDot = normalized.lastIndexOf('.');
-    if (lastComma > lastDot) {
-      normalized = normalized.replace(/\./g, '').replace(',', '.');
-    } else {
-      normalized = normalized.replace(/,/g, '');
-    }
-  } else if (hasComma) {
-    normalized = normalized.replace(',', '.');
-  }
-
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  return value;
-}
 
 function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
   return {
@@ -129,7 +106,7 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
       return { ok: false, error: 'La subcategoria no corresponde con la categoria elegida.' };
     }
 
-    const amount = parseAmount(draft.amountAnnual);
+    const amount = parseAnnualAmount(draft.amountAnnual);
     if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
 
     loading.value = true;
@@ -172,7 +149,7 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
       return { ok: false, error: 'La subcategoria no corresponde con la categoria elegida.' };
     }
 
-    const amount = parseAmount(draft.amountAnnual);
+    const amount = parseAnnualAmount(draft.amountAnnual);
     if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
 
     loading.value = true;

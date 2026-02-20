@@ -9,7 +9,25 @@ from .services import (
 )
 
 
-class AnnualIncomeEntrySerializer(serializers.ModelSerializer):
+class AnnualEntryValidationMixin:
+    def validate_currency(self, value: str):
+        normalized = normalize_currency_code(value)
+        if len(normalized) != 3:
+            raise serializers.ValidationError("Moneda invalida. Usa codigos ISO de 3 letras.")
+        return normalized
+
+    def validate_amount_annual(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El importe anual debe ser mayor que cero.")
+        return value
+
+    def validate_fiscal_year(self, value: int):
+        if value < 1900 or value > 3000:
+            raise serializers.ValidationError("Ejercicio fiscal invalido.")
+        return value
+
+
+class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
     class Meta:
         model = AnnualIncomeEntry
         fields = [
@@ -29,22 +47,6 @@ class AnnualIncomeEntrySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def validate_currency(self, value: str):
-        normalized = normalize_currency_code(value)
-        if len(normalized) != 3:
-            raise serializers.ValidationError("Moneda invalida. Usa codigos ISO de 3 letras.")
-        return normalized
-
-    def validate_amount_annual(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("El importe anual debe ser mayor que cero.")
-        return value
-
-    def validate_fiscal_year(self, value: int):
-        if value < 1900 or value > 3000:
-            raise serializers.ValidationError("Ejercicio fiscal invalido.")
-        return value
-
     def validate(self, attrs):
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
@@ -55,7 +57,7 @@ class AnnualIncomeEntrySerializer(serializers.ModelSerializer):
         return attrs
 
 
-class AnnualExpenseEntrySerializer(serializers.ModelSerializer):
+class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
     class Meta:
         model = AnnualExpenseEntry
         fields = [
@@ -74,22 +76,6 @@ class AnnualExpenseEntrySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
-
-    def validate_currency(self, value: str):
-        normalized = normalize_currency_code(value)
-        if len(normalized) != 3:
-            raise serializers.ValidationError("Moneda invalida. Usa codigos ISO de 3 letras.")
-        return normalized
-
-    def validate_amount_annual(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("El importe anual debe ser mayor que cero.")
-        return value
-
-    def validate_fiscal_year(self, value: int):
-        if value < 1900 or value > 3000:
-            raise serializers.ValidationError("Ejercicio fiscal invalido.")
-        return value
 
     def validate(self, attrs):
         category = attrs.get("category") or getattr(self.instance, "category", "")

@@ -114,4 +114,24 @@ describe('annual income store (core)', () => {
     await store.deleteEntry(10, 2026);
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/budget/annual-income/10/');
   });
+
+  it('rejects invalid subcategory before calling api', async () => {
+    const store = useAnnualIncomeStore('core');
+    const result = await store.addEntry(
+      {
+        name: 'Linea invalida',
+        category: 'salary',
+        subcategory: 'inheritance',
+        incomeType: 'one_off',
+        amountAnnual: '1000',
+        fiscalYear: 2026,
+        currency: 'EUR',
+        notes: '',
+      },
+      2026,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(mocks.api.post).not.toHaveBeenCalled();
+  });
 });

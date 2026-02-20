@@ -46,6 +46,7 @@ const decimalsByCurrency: Record<string, number> = {
   BTC: 8,
   ETH: 8,
 };
+const LIABILITY_CATEGORIES_REQUIRING_TAE = ['mortgage', 'personal_loan', 'credit_card'];
 
 const form = reactive({
   name: '',
@@ -76,8 +77,7 @@ const financedAssetOptions = computed(() => {
 
 const showFinancedAsset = computed(() => !!props.showFinancedAsset);
 const showAnnualInterestInput = computed(
-  () =>
-    showFinancedAsset.value && ['mortgage', 'personal_loan', 'credit_card'].includes(form.category),
+  () => showFinancedAsset.value && LIABILITY_CATEGORIES_REQUIRING_TAE.includes(form.category),
 );
 const subcategoriesForCategory = computed(() => {
   if (!props.subcategories || !form.category) return [];
