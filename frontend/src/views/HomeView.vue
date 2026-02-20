@@ -46,7 +46,7 @@ function phaseStateLabel(phase: Phase): string {
   <div class="container ui-pro-page">
     <section class="card ui-pro-panel ui-home-intro">
       <div class="ui-home-intro-text">
-        <p class="ui-pro-kicker">Inicio</p>
+        <p class="ui-pro-kicker">Guia financiera</p>
         <h1 class="h1 ui-home-title">Vas por buen camino: Fase {{ activePhase.id }} en progreso</h1>
         <p class="subtle ui-home-copy">
           Estas consolidando habitos de flujo positivo. El siguiente salto es construir un fondo de

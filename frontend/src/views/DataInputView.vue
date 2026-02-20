@@ -73,6 +73,30 @@ const filteredAnnualIncomeEntries = computed(() => annualIncomeEntries.value);
 const filteredAnnualIncomeTotal = computed(() =>
   filteredAnnualIncomeEntries.value.reduce((sum, entry) => sum + entry.amountAnnual, 0),
 );
+const annualIncomeCount = computed(() => annualIncomeEntries.value.length);
+const assetsCount = computed(() => store.assets.length);
+const liabilitiesCount = computed(() => store.liabilities.length);
+const hasIncomeData = computed(() => annualIncomeCount.value > 0);
+const hasAssetData = computed(() => assetsCount.value > 0);
+const hasLiabilityData = computed(() => liabilitiesCount.value > 0);
+const hasCompleteDataInput = computed(
+  () => hasIncomeData.value && hasAssetData.value && hasLiabilityData.value,
+);
+const dataInputCheckTitle = computed(() =>
+  hasCompleteDataInput.value ? 'Check de datos: completo' : 'Check de datos: pendiente',
+);
+const dataInputSummary = computed(() => {
+  const incomePart = hasIncomeData.value
+    ? `${annualIncomeCount.value} ingresos registrados`
+    : 'sin ingresos registrados';
+  const assetsPart = hasAssetData.value
+    ? `${assetsCount.value} activos registrados`
+    : 'sin activos registrados';
+  const liabilitiesPart = hasLiabilityData.value
+    ? `${liabilitiesCount.value} pasivos registrados`
+    : 'sin pasivos registrados';
+  return `Estado actual: ${incomePart}, ${assetsPart} y ${liabilitiesPart}. Completa los tres bloques para un diagnostico patrimonial fiable.`;
+});
 
 watch(
   () => annualIncomeForm.category,
@@ -302,11 +326,14 @@ watch(
 <template>
   <div class="container ui-pro-page">
     <section class="card ui-pro-panel grid gap-2.5">
-      <p class="ui-pro-kicker">Milestone 08</p>
-      <h1 class="h1 m-0">Introduccion de datos</h1>
+      <p class="ui-pro-kicker">Introduccion de datos</p>
+      <h1 class="h1 m-0">{{ dataInputCheckTitle }}</h1>
       <p class="subtle m-0">
-        Esta vista centraliza la carga de datos base: ingresos anuales, gastos anuales, activos y
-        pasivos con interes.
+        {{ dataInputSummary }}
+      </p>
+      <p class="subtle m-0">
+        Gestiona aqui la base financiera anual: ingresos, activos y pasivos con interes para el
+        analisis de patrimonio.
       </p>
     </section>
 

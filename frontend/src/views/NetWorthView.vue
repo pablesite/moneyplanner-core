@@ -277,58 +277,54 @@ const analysis = computed(() => ({
 
 <template>
   <div class="container ui-pro-page relative">
-    <div class="mb-1 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2.5">
-        <h1 class="h1 m-0">Patrimonio</h1>
-        <button
-          class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
-          type="button"
-          :disabled="store.loading"
-          aria-label="Refrescar"
-          @click="store.refreshAll()"
-        >
-          <span class="icon" aria-hidden="true">&#8635;</span>
-        </button>
-        <button
-          class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
-          type="button"
-          :disabled="store.loading"
-          aria-label="Guardar snapshot"
-          title="Guardar snapshot"
-          @click="store.createTodaySnapshot()"
-        >
-          <span class="icon" aria-hidden="true">&#128190;</span>
-        </button>
+    <section class="card ui-pro-panel grid gap-2.5 mb-2">
+      <p class="ui-pro-kicker">Patrimonio</p>
+      <div class="mt-1 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <button
+            class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            :disabled="store.loading"
+            aria-label="Refrescar"
+            @click="store.refreshAll()"
+          >
+            <span class="icon" aria-hidden="true">&#8635;</span>
+          </button>
+          <button
+            class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            :disabled="store.loading"
+            aria-label="Guardar snapshot"
+            title="Guardar snapshot"
+            @click="store.createTodaySnapshot()"
+          >
+            <span class="icon" aria-hidden="true">&#128190;</span>
+          </button>
+        </div>
+
+        <div class="ui-pro-toolbar">
+          <component :is="HeaderActions" v-if="HeaderActions" />
+
+          <SettingsPopover
+            :loading="store.loading"
+            :base-currency="store.baseCurrency ?? 'EUR'"
+            :currencies="currencies"
+            :value-mode="valueMode"
+            :can-show-real="canShowReal()"
+            :mode-help="modeLabel()"
+            :real-base-label="realBaseLabel"
+            :show-refresh="false"
+            :show-snapshot="false"
+            :icon-only="true"
+            @update:base-currency="store.updateBaseCurrency"
+            @update:value-mode="(v) => (valueMode = v)"
+            @snapshot="store.createTodaySnapshot()"
+            @refresh="store.refreshAll()"
+          />
+        </div>
       </div>
 
-      <div class="ui-pro-toolbar">
-        <component :is="HeaderActions" v-if="HeaderActions" />
-
-        <SettingsPopover
-          :loading="store.loading"
-          :base-currency="store.baseCurrency ?? 'EUR'"
-          :currencies="currencies"
-          :value-mode="valueMode"
-          :can-show-real="canShowReal()"
-          :mode-help="modeLabel()"
-          :real-base-label="realBaseLabel"
-          :show-refresh="false"
-          :show-snapshot="false"
-          :icon-only="true"
-          @update:base-currency="store.updateBaseCurrency"
-          @update:value-mode="(v) => (valueMode = v)"
-          @snapshot="store.createTodaySnapshot()"
-          @refresh="store.refreshAll()"
-        />
-      </div>
-    </div>
-
-    <div v-if="store.error" class="alert mt-3">
-      {{ prettyError() }}
-    </div>
-
-    <div class="card ui-pro-panel ui-nw-balance-panel section">
-      <div class="ui-nw-balance-kpi-grid">
+      <div class="ui-nw-balance-kpi-grid mt-2">
         <article class="ui-nw-balance-kpi ui-nw-balance-kpi-main">
           <div class="ui-nw-kpi-label">Patrimonio neto</div>
           <div class="ui-nw-kpi-value">
@@ -376,7 +372,13 @@ const analysis = computed(() => ({
           </div>
         </article>
       </div>
+    </section>
 
+    <div v-if="store.error" class="alert mt-3">
+      {{ prettyError() }}
+    </div>
+
+    <div class="card ui-pro-panel ui-nw-balance-panel section">
       <div class="ui-pro-divider mt-4">
         <NetWorthDonut
           :total-assets="summaryAssets"
