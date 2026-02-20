@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     # apps
     "core",
+    "budget.apps.BudgetConfig",
     "accounts.apps.AccountsConfig",
     "net_worth",
 ]

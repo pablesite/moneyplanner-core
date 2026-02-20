@@ -86,8 +86,8 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
     error.value = null;
     try {
       const [listRes, totalsRes] = await Promise.all([
-        api.get<AnnualIncomeApiItem[]>('/api/core/annual-income/'),
-        api.get<TotalsResponse>('/api/core/annual-income/totals/'),
+        api.get<AnnualIncomeApiItem[]>('/api/budget/annual-income/'),
+        api.get<TotalsResponse>('/api/budget/annual-income/totals/'),
       ]);
       entries.value = (listRes.data ?? []).map(mapApiItem);
       totalAnnual.value = Number(totalsRes.data?.total_annual ?? '0');
@@ -115,7 +115,7 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
     loading.value = true;
     error.value = null;
     try {
-      await api.post('/api/core/annual-income/', {
+      await api.post('/api/budget/annual-income/', {
         name,
         category: draft.category,
         subcategory: draft.subcategory,
@@ -141,7 +141,7 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
     loading.value = true;
     error.value = null;
     try {
-      await api.delete(`/api/core/annual-income/${id}/`);
+      await api.delete(`/api/budget/annual-income/${id}/`);
       await loadAll();
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);

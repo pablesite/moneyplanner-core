@@ -1,0 +1,92 @@
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    initial = True
+
+    dependencies = [
+        ("core", "0005_move_annual_income_to_budget_state"),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.CreateModel(
+                    name="AnnualIncomeEntry",
+                    fields=[
+                        (
+                            "id",
+                            models.BigAutoField(
+                                auto_created=True,
+                                primary_key=True,
+                                serialize=False,
+                                verbose_name="ID",
+                            ),
+                        ),
+                        ("name", models.CharField(max_length=140)),
+                        (
+                            "category",
+                            models.CharField(
+                                choices=[
+                                    ("salary", "Salarios y trabajo"),
+                                    ("business", "Actividad profesional/negocio"),
+                                    ("passive_income", "Ingresos pasivos"),
+                                    ("capital_gains", "Ganancias de capital"),
+                                    ("transfers_support", "Transferencias y apoyo recibido"),
+                                    ("public_benefits", "Prestaciones y ayudas"),
+                                    ("other_income", "Otros ingresos"),
+                                ],
+                                max_length=32,
+                            ),
+                        ),
+                        ("subcategory", models.CharField(max_length=64)),
+                        ("owner_name", models.CharField(blank=True, default="", max_length=120)),
+                        (
+                            "income_type",
+                            models.CharField(
+                                choices=[("recurrent", "Recurrente"), ("one_off", "Puntual")],
+                                default="recurrent",
+                                max_length=16,
+                            ),
+                        ),
+                        ("amount_annual", models.DecimalField(decimal_places=2, max_digits=14)),
+                        ("currency", models.CharField(default="EUR", max_length=3)),
+                        ("notes", models.TextField(blank=True, default="")),
+                        ("is_active", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                        (
+                            "user",
+                            models.ForeignKey(
+                                on_delete=django.db.models.deletion.CASCADE,
+                                related_name="annual_income_entries",
+                                to=settings.AUTH_USER_MODEL,
+                            ),
+                        ),
+                    ],
+                    options={
+                        "db_table": "core_annualincomeentry",
+                        "ordering": ["-created_at"],
+                        "indexes": [
+                            models.Index(
+                                fields=["user", "is_active"],
+                                name="core_annual_user_id_661509_idx",
+                            ),
+                            models.Index(
+                                fields=["user", "category"],
+                                name="core_annual_user_id_e66798_idx",
+                            ),
+                            models.Index(
+                                fields=["user", "subcategory"],
+                                name="core_annual_user_id_5e4064_idx",
+                            ),
+                        ],
+                    },
+                ),
+            ],
+        )
+    ]
