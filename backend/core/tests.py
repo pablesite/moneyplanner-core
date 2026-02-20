@@ -4,15 +4,20 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.test.utils import override_settings
+from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from .models import FxRate, InflationIndex
+from .models import AnnualIncomeEntry, FxRate, InflationIndex
 from .services import (
+    INCOME_TAXONOMY,
     _get_inflation_index,
     _normalize_month_start,
     adjust_for_inflation,
     convert_currency,
     get_latest_inflation_period,
     normalize_currency_code,
+    validate_annual_income_taxonomy,
     validate_fx_currency_pair,
     validate_inflation_period_start,
 )
@@ -30,6 +35,16 @@ class CoreServicesTests(TestCase):
     def test_validate_inflation_period_start_rejects_non_first_day(self):
         with self.assertRaises(ValidationError):
             validate_inflation_period_start(period=date(2026, 2, 2))
+
+    def test_validate_annual_income_taxonomy(self):
+        validate_annual_income_taxonomy(
+            category="salary",
+            subcategory="employee_salary",
+        )
+        with self.assertRaises(ValidationError):
+            validate_annual_income_taxonomy(category="salary", subcategory="inheritance")
+        with self.assertRaises(ValidationError):
+            validate_annual_income_taxonomy(category="unknown", subcategory="other")
 
     def test_normalize_month_start_from_string_and_invalid_type(self):
         self.assertEqual(_normalize_month_start("2026-02-18"), date(2026, 2, 1))
@@ -214,3 +229,85 @@ class CoreServicesTests(TestCase):
 
         with self.assertRaises(ValidationError):
             adjust_for_inflation(Decimal("10"), date=date(2026, 2, 1), region="ES")
+
+    def test_income_taxonomy_has_fallback_subcategories(self):
+        for category, options in INCOME_TAXONOMY.items():
+            self.assertTrue(options, msg=f"{category} must define subcategories")
+            has_fallback = any(opt.startswith("other") or opt == "other" for opt in options)
+            self.assertTrue(has_fallback, msg=f"{category} must define fallback subcategory")
+
+
+class AnnualIncomeApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="income_api_user", password="pass1234"
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_list_and_totals_for_annual_income(self):
+        create_res = self.client.post(
+            "/api/core/annual-income/",
+            {
+                "name": "CTN",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "owner_name": "Pablo",
+                "income_type": "recurrent",
+                "amount_annual": "32460.00",
+                "currency": "eur",
+                "notes": "Nomina principal",
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_res.data["currency"], "EUR")
+
+        list_res = self.client.get("/api/core/annual-income/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["name"], "CTN")
+
+        totals_res = self.client.get("/api/core/annual-income/totals/")
+        self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(totals_res.data["total_annual"], "32460.00")
+
+    def test_create_rejects_invalid_subcategory(self):
+        create_res = self.client.post(
+            "/api/core/annual-income/",
+            {
+                "name": "Linea invalida",
+                "category": "salary",
+                "subcategory": "inheritance",
+                "income_type": "one_off",
+                "amount_annual": "1000.00",
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_queryset_is_user_scoped(self):
+        other_user = get_user_model().objects.create_user(
+            username="income_other_user", password="pass1234"
+        )
+        AnnualIncomeEntry.objects.create(
+            user=other_user,
+            name="Otro ingreso",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("100.00"),
+            currency="EUR",
+        )
+        own = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Mi ingreso",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("200.00"),
+            currency="EUR",
+        )
+        list_res = self.client.get("/api/core/annual-income/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["id"], own.id)
