@@ -31,11 +31,7 @@ const navItems = computed<NavItem[]>(() => [
   { id: 'net-worth', icon: 'PT', label: 'Patrimonio', hint: 'Estado financiero', to: '/' },
 ]);
 
-const pageTitle = computed(() => {
-  if (route.path === '/inicio') return 'Tu plan financiero';
-  if (route.path === '/introduccion-datos') return 'Introduccion de datos';
-  return 'Moneyplanner Core';
-});
+const pageTitle = 'moneyplanner';
 
 function toggleSidebar(): void {
   sidebarOpen.value = !sidebarOpen.value;
