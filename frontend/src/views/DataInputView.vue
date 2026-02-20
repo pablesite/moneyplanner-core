@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { BaseModal } from '@/domains/ui';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
 import {
   incomeCategories,
@@ -17,13 +18,15 @@ const {
   deleteEntry,
 } = useAnnualIncomeStore('core');
 const annualIncomeError = ref<string | null>(null);
+const showIncomeModal = ref(false);
 
 const annualIncomeForm = reactive({
-  name: '',
   category: 'salary' as IncomeCategoryKey,
   subcategory: 'employee_salary',
+  name: '',
   owner: '',
-  incomeType: 'recurrent' as 'recurrent' | 'one_off',
+  isRecurrent: true,
+  amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
   currency: 'EUR',
   notes: '',
@@ -52,24 +55,52 @@ function formatMoneyAmount(value: number, currency: string): string {
 }
 
 function resetIncomeForm(): void {
-  annualIncomeForm.name = '';
   annualIncomeForm.category = 'salary';
   annualIncomeForm.subcategory = 'employee_salary';
+  annualIncomeForm.name = '';
   annualIncomeForm.owner = '';
-  annualIncomeForm.incomeType = 'recurrent';
+  annualIncomeForm.isRecurrent = true;
+  annualIncomeForm.amountInputPeriod = 'annual';
   annualIncomeForm.amountAnnual = '';
   annualIncomeForm.currency = 'EUR';
   annualIncomeForm.notes = '';
 }
 
+function openIncomeModal(): void {
+  annualIncomeError.value = null;
+  showIncomeModal.value = true;
+}
+
+function closeIncomeModal(): void {
+  showIncomeModal.value = false;
+}
+
+const amountInputPlaceholder = computed(() =>
+  annualIncomeForm.amountInputPeriod === 'monthly' ? 'Importe mensual' : 'Importe anual',
+);
+
+watch(
+  () => annualIncomeForm.isRecurrent,
+  (isRecurrent) => {
+    if (!isRecurrent) annualIncomeForm.amountInputPeriod = 'annual';
+  },
+);
+
 async function submitAnnualIncome(): Promise<void> {
+  const rawAmount = Number(String(annualIncomeForm.amountAnnual).replace(',', '.'));
+  const normalizedAmount = Number.isFinite(rawAmount)
+    ? annualIncomeForm.amountInputPeriod === 'monthly'
+      ? rawAmount * 12
+      : rawAmount
+    : annualIncomeForm.amountAnnual;
+
   const result = await addEntry({
     name: annualIncomeForm.name,
     category: annualIncomeForm.category,
     subcategory: annualIncomeForm.subcategory,
     owner: annualIncomeForm.owner,
-    incomeType: annualIncomeForm.incomeType,
-    amountAnnual: annualIncomeForm.amountAnnual,
+    incomeType: annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off',
+    amountAnnual: String(normalizedAmount),
     currency: annualIncomeForm.currency,
     notes: annualIncomeForm.notes,
   });
@@ -78,6 +109,7 @@ async function submitAnnualIncome(): Promise<void> {
     return;
   }
   annualIncomeError.value = null;
+  closeIncomeModal();
   resetIncomeForm();
 }
 
@@ -97,14 +129,93 @@ onMounted(loadAnnualIncome);
       </p>
     </section>
 
-    <section class="card">
-      <h2 class="h2">Ingresos anuales</h2>
-      <div class="ui-data-form-grid">
-        <input
-          v-model="annualIncomeForm.name"
-          class="input ui-data-field"
-          placeholder="Concepto (ej: CTN, Regalos Pablo)"
-        />
+    <div class="grid-2">
+      <section class="card ui-pro-panel">
+        <div class="nw-list-header">
+          <div class="nw-list-header-left">
+            <h2 class="card-header-title mt-0">Ingresos anuales</h2>
+          </div>
+          <div class="nw-list-header-right">
+            <div class="nw-list-total-inline">{{ formatMoneyAmount(totalAnnual, 'EUR') }}</div>
+            <button
+              class="btn btn-primary btn-sm nw-list-add-icon-only"
+              type="button"
+              aria-label="Anadir ingreso"
+              :disabled="annualIncomeLoading"
+              @click="openIncomeModal"
+            >
+              <span class="btn-icon">+</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="nw-list-header-totals">
+          <div class="nw-list-total-details">Total anual</div>
+        </div>
+
+        <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
+        <div v-else-if="annualIncomeApiError" class="alert mt-3">{{ annualIncomeApiError }}</div>
+
+        <table class="ui-data-table mt-3">
+          <thead>
+            <tr>
+              <th>Concepto</th>
+              <th>Categoria</th>
+              <th>Titular</th>
+              <th>Tipo</th>
+              <th>Importe anual</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="entry in annualIncomeEntries" :key="entry.id">
+              <td>
+                <strong>{{ entry.name }}</strong>
+                <div class="subtle">{{ entry.subcategory }}</div>
+              </td>
+              <td>
+                {{
+                  incomeCategories.find((category) => category.value === entry.category)?.label ??
+                  entry.category
+                }}
+              </td>
+              <td>{{ entry.owner || '-' }}</td>
+              <td>{{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}</td>
+              <td>{{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}</td>
+              <td class="ui-data-table-actions">
+                <button
+                  class="icon-btn"
+                  title="Eliminar"
+                  :disabled="annualIncomeLoading"
+                  @click="removeAnnualIncome(entry.id)"
+                >
+                  &#128465;
+                </button>
+              </td>
+            </tr>
+            <tr v-if="!annualIncomeEntries.length && !annualIncomeLoading">
+              <td colspan="6" class="ui-table-empty">No hay ingresos anuales todavia.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-if="annualIncomeLoading" class="ui-status-line mt-2">
+          Cargando ingresos anuales...
+        </div>
+      </section>
+
+      <section class="card ui-pro-panel">
+        <div class="nw-list-header">
+          <div class="nw-list-header-left">
+            <h2 class="card-header-title mt-0">Gastos anuales</h2>
+          </div>
+        </div>
+        <p class="subtle m-0">Proximamente en Milestone 08.</p>
+      </section>
+    </div>
+
+    <BaseModal :open="showIncomeModal" title="Nuevo ingreso anual" @close="closeIncomeModal">
+      <div class="grid gap-2.5 md:grid-cols-2">
         <select v-model="annualIncomeForm.category" class="select ui-data-field">
           <option
             v-for="category in incomeCategories"
@@ -124,92 +235,83 @@ onMounted(loadAnnualIncome);
           </option>
         </select>
         <input
-          v-model="annualIncomeForm.owner"
-          class="input ui-data-field"
-          placeholder="Titular (opcional)"
+          v-model="annualIncomeForm.name"
+          class="input ui-data-field md:col-span-2"
+          placeholder="Concepto (ej: CTN, Regalos Pablo)"
         />
-        <select v-model="annualIncomeForm.incomeType" class="select ui-data-field">
-          <option value="recurrent">Recurrente</option>
-          <option value="one_off">Puntual</option>
-        </select>
-        <input
-          v-model="annualIncomeForm.amountAnnual"
-          class="input ui-data-field"
-          inputmode="decimal"
-          placeholder="Importe anual"
-        />
-        <select v-model="annualIncomeForm.currency" class="select ui-data-field">
-          <option value="EUR">EUR</option>
-          <option value="USD">USD</option>
-        </select>
-        <button
-          class="btn btn-primary ui-data-field px-[14px]"
-          type="button"
-          :disabled="annualIncomeLoading"
-          @click="submitAnnualIncome"
+        <div
+          class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_auto_120px]"
         >
-          Anadir ingreso
-        </button>
-      </div>
-
-      <textarea
-        v-model="annualIncomeForm.notes"
-        class="textarea mt-2"
-        rows="2"
-        placeholder="Notas (opcional)"
-      />
-
-      <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
-      <div v-else-if="annualIncomeApiError" class="alert mt-3">{{ annualIncomeApiError }}</div>
-
-      <table class="ui-data-table mt-3">
-        <thead>
-          <tr>
-            <th>Concepto</th>
-            <th>Categoria</th>
-            <th>Titular</th>
-            <th>Tipo</th>
-            <th>Importe anual</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="entry in annualIncomeEntries" :key="entry.id">
-            <td>
-              <strong>{{ entry.name }}</strong>
-              <div class="subtle">{{ entry.subcategory }}</div>
-            </td>
-            <td>
-              {{
-                incomeCategories.find((category) => category.value === entry.category)?.label ??
-                entry.category
-              }}
-            </td>
-            <td>{{ entry.owner || '-' }}</td>
-            <td>{{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}</td>
-            <td>{{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}</td>
-            <td class="ui-data-table-actions">
-              <button
-                class="icon-btn"
-                title="Eliminar"
-                :disabled="annualIncomeLoading"
-                @click="removeAnnualIncome(entry.id)"
+          <input
+            v-model="annualIncomeForm.amountAnnual"
+            class="input ui-data-field"
+            inputmode="decimal"
+            :placeholder="amountInputPlaceholder"
+          />
+          <label class="checkbox-row whitespace-nowrap">
+            <input v-model="annualIncomeForm.isRecurrent" type="checkbox" />
+            Recurrente
+          </label>
+          <div class="grid justify-items-center gap-1">
+            <button
+              type="button"
+              class="relative inline-flex h-[34px] w-[58px] items-center rounded-full border transition"
+              :class="
+                annualIncomeForm.amountInputPeriod === 'monthly'
+                  ? 'border-teal-300/60 bg-teal-400/20'
+                  : 'border-white/20 bg-white/5'
+              "
+              :disabled="!annualIncomeForm.isRecurrent"
+              aria-label="Cambiar periodicidad mensual/anual"
+              @click="
+                annualIncomeForm.amountInputPeriod =
+                  annualIncomeForm.amountInputPeriod === 'annual' ? 'monthly' : 'annual'
+              "
+            >
+              <span
+                class="inline-block h-6 w-6 rounded-full bg-white/90 transition-transform"
+                :class="
+                  annualIncomeForm.amountInputPeriod === 'monthly'
+                    ? 'translate-x-7'
+                    : 'translate-x-1'
+                "
+              />
+            </button>
+            <span class="subtle text-[11px]">
+              <span :class="annualIncomeForm.amountInputPeriod === 'annual' ? 'text-white/90' : ''">
+                Anual
+              </span>
+              /
+              <span
+                :class="annualIncomeForm.amountInputPeriod === 'monthly' ? 'text-white/90' : ''"
               >
-                &#128465;
-              </button>
-            </td>
-          </tr>
-          <tr v-if="!annualIncomeEntries.length && !annualIncomeLoading">
-            <td colspan="6" class="ui-table-empty">No hay ingresos anuales todavia.</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div v-if="annualIncomeLoading" class="ui-status-line mt-2">Cargando ingresos anuales...</div>
-
-      <div class="mt-3 text-right">
-        <strong>Total anual:</strong> {{ formatMoneyAmount(totalAnnual, 'EUR') }}
+                Mensual
+              </span>
+            </span>
+          </div>
+          <select v-model="annualIncomeForm.currency" class="select ui-data-field">
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
+        <textarea
+          v-model="annualIncomeForm.notes"
+          class="textarea md:col-span-2"
+          rows="2"
+          placeholder="Notas (opcional)"
+        />
+        <div class="actions md:col-span-2">
+          <button class="btn btn-ghost" type="button" @click="closeIncomeModal">Cancelar</button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            :disabled="annualIncomeLoading"
+            @click="submitAnnualIncome"
+          >
+            Guardar ingreso
+          </button>
+        </div>
       </div>
-    </section>
+    </BaseModal>
   </div>
 </template>
