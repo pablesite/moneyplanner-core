@@ -21,6 +21,11 @@ LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.CREDIT_CARD,
 }
 
+ASSET_SUBCATEGORIES_REQUIRING_TAE = {
+    Asset.Subcategory.BANK_ACCOUNT,
+    Asset.Subcategory.CRYPTO_SPOT_EARN,
+}
+
 
 @dataclass
 class NetWorthTotals:
@@ -34,7 +39,12 @@ class NetWorthTotals:
 
 
 def validate_asset_payload(
-    *, tracking_mode: str | None, accounting_account_id, category, subcategory
+    *,
+    tracking_mode: str | None,
+    accounting_account_id,
+    category,
+    subcategory,
+    annual_interest_tae,
 ) -> None:
     if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -50,6 +60,12 @@ def validate_asset_payload(
         allowed = ASSET_SUBCATEGORY_MAP.get(category)
         if allowed and subcategory not in allowed:
             raise DRFValidationError({"subcategory": "Subcategoria invalida para esta categoria."})
+
+    requires_tae = subcategory in ASSET_SUBCATEGORIES_REQUIRING_TAE
+    if requires_tae and annual_interest_tae is None:
+        raise DRFValidationError(
+            {"annual_interest_tae": "Requerido para cuenta bancaria y spot/earn cripto."}
+        )
 
 
 def validate_liability_payload(

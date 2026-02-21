@@ -51,6 +51,7 @@ class NetWorthServicesTests(TestCase):
                 accounting_account_id=None,
                 category=Asset.Category.CASH,
                 subcategory=Asset.Subcategory.BANK_ACCOUNT,
+                annual_interest_tae=Decimal("1.00"),
             )
 
     def test_validate_asset_payload_rejects_invalid_subcategory(self):
@@ -60,6 +61,7 @@ class NetWorthServicesTests(TestCase):
                 accounting_account_id=None,
                 category=Asset.Category.CASH,
                 subcategory=Asset.Subcategory.ETFS,
+                annual_interest_tae=None,
             )
 
     def test_validate_liability_payload_rejects_accounting_without_account(self):
@@ -77,12 +79,14 @@ class NetWorthServicesTests(TestCase):
             accounting_account_id=None,
             category=Asset.Category.CASH,
             subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            annual_interest_tae=Decimal("0.00"),
         )
         validate_asset_payload(
             tracking_mode=Asset.TrackingMode.MANUAL,
             accounting_account_id=None,
             category=None,
             subcategory=None,
+            annual_interest_tae=None,
         )
         validate_liability_payload(
             tracking_mode=Liability.TrackingMode.MANUAL,
@@ -97,6 +101,16 @@ class NetWorthServicesTests(TestCase):
                 tracking_mode=Liability.TrackingMode.MANUAL,
                 accounting_account_id=None,
                 category=Liability.Category.CREDIT_CARD,
+                annual_interest_tae=None,
+            )
+
+    def test_validate_asset_payload_requires_tae_for_remunerated_liquidity(self):
+        with self.assertRaises(DRFValidationError):
+            validate_asset_payload(
+                tracking_mode=Asset.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.BANK_ACCOUNT,
                 annual_interest_tae=None,
             )
 
@@ -391,6 +405,21 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_asset_create_rejects_missing_tae_for_remunerated_liquidity(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cuenta remunerada",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "currency": "EUR",
+                "amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("annual_interest_tae", response.data["error"]["details"])
+
     def test_liability_create_rejects_accounting_without_account(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
@@ -446,6 +475,7 @@ class NetWorthApiTests(APITestCase):
                 "subcategory": Asset.Subcategory.BANK_ACCOUNT,
                 "currency": "EUR",
                 "start_date": "2020-01-01",
+                "annual_interest_tae": "0.80",
                 "amount": "100.00",
             },
             format="json",
@@ -581,6 +611,7 @@ class NetWorthSerializerUnitTests(TestCase):
                 "subcategory": Asset.Subcategory.BANK_ACCOUNT,
                 "tracking_mode": Asset.TrackingMode.MANUAL,
                 "currency": "EUR",
+                "annual_interest_tae": "0.50",
                 "amount": "100.00",
             },
             context={"request": self.request, "base_currency": "EUR"},

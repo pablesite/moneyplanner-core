@@ -32,6 +32,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "accounting_account_id",
             "currency",
             "start_date",
+            "annual_interest_tae",
             "amount",
             "amount_base",
             "is_active",
@@ -47,11 +48,15 @@ class AssetSerializer(serializers.ModelSerializer):
         )
         category = attrs.get("category", getattr(self.instance, "category", None))
         subcategory = attrs.get("subcategory", getattr(self.instance, "subcategory", None))
+        annual_interest_tae = attrs.get(
+            "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
+        )
         validate_asset_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
             category=category,
             subcategory=subcategory,
+            annual_interest_tae=annual_interest_tae,
         )
         return attrs
 
