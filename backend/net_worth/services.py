@@ -21,9 +21,10 @@ LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.CREDIT_CARD,
 }
 
-ASSET_SUBCATEGORIES_REQUIRING_TAE = {
+ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
     Asset.Subcategory.BANK_ACCOUNT,
     Asset.Subcategory.CRYPTO_SPOT_EARN,
+    Asset.Subcategory.OTHER,
 }
 
 
@@ -61,10 +62,16 @@ def validate_asset_payload(
         if allowed and subcategory not in allowed:
             raise DRFValidationError({"subcategory": "Subcategoria invalida para esta categoria."})
 
-    requires_tae = subcategory in ASSET_SUBCATEGORIES_REQUIRING_TAE
+    requires_tae = (
+        category == Asset.Category.CASH and subcategory in ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE
+    )
     if requires_tae and annual_interest_tae is None:
         raise DRFValidationError(
-            {"annual_interest_tae": "Requerido para cuenta bancaria y spot/earn cripto."}
+            {
+                "annual_interest_tae": (
+                    "Requerido para liquidez en cuenta bancaria, spot/earn cripto y otros."
+                )
+            }
         )
 
 

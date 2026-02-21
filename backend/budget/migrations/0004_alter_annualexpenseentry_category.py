@@ -4,15 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('budget', '0003_annualexpenseentry'),
+        ("budget", "0003_annualexpenseentry"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='annualexpenseentry',
-            name='category',
-            field=models.CharField(choices=[('savings_allocation', 'Ahorro'), ('financial_investments', 'Inversion financiera'), ('real_estate_assets', 'Activos inmobiliarios'), ('tangible_assets', 'Activos mobiliarios'), ('consumption_expenses', 'Gastos')], max_length=32),
+            model_name="annualexpenseentry",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("savings_allocation", "Ahorro"),
+                    ("financial_investments", "Inversion financiera"),
+                    ("real_estate_assets", "Activos inmobiliarios"),
+                    ("tangible_assets", "Activos mobiliarios"),
+                    ("consumption_expenses", "Gastos"),
+                ],
+                max_length=32,
+            ),
         ),
     ]

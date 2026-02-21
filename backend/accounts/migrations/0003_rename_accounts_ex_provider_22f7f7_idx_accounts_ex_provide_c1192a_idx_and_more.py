@@ -4,20 +4,19 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounts', '0002_externalidentity'),
+        ("accounts", "0002_externalidentity"),
     ]
 
     operations = [
         migrations.RenameIndex(
-            model_name='externalidentity',
-            new_name='accounts_ex_provide_c1192a_idx',
-            old_name='accounts_ex_provider_22f7f7_idx',
+            model_name="externalidentity",
+            new_name="accounts_ex_provide_c1192a_idx",
+            old_name="accounts_ex_provider_22f7f7_idx",
         ),
         migrations.RenameIndex(
-            model_name='externalidentity',
-            new_name='accounts_ex_user_id_d49f33_idx',
-            old_name='accounts_ex_user_id_8c3e28_idx',
+            model_name="externalidentity",
+            new_name="accounts_ex_user_id_d49f33_idx",
+            old_name="accounts_ex_user_id_8c3e28_idx",
         ),
     ]

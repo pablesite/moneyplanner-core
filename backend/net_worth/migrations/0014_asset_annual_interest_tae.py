@@ -5,15 +5,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0013_asset_start_date_liability_annual_interest_tae_and_more'),
+        ("net_worth", "0013_asset_start_date_liability_annual_interest_tae_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='annual_interest_tae',
-            field=models.DecimalField(blank=True, decimal_places=2, help_text='TAE anual en porcentaje. Se usa para liquidez remunerada (cuentas bancarias y spot/earn cripto).', max_digits=5, null=True, validators=[django.core.validators.MinValueValidator(0)]),
+            model_name="asset",
+            name="annual_interest_tae",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="TAE anual en porcentaje. Se usa para liquidez remunerada (cuentas bancarias y spot/earn cripto).",
+                max_digits=5,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(0)],
+            ),
         ),
     ]
