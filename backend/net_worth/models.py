@@ -64,6 +64,17 @@ class Asset(models.Model):
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del activo.",
     )
+    annual_interest_tae = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "TAE anual en porcentaje. Se usa para liquidez remunerada "
+            "(cuentas bancarias y spot/earn cripto)."
+        ),
+    )
     amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
