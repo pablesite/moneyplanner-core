@@ -137,6 +137,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "currency",
             "start_date",
             "annual_interest_tae",
+            "monthly_payment_amount",
             "amount",
             "amount_base",
             "is_active",
