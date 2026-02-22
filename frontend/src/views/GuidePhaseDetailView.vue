@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
+import { computeGuidePhaseDiagnostics } from '@/domains/guide/phaseDiagnostics';
 import { findGuidePhaseById, guidePhases } from '@/domains/guide/phases';
 import { gradeFromScore, scoreBadgeStyle, scoreColor } from '@/domains/guide/scoreVisuals';
 import { useNetWorthStore } from '@/stores/netWorth';
@@ -51,6 +52,14 @@ const isDebtPhase = computed(() => phase.value?.id === 1);
 const isNetWorthHealthPhase = computed(() => phase.value?.id === 4);
 const hasDiagnosticPhase = computed(() => isDebtPhase.value || isNetWorthHealthPhase.value);
 const summaryExtended = computed(() => store.summary as SummaryExtended | null);
+const sharedPhaseDiagnostics = computed(() =>
+  computeGuidePhaseDiagnostics({
+    summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
+    assets: store.assets,
+    liabilities: store.liabilities,
+    annualIncomeEntries: annualIncomeStore.entries.value,
+  }),
+);
 
 function toNumber(raw: unknown): number {
   const normalized = String(raw ?? '')
@@ -343,10 +352,7 @@ const phase4RiskDistributionScoreValue = computed(() =>
 );
 
 const phase4GlobalScoreValue = computed(() =>
-  weightedScore([
-    { score: phase4SupportScoreValue.value, weight: 0.5 },
-    { score: phase4RiskDistributionScoreValue.value, weight: 0.5 },
-  ]),
+  sharedPhaseDiagnostics.value.phase4GlobalScore,
 );
 
 const debtMaxTaeScoreValue = computed(() =>
@@ -387,10 +393,7 @@ const phase1DebtRiskScoreValue = computed(() =>
 );
 
 const phase1GlobalScoreValue = computed(() =>
-  weightedScore([
-    { score: phase1DebtCostScoreValue.value, weight: 0.5 },
-    { score: phase1DebtRiskScoreValue.value, weight: 0.5 },
-  ]),
+  sharedPhaseDiagnostics.value.phase1GlobalScore,
 );
 
 function toneFromScore(score: number): ScoreTone {

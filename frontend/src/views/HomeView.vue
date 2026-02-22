@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
+import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
+import { computeGuidePhaseDiagnostics } from '@/domains/guide/phaseDiagnostics';
 import { getActiveGuidePhase, guidePhases, type GuidePhase } from '@/domains/guide/phases';
 import { gradeFromScore, scoreColor } from '@/domains/guide/scoreVisuals';
 import { useNetWorthStore } from '@/stores/netWorth';
 
 const phases = guidePhases;
 const store = useNetWorthStore();
+const annualIncomeStore = useAnnualIncomeStore('core');
+const sharedPhaseDiagnostics = computed(() =>
+  computeGuidePhaseDiagnostics({
+    summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
+    assets: store.assets,
+    liabilities: store.liabilities,
+    annualIncomeEntries: annualIncomeStore.entries.value,
+  }),
+);
 const activePhase = computed(() => getActiveGuidePhase());
 const completedPhases = computed(() => phases.filter((phase) => phase.progress >= 100).length);
 
@@ -72,6 +83,8 @@ const chartRows = computed(() => {
 
 const assetRows = computed(() => chartRows.value.filter((row) => row.assets > 0));
 const activeAssets = computed(() => store.assets.filter((asset) => asset.is_active));
+const activeLiabilities = computed(() => store.liabilities.filter((liability) => liability.is_active));
+const liabilitiesValue = computed(() => Math.max(0, toNumber(store.summary?.total_liabilities)));
 
 const illiquidInvestmentSubcategories = new Set([
   'pension_plans',
@@ -83,6 +96,10 @@ const illiquidInvestmentSubcategories = new Set([
 function isPositiveTae(raw: string | null | undefined): boolean {
   if (raw == null) return false;
   return toNumber(raw) > 0;
+}
+
+function hasTextValue(raw: unknown): boolean {
+  return String(raw ?? '').trim() !== '';
 }
 
 const illiquidAssetsValue = computed(() => {
@@ -116,6 +133,100 @@ const illiquidAssetsShareValue = computed(() =>
 
 const unbackedDebtToAssetsValue = computed(() =>
   assetsValue.value > 0 ? unbackedDebtValue.value / assetsValue.value : null,
+);
+
+const debtRows = computed(() =>
+  activeLiabilities.value
+    .map((liability) => {
+      const amountBase = Math.max(0, toNumber(liability.amount_base));
+      const tae = liability.annual_interest_tae;
+      const taePct = tae == null || String(tae).trim() === '' ? null : toNumber(tae);
+      const hasKnownTae = taePct != null && Number.isFinite(taePct) && taePct >= 0;
+      const hasMonthlyPaymentInput = hasTextValue(liability.monthly_payment_amount);
+      const monthlyPaymentAmount = hasMonthlyPaymentInput
+        ? Math.max(0, toNumber(liability.monthly_payment_amount))
+        : 0;
+      return {
+        amountBase,
+        taePct: hasKnownTae ? taePct : null,
+        hasMonthlyPaymentInput,
+        monthlyPaymentAmount,
+      };
+    })
+    .filter((row) => row.amountBase > 0),
+);
+
+const unbackedDebtToLiabilitiesValue = computed(() =>
+  liabilitiesValue.value > 0 ? unbackedDebtValue.value / liabilitiesValue.value : null,
+);
+
+const topLiabilityShareValue = computed(() => {
+  if (liabilitiesValue.value <= 0) return null;
+  const topLiability = debtRows.value.map((row) => row.amountBase).sort((a, b) => b - a)[0] ?? 0;
+  return topLiability / liabilitiesValue.value;
+});
+
+const maxLiabilityTaePctValue = computed(() => {
+  const taes = debtRows.value
+    .map((row) => row.taePct)
+    .filter((value): value is number => value != null && Number.isFinite(value));
+  if (!taes.length) return null;
+  return Math.max(...taes);
+});
+
+const weightedLiabilityTaePctValue = computed(() => {
+  const rows = debtRows.value.filter((row) => row.taePct != null);
+  const denominator = rows.reduce((acc, row) => acc + row.amountBase, 0);
+  if (denominator <= 0) return null;
+  const numerator = rows.reduce((acc, row) => acc + row.amountBase * (row.taePct ?? 0), 0);
+  return numerator / denominator;
+});
+
+const liabilitiesWithAmountCountValue = computed(
+  () => debtRows.value.filter((row) => row.amountBase > 0).length,
+);
+const liabilitiesWithPaymentInputCountValue = computed(
+  () => debtRows.value.filter((row) => row.hasMonthlyPaymentInput).length,
+);
+const hasNoDebtPaymentInputsValue = computed(
+  () =>
+    liabilitiesWithAmountCountValue.value > 0 && liabilitiesWithPaymentInputCountValue.value === 0,
+);
+
+const totalMonthlyDebtPaymentValue = computed(() =>
+  debtRows.value.reduce((acc, row) => acc + row.monthlyPaymentAmount, 0),
+);
+
+const recurrentAnnualIncomeValue = computed(() =>
+  annualIncomeStore.entries.value.reduce(
+    (acc, entry) => (entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    0,
+  ),
+);
+
+const monthlyIncomeValue = computed(() => {
+  const annual = Number(recurrentAnnualIncomeValue.value ?? 0);
+  if (!Number.isFinite(annual) || annual <= 0) return null;
+  return annual / 12;
+});
+
+const debtPaymentToIncomeValue = computed(() => {
+  if (liabilitiesValue.value <= 0) return 0;
+  if (monthlyIncomeValue.value == null || monthlyIncomeValue.value <= 0) return null;
+  if (hasNoDebtPaymentInputsValue.value) return null;
+  return totalMonthlyDebtPaymentValue.value / monthlyIncomeValue.value;
+});
+
+const highInterestDebtThresholdPct = 8;
+const highInterestDebtValue = computed(() =>
+  debtRows.value.reduce(
+    (acc, row) =>
+      row.taePct != null && row.taePct >= highInterestDebtThresholdPct ? acc + row.amountBase : acc,
+    0,
+  ),
+);
+const highInterestDebtShareValue = computed(() =>
+  liabilitiesValue.value > 0 ? highInterestDebtValue.value / liabilitiesValue.value : null,
 );
 
 const topAssetShareValue = computed(() => {
@@ -155,15 +266,65 @@ const phase4HealthScoreValue = computed(() =>
   ]),
 );
 
+const debtMaxTaeScoreValue = computed(() =>
+  linearScoreDecreasing(maxLiabilityTaePctValue.value, 0.5, 10),
+);
+const debtWeightedTaeScoreValue = computed(() =>
+  linearScoreDecreasing(weightedLiabilityTaePctValue.value, 0.5, 10),
+);
+const debtPaymentToIncomeScoreValue = computed(() =>
+  hasNoDebtPaymentInputsValue.value
+    ? 100
+    : linearScoreDecreasing(debtPaymentToIncomeValue.value, 0.1, 0.5),
+);
+const debtUnbackedScoreValue = computed(() =>
+  linearScoreDecreasing(unbackedDebtToLiabilitiesValue.value, 0.01, 0.5),
+);
+const debtConcentrationScoreValue = computed(() =>
+  linearScoreDecreasing(topLiabilityShareValue.value, 0.25, 0.95),
+);
+const debtHighInterestShareScoreValue = computed(() =>
+  linearScoreDecreasing(highInterestDebtShareValue.value, 0.05, 0.6),
+);
+
+const phase1HealthScoreValue = computed(() =>
+  weightedScore([
+    {
+      score: weightedScore([
+        { score: debtMaxTaeScoreValue.value, weight: 0.4 },
+        { score: debtWeightedTaeScoreValue.value, weight: 0.4 },
+        { score: debtPaymentToIncomeScoreValue.value, weight: 0.2 },
+      ]),
+      weight: 0.5,
+    },
+    {
+      score: weightedScore([
+        { score: debtUnbackedScoreValue.value, weight: 0.4 },
+        { score: debtConcentrationScoreValue.value, weight: 0.3 },
+        { score: debtHighInterestShareScoreValue.value, weight: 0.3 },
+      ]),
+      weight: 0.5,
+    },
+  ]),
+);
+
 function phaseDisplayProgress(phase: GuidePhase): number {
-  if (phase.id !== 4) return phase.progress;
   if (!store.summary) return phase.progress;
-  return Math.round(phase4HealthScoreValue.value);
+  if (phase.id === 1) {
+    const localScore = Math.round(phase1HealthScoreValue.value);
+    const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase1GlobalScore);
+    return Number.isFinite(sharedScore) ? sharedScore : localScore;
+  }
+  if (phase.id === 4) {
+    const localScore = Math.round(phase4HealthScoreValue.value);
+    const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase4GlobalScore);
+    return Number.isFinite(sharedScore) ? sharedScore : localScore;
+  }
+  return phase.progress;
 }
 
 function phaseDonutStyle(phase: GuidePhase): Record<string, string> {
   const progress = phaseDisplayProgress(phase);
-  if (phase.id !== 4 || !store.summary) return { '--phase-progress': `${progress}%` };
   return {
     '--phase-progress': `${progress}%`,
     '--phase-progress-color': scoreColor(progress),
@@ -185,6 +346,7 @@ function phaseBadgeStyle(phase: GuidePhase): Record<string, string> {
 onMounted(() => {
   void store.fetchSettings();
   void store.refreshAll();
+  void annualIncomeStore.loadAll();
 });
 </script>
 
