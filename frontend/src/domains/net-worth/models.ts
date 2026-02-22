@@ -9,6 +9,7 @@ export type Asset = {
   start_date?: string;
   amount: string;
   annual_interest_tae?: string | null;
+  monthly_payment_amount?: string | null;
   amount_base?: string;
   is_active: boolean;
   notes: string;

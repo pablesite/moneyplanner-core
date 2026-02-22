@@ -1,45 +1,191 @@
 <script setup lang="ts">
-type Phase = {
-  id: number;
-  title: string;
-  focus: string;
-  progress: number;
-};
+import { computed, onMounted } from 'vue';
+import { RouterLink } from 'vue-router';
+import { getActiveGuidePhase, guidePhases, type GuidePhase } from '@/domains/guide/phases';
+import { gradeFromScore, scoreColor } from '@/domains/guide/scoreVisuals';
+import { useNetWorthStore } from '@/stores/netWorth';
 
-const phases: Phase[] = [
-  { id: 1, title: 'Estado inicial', focus: 'Foto real y deudas base', progress: 100 },
-  { id: 2, title: 'Flujo de caja positivo', focus: 'Superavit mensual estable', progress: 68 },
-  { id: 3, title: 'Fondo de emergencia', focus: 'Colchon de seguridad', progress: 35 },
-  { id: 4, title: 'Mejorar patrimonio', focus: 'Balancear activo y pasivo', progress: 18 },
-  {
-    id: 5,
-    title: 'Independencia financiera',
-    focus: 'Ingresos cubren tu estilo de vida',
-    progress: 6,
-  },
-];
+const phases = guidePhases;
+const store = useNetWorthStore();
+const activePhase = computed(() => getActiveGuidePhase());
+const completedPhases = computed(() => phases.filter((phase) => phase.progress >= 100).length);
 
-const fallbackPhase: Phase = phases[phases.length - 1] ?? {
-  id: 5,
-  title: 'Independencia financiera',
-  focus: 'Ingresos cubren tu estilo de vida',
-  progress: 0,
-};
-
-const activePhase = phases.find((phase) => phase.progress < 100) ?? fallbackPhase;
-
-function phaseState(phase: Phase): 'done' | 'active' | 'next' {
+function phaseState(phase: GuidePhase): 'done' | 'active' | 'next' {
   if (phase.progress >= 100) return 'done';
-  if (phase.id === activePhase.id) return 'active';
+  if (phase.id === activePhase.value.id) return 'active';
   return 'next';
 }
 
-function phaseStateLabel(phase: Phase): string {
-  const state = phaseState(phase);
-  if (state === 'done') return 'Completada';
-  if (state === 'active') return 'Actual';
-  return 'Siguiente';
+function phaseDetailTo(phaseId: number): string {
+  return `/guia/fases/${phaseId}`;
 }
+
+type SummaryExtended = {
+  liabilities_unbacked?: string | null;
+};
+
+function toNumber(raw: unknown): number {
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function linearScoreIncreasing(value: number | null, min: number, max: number): number {
+  if (value == null || !Number.isFinite(value) || max <= min) return 0;
+  const normalized = (value - min) / (max - min);
+  return clamp(normalized * 100, 0, 100);
+}
+
+function linearScoreDecreasing(value: number | null, min: number, max: number): number {
+  if (value == null || !Number.isFinite(value) || max <= min) return 0;
+  const normalized = (max - value) / (max - min);
+  return clamp(normalized * 100, 0, 100);
+}
+
+function weightedScore(items: { score: number; weight: number }[]): number {
+  const totalWeight = items.reduce((acc, item) => acc + item.weight, 0);
+  if (totalWeight <= 0) return 0;
+  const sum = items.reduce((acc, item) => acc + item.score * item.weight, 0);
+  return clamp(sum / totalWeight, 0, 100);
+}
+
+const summaryExtended = computed(() => store.summary as SummaryExtended | null);
+const assetsValue = computed(() => Math.max(0, toNumber(store.summary?.total_assets)));
+const unbackedDebtValue = computed(() =>
+  Math.max(0, toNumber(summaryExtended.value?.liabilities_unbacked)),
+);
+
+const chartRows = computed(() => {
+  const chart = store.byCategoryChart;
+  return chart.keys.map((key, index) => ({
+    key,
+    assets: Math.max(0, chart.assets[index] ?? 0),
+  }));
+});
+
+const assetRows = computed(() => chartRows.value.filter((row) => row.assets > 0));
+const activeAssets = computed(() => store.assets.filter((asset) => asset.is_active));
+
+const illiquidInvestmentSubcategories = new Set([
+  'pension_plans',
+  'real_estate_crowd',
+  'crowdlending',
+  'other',
+]);
+
+function isPositiveTae(raw: string | null | undefined): boolean {
+  if (raw == null) return false;
+  return toNumber(raw) > 0;
+}
+
+const illiquidAssetsValue = computed(() => {
+  return activeAssets.value.reduce((acc, asset) => {
+    const amountBase = Math.max(0, toNumber(asset.amount_base));
+    if (amountBase <= 0) return acc;
+
+    const illiquidByCategory =
+      asset.category === 'real_estate' ||
+      asset.category === 'furnishings' ||
+      asset.category === 'other';
+
+    const illiquidByInvestmentSubcategory =
+      asset.category === 'investments' &&
+      illiquidInvestmentSubcategories.has(asset.subcategory || 'other');
+
+    const illiquidByCashOtherDeposit =
+      asset.category === 'cash' &&
+      asset.subcategory === 'other' &&
+      isPositiveTae(asset.annual_interest_tae);
+
+    return illiquidByCategory || illiquidByInvestmentSubcategory || illiquidByCashOtherDeposit
+      ? acc + amountBase
+      : acc;
+  }, 0);
+});
+
+const illiquidAssetsShareValue = computed(() =>
+  assetsValue.value > 0 ? illiquidAssetsValue.value / assetsValue.value : null,
+);
+
+const unbackedDebtToAssetsValue = computed(() =>
+  assetsValue.value > 0 ? unbackedDebtValue.value / assetsValue.value : null,
+);
+
+const topAssetShareValue = computed(() => {
+  if (assetsValue.value <= 0) return null;
+  const topAssets = assetRows.value.map((row) => row.assets).sort((a, b) => b - a)[0] ?? 0;
+  return topAssets / assetsValue.value;
+});
+
+const diversificationIndexValue = computed(() => {
+  if (assetsValue.value <= 0) return null;
+  const shares = assetRows.value.map((row) => row.assets / assetsValue.value);
+  if (!shares.length) return null;
+  const hhi = shares.reduce((acc, share) => acc + share * share, 0);
+  const minHhi = 1 / 5;
+  const maxHhi = 1;
+  return clamp((maxHhi - hhi) / (maxHhi - minHhi), 0, 1);
+});
+
+const supportScoreValue = computed(() =>
+  weightedScore([
+    { score: linearScoreDecreasing(unbackedDebtToAssetsValue.value, 0.05, 0.35), weight: 0.5 },
+    { score: linearScoreDecreasing(illiquidAssetsShareValue.value, 0.25, 0.8), weight: 0.5 },
+  ]),
+);
+
+const riskDistributionScoreValue = computed(() =>
+  weightedScore([
+    { score: linearScoreDecreasing(topAssetShareValue.value, 0.4, 0.9), weight: 0.5 },
+    { score: linearScoreIncreasing(diversificationIndexValue.value, 0.2, 0.8), weight: 0.5 },
+  ]),
+);
+
+const phase4HealthScoreValue = computed(() =>
+  weightedScore([
+    { score: supportScoreValue.value, weight: 0.5 },
+    { score: riskDistributionScoreValue.value, weight: 0.5 },
+  ]),
+);
+
+function phaseDisplayProgress(phase: GuidePhase): number {
+  if (phase.id !== 4) return phase.progress;
+  if (!store.summary) return phase.progress;
+  return Math.round(phase4HealthScoreValue.value);
+}
+
+function phaseDonutStyle(phase: GuidePhase): Record<string, string> {
+  const progress = phaseDisplayProgress(phase);
+  if (phase.id !== 4 || !store.summary) return { '--phase-progress': `${progress}%` };
+  return {
+    '--phase-progress': `${progress}%`,
+    '--phase-progress-color': scoreColor(progress),
+  };
+}
+
+function phaseGradeLabel(phase: GuidePhase): string {
+  return gradeFromScore(phaseDisplayProgress(phase));
+}
+
+function phaseBadgeStyle(phase: GuidePhase): Record<string, string> {
+  const score = phaseDisplayProgress(phase);
+  return {
+    color: scoreColor(score),
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  };
+}
+
+onMounted(() => {
+  void store.fetchSettings();
+  void store.refreshAll();
+});
 </script>
 
 <template>
@@ -47,18 +193,30 @@ function phaseStateLabel(phase: Phase): string {
     <section class="card ui-pro-panel ui-home-intro">
       <div class="ui-home-intro-text">
         <p class="ui-pro-kicker">Guia financiera</p>
-        <h1 class="h1 ui-home-title">Vas por buen camino: Fase {{ activePhase.id }} en progreso</h1>
+        <h1 class="h1 ui-home-title">
+          Ruta activa: Fase {{ activePhase.id }} - {{ activePhase.title }}
+        </h1>
         <p class="subtle ui-home-copy">
-          Estas consolidando habitos de flujo positivo. El siguiente salto es construir un fondo de
-          emergencia que te de tranquilidad.
+          Hoja de ruta por fases para avanzar sin perder el foco. Entra en cada fase para ver
+          diagnostico, contexto y siguientes acciones.
         </p>
+      </div>
+      <div class="ui-home-intro-kpis">
+        <div class="ui-home-intro-kpi">
+          <span>Fases completadas</span>
+          <strong>{{ completedPhases }}/{{ phases.length }}</strong>
+        </div>
+        <div class="ui-home-intro-kpi">
+          <span>Progreso fase activa</span>
+          <strong>{{ activePhase.progress }}%</strong>
+        </div>
       </div>
     </section>
 
     <article class="section card ui-pro-panel">
       <h2 class="h2">Ruta por fases</h2>
       <p class="subtle ui-home-block-copy">
-        Recorrido de izquierda a derecha para visualizar tu avance total.
+        Selecciona una fase para abrir su vista de detalle y revisar el diagnostico asociado.
       </p>
 
       <ol class="ui-home-phase-row">
@@ -71,151 +229,84 @@ function phaseStateLabel(phase: Phase): string {
             'ui-home-phase-active': phaseState(phase) === 'active',
           }"
         >
-          <div class="ui-home-phase-head">
-            <span class="ui-home-phase-id">F{{ phase.id }}</span>
-            <span class="badge">{{ phaseStateLabel(phase) }}</span>
-          </div>
+          <RouterLink class="ui-home-phase-link" :to="phaseDetailTo(phase.id)">
+            <div class="ui-home-phase-head">
+              <span class="ui-home-phase-id">F{{ phase.id }}</span>
+              <span class="badge" :style="phaseBadgeStyle(phase)">{{
+                phaseGradeLabel(phase)
+              }}</span>
+            </div>
 
-          <div class="ui-home-phase-title">{{ phase.title }}</div>
-          <div class="ui-home-phase-focus">{{ phase.focus }}</div>
+            <div class="ui-home-phase-title">{{ phase.title }}</div>
+            <div class="ui-home-phase-focus">{{ phase.focus }}</div>
 
-          <div class="ui-home-phase-donut" :style="{ '--phase-progress': `${phase.progress}%` }">
-            <div class="ui-home-phase-donut-inner">{{ phase.progress }}%</div>
-          </div>
+            <div class="ui-home-phase-donut" :style="phaseDonutStyle(phase)">
+              <div class="ui-home-phase-donut-inner">{{ phaseDisplayProgress(phase) }}%</div>
+            </div>
+
+            <div class="ui-home-phase-cta">Ver detalle de fase</div>
+          </RouterLink>
         </li>
       </ol>
-    </article>
-
-    <article class="card ui-pro-panel">
-      <h2 class="h2">Siguiente mejor accion</h2>
-      <p class="subtle ui-home-block-copy">
-        Dedica 20 minutos hoy para revisar estos puntos y seguir avanzando sin saturarte.
-      </p>
-      <ul class="list">
-        <li>Registrar todos los gastos variables de la semana.</li>
-        <li>Confirmar que no hay nuevos pasivos sin categorizar.</li>
-        <li>Definir objetivo de ahorro automatico para este mes.</li>
-      </ul>
     </article>
   </div>
 </template>
 
 <style scoped>
 .ui-home-intro {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
 }
 
-.ui-home-kicker {
-  margin: 0 0 6px;
-  color: rgba(74, 222, 128, 0.9);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-.ui-home-title {
-  margin-bottom: 8px;
-}
-
-.ui-home-copy {
-  margin: 0;
-}
-
-.ui-home-block-copy {
-  margin-top: 0;
-}
-
-.ui-home-phase-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-}
-
-.ui-home-phase-card {
-  min-width: 220px;
-  max-width: 220px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.02);
+.ui-home-intro-kpis {
   display: grid;
   gap: 8px;
-  scroll-snap-align: start;
+  min-width: 220px;
 }
 
-.ui-home-phase-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.ui-home-intro-kpi {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 3px;
+}
+
+.ui-home-intro-kpi span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-home-intro-kpi strong {
+  font-size: 21px;
+}
+
+.ui-home-phase-link {
+  color: inherit;
+  text-decoration: none;
+  display: grid;
   gap: 8px;
+  height: 100%;
 }
 
-.ui-home-phase-id {
+.ui-home-phase-cta {
+  margin-top: auto;
   font-size: 12px;
-  color: var(--muted);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-
-.ui-home-phase-title {
   font-weight: 600;
-  font-size: 14px;
+  color: rgba(45, 212, 191, 0.95);
 }
 
-.ui-home-phase-focus {
-  font-size: 12px;
-  color: var(--muted);
-  min-height: 34px;
-}
-
-.ui-home-phase-done {
-  border-color: rgba(34, 197, 94, 0.35);
-  background: rgba(34, 197, 94, 0.07);
-}
-
-.ui-home-phase-active {
-  border-color: rgba(45, 212, 191, 0.72);
-  background: rgba(45, 212, 191, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.2);
-}
-
-.ui-home-phase-donut {
-  --phase-progress: 0%;
-  width: 66px;
-  height: 66px;
-  border-radius: 999px;
-  background: conic-gradient(
-    rgba(45, 212, 191, 0.9) var(--phase-progress),
-    rgba(255, 255, 255, 0.16) 0
-  );
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 4px;
-}
-
-.ui-home-phase-donut-inner {
-  width: 48px;
-  height: 48px;
-  border-radius: 999px;
-  background: rgba(11, 13, 18, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 860px) {
   .ui-home-intro {
-    display: block;
+    grid-template-columns: 1fr;
+  }
+
+  .ui-home-intro-kpis {
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
