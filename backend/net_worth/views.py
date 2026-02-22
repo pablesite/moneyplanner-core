@@ -82,6 +82,49 @@ class NetWorthSnapshotViewSet(
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["post"], url_path="import-bulk")
+    def import_bulk(self, request):
+        if not isinstance(request.data, list):
+            return Response(
+                {"detail": "Expected a JSON array of snapshots."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = NetWorthSnapshotSerializer(
+            data=request.data, many=True, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        created_count = 0
+        updated_count = 0
+        snapshots = []
+        for row in serializer.validated_data:
+            snapshot, created = NetWorthSnapshot.objects.update_or_create(
+                user=request.user,
+                snapshot_date=row["snapshot_date"],
+                defaults={
+                    "base_currency": row["base_currency"],
+                    "total_assets": row["total_assets"],
+                    "total_liabilities": row["total_liabilities"],
+                    "net_worth": row["net_worth"],
+                },
+            )
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+            snapshots.append(snapshot)
+
+        return Response(
+            {
+                "ok": True,
+                "created": created_count,
+                "updated": updated_count,
+                "snapshots": NetWorthSnapshotSerializer(snapshots, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class NetWorthSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]

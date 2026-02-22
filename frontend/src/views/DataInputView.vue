@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { api } from '@/lib/api';
+import { toApiErrorMessage } from '@/lib/errors';
 import {
   ItemForm,
   ItemList,
@@ -567,6 +569,414 @@ async function removeAnnualExpense(id: number): Promise<void> {
   await deleteExpenseEntry(id, fiscalYear.value);
 }
 
+type PortableAnnualIncomeRecord = {
+  id: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  owner_name?: string;
+  income_type: 'recurrent' | 'one_off';
+  amount_annual: string;
+  fiscal_year: number;
+  currency: string;
+  notes: string;
+  is_active?: boolean;
+};
+
+type PortableAnnualExpenseRecord = {
+  id: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  owner_name?: string;
+  expense_type: 'recurrent' | 'one_off';
+  amount_annual: string;
+  fiscal_year: number;
+  currency: string;
+  notes: string;
+  is_active?: boolean;
+};
+
+type PortableAssetRecord = {
+  id: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  tracking_mode: string;
+  accounting_account_id: number | null;
+  currency: string;
+  start_date?: string;
+  annual_interest_tae?: string | null;
+  amount: string;
+  is_active: boolean;
+  notes: string;
+};
+
+type PortableLiabilityRecord = {
+  id: number;
+  name: string;
+  category: string;
+  tracking_mode: string;
+  accounting_account_id: number | null;
+  currency: string;
+  start_date?: string;
+  annual_interest_tae?: string | null;
+  monthly_payment_amount?: string | null;
+  amount: string;
+  is_active: boolean;
+  notes: string;
+  financed_asset_ref?: number | null;
+};
+
+type PortableSnapshotRecord = {
+  id: number;
+  snapshot_date: string;
+  base_currency: string;
+  total_assets: string;
+  total_liabilities: string;
+  net_worth: string;
+  created_at?: string;
+};
+
+type PortableSettingsRecord = {
+  base_currency: string;
+};
+
+type PortableDataBundle = {
+  schema_version: 1;
+  exported_at: string;
+  source_app: 'core';
+  settings?: PortableSettingsRecord;
+  data: {
+    annual_income: PortableAnnualIncomeRecord[];
+    annual_expense: PortableAnnualExpenseRecord[];
+    assets: PortableAssetRecord[];
+    liabilities: PortableLiabilityRecord[];
+    snapshots?: PortableSnapshotRecord[];
+  };
+};
+
+const dataTransferBusy = ref(false);
+const dataTransferStatus = ref<string | null>(null);
+const dataTransferError = ref<string | null>(null);
+const importFileInputRef = ref<HTMLInputElement | null>(null);
+type ImportMode = 'append' | 'replace';
+const pendingImportMode = ref<ImportMode>('append');
+
+const dataTransferUiBusy = computed(
+  () =>
+    dataTransferBusy.value || store.loading || annualIncomeLoading.value || annualExpenseLoading.value,
+);
+
+function clearDataTransferFeedback(): void {
+  dataTransferStatus.value = null;
+  dataTransferError.value = null;
+}
+
+function normalizeOptionalText(raw: unknown): string | null {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  return text ? text : null;
+}
+
+function formatImportYearSummary(
+  entries: Array<{ fiscal_year: number; amount_annual: string | number }>,
+  label: string,
+): string {
+  if (!entries.length) return `${label}: 0`;
+  const totals = new Map<number, { count: number; amount: number }>();
+  for (const entry of entries) {
+    const year = Number(entry.fiscal_year);
+    const amount = Number(entry.amount_annual ?? 0);
+    const prev = totals.get(year) ?? { count: 0, amount: 0 };
+    totals.set(year, { count: prev.count + 1, amount: prev.amount + (Number.isFinite(amount) ? amount : 0) });
+  }
+  const segments = [...totals.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(
+      ([year, info]) =>
+        `${year}: ${info.count} (${new Intl.NumberFormat('es-ES', {
+          maximumFractionDigits: 2,
+          minimumFractionDigits: 0,
+        }).format(info.amount)})`,
+    );
+  return `${label}: ${segments.join(' | ')}`;
+}
+
+function buildImportPreviewMessage(bundle: PortableDataBundle, mode: ImportMode): string {
+  const snapshots = bundle.data.snapshots ?? [];
+  const snapshotRange =
+    snapshots.length > 0
+      ? `${[...snapshots].map((s) => s.snapshot_date).sort()[0]} .. ${[...snapshots]
+          .map((s) => s.snapshot_date)
+          .sort()
+          .slice(-1)[0]}`
+      : 'sin snapshots';
+  const lines = [
+    mode === 'replace'
+      ? 'Se reemplazaran los datos actuales por el archivo:'
+      : 'Se importaran datos (modo aditivo):',
+    `- Ingresos: ${bundle.data.annual_income.length}`,
+    `- Gastos: ${bundle.data.annual_expense.length}`,
+    `- Activos: ${bundle.data.assets.length}`,
+    `- Pasivos: ${bundle.data.liabilities.length}`,
+    `- Snapshots: ${snapshots.length} (${snapshotRange})`,
+    `- Configuracion base_currency: ${bundle.settings?.base_currency ?? 'sin incluir'}`,
+    '',
+    formatImportYearSummary(bundle.data.annual_income, 'Ingresos por ano'),
+    formatImportYearSummary(bundle.data.annual_expense, 'Gastos por ano'),
+    '',
+    mode === 'replace'
+      ? 'Se borraran primero los datos actuales de estos bloques (incluidos snapshots).'
+      : 'La importacion anade registros y actualiza settings/snapshots importados.',
+    'Continuar?',
+  ];
+  return lines.join('\n');
+}
+
+function buildPortableFilename(): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `moneyplanner-core-data-${timestamp}.json`;
+}
+
+function triggerImportDialog(mode: ImportMode = 'append'): void {
+  clearDataTransferFeedback();
+  pendingImportMode.value = mode;
+  importFileInputRef.value?.click();
+}
+
+async function exportDataBundle(): Promise<void> {
+  clearDataTransferFeedback();
+  dataTransferBusy.value = true;
+  try {
+    const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes, settingsRes] =
+      await Promise.all([
+      api.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+      api.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
+      api.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+      api.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+      api.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
+      api.get<PortableSettingsRecord>('/api/auth/settings/'),
+    ]);
+
+    const payload: PortableDataBundle = {
+      schema_version: 1,
+      exported_at: new Date().toISOString(),
+      source_app: 'core',
+      settings: settingsRes.data ?? undefined,
+      data: {
+        annual_income: (incomeRes.data ?? []).slice(),
+        annual_expense: (expenseRes.data ?? []).slice(),
+        assets: (assetsRes.data ?? []).slice(),
+        liabilities: (liabilitiesRes.data ?? []).slice(),
+        snapshots: (snapshotsRes.data ?? []).slice(),
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = buildPortableFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos y ${(payload.data.snapshots?.length ?? 0)} snapshots.`;
+  } catch (e: unknown) {
+    dataTransferError.value = `No se pudo exportar: ${toApiErrorMessage(e)}`;
+  } finally {
+    dataTransferBusy.value = false;
+  }
+}
+
+function parsePortableDataBundle(raw: string): PortableDataBundle {
+  const parsed = JSON.parse(raw) as Partial<PortableDataBundle>;
+  if (parsed?.schema_version !== 1 || !parsed.data) {
+    throw new Error('Formato de archivo no compatible.');
+  }
+  const { annual_income, annual_expense, assets, liabilities, snapshots } =
+    parsed.data as PortableDataBundle['data'];
+  if (
+    !Array.isArray(annual_income) ||
+    !Array.isArray(annual_expense) ||
+    !Array.isArray(assets) ||
+    !Array.isArray(liabilities)
+  ) {
+    throw new Error('El archivo no contiene las colecciones esperadas.');
+  }
+  return {
+    schema_version: 1,
+    exported_at: String(parsed.exported_at ?? ''),
+    source_app: 'core',
+    settings:
+      parsed.settings && typeof parsed.settings === 'object'
+        ? { base_currency: String((parsed.settings as PortableSettingsRecord).base_currency ?? '') }
+        : undefined,
+    data: {
+      annual_income,
+      annual_expense,
+      assets,
+      liabilities,
+      snapshots: Array.isArray(snapshots) ? snapshots : [],
+    },
+  };
+}
+
+async function clearExistingDataForReplace(): Promise<void> {
+  const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
+    api.get<{ id: number }[]>('/api/budget/annual-income/'),
+    api.get<{ id: number }[]>('/api/budget/annual-expense/'),
+    api.get<{ id: number }[]>('/api/net-worth/assets/'),
+    api.get<{ id: number }[]>('/api/net-worth/liabilities/'),
+    api.get<{ id: number }[]>('/api/net-worth/snapshots/'),
+  ]);
+
+  for (const item of [...(liabilitiesRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/net-worth/liabilities/${item.id}/`);
+  }
+  for (const item of [...(assetsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/net-worth/assets/${item.id}/`);
+  }
+  for (const item of [...(incomeRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/budget/annual-income/${item.id}/`);
+  }
+  for (const item of [...(expenseRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/budget/annual-expense/${item.id}/`);
+  }
+  for (const item of [...(snapshotsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/net-worth/snapshots/${item.id}/`);
+  }
+}
+
+async function importDataFromFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  clearDataTransferFeedback();
+
+  try {
+    const content = await file.text();
+    const bundle = parsePortableDataBundle(content);
+    const importMode = pendingImportMode.value;
+
+    const proceed = window.confirm(buildImportPreviewMessage(bundle, importMode));
+    if (!proceed) return;
+
+    dataTransferBusy.value = true;
+
+    if (importMode === 'replace') {
+      await clearExistingDataForReplace();
+    }
+
+    const assetIdMap = new Map<number, number>();
+
+    const sortedAssets = [...bundle.data.assets].sort((a, b) => a.id - b.id);
+    for (const asset of sortedAssets) {
+      const assetPayload = {
+        name: asset.name,
+        category: asset.category,
+        subcategory: asset.subcategory,
+        tracking_mode: asset.tracking_mode,
+        accounting_account_id: asset.accounting_account_id,
+        currency: asset.currency,
+        start_date: asset.start_date,
+        annual_interest_tae: normalizeOptionalText(asset.annual_interest_tae),
+        amount: String(asset.amount),
+        is_active: asset.is_active ?? true,
+        notes: asset.notes ?? '',
+      };
+      const res = await api.post<{ id: number }>('/api/net-worth/assets/', assetPayload);
+      if (typeof res.data?.id === 'number') assetIdMap.set(asset.id, res.data.id);
+    }
+
+    const sortedLiabilities = [...bundle.data.liabilities].sort((a, b) => a.id - b.id);
+    for (const liability of sortedLiabilities) {
+      const financedAssetId =
+        liability.financed_asset_ref != null
+          ? (assetIdMap.get(liability.financed_asset_ref) ?? null)
+          : null;
+      const liabilityPayload = {
+        name: liability.name,
+        category: liability.category,
+        tracking_mode: liability.tracking_mode,
+        accounting_account_id: liability.accounting_account_id,
+        currency: liability.currency,
+        start_date: liability.start_date,
+        annual_interest_tae: normalizeOptionalText(liability.annual_interest_tae),
+        monthly_payment_amount: normalizeOptionalText(liability.monthly_payment_amount),
+        amount: String(liability.amount),
+        is_active: liability.is_active ?? true,
+        notes: liability.notes ?? '',
+        financed_asset_id: financedAssetId,
+      };
+      await api.post('/api/net-worth/liabilities/', liabilityPayload);
+    }
+
+    const sortedIncome = [...bundle.data.annual_income].sort((a, b) => a.id - b.id);
+    for (const entry of sortedIncome) {
+      await api.post('/api/budget/annual-income/', {
+        name: entry.name,
+        category: entry.category,
+        subcategory: entry.subcategory,
+        owner_name: String(entry.owner_name ?? '').trim(),
+        income_type: entry.income_type,
+        amount_annual: String(entry.amount_annual),
+        fiscal_year: Number(entry.fiscal_year),
+        currency: (entry.currency || 'EUR').toUpperCase(),
+        notes: entry.notes ?? '',
+        is_active: entry.is_active ?? true,
+      });
+    }
+
+    const sortedExpense = [...bundle.data.annual_expense].sort((a, b) => a.id - b.id);
+    for (const entry of sortedExpense) {
+      await api.post('/api/budget/annual-expense/', {
+        name: entry.name,
+        category: entry.category,
+        subcategory: entry.subcategory,
+        owner_name: String(entry.owner_name ?? '').trim(),
+        expense_type: entry.expense_type,
+        amount_annual: String(entry.amount_annual),
+        fiscal_year: Number(entry.fiscal_year),
+        currency: (entry.currency || 'EUR').toUpperCase(),
+        notes: entry.notes ?? '',
+        is_active: entry.is_active ?? true,
+      });
+    }
+
+    if (bundle.settings?.base_currency) {
+      await api.put('/api/auth/settings/', { base_currency: bundle.settings.base_currency });
+    }
+    if (Array.isArray(bundle.data.snapshots) && bundle.data.snapshots.length) {
+      await api.post(
+        '/api/net-worth/snapshots/import-bulk/',
+        bundle.data.snapshots.map((snapshot) => ({
+          snapshot_date: snapshot.snapshot_date,
+          base_currency: snapshot.base_currency,
+          total_assets: snapshot.total_assets,
+          total_liabilities: snapshot.total_liabilities,
+          net_worth: snapshot.net_worth,
+        })),
+      );
+    }
+
+    await Promise.all([store.refreshAll(), loadAnnualIncome(fiscalYear.value), loadAnnualExpense(fiscalYear.value)]);
+
+    dataTransferStatus.value =
+      importMode === 'replace'
+        ? `Reemplazo completado: ${sortedIncome.length} ingresos, ${sortedExpense.length} gastos, ${sortedAssets.length} activos, ${sortedLiabilities.length} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`
+        : `Importacion completada: ${sortedIncome.length} ingresos, ${sortedExpense.length} gastos, ${sortedAssets.length} activos, ${sortedLiabilities.length} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`;
+  } catch (e: unknown) {
+    dataTransferError.value = `No se pudo importar: ${e instanceof Error ? e.message : toApiErrorMessage(e)}`;
+  } finally {
+    dataTransferBusy.value = false;
+    if (input) input.value = '';
+  }
+}
+
 watch(
   fiscalYear,
   (year) => {
@@ -589,6 +999,41 @@ watch(
         Gestiona aqui la base financiera anual: ingresos, activos y pasivos con interes para el
         analisis de patrimonio.
       </p>
+      <div class="actions m-0">
+        <button
+          class="btn btn-ghost"
+          type="button"
+          :disabled="dataTransferUiBusy"
+          @click="exportDataBundle"
+        >
+          Exportar datos
+        </button>
+        <button
+          class="btn btn-primary"
+          type="button"
+          :disabled="dataTransferUiBusy"
+          @click="triggerImportDialog('append')"
+        >
+          Importar datos
+        </button>
+        <button
+          class="btn btn-ghost"
+          type="button"
+          :disabled="dataTransferUiBusy"
+          @click="triggerImportDialog('replace')"
+        >
+          Reemplazar datos
+        </button>
+        <input
+          ref="importFileInputRef"
+          type="file"
+          accept="application/json,.json"
+          class="sr-only"
+          @change="importDataFromFile"
+        />
+      </div>
+      <p v-if="dataTransferStatus" class="subtle m-0">{{ dataTransferStatus }}</p>
+      <p v-if="dataTransferError" class="alert m-0">{{ dataTransferError }}</p>
     </section>
 
     <div class="grid-2">

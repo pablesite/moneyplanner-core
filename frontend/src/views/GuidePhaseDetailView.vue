@@ -19,6 +19,7 @@ type ScoreKpi = {
   valueText: string;
   score: number | null;
   hint: string;
+  incomplete?: boolean;
 };
 
 type ScoreCard = {
@@ -58,6 +59,10 @@ function toNumber(raw: unknown): number {
     .replace(/,/g, '.');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : 0;
+}
+
+function hasTextValue(raw: unknown): boolean {
+  return String(raw ?? '').trim() !== '';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -187,9 +192,15 @@ const debtRows = computed(() =>
       const tae = liability.annual_interest_tae;
       const taePct = tae == null || String(tae).trim() === '' ? null : toNumber(tae);
       const hasKnownTae = taePct != null && Number.isFinite(taePct) && taePct >= 0;
+      const hasMonthlyPaymentInput = hasTextValue(liability.monthly_payment_amount);
+      const monthlyPaymentAmount = hasMonthlyPaymentInput
+        ? Math.max(0, toNumber(liability.monthly_payment_amount))
+        : 0;
       return {
         amountBase,
         taePct: hasKnownTae ? taePct : null,
+        hasMonthlyPaymentInput,
+        monthlyPaymentAmount,
       };
     })
     .filter((row) => row.amountBase > 0),
@@ -251,15 +262,34 @@ const liabilitiesWithAmountCountValue = computed(
   () => debtRows.value.filter((row) => row.amountBase > 0).length,
 );
 
+const liabilitiesWithPaymentInputCountValue = computed(
+  () => debtRows.value.filter((row) => row.hasMonthlyPaymentInput).length,
+);
+
+const hasMissingDebtPaymentInputsValue = computed(
+  () =>
+    liabilitiesWithAmountCountValue.value > 0 &&
+    liabilitiesWithPaymentInputCountValue.value < liabilitiesWithAmountCountValue.value,
+);
+
+const hasNoDebtPaymentInputsValue = computed(
+  () =>
+    liabilitiesWithAmountCountValue.value > 0 && liabilitiesWithPaymentInputCountValue.value === 0,
+);
+
 const totalMonthlyDebtPaymentValue = computed(() =>
-  activeLiabilities.value.reduce((acc, liability) => {
-    const payment = Math.max(0, toNumber(liability.monthly_payment_amount));
-    return acc + payment;
-  }, 0),
+  debtRows.value.reduce((acc, row) => acc + row.monthlyPaymentAmount, 0),
+);
+
+const recurrentAnnualIncomeValue = computed(() =>
+  annualIncomeStore.entries.value.reduce(
+    (acc, entry) => (entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    0,
+  ),
 );
 
 const monthlyIncomeValue = computed(() => {
-  const annual = Number(annualIncomeStore.totalAnnual.value ?? 0);
+  const annual = Number(recurrentAnnualIncomeValue.value ?? 0);
   if (!Number.isFinite(annual) || annual <= 0) return null;
   return annual / 12;
 });
@@ -267,8 +297,7 @@ const monthlyIncomeValue = computed(() => {
 const debtPaymentToIncomeValue = computed(() => {
   if (liabilitiesValue.value <= 0) return 0;
   if (monthlyIncomeValue.value == null || monthlyIncomeValue.value <= 0) return null;
-  if (liabilitiesWithAmountCountValue.value > 0 && totalMonthlyDebtPaymentValue.value <= 0)
-    return null;
+  if (hasNoDebtPaymentInputsValue.value) return null;
   return totalMonthlyDebtPaymentValue.value / monthlyIncomeValue.value;
 });
 
@@ -286,7 +315,7 @@ const highInterestDebtShareValue = computed(() =>
 );
 
 const illiquidScoreValue = computed(() =>
-  linearScoreDecreasing(illiquidAssetsShareValue.value, 0.25, 0.8),
+  linearScoreDecreasing(illiquidAssetsShareValue.value, 0.25, 1),
 );
 const unbackedDebtScoreValue = computed(() =>
   linearScoreDecreasing(unbackedDebtToAssetsValue.value, 0.05, 0.35),
@@ -327,7 +356,9 @@ const debtWeightedTaeScoreValue = computed(() =>
   linearScoreDecreasing(weightedLiabilityTaePctValue.value, 0.5, 10),
 );
 const debtPaymentToIncomeScoreValue = computed(() =>
-  linearScoreDecreasing(debtPaymentToIncomeValue.value, 0.1, 0.5),
+  hasNoDebtPaymentInputsValue.value
+    ? 100
+    : linearScoreDecreasing(debtPaymentToIncomeValue.value, 0.1, 0.5),
 );
 const debtUnbackedScoreValue = computed(() =>
   linearScoreDecreasing(unbackedDebtToLiabilitiesValue.value, 0.01, 0.5),
@@ -466,7 +497,8 @@ const phase1ScoreCards = computed<ScoreCard[]>(() => [
         label: '% cuota / ingresos',
         valueText: formatPct(debtPaymentToIncomeValue.value, 0),
         score: debtPaymentToIncomeScoreValue.value,
-        hint: 'Suma de cuotas mensuales manuales / ingreso mensual (inverso)',
+        hint: 'Suma de cuotas mensuales manuales / ingreso mensual recurrente (inverso)',
+        incomplete: hasMissingDebtPaymentInputsValue.value,
       },
     ],
   },
@@ -695,7 +727,16 @@ watch(hasDiagnosticPhase, () => {
             <div v-for="kpi in card.kpis" :key="kpi.id" class="ui-guide-score-kpi">
               <div class="ui-guide-score-kpi-head">
                 <span>{{ kpi.label }}</span>
-                <strong>{{ kpi.valueText }}</strong>
+                <strong class="ui-guide-score-kpi-value">
+                  {{ kpi.valueText }}
+                  <span
+                    v-if="kpi.incomplete"
+                    class="ui-guide-score-kpi-alert"
+                    title="Faltan cuotas por completar"
+                    aria-label="Faltan cuotas por completar"
+                    >!</span
+                  >
+                </strong>
               </div>
               <div v-if="kpi.score != null" class="ui-guide-meter-row ui-guide-meter-row-kpi">
                 <span class="ui-guide-grade" :style="gradeStyle(kpi.score)">{{
@@ -964,6 +1005,27 @@ watch(hasDiagnosticPhase, () => {
   justify-content: space-between;
   gap: 8px;
   font-size: 13px;
+}
+
+.ui-guide-score-kpi-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-guide-score-kpi-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: hsl(34 100% 72%);
+  border: 1px solid hsl(34 100% 68% / 0.45);
+  background: hsl(34 100% 50% / 0.14);
 }
 
 .ui-guide-score-kpi-track {
