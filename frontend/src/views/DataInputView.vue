@@ -679,6 +679,32 @@ function normalizeOptionalText(raw: unknown): string | null {
   return text ? text : null;
 }
 
+function normalizeImportedAssetTae(asset: PortableAssetRecord): string | null {
+  const normalized = normalizeOptionalText(asset.annual_interest_tae);
+  if (normalized != null) return normalized;
+
+  const category = String(asset.category ?? '').trim();
+  const subcategory = String(asset.subcategory ?? '').trim();
+  const requiresTae =
+    category === 'cash' &&
+    (subcategory === 'bank_account' || subcategory === 'crypto_spot_earn' || subcategory === 'other');
+
+  // Backward compatibility: older exports may not include TAE for assets that are now required.
+  return requiresTae ? '0' : null;
+}
+
+function normalizeImportedLiabilityTae(liability: PortableLiabilityRecord): string | null {
+  const normalized = normalizeOptionalText(liability.annual_interest_tae);
+  if (normalized != null) return normalized;
+
+  const category = String(liability.category ?? '').trim();
+  const requiresTae =
+    category === 'mortgage' || category === 'personal_loan' || category === 'credit_card';
+
+  // Backward compatibility: older exports may not include TAE for liabilities that are now required.
+  return requiresTae ? '0' : null;
+}
+
 function formatImportYearSummary(
   entries: Array<{ fiscal_year: number; amount_annual: string | number }>,
   label: string,
@@ -883,7 +909,7 @@ async function importDataFromFile(event: Event): Promise<void> {
         accounting_account_id: asset.accounting_account_id,
         currency: asset.currency,
         start_date: asset.start_date,
-        annual_interest_tae: normalizeOptionalText(asset.annual_interest_tae),
+        annual_interest_tae: normalizeImportedAssetTae(asset),
         amount: String(asset.amount),
         is_active: asset.is_active ?? true,
         notes: asset.notes ?? '',
@@ -905,7 +931,7 @@ async function importDataFromFile(event: Event): Promise<void> {
         accounting_account_id: liability.accounting_account_id,
         currency: liability.currency,
         start_date: liability.start_date,
-        annual_interest_tae: normalizeOptionalText(liability.annual_interest_tae),
+        annual_interest_tae: normalizeImportedLiabilityTae(liability),
         monthly_payment_amount: normalizeOptionalText(liability.monthly_payment_amount),
         amount: String(liability.amount),
         is_active: liability.is_active ?? true,
@@ -970,7 +996,7 @@ async function importDataFromFile(event: Event): Promise<void> {
         ? `Reemplazo completado: ${sortedIncome.length} ingresos, ${sortedExpense.length} gastos, ${sortedAssets.length} activos, ${sortedLiabilities.length} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`
         : `Importacion completada: ${sortedIncome.length} ingresos, ${sortedExpense.length} gastos, ${sortedAssets.length} activos, ${sortedLiabilities.length} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`;
   } catch (e: unknown) {
-    dataTransferError.value = `No se pudo importar: ${e instanceof Error ? e.message : toApiErrorMessage(e)}`;
+    dataTransferError.value = `No se pudo importar: ${toApiErrorMessage(e)}`;
   } finally {
     dataTransferBusy.value = false;
     if (input) input.value = '';
