@@ -182,6 +182,17 @@ class Liability(models.Model):
             "para hipoteca, prestamo personal y tarjeta."
         ),
     )
+    monthly_payment_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Cuota mensual manual en la moneda del pasivo. "
+            "Temporal hasta modelar amortizacion y calendario."
+        ),
+    )
     amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
