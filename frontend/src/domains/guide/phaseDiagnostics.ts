@@ -213,7 +213,7 @@ export function computeGuidePhaseDiagnostics(
     {
       score: hasNoDebtPaymentInputs
         ? 100
-        : linearScoreDecreasing(debtPaymentToIncome, 0.1, 0.5),
+        : linearScoreDecreasing(debtPaymentToIncome, 0.15, 0.6),
       weight: 0.2,
     },
   ]);

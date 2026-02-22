@@ -364,7 +364,7 @@ const debtWeightedTaeScoreValue = computed(() =>
 const debtPaymentToIncomeScoreValue = computed(() =>
   hasNoDebtPaymentInputsValue.value
     ? 100
-    : linearScoreDecreasing(debtPaymentToIncomeValue.value, 0.1, 0.5),
+    : linearScoreDecreasing(debtPaymentToIncomeValue.value, 0.15, 0.6),
 );
 const debtUnbackedScoreValue = computed(() =>
   linearScoreDecreasing(unbackedDebtToLiabilitiesValue.value, 0.01, 0.5),
