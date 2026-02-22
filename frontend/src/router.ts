@@ -4,6 +4,7 @@ import LoginView from './views/LoginView.vue';
 import HomeView from './views/HomeView.vue';
 import GuidePhaseDetailView from './views/GuidePhaseDetailView.vue';
 import DataInputView from './views/DataInputView.vue';
+import BudgetDashboardView from './views/BudgetDashboardView.vue';
 import AuxDataView from './views/AuxDataView.vue';
 import { registerAuthGuard } from '@/domains/auth';
 
@@ -15,6 +16,7 @@ export const router = createRouter({
     { path: '/guia/fases/:phaseId', name: 'guide-phase-detail', component: GuidePhaseDetailView },
     { path: '/introduccion-datos', name: 'data-input', component: DataInputView },
     { path: '/', name: 'networth', component: NetWorthView },
+    { path: '/presupuesto', name: 'budget-dashboard', component: BudgetDashboardView },
     { path: '/data', name: 'aux-data', component: AuxDataView },
   ],
 });

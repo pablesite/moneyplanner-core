@@ -32,6 +32,7 @@ describe('router (core)', () => {
         routes: expect.arrayContaining([
           expect.objectContaining({ path: '/login' }),
           expect.objectContaining({ path: '/introduccion-datos' }),
+          expect.objectContaining({ path: '/presupuesto' }),
           expect.objectContaining({ path: '/' }),
           expect.objectContaining({ path: '/data' }),
         ]),
