@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { api } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import {
@@ -657,11 +657,14 @@ type PortableDataBundle = {
 };
 
 const dataTransferBusy = ref(false);
+const dataTransferBusyLabel = ref<string | null>(null);
 const dataTransferStatus = ref<string | null>(null);
 const dataTransferError = ref<string | null>(null);
+const dataTransferToastMessage = ref<string | null>(null);
 const importFileInputRef = ref<HTMLInputElement | null>(null);
 type ImportMode = 'append' | 'replace';
 const pendingImportMode = ref<ImportMode>('append');
+let dataTransferToastTimer: number | null = null;
 
 const dataTransferUiBusy = computed(
   () =>
@@ -671,6 +674,23 @@ const dataTransferUiBusy = computed(
 function clearDataTransferFeedback(): void {
   dataTransferStatus.value = null;
   dataTransferError.value = null;
+}
+
+function clearDataTransferToast(): void {
+  if (dataTransferToastTimer != null) {
+    window.clearTimeout(dataTransferToastTimer);
+    dataTransferToastTimer = null;
+  }
+  dataTransferToastMessage.value = null;
+}
+
+function showDataTransferToast(message: string): void {
+  clearDataTransferToast();
+  dataTransferToastMessage.value = message;
+  dataTransferToastTimer = window.setTimeout(() => {
+    dataTransferToastMessage.value = null;
+    dataTransferToastTimer = null;
+  }, 5000);
 }
 
 function normalizeOptionalText(raw: unknown): string | null {
@@ -773,6 +793,7 @@ function triggerImportDialog(mode: ImportMode = 'append'): void {
 
 async function exportDataBundle(): Promise<void> {
   clearDataTransferFeedback();
+  dataTransferBusyLabel.value = 'Exportando datos...';
   dataTransferBusy.value = true;
   try {
     const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes, settingsRes] =
@@ -814,6 +835,7 @@ async function exportDataBundle(): Promise<void> {
     dataTransferError.value = `No se pudo exportar: ${toApiErrorMessage(e)}`;
   } finally {
     dataTransferBusy.value = false;
+    dataTransferBusyLabel.value = null;
   }
 }
 
@@ -891,6 +913,10 @@ async function importDataFromFile(event: Event): Promise<void> {
     const proceed = window.confirm(buildImportPreviewMessage(bundle, importMode));
     if (!proceed) return;
 
+    dataTransferBusyLabel.value =
+      importMode === 'replace'
+        ? 'Reemplazando datos... Esto puede tardar unos segundos.'
+        : 'Importando datos...';
     dataTransferBusy.value = true;
 
     if (importMode === 'replace') {
@@ -999,9 +1025,18 @@ async function importDataFromFile(event: Event): Promise<void> {
     dataTransferError.value = `No se pudo importar: ${toApiErrorMessage(e)}`;
   } finally {
     dataTransferBusy.value = false;
+    dataTransferBusyLabel.value = null;
     if (input) input.value = '';
   }
 }
+
+watch(dataTransferStatus, (message) => {
+  if (message) showDataTransferToast(message);
+});
+
+onBeforeUnmount(() => {
+  clearDataTransferToast();
+});
 
 watch(
   fiscalYear,
@@ -1061,6 +1096,50 @@ watch(
       <p v-if="dataTransferStatus" class="subtle m-0">{{ dataTransferStatus }}</p>
       <p v-if="dataTransferError" class="alert m-0">{{ dataTransferError }}</p>
     </section>
+
+    <Transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="translate-y-2 opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-2 opacity-0"
+    >
+      <div
+        v-if="dataTransferToastMessage"
+        class="fixed bottom-4 right-4 z-[80] max-w-[min(92vw,560px)] rounded-xl border border-emerald-300/30 bg-emerald-950/90 px-4 py-3 text-sm text-emerald-100 shadow-2xl backdrop-blur"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="flex items-start gap-2.5">
+          <span class="mt-0.5 inline-block h-2.5 w-2.5 rounded-full bg-emerald-300" />
+          <span>{{ dataTransferToastMessage }}</span>
+        </div>
+      </div>
+    </Transition>
+
+    <div
+      v-if="dataTransferBusy"
+      class="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 backdrop-blur-[2px]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="w-full max-w-md rounded-2xl border border-white/15 bg-[#111827f2] p-4 shadow-2xl">
+        <div class="flex items-center gap-3">
+          <span
+            class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-teal-300"
+            aria-hidden="true"
+          />
+          <div>
+            <p class="m-0 text-sm font-medium text-white">
+              {{ dataTransferBusyLabel ?? 'Procesando datos...' }}
+            </p>
+            <p class="m-0 text-xs text-white/65">No cierres la pestaña hasta que termine.</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="grid-2">
       <section class="section ui-flow-air md:col-span-2">
