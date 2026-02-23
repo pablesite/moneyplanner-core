@@ -9,8 +9,16 @@ import {
   useNetWorthViewState,
 } from '@/domains/net-worth';
 import { BaseModal } from '@/domains/ui';
-import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
-import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
+import {
+  useAnnualIncomeStore,
+  type AnnualIncomeCashflowRole,
+  type AnnualTimeProfile as IncomeTimeProfile,
+} from '@/domains/data-input/annualIncomeStore';
+import {
+  useAnnualExpenseStore,
+  type AnnualExpenseCashflowRole,
+  type AnnualTimeProfile as ExpenseTimeProfile,
+} from '@/domains/data-input/annualExpenseStore';
 import {
   expenseCategories,
   expenseSubcategories,
@@ -82,6 +90,10 @@ const annualIncomeForm = reactive({
   subcategory: 'employee_salary',
   name: '',
   isRecurrent: true,
+  timeProfile: 'structural_recurrent' as IncomeTimeProfile,
+  cashflowRole: 'operating' as AnnualIncomeCashflowRole,
+  eventGroup: '',
+  termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
   currency: 'EUR',
@@ -92,6 +104,10 @@ const annualExpenseForm = reactive({
   subcategory: 'living_expenses',
   name: '',
   isRecurrent: true,
+  timeProfile: 'structural_recurrent' as ExpenseTimeProfile,
+  cashflowRole: 'operating' as AnnualExpenseCashflowRole,
+  eventGroup: '',
+  termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
   currency: 'EUR',
@@ -238,11 +254,44 @@ function expenseSubcategoryLabel(key: string): string {
   return expenseSubcategories.find((subcategory) => subcategory.value === key)?.label ?? key;
 }
 
-function incomeTypeLabel(type: 'recurrent' | 'one_off'): string {
-  return type === 'recurrent' ? 'Recurrente' : 'Puntual';
+function timeProfileLabel(type: IncomeTimeProfile | ExpenseTimeProfile): string {
+  if (type === 'structural_recurrent') return 'Recurrente estructural';
+  if (type === 'term_recurrent') return 'Recurrente temporal';
+  return 'Puntual';
 }
-function expenseTypeLabel(type: 'recurrent' | 'one_off'): string {
-  return type === 'recurrent' ? 'Recurrente' : 'Puntual';
+function incomeCashflowRoleLabel(role: AnnualIncomeCashflowRole): string {
+  if (role === 'operating') return 'Operativo';
+  if (role === 'transfer') return 'Transferencia';
+  if (role === 'asset_sale') return 'Venta de activo';
+  if (role === 'tax_adjustment') return 'Ajuste fiscal';
+  return 'Otro';
+}
+function expenseCashflowRoleLabel(role: AnnualExpenseCashflowRole): string {
+  if (role === 'operating') return 'Operativo';
+  if (role === 'temporary_commitment') return 'Compromiso temporal';
+  if (role === 'savings') return 'Ahorro';
+  if (role === 'investment') return 'Inversion';
+  if (role === 'asset_purchase') return 'Compra de activo';
+  if (role === 'tax_fee') return 'Impuestos/gastos';
+  if (role === 'transfer') return 'Transferencia';
+  return 'Otro';
+}
+function defaultIncomeCashflowRole(category: IncomeCategoryKey): AnnualIncomeCashflowRole {
+  if (category === 'capital_gains') return 'asset_sale';
+  if (category === 'transfers_support' || category === 'public_benefits') return 'transfer';
+  if (category === 'other_income') return 'other';
+  return 'operating';
+}
+function defaultExpenseCashflowRole(
+  category: ExpenseCategoryKey,
+  subcategory: string,
+): AnnualExpenseCashflowRole {
+  if (category === 'savings_allocation') return 'savings';
+  if (category === 'financial_investments') return 'investment';
+  if (category === 'real_estate_assets' || category === 'tangible_assets') {
+    return subcategory === 'real_estate_fees_taxes' ? 'tax_fee' : 'asset_purchase';
+  }
+  return 'operating';
 }
 
 function sumByCurrency(
@@ -403,6 +452,10 @@ function resetIncomeForm(): void {
   annualIncomeForm.subcategory = 'employee_salary';
   annualIncomeForm.name = '';
   annualIncomeForm.isRecurrent = true;
+  annualIncomeForm.timeProfile = 'structural_recurrent';
+  annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
+  annualIncomeForm.eventGroup = '';
+  annualIncomeForm.termEndYear = '';
   annualIncomeForm.amountInputPeriod = 'annual';
   annualIncomeForm.amountAnnual = '';
   annualIncomeForm.currency = 'EUR';
@@ -413,6 +466,13 @@ function resetExpenseForm(): void {
   annualExpenseForm.subcategory = 'living_expenses';
   annualExpenseForm.name = '';
   annualExpenseForm.isRecurrent = true;
+  annualExpenseForm.timeProfile = 'structural_recurrent';
+  annualExpenseForm.cashflowRole = defaultExpenseCashflowRole(
+    annualExpenseForm.category,
+    annualExpenseForm.subcategory,
+  );
+  annualExpenseForm.eventGroup = '';
+  annualExpenseForm.termEndYear = '';
   annualExpenseForm.amountInputPeriod = 'annual';
   annualExpenseForm.amountAnnual = '';
   annualExpenseForm.currency = 'EUR';
@@ -427,6 +487,11 @@ function openIncomeModal(entry?: AnnualIncomeEntry): void {
     annualIncomeForm.subcategory = entry.subcategory;
     annualIncomeForm.name = entry.name;
     annualIncomeForm.isRecurrent = entry.incomeType === 'recurrent';
+    annualIncomeForm.timeProfile = entry.timeProfile;
+    annualIncomeForm.cashflowRole = entry.cashflowRole;
+    annualIncomeForm.eventGroup = entry.eventGroup || '';
+    annualIncomeForm.termEndYear =
+      entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
     annualIncomeForm.amountInputPeriod = 'annual';
     annualIncomeForm.amountAnnual = String(entry.amountAnnual);
     annualIncomeForm.currency = entry.currency;
@@ -445,6 +510,11 @@ function openExpenseModal(entry?: AnnualExpenseEntry): void {
     annualExpenseForm.subcategory = entry.subcategory;
     annualExpenseForm.name = entry.name;
     annualExpenseForm.isRecurrent = entry.expenseType === 'recurrent';
+    annualExpenseForm.timeProfile = entry.timeProfile;
+    annualExpenseForm.cashflowRole = entry.cashflowRole;
+    annualExpenseForm.eventGroup = entry.eventGroup || '';
+    annualExpenseForm.termEndYear =
+      entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
     annualExpenseForm.amountInputPeriod = 'annual';
     annualExpenseForm.amountAnnual = String(entry.amountAnnual);
     annualExpenseForm.currency = entry.currency;
@@ -490,14 +560,46 @@ watch(
   () => annualIncomeForm.isRecurrent,
   (isRecurrent) => {
     if (!isRecurrent) annualIncomeForm.amountInputPeriod = 'annual';
+    if (!isRecurrent) annualIncomeForm.timeProfile = 'one_off';
+    else if (annualIncomeForm.timeProfile === 'one_off')
+      annualIncomeForm.timeProfile = 'structural_recurrent';
   },
 );
 watch(
   () => annualExpenseForm.isRecurrent,
   (isRecurrent) => {
     if (!isRecurrent) annualExpenseForm.amountInputPeriod = 'annual';
+    if (!isRecurrent) annualExpenseForm.timeProfile = 'one_off';
+    else if (annualExpenseForm.timeProfile === 'one_off')
+      annualExpenseForm.timeProfile = 'structural_recurrent';
   },
 );
+watch(
+  () => annualIncomeForm.timeProfile,
+  (timeProfile) => {
+    annualIncomeForm.isRecurrent = timeProfile !== 'one_off';
+    if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndYear = '';
+  },
+);
+watch(
+  () => annualExpenseForm.timeProfile,
+  (timeProfile) => {
+    annualExpenseForm.isRecurrent = timeProfile !== 'one_off';
+    if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndYear = '';
+  },
+);
+watch(
+  () => annualIncomeForm.category,
+  () => {
+    annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
+  },
+);
+watch([() => annualExpenseForm.category, () => annualExpenseForm.subcategory], () => {
+  annualExpenseForm.cashflowRole = defaultExpenseCashflowRole(
+    annualExpenseForm.category,
+    annualExpenseForm.subcategory,
+  );
+});
 
 async function submitAnnualIncome(): Promise<void> {
   const rawAmount = Number(String(annualIncomeForm.amountAnnual).replace(',', '.'));
@@ -512,6 +614,14 @@ async function submitAnnualIncome(): Promise<void> {
     category: annualIncomeForm.category,
     subcategory: annualIncomeForm.subcategory,
     incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
+    timeProfile: annualIncomeForm.timeProfile,
+    cashflowRole: annualIncomeForm.cashflowRole,
+    eventGroup: annualIncomeForm.eventGroup,
+    termEndYear:
+      annualIncomeForm.timeProfile === 'term_recurrent' &&
+      String(annualIncomeForm.termEndYear).trim()
+        ? Number(annualIncomeForm.termEndYear)
+        : null,
     amountAnnual: String(normalizedAmount),
     fiscalYear: fiscalYear.value,
     currency: annualIncomeForm.currency,
@@ -548,6 +658,14 @@ async function submitAnnualExpense(): Promise<void> {
     expenseType: (annualExpenseForm.isRecurrent ? 'recurrent' : 'one_off') as
       | 'recurrent'
       | 'one_off',
+    timeProfile: annualExpenseForm.timeProfile,
+    cashflowRole: annualExpenseForm.cashflowRole,
+    eventGroup: annualExpenseForm.eventGroup,
+    termEndYear:
+      annualExpenseForm.timeProfile === 'term_recurrent' &&
+      String(annualExpenseForm.termEndYear).trim()
+        ? Number(annualExpenseForm.termEndYear)
+        : null,
     amountAnnual: String(normalizedAmount),
     fiscalYear: fiscalYear.value,
     currency: annualExpenseForm.currency,
@@ -576,6 +694,10 @@ type PortableAnnualIncomeRecord = {
   subcategory: string;
   owner_name?: string;
   income_type: 'recurrent' | 'one_off';
+  time_profile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
+  cashflow_role?: 'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
+  event_group?: string;
+  term_end_year?: number | null;
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -590,6 +712,18 @@ type PortableAnnualExpenseRecord = {
   subcategory: string;
   owner_name?: string;
   expense_type: 'recurrent' | 'one_off';
+  time_profile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
+  cashflow_role?:
+    | 'operating'
+    | 'temporary_commitment'
+    | 'savings'
+    | 'investment'
+    | 'asset_purchase'
+    | 'tax_fee'
+    | 'transfer'
+    | 'other';
+  event_group?: string;
+  term_end_year?: number | null;
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -669,7 +803,10 @@ let dataTransferToastTimer: number | null = null;
 
 const dataTransferUiBusy = computed(
   () =>
-    dataTransferBusy.value || store.loading || annualIncomeLoading.value || annualExpenseLoading.value,
+    dataTransferBusy.value ||
+    store.loading ||
+    annualIncomeLoading.value ||
+    annualExpenseLoading.value,
 );
 
 function clearDataTransferFeedback(): void {
@@ -709,7 +846,9 @@ function normalizeImportedAssetTae(asset: PortableAssetRecord): string | null {
   const subcategory = String(asset.subcategory ?? '').trim();
   const requiresTae =
     category === 'cash' &&
-    (subcategory === 'bank_account' || subcategory === 'crypto_spot_earn' || subcategory === 'other');
+    (subcategory === 'bank_account' ||
+      subcategory === 'crypto_spot_earn' ||
+      subcategory === 'other');
 
   // Backward compatibility: older exports may not include TAE for assets that are now required.
   return requiresTae ? '0' : null;
@@ -737,7 +876,10 @@ function formatImportYearSummary(
     const year = Number(entry.fiscal_year);
     const amount = Number(entry.amount_annual ?? 0);
     const prev = totals.get(year) ?? { count: 0, amount: 0 };
-    totals.set(year, { count: prev.count + 1, amount: prev.amount + (Number.isFinite(amount) ? amount : 0) });
+    totals.set(year, {
+      count: prev.count + 1,
+      amount: prev.amount + (Number.isFinite(amount) ? amount : 0),
+    });
   }
   const segments = [...totals.entries()]
     .sort((a, b) => a[0] - b[0])
@@ -755,10 +897,12 @@ function buildImportPreviewMessage(bundle: PortableDataBundle, mode: ImportMode)
   const snapshots = bundle.data.snapshots ?? [];
   const snapshotRange =
     snapshots.length > 0
-      ? `${[...snapshots].map((s) => s.snapshot_date).sort()[0]} .. ${[...snapshots]
-          .map((s) => s.snapshot_date)
-          .sort()
-          .slice(-1)[0]}`
+      ? `${[...snapshots].map((s) => s.snapshot_date).sort()[0]} .. ${
+          [...snapshots]
+            .map((s) => s.snapshot_date)
+            .sort()
+            .slice(-1)[0]
+        }`
       : 'sin snapshots';
   const lines = [
     mode === 'replace'
@@ -800,13 +944,13 @@ async function exportDataBundle(): Promise<void> {
   try {
     const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes, settingsRes] =
       await Promise.all([
-      api.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
-      api.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
-      api.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
-      api.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-      api.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
-      api.get<PortableSettingsRecord>('/api/auth/settings/'),
-    ]);
+        api.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+        api.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
+        api.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+        api.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+        api.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
+        api.get<PortableSettingsRecord>('/api/auth/settings/'),
+      ]);
 
     const payload: PortableDataBundle = {
       schema_version: 1,
@@ -832,7 +976,7 @@ async function exportDataBundle(): Promise<void> {
     link.remove();
     URL.revokeObjectURL(url);
 
-    dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos y ${(payload.data.snapshots?.length ?? 0)} snapshots.`;
+    dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos y ${payload.data.snapshots?.length ?? 0} snapshots.`;
   } catch (e: unknown) {
     dataTransferError.value = `No se pudo exportar: ${toApiErrorMessage(e)}`;
   } finally {
@@ -973,6 +1117,10 @@ async function importPortableAnnualIncomeEntries(
       subcategory: entry.subcategory,
       owner_name: String(entry.owner_name ?? '').trim(),
       income_type: entry.income_type,
+      time_profile: entry.time_profile,
+      cashflow_role: entry.cashflow_role,
+      event_group: String(entry.event_group ?? ''),
+      term_end_year: entry.term_end_year ?? null,
       amount_annual: String(entry.amount_annual),
       fiscal_year: Number(entry.fiscal_year),
       currency: (entry.currency || 'EUR').toUpperCase(),
@@ -994,6 +1142,10 @@ async function importPortableAnnualExpenseEntries(
       subcategory: entry.subcategory,
       owner_name: String(entry.owner_name ?? '').trim(),
       expense_type: entry.expense_type,
+      time_profile: entry.time_profile,
+      cashflow_role: entry.cashflow_role,
+      event_group: String(entry.event_group ?? ''),
+      term_end_year: entry.term_end_year ?? null,
       amount_annual: String(entry.amount_annual),
       fiscal_year: Number(entry.fiscal_year),
       currency: (entry.currency || 'EUR').toUpperCase(),
@@ -1022,7 +1174,11 @@ async function importPortableSettingsAndSnapshots(bundle: PortableDataBundle): P
 }
 
 async function refreshImportedDataViews(): Promise<void> {
-  await Promise.all([store.refreshAll(), loadAnnualIncome(fiscalYear.value), loadAnnualExpense(fiscalYear.value)]);
+  await Promise.all([
+    store.refreshAll(),
+    loadAnnualIncome(fiscalYear.value),
+    loadAnnualExpense(fiscalYear.value),
+  ]);
 }
 
 function buildImportCompletionStatus(params: {
@@ -1033,11 +1189,17 @@ function buildImportCompletionStatus(params: {
   sortedAssetsCount: number;
   sortedLiabilitiesCount: number;
 }): string {
-  const { importMode, bundle, sortedIncomeCount, sortedExpenseCount, sortedAssetsCount, sortedLiabilitiesCount } =
-    params;
+  const {
+    importMode,
+    bundle,
+    sortedIncomeCount,
+    sortedExpenseCount,
+    sortedAssetsCount,
+    sortedLiabilitiesCount,
+  } = params;
   return importMode === 'replace'
-    ? `Reemplazo completado: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`
-    : `Importacion completada: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${(bundle.data.snapshots?.length ?? 0)} snapshots.`;
+    ? `Reemplazo completado: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${bundle.data.snapshots?.length ?? 0} snapshots.`
+    : `Importacion completada: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${bundle.data.snapshots?.length ?? 0} snapshots.`;
 }
 
 async function importDataFromFile(event: Event): Promise<void> {
@@ -1346,7 +1508,13 @@ watch(
                           ></span>
                           <span class="item-name-text">{{ entry.name }}</span>
                         </div>
-                        <div class="nw-item-submeta">{{ incomeTypeLabel(entry.incomeType) }}</div>
+                        <div class="nw-item-submeta">
+                          {{ timeProfileLabel(entry.timeProfile) }} .
+                          {{ incomeCashflowRoleLabel(entry.cashflowRole) }}
+                          <template v-if="entry.eventGroup">
+                            . Evento {{ entry.eventGroup }}</template
+                          >
+                        </div>
                       </div>
                       <div class="nw-item-amount">
                         {{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}
@@ -1494,7 +1662,16 @@ watch(
                           ></span>
                           <span class="item-name-text">{{ entry.name }}</span>
                         </div>
-                        <div class="nw-item-submeta">{{ expenseTypeLabel(entry.expenseType) }}</div>
+                        <div class="nw-item-submeta">
+                          {{ timeProfileLabel(entry.timeProfile) }} .
+                          {{ expenseCashflowRoleLabel(entry.cashflowRole) }}
+                          <template v-if="entry.eventGroup">
+                            . Evento {{ entry.eventGroup }}</template
+                          >
+                          <template v-if="entry.termEndYear != null">
+                            . Fin {{ entry.termEndYear }}</template
+                          >
+                        </div>
                       </div>
                       <div class="nw-item-amount">
                         {{ formatMoneyAmount(entry.amountAnnual, entry.currency) }}
@@ -1651,6 +1828,30 @@ watch(
           class="input ui-data-field md:col-span-2"
           placeholder="Concepto (ej: CTN, Regalos Pablo)"
         />
+        <select v-model="annualIncomeForm.timeProfile" class="select ui-data-field">
+          <option value="structural_recurrent">Recurrente estructural (base)</option>
+          <option value="term_recurrent">Recurrente temporal (con fin)</option>
+          <option value="one_off">Puntual / extraordinario</option>
+        </select>
+        <select v-model="annualIncomeForm.cashflowRole" class="select ui-data-field">
+          <option value="operating">Naturaleza: Operativo</option>
+          <option value="transfer">Naturaleza: Transferencia/apoyo</option>
+          <option value="asset_sale">Naturaleza: Venta de activo</option>
+          <option value="tax_adjustment">Naturaleza: Ajuste fiscal</option>
+          <option value="other">Naturaleza: Otro</option>
+        </select>
+        <input
+          v-model="annualIncomeForm.eventGroup"
+          class="input ui-data-field"
+          placeholder="Grupo de evento (opcional, ej: vivienda_2026)"
+        />
+        <input
+          v-if="annualIncomeForm.timeProfile === 'term_recurrent'"
+          v-model="annualIncomeForm.termEndYear"
+          class="input ui-data-field"
+          inputmode="numeric"
+          placeholder="Ano fin compromiso (ej: 2027)"
+        />
         <div
           class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_auto_120px]"
         >
@@ -1750,6 +1951,33 @@ watch(
           v-model="annualExpenseForm.name"
           class="input ui-data-field md:col-span-2"
           placeholder="Concepto (ej: Alimentacion, Hipoteca)"
+        />
+        <select v-model="annualExpenseForm.timeProfile" class="select ui-data-field">
+          <option value="structural_recurrent">Recurrente estructural (estilo de vida)</option>
+          <option value="term_recurrent">Recurrente temporal (cuotas/compromiso)</option>
+          <option value="one_off">Puntual / extraordinario</option>
+        </select>
+        <select v-model="annualExpenseForm.cashflowRole" class="select ui-data-field">
+          <option value="operating">Naturaleza: Operativo</option>
+          <option value="temporary_commitment">Naturaleza: Compromiso temporal</option>
+          <option value="savings">Naturaleza: Ahorro</option>
+          <option value="investment">Naturaleza: Inversion</option>
+          <option value="asset_purchase">Naturaleza: Compra de activo</option>
+          <option value="tax_fee">Naturaleza: Impuestos/gastos</option>
+          <option value="transfer">Naturaleza: Transferencia</option>
+          <option value="other">Naturaleza: Otro</option>
+        </select>
+        <input
+          v-model="annualExpenseForm.eventGroup"
+          class="input ui-data-field"
+          placeholder="Grupo de evento (opcional, ej: vivienda_2026)"
+        />
+        <input
+          v-if="annualExpenseForm.timeProfile === 'term_recurrent'"
+          v-model="annualExpenseForm.termEndYear"
+          class="input ui-data-field"
+          inputmode="numeric"
+          placeholder="Ano fin compromiso (ej: 2027)"
         />
         <div
           class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_auto_120px]"

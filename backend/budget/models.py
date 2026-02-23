@@ -17,6 +17,18 @@ class AnnualIncomeEntry(models.Model):
         RECURRENT = "recurrent", "Recurrente"
         ONE_OFF = "one_off", "Puntual"
 
+    class TimeProfile(models.TextChoices):
+        STRUCTURAL_RECURRENT = "structural_recurrent", "Recurrente estructural"
+        TERM_RECURRENT = "term_recurrent", "Recurrente temporal"
+        ONE_OFF = "one_off", "Puntual"
+
+    class CashflowRole(models.TextChoices):
+        OPERATING = "operating", "Operativo"
+        TRANSFER = "transfer", "Transferencia"
+        ASSET_SALE = "asset_sale", "Venta de activo"
+        TAX_ADJUSTMENT = "tax_adjustment", "Ajuste fiscal"
+        OTHER = "other", "Otro"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="annual_income_entries"
     )
@@ -27,6 +39,14 @@ class AnnualIncomeEntry(models.Model):
     income_type = models.CharField(
         max_length=16, choices=IncomeType.choices, default=IncomeType.RECURRENT
     )
+    time_profile = models.CharField(
+        max_length=24, choices=TimeProfile.choices, default=TimeProfile.STRUCTURAL_RECURRENT
+    )
+    cashflow_role = models.CharField(
+        max_length=24, choices=CashflowRole.choices, default=CashflowRole.OPERATING
+    )
+    event_group = models.CharField(max_length=64, blank=True, default="")
+    term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
     fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
     currency = models.CharField(max_length=3, default="EUR")
@@ -66,6 +86,21 @@ class AnnualExpenseEntry(models.Model):
         RECURRENT = "recurrent", "Recurrente"
         ONE_OFF = "one_off", "Puntual"
 
+    class TimeProfile(models.TextChoices):
+        STRUCTURAL_RECURRENT = "structural_recurrent", "Recurrente estructural"
+        TERM_RECURRENT = "term_recurrent", "Recurrente temporal"
+        ONE_OFF = "one_off", "Puntual"
+
+    class CashflowRole(models.TextChoices):
+        OPERATING = "operating", "Operativo"
+        TEMPORARY_COMMITMENT = "temporary_commitment", "Compromiso temporal"
+        SAVINGS = "savings", "Ahorro"
+        INVESTMENT = "investment", "Inversion"
+        ASSET_PURCHASE = "asset_purchase", "Compra de activo"
+        TAX_FEE = "tax_fee", "Impuestos y gastos"
+        TRANSFER = "transfer", "Transferencia"
+        OTHER = "other", "Otro"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="annual_expense_entries"
     )
@@ -76,6 +111,14 @@ class AnnualExpenseEntry(models.Model):
     expense_type = models.CharField(
         max_length=16, choices=ExpenseType.choices, default=ExpenseType.RECURRENT
     )
+    time_profile = models.CharField(
+        max_length=24, choices=TimeProfile.choices, default=TimeProfile.STRUCTURAL_RECURRENT
+    )
+    cashflow_role = models.CharField(
+        max_length=24, choices=CashflowRole.choices, default=CashflowRole.OPERATING
+    )
+    event_group = models.CharField(max_length=64, blank=True, default="")
+    term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
     fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
     currency = models.CharField(max_length=3, default="EUR")

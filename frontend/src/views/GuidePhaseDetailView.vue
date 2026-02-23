@@ -48,8 +48,8 @@ type SummaryCard = {
 
 const route = useRoute();
 const store = useNetWorthStore();
-const annualIncomeStore = useAnnualIncomeStore('core');
-const annualExpenseStore = useAnnualExpenseStore('core');
+const annualIncomeStore = useAnnualIncomeStore('saas');
+const annualExpenseStore = useAnnualExpenseStore('saas');
 
 const phaseId = computed(() => {
   const raw = String(route.params.phaseId ?? '');
@@ -307,13 +307,20 @@ const totalMonthlyDebtPaymentValue = computed(() =>
 const recurrentAnnualIncomeValue = computed(() =>
   annualIncomeStore.entries.value.reduce(
     (acc, entry) =>
-      entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc,
+      (entry.timeProfile ??
+        (entry.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent')) !== 'one_off'
+        ? acc + Number(entry.amountAnnual ?? 0)
+        : acc,
     0,
   ),
 );
 const oneOffAnnualIncomeValue = computed(() =>
   annualIncomeStore.entries.value.reduce(
-    (acc, entry) => (entry.incomeType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    (acc, entry) =>
+      (entry.timeProfile ??
+        (entry.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent')) === 'one_off'
+        ? acc + Number(entry.amountAnnual ?? 0)
+        : acc,
     0,
   ),
 );
@@ -323,44 +330,74 @@ const totalAnnualIncomeValue = computed(
 const recurrentAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
     (acc, entry) =>
-      entry.expenseType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc,
+      (entry.timeProfile ??
+        (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent')) !== 'one_off'
+        ? acc + Number(entry.amountAnnual ?? 0)
+        : acc,
     0,
   ),
 );
+function resolveExpenseRole(entry: (typeof annualExpenseStore.entries.value)[number]): string {
+  if (entry.cashflowRole) return entry.cashflowRole;
+  if (entry.category === 'savings_allocation') return 'savings';
+  if (entry.category === 'financial_investments') return 'investment';
+  if (entry.category === 'real_estate_assets' || entry.category === 'tangible_assets') {
+    return entry.subcategory === 'real_estate_fees_taxes' ? 'tax_fee' : 'asset_purchase';
+  }
+  return 'operating';
+}
+function resolveExpenseTimeProfile(
+  entry: (typeof annualExpenseStore.entries.value)[number],
+): string {
+  return (
+    entry.timeProfile ?? (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent')
+  );
+}
 const recurrentOperationalExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
-    return entry.category === 'consumption_expenses' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+    if (resolveExpenseTimeProfile(entry) !== 'structural_recurrent') return acc;
+    return resolveExpenseRole(entry) === 'operating' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
+const temporaryCommitmentExpenseValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (resolveExpenseTimeProfile(entry) !== 'term_recurrent') return acc;
+    return resolveExpenseRole(entry) === 'temporary_commitment'
+      ? acc + Number(entry.amountAnnual ?? 0)
+      : acc;
   }, 0),
 );
 const recurrentSavingsAllocationValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
+    if (resolveExpenseTimeProfile(entry) === 'one_off') return acc;
     return entry.category === 'savings_allocation' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
 const recurrentFinancialInvestmentAllocationValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
+    if (resolveExpenseTimeProfile(entry) === 'one_off') return acc;
     return entry.category === 'financial_investments' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
 const recurrentRealEstateAllocationValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
+    if (resolveExpenseTimeProfile(entry) === 'one_off') return acc;
     return entry.category === 'real_estate_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
 const recurrentTangibleAllocationValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
+    if (resolveExpenseTimeProfile(entry) === 'one_off') return acc;
     return entry.category === 'tangible_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
-const recurrentDebtReductionAllocationValue = computed(() => totalMonthlyDebtPaymentValue.value * 12);
+const recurrentDebtReductionAllocationValue = computed(
+  () => totalMonthlyDebtPaymentValue.value * 12,
+);
 const oneOffAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
-    (acc, entry) => (entry.expenseType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    (acc, entry) =>
+      resolveExpenseTimeProfile(entry) === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc,
     0,
   ),
 );
@@ -375,10 +412,14 @@ const recurrentExpenseToIncomeRatioValue = computed(() =>
     ? recurrentOperationalExpenseValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
-const recurrentOperationalSavingsMonthlyValue = computed(() => {
+const recurrentAfterCommitmentsMonthlyValue = computed(() => {
   if (recurrentAnnualIncomeValue.value <= 0) return null;
-  if (recurrentExpenseToIncomeRatioValue.value == null) return null;
-  return ((1 - recurrentExpenseToIncomeRatioValue.value) * recurrentAnnualIncomeValue.value) / 12;
+  return (
+    (recurrentAnnualIncomeValue.value -
+      recurrentOperationalExpenseValue.value -
+      temporaryCommitmentExpenseValue.value) /
+    12
+  );
 });
 const recurrentFinancialInvestmentAllocationRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
@@ -402,6 +443,12 @@ const recurrentDebtReductionAllocationRatioValue = computed(() =>
 );
 const recurrentTotalCashFlowValue = computed(
   () => recurrentAnnualIncomeValue.value - recurrentAnnualExpenseValue.value,
+);
+const recurrentAfterCommitmentsCashFlowValue = computed(
+  () =>
+    recurrentAnnualIncomeValue.value -
+    recurrentOperationalExpenseValue.value -
+    temporaryCommitmentExpenseValue.value,
 );
 const extraordinaryVolumeRatioValue = computed(() => {
   const numerator =
@@ -504,11 +551,28 @@ const phase1DebtRiskScoreValue = computed(() =>
 );
 
 const phase1GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase1GlobalScore);
-const cashFlowRecurrentExpenseRatioScoreValue = computed(() =>
+const cashFlowStructuralOperatingScoreValue = computed(() =>
   linearScoreDecreasing(recurrentExpenseToIncomeRatioValue.value, 0.5, 1),
 );
-const cashFlowSurplusScoreValue = computed(() => cashFlowRecurrentExpenseRatioScoreValue.value);
+const committedLoadToIncomeRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? (recurrentOperationalExpenseValue.value + temporaryCommitmentExpenseValue.value) /
+      recurrentAnnualIncomeValue.value
+    : null,
+);
+const temporaryCommitmentToIncomeRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? temporaryCommitmentExpenseValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
+const cashFlowCommittedLoadScoreValue = computed(() =>
+  linearScoreDecreasing(committedLoadToIncomeRatioValue.value, 0.65, 1.05),
+);
+const cashFlowTemporaryCommitmentScoreValue = computed(() =>
+  linearScoreDecreasing(temporaryCommitmentToIncomeRatioValue.value, 0.05, 0.35),
+);
 const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
+const cashFlowSurplusScoreValue = computed(() => phase2GlobalScoreValue.value);
 
 function toneFromScore(score: number): ScoreTone {
   if (score >= 75) return 'solid';
@@ -664,21 +728,35 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
     title: 'Superavit operativo',
     score: cashFlowSurplusScoreValue.value,
     description:
-      'Indicador unico basado en gasto operativo recurrente (categoria Gastos) frente a ingresos recurrentes.',
+      'Score compuesto de tension de caja: coste operativo estructural, carga comprometida y peso de compromisos temporales frente a ingresos recurrentes.',
     kpis: [
       {
-        id: 'recurrent-expense-ratio',
-        label: '% gasto operativo / ingresos recurrentes',
+        id: 'structural-operating-ratio',
+        label: '% gasto operativo estructural / ingresos recurrentes',
         valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
-        score: cashFlowRecurrentExpenseRatioScoreValue.value,
-        hint: 'Umbral score (inverso): 50% top -> 100% bad',
+        score: cashFlowStructuralOperatingScoreValue.value,
+        hint: 'Base de estilo de vida (inverso). Umbral: 50% top -> 100% tension',
+      },
+      {
+        id: 'committed-load-ratio',
+        label: '% carga comprometida total / ingresos recurrentes',
+        valueText: formatPct(committedLoadToIncomeRatioValue.value, 0),
+        score: cashFlowCommittedLoadScoreValue.value,
+        hint: 'Operativo estructural + compromisos temporales (inverso)',
         detailText:
-          recurrentOperationalSavingsMonthlyValue.value == null
+          recurrentAfterCommitmentsMonthlyValue.value == null
             ? undefined
-            : `Capacidad de asignacion recurrente mensual (${formatPct(
-                Math.max(0, 1 - (recurrentExpenseToIncomeRatioValue.value ?? 0)),
-                0,
-              )} restante): ${formatNumber(recurrentOperationalSavingsMonthlyValue.value, 2)}`,
+            : `Colchon mensual tras compromisos: ${formatNumber(
+                recurrentAfterCommitmentsMonthlyValue.value,
+                2,
+              )}`,
+      },
+      {
+        id: 'temporary-commitment-ratio',
+        label: '% compromisos temporales / ingresos recurrentes',
+        valueText: formatPct(temporaryCommitmentToIncomeRatioValue.value, 0),
+        score: cashFlowTemporaryCommitmentScoreValue.value,
+        hint: 'Cuotas con fecha fin (fertilidad/entrada vivienda/etc.) (inverso)',
       },
     ],
   },
@@ -697,6 +775,13 @@ const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
         valueText: formatPct(recurrentDebtReductionAllocationRatioValue.value, 0),
         score: null,
         hint: 'Suma de cuotas mensuales de pasivos (anualizada) / ingresos recurrentes',
+      },
+      {
+        id: 'temporary-commitments-income',
+        label: '% compromisos temporales / ingresos recurrentes',
+        valueText: formatPct(temporaryCommitmentToIncomeRatioValue.value, 0),
+        score: null,
+        hint: 'Gastos con perfil recurrente temporal y naturaleza compromiso temporal',
       },
       {
         id: 'financial-investments-income',
@@ -794,9 +879,24 @@ const summaryCards = computed<SummaryCard[]>(() => {
         valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
       },
       {
+        id: 'expense-operating-structural',
+        label: 'Gasto operativo estructural',
+        valueText: formatNumber(recurrentOperationalExpenseValue.value, 2),
+      },
+      {
+        id: 'expense-temporary-commitments',
+        label: 'Compromisos temporales',
+        valueText: formatNumber(temporaryCommitmentExpenseValue.value, 2),
+      },
+      {
         id: 'cashflow-recurrent-annual',
         label: 'Flujo anual recurrente',
         valueText: formatNumber(recurrentTotalCashFlowValue.value, 2),
+      },
+      {
+        id: 'cashflow-recurrent-after-commitments',
+        label: 'Flujo recurrente tras compromisos',
+        valueText: formatNumber(recurrentAfterCommitmentsCashFlowValue.value, 2),
       },
       {
         id: 'cashflow-total-annual',
@@ -833,7 +933,7 @@ const cashFlowDistortionWarning = computed(() => {
   if (!isCashFlowPhase.value) return null;
   if (extraordinaryVolumeRatioValue.value == null) return null;
   if (extraordinaryVolumeRatioValue.value <= 0.25) return null;
-  return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score usa flujo operativo ajustado.`;
+  return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score prioriza tension recurrente estructural y compromisos temporales.`;
 });
 
 const phaseDiagnosticCopy = computed(() => {
@@ -844,7 +944,7 @@ const phaseDiagnosticCopy = computed(() => {
     return 'Diagnostico de salud patrimonial: respaldo patrimonial y distribucion del riesgo.';
   }
   if (isCashFlowPhase.value) {
-    return 'Diagnostico de flujo de caja ajustado: score basado en ingresos/gastos recurrentes y contexto extraordinario separado.';
+    return 'Diagnostico de flujo de caja: score compuesto de tension recurrente (operativo estructural + compromisos temporales) y contexto extraordinario separado.';
   }
   return phase.value?.objective ?? '';
 });

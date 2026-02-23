@@ -77,6 +77,8 @@ class AnnualIncomeApiTests(APITestCase):
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(create_res.data["currency"], "EUR")
         self.assertEqual(create_res.data["fiscal_year"], 2026)
+        self.assertEqual(create_res.data["time_profile"], "structural_recurrent")
+        self.assertEqual(create_res.data["cashflow_role"], "operating")
 
         list_res = self.client.get("/api/budget/annual-income/")
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
@@ -184,6 +186,8 @@ class AnnualExpenseApiTests(APITestCase):
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(create_res.data["currency"], "EUR")
         self.assertEqual(create_res.data["fiscal_year"], 2026)
+        self.assertEqual(create_res.data["time_profile"], "structural_recurrent")
+        self.assertEqual(create_res.data["cashflow_role"], "operating")
 
         list_res = self.client.get("/api/budget/annual-expense/")
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
@@ -284,6 +288,8 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["currency"], "EUR")
+        self.assertEqual(serializer.validated_data["time_profile"], "structural_recurrent")
+        self.assertEqual(serializer.validated_data["cashflow_role"], "operating")
 
     def test_income_serializer_rejects_invalid_amount_currency_and_year(self):
         serializer = AnnualIncomeEntrySerializer(
@@ -320,6 +326,41 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
+
+    def test_income_serializer_requires_term_end_year_for_term_recurrent(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Bonus temporal",
+                "category": "salary",
+                "subcategory": "bonus_commission",
+                "income_type": "recurrent",
+                "time_profile": "term_recurrent",
+                "amount_annual": "3000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("term_end_year", serializer.errors)
+
+    def test_expense_serializer_accepts_temporary_commitment_fields(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Clinica fertilidad cuota",
+                "category": "consumption_expenses",
+                "subcategory": "financial_commitments",
+                "expense_type": "recurrent",
+                "time_profile": "term_recurrent",
+                "cashflow_role": "temporary_commitment",
+                "event_group": "fertilidad_2026",
+                "term_end_year": 2027,
+                "amount_annual": "12000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["expense_type"], "recurrent")
 
     def test_expense_serializer_validates_partial_update_with_instance_values(self):
         entry = AnnualExpenseEntry.objects.create(

@@ -5,9 +5,19 @@ import {
   expenseSubcategories,
   type ExpenseCategoryKey,
 } from '@/domains/data-input/expenseTaxonomy';
-import { parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
+import { normalizeOwnerName, parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
 
 export type AnnualExpenseType = 'recurrent' | 'one_off';
+export type AnnualTimeProfile = 'structural_recurrent' | 'term_recurrent' | 'one_off';
+export type AnnualExpenseCashflowRole =
+  | 'operating'
+  | 'temporary_commitment'
+  | 'savings'
+  | 'investment'
+  | 'asset_purchase'
+  | 'tax_fee'
+  | 'transfer'
+  | 'other';
 
 export type AnnualExpenseEntry = {
   id: number;
@@ -16,6 +26,10 @@ export type AnnualExpenseEntry = {
   subcategory: string;
   owner: string;
   expenseType: AnnualExpenseType;
+  timeProfile: AnnualTimeProfile;
+  cashflowRole: AnnualExpenseCashflowRole;
+  eventGroup: string;
+  termEndYear: number | null;
   amountAnnual: number;
   fiscalYear: number;
   currency: string;
@@ -27,7 +41,12 @@ export type AnnualExpenseDraft = {
   name: string;
   category: ExpenseCategoryKey;
   subcategory: string;
+  owner?: string;
   expenseType: AnnualExpenseType;
+  timeProfile?: AnnualTimeProfile;
+  cashflowRole?: AnnualExpenseCashflowRole;
+  eventGroup?: string;
+  termEndYear?: number | null;
   amountAnnual: string;
   fiscalYear: number;
   currency: string;
@@ -43,6 +62,10 @@ type AnnualExpenseApiItem = {
   subcategory: string;
   owner_name: string;
   expense_type: AnnualExpenseType;
+  time_profile?: AnnualTimeProfile;
+  cashflow_role?: AnnualExpenseCashflowRole;
+  event_group?: string;
+  term_end_year?: number | null;
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -56,6 +79,8 @@ type TotalsResponse = {
 };
 
 function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
+  const timeProfile =
+    item.time_profile ?? (item.expense_type === 'one_off' ? 'one_off' : 'structural_recurrent');
   return {
     id: item.id,
     name: item.name,
@@ -63,6 +88,10 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
     subcategory: item.subcategory,
     owner: item.owner_name || '',
     expenseType: item.expense_type,
+    timeProfile,
+    cashflowRole: item.cashflow_role ?? 'operating',
+    eventGroup: item.event_group ?? '',
+    termEndYear: item.term_end_year == null ? null : Number(item.term_end_year),
     amountAnnual: Number(item.amount_annual),
     fiscalYear: Number(item.fiscal_year),
     currency: item.currency,
@@ -71,7 +100,7 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
   };
 }
 
-export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'core') {
+export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
   const entries = ref<AnnualExpenseEntry[]>([]);
   const totalAnnual = ref(0);
   const loading = ref(false);
@@ -119,7 +148,14 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'core') {
         name,
         category: draft.category,
         subcategory: draft.subcategory,
+        owner_name: normalizeOwnerName(draft.owner ?? ''),
         expense_type: draft.expenseType,
+        time_profile:
+          draft.timeProfile ??
+          (draft.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent'),
+        cashflow_role: draft.cashflowRole ?? 'operating',
+        event_group: (draft.eventGroup ?? '').trim(),
+        term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),
@@ -162,7 +198,14 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'core') {
         name,
         category: draft.category,
         subcategory: draft.subcategory,
+        owner_name: normalizeOwnerName(draft.owner ?? ''),
         expense_type: draft.expenseType,
+        time_profile:
+          draft.timeProfile ??
+          (draft.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent'),
+        cashflow_role: draft.cashflowRole ?? 'operating',
+        event_group: (draft.eventGroup ?? '').trim(),
+        term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),

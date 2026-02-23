@@ -6,6 +6,8 @@ type SummaryExtended = Summary & {
 
 type AnnualIncomeLike = {
   incomeType: 'recurrent' | 'one_off';
+  timeProfile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
+  cashflowRole?: 'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
   amountAnnual: number;
 };
 
@@ -17,6 +19,18 @@ type AnnualExpenseLike = {
     | 'tangible_assets'
     | 'consumption_expenses';
   expenseType: 'recurrent' | 'one_off';
+  timeProfile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
+  cashflowRole?:
+    | 'operating'
+    | 'temporary_commitment'
+    | 'savings'
+    | 'investment'
+    | 'asset_purchase'
+    | 'tax_fee'
+    | 'transfer'
+    | 'other';
+  subcategory?: string;
+  termEndYear?: number | null;
   amountAnnual: number;
 };
 
@@ -97,18 +111,54 @@ function computePhase2CashFlowAdjustedScore(input: {
   annualIncomeEntries: AnnualIncomeLike[];
   annualExpenseEntries: AnnualExpenseLike[];
 }): number {
-  const recurrentAnnualIncome = sumAnnualByType(
-    input.annualIncomeEntries,
-    'incomeType',
-    'recurrent',
-  );
-  const recurrentOperationalExpense = input.annualExpenseEntries.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
-    return entry.category === 'consumption_expenses' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  const incomeTimeProfile = (entry: AnnualIncomeLike) =>
+    entry.timeProfile ?? (entry.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent');
+  const expenseTimeProfile = (entry: AnnualExpenseLike) =>
+    entry.timeProfile ?? (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent');
+  const expenseCashflowRole = (entry: AnnualExpenseLike) => {
+    if (entry.cashflowRole) return entry.cashflowRole;
+    if (entry.category === 'savings_allocation') return 'savings' as const;
+    if (entry.category === 'financial_investments') return 'investment' as const;
+    if (entry.category === 'real_estate_assets' || entry.category === 'tangible_assets') {
+      return entry.subcategory === 'real_estate_fees_taxes'
+        ? ('tax_fee' as const)
+        : ('asset_purchase' as const);
+    }
+    return 'operating' as const;
+  };
+
+  const recurrentAnnualIncome = input.annualIncomeEntries.reduce((acc, entry) => {
+    const profile = incomeTimeProfile(entry);
+    if (profile === 'one_off') return acc;
+    return acc + Number(entry.amountAnnual ?? 0);
   }, 0);
-  const recurrentExpenseToIncomeRatio =
-    recurrentAnnualIncome > 0 ? recurrentOperationalExpense / recurrentAnnualIncome : null;
-  return linearScoreDecreasing(recurrentExpenseToIncomeRatio, 0.5, 1);
+
+  const structuralOperatingExpense = input.annualExpenseEntries.reduce((acc, entry) => {
+    if (expenseTimeProfile(entry) !== 'structural_recurrent') return acc;
+    return expenseCashflowRole(entry) === 'operating' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0);
+
+  const temporaryCommitmentExpense = input.annualExpenseEntries.reduce((acc, entry) => {
+    if (expenseTimeProfile(entry) !== 'term_recurrent') return acc;
+    return expenseCashflowRole(entry) === 'temporary_commitment'
+      ? acc + Number(entry.amountAnnual ?? 0)
+      : acc;
+  }, 0);
+
+  const structuralOperatingRatio =
+    recurrentAnnualIncome > 0 ? structuralOperatingExpense / recurrentAnnualIncome : null;
+  const committedLoadRatio =
+    recurrentAnnualIncome > 0
+      ? (structuralOperatingExpense + temporaryCommitmentExpense) / recurrentAnnualIncome
+      : null;
+  const temporaryCommitmentRatio =
+    recurrentAnnualIncome > 0 ? temporaryCommitmentExpense / recurrentAnnualIncome : null;
+
+  return weightedScore([
+    { score: linearScoreDecreasing(structuralOperatingRatio, 0.5, 1.0), weight: 0.45 },
+    { score: linearScoreDecreasing(committedLoadRatio, 0.65, 1.05), weight: 0.4 },
+    { score: linearScoreDecreasing(temporaryCommitmentRatio, 0.05, 0.35), weight: 0.15 },
+  ]);
 }
 
 export function computeGuidePhaseDiagnostics(
