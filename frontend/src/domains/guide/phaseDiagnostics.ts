@@ -45,6 +45,7 @@ export type GuidePhaseDiagnosticsInput = {
 export type GuidePhaseDiagnostics = {
   phase1GlobalScore: number;
   phase2GlobalScore: number;
+  phase3GlobalScore: number;
   phase4GlobalScore: number;
 };
 
@@ -94,6 +95,15 @@ const ILLIQUID_INVESTMENT_SUBCATEGORIES = new Set([
   'real_estate_crowd',
   'crowdlending',
   'other',
+]);
+
+const LIQUID_INVESTMENT_SUBCATEGORIES = new Set([
+  'deposits',
+  'funds',
+  'etfs',
+  'roboadvisor',
+  'stocks',
+  'cryptocurrencies',
 ]);
 
 function sumAnnualByType<
@@ -220,6 +230,26 @@ export function computeGuidePhaseDiagnostics(
   const unbackedDebtToAssets = assetsValue > 0 ? unbackedDebtValue / assetsValue : null;
   const unbackedDebtToLiabilities =
     liabilitiesValue > 0 ? unbackedDebtValue / liabilitiesValue : null;
+  const emergencyLiquidAssetsValue = activeAssets.reduce((acc, asset) => {
+    const amountBase = Math.max(0, toNumber(asset.amount_base));
+    if (amountBase <= 0) return acc;
+
+    const isCashLiquidity = asset.category === 'cash';
+    const isLiquidInvestment =
+      asset.category === 'investments' &&
+      LIQUID_INVESTMENT_SUBCATEGORIES.has(asset.subcategory || 'other');
+
+    return isCashLiquidity || isLiquidInvestment ? acc + amountBase : acc;
+  }, 0);
+  const immediateLiquidityAssetsValue = activeAssets.reduce((acc, asset) => {
+    if (asset.category !== 'cash') return acc;
+    const amountBase = Math.max(0, toNumber(asset.amount_base));
+    return amountBase > 0 ? acc + amountBase : acc;
+  }, 0);
+  const emergencyLiquidityToAssets =
+    assetsValue > 0 ? emergencyLiquidAssetsValue / assetsValue : null;
+  const immediateLiquidityShareWithinEmergency =
+    emergencyLiquidAssetsValue > 0 ? immediateLiquidityAssetsValue / emergencyLiquidAssetsValue : null;
 
   const topAssetShare =
     assetsValue > 0 ? (assetsByCategoryValues.sort((a, b) => b - a)[0] ?? 0) / assetsValue : null;
@@ -341,9 +371,61 @@ export function computeGuidePhaseDiagnostics(
     annualExpenseEntries,
   });
 
+  const expenseTimeProfile = (entry: AnnualExpenseLike) =>
+    entry.timeProfile ?? (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent');
+  const expenseCashflowRole = (entry: AnnualExpenseLike) => {
+    if (entry.cashflowRole) return entry.cashflowRole;
+    if (entry.category === 'savings_allocation') return 'savings' as const;
+    if (entry.category === 'financial_investments') return 'investment' as const;
+    if (entry.category === 'real_estate_assets' || entry.category === 'tangible_assets') {
+      return entry.subcategory === 'real_estate_fees_taxes'
+        ? ('tax_fee' as const)
+        : ('asset_purchase' as const);
+    }
+    return 'operating' as const;
+  };
+
+  const structuralOperatingExpense = annualExpenseEntries.reduce((acc, entry) => {
+    if (expenseTimeProfile(entry) !== 'structural_recurrent') return acc;
+    return expenseCashflowRole(entry) === 'operating' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0);
+  const temporaryCommitmentExpense = annualExpenseEntries.reduce((acc, entry) => {
+    if (expenseTimeProfile(entry) !== 'term_recurrent') return acc;
+    return expenseCashflowRole(entry) === 'temporary_commitment'
+      ? acc + Number(entry.amountAnnual ?? 0)
+      : acc;
+  }, 0);
+
+  const structuralOperatingMonthlyExpense =
+    structuralOperatingExpense > 0 ? structuralOperatingExpense / 12 : null;
+  const currentCommittedMonthlyExpense =
+    structuralOperatingExpense + temporaryCommitmentExpense > 0
+      ? (structuralOperatingExpense + temporaryCommitmentExpense) / 12
+      : null;
+
+  const emergencyCoverageMonthsBase =
+    structuralOperatingMonthlyExpense != null && structuralOperatingMonthlyExpense > 0
+      ? emergencyLiquidAssetsValue / structuralOperatingMonthlyExpense
+      : null;
+  const emergencyCoverageMonthsCommitted =
+    currentCommittedMonthlyExpense != null && currentCommittedMonthlyExpense > 0
+      ? emergencyLiquidAssetsValue / currentCommittedMonthlyExpense
+      : null;
+
+  const phase3GlobalScore = weightedScore([
+    { score: linearScoreIncreasing(emergencyCoverageMonthsBase, 1, 6), weight: 0.45 },
+    { score: linearScoreIncreasing(emergencyCoverageMonthsCommitted, 1, 6), weight: 0.25 },
+    { score: linearScoreIncreasing(emergencyLiquidityToAssets, 0.05, 0.3), weight: 0.15 },
+    {
+      score: linearScoreIncreasing(immediateLiquidityShareWithinEmergency, 0.4, 0.85),
+      weight: 0.15,
+    },
+  ]);
+
   return {
     phase1GlobalScore,
     phase2GlobalScore,
+    phase3GlobalScore,
     phase4GlobalScore,
   };
 }
