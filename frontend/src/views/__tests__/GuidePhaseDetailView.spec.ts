@@ -98,7 +98,7 @@ describe('GuidePhaseDetailView (fase 2)', () => {
     expect(wrapper.text()).toContain('Flujo anual total');
     expect(wrapper.text()).toContain('Distribucion del ahorro');
     expect(wrapper.text()).toContain('% ingresos destinados a reduccion de deuda');
-    expect(wrapper.text()).toContain('Capacidad de asignacion recurrente mensual');
+    expect(wrapper.text()).toContain('Colchon mensual tras compromisos');
     expect(wrapper.text()).toContain('Ano con eventos extraordinarios');
 
     expect(mockNetWorthStore.fetchSettings).toHaveBeenCalledTimes(1);

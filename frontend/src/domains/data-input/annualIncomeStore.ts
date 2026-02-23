@@ -2,9 +2,16 @@ import { ref } from 'vue';
 import { api } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import { incomeSubcategories, type IncomeCategoryKey } from '@/domains/data-input/incomeTaxonomy';
-import { parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
+import { normalizeOwnerName, parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
 
 export type AnnualIncomeType = 'recurrent' | 'one_off';
+export type AnnualTimeProfile = 'structural_recurrent' | 'term_recurrent' | 'one_off';
+export type AnnualIncomeCashflowRole =
+  | 'operating'
+  | 'transfer'
+  | 'asset_sale'
+  | 'tax_adjustment'
+  | 'other';
 
 export type AnnualIncomeEntry = {
   id: number;
@@ -13,6 +20,10 @@ export type AnnualIncomeEntry = {
   subcategory: string;
   owner: string;
   incomeType: AnnualIncomeType;
+  timeProfile: AnnualTimeProfile;
+  cashflowRole: AnnualIncomeCashflowRole;
+  eventGroup: string;
+  termEndYear: number | null;
   amountAnnual: number;
   fiscalYear: number;
   currency: string;
@@ -24,7 +35,12 @@ export type AnnualIncomeDraft = {
   name: string;
   category: IncomeCategoryKey;
   subcategory: string;
+  owner?: string;
   incomeType: AnnualIncomeType;
+  timeProfile?: AnnualTimeProfile;
+  cashflowRole?: AnnualIncomeCashflowRole;
+  eventGroup?: string;
+  termEndYear?: number | null;
   amountAnnual: string;
   fiscalYear: number;
   currency: string;
@@ -40,6 +56,10 @@ type AnnualIncomeApiItem = {
   subcategory: string;
   owner_name: string;
   income_type: AnnualIncomeType;
+  time_profile?: AnnualTimeProfile;
+  cashflow_role?: AnnualIncomeCashflowRole;
+  event_group?: string;
+  term_end_year?: number | null;
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -53,6 +73,8 @@ type TotalsResponse = {
 };
 
 function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
+  const timeProfile =
+    item.time_profile ?? (item.income_type === 'one_off' ? 'one_off' : 'structural_recurrent');
   return {
     id: item.id,
     name: item.name,
@@ -60,6 +82,10 @@ function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
     subcategory: item.subcategory,
     owner: item.owner_name || '',
     incomeType: item.income_type,
+    timeProfile,
+    cashflowRole: item.cashflow_role ?? 'operating',
+    eventGroup: item.event_group ?? '',
+    termEndYear: item.term_end_year == null ? null : Number(item.term_end_year),
     amountAnnual: Number(item.amount_annual),
     fiscalYear: Number(item.fiscal_year),
     currency: item.currency,
@@ -68,7 +94,7 @@ function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
   };
 }
 
-export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
+export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'saas') {
   const entries = ref<AnnualIncomeEntry[]>([]);
   const totalAnnual = ref(0);
   const loading = ref(false);
@@ -116,7 +142,14 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
         name,
         category: draft.category,
         subcategory: draft.subcategory,
+        owner_name: normalizeOwnerName(draft.owner ?? ''),
         income_type: draft.incomeType,
+        time_profile:
+          draft.timeProfile ??
+          (draft.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent'),
+        cashflow_role: draft.cashflowRole ?? 'operating',
+        event_group: (draft.eventGroup ?? '').trim(),
+        term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),
@@ -159,7 +192,14 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'core') {
         name,
         category: draft.category,
         subcategory: draft.subcategory,
+        owner_name: normalizeOwnerName(draft.owner ?? ''),
         income_type: draft.incomeType,
+        time_profile:
+          draft.timeProfile ??
+          (draft.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent'),
+        cashflow_role: draft.cashflowRole ?? 'operating',
+        event_group: (draft.eventGroup ?? '').trim(),
+        term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),

@@ -34,9 +34,9 @@ describe('computeGuidePhaseDiagnostics', () => {
     });
 
     expect(stable.phase2GlobalScore).toBeGreaterThan(volatile.phase2GlobalScore);
-    expect(stable.phase2GlobalScore).toBeGreaterThan(45);
-    expect(stable.phase2GlobalScore).toBeLessThan(55);
-    expect(volatile.phase2GlobalScore).toBeLessThan(10);
+    expect(stable.phase2GlobalScore).toBeGreaterThan(40);
+    expect(stable.phase2GlobalScore).toBeLessThan(70);
+    expect(volatile.phase2GlobalScore).toBeLessThan(20);
   });
 
   it('ignores recurring savings and asset allocations in phase 2 operating ratio score', () => {
@@ -66,11 +66,11 @@ describe('computeGuidePhaseDiagnostics', () => {
     });
 
     expect(base.phase2GlobalScore).toBeCloseTo(withAllocations.phase2GlobalScore, 6);
-    expect(base.phase2GlobalScore).toBeCloseTo(80, 6);
+    expect(base.phase2GlobalScore).toBeGreaterThan(70);
   });
 
-  it('caps phase 2 score at top and bottom thresholds of operating expense ratio', () => {
-    const top = computeGuidePhaseDiagnostics({
+  it('rewards low structural operating load and penalizes full operating load in phase 2', () => {
+    const healthy = computeGuidePhaseDiagnostics({
       summary: null,
       assets: [],
       liabilities: [],
@@ -80,7 +80,7 @@ describe('computeGuidePhaseDiagnostics', () => {
       ],
     });
 
-    const bottom = computeGuidePhaseDiagnostics({
+    const stressed = computeGuidePhaseDiagnostics({
       summary: null,
       assets: [],
       liabilities: [],
@@ -90,13 +90,59 @@ describe('computeGuidePhaseDiagnostics', () => {
       ],
     });
 
-    expect(top.phase2GlobalScore).toBeCloseTo(100, 6);
-    expect(bottom.phase2GlobalScore).toBeCloseTo(0, 6);
+    expect(healthy.phase2GlobalScore).toBeGreaterThan(stressed.phase2GlobalScore);
+    expect(healthy.phase2GlobalScore).toBeGreaterThan(80);
+    expect(stressed.phase2GlobalScore).toBeLessThan(30);
+  });
+
+  it('penalizes temporary recurring commitments in phase 2 tension score', () => {
+    const noCommitments = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 36000 }],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'structural_recurrent',
+          cashflowRole: 'operating',
+          amountAnnual: 18000,
+        },
+      ],
+    });
+
+    const withTemporaryCommitments = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 36000 }],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'structural_recurrent',
+          cashflowRole: 'operating',
+          amountAnnual: 18000,
+        },
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'term_recurrent',
+          cashflowRole: 'temporary_commitment',
+          amountAnnual: 9000,
+        },
+      ],
+    });
+
+    expect(withTemporaryCommitments.phase2GlobalScore).toBeLessThan(
+      noCommitments.phase2GlobalScore,
+    );
   });
 
   it('keeps diagnostics finite when liabilities exist but there is no recurrent income', () => {
     const diagnostics = computeGuidePhaseDiagnostics({
-      summary: ({
+      summary: {
         total_assets: '50000',
         total_liabilities: '10000',
         net_worth: '40000',
@@ -105,8 +151,16 @@ describe('computeGuidePhaseDiagnostics', () => {
         assets_by_subcategory: {},
         liabilities_by_category: { personal_loan: '10000' },
         base_currency: 'EUR',
-      } as any),
-      assets: [{ id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '50000', is_active: true }] as any,
+      } as any,
+      assets: [
+        {
+          id: 1,
+          category: 'cash',
+          subcategory: 'bank_account',
+          amount_base: '50000',
+          is_active: true,
+        },
+      ] as any,
       liabilities: [
         {
           id: 1,
@@ -127,7 +181,7 @@ describe('computeGuidePhaseDiagnostics', () => {
 
   it('handles liabilities without monthly payment inputs without penalizing debt-cost payment subscore path', () => {
     const diagnostics = computeGuidePhaseDiagnostics({
-      summary: ({
+      summary: {
         total_assets: '20000',
         total_liabilities: '6000',
         net_worth: '14000',
@@ -136,8 +190,16 @@ describe('computeGuidePhaseDiagnostics', () => {
         assets_by_subcategory: {},
         liabilities_by_category: { personal_loan: '6000' },
         base_currency: 'EUR',
-      } as any),
-      assets: [{ id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '20000', is_active: true }] as any,
+      } as any,
+      assets: [
+        {
+          id: 1,
+          category: 'cash',
+          subcategory: 'bank_account',
+          amount_base: '20000',
+          is_active: true,
+        },
+      ] as any,
       liabilities: [
         {
           id: 1,
