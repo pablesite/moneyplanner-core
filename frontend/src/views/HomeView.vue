@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
+import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
 import { computeGuidePhaseDiagnostics } from '@/domains/guide/phaseDiagnostics';
 import { getActiveGuidePhase, guidePhases, type GuidePhase } from '@/domains/guide/phases';
@@ -10,12 +11,14 @@ import { useNetWorthStore } from '@/stores/netWorth';
 const phases = guidePhases;
 const store = useNetWorthStore();
 const annualIncomeStore = useAnnualIncomeStore('core');
+const annualExpenseStore = useAnnualExpenseStore('core');
 const sharedPhaseDiagnostics = computed(() =>
   computeGuidePhaseDiagnostics({
     summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
     assets: store.assets,
     liabilities: store.liabilities,
     annualIncomeEntries: annualIncomeStore.entries.value,
+    annualExpenseEntries: annualExpenseStore.entries.value,
   }),
 );
 const activePhase = computed(() => getActiveGuidePhase());
@@ -320,6 +323,10 @@ function phaseDisplayProgress(phase: GuidePhase): number {
     const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase4GlobalScore);
     return Number.isFinite(sharedScore) ? sharedScore : localScore;
   }
+  if (phase.id === 2) {
+    const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase2GlobalScore);
+    return Number.isFinite(sharedScore) ? sharedScore : phase.progress;
+  }
   return phase.progress;
 }
 
@@ -347,6 +354,7 @@ onMounted(() => {
   void store.fetchSettings();
   void store.refreshAll();
   void annualIncomeStore.loadAll();
+  void annualExpenseStore.loadAll();
 });
 </script>
 
