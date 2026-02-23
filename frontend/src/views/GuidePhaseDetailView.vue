@@ -357,6 +357,14 @@ const recurrentTangibleAllocationValue = computed(() =>
     return entry.category === 'tangible_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
+const recurrentDebtReductionAllocationValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    const isDebtReductionCommitment =
+      entry.category === 'consumption_expenses' && entry.subcategory === 'financial_commitments';
+    return isDebtReductionCommitment ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
 const oneOffAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
     (acc, entry) => (entry.expenseType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
@@ -392,6 +400,11 @@ const recurrentTangibleAllocationRatioValue = computed(() =>
 const recurrentRealEstateAllocationRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
     ? recurrentRealEstateAllocationValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
+const recurrentDebtReductionAllocationRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentDebtReductionAllocationValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
 const recurrentTotalCashFlowValue = computed(
@@ -685,6 +698,13 @@ const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
     description:
       'Indicadores informativos de asignacion recurrente a patrimonio sobre ingresos recurrentes.',
     kpis: [
+      {
+        id: 'debt-reduction-income',
+        label: '% ingresos destinados a reduccion de deuda',
+        valueText: formatPct(recurrentDebtReductionAllocationRatioValue.value, 0),
+        score: null,
+        hint: 'Subcategoria compromisos financieros / ingresos recurrentes (informativo)',
+      },
       {
         id: 'financial-investments-income',
         label: '% inversiones / ingresos recurrentes',
