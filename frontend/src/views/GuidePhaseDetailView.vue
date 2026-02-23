@@ -721,12 +721,11 @@ const cashFlowTotalAnnualFlowScoreValue = computed(() =>
   linearScoreIncreasing(totalAnnualCashFlowToRecurrentIncomeRatioValue.value, -0.5, 0),
 );
 const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
-const cashFlowSurplusScoreValue = computed(() => phase2GlobalScoreValue.value);
 const emergencyCoverageBaseScoreValue = computed(() =>
-  linearScoreIncreasing(emergencyCoverageMonthsBaseValue.value, 1, 6),
+  linearScoreIncreasing(emergencyCoverageMonthsBaseValue.value, 3, 12),
 );
 const emergencyCoverageCommittedScoreValue = computed(() =>
-  linearScoreIncreasing(emergencyCoverageMonthsCommittedValue.value, 1, 6),
+  linearScoreIncreasing(emergencyCoverageMonthsCommittedValue.value, 3, 12),
 );
 const emergencyLiquidityToAssetsScoreValue = computed(() =>
   linearScoreIncreasing(emergencyLiquidityToAssetsRatioValue.value, 0.05, 0.3),
@@ -905,11 +904,14 @@ const phase1ScoreCards = computed<ScoreCard[]>(() => [
 
 const phase2ScoreCards = computed<ScoreCard[]>(() => [
   {
-    id: 'cashflow-operational-surplus',
-    title: 'Tension de caja',
-    score: cashFlowSurplusScoreValue.value,
+    id: 'cashflow-recurrent-tension',
+    title: 'Tension de caja (recurrente)',
+    score: weightedScore([
+      { score: cashFlowStructuralOperatingScoreValue.value, weight: 0.4 },
+      { score: cashFlowCommittedLoadScoreValue.value, weight: 0.35 },
+    ]),
     description:
-      'Score de flujo de caja basado en 4 senales: gasto base, carga actual, cargas temporales de caja y resultado anual total.',
+      'Lectura principal de tension recurrente: coste de vida base y carga actual de caja incluyendo compromisos temporales.',
     kpis: [
       {
         id: 'structural-operating-ratio',
@@ -929,6 +931,18 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
             ? undefined
             : `Colchon mensual tras cargas temporales: ${formatNumber(recurrentAfterCommitmentsMonthlyValue.value, 2)}`,
       },
+    ],
+  },
+  {
+    id: 'cashflow-temporality-and-year-close',
+    title: 'Temporalidad y cierre anual',
+    score: weightedScore([
+      { score: cashFlowTemporaryCommitmentScoreValue.value, weight: 0.15 },
+      { score: cashFlowTotalAnnualFlowScoreValue.value, weight: 0.1 },
+    ]),
+    description:
+      'Complemento del diagnostico: peso de compromisos temporales y resultado anual total (incluye extraordinarios y asignacion patrimonial).',
+    kpis: [
       {
         id: 'temporary-commitment-ratio',
         label: 'Peso de cargas temporales de caja (% ingresos recurrentes)',

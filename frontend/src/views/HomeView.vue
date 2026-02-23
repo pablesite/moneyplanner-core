@@ -10,8 +10,8 @@ import { useNetWorthStore } from '@/stores/netWorth';
 
 const phases = guidePhases;
 const store = useNetWorthStore();
-const annualIncomeStore = useAnnualIncomeStore('core');
-const annualExpenseStore = useAnnualExpenseStore('core');
+const annualIncomeStore = useAnnualIncomeStore('saas');
+const annualExpenseStore = useAnnualExpenseStore('saas');
 const sharedPhaseDiagnostics = computed(() =>
   computeGuidePhaseDiagnostics({
     summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
@@ -325,6 +325,10 @@ function phaseDisplayProgress(phase: GuidePhase): number {
   }
   if (phase.id === 2) {
     const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase2GlobalScore);
+    return Number.isFinite(sharedScore) ? sharedScore : phase.progress;
+  }
+  if (phase.id === 3) {
+    const sharedScore = Math.round(sharedPhaseDiagnostics.value.phase3GlobalScore);
     return Number.isFinite(sharedScore) ? sharedScore : phase.progress;
   }
   return phase.progress;
