@@ -319,6 +319,26 @@ const recurrentAnnualExpenseValue = computed(() =>
     0,
   ),
 );
+const recurrentOperationalExpenseValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'consumption_expenses' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
+const recurrentSavingsAllocationValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'savings_allocation' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
+const recurrentFinancialAndTangibleAllocationValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    const isFinancialOrTangible =
+      entry.category === 'financial_investments' || entry.category === 'tangible_assets';
+    return isFinancialOrTangible ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
 const oneOffAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
     (acc, entry) => (entry.expenseType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
@@ -329,35 +349,43 @@ const totalAnnualExpenseValue = computed(
   () => recurrentAnnualExpenseValue.value + oneOffAnnualExpenseValue.value,
 );
 const recurrentAnnualCashFlowValue = computed(
-  () => recurrentAnnualIncomeValue.value - recurrentAnnualExpenseValue.value,
+  () => recurrentAnnualIncomeValue.value - recurrentOperationalExpenseValue.value,
 );
 const recurrentMonthlyCashFlowValue = computed(() => recurrentAnnualCashFlowValue.value / 12);
 const totalAnnualCashFlowValue = computed(
   () => totalAnnualIncomeValue.value - totalAnnualExpenseValue.value,
 );
+const recurrentSavingsCapacityValue = computed(
+  () => recurrentAnnualCashFlowValue.value + recurrentSavingsAllocationValue.value,
+);
 const recurrentSavingsToIncomeRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
-    ? recurrentAnnualCashFlowValue.value / recurrentAnnualIncomeValue.value
+    ? recurrentSavingsCapacityValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
 const recurrentExpenseToIncomeRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
-    ? recurrentAnnualExpenseValue.value / recurrentAnnualIncomeValue.value
+    ? recurrentOperationalExpenseValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
 const recurrentExpenseCoverageValue = computed(() => {
-  if (recurrentAnnualExpenseValue.value > 0) {
-    return recurrentAnnualIncomeValue.value / recurrentAnnualExpenseValue.value;
+  if (recurrentOperationalExpenseValue.value > 0) {
+    return recurrentAnnualIncomeValue.value / recurrentOperationalExpenseValue.value;
   }
   if (recurrentAnnualIncomeValue.value > 0) return 2;
   return null;
 });
+const recurrentFinancialAndTangibleAllocationRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentFinancialAndTangibleAllocationValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
 const extraordinaryNetImpactValue = computed(
   () => oneOffAnnualIncomeValue.value - oneOffAnnualExpenseValue.value,
 );
 const extraordinaryNetImpactToRecurrentExpenseValue = computed(() =>
-  recurrentAnnualExpenseValue.value > 0
-    ? extraordinaryNetImpactValue.value / recurrentAnnualExpenseValue.value
+  recurrentOperationalExpenseValue.value > 0
+    ? extraordinaryNetImpactValue.value / recurrentOperationalExpenseValue.value
     : null,
 );
 const extraordinaryVolumeRatioValue = computed(() => {
@@ -632,25 +660,26 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
     id: 'cashflow-operational-surplus',
     title: 'Superavit operativo',
     score: cashFlowSurplusScoreValue.value,
-    description: 'Salud del flujo mes a mes usando solo ingresos y gastos recurrentes.',
+    description:
+      'Salud del flujo mes a mes usando ingresos recurrentes y gasto operativo (categoria Gastos).',
     kpis: [
       {
         id: 'recurrent-cash-flow',
         label: 'Flujo operativo anual',
         valueText: formatNumber(recurrentAnnualCashFlowValue.value, 2),
         score: cashFlowRecurrentSavingsScoreValue.value,
-        hint: 'Ingresos recurrentes - gastos recurrentes',
+        hint: 'Ingresos recurrentes - gasto operativo recurrente (categoria Gastos)',
       },
       {
         id: 'recurrent-savings-ratio',
         label: '% ahorro recurrente / ingresos recurrentes',
         valueText: formatPct(recurrentSavingsToIncomeRatioValue.value, 0),
         score: cashFlowRecurrentSavingsScoreValue.value,
-        hint: 'Margen operativo sobre ingresos recurrentes',
+        hint: 'Flujo operativo + asignaciones de ahorro, sobre ingresos recurrentes',
       },
       {
         id: 'recurrent-expense-ratio',
-        label: '% gastos recurrentes / ingresos recurrentes',
+        label: '% gasto operativo / ingresos recurrentes',
         valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
         score: cashFlowRecurrentExpenseRatioScoreValue.value,
         hint: 'Carga estructural de gasto (inverso)',
@@ -672,14 +701,21 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
             ? '-'
             : `${formatNumber(recurrentExpenseCoverageValue.value, 2)}x`,
         score: cashFlowRecurrentCoverageScoreValue.value,
-        hint: 'KPI extra: ingresos recurrentes / gastos recurrentes',
+        hint: 'KPI extra: ingresos recurrentes / gasto operativo recurrente',
+      },
+      {
+        id: 'financial-tangible-allocation',
+        label: '% inversion financiera + activos mobiliarios',
+        valueText: formatPct(recurrentFinancialAndTangibleAllocationRatioValue.value, 0),
+        score: null,
+        hint: 'KPI especifico de asignacion recurrente a patrimonio (informativo)',
       },
       {
         id: 'extraordinary-net-impact',
         label: 'Impacto extraordinario neto',
         valueText: formatPct(extraordinaryNetImpactToRecurrentExpenseValue.value, 0),
         score: null,
-        hint: 'Ingresos no recurrentes - gastos no recurrentes, sobre gastos recurrentes (informativo)',
+        hint: 'Ingresos no recurrentes - gastos no recurrentes, sobre gasto operativo recurrente (informativo)',
       },
     ],
   },
@@ -751,9 +787,9 @@ const summaryCards = computed<SummaryCard[]>(() => {
         valueText: formatNumber(recurrentAnnualIncomeValue.value, 2),
       },
       {
-        id: 'expense-recurrent',
-        label: 'Gastos recurrentes anuales',
-        valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
+        id: 'expense-operational-recurrent',
+        label: 'Gasto operativo recurrente',
+        valueText: formatNumber(recurrentOperationalExpenseValue.value, 2),
       },
       {
         id: 'cashflow-operational-annual',
@@ -764,6 +800,11 @@ const summaryCards = computed<SummaryCard[]>(() => {
         id: 'cashflow-operational-monthly',
         label: 'Superavit operativo mensual',
         valueText: formatNumber(recurrentMonthlyCashFlowValue.value, 2),
+      },
+      {
+        id: 'savings-allocation-recurrent',
+        label: 'Asignacion recurrente a ahorro',
+        valueText: formatNumber(recurrentSavingsAllocationValue.value, 2),
       },
       {
         id: 'extraordinary-net',

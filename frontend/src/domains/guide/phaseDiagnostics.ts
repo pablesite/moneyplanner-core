@@ -10,6 +10,12 @@ type AnnualIncomeLike = {
 };
 
 type AnnualExpenseLike = {
+  category:
+    | 'savings_allocation'
+    | 'financial_investments'
+    | 'real_estate_assets'
+    | 'tangible_assets'
+    | 'consumption_expenses';
   expenseType: 'recurrent' | 'one_off';
   amountAnnual: number;
 };
@@ -96,19 +102,23 @@ function computePhase2CashFlowAdjustedScore(input: {
     'incomeType',
     'recurrent',
   );
-  const recurrentAnnualExpense = sumAnnualByType(
-    input.annualExpenseEntries,
-    'expenseType',
-    'recurrent',
-  );
-  const recurrentAnnualCashFlow = recurrentAnnualIncome - recurrentAnnualExpense;
+  const recurrentOperationalExpense = input.annualExpenseEntries.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'consumption_expenses' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0);
+  const recurrentSavingsAllocation = input.annualExpenseEntries.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'savings_allocation' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0);
+  const recurrentAnnualCashFlow = recurrentAnnualIncome - recurrentOperationalExpense;
+  const recurrentSavingsCapacity = recurrentAnnualCashFlow + recurrentSavingsAllocation;
   const recurrentSavingsToIncomeRatio =
-    recurrentAnnualIncome > 0 ? recurrentAnnualCashFlow / recurrentAnnualIncome : null;
+    recurrentAnnualIncome > 0 ? recurrentSavingsCapacity / recurrentAnnualIncome : null;
   const recurrentExpenseToIncomeRatio =
-    recurrentAnnualIncome > 0 ? recurrentAnnualExpense / recurrentAnnualIncome : null;
+    recurrentAnnualIncome > 0 ? recurrentOperationalExpense / recurrentAnnualIncome : null;
   const recurrentExpenseCoverage =
-    recurrentAnnualExpense > 0
-      ? recurrentAnnualIncome / recurrentAnnualExpense
+    recurrentOperationalExpense > 0
+      ? recurrentAnnualIncome / recurrentOperationalExpense
       : recurrentAnnualIncome > 0
         ? 2
         : null;

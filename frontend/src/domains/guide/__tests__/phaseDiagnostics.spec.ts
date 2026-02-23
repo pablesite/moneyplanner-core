@@ -12,8 +12,9 @@ describe('computeGuidePhaseDiagnostics', () => {
         { incomeType: 'one_off', amountAnnual: 90000 },
       ],
       annualExpenseEntries: [
-        { expenseType: 'recurrent', amountAnnual: 18000 },
-        { expenseType: 'one_off', amountAnnual: 88000 },
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 18000 },
+        { category: 'savings_allocation', expenseType: 'recurrent', amountAnnual: 2000 },
+        { category: 'real_estate_assets', expenseType: 'one_off', amountAnnual: 88000 },
       ],
     });
 
@@ -26,8 +27,9 @@ describe('computeGuidePhaseDiagnostics', () => {
         { incomeType: 'one_off', amountAnnual: 12000 },
       ],
       annualExpenseEntries: [
-        { expenseType: 'recurrent', amountAnnual: 17000 },
-        { expenseType: 'one_off', amountAnnual: 4000 },
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 17000 },
+        { category: 'savings_allocation', expenseType: 'recurrent', amountAnnual: 0 },
+        { category: 'real_estate_assets', expenseType: 'one_off', amountAnnual: 4000 },
       ],
     });
 
