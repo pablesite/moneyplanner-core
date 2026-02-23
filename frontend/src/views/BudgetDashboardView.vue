@@ -45,8 +45,8 @@ type BudgetExecutionPreview = {
   overflow: boolean;
 };
 
-const incomeStore = useAnnualIncomeStore('core');
-const expenseStore = useAnnualExpenseStore('core');
+const incomeStore = useAnnualIncomeStore('saas');
+const expenseStore = useAnnualExpenseStore('saas');
 
 const fiscalYear = ref(new Date().getFullYear());
 const ownershipFilter = ref<string>('all');
@@ -95,6 +95,14 @@ const fiscalYearOptions = computed(() => {
   years.add(fiscalYear.value);
   return Array.from(years).sort((a, b) => b - a);
 });
+const selectedOwnershipFilterLabel = computed(() => {
+  if (ownershipFilter.value === 'all') return 'Todos';
+  return (
+    ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
+    ownershipFilter.value
+  );
+});
+const selectedFiscalYearLabel = computed(() => String(fiscalYear.value));
 
 const isLoading = computed(() => incomeStore.loading.value || expenseStore.loading.value);
 const firstError = computed(() => incomeStore.error.value || expenseStore.error.value);
@@ -173,6 +181,22 @@ watch(ownershipOptions, (options) => {
     ownershipFilter.value = 'all';
   }
 });
+
+function closePopoverFromClick(event: Event): void {
+  const target = event.currentTarget as HTMLElement | null;
+  const details = target?.closest('details') as HTMLDetailsElement | null;
+  if (details) details.open = false;
+}
+
+function selectOwnershipFilterOption(value: string, event: Event): void {
+  ownershipFilter.value = value;
+  closePopoverFromClick(event);
+}
+
+function selectFiscalYearOption(year: number, event: Event): void {
+  fiscalYear.value = year;
+  closePopoverFromClick(event);
+}
 
 const ownerAdjustedIncomeEntries = computed(() =>
   incomeEntries.value
@@ -465,24 +489,56 @@ watch(
         <div class="ui-budget-toolbar">
           <label class="ui-budget-owner-picker">
             <span>Titularidad</span>
-            <select v-model="ownershipFilter">
-              <option value="all">Todos</option>
-              <option
-                v-for="ownerOption in ownershipOptions"
-                :key="ownerOption.value"
-                :value="ownerOption.value"
-              >
-                {{ ownerOption.label }}
-              </option>
-            </select>
+            <details class="ui-select-popover">
+              <summary class="ui-select-popover-trigger">
+                <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
+                <span class="ui-select-popover-caret" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                <button
+                  type="button"
+                  class="ui-select-popover-option"
+                  :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                  @click="selectOwnershipFilterOption('all', $event)"
+                >
+                  Todos
+                </button>
+                <button
+                  v-for="ownerOption in ownershipOptions"
+                  :key="ownerOption.value"
+                  type="button"
+                  class="ui-select-popover-option"
+                  :class="{
+                    'ui-select-popover-option-active': ownershipFilter === ownerOption.value,
+                  }"
+                  @click="selectOwnershipFilterOption(ownerOption.value, $event)"
+                >
+                  {{ ownerOption.label }}
+                </button>
+              </div>
+            </details>
           </label>
           <label class="ui-budget-year-picker">
             <span>Ejercicio</span>
-            <select v-model="fiscalYear" :disabled="isLoading">
-              <option v-for="year in fiscalYearOptions" :key="year" :value="year">
-                {{ year }}
-              </option>
-            </select>
+            <details class="ui-select-popover" :class="{ 'opacity-60': isLoading }">
+              <summary class="ui-select-popover-trigger">
+                <span class="ui-select-popover-text">{{ selectedFiscalYearLabel }}</span>
+                <span class="ui-select-popover-caret" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="ui-select-popover-menu" role="listbox" aria-label="Ejercicio">
+                <button
+                  v-for="year in fiscalYearOptions"
+                  :key="year"
+                  type="button"
+                  class="ui-select-popover-option"
+                  :class="{ 'ui-select-popover-option-active': fiscalYear === year }"
+                  :disabled="isLoading"
+                  @click="selectFiscalYearOption(year, $event)"
+                >
+                  {{ year }}
+                </button>
+              </div>
+            </details>
           </label>
         </div>
       </div>

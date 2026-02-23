@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
 import { RouterLink, useRoute } from 'vue-router';
 import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
@@ -44,12 +44,23 @@ type SummaryCard = {
   id: string;
   label: string;
   valueText: string;
+  valueTone?: 'neutral' | 'positive' | 'negative' | 'warning';
+  metaText?: string;
+};
+
+type SummarySection = {
+  id: string;
+  title: string;
+  description?: string;
+  columns: 2 | 4;
+  cards: SummaryCard[];
 };
 
 const route = useRoute();
 const store = useNetWorthStore();
 const annualIncomeStore = useAnnualIncomeStore('saas');
 const annualExpenseStore = useAnnualExpenseStore('saas');
+const selectedExtraordinaryEventGroup = ref<string>('all');
 
 const phaseId = computed(() => {
   const raw = String(route.params.phaseId ?? '');
@@ -112,6 +123,13 @@ function formatPct(n: number | null, decimals = 0): string {
 function formatPctFromPercentValue(n: number | null, decimals = 1): string {
   if (n == null || !Number.isFinite(n)) return '-';
   return formatPct(n / 100, decimals);
+}
+
+function valueToneFromSignedAmount(value: number): SummaryCard['valueTone'] {
+  if (!Number.isFinite(value)) return 'neutral';
+  if (value > 0) return 'positive';
+  if (value < 0) return 'negative';
+  return 'neutral';
 }
 
 function linearScoreIncreasing(value: number | null, min: number, max: number): number {
@@ -391,9 +409,6 @@ const recurrentTangibleAllocationValue = computed(() =>
     return entry.category === 'tangible_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
-const recurrentDebtReductionAllocationValue = computed(
-  () => totalMonthlyDebtPaymentValue.value * 12,
-);
 const oneOffAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
     (acc, entry) =>
@@ -436,11 +451,6 @@ const recurrentRealEstateAllocationRatioValue = computed(() =>
     ? recurrentRealEstateAllocationValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
-const recurrentDebtReductionAllocationRatioValue = computed(() =>
-  recurrentAnnualIncomeValue.value > 0
-    ? recurrentDebtReductionAllocationValue.value / recurrentAnnualIncomeValue.value
-    : null,
-);
 const recurrentTotalCashFlowValue = computed(
   () => recurrentAnnualIncomeValue.value - recurrentAnnualExpenseValue.value,
 );
@@ -449,6 +459,61 @@ const recurrentAfterCommitmentsCashFlowValue = computed(
     recurrentAnnualIncomeValue.value -
     recurrentOperationalExpenseValue.value -
     temporaryCommitmentExpenseValue.value,
+);
+const recurrentPatrimonialAllocationTotalValue = computed(
+  () =>
+    recurrentSavingsAllocationValue.value +
+    recurrentFinancialInvestmentAllocationValue.value +
+    recurrentTangibleAllocationValue.value +
+    recurrentRealEstateAllocationValue.value,
+);
+const extraordinaryEventGroupOptions = computed(() => {
+  const values = new Set<string>();
+  for (const entry of annualIncomeStore.entries.value) {
+    const profile =
+      entry.timeProfile ?? (entry.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent');
+    if (profile !== 'one_off') continue;
+    const group = String(entry.eventGroup ?? '').trim();
+    if (group) values.add(group);
+  }
+  for (const entry of annualExpenseStore.entries.value) {
+    const profile =
+      entry.timeProfile ?? (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent');
+    if (profile !== 'one_off') continue;
+    const group = String(entry.eventGroup ?? '').trim();
+    if (group) values.add(group);
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b, 'es'));
+});
+const selectedExtraordinaryEventGroupLabel = computed(() =>
+  selectedExtraordinaryEventGroup.value === 'all'
+    ? 'Todos los eventos'
+    : selectedExtraordinaryEventGroup.value,
+);
+const filteredOneOffAnnualIncomeValue = computed(() => {
+  if (selectedExtraordinaryEventGroup.value === 'all') return oneOffAnnualIncomeValue.value;
+  return annualIncomeStore.entries.value.reduce((acc, entry) => {
+    const profile =
+      entry.timeProfile ?? (entry.incomeType === 'one_off' ? 'one_off' : 'structural_recurrent');
+    if (profile !== 'one_off') return acc;
+    return String(entry.eventGroup ?? '').trim() === selectedExtraordinaryEventGroup.value
+      ? acc + Number(entry.amountAnnual ?? 0)
+      : acc;
+  }, 0);
+});
+const filteredOneOffAnnualExpenseValue = computed(() => {
+  if (selectedExtraordinaryEventGroup.value === 'all') return oneOffAnnualExpenseValue.value;
+  return annualExpenseStore.entries.value.reduce((acc, entry) => {
+    const profile =
+      entry.timeProfile ?? (entry.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent');
+    if (profile !== 'one_off') return acc;
+    return String(entry.eventGroup ?? '').trim() === selectedExtraordinaryEventGroup.value
+      ? acc + Number(entry.amountAnnual ?? 0)
+      : acc;
+  }, 0);
+});
+const filteredExtraordinaryNetCashFlowValue = computed(
+  () => filteredOneOffAnnualIncomeValue.value - filteredOneOffAnnualExpenseValue.value,
 );
 const extraordinaryVolumeRatioValue = computed(() => {
   const numerator =
@@ -462,6 +527,22 @@ const monthlyIncomeValue = computed(() => {
   if (!Number.isFinite(annual) || annual <= 0) return null;
   return annual / 12;
 });
+
+watch(extraordinaryEventGroupOptions, (options) => {
+  if (
+    selectedExtraordinaryEventGroup.value !== 'all' &&
+    !options.includes(selectedExtraordinaryEventGroup.value)
+  ) {
+    selectedExtraordinaryEventGroup.value = 'all';
+  }
+});
+
+function selectExtraordinaryEventGroup(value: string, event: Event): void {
+  selectedExtraordinaryEventGroup.value = value;
+  const target = event.currentTarget as HTMLElement | null;
+  const details = target?.closest('details') as HTMLDetailsElement | null;
+  if (details) details.open = false;
+}
 
 const debtPaymentToIncomeValue = computed(() => {
   if (liabilitiesValue.value <= 0) return 0;
@@ -570,6 +651,14 @@ const cashFlowCommittedLoadScoreValue = computed(() =>
 );
 const cashFlowTemporaryCommitmentScoreValue = computed(() =>
   linearScoreDecreasing(temporaryCommitmentToIncomeRatioValue.value, 0.05, 0.35),
+);
+const totalAnnualCashFlowToRecurrentIncomeRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? totalAnnualCashFlowValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
+const cashFlowTotalAnnualFlowScoreValue = computed(() =>
+  linearScoreIncreasing(totalAnnualCashFlowToRecurrentIncomeRatioValue.value, -0.5, 0),
 );
 const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
 const cashFlowSurplusScoreValue = computed(() => phase2GlobalScoreValue.value);
@@ -725,38 +814,43 @@ const phase1ScoreCards = computed<ScoreCard[]>(() => [
 const phase2ScoreCards = computed<ScoreCard[]>(() => [
   {
     id: 'cashflow-operational-surplus',
-    title: 'Superavit operativo',
+    title: 'Tension de caja',
     score: cashFlowSurplusScoreValue.value,
     description:
-      'Score compuesto de tension de caja: coste operativo estructural, carga comprometida y peso de compromisos temporales frente a ingresos recurrentes.',
+      'Score de flujo de caja basado en 4 senales: gasto base, carga actual, cargas temporales de caja y resultado anual total.',
     kpis: [
       {
         id: 'structural-operating-ratio',
-        label: '% gasto operativo estructural / ingresos recurrentes',
+        label: 'Base de gasto estructural (% ingresos recurrentes)',
         valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
         score: cashFlowStructuralOperatingScoreValue.value,
-        hint: 'Base de estilo de vida (inverso). Umbral: 50% top -> 100% tension',
+        hint: 'Coste de vida base. Menor es mejor (score inverso).',
       },
       {
         id: 'committed-load-ratio',
-        label: '% carga comprometida total / ingresos recurrentes',
+        label: 'Tension total actual de caja (% ingresos recurrentes)',
         valueText: formatPct(committedLoadToIncomeRatioValue.value, 0),
         score: cashFlowCommittedLoadScoreValue.value,
-        hint: 'Operativo estructural + compromisos temporales (inverso)',
+        hint: 'Gasto base + cargas temporales de caja. Menor es mejor (score inverso).',
         detailText:
           recurrentAfterCommitmentsMonthlyValue.value == null
             ? undefined
-            : `Colchon mensual tras compromisos: ${formatNumber(
-                recurrentAfterCommitmentsMonthlyValue.value,
-                2,
-              )}`,
+            : `Colchon mensual tras cargas temporales: ${formatNumber(recurrentAfterCommitmentsMonthlyValue.value, 2)}`,
       },
       {
         id: 'temporary-commitment-ratio',
-        label: '% compromisos temporales / ingresos recurrentes',
+        label: 'Peso de cargas temporales de caja (% ingresos recurrentes)',
         valueText: formatPct(temporaryCommitmentToIncomeRatioValue.value, 0),
         score: cashFlowTemporaryCommitmentScoreValue.value,
-        hint: 'Cuotas con fecha fin (fertilidad/entrada vivienda/etc.) (inverso)',
+        hint: 'Parte de la tension que viene de cuotas con fecha fin. Menor es mejor (score inverso).',
+      },
+      {
+        id: 'total-annual-cash-flow-ratio',
+        label: 'Resultado anual total (% ingresos recurrentes)',
+        valueText: formatPct(totalAnnualCashFlowToRecurrentIncomeRatioValue.value, 0),
+        score: cashFlowTotalAnnualFlowScoreValue.value,
+        hint: 'Resultado anual completo de caja (recurrente + puntual). Incluye asignacion patrimonial y extraordinarios. Mayor es mejor.',
+        detailText: `Ingresos anuales totales ${formatNumber(totalAnnualIncomeValue.value, 2)} · Gastos anuales totales ${formatNumber(totalAnnualExpenseValue.value, 2)} · Flujo anual total ${formatNumber(totalAnnualCashFlowValue.value, 2)}`,
       },
     ],
   },
@@ -769,20 +863,6 @@ const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
     description:
       'Indicadores informativos de asignacion recurrente a patrimonio sobre ingresos recurrentes.',
     kpis: [
-      {
-        id: 'debt-reduction-income',
-        label: '% ingresos destinados a reduccion de deuda',
-        valueText: formatPct(recurrentDebtReductionAllocationRatioValue.value, 0),
-        score: null,
-        hint: 'Suma de cuotas mensuales de pasivos (anualizada) / ingresos recurrentes',
-      },
-      {
-        id: 'temporary-commitments-income',
-        label: '% compromisos temporales / ingresos recurrentes',
-        valueText: formatPct(temporaryCommitmentToIncomeRatioValue.value, 0),
-        score: null,
-        hint: 'Gastos con perfil recurrente temporal y naturaleza compromiso temporal',
-      },
       {
         id: 'financial-investments-income',
         label: '% inversiones / ingresos recurrentes',
@@ -813,6 +893,199 @@ const scoreCards = computed<ScoreCard[]>(() => {
   if (isCashFlowPhase.value) return phase2ScoreCards.value;
   if (isNetWorthHealthPhase.value) return phase4ScoreCards.value;
   return [];
+});
+
+const cashFlowSummarySections = computed<SummarySection[]>(() => {
+  if (!isCashFlowPhase.value) return [];
+  return [
+    {
+      id: 'cashflow-core',
+      title: 'Caja Recurrente',
+      description: 'Lectura principal de tension de caja: base operativa y cargas temporales de caja.',
+      columns: 4,
+      cards: [
+        {
+          id: 'income-recurrent',
+          label: 'Ingresos recurrentes anuales',
+          valueText: formatNumber(recurrentAnnualIncomeValue.value, 2),
+          valueTone: 'neutral',
+          metaText:
+            recurrentAnnualIncomeValue.value > 0
+              ? `${formatNumber(recurrentAnnualIncomeValue.value / 12, 2)} / mes`
+              : undefined,
+        },
+        {
+          id: 'expense-operating-structural',
+          label: 'Gasto operativo estructural',
+          valueText: formatNumber(recurrentOperationalExpenseValue.value, 2),
+          valueTone: 'warning',
+          metaText:
+            recurrentOperationalExpenseValue.value > 0
+              ? `${formatNumber(recurrentOperationalExpenseValue.value / 12, 2)} / mes`
+              : undefined,
+        },
+        {
+          id: 'expense-temporary-commitments',
+          label: 'Cargas temporales de caja',
+          valueText: formatNumber(temporaryCommitmentExpenseValue.value, 2),
+          valueTone: temporaryCommitmentExpenseValue.value > 0 ? 'warning' : 'neutral',
+          metaText:
+            temporaryCommitmentExpenseValue.value > 0
+              ? `${formatNumber(temporaryCommitmentExpenseValue.value / 12, 2)} / mes`
+              : 'Sin carga temporal',
+        },
+        {
+          id: 'cashflow-recurrent-after-commitments',
+          label: 'Colchon tras cargas temporales',
+          valueText: formatNumber(recurrentAfterCommitmentsCashFlowValue.value, 2),
+          valueTone: valueToneFromSignedAmount(recurrentAfterCommitmentsCashFlowValue.value),
+          metaText:
+            recurrentAfterCommitmentsMonthlyValue.value == null
+              ? undefined
+              : `${formatNumber(recurrentAfterCommitmentsMonthlyValue.value, 2)} / mes`,
+        },
+      ],
+    },
+    {
+      id: 'cashflow-context',
+      title: 'Contexto de Flujo',
+      description: 'Contexto anual para no confundir caja operativa con asignacion patrimonial.',
+      columns: 4,
+      cards: [
+        {
+          id: 'expense-recurrent-total',
+          label: 'Salidas recurrentes totales',
+          valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
+          valueTone: 'warning',
+          metaText: 'Incluye ahorro e inversion',
+        },
+        {
+          id: 'cashflow-recurrent-annual',
+          label: 'Flujo recurrente neto total',
+          valueText: formatNumber(recurrentTotalCashFlowValue.value, 2),
+          valueTone: valueToneFromSignedAmount(recurrentTotalCashFlowValue.value),
+          metaText: 'Tras todas las salidas recurrentes',
+        },
+        {
+          id: 'cashflow-total-annual',
+          label: 'Flujo anual total',
+          valueText: formatNumber(totalAnnualCashFlowValue.value, 2),
+          valueTone: valueToneFromSignedAmount(totalAnnualCashFlowValue.value),
+          metaText: 'Incluye extraordinarios',
+        },
+        {
+          id: 'extraordinary-volume-ratio',
+          label: 'Peso de extraordinarios',
+          valueText: formatPct(extraordinaryVolumeRatioValue.value, 0),
+          valueTone:
+            extraordinaryVolumeRatioValue.value != null &&
+            extraordinaryVolumeRatioValue.value > 0.25
+              ? 'warning'
+              : 'neutral',
+          metaText: 'Volumen de ingresos+gastos puntuales',
+        },
+      ],
+    },
+    {
+      id: 'cashflow-patrimonial',
+      title: 'Asignacion Patrimonial Recurrente',
+      description: 'Asignaciones recurrentes no operativas (informativas, no puntuan el score).',
+      columns: 4,
+      cards: [
+        {
+          id: 'patrimonial-total',
+          label: 'Asignacion patrimonial recurrente total',
+          valueText: formatNumber(recurrentPatrimonialAllocationTotalValue.value, 2),
+          valueTone: 'positive',
+          metaText:
+            recurrentAnnualIncomeValue.value > 0
+              ? formatPct(
+                  recurrentPatrimonialAllocationTotalValue.value / recurrentAnnualIncomeValue.value,
+                  0,
+                ) + ' de ingresos recurrentes'
+              : undefined,
+        },
+        {
+          id: 'savings-allocation-recurrent',
+          label: 'Ahorro recurrente',
+          valueText: formatNumber(recurrentSavingsAllocationValue.value, 2),
+          valueTone: 'positive',
+        },
+        {
+          id: 'financial-investments-allocation-recurrent',
+          label: 'Inversiones financieras recurrentes',
+          valueText: formatNumber(recurrentFinancialInvestmentAllocationValue.value, 2),
+          valueTone: 'positive',
+        },
+        {
+          id: 'assets-allocation-mixed',
+          label: 'Activos (mobiliarios + inmobiliarios)',
+          valueText: formatNumber(
+            recurrentTangibleAllocationValue.value + recurrentRealEstateAllocationValue.value,
+            2,
+          ),
+          valueTone: 'positive',
+          metaText: `Mobiliarios ${formatNumber(recurrentTangibleAllocationValue.value, 2)} · Inmobiliarios ${formatNumber(recurrentRealEstateAllocationValue.value, 2)}`,
+        },
+      ],
+    },
+    {
+      id: 'cashflow-extraordinary',
+      title: 'Extraordinarios',
+      description:
+        'Eventos puntuales del ano (visibles como contexto, separados del score principal).',
+      columns: 4,
+      cards: [
+        {
+          id: 'income-one-off',
+          label: 'Ingresos extraordinarios',
+          valueText: formatNumber(filteredOneOffAnnualIncomeValue.value, 2),
+          valueTone: filteredOneOffAnnualIncomeValue.value > 0 ? 'positive' : 'neutral',
+          metaText:
+            selectedExtraordinaryEventGroup.value === 'all'
+              ? undefined
+              : `Evento: ${selectedExtraordinaryEventGroupLabel.value}`,
+        },
+        {
+          id: 'expense-one-off',
+          label: 'Gastos extraordinarios',
+          valueText: formatNumber(filteredOneOffAnnualExpenseValue.value, 2),
+          valueTone: filteredOneOffAnnualExpenseValue.value > 0 ? 'warning' : 'neutral',
+          metaText:
+            selectedExtraordinaryEventGroup.value === 'all'
+              ? undefined
+              : `Evento: ${selectedExtraordinaryEventGroupLabel.value}`,
+        },
+        {
+          id: 'cashflow-one-off-net',
+          label: 'Flujo extraordinario neto',
+          valueText: formatNumber(filteredExtraordinaryNetCashFlowValue.value, 2),
+          valueTone: valueToneFromSignedAmount(filteredExtraordinaryNetCashFlowValue.value),
+          metaText:
+            selectedExtraordinaryEventGroup.value === 'all'
+              ? 'Todos los eventos puntuales'
+              : `Evento: ${selectedExtraordinaryEventGroupLabel.value}`,
+        },
+        {
+          id: 'cashflow-one-off-grouping',
+          label: 'Filtro por evento',
+          valueText: selectedExtraordinaryEventGroupLabel.value,
+          valueTone: 'neutral',
+          metaText: 'Usa Grupo de evento para aislar una operacion puntual',
+        },
+      ],
+    },
+  ];
+});
+
+const cashFlowHeroSummaryCards = computed<SummaryCard[]>(() => {
+  if (!isCashFlowPhase.value) return [];
+  return cashFlowSummarySections.value[0]?.cards ?? [];
+});
+
+const cashFlowContextSummarySections = computed<SummarySection[]>(() => {
+  if (!isCashFlowPhase.value) return [];
+  return cashFlowSummarySections.value.slice(1);
 });
 
 const summaryCards = computed<SummaryCard[]>(() => {
@@ -869,33 +1142,13 @@ const summaryCards = computed<SummaryCard[]>(() => {
   if (isCashFlowPhase.value) {
     return [
       {
-        id: 'income-recurrent',
-        label: 'Ingresos recurrentes anuales',
-        valueText: formatNumber(recurrentAnnualIncomeValue.value, 2),
-      },
-      {
-        id: 'expense-recurrent-total',
-        label: 'Gastos recurrentes anuales',
-        valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
-      },
-      {
-        id: 'expense-operating-structural',
-        label: 'Gasto operativo estructural',
-        valueText: formatNumber(recurrentOperationalExpenseValue.value, 2),
-      },
-      {
-        id: 'expense-temporary-commitments',
-        label: 'Compromisos temporales',
-        valueText: formatNumber(temporaryCommitmentExpenseValue.value, 2),
-      },
-      {
         id: 'cashflow-recurrent-annual',
         label: 'Flujo anual recurrente',
         valueText: formatNumber(recurrentTotalCashFlowValue.value, 2),
       },
       {
         id: 'cashflow-recurrent-after-commitments',
-        label: 'Flujo recurrente tras compromisos',
+        label: 'Flujo recurrente tras cargas temporales',
         valueText: formatNumber(recurrentAfterCommitmentsCashFlowValue.value, 2),
       },
       {
@@ -908,21 +1161,6 @@ const summaryCards = computed<SummaryCard[]>(() => {
         label: 'Asignacion recurrente a ahorro',
         valueText: formatNumber(recurrentSavingsAllocationValue.value, 2),
       },
-      {
-        id: 'financial-investments-allocation-recurrent',
-        label: 'Asignacion recurrente a inversiones financieras',
-        valueText: formatNumber(recurrentFinancialInvestmentAllocationValue.value, 2),
-      },
-      {
-        id: 'tangible-assets-allocation-recurrent',
-        label: 'Asignacion recurrente a inversiones mobiliarias',
-        valueText: formatNumber(recurrentTangibleAllocationValue.value, 2),
-      },
-      {
-        id: 'real-estate-assets-allocation-recurrent',
-        label: 'Asignacion recurrente a inversiones inmobiliarias',
-        valueText: formatNumber(recurrentRealEstateAllocationValue.value, 2),
-      },
     ];
   }
 
@@ -933,7 +1171,7 @@ const cashFlowDistortionWarning = computed(() => {
   if (!isCashFlowPhase.value) return null;
   if (extraordinaryVolumeRatioValue.value == null) return null;
   if (extraordinaryVolumeRatioValue.value <= 0.25) return null;
-  return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score prioriza tension recurrente estructural y compromisos temporales.`;
+  return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score prioriza tension recurrente estructural y cargas temporales de caja.`;
 });
 
 const phaseDiagnosticCopy = computed(() => {
@@ -944,7 +1182,7 @@ const phaseDiagnosticCopy = computed(() => {
     return 'Diagnostico de salud patrimonial: respaldo patrimonial y distribucion del riesgo.';
   }
   if (isCashFlowPhase.value) {
-    return 'Diagnostico de flujo de caja: score compuesto de tension recurrente (operativo estructural + compromisos temporales) y contexto extraordinario separado.';
+    return 'Diagnostico de flujo de caja: score compuesto de tension recurrente (operativo estructural + cargas temporales de caja) y contexto extraordinario separado.';
   }
   return phase.value?.objective ?? '';
 });
@@ -1025,7 +1263,29 @@ watch(hasDiagnosticPhase, () => {
     </section>
 
     <section v-else class="card ui-pro-panel ui-guide-score-panel">
-      <div class="ui-guide-summary-grid">
+      <template v-if="isCashFlowPhase">
+        <div class="ui-guide-summary-grid ui-guide-summary-grid-cols-4">
+          <article
+            v-for="summaryCard in cashFlowHeroSummaryCards"
+            :key="summaryCard.id"
+            class="ui-guide-summary-card"
+          >
+            <div class="ui-guide-summary-label">{{ summaryCard.label }}</div>
+            <div
+              class="ui-guide-summary-value"
+              :class="
+                summaryCard.valueTone ? `ui-guide-summary-value-${summaryCard.valueTone}` : ''
+              "
+            >
+              {{ summaryCard.valueText }}
+            </div>
+            <div v-if="summaryCard.metaText" class="ui-guide-summary-meta">
+              {{ summaryCard.metaText }}
+            </div>
+          </article>
+        </div>
+      </template>
+      <div v-else class="ui-guide-summary-grid">
         <article
           v-for="summaryCard in summaryCards"
           :key="summaryCard.id"
@@ -1098,7 +1358,7 @@ watch(hasDiagnosticPhase, () => {
                   <span class="ui-guide-score-kpi-fill" :style="scoreFillStyle(kpi.score)"></span>
                 </div>
               </div>
-              <div v-else class="ui-guide-score-kpi-pending">Indicador informativo (pendiente)</div>
+              <div v-else class="ui-guide-score-kpi-pending">Indicador informativo (no puntua)</div>
               <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
               <div v-if="kpi.detailText" class="ui-guide-score-kpi-hint">{{ kpi.detailText }}</div>
             </div>
@@ -1106,30 +1366,121 @@ watch(hasDiagnosticPhase, () => {
         </article>
       </div>
 
-      <div
-        v-if="isCashFlowPhase && phase2DistributionInfoCards.length"
-        class="ui-guide-score-grid ui-guide-score-grid-cols-1"
-      >
-        <article
-          v-for="card in phase2DistributionInfoCards"
-          :key="card.id"
-          class="ui-guide-score-card"
-        >
-          <div class="ui-guide-score-card-head">
-            <h3 class="ui-guide-score-card-title">{{ card.title }}</h3>
-          </div>
-          <p class="ui-guide-score-card-copy">{{ card.description }}</p>
-          <div class="ui-guide-score-kpi-list">
-            <div v-for="kpi in card.kpis" :key="kpi.id" class="ui-guide-score-kpi">
-              <div class="ui-guide-score-kpi-head">
-                <span>{{ kpi.label }}</span>
-                <strong class="ui-guide-score-kpi-value">{{ kpi.valueText }}</strong>
+      <details v-if="isCashFlowPhase" class="ui-guide-context-details">
+        <summary class="ui-guide-context-summary">
+          <span class="ui-guide-context-summary-title">Ver contexto completo</span>
+          <span class="ui-guide-context-summary-copy">
+            Contexto de flujo, asignacion patrimonial y extraordinarios
+          </span>
+        </summary>
+
+        <div class="ui-guide-context-details-content">
+          <div v-if="cashFlowContextSummarySections.length" class="ui-guide-summary-sections">
+            <section
+              v-for="section in cashFlowContextSummarySections"
+              :key="section.id"
+              class="ui-guide-summary-section"
+            >
+              <div class="ui-guide-summary-section-head">
+                <div>
+                  <h3 class="ui-guide-summary-section-title">{{ section.title }}</h3>
+                  <p v-if="section.description" class="ui-guide-summary-section-copy">
+                    {{ section.description }}
+                  </p>
+                </div>
+                <div
+                  v-if="section.id === 'cashflow-extraordinary' && extraordinaryEventGroupOptions.length"
+                  class="ui-guide-section-filter"
+                >
+                  <span class="ui-guide-section-filter-label">Evento</span>
+                  <details class="ui-select-popover ui-guide-event-filter">
+                    <summary class="ui-select-popover-trigger ui-guide-event-filter-summary">
+                      <span class="ui-select-popover-text ui-guide-event-filter-summary-text">
+                        {{ selectedExtraordinaryEventGroupLabel }}
+                      </span>
+                      <span class="ui-select-popover-caret ui-guide-event-filter-summary-caret" aria-hidden="true">⌄</span>
+                    </summary>
+                    <div class="ui-select-popover-menu ui-guide-event-filter-menu" role="listbox" aria-label="Evento">
+                      <button
+                        type="button"
+                        class="ui-select-popover-option ui-guide-event-filter-option"
+                        :class="{
+                          'ui-select-popover-option-active ui-guide-event-filter-option-active':
+                            selectedExtraordinaryEventGroup === 'all',
+                        }"
+                        @click="selectExtraordinaryEventGroup('all', $event)"
+                      >
+                        Todos los eventos
+                      </button>
+                      <button
+                        v-for="eventGroup in extraordinaryEventGroupOptions"
+                        :key="eventGroup"
+                        type="button"
+                        class="ui-select-popover-option ui-guide-event-filter-option"
+                        :class="{
+                          'ui-select-popover-option-active ui-guide-event-filter-option-active':
+                            selectedExtraordinaryEventGroup === eventGroup,
+                        }"
+                        @click="selectExtraordinaryEventGroup(eventGroup, $event)"
+                      >
+                        {{ eventGroup }}
+                      </button>
+                    </div>
+                  </details>
+                </div>
               </div>
-              <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
-            </div>
+              <div
+                class="ui-guide-summary-grid"
+                :class="`ui-guide-summary-grid-cols-${section.columns}`"
+              >
+                <article
+                  v-for="summaryCard in section.cards"
+                  :key="summaryCard.id"
+                  class="ui-guide-summary-card"
+                >
+                  <div class="ui-guide-summary-label">{{ summaryCard.label }}</div>
+                  <div
+                    class="ui-guide-summary-value"
+                    :class="
+                      summaryCard.valueTone ? `ui-guide-summary-value-${summaryCard.valueTone}` : ''
+                    "
+                  >
+                    {{ summaryCard.valueText }}
+                  </div>
+                  <div v-if="summaryCard.metaText" class="ui-guide-summary-meta">
+                    {{ summaryCard.metaText }}
+                  </div>
+                </article>
+              </div>
+            </section>
           </div>
-        </article>
-      </div>
+
+          <div
+            v-if="phase2DistributionInfoCards.length"
+            class="ui-guide-score-grid ui-guide-score-grid-cols-1 ui-guide-context-score-grid"
+          >
+            <article
+              v-for="card in phase2DistributionInfoCards"
+              :key="card.id"
+              class="ui-guide-score-card"
+            >
+              <div class="ui-guide-score-card-head">
+                <h3 class="ui-guide-score-card-title">{{ card.title }}</h3>
+              </div>
+              <p class="ui-guide-score-card-copy">{{ card.description }}</p>
+              <div class="ui-guide-score-kpi-list">
+                <div v-for="kpi in card.kpis" :key="kpi.id" class="ui-guide-score-kpi">
+                  <div class="ui-guide-score-kpi-head">
+                    <span>{{ kpi.label }}</span>
+                    <strong class="ui-guide-score-kpi-value">{{ kpi.valueText }}</strong>
+                  </div>
+                  <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </details>
 
       <div v-if="store.loading" class="ui-status-line">Cargando diagnostico...</div>
       <div v-else-if="store.error" class="alert">{{ store.error }}</div>
@@ -1441,6 +1792,101 @@ watch(hasDiagnosticPhase, () => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.ui-guide-summary-grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-guide-summary-grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-guide-summary-sections {
+  display: grid;
+  gap: 14px;
+}
+
+.ui-guide-context-details {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.01);
+  overflow: clip;
+}
+
+.ui-guide-context-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.ui-guide-context-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-guide-context-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ui-guide-context-summary-copy {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-context-details[open] .ui-guide-context-summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ui-guide-context-details-content {
+  padding: 12px;
+}
+
+.ui-guide-context-score-grid {
+  margin-top: 12px;
+}
+
+.ui-guide-summary-section {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.008));
+}
+
+.ui-guide-summary-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.ui-guide-summary-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ui-guide-summary-section-copy {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-section-filter {
+  display: grid;
+  gap: 4px;
+  min-width: min(280px, 100%);
+}
+
+.ui-guide-section-filter-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .ui-guide-summary-card {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
@@ -1459,6 +1905,22 @@ watch(hasDiagnosticPhase, () => {
   font-weight: 700;
 }
 
+.ui-guide-summary-value-positive {
+  color: rgba(110, 231, 183, 0.95);
+}
+
+.ui-guide-summary-value-negative {
+  color: rgba(251, 113, 133, 0.96);
+}
+
+.ui-guide-summary-value-warning {
+  color: rgba(253, 224, 71, 0.96);
+}
+
+.ui-guide-summary-value-neutral {
+  color: inherit;
+}
+
 .ui-guide-summary-meta {
   margin-top: 4px;
   font-size: 11px;
@@ -1473,6 +1935,10 @@ watch(hasDiagnosticPhase, () => {
   .ui-guide-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .ui-guide-summary-grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -1481,6 +1947,11 @@ watch(hasDiagnosticPhase, () => {
   }
 
   .ui-guide-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-guide-summary-grid-cols-2,
+  .ui-guide-summary-grid-cols-4 {
     grid-template-columns: 1fr;
   }
 }
