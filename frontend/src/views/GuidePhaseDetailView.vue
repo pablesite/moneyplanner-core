@@ -21,6 +21,7 @@ type ScoreKpi = {
   valueText: string;
   score: number | null;
   hint: string;
+  detailText?: string;
   incomplete?: boolean;
 };
 
@@ -373,6 +374,11 @@ const recurrentExpenseToIncomeRatioValue = computed(() =>
     ? recurrentOperationalExpenseValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
+const recurrentOperationalSavingsMonthlyValue = computed(() => {
+  if (recurrentAnnualIncomeValue.value <= 0) return null;
+  if (recurrentExpenseToIncomeRatioValue.value == null) return null;
+  return ((1 - recurrentExpenseToIncomeRatioValue.value) * recurrentAnnualIncomeValue.value) / 12;
+});
 const recurrentFinancialInvestmentAllocationRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
     ? recurrentFinancialInvestmentAllocationValue.value / recurrentAnnualIncomeValue.value
@@ -660,6 +666,13 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
         valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
         score: cashFlowRecurrentExpenseRatioScoreValue.value,
         hint: 'Umbral score (inverso): 50% top -> 100% bad',
+        detailText:
+          recurrentOperationalSavingsMonthlyValue.value == null
+            ? undefined
+            : `Ahorro operativo recurrente mensual (${formatPct(
+                Math.max(0, 1 - (recurrentExpenseToIncomeRatioValue.value ?? 0)),
+                0,
+              )} restante): ${formatNumber(recurrentOperationalSavingsMonthlyValue.value, 2)}`,
       },
     ],
   },
@@ -974,6 +987,7 @@ watch(hasDiagnosticPhase, () => {
               </div>
               <div v-else class="ui-guide-score-kpi-pending">Indicador informativo (pendiente)</div>
               <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
+              <div v-if="kpi.detailText" class="ui-guide-score-kpi-hint">{{ kpi.detailText }}</div>
             </div>
           </div>
         </article>
