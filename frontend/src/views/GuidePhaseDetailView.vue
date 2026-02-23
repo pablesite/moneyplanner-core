@@ -669,7 +669,7 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
         detailText:
           recurrentOperationalSavingsMonthlyValue.value == null
             ? undefined
-            : `Ahorro operativo recurrente mensual (${formatPct(
+            : `Capacidad de asignacion recurrente mensual (${formatPct(
                 Math.max(0, 1 - (recurrentExpenseToIncomeRatioValue.value ?? 0)),
                 0,
               )} restante): ${formatNumber(recurrentOperationalSavingsMonthlyValue.value, 2)}`,
