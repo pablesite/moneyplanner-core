@@ -357,14 +357,7 @@ const recurrentTangibleAllocationValue = computed(() =>
     return entry.category === 'tangible_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
-const recurrentDebtReductionAllocationValue = computed(() =>
-  annualExpenseStore.entries.value.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
-    const isDebtReductionCommitment =
-      entry.category === 'consumption_expenses' && entry.subcategory === 'financial_commitments';
-    return isDebtReductionCommitment ? acc + Number(entry.amountAnnual ?? 0) : acc;
-  }, 0),
-);
+const recurrentDebtReductionAllocationValue = computed(() => totalMonthlyDebtPaymentValue.value * 12);
 const oneOffAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
     (acc, entry) => (entry.expenseType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
@@ -703,7 +696,7 @@ const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
         label: '% ingresos destinados a reduccion de deuda',
         valueText: formatPct(recurrentDebtReductionAllocationRatioValue.value, 0),
         score: null,
-        hint: 'Subcategoria compromisos financieros / ingresos recurrentes (informativo)',
+        hint: 'Suma de cuotas mensuales de pasivos (anualizada) / ingresos recurrentes',
       },
       {
         id: 'financial-investments-income',
