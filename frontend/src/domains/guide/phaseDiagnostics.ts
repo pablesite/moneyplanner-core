@@ -29,7 +29,10 @@ export type GuidePhaseDiagnostics = {
 };
 
 function toNumber(raw: unknown): number {
-  const normalized = String(raw ?? '').trim().replace(/\s/g, '').replace(/,/g, '.');
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : 0;
 }
@@ -73,6 +76,50 @@ const ILLIQUID_INVESTMENT_SUBCATEGORIES = new Set([
   'other',
 ]);
 
+function sumAnnualByType<
+  TEntry extends { amountAnnual: number },
+  TKey extends keyof TEntry,
+  TValue extends TEntry[TKey],
+>(entries: TEntry[], key: TKey, expected: TValue): number {
+  return entries.reduce(
+    (acc, entry) => (entry[key] === expected ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    0,
+  );
+}
+
+function computePhase2CashFlowAdjustedScore(input: {
+  annualIncomeEntries: AnnualIncomeLike[];
+  annualExpenseEntries: AnnualExpenseLike[];
+}): number {
+  const recurrentAnnualIncome = sumAnnualByType(
+    input.annualIncomeEntries,
+    'incomeType',
+    'recurrent',
+  );
+  const recurrentAnnualExpense = sumAnnualByType(
+    input.annualExpenseEntries,
+    'expenseType',
+    'recurrent',
+  );
+  const recurrentAnnualCashFlow = recurrentAnnualIncome - recurrentAnnualExpense;
+  const recurrentSavingsToIncomeRatio =
+    recurrentAnnualIncome > 0 ? recurrentAnnualCashFlow / recurrentAnnualIncome : null;
+  const recurrentExpenseToIncomeRatio =
+    recurrentAnnualIncome > 0 ? recurrentAnnualExpense / recurrentAnnualIncome : null;
+  const recurrentExpenseCoverage =
+    recurrentAnnualExpense > 0
+      ? recurrentAnnualIncome / recurrentAnnualExpense
+      : recurrentAnnualIncome > 0
+        ? 2
+        : null;
+
+  return weightedScore([
+    { score: linearScoreIncreasing(recurrentSavingsToIncomeRatio, 0, 0.2), weight: 0.45 },
+    { score: linearScoreDecreasing(recurrentExpenseToIncomeRatio, 0.7, 0.95), weight: 0.25 },
+    { score: linearScoreIncreasing(recurrentExpenseCoverage, 1, 1.2), weight: 0.3 },
+  ]);
+}
+
 export function computeGuidePhaseDiagnostics(
   input: GuidePhaseDiagnosticsInput,
 ): GuidePhaseDiagnostics {
@@ -115,7 +162,8 @@ export function computeGuidePhaseDiagnostics(
 
   const illiquidAssetsShare = assetsValue > 0 ? illiquidAssetsValue / assetsValue : null;
   const unbackedDebtToAssets = assetsValue > 0 ? unbackedDebtValue / assetsValue : null;
-  const unbackedDebtToLiabilities = liabilitiesValue > 0 ? unbackedDebtValue / liabilitiesValue : null;
+  const unbackedDebtToLiabilities =
+    liabilitiesValue > 0 ? unbackedDebtValue / liabilitiesValue : null;
 
   const topAssetShare =
     assetsValue > 0 ? (assetsByCategoryValues.sort((a, b) => b - a)[0] ?? 0) / assetsValue : null;
@@ -172,40 +220,14 @@ export function computeGuidePhaseDiagnostics(
   })();
 
   const liabilitiesWithAmountCount = debtRows.filter((row) => row.amountBase > 0).length;
-  const liabilitiesWithPaymentInputCount = debtRows.filter((row) => row.hasMonthlyPaymentInput).length;
+  const liabilitiesWithPaymentInputCount = debtRows.filter(
+    (row) => row.hasMonthlyPaymentInput,
+  ).length;
   const hasNoDebtPaymentInputs =
     liabilitiesWithAmountCount > 0 && liabilitiesWithPaymentInputCount === 0;
   const totalMonthlyDebtPayment = debtRows.reduce((acc, row) => acc + row.monthlyPaymentAmount, 0);
 
-  const recurrentAnnualIncome = annualIncomeEntries.reduce(
-    (acc, entry) => (entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
-    0,
-  );
-  const oneOffAnnualIncome = annualIncomeEntries.reduce(
-    (acc, entry) => (entry.incomeType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
-    0,
-  );
-  const totalAnnualIncome = recurrentAnnualIncome + oneOffAnnualIncome;
-  const recurrentAnnualExpense = annualExpenseEntries.reduce(
-    (acc, entry) => (entry.expenseType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
-    0,
-  );
-  const oneOffAnnualExpense = annualExpenseEntries.reduce(
-    (acc, entry) => (entry.expenseType === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc),
-    0,
-  );
-  const totalAnnualExpense = recurrentAnnualExpense + oneOffAnnualExpense;
-  const annualCashFlow = totalAnnualIncome - totalAnnualExpense;
-  const savingsToIncomeRatio = totalAnnualIncome > 0 ? annualCashFlow / totalAnnualIncome : null;
-  const expenseToIncomeRatio = totalAnnualIncome > 0 ? totalAnnualExpense / totalAnnualIncome : null;
-  const recurrentExpenseCoverage =
-    recurrentAnnualExpense > 0
-      ? recurrentAnnualIncome / recurrentAnnualExpense
-      : recurrentAnnualIncome > 0
-        ? 2
-        : null;
-  const oneOffIncomeShare = totalAnnualIncome > 0 ? oneOffAnnualIncome / totalAnnualIncome : null;
-  const oneOffExpenseShare = totalAnnualExpense > 0 ? oneOffAnnualExpense / totalAnnualExpense : null;
+  const recurrentAnnualIncome = sumAnnualByType(annualIncomeEntries, 'incomeType', 'recurrent');
   const monthlyIncome =
     Number.isFinite(recurrentAnnualIncome) && recurrentAnnualIncome > 0
       ? recurrentAnnualIncome / 12
@@ -244,9 +266,7 @@ export function computeGuidePhaseDiagnostics(
     { score: linearScoreDecreasing(maxLiabilityTaePct, 0.5, 10), weight: 0.4 },
     { score: linearScoreDecreasing(weightedLiabilityTaePct, 0.5, 10), weight: 0.4 },
     {
-      score: hasNoDebtPaymentInputs
-        ? 100
-        : linearScoreDecreasing(debtPaymentToIncome, 0.15, 0.6),
+      score: hasNoDebtPaymentInputs ? 100 : linearScoreDecreasing(debtPaymentToIncome, 0.15, 0.6),
       weight: 0.2,
     },
   ]);
@@ -260,19 +280,10 @@ export function computeGuidePhaseDiagnostics(
     { score: phase1DebtRiskScore, weight: 0.5 },
   ]);
 
-  const phase2SurplusScore = weightedScore([
-    { score: linearScoreIncreasing(savingsToIncomeRatio, -0.1, 0.3), weight: 0.7 },
-    { score: linearScoreDecreasing(expenseToIncomeRatio, 0.7, 1.1), weight: 0.3 },
-  ]);
-  const phase2StabilityScore = weightedScore([
-    { score: linearScoreIncreasing(recurrentExpenseCoverage, 0.9, 1.2), weight: 0.5 },
-    { score: linearScoreDecreasing(oneOffIncomeShare, 0.1, 0.5), weight: 0.3 },
-    { score: linearScoreDecreasing(oneOffExpenseShare, 0.15, 0.6), weight: 0.2 },
-  ]);
-  const phase2GlobalScore = weightedScore([
-    { score: phase2SurplusScore, weight: 0.5 },
-    { score: phase2StabilityScore, weight: 0.5 },
-  ]);
+  const phase2GlobalScore = computePhase2CashFlowAdjustedScore({
+    annualIncomeEntries,
+    annualExpenseEntries,
+  });
 
   return {
     phase1GlobalScore,

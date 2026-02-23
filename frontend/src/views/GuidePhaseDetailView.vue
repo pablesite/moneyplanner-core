@@ -59,7 +59,7 @@ const hasDiagnosticPhase = computed(
 const summaryExtended = computed(() => store.summary as SummaryExtended | null);
 const sharedPhaseDiagnostics = computed(() =>
   computeGuidePhaseDiagnostics({
-    summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
+    summary: store.summary as typeof store.summary & { liabilities_unbacked?: string | null },
     assets: store.assets,
     liabilities: store.liabilities,
     annualIncomeEntries: annualIncomeStore.entries.value,
@@ -298,7 +298,8 @@ const totalMonthlyDebtPaymentValue = computed(() =>
 
 const recurrentAnnualIncomeValue = computed(() =>
   annualIncomeStore.entries.value.reduce(
-    (acc, entry) => (entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    (acc, entry) =>
+      entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc,
     0,
   ),
 );
@@ -313,7 +314,8 @@ const totalAnnualIncomeValue = computed(
 );
 const recurrentAnnualExpenseValue = computed(() =>
   annualExpenseStore.entries.value.reduce(
-    (acc, entry) => (entry.expenseType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    (acc, entry) =>
+      entry.expenseType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc,
     0,
   ),
 );
@@ -326,13 +328,22 @@ const oneOffAnnualExpenseValue = computed(() =>
 const totalAnnualExpenseValue = computed(
   () => recurrentAnnualExpenseValue.value + oneOffAnnualExpenseValue.value,
 );
-const annualCashFlowValue = computed(() => totalAnnualIncomeValue.value - totalAnnualExpenseValue.value);
-const monthlyCashFlowValue = computed(() => annualCashFlowValue.value / 12);
-const savingsToIncomeRatioValue = computed(() =>
-  totalAnnualIncomeValue.value > 0 ? annualCashFlowValue.value / totalAnnualIncomeValue.value : null,
+const recurrentAnnualCashFlowValue = computed(
+  () => recurrentAnnualIncomeValue.value - recurrentAnnualExpenseValue.value,
 );
-const expenseToIncomeRatioValue = computed(() =>
-  totalAnnualIncomeValue.value > 0 ? totalAnnualExpenseValue.value / totalAnnualIncomeValue.value : null,
+const recurrentMonthlyCashFlowValue = computed(() => recurrentAnnualCashFlowValue.value / 12);
+const totalAnnualCashFlowValue = computed(
+  () => totalAnnualIncomeValue.value - totalAnnualExpenseValue.value,
+);
+const recurrentSavingsToIncomeRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentAnnualCashFlowValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
+const recurrentExpenseToIncomeRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentAnnualExpenseValue.value / recurrentAnnualIncomeValue.value
+    : null,
 );
 const recurrentExpenseCoverageValue = computed(() => {
   if (recurrentAnnualExpenseValue.value > 0) {
@@ -341,12 +352,20 @@ const recurrentExpenseCoverageValue = computed(() => {
   if (recurrentAnnualIncomeValue.value > 0) return 2;
   return null;
 });
-const oneOffIncomeShareValue = computed(() =>
-  totalAnnualIncomeValue.value > 0 ? oneOffAnnualIncomeValue.value / totalAnnualIncomeValue.value : null,
+const extraordinaryNetImpactValue = computed(
+  () => oneOffAnnualIncomeValue.value - oneOffAnnualExpenseValue.value,
 );
-const oneOffExpenseShareValue = computed(() =>
-  totalAnnualExpenseValue.value > 0 ? oneOffAnnualExpenseValue.value / totalAnnualExpenseValue.value : null,
+const extraordinaryNetImpactToRecurrentExpenseValue = computed(() =>
+  recurrentAnnualExpenseValue.value > 0
+    ? extraordinaryNetImpactValue.value / recurrentAnnualExpenseValue.value
+    : null,
 );
+const extraordinaryVolumeRatioValue = computed(() => {
+  const numerator =
+    Math.abs(oneOffAnnualIncomeValue.value) + Math.abs(oneOffAnnualExpenseValue.value);
+  if (totalAnnualIncomeValue.value <= 0) return null;
+  return numerator / totalAnnualIncomeValue.value;
+});
 
 const monthlyIncomeValue = computed(() => {
   const annual = Number(recurrentAnnualIncomeValue.value ?? 0);
@@ -402,9 +421,7 @@ const phase4RiskDistributionScoreValue = computed(() =>
   ]),
 );
 
-const phase4GlobalScoreValue = computed(() =>
-  sharedPhaseDiagnostics.value.phase4GlobalScore,
-);
+const phase4GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase4GlobalScore);
 
 const debtMaxTaeScoreValue = computed(() =>
   linearScoreDecreasing(maxLiabilityTaePctValue.value, 0.5, 10),
@@ -443,34 +460,24 @@ const phase1DebtRiskScoreValue = computed(() =>
   ]),
 );
 
-const phase1GlobalScoreValue = computed(() =>
-  sharedPhaseDiagnostics.value.phase1GlobalScore,
+const phase1GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase1GlobalScore);
+const cashFlowRecurrentSavingsScoreValue = computed(() =>
+  linearScoreIncreasing(recurrentSavingsToIncomeRatioValue.value, 0, 0.2),
+);
+const cashFlowRecurrentExpenseRatioScoreValue = computed(() =>
+  linearScoreDecreasing(recurrentExpenseToIncomeRatioValue.value, 0.7, 0.95),
 );
 const cashFlowSurplusScoreValue = computed(() =>
   weightedScore([
-    { score: linearScoreIncreasing(savingsToIncomeRatioValue.value, -0.1, 0.3), weight: 0.7 },
-    { score: linearScoreDecreasing(expenseToIncomeRatioValue.value, 0.7, 1.1), weight: 0.3 },
+    { score: cashFlowRecurrentSavingsScoreValue.value, weight: 0.65 },
+    { score: cashFlowRecurrentExpenseRatioScoreValue.value, weight: 0.35 },
   ]),
 );
 const cashFlowRecurrentCoverageScoreValue = computed(() =>
-  linearScoreIncreasing(recurrentExpenseCoverageValue.value, 0.9, 1.2),
+  linearScoreIncreasing(recurrentExpenseCoverageValue.value, 1, 1.2),
 );
-const cashFlowOneOffIncomeShareScoreValue = computed(() =>
-  linearScoreDecreasing(oneOffIncomeShareValue.value, 0.1, 0.5),
-);
-const cashFlowOneOffExpenseShareScoreValue = computed(() =>
-  linearScoreDecreasing(oneOffExpenseShareValue.value, 0.15, 0.6),
-);
-const cashFlowStabilityScoreValue = computed(() =>
-  weightedScore([
-    { score: cashFlowRecurrentCoverageScoreValue.value, weight: 0.5 },
-    { score: cashFlowOneOffIncomeShareScoreValue.value, weight: 0.3 },
-    { score: cashFlowOneOffExpenseShareScoreValue.value, weight: 0.2 },
-  ]),
-);
-const phase2GlobalScoreValue = computed(() =>
-  sharedPhaseDiagnostics.value.phase2GlobalScore,
-);
+const cashFlowStabilityScoreValue = computed(() => cashFlowRecurrentCoverageScoreValue.value);
+const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
 
 function toneFromScore(score: number): ScoreTone {
   if (score >= 75) return 'solid';
@@ -498,10 +505,10 @@ const globalLabelValue = computed(() => {
     return 'Deuda critica';
   }
   if (isCashFlowPhase.value) {
-    if (tone === 'solid') return 'Flujo de caja solido';
-    if (tone === 'medium') return 'Flujo de caja estable';
-    if (tone === 'watch') return 'Flujo de caja ajustado';
-    return 'Flujo de caja en tension';
+    if (tone === 'solid') return 'Flujo operativo solido';
+    if (tone === 'medium') return 'Flujo operativo estable';
+    if (tone === 'watch') return 'Flujo operativo ajustado';
+    return 'Flujo operativo en tension';
   }
   if (tone === 'solid') return 'Salud patrimonial solida';
   if (tone === 'medium') return 'Salud patrimonial equilibrada';
@@ -622,41 +629,40 @@ const phase1ScoreCards = computed<ScoreCard[]>(() => [
 
 const phase2ScoreCards = computed<ScoreCard[]>(() => [
   {
-    id: 'cashflow-surplus',
-    title: 'Superavit y eficiencia',
+    id: 'cashflow-operational-surplus',
+    title: 'Superavit operativo',
     score: cashFlowSurplusScoreValue.value,
-    description:
-      'Capacidad de mantener margen positivo entre ingresos y gastos sin consumir el presupuesto.',
+    description: 'Salud del flujo mes a mes usando solo ingresos y gastos recurrentes.',
     kpis: [
       {
-        id: 'cash-flow',
-        label: 'Flujo de caja anual',
-        valueText: formatNumber(annualCashFlowValue.value, 2),
-        score: linearScoreIncreasing(savingsToIncomeRatioValue.value, -0.1, 0.3),
-        hint: 'Ingresos anuales - gastos anuales',
+        id: 'recurrent-cash-flow',
+        label: 'Flujo operativo anual',
+        valueText: formatNumber(recurrentAnnualCashFlowValue.value, 2),
+        score: cashFlowRecurrentSavingsScoreValue.value,
+        hint: 'Ingresos recurrentes - gastos recurrentes',
       },
       {
-        id: 'savings-ratio',
-        label: '% ahorro / ingresos',
-        valueText: formatPct(savingsToIncomeRatioValue.value, 0),
-        score: linearScoreIncreasing(savingsToIncomeRatioValue.value, -0.1, 0.3),
-        hint: 'Margen de ahorro sobre ingresos totales',
+        id: 'recurrent-savings-ratio',
+        label: '% ahorro recurrente / ingresos recurrentes',
+        valueText: formatPct(recurrentSavingsToIncomeRatioValue.value, 0),
+        score: cashFlowRecurrentSavingsScoreValue.value,
+        hint: 'Margen operativo sobre ingresos recurrentes',
       },
       {
-        id: 'expense-ratio',
-        label: '% gastos / ingresos',
-        valueText: formatPct(expenseToIncomeRatioValue.value, 0),
-        score: linearScoreDecreasing(expenseToIncomeRatioValue.value, 0.7, 1.1),
-        hint: 'Carga de gasto anual sobre ingresos (inverso)',
+        id: 'recurrent-expense-ratio',
+        label: '% gastos recurrentes / ingresos recurrentes',
+        valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
+        score: cashFlowRecurrentExpenseRatioScoreValue.value,
+        hint: 'Carga estructural de gasto (inverso)',
       },
     ],
   },
   {
-    id: 'cashflow-stability',
-    title: 'Estabilidad del flujo',
+    id: 'cashflow-operational-stability',
+    title: 'Estabilidad operativa',
     score: cashFlowStabilityScoreValue.value,
     description:
-      'Robustez del flujo por cobertura recurrente y baja dependencia de partidas no recurrentes.',
+      'Robustez de la cobertura recurrente y lectura separada del impacto extraordinario.',
     kpis: [
       {
         id: 'recurrent-expense-coverage',
@@ -669,18 +675,11 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
         hint: 'KPI extra: ingresos recurrentes / gastos recurrentes',
       },
       {
-        id: 'one-off-income-share',
-        label: '% ingresos no recurrentes',
-        valueText: formatPct(oneOffIncomeShareValue.value, 0),
-        score: cashFlowOneOffIncomeShareScoreValue.value,
-        hint: 'Dependencia de ingresos puntuales (inverso)',
-      },
-      {
-        id: 'one-off-expense-share',
-        label: '% gastos no recurrentes',
-        valueText: formatPct(oneOffExpenseShareValue.value, 0),
-        score: cashFlowOneOffExpenseShareScoreValue.value,
-        hint: 'Volatilidad de gasto por partidas puntuales (inverso)',
+        id: 'extraordinary-net-impact',
+        label: 'Impacto extraordinario neto',
+        valueText: formatPct(extraordinaryNetImpactToRecurrentExpenseValue.value, 0),
+        score: null,
+        hint: 'Ingresos no recurrentes - gastos no recurrentes, sobre gastos recurrentes (informativo)',
       },
     ],
   },
@@ -747,29 +746,46 @@ const summaryCards = computed<SummaryCard[]>(() => {
   if (isCashFlowPhase.value) {
     return [
       {
-        id: 'income-total',
-        label: 'Ingresos anuales',
-        valueText: formatNumber(totalAnnualIncomeValue.value, 2),
+        id: 'income-recurrent',
+        label: 'Ingresos recurrentes anuales',
+        valueText: formatNumber(recurrentAnnualIncomeValue.value, 2),
       },
       {
-        id: 'expense-total',
-        label: 'Gastos anuales',
-        valueText: formatNumber(totalAnnualExpenseValue.value, 2),
+        id: 'expense-recurrent',
+        label: 'Gastos recurrentes anuales',
+        valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
       },
       {
-        id: 'cashflow-annual',
-        label: 'Flujo de caja anual',
-        valueText: formatNumber(annualCashFlowValue.value, 2),
+        id: 'cashflow-operational-annual',
+        label: 'Flujo operativo anual',
+        valueText: formatNumber(recurrentAnnualCashFlowValue.value, 2),
       },
       {
-        id: 'cashflow-monthly',
-        label: 'Superavit mensual',
-        valueText: formatNumber(monthlyCashFlowValue.value, 2),
+        id: 'cashflow-operational-monthly',
+        label: 'Superavit operativo mensual',
+        valueText: formatNumber(recurrentMonthlyCashFlowValue.value, 2),
+      },
+      {
+        id: 'extraordinary-net',
+        label: 'Impacto extraordinario neto',
+        valueText: formatNumber(extraordinaryNetImpactValue.value, 2),
+      },
+      {
+        id: 'cashflow-total-annual',
+        label: 'Flujo total anual (contexto)',
+        valueText: formatNumber(totalAnnualCashFlowValue.value, 2),
       },
     ];
   }
 
   return [];
+});
+
+const cashFlowDistortionWarning = computed(() => {
+  if (!isCashFlowPhase.value) return null;
+  if (extraordinaryVolumeRatioValue.value == null) return null;
+  if (extraordinaryVolumeRatioValue.value <= 0.25) return null;
+  return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score usa flujo operativo ajustado.`;
 });
 
 const phaseDiagnosticCopy = computed(() => {
@@ -780,7 +796,7 @@ const phaseDiagnosticCopy = computed(() => {
     return 'Diagnostico de salud patrimonial: respaldo patrimonial y distribucion del riesgo.';
   }
   if (isCashFlowPhase.value) {
-    return 'Diagnostico de flujo de caja: superavit, eficiencia y estabilidad del margen mensual.';
+    return 'Diagnostico de flujo de caja ajustado: score basado en ingresos/gastos recurrentes y contexto extraordinario separado.';
   }
   return phase.value?.objective ?? '';
 });
@@ -870,6 +886,10 @@ watch(hasDiagnosticPhase, () => {
           <div class="ui-guide-summary-label">{{ summaryCard.label }}</div>
           <div class="ui-guide-summary-value">{{ summaryCard.valueText }}</div>
         </article>
+      </div>
+
+      <div v-if="cashFlowDistortionWarning" class="ui-status-line">
+        {{ cashFlowDistortionWarning }}
       </div>
 
       <div class="ui-guide-score-top">
