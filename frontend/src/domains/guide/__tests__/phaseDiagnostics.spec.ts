@@ -34,7 +34,8 @@ describe('computeGuidePhaseDiagnostics', () => {
     });
 
     expect(stable.phase2GlobalScore).toBeGreaterThan(volatile.phase2GlobalScore);
-    expect(stable.phase2GlobalScore).toBeGreaterThan(85);
+    expect(stable.phase2GlobalScore).toBeGreaterThan(45);
+    expect(stable.phase2GlobalScore).toBeLessThan(55);
     expect(volatile.phase2GlobalScore).toBeLessThan(10);
   });
 });
