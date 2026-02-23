@@ -1012,7 +1012,6 @@ watch(hasDiagnosticPhase, () => {
                 <span>{{ kpi.label }}</span>
                 <strong class="ui-guide-score-kpi-value">{{ kpi.valueText }}</strong>
               </div>
-              <div class="ui-guide-score-kpi-pending">Indicador informativo</div>
               <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
             </div>
           </div>
