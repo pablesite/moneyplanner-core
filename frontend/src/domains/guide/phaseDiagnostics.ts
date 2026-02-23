@@ -144,7 +144,6 @@ function computePhase2CashFlowAdjustedScore(input: {
       ? acc + Number(entry.amountAnnual ?? 0)
       : acc;
   }, 0);
-
   const structuralOperatingRatio =
     recurrentAnnualIncome > 0 ? structuralOperatingExpense / recurrentAnnualIncome : null;
   const committedLoadRatio =
@@ -153,11 +152,27 @@ function computePhase2CashFlowAdjustedScore(input: {
       : null;
   const temporaryCommitmentRatio =
     recurrentAnnualIncome > 0 ? temporaryCommitmentExpense / recurrentAnnualIncome : null;
+  const oneOffIncome = input.annualIncomeEntries.reduce(
+    (acc, entry) =>
+      incomeTimeProfile(entry) === 'one_off' ? acc + Number(entry.amountAnnual ?? 0) : acc,
+    0,
+  );
+  const totalAnnualIncome = recurrentAnnualIncome + oneOffIncome;
+  const totalAnnualExpense = input.annualExpenseEntries.reduce(
+    (acc, entry) => acc + Number(entry.amountAnnual ?? 0),
+    0,
+  );
+  const totalAnnualCashFlowRatio =
+    recurrentAnnualIncome > 0 ? (totalAnnualIncome - totalAnnualExpense) / recurrentAnnualIncome : null;
+  // Total annual flow (including patrimonial allocation and one-offs) is informative and should
+  // modestly affect the score, especially when the year closes with a net deficit.
+  const totalAnnualCashFlowScore = linearScoreIncreasing(totalAnnualCashFlowRatio, -0.2, 0.2);
 
   return weightedScore([
-    { score: linearScoreDecreasing(structuralOperatingRatio, 0.5, 1.0), weight: 0.45 },
-    { score: linearScoreDecreasing(committedLoadRatio, 0.65, 1.05), weight: 0.4 },
+    { score: linearScoreDecreasing(structuralOperatingRatio, 0.5, 1.0), weight: 0.4 },
+    { score: linearScoreDecreasing(committedLoadRatio, 0.65, 1.05), weight: 0.35 },
     { score: linearScoreDecreasing(temporaryCommitmentRatio, 0.05, 0.35), weight: 0.15 },
+    { score: totalAnnualCashFlowScore, weight: 0.1 },
   ]);
 }
 

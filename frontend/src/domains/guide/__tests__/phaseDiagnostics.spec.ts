@@ -35,11 +35,11 @@ describe('computeGuidePhaseDiagnostics', () => {
 
     expect(stable.phase2GlobalScore).toBeGreaterThan(volatile.phase2GlobalScore);
     expect(stable.phase2GlobalScore).toBeGreaterThan(40);
-    expect(stable.phase2GlobalScore).toBeLessThan(70);
-    expect(volatile.phase2GlobalScore).toBeLessThan(20);
+    expect(stable.phase2GlobalScore).toBeLessThan(80);
+    expect(volatile.phase2GlobalScore).toBeLessThan(30);
   });
 
-  it('ignores recurring savings and asset allocations in phase 2 operating ratio score', () => {
+  it('modestly penalizes recurring patrimonial allocations via total annual cash flow component', () => {
     const base = computeGuidePhaseDiagnostics({
       summary: null,
       assets: [],
@@ -61,12 +61,39 @@ describe('computeGuidePhaseDiagnostics', () => {
         { category: 'financial_investments', expenseType: 'recurrent', amountAnnual: 3000 },
         { category: 'tangible_assets', expenseType: 'recurrent', amountAnnual: 1000 },
         { category: 'real_estate_assets', expenseType: 'recurrent', amountAnnual: 2000 },
+      ],
+    });
+
+    expect(withAllocations.phase2GlobalScore).toBeLessThan(base.phase2GlobalScore);
+    expect(base.phase2GlobalScore - withAllocations.phase2GlobalScore).toBeLessThan(15);
+    expect(base.phase2GlobalScore).toBeGreaterThan(70);
+  });
+
+  it('includes total annual cash flow as a fourth score component (penalizes net annual deficits)', () => {
+    const withoutOneOffDeficit = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 24000 }],
+      annualExpenseEntries: [
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 14400 },
+      ],
+    });
+
+    const withOneOffDeficit = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 24000 }],
+      annualExpenseEntries: [
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 14400 },
         { category: 'real_estate_assets', expenseType: 'one_off', amountAnnual: 80000 },
       ],
     });
 
-    expect(base.phase2GlobalScore).toBeCloseTo(withAllocations.phase2GlobalScore, 6);
-    expect(base.phase2GlobalScore).toBeGreaterThan(70);
+    expect(withoutOneOffDeficit.phase2GlobalScore).toBeGreaterThan(
+      withOneOffDeficit.phase2GlobalScore,
+    );
   });
 
   it('rewards low structural operating load and penalizes full operating load in phase 2', () => {

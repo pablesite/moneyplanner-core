@@ -93,12 +93,12 @@ describe('GuidePhaseDetailView (fase 2)', () => {
     const wrapper = mount(GuidePhaseDetailView);
     await nextTick();
 
-    expect(wrapper.text()).toContain('Superavit operativo');
+    expect(wrapper.text()).toContain('Tension de caja');
     expect(wrapper.text()).toContain('Ingresos recurrentes anuales');
     expect(wrapper.text()).toContain('Flujo anual total');
     expect(wrapper.text()).toContain('Distribucion del ahorro');
-    expect(wrapper.text()).toContain('% ingresos destinados a reduccion de deuda');
-    expect(wrapper.text()).toContain('Colchon mensual tras compromisos');
+    expect(wrapper.text()).toContain('% inversiones / ingresos recurrentes');
+    expect(wrapper.text()).toContain('Colchon mensual tras cargas temporales');
     expect(wrapper.text()).toContain('Ano con eventos extraordinarios');
 
     expect(mockNetWorthStore.fetchSettings).toHaveBeenCalledTimes(1);
@@ -116,7 +116,7 @@ describe('GuidePhaseDetailView (fase 2)', () => {
     const wrapper = mount(GuidePhaseDetailView);
     await nextTick();
 
-    expect(wrapper.text()).toContain('Superavit operativo');
+    expect(wrapper.text()).toContain('Tension de caja');
     expect(wrapper.text()).not.toContain('Capacidad de asignacion recurrente mensual');
     expect(wrapper.text()).not.toContain('Ano con eventos extraordinarios');
   });
