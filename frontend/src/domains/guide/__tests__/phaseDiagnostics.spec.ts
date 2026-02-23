@@ -93,4 +93,65 @@ describe('computeGuidePhaseDiagnostics', () => {
     expect(top.phase2GlobalScore).toBeCloseTo(100, 6);
     expect(bottom.phase2GlobalScore).toBeCloseTo(0, 6);
   });
+
+  it('keeps diagnostics finite when liabilities exist but there is no recurrent income', () => {
+    const diagnostics = computeGuidePhaseDiagnostics({
+      summary: ({
+        total_assets: '50000',
+        total_liabilities: '10000',
+        net_worth: '40000',
+        liabilities_unbacked: '10000',
+        assets_by_category: { cash: '50000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: { personal_loan: '10000' },
+        base_currency: 'EUR',
+      } as any),
+      assets: [{ id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '50000', is_active: true }] as any,
+      liabilities: [
+        {
+          id: 1,
+          amount_base: '10000',
+          annual_interest_tae: '12',
+          monthly_payment_amount: '250',
+          is_active: true,
+        },
+      ] as any,
+      annualIncomeEntries: [{ incomeType: 'one_off', amountAnnual: 5000 }],
+      annualExpenseEntries: [],
+    });
+
+    expect(Number.isFinite(diagnostics.phase1GlobalScore)).toBe(true);
+    expect(diagnostics.phase1GlobalScore).toBeGreaterThanOrEqual(0);
+    expect(diagnostics.phase1GlobalScore).toBeLessThanOrEqual(100);
+  });
+
+  it('handles liabilities without monthly payment inputs without penalizing debt-cost payment subscore path', () => {
+    const diagnostics = computeGuidePhaseDiagnostics({
+      summary: ({
+        total_assets: '20000',
+        total_liabilities: '6000',
+        net_worth: '14000',
+        liabilities_unbacked: '6000',
+        assets_by_category: { cash: '20000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: { personal_loan: '6000' },
+        base_currency: 'EUR',
+      } as any),
+      assets: [{ id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '20000', is_active: true }] as any,
+      liabilities: [
+        {
+          id: 1,
+          amount_base: '6000',
+          annual_interest_tae: '6',
+          monthly_payment_amount: '',
+          is_active: true,
+        },
+      ] as any,
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 24000 }],
+      annualExpenseEntries: [],
+    });
+
+    expect(Number.isFinite(diagnostics.phase1GlobalScore)).toBe(true);
+    expect(Number.isFinite(diagnostics.phase4GlobalScore)).toBe(true);
+  });
 });
