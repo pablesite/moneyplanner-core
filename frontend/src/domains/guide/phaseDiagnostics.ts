@@ -413,8 +413,8 @@ export function computeGuidePhaseDiagnostics(
       : null;
 
   const phase3GlobalScore = weightedScore([
-    { score: linearScoreIncreasing(emergencyCoverageMonthsBase, 1, 6), weight: 0.45 },
-    { score: linearScoreIncreasing(emergencyCoverageMonthsCommitted, 1, 6), weight: 0.25 },
+    { score: linearScoreIncreasing(emergencyCoverageMonthsBase, 3, 12), weight: 0.45 },
+    { score: linearScoreIncreasing(emergencyCoverageMonthsCommitted, 3, 12), weight: 0.25 },
     { score: linearScoreIncreasing(emergencyLiquidityToAssets, 0.05, 0.3), weight: 0.15 },
     {
       score: linearScoreIncreasing(immediateLiquidityShareWithinEmergency, 0.4, 0.85),
