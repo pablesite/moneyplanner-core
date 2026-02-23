@@ -71,9 +71,14 @@ const phaseId = computed(() => {
 const phase = computed(() => (phaseId.value == null ? null : findGuidePhaseById(phaseId.value)));
 const isDebtPhase = computed(() => phase.value?.id === 1);
 const isCashFlowPhase = computed(() => phase.value?.id === 2);
+const isEmergencyFundPhase = computed(() => phase.value?.id === 3);
 const isNetWorthHealthPhase = computed(() => phase.value?.id === 4);
 const hasDiagnosticPhase = computed(
-  () => isDebtPhase.value || isCashFlowPhase.value || isNetWorthHealthPhase.value,
+  () =>
+    isDebtPhase.value ||
+    isCashFlowPhase.value ||
+    isEmergencyFundPhase.value ||
+    isNetWorthHealthPhase.value,
 );
 const summaryExtended = computed(() => store.summary as SummaryExtended | null);
 const sharedPhaseDiagnostics = computed(() =>
@@ -196,6 +201,14 @@ const illiquidInvestmentSubcategories = new Set([
   'crowdlending',
   'other',
 ]);
+const liquidInvestmentSubcategories = new Set([
+  'deposits',
+  'funds',
+  'etfs',
+  'roboadvisor',
+  'stocks',
+  'cryptocurrencies',
+]);
 
 const illiquidAssetsValue = computed(() => {
   return activeAssets.value.reduce((acc, asset) => {
@@ -224,6 +237,36 @@ const illiquidAssetsValue = computed(() => {
 
 const illiquidAssetsShareValue = computed(() =>
   assetsValue.value > 0 ? illiquidAssetsValue.value / assetsValue.value : null,
+);
+
+const emergencyLiquidAssetsValue = computed(() => {
+  return activeAssets.value.reduce((acc, asset) => {
+    const amountBase = Math.max(0, toNumber(asset.amount_base));
+    if (amountBase <= 0) return acc;
+    const isCashLiquidity = asset.category === 'cash';
+    const isLiquidInvestment =
+      asset.category === 'investments' &&
+      liquidInvestmentSubcategories.has(asset.subcategory || 'other');
+    return isCashLiquidity || isLiquidInvestment ? acc + amountBase : acc;
+  }, 0);
+});
+
+const immediateLiquidityAssetsValue = computed(() => {
+  return activeAssets.value.reduce((acc, asset) => {
+    if (asset.category !== 'cash') return acc;
+    const amountBase = Math.max(0, toNumber(asset.amount_base));
+    return amountBase > 0 ? acc + amountBase : acc;
+  }, 0);
+});
+
+const emergencyLiquidityToAssetsRatioValue = computed(() =>
+  assetsValue.value > 0 ? emergencyLiquidAssetsValue.value / assetsValue.value : null,
+);
+
+const immediateLiquidityShareWithinEmergencyValue = computed(() =>
+  emergencyLiquidAssetsValue.value > 0
+    ? immediateLiquidityAssetsValue.value / emergencyLiquidAssetsValue.value
+    : null,
 );
 
 const debtRows = computed(() =>
@@ -485,6 +528,23 @@ const extraordinaryEventGroupOptions = computed(() => {
   }
   return Array.from(values).sort((a, b) => a.localeCompare(b, 'es'));
 });
+const structuralOperatingMonthlyExpenseValue = computed(() =>
+  recurrentOperationalExpenseValue.value > 0 ? recurrentOperationalExpenseValue.value / 12 : null,
+);
+const currentCommittedMonthlyExpenseValue = computed(() => {
+  const annualCommitted = recurrentOperationalExpenseValue.value + temporaryCommitmentExpenseValue.value;
+  return annualCommitted > 0 ? annualCommitted / 12 : null;
+});
+const emergencyCoverageMonthsBaseValue = computed(() =>
+  structuralOperatingMonthlyExpenseValue.value != null && structuralOperatingMonthlyExpenseValue.value > 0
+    ? emergencyLiquidAssetsValue.value / structuralOperatingMonthlyExpenseValue.value
+    : null,
+);
+const emergencyCoverageMonthsCommittedValue = computed(() =>
+  currentCommittedMonthlyExpenseValue.value != null && currentCommittedMonthlyExpenseValue.value > 0
+    ? emergencyLiquidAssetsValue.value / currentCommittedMonthlyExpenseValue.value
+    : null,
+);
 const selectedExtraordinaryEventGroupLabel = computed(() =>
   selectedExtraordinaryEventGroup.value === 'all'
     ? 'Todos los eventos'
@@ -662,6 +722,31 @@ const cashFlowTotalAnnualFlowScoreValue = computed(() =>
 );
 const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
 const cashFlowSurplusScoreValue = computed(() => phase2GlobalScoreValue.value);
+const emergencyCoverageBaseScoreValue = computed(() =>
+  linearScoreIncreasing(emergencyCoverageMonthsBaseValue.value, 1, 6),
+);
+const emergencyCoverageCommittedScoreValue = computed(() =>
+  linearScoreIncreasing(emergencyCoverageMonthsCommittedValue.value, 1, 6),
+);
+const emergencyLiquidityToAssetsScoreValue = computed(() =>
+  linearScoreIncreasing(emergencyLiquidityToAssetsRatioValue.value, 0.05, 0.3),
+);
+const emergencyImmediateLiquidityQualityScoreValue = computed(() =>
+  linearScoreIncreasing(immediateLiquidityShareWithinEmergencyValue.value, 0.4, 0.85),
+);
+const phase3CoverageScoreValue = computed(() =>
+  weightedScore([
+    { score: emergencyCoverageBaseScoreValue.value, weight: 0.65 },
+    { score: emergencyCoverageCommittedScoreValue.value, weight: 0.35 },
+  ]),
+);
+const phase3LiquidityQualityScoreValue = computed(() =>
+  weightedScore([
+    { score: emergencyLiquidityToAssetsScoreValue.value, weight: 0.5 },
+    { score: emergencyImmediateLiquidityQualityScoreValue.value, weight: 0.5 },
+  ]),
+);
+const phase3GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase3GlobalScore);
 
 function toneFromScore(score: number): ScoreTone {
   if (score >= 75) return 'solid';
@@ -673,6 +758,7 @@ function toneFromScore(score: number): ScoreTone {
 const globalScoreValue = computed(() => {
   if (isDebtPhase.value) return phase1GlobalScoreValue.value;
   if (isCashFlowPhase.value) return phase2GlobalScoreValue.value;
+  if (isEmergencyFundPhase.value) return phase3GlobalScoreValue.value;
   if (isNetWorthHealthPhase.value) return phase4GlobalScoreValue.value;
   return 0;
 });
@@ -693,6 +779,12 @@ const globalLabelValue = computed(() => {
     if (tone === 'medium') return 'Flujo operativo estable';
     if (tone === 'watch') return 'Flujo operativo ajustado';
     return 'Flujo operativo en tension';
+  }
+  if (isEmergencyFundPhase.value) {
+    if (tone === 'solid') return 'Colchon robusto';
+    if (tone === 'medium') return 'Colchon suficiente';
+    if (tone === 'watch') return 'Colchon justo';
+    return 'Colchon insuficiente';
   }
   if (tone === 'solid') return 'Salud patrimonial solida';
   if (tone === 'medium') return 'Salud patrimonial equilibrada';
@@ -888,9 +980,69 @@ const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
   },
 ]);
 
+const phase3ScoreCards = computed<ScoreCard[]>(() => [
+  {
+    id: 'emergency-coverage',
+    title: 'Cobertura del colchon',
+    score: phase3CoverageScoreValue.value,
+    description:
+      'Cobertura de liquidez util medida contra gasto base (Fase 2) y carga actual incluyendo compromisos temporales.',
+    kpis: [
+      {
+        id: 'emergency-months-base',
+        label: 'Meses de gasto base cubiertos',
+        valueText:
+          emergencyCoverageMonthsBaseValue.value == null
+            ? '-'
+            : `${formatNumber(emergencyCoverageMonthsBaseValue.value, 1)} meses`,
+        score: emergencyCoverageBaseScoreValue.value,
+        hint: 'Liquidez util / gasto operativo estructural mensual. Mayor es mejor.',
+      },
+      {
+        id: 'emergency-months-committed',
+        label: 'Meses de gasto actual cubiertos',
+        valueText:
+          emergencyCoverageMonthsCommittedValue.value == null
+            ? '-'
+            : `${formatNumber(emergencyCoverageMonthsCommittedValue.value, 1)} meses`,
+        score: emergencyCoverageCommittedScoreValue.value,
+        hint: 'Liquidez util / (gasto estructural + cargas temporales) mensual. Mayor es mejor.',
+        detailText:
+          currentCommittedMonthlyExpenseValue.value == null
+            ? undefined
+            : `Carga mensual actual estimada: ${formatNumber(currentCommittedMonthlyExpenseValue.value, 2)}`,
+      },
+    ],
+  },
+  {
+    id: 'emergency-liquidity-quality',
+    title: 'Calidad de liquidez',
+    score: phase3LiquidityQualityScoreValue.value,
+    description:
+      'Peso de la liquidez dentro del patrimonio y porcentaje de liquidez inmediata dentro del colchon.',
+    kpis: [
+      {
+        id: 'emergency-liquidity-assets-ratio',
+        label: '% liquidez util / activos',
+        valueText: formatPct(emergencyLiquidityToAssetsRatioValue.value, 0),
+        score: emergencyLiquidityToAssetsScoreValue.value,
+        hint: 'Liquidez util disponible para emergencia sobre activos totales. Mayor es mejor.',
+      },
+      {
+        id: 'immediate-liquidity-share',
+        label: '% liquidez inmediata / liquidez util',
+        valueText: formatPct(immediateLiquidityShareWithinEmergencyValue.value, 0),
+        score: emergencyImmediateLiquidityQualityScoreValue.value,
+        hint: 'Parte del colchon que esta en cash y acceso inmediato. Mayor es mejor.',
+      },
+    ],
+  },
+]);
+
 const scoreCards = computed<ScoreCard[]>(() => {
   if (isDebtPhase.value) return phase1ScoreCards.value;
   if (isCashFlowPhase.value) return phase2ScoreCards.value;
+  if (isEmergencyFundPhase.value) return phase3ScoreCards.value;
   if (isNetWorthHealthPhase.value) return phase4ScoreCards.value;
   return [];
 });
@@ -1139,6 +1291,37 @@ const summaryCards = computed<SummaryCard[]>(() => {
     ];
   }
 
+  if (isEmergencyFundPhase.value) {
+    return [
+      {
+        id: 'emergency-liquid-assets',
+        label: 'Liquidez util para emergencia',
+        valueText: formatNumber(emergencyLiquidAssetsValue.value, 2),
+      },
+      {
+        id: 'emergency-immediate-liquidity',
+        label: 'Liquidez inmediata',
+        valueText: formatNumber(immediateLiquidityAssetsValue.value, 2),
+      },
+      {
+        id: 'emergency-months-base',
+        label: 'Meses gasto base',
+        valueText:
+          emergencyCoverageMonthsBaseValue.value == null
+            ? '-'
+            : `${formatNumber(emergencyCoverageMonthsBaseValue.value, 1)}m`,
+      },
+      {
+        id: 'emergency-months-committed',
+        label: 'Meses carga actual',
+        valueText:
+          emergencyCoverageMonthsCommittedValue.value == null
+            ? '-'
+            : `${formatNumber(emergencyCoverageMonthsCommittedValue.value, 1)}m`,
+      },
+    ];
+  }
+
   if (isCashFlowPhase.value) {
     return [
       {
@@ -1184,6 +1367,9 @@ const phaseDiagnosticCopy = computed(() => {
   if (isCashFlowPhase.value) {
     return 'Diagnostico de flujo de caja: score compuesto de tension recurrente (operativo estructural + cargas temporales de caja) y contexto extraordinario separado.';
   }
+  if (isEmergencyFundPhase.value) {
+    return 'Diagnostico de fondo de emergencia: cobertura del colchon usando liquidez util (baseline Fase 4) contra gasto base y carga actual (semantica Fase 2).';
+  }
   return phase.value?.objective ?? '';
 });
 
@@ -1194,7 +1380,7 @@ function maybeLoadNetWorthContext() {
   if (isDebtPhase.value || isCashFlowPhase.value) {
     void annualIncomeStore.loadAll();
   }
-  if (isCashFlowPhase.value) {
+  if (isCashFlowPhase.value || isEmergencyFundPhase.value) {
     void annualExpenseStore.loadAll();
   }
 }

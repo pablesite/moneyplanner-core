@@ -206,6 +206,115 @@ describe('computeGuidePhaseDiagnostics', () => {
     expect(diagnostics.phase1GlobalScore).toBeLessThanOrEqual(100);
   });
 
+  it('improves phase 3 score when emergency liquidity covers more months of essential expense', () => {
+    const lowCoverage = computeGuidePhaseDiagnostics({
+      summary: {
+        total_assets: '10000',
+        total_liabilities: '0',
+        net_worth: '10000',
+        liabilities_unbacked: '0',
+        assets_by_category: { cash: '2000', real_estate: '8000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: {},
+        base_currency: 'EUR',
+      } as any,
+      assets: [
+        { id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '2000', is_active: true },
+        { id: 2, category: 'real_estate', subcategory: 'primary_home', amount_base: '8000', is_active: true },
+      ] as any,
+      liabilities: [],
+      annualIncomeEntries: [],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'structural_recurrent',
+          cashflowRole: 'operating',
+          amountAnnual: 12000,
+        },
+      ],
+    });
+
+    const highCoverage = computeGuidePhaseDiagnostics({
+      summary: {
+        total_assets: '20000',
+        total_liabilities: '0',
+        net_worth: '20000',
+        liabilities_unbacked: '0',
+        assets_by_category: { cash: '12000', real_estate: '8000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: {},
+        base_currency: 'EUR',
+      } as any,
+      assets: [
+        { id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '12000', is_active: true },
+        { id: 2, category: 'real_estate', subcategory: 'primary_home', amount_base: '8000', is_active: true },
+      ] as any,
+      liabilities: [],
+      annualIncomeEntries: [],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'structural_recurrent',
+          cashflowRole: 'operating',
+          amountAnnual: 12000,
+        },
+      ],
+    });
+
+    expect(highCoverage.phase3GlobalScore).toBeGreaterThan(lowCoverage.phase3GlobalScore);
+    expect(Number.isFinite(highCoverage.phase3GlobalScore)).toBe(true);
+  });
+
+  it('penalizes phase 3 when assets are mostly illiquid even with similar total assets', () => {
+    const mostlyIlliquid = computeGuidePhaseDiagnostics({
+      summary: {
+        total_assets: '50000',
+        total_liabilities: '0',
+        net_worth: '50000',
+        liabilities_unbacked: '0',
+        assets_by_category: { real_estate: '45000', cash: '5000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: {},
+        base_currency: 'EUR',
+      } as any,
+      assets: [
+        { id: 1, category: 'real_estate', subcategory: 'primary_home', amount_base: '45000', is_active: true },
+        { id: 2, category: 'cash', subcategory: 'bank_account', amount_base: '5000', is_active: true },
+      ] as any,
+      liabilities: [],
+      annualIncomeEntries: [],
+      annualExpenseEntries: [
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 12000 },
+      ],
+    });
+
+    const liquidMix = computeGuidePhaseDiagnostics({
+      summary: {
+        total_assets: '50000',
+        total_liabilities: '0',
+        net_worth: '50000',
+        liabilities_unbacked: '0',
+        assets_by_category: { cash: '15000', investments: '35000' },
+        assets_by_subcategory: {},
+        liabilities_by_category: {},
+        base_currency: 'EUR',
+      } as any,
+      assets: [
+        { id: 1, category: 'cash', subcategory: 'bank_account', amount_base: '15000', is_active: true },
+        { id: 2, category: 'investments', subcategory: 'etfs', amount_base: '35000', is_active: true },
+      ] as any,
+      liabilities: [],
+      annualIncomeEntries: [],
+      annualExpenseEntries: [
+        { category: 'consumption_expenses', expenseType: 'recurrent', amountAnnual: 12000 },
+      ],
+    });
+
+    expect(liquidMix.phase3GlobalScore).toBeGreaterThan(mostlyIlliquid.phase3GlobalScore);
+  });
+
   it('handles liabilities without monthly payment inputs without penalizing debt-cost payment subscore path', () => {
     const diagnostics = computeGuidePhaseDiagnostics({
       summary: {
