@@ -106,28 +106,9 @@ function computePhase2CashFlowAdjustedScore(input: {
     if (entry.expenseType !== 'recurrent') return acc;
     return entry.category === 'consumption_expenses' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0);
-  const recurrentSavingsAllocation = input.annualExpenseEntries.reduce((acc, entry) => {
-    if (entry.expenseType !== 'recurrent') return acc;
-    return entry.category === 'savings_allocation' ? acc + Number(entry.amountAnnual ?? 0) : acc;
-  }, 0);
-  const recurrentAnnualCashFlow = recurrentAnnualIncome - recurrentOperationalExpense;
-  const recurrentSavingsCapacity = recurrentAnnualCashFlow + recurrentSavingsAllocation;
-  const recurrentSavingsToIncomeRatio =
-    recurrentAnnualIncome > 0 ? recurrentSavingsCapacity / recurrentAnnualIncome : null;
   const recurrentExpenseToIncomeRatio =
     recurrentAnnualIncome > 0 ? recurrentOperationalExpense / recurrentAnnualIncome : null;
-  const recurrentExpenseCoverage =
-    recurrentOperationalExpense > 0
-      ? recurrentAnnualIncome / recurrentOperationalExpense
-      : recurrentAnnualIncome > 0
-        ? 2
-        : null;
-
-  return weightedScore([
-    { score: linearScoreIncreasing(recurrentSavingsToIncomeRatio, 0, 0.2), weight: 0.45 },
-    { score: linearScoreDecreasing(recurrentExpenseToIncomeRatio, 0.7, 0.95), weight: 0.25 },
-    { score: linearScoreIncreasing(recurrentExpenseCoverage, 1, 1.2), weight: 0.3 },
-  ]);
+  return linearScoreDecreasing(recurrentExpenseToIncomeRatio, 0.5, 1);
 }
 
 export function computeGuidePhaseDiagnostics(

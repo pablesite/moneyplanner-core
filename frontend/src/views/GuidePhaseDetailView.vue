@@ -32,6 +32,13 @@ type ScoreCard = {
   kpis: ScoreKpi[];
 };
 
+type InfoCard = {
+  id: string;
+  title: string;
+  description: string;
+  kpis: ScoreKpi[];
+};
+
 type SummaryCard = {
   id: string;
   label: string;
@@ -331,12 +338,22 @@ const recurrentSavingsAllocationValue = computed(() =>
     return entry.category === 'savings_allocation' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
-const recurrentFinancialAndTangibleAllocationValue = computed(() =>
+const recurrentFinancialInvestmentAllocationValue = computed(() =>
   annualExpenseStore.entries.value.reduce((acc, entry) => {
     if (entry.expenseType !== 'recurrent') return acc;
-    const isFinancialOrTangible =
-      entry.category === 'financial_investments' || entry.category === 'tangible_assets';
-    return isFinancialOrTangible ? acc + Number(entry.amountAnnual ?? 0) : acc;
+    return entry.category === 'financial_investments' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
+const recurrentRealEstateAllocationValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'real_estate_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
+  }, 0),
+);
+const recurrentTangibleAllocationValue = computed(() =>
+  annualExpenseStore.entries.value.reduce((acc, entry) => {
+    if (entry.expenseType !== 'recurrent') return acc;
+    return entry.category === 'tangible_assets' ? acc + Number(entry.amountAnnual ?? 0) : acc;
   }, 0),
 );
 const oneOffAnnualExpenseValue = computed(() =>
@@ -348,45 +365,31 @@ const oneOffAnnualExpenseValue = computed(() =>
 const totalAnnualExpenseValue = computed(
   () => recurrentAnnualExpenseValue.value + oneOffAnnualExpenseValue.value,
 );
-const recurrentAnnualCashFlowValue = computed(
-  () => recurrentAnnualIncomeValue.value - recurrentOperationalExpenseValue.value,
-);
-const recurrentMonthlyCashFlowValue = computed(() => recurrentAnnualCashFlowValue.value / 12);
 const totalAnnualCashFlowValue = computed(
   () => totalAnnualIncomeValue.value - totalAnnualExpenseValue.value,
-);
-const recurrentSavingsCapacityValue = computed(
-  () => recurrentAnnualCashFlowValue.value + recurrentSavingsAllocationValue.value,
-);
-const recurrentSavingsToIncomeRatioValue = computed(() =>
-  recurrentAnnualIncomeValue.value > 0
-    ? recurrentSavingsCapacityValue.value / recurrentAnnualIncomeValue.value
-    : null,
 );
 const recurrentExpenseToIncomeRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
     ? recurrentOperationalExpenseValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
-const recurrentExpenseCoverageValue = computed(() => {
-  if (recurrentOperationalExpenseValue.value > 0) {
-    return recurrentAnnualIncomeValue.value / recurrentOperationalExpenseValue.value;
-  }
-  if (recurrentAnnualIncomeValue.value > 0) return 2;
-  return null;
-});
-const recurrentFinancialAndTangibleAllocationRatioValue = computed(() =>
+const recurrentFinancialInvestmentAllocationRatioValue = computed(() =>
   recurrentAnnualIncomeValue.value > 0
-    ? recurrentFinancialAndTangibleAllocationValue.value / recurrentAnnualIncomeValue.value
+    ? recurrentFinancialInvestmentAllocationValue.value / recurrentAnnualIncomeValue.value
     : null,
 );
-const extraordinaryNetImpactValue = computed(
-  () => oneOffAnnualIncomeValue.value - oneOffAnnualExpenseValue.value,
-);
-const extraordinaryNetImpactToRecurrentExpenseValue = computed(() =>
-  recurrentOperationalExpenseValue.value > 0
-    ? extraordinaryNetImpactValue.value / recurrentOperationalExpenseValue.value
+const recurrentTangibleAllocationRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentTangibleAllocationValue.value / recurrentAnnualIncomeValue.value
     : null,
+);
+const recurrentRealEstateAllocationRatioValue = computed(() =>
+  recurrentAnnualIncomeValue.value > 0
+    ? recurrentRealEstateAllocationValue.value / recurrentAnnualIncomeValue.value
+    : null,
+);
+const recurrentTotalCashFlowValue = computed(
+  () => recurrentAnnualIncomeValue.value - recurrentAnnualExpenseValue.value,
 );
 const extraordinaryVolumeRatioValue = computed(() => {
   const numerator =
@@ -489,22 +492,10 @@ const phase1DebtRiskScoreValue = computed(() =>
 );
 
 const phase1GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase1GlobalScore);
-const cashFlowRecurrentSavingsScoreValue = computed(() =>
-  linearScoreIncreasing(recurrentSavingsToIncomeRatioValue.value, 0, 0.2),
-);
 const cashFlowRecurrentExpenseRatioScoreValue = computed(() =>
-  linearScoreDecreasing(recurrentExpenseToIncomeRatioValue.value, 0.7, 0.95),
+  linearScoreDecreasing(recurrentExpenseToIncomeRatioValue.value, 0.5, 1),
 );
-const cashFlowSurplusScoreValue = computed(() =>
-  weightedScore([
-    { score: cashFlowRecurrentSavingsScoreValue.value, weight: 0.65 },
-    { score: cashFlowRecurrentExpenseRatioScoreValue.value, weight: 0.35 },
-  ]),
-);
-const cashFlowRecurrentCoverageScoreValue = computed(() =>
-  linearScoreIncreasing(recurrentExpenseCoverageValue.value, 1, 1.2),
-);
-const cashFlowStabilityScoreValue = computed(() => cashFlowRecurrentCoverageScoreValue.value);
+const cashFlowSurplusScoreValue = computed(() => cashFlowRecurrentExpenseRatioScoreValue.value);
 const phase2GlobalScoreValue = computed(() => sharedPhaseDiagnostics.value.phase2GlobalScore);
 
 function toneFromScore(score: number): ScoreTone {
@@ -661,61 +652,46 @@ const phase2ScoreCards = computed<ScoreCard[]>(() => [
     title: 'Superavit operativo',
     score: cashFlowSurplusScoreValue.value,
     description:
-      'Salud del flujo mes a mes usando ingresos recurrentes y gasto operativo (categoria Gastos).',
+      'Indicador unico basado en gasto operativo recurrente (categoria Gastos) frente a ingresos recurrentes.',
     kpis: [
-      {
-        id: 'recurrent-cash-flow',
-        label: 'Flujo operativo anual',
-        valueText: formatNumber(recurrentAnnualCashFlowValue.value, 2),
-        score: cashFlowRecurrentSavingsScoreValue.value,
-        hint: 'Ingresos recurrentes - gasto operativo recurrente (categoria Gastos)',
-      },
-      {
-        id: 'recurrent-savings-ratio',
-        label: '% ahorro recurrente / ingresos recurrentes',
-        valueText: formatPct(recurrentSavingsToIncomeRatioValue.value, 0),
-        score: cashFlowRecurrentSavingsScoreValue.value,
-        hint: 'Flujo operativo + asignaciones de ahorro, sobre ingresos recurrentes',
-      },
       {
         id: 'recurrent-expense-ratio',
         label: '% gasto operativo / ingresos recurrentes',
         valueText: formatPct(recurrentExpenseToIncomeRatioValue.value, 0),
         score: cashFlowRecurrentExpenseRatioScoreValue.value,
-        hint: 'Carga estructural de gasto (inverso)',
+        hint: 'Umbral score (inverso): 50% top -> 100% bad',
       },
     ],
   },
+]);
+
+const phase2DistributionInfoCards = computed<InfoCard[]>(() => [
   {
-    id: 'cashflow-operational-stability',
-    title: 'Estabilidad operativa',
-    score: cashFlowStabilityScoreValue.value,
+    id: 'cashflow-savings-distribution',
+    title: 'Distribucion del ahorro',
     description:
-      'Robustez de la cobertura recurrente y lectura separada del impacto extraordinario.',
+      'Indicadores informativos de asignacion recurrente a patrimonio sobre ingresos recurrentes.',
     kpis: [
       {
-        id: 'recurrent-expense-coverage',
-        label: 'Cobertura recurrente de gastos',
-        valueText:
-          recurrentExpenseCoverageValue.value == null
-            ? '-'
-            : `${formatNumber(recurrentExpenseCoverageValue.value, 2)}x`,
-        score: cashFlowRecurrentCoverageScoreValue.value,
-        hint: 'KPI extra: ingresos recurrentes / gasto operativo recurrente',
+        id: 'financial-investments-income',
+        label: '% inversiones / ingresos recurrentes',
+        valueText: formatPct(recurrentFinancialInvestmentAllocationRatioValue.value, 0),
+        score: null,
+        hint: 'Categoria inversiones financieras / ingresos recurrentes',
       },
       {
-        id: 'financial-tangible-allocation',
-        label: '% inversion financiera + activos mobiliarios',
-        valueText: formatPct(recurrentFinancialAndTangibleAllocationRatioValue.value, 0),
+        id: 'tangible-assets-income',
+        label: '% activos mobiliarios / ingresos recurrentes',
+        valueText: formatPct(recurrentTangibleAllocationRatioValue.value, 0),
         score: null,
-        hint: 'KPI especifico de asignacion recurrente a patrimonio (informativo)',
+        hint: 'Categoria activos mobiliarios / ingresos recurrentes',
       },
       {
-        id: 'extraordinary-net-impact',
-        label: 'Impacto extraordinario neto',
-        valueText: formatPct(extraordinaryNetImpactToRecurrentExpenseValue.value, 0),
+        id: 'real-estate-assets-income',
+        label: '% activos inmobiliarios / ingresos recurrentes',
+        valueText: formatPct(recurrentRealEstateAllocationRatioValue.value, 0),
         score: null,
-        hint: 'Ingresos no recurrentes - gastos no recurrentes, sobre gasto operativo recurrente (informativo)',
+        hint: 'Categoria activos inmobiliarios / ingresos recurrentes',
       },
     ],
   },
@@ -787,19 +763,19 @@ const summaryCards = computed<SummaryCard[]>(() => {
         valueText: formatNumber(recurrentAnnualIncomeValue.value, 2),
       },
       {
-        id: 'expense-operational-recurrent',
-        label: 'Gasto operativo recurrente',
-        valueText: formatNumber(recurrentOperationalExpenseValue.value, 2),
+        id: 'expense-recurrent-total',
+        label: 'Gastos recurrentes anuales',
+        valueText: formatNumber(recurrentAnnualExpenseValue.value, 2),
       },
       {
-        id: 'cashflow-operational-annual',
-        label: 'Flujo operativo anual',
-        valueText: formatNumber(recurrentAnnualCashFlowValue.value, 2),
+        id: 'cashflow-recurrent-annual',
+        label: 'Flujo anual recurrente',
+        valueText: formatNumber(recurrentTotalCashFlowValue.value, 2),
       },
       {
-        id: 'cashflow-operational-monthly',
-        label: 'Superavit operativo mensual',
-        valueText: formatNumber(recurrentMonthlyCashFlowValue.value, 2),
+        id: 'cashflow-total-annual',
+        label: 'Flujo anual total',
+        valueText: formatNumber(totalAnnualCashFlowValue.value, 2),
       },
       {
         id: 'savings-allocation-recurrent',
@@ -807,14 +783,19 @@ const summaryCards = computed<SummaryCard[]>(() => {
         valueText: formatNumber(recurrentSavingsAllocationValue.value, 2),
       },
       {
-        id: 'extraordinary-net',
-        label: 'Impacto extraordinario neto',
-        valueText: formatNumber(extraordinaryNetImpactValue.value, 2),
+        id: 'financial-investments-allocation-recurrent',
+        label: 'Asignacion recurrente a inversiones financieras',
+        valueText: formatNumber(recurrentFinancialInvestmentAllocationValue.value, 2),
       },
       {
-        id: 'cashflow-total-annual',
-        label: 'Flujo total anual (contexto)',
-        valueText: formatNumber(totalAnnualCashFlowValue.value, 2),
+        id: 'tangible-assets-allocation-recurrent',
+        label: 'Asignacion recurrente a inversiones mobiliarias',
+        valueText: formatNumber(recurrentTangibleAllocationValue.value, 2),
+      },
+      {
+        id: 'real-estate-assets-allocation-recurrent',
+        label: 'Asignacion recurrente a inversiones inmobiliarias',
+        valueText: formatNumber(recurrentRealEstateAllocationValue.value, 2),
       },
     ];
   }
@@ -992,6 +973,32 @@ watch(hasDiagnosticPhase, () => {
                 </div>
               </div>
               <div v-else class="ui-guide-score-kpi-pending">Indicador informativo (pendiente)</div>
+              <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div
+        v-if="isCashFlowPhase && phase2DistributionInfoCards.length"
+        class="ui-guide-score-grid ui-guide-score-grid-cols-1"
+      >
+        <article
+          v-for="card in phase2DistributionInfoCards"
+          :key="card.id"
+          class="ui-guide-score-card"
+        >
+          <div class="ui-guide-score-card-head">
+            <h3 class="ui-guide-score-card-title">{{ card.title }}</h3>
+          </div>
+          <p class="ui-guide-score-card-copy">{{ card.description }}</p>
+          <div class="ui-guide-score-kpi-list">
+            <div v-for="kpi in card.kpis" :key="kpi.id" class="ui-guide-score-kpi">
+              <div class="ui-guide-score-kpi-head">
+                <span>{{ kpi.label }}</span>
+                <strong class="ui-guide-score-kpi-value">{{ kpi.valueText }}</strong>
+              </div>
+              <div class="ui-guide-score-kpi-pending">Indicador informativo</div>
               <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
             </div>
           </div>
