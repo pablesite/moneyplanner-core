@@ -111,11 +111,23 @@ export const useNetWorthStore = defineStore('netWorth', {
     async createLiability(payload: NetWorthWritePayload) {
       this.loading = true;
       this.error = null;
+      let createdLiability: Liability | null = null;
       try {
-        await coreNetWorthApi.createLiability(payload);
+        const response = await coreNetWorthApi.createLiability(payload);
+        createdLiability = response.data;
         await this.refreshAll();
+        return createdLiability;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
+        if (createdLiability) {
+          try {
+            await this.refreshAll();
+          } catch {
+            // keep original error; el pasivo ya existe
+          }
+          return createdLiability;
+        }
+        return null;
       } finally {
         this.loading = false;
       }

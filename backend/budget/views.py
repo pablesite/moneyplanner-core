@@ -41,6 +41,7 @@ class AnnualExpenseEntryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = AnnualExpenseEntry.objects.filter(user=self.request.user)
         year_param = (self.request.query_params.get("year") or "").strip()
+        source_liability_param = (self.request.query_params.get("source_liability_id") or "").strip()
         if year_param:
             try:
                 year = int(year_param)
@@ -48,6 +49,13 @@ class AnnualExpenseEntryViewSet(viewsets.ModelViewSet):
                 year = None
             if year is not None:
                 queryset = queryset.filter(fiscal_year=year)
+        if source_liability_param:
+            try:
+                source_liability_id = int(source_liability_param)
+            except ValueError:
+                source_liability_id = None
+            if source_liability_id is not None:
+                queryset = queryset.filter(source_liability_id=source_liability_id)
         return queryset.order_by("-created_at")
 
     def perform_create(self, serializer):

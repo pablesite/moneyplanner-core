@@ -332,6 +332,78 @@ def get_effective_liability_amount(*, liability: Liability, as_of_date: date | N
     return estimated if estimated is not None else liability.amount
 
 
+def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str, str]:
+    from budget.models import AnnualExpenseEntry
+
+    financed_asset = getattr(liability, "financed_asset", None)
+    if financed_asset is None:
+        return {
+            "category": AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            "subcategory": "financial_commitments",
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        }
+
+    if financed_asset.category == Asset.Category.REAL_ESTATE:
+        return {
+            "category": AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+            "subcategory": "property_purchase",
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+        }
+
+    if financed_asset.category == Asset.Category.VEHICLE:
+        return {
+            "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            "subcategory": "vehicle_purchase",
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+        }
+
+    if financed_asset.category == Asset.Category.FURNISHINGS:
+        furnishings_map = {
+            Asset.Subcategory.VEHICLES: "vehicle_purchase",
+            Asset.Subcategory.HOME_FURNISHINGS: "home_furniture_appliances",
+            Asset.Subcategory.TECHNOLOGY: "technology_devices",
+            Asset.Subcategory.JEWELRY: "jewelry_collectibles",
+        }
+        return {
+            "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            "subcategory": furnishings_map.get(
+                financed_asset.subcategory, "other_tangible_assets"
+            ),
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+        }
+
+    if financed_asset.category == Asset.Category.INVESTMENTS:
+        investments_map = {
+            Asset.Subcategory.FUNDS: "index_funds_etf",
+            Asset.Subcategory.ETFS: "index_funds_etf",
+            Asset.Subcategory.PENSION_PLANS: "pension_plan",
+            Asset.Subcategory.STOCKS: "stocks_dividends",
+            Asset.Subcategory.CRYPTOCURRENCIES: "crypto",
+            Asset.Subcategory.CROWDLENDING: "crowdlending_p2p",
+            Asset.Subcategory.ROBOADVISOR: "roboadvisor",
+        }
+        return {
+            "category": AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            "subcategory": investments_map.get(
+                financed_asset.subcategory, "other_financial_investments"
+            ),
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.INVESTMENT,
+        }
+
+    if financed_asset.category == Asset.Category.CASH:
+        return {
+            "category": AnnualExpenseEntry.Category.SAVINGS_ALLOCATION,
+            "subcategory": "cash_reserve",
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.SAVINGS,
+        }
+
+    return {
+        "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+        "subcategory": "other_tangible_assets",
+        "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+    }
+
+
 def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> None:
     from budget.models import AnnualExpenseEntry
 
@@ -348,6 +420,8 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
         totals_by_year.setdefault(due_date.year, Decimal("0"))
         totals_by_year[due_date.year] += installment
 
+    expense_profile = get_generated_liability_expense_profile(liability=liability)
+
     for year, annual_total in totals_by_year.items():
         AnnualExpenseEntry.objects.get_or_create(
             user=liability.user,
@@ -356,12 +430,12 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             fiscal_year=year,
             defaults={
                 "name": f"Compromiso pasivo: {liability.name}",
-                "category": AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
-                "subcategory": "financial_commitments",
+                "category": expense_profile["category"],
+                "subcategory": expense_profile["subcategory"],
                 "owner_name": "",
                 "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
                 "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
-                "cashflow_role": AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+                "cashflow_role": expense_profile["cashflow_role"],
                 "event_group": f"liability_{liability.id}",
                 "term_end_year": final_due_year,
                 "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),

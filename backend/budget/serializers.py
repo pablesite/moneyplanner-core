@@ -156,6 +156,8 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         model = AnnualExpenseEntry
         fields = [
             "id",
+            "source_liability_id",
+            "is_system_generated",
             "name",
             "category",
             "subcategory",
@@ -173,7 +175,13 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "source_liability_id",
+            "is_system_generated",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
         category = attrs.get("category") or getattr(self.instance, "category", "")
