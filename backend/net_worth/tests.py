@@ -719,6 +719,47 @@ class NetWorthApiTests(APITestCase):
         # 9 cuotas (ene-sep 2026) de 1375.44 -> 12378.96
         self.assertEqual(row_2026.amount_annual, Decimal("12378.96"))
 
+    def test_liability_create_with_financed_real_estate_generates_asset_purchase_expense(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Entrada casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("100000.00"),
+            is_active=True,
+        )
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo entrada vivienda",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "0.00",
+                "amount": "12000.00",
+                "principal_amount": "12000.00",
+                "term_months": 12,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "financed_asset_id": asset.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=response.data["id"],
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertTrue(generated.exists())
+        row = generated.first()
+        self.assertEqual(row.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
+        self.assertEqual(row.subcategory, "property_purchase")
+        self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE)
+
     def test_liability_update_does_not_overwrite_generated_budget_commitment_if_user_edits_it(self):
         create_response = self.client.post(
             "/api/net-worth/liabilities/",

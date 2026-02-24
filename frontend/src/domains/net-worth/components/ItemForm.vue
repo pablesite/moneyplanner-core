@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import type { NetWorthWritePayload } from '@/domains/net-worth/models';
 
 type Props = {
   title: string;
+  defaultCurrency?: string;
   categories: { value: string; label: string }[];
   subcategories?: { value: string; label: string; category: string }[];
   onSubmit: (payload: NetWorthWritePayload) => Promise<void>;
@@ -44,6 +45,49 @@ const props = defineProps<Props>();
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+type SimpleDate = { year: number; month: number; day: number };
+
+function parseIsoDate(raw: string): SimpleDate | null {
+  const value = String(raw ?? '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function simpleDateToIso(value: SimpleDate): string {
+  return `${value.year.toString().padStart(4, '0')}-${value.month
+    .toString()
+    .padStart(2, '0')}-${value.day.toString().padStart(2, '0')}`;
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function addMonthsPreserveDayIso(startIso: string, months: number): string | null {
+  const start = parseIsoDate(startIso);
+  if (!start || !Number.isInteger(months) || months < 0) return null;
+  const totalMonth = start.month - 1 + months;
+  const year = start.year + Math.floor(totalMonth / 12);
+  const month = (totalMonth % 12) + 1;
+  const day = Math.min(start.day, lastDayOfMonth(year, month));
+  return simpleDateToIso({ year, month, day });
+}
+
+function monthsBetweenPreserveDayIso(startIso: string, endIso: string): number | null {
+  const start = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+  if (!start || !end) return null;
+  const rawMonths = (end.year - start.year) * 12 + (end.month - start.month);
+  if (rawMonths < 0) return null;
+  const rebuilt = addMonthsPreserveDayIso(startIso, rawMonths);
+  return rebuilt === endIso ? rawMonths : null;
 }
 
 const currencies = [
@@ -144,6 +188,13 @@ const subcategoriesForCategory = computed(() => {
 });
 
 const maxDecimals = computed(() => decimalsByCurrency[form.currency] ?? 2);
+const normalizedDefaultCurrency = computed(() =>
+  String(props.defaultCurrency ?? '')
+    .trim()
+    .toUpperCase(),
+);
+const activeLiabilityFieldGroup = ref<'term' | 'end' | null>(null);
+let syncingScheduleFields = false;
 
 watch(
   () => form.category,
@@ -240,6 +291,37 @@ const liabilityDatesError = computed(() => {
   if (!form.expected_end_date || !form.start_date) return '';
   return form.expected_end_date < form.start_date ? 'Fecha fin debe ser >= fecha inicio' : '';
 });
+const liabilityScheduleError = computed(() => {
+  if (!showLiabilityAdvancedFields.value) return '';
+  const hasTerm = String(form.term_months ?? '').trim().length > 0;
+  const hasEndDate = String(form.expected_end_date ?? '').trim().length > 0;
+  if (!hasTerm && !hasEndDate) {
+    return 'Indica cuotas o fecha fin (uno de los dos es obligatorio)';
+  }
+  if (hasTerm) {
+    const term = Number(String(form.term_months).trim());
+    if (!Number.isInteger(term) || term <= 0) return 'Cuotas/plazo debe ser un entero > 0';
+  }
+  if (hasEndDate && form.start_date) {
+    const inferredMonths = monthsBetweenPreserveDayIso(
+      String(form.start_date),
+      String(form.expected_end_date),
+    );
+    if (inferredMonths == null && !liabilityDatesError.value) {
+      return 'La fecha fin no encaja con la fecha inicio y una cuota mensual exacta';
+    }
+  }
+  if (hasTerm && hasEndDate && form.start_date) {
+    const expectedFromTerm = addMonthsPreserveDayIso(
+      String(form.start_date),
+      Number(String(form.term_months).trim()),
+    );
+    if (expectedFromTerm && expectedFromTerm !== String(form.expected_end_date)) {
+      return 'Cuotas y fecha fin no coinciden';
+    }
+  }
+  return '';
+});
 const estimatedMonthlyPaymentPreview = computed(() => {
   if (!showLiabilityAdvancedFields.value) return null;
   if (String(form.payment_frequency ?? '') !== 'monthly') return null;
@@ -279,6 +361,7 @@ async function submit() {
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
   if (liabilityDatesError.value) return;
+  if (liabilityScheduleError.value) return;
 
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
@@ -367,7 +450,7 @@ async function submit() {
   form.amortization_method = 'none';
   form.amortization_term_years = '';
   form.notes = '';
-  form.currency = '';
+  form.currency = normalizedDefaultCurrency.value || '';
   form.financed_asset_id = null;
 }
 
@@ -404,206 +487,371 @@ watch(
   },
   { immediate: true, deep: true },
 );
+
+watch(
+  [() => props.defaultCurrency, () => props.initial],
+  () => {
+    if (props.initial) return;
+    if (!String(form.currency ?? '').trim() && normalizedDefaultCurrency.value) {
+      form.currency = normalizedDefaultCurrency.value;
+    }
+  },
+  { immediate: true },
+);
+
+function syncExpectedEndDateFromTerm(): void {
+  if (!showLiabilityAdvancedFields.value) return;
+  const startDate = String(form.start_date ?? '').trim();
+  const termRaw = String(form.term_months ?? '').trim();
+  if (!startDate || !termRaw) return;
+  const term = Number(termRaw);
+  if (!Number.isInteger(term) || term <= 0) return;
+  const computedEndDate = addMonthsPreserveDayIso(startDate, term);
+  if (computedEndDate && form.expected_end_date !== computedEndDate) {
+    form.expected_end_date = computedEndDate;
+  }
+}
+
+function syncTermFromExpectedEndDate(): void {
+  if (!showLiabilityAdvancedFields.value) return;
+  const startDate = String(form.start_date ?? '').trim();
+  const endDate = String(form.expected_end_date ?? '').trim();
+  if (!startDate || !endDate) return;
+  const inferredMonths = monthsBetweenPreserveDayIso(startDate, endDate);
+  if (inferredMonths == null || inferredMonths <= 0) return;
+  const nextTerm = String(inferredMonths);
+  if (String(form.term_months ?? '') !== nextTerm) {
+    form.term_months = nextTerm;
+  }
+}
+
+function syncLinkedLiabilityScheduleField(source: 'term' | 'end'): void {
+  if (syncingScheduleFields) return;
+  syncingScheduleFields = true;
+  try {
+    if (source === 'term') syncExpectedEndDateFromTerm();
+    else syncTermFromExpectedEndDate();
+  } finally {
+    syncingScheduleFields = false;
+  }
+}
+
+function onLiabilityTermInput(): void {
+  activeLiabilityFieldGroup.value = 'term';
+  syncLinkedLiabilityScheduleField('term');
+}
+
+function onLiabilityEndDateInput(): void {
+  activeLiabilityFieldGroup.value = 'end';
+  syncLinkedLiabilityScheduleField('end');
+}
+
+watch(
+  () => form.start_date,
+  () => {
+    if (!showLiabilityAdvancedFields.value || syncingScheduleFields) return;
+    if (activeLiabilityFieldGroup.value === 'end') {
+      syncLinkedLiabilityScheduleField('end');
+      return;
+    }
+    if (String(form.term_months ?? '').trim()) {
+      syncLinkedLiabilityScheduleField('term');
+      return;
+    }
+    if (String(form.expected_end_date ?? '').trim()) {
+      syncLinkedLiabilityScheduleField('end');
+    }
+  },
+);
 </script>
 
 <template>
-  <div class="card mb-3">
-    <h3 class="h3">{{ title }}</h3>
+  <div class="card mb-3 ui-item-form-shell">
+    <h3 class="h3 ui-item-form-title">{{ title }}</h3>
 
-    <div class="form-grid">
-      <input v-model="form.name" placeholder="Nombre" class="input" />
-
-      <select
-        v-model="form.category"
-        :class="['select', { 'ui-select-placeholder': !form.category }]"
-      >
-        <option value="" disabled>Selecciona categoría</option>
-        <option v-for="c in categories" :key="c.value" :value="c.value">
-          {{ c.label }}
-        </option>
-      </select>
-
-      <select
-        v-if="props.subcategories"
-        v-model="form.subcategory"
-        :class="['select', { 'ui-select-placeholder': !form.subcategory }]"
-      >
-        <option value="" disabled>Selecciona subcategoría</option>
-        <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">
-          {{ s.label }}
-        </option>
-      </select>
-
-      <select
-        v-model="form.currency"
-        :class="['select', { 'ui-select-placeholder': !form.currency }]"
-      >
-        <option value="" disabled>Selecciona moneda</option>
-        <option v-for="c in currencies" :key="c.value" :value="c.value">
-          {{ c.label }}
-        </option>
-      </select>
-
-      <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input" />
-
-      <input v-model="form.start_date" type="date" class="input" />
-
-      <div v-if="amountError" class="ui-form-help ui-form-help-error">
-        {{ amountError }}
-      </div>
-      <div v-if="annualInterestError" class="ui-form-help ui-form-help-error">
-        {{ annualInterestError }}
-      </div>
-      <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">
-        {{ monthlyPaymentError }}
-      </div>
-      <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">
-        {{ assetAmortizationError }}
-      </div>
-      <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">
-        {{ liabilityDatesError }}
-      </div>
-      <div
-        v-if="showLiabilityAdvancedFields && estimatedMonthlyPaymentPreviewText"
-        class="ui-form-help"
-      >
-        Cuota estimada (simple, tipo fijo): {{ estimatedMonthlyPaymentPreviewText }}
-        {{ form.currency || '' }}
-      </div>
-
-      <select
-        v-if="showAssetAmortizationFields"
-        v-model="form.amortization_method"
-        class="select"
-      >
-        <option v-for="opt in ASSET_AMORTIZATION_METHODS" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-
-      <input
-        v-if="showAssetAmortizationFields"
-        v-model="form.initial_purchase_value"
-        inputmode="decimal"
-        placeholder="Valor compra inicial (opcional)"
-        class="input"
-      />
-
-      <input
-        v-if="requiresAssetAmortizationInputs"
-        v-model="form.amortization_term_years"
-        inputmode="numeric"
-        placeholder="Plazo amortizacion (anos)"
-        class="input"
-      />
-
-      <input
-        v-if="showAnnualInterestInput"
-        v-model="form.annual_interest_tae"
-        inputmode="decimal"
-        placeholder="TAE anual (%)"
-        class="input"
-      />
-
-      <input
-        v-if="showLiabilityAdvancedFields"
-        v-model="form.expected_end_date"
-        type="date"
-        class="input"
-      />
-
-      <input
-        v-if="showLiabilityAdvancedFields"
-        v-model="form.term_months"
-        inputmode="numeric"
-        placeholder="Plazo (meses) opcional"
-        class="input"
-      />
-
-      <select v-if="showLiabilityAdvancedFields" v-model="form.rate_type" class="select">
-        <option v-for="opt in LIABILITY_RATE_TYPES" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-
-      <select v-if="showLiabilityAdvancedFields" v-model="form.payment_frequency" class="select">
-        <option v-for="opt in LIABILITY_PAYMENT_FREQUENCIES" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-
-      <select v-if="showLiabilityAdvancedFields" v-model="form.amortization_system" class="select">
-        <option v-for="opt in LIABILITY_AMORTIZATION_SYSTEMS" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-
-      <input
-        v-if="showMortgageFeeFields"
-        v-model="form.opening_fees_amount"
-        inputmode="decimal"
-        placeholder="Comision apertura (opcional)"
-        class="input"
-      />
-
-      <input
-        v-if="showMortgageFeeFields"
-        v-model="form.early_repayment_fee_percent"
-        inputmode="decimal"
-        placeholder="Comision amort. anticipada % (opcional)"
-        class="input"
-      />
-
-      <input
-        v-if="showMortgageFeeFields"
-        v-model="form.novation_subrogation_fee_amount"
-        inputmode="decimal"
-        placeholder="Coste novacion/subrogacion (opcional)"
-        class="input"
-      />
-
-      <input
-        v-if="showMortgageFeeFields"
-        v-model="form.linked_products_monthly_cost"
-        inputmode="decimal"
-        placeholder="Coste mensual vinculados (opcional)"
-        class="input"
-      />
-
-      <select
-        v-if="showFinancedAsset"
-        v-model="form.financed_asset_id"
-        :class="['select', { 'ui-select-placeholder': form.financed_asset_id == null }]"
-      >
-        <option v-for="a in financedAssetOptions" :key="String(a.value)" :value="a.value">
-          {{ a.label }}
-        </option>
-      </select>
-
-      <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
-
-      <label class="checkbox-row">
-        <input v-model="form.is_active" type="checkbox" />
-        Activo
+    <div class="ui-item-form-grid">
+      <label class="ui-item-form-field ui-item-form-field-span-2">
+        <span class="ui-item-form-label">Nombre</span>
+        <input v-model="form.name" placeholder="Nombre" class="input" />
       </label>
 
-      <div class="ui-form-actions">
-        <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">
-          Cancelar
-        </button>
-        <button
-          class="btn btn-primary ui-form-action-btn"
-          :disabled="
-            !!amountError ||
-            !!annualInterestError ||
-            !!monthlyPaymentError ||
-            !!assetAmortizationError ||
-            !!liabilityDatesError
-          "
-          @click="submit"
+      <label class="ui-item-form-field">
+        <span class="ui-item-form-label">Categoría</span>
+        <select
+          v-model="form.category"
+          :class="['select', { 'ui-select-placeholder': !form.category }]"
         >
-          {{ isEdit ? 'Guardar' : 'Crear' }}
-        </button>
+          <option value="" disabled>Selecciona categoría</option>
+          <option v-for="c in categories" :key="c.value" :value="c.value">
+            {{ c.label }}
+          </option>
+        </select>
+      </label>
+
+      <label v-if="props.subcategories" class="ui-item-form-field">
+        <span class="ui-item-form-label">Subcategoría</span>
+        <select
+          v-model="form.subcategory"
+          :class="['select', { 'ui-select-placeholder': !form.subcategory }]"
+        >
+          <option value="" disabled>Selecciona subcategoría</option>
+          <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">
+            {{ s.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="ui-item-form-field">
+        <span class="ui-item-form-label">Moneda</span>
+        <select
+          v-model="form.currency"
+          :class="['select', { 'ui-select-placeholder': !form.currency }]"
+        >
+          <option value="" disabled>Selecciona moneda</option>
+          <option v-for="c in currencies" :key="c.value" :value="c.value">
+            {{ c.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="ui-item-form-field">
+        <span class="ui-item-form-label">
+          {{ isLiabilityForm ? 'Principal / saldo actual' : 'Importe' }}
+        </span>
+        <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input" />
+      </label>
+
+      <label class="ui-item-form-field">
+        <span class="ui-item-form-label">
+          {{ isLiabilityForm ? 'Fecha inicio préstamo' : 'Fecha inicio' }}
+        </span>
+        <input v-model="form.start_date" type="date" class="input" />
+      </label>
+
+      <label v-if="showAnnualInterestInput" class="ui-item-form-field">
+        <span class="ui-item-form-label">TAE anual (%)</span>
+        <input
+          v-model="form.annual_interest_tae"
+          inputmode="decimal"
+          placeholder="TAE anual (%)"
+          class="input"
+        />
+      </label>
+
+      <div v-if="showLiabilityAdvancedFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <div class="ui-item-form-section-head">
+          <div>
+            <div class="ui-item-form-section-title">Calendario de cuotas</div>
+            <div class="ui-item-form-section-subtitle">
+              Indica <strong>cuotas</strong> o <strong>fecha fin</strong>. Se calcula la otra.
+            </div>
+          </div>
+          <span class="badge">Requerido</span>
+        </div>
+
+        <div class="ui-item-form-inline-grid">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Fecha fin</span>
+            <input
+              v-model="form.expected_end_date"
+              type="date"
+              class="input"
+              @change="onLiabilityEndDateInput"
+            />
+          </label>
+
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Cuotas (meses)</span>
+            <input
+              v-model="form.term_months"
+              inputmode="numeric"
+              placeholder="Ej: 24"
+              class="input"
+              @input="onLiabilityTermInput"
+            />
+          </label>
+        </div>
+
+        <div
+          v-if="showLiabilityAdvancedFields && estimatedMonthlyPaymentPreviewText"
+          class="ui-item-form-chipline"
+        >
+          <span class="ui-item-form-chip">Cuota estimada</span>
+          <span>
+            {{ estimatedMonthlyPaymentPreviewText }} {{ form.currency || '' }}
+            <small class="subtle">(simple, tipo fijo)</small>
+          </span>
+        </div>
+      </div>
+
+      <div v-if="showLiabilityAdvancedFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <div class="ui-item-form-section-head">
+          <div class="ui-item-form-section-title">Condiciones</div>
+        </div>
+        <div class="ui-item-form-inline-grid">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Tipo de interés</span>
+            <select v-model="form.rate_type" class="select">
+              <option v-for="opt in LIABILITY_RATE_TYPES" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Frecuencia</span>
+            <select v-model="form.payment_frequency" class="select">
+              <option v-for="opt in LIABILITY_PAYMENT_FREQUENCIES" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+
+          <label class="ui-item-form-field ui-item-form-field-span-2">
+            <span class="ui-item-form-label">Sistema de amortización</span>
+            <select v-model="form.amortization_system" class="select">
+              <option v-for="opt in LIABILITY_AMORTIZATION_SYSTEMS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <details v-if="showMortgageFeeFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <summary class="ui-item-form-details-summary">Costes hipotecarios opcionales</summary>
+        <div class="ui-item-form-inline-grid mt-2">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Comisión apertura</span>
+            <input v-model="form.opening_fees_amount" inputmode="decimal" placeholder="Opcional" class="input" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Amortización anticipada (%)</span>
+            <input
+              v-model="form.early_repayment_fee_percent"
+              inputmode="decimal"
+              placeholder="Opcional"
+              class="input"
+            />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Novación / subrogación</span>
+            <input
+              v-model="form.novation_subrogation_fee_amount"
+              inputmode="decimal"
+              placeholder="Opcional"
+              class="input"
+            />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Vinculados (mensual)</span>
+            <input
+              v-model="form.linked_products_monthly_cost"
+              inputmode="decimal"
+              placeholder="Opcional"
+              class="input"
+            />
+          </label>
+        </div>
+      </details>
+
+      <div v-if="showAssetAmortizationFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <div class="ui-item-form-section-head">
+          <div class="ui-item-form-section-title">Amortización del activo</div>
+        </div>
+        <div class="ui-item-form-inline-grid">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Método</span>
+            <select v-model="form.amortization_method" class="select">
+              <option v-for="opt in ASSET_AMORTIZATION_METHODS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Valor compra inicial</span>
+            <input
+              v-model="form.initial_purchase_value"
+              inputmode="decimal"
+              placeholder="Opcional"
+              class="input"
+            />
+          </label>
+
+          <label v-if="requiresAssetAmortizationInputs" class="ui-item-form-field">
+            <span class="ui-item-form-label">Plazo (años)</span>
+            <input
+              v-model="form.amortization_term_years"
+              inputmode="numeric"
+              placeholder="Ej: 10"
+              class="input"
+            />
+          </label>
+        </div>
+      </div>
+
+      <label v-if="showFinancedAsset" class="ui-item-form-field ui-item-form-field-span-2">
+        <span class="ui-item-form-label">Activo financiado</span>
+        <select
+          v-model="form.financed_asset_id"
+          :class="['select', { 'ui-select-placeholder': form.financed_asset_id == null }]"
+        >
+          <option v-for="a in financedAssetOptions" :key="String(a.value)" :value="a.value">
+            {{ a.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="ui-item-form-field ui-item-form-field-span-2">
+        <span class="ui-item-form-label">Notas</span>
+        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
+      </label>
+
+      <div class="ui-item-form-feedback ui-item-form-field-span-2">
+        <div v-if="amountError" class="ui-form-help ui-form-help-error">{{ amountError }}</div>
+        <div v-if="annualInterestError" class="ui-form-help ui-form-help-error">
+          {{ annualInterestError }}
+        </div>
+        <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">
+          {{ monthlyPaymentError }}
+        </div>
+        <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">
+          {{ assetAmortizationError }}
+        </div>
+        <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">
+          {{ liabilityDatesError }}
+        </div>
+        <div v-if="liabilityScheduleError" class="ui-form-help ui-form-help-error">
+          {{ liabilityScheduleError }}
+        </div>
+      </div>
+
+      <div class="ui-item-form-footer ui-item-form-field-span-2">
+        <label class="checkbox-row">
+          <input v-model="form.is_active" type="checkbox" />
+          Activo
+        </label>
+
+        <div class="ui-form-actions ui-item-form-actions">
+          <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">
+            Cancelar
+          </button>
+          <button
+            class="btn btn-primary ui-form-action-btn"
+            :disabled="
+              !!amountError ||
+              !!annualInterestError ||
+              !!monthlyPaymentError ||
+              !!assetAmortizationError ||
+              !!liabilityDatesError ||
+              !!liabilityScheduleError
+            "
+            @click="submit"
+          >
+            {{ isEdit ? 'Guardar' : 'Crear' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
