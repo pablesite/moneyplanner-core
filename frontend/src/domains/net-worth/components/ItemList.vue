@@ -276,6 +276,11 @@ function formatAmountWithUnit(value: unknown, currency: string) {
   return `${amount} ${currency}`.trim();
 }
 
+function displayAmount(item: Item) {
+  if (isLiabilitiesList.value && item.effective_amount) return item.effective_amount;
+  return item.amount;
+}
+
 function rawValue(v: string) {
   return String(v ?? '')
     .trim()
@@ -524,7 +529,7 @@ async function saveEdit(id: number) {
                 <ItemDisplayRow
                   v-if="editingId !== it.id"
                   :item="it"
-                  :formatted-amount="formatAmountWithUnit(it.amount, it.currency)"
+                  :formatted-amount="formatAmountWithUnit(displayAmount(it), it.currency)"
                   :is-liabilities-list="isLiabilitiesList"
                   :financed-asset-name="financedAssetName(it.financed_asset_ref)"
                   @edit="onEdit ? onEdit(it) : startEdit(it)"

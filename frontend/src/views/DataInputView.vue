@@ -766,6 +766,9 @@ type PortableAssetRecord = {
   accounting_account_id: number | null;
   currency: string;
   start_date?: string;
+  initial_purchase_value?: string | null;
+  amortization_method?: string;
+  amortization_term_years?: number | null;
   annual_interest_tae?: string | null;
   amount: string;
   is_active: boolean;
@@ -780,8 +783,18 @@ type PortableLiabilityRecord = {
   accounting_account_id: number | null;
   currency: string;
   start_date?: string;
+  expected_end_date?: string | null;
+  term_months?: number | null;
+  rate_type?: string;
+  payment_frequency?: string;
+  amortization_system?: string | null;
   annual_interest_tae?: string | null;
   monthly_payment_amount?: string | null;
+  principal_amount?: string | null;
+  opening_fees_amount?: string | null;
+  early_repayment_fee_percent?: string | null;
+  novation_subrogation_fee_amount?: string | null;
+  linked_products_monthly_cost?: string | null;
   amount: string;
   is_active: boolean;
   notes: string;
@@ -1092,6 +1105,9 @@ async function importPortableAssets(
       accounting_account_id: asset.accounting_account_id,
       currency: asset.currency,
       start_date: asset.start_date,
+      initial_purchase_value: normalizeOptionalText(asset.initial_purchase_value),
+      amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
+      amortization_term_years: asset.amortization_term_years ?? null,
       annual_interest_tae: normalizeImportedAssetTae(asset),
       amount: String(asset.amount),
       is_active: asset.is_active ?? true,
@@ -1120,8 +1136,19 @@ async function importPortableLiabilities(
       accounting_account_id: liability.accounting_account_id,
       currency: liability.currency,
       start_date: liability.start_date,
+      expected_end_date: normalizeOptionalText(liability.expected_end_date),
+      term_months: liability.term_months ?? null,
+      rate_type: normalizeOptionalText(liability.rate_type) ?? 'fixed',
+      payment_frequency: normalizeOptionalText(liability.payment_frequency) ?? 'monthly',
+      amortization_system: normalizeOptionalText(liability.amortization_system),
       annual_interest_tae: normalizeImportedLiabilityTae(liability),
-      monthly_payment_amount: normalizeOptionalText(liability.monthly_payment_amount),
+      principal_amount: normalizeOptionalText(liability.principal_amount),
+      opening_fees_amount: normalizeOptionalText(liability.opening_fees_amount),
+      early_repayment_fee_percent: normalizeOptionalText(liability.early_repayment_fee_percent),
+      novation_subrogation_fee_amount: normalizeOptionalText(
+        liability.novation_subrogation_fee_amount,
+      ),
+      linked_products_monthly_cost: normalizeOptionalText(liability.linked_products_monthly_cost),
       amount: String(liability.amount),
       is_active: liability.is_active ?? true,
       notes: liability.notes ?? '',

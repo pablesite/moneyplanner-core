@@ -6,7 +6,10 @@ from .services import (
     create_asset_for_user,
     create_liability_for_user,
     create_snapshot_for_user,
+    estimate_liability_monthly_payment_simple,
+    estimate_liability_outstanding_amount_simple,
     get_amount_base_value,
+    get_effective_liability_amount,
     infer_liability_is_asset_backed,
     validate_snapshot_payload,
     validate_asset_payload,
@@ -32,10 +35,14 @@ class AssetSerializer(serializers.ModelSerializer):
             "accounting_account_id",
             "currency",
             "start_date",
+            "initial_purchase_value",
+            "amortization_method",
+            "amortization_term_years",
             "annual_interest_tae",
             "amount",
             "amount_base",
             "is_active",
+            "notes",
             "created_at",
             "updated_at",
         ]
@@ -51,12 +58,24 @@ class AssetSerializer(serializers.ModelSerializer):
         annual_interest_tae = attrs.get(
             "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
         )
+        amortization_method = attrs.get(
+            "amortization_method", getattr(self.instance, "amortization_method", None)
+        )
+        amortization_term_years = attrs.get(
+            "amortization_term_years", getattr(self.instance, "amortization_term_years", None)
+        )
+        initial_purchase_value = attrs.get(
+            "initial_purchase_value", getattr(self.instance, "initial_purchase_value", None)
+        )
         validate_asset_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
             category=category,
             subcategory=subcategory,
             annual_interest_tae=annual_interest_tae,
+            amortization_method=amortization_method,
+            amortization_term_years=amortization_term_years,
+            initial_purchase_value=initial_purchase_value,
         )
         return attrs
 
@@ -125,6 +144,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
 
     financed_asset_ref = serializers.IntegerField(source="financed_asset_id", read_only=True)
     financed_asset_detail = AssetMiniSerializer(source="financed_asset", read_only=True)
+    estimated_monthly_payment_amount = serializers.SerializerMethodField()
+    estimated_outstanding_amount = serializers.SerializerMethodField()
+    effective_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Liability
@@ -136,9 +158,21 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "accounting_account_id",
             "currency",
             "start_date",
+            "expected_end_date",
+            "term_months",
+            "principal_amount",
+            "rate_type",
+            "payment_frequency",
+            "amortization_system",
             "annual_interest_tae",
-            "monthly_payment_amount",
+            "estimated_monthly_payment_amount",
+            "estimated_outstanding_amount",
+            "effective_amount",
             "amount",
+            "opening_fees_amount",
+            "early_repayment_fee_percent",
+            "novation_subrogation_fee_amount",
+            "linked_products_monthly_cost",
             "amount_base",
             "is_active",
             "is_asset_backed",
@@ -166,11 +200,17 @@ class LiabilitySerializer(serializers.ModelSerializer):
         annual_interest_tae = attrs.get(
             "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
         )
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        expected_end_date = attrs.get(
+            "expected_end_date", getattr(self.instance, "expected_end_date", None)
+        )
         validate_liability_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
             category=category,
             annual_interest_tae=annual_interest_tae,
+            start_date=start_date,
+            expected_end_date=expected_end_date,
         )
 
         financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))
@@ -178,12 +218,37 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
+        effective_amount = get_effective_liability_amount(liability=obj)
         return get_amount_base_value(
-            amount=obj.amount,
+            amount=effective_amount,
             currency=obj.currency,
             base_currency=self.context.get("base_currency"),
         )
 
+    def get_estimated_monthly_payment_amount(self, obj):
+        value = estimate_liability_monthly_payment_simple(
+            amount=obj.principal_amount or obj.amount,
+            annual_interest_tae=obj.annual_interest_tae,
+            term_months=obj.term_months,
+            payment_frequency=obj.payment_frequency,
+            rate_type=obj.rate_type,
+            amortization_system=obj.amortization_system,
+        )
+        return str(value) if value is not None else None
+
+    def get_estimated_outstanding_amount(self, obj):
+        value = estimate_liability_outstanding_amount_simple(liability=obj)
+        return str(value) if value is not None else None
+
+    def get_effective_amount(self, obj):
+        return str(get_effective_liability_amount(liability=obj))
+
     def create(self, validated_data):
         request = self.context["request"]
+        if (
+            validated_data.get("principal_amount") is None
+            and validated_data.get("term_months")
+            and validated_data.get("amount") is not None
+        ):
+            validated_data["principal_amount"] = validated_data["amount"]
         return create_liability_for_user(user=request.user, validated_data=validated_data)

@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from rest_framework.test import APIRequestFactory
 
 from accounts.models import UserSettings
+from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
 from .models import Asset, Liability
 from .serializers import (
@@ -27,6 +28,8 @@ from .services import (
     create_liability_for_user,
     create_or_update_snapshot_from_current,
     create_snapshot_for_user,
+    estimate_liability_monthly_payment_simple,
+    estimate_liability_outstanding_amount_simple,
     get_base_currency_for_user,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
@@ -52,6 +55,9 @@ class NetWorthServicesTests(TestCase):
                 category=Asset.Category.CASH,
                 subcategory=Asset.Subcategory.BANK_ACCOUNT,
                 annual_interest_tae=Decimal("1.00"),
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
             )
 
     def test_validate_asset_payload_rejects_invalid_subcategory(self):
@@ -62,6 +68,9 @@ class NetWorthServicesTests(TestCase):
                 category=Asset.Category.CASH,
                 subcategory=Asset.Subcategory.ETFS,
                 annual_interest_tae=None,
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
             )
 
     def test_validate_liability_payload_rejects_accounting_without_account(self):
@@ -71,6 +80,8 @@ class NetWorthServicesTests(TestCase):
                 accounting_account_id=None,
                 category=Liability.Category.MORTGAGE,
                 annual_interest_tae=Decimal("2.50"),
+                start_date=date(2026, 1, 1),
+                expected_end_date=date(2030, 1, 1),
             )
 
     def test_validate_asset_and_liability_payload_accept_valid_values(self):
@@ -80,6 +91,9 @@ class NetWorthServicesTests(TestCase):
             category=Asset.Category.CASH,
             subcategory=Asset.Subcategory.BANK_ACCOUNT,
             annual_interest_tae=Decimal("0.00"),
+            amortization_method=Asset.AmortizationMethod.NONE,
+            amortization_term_years=None,
+            initial_purchase_value=None,
         )
         validate_asset_payload(
             tracking_mode=Asset.TrackingMode.MANUAL,
@@ -87,12 +101,17 @@ class NetWorthServicesTests(TestCase):
             category=None,
             subcategory=None,
             annual_interest_tae=None,
+            amortization_method=Asset.AmortizationMethod.NONE,
+            amortization_term_years=None,
+            initial_purchase_value=None,
         )
         validate_liability_payload(
             tracking_mode=Liability.TrackingMode.MANUAL,
             accounting_account_id=None,
             category=Liability.Category.OTHER,
             annual_interest_tae=None,
+            start_date=date(2026, 1, 1),
+            expected_end_date=None,
         )
 
     def test_validate_liability_payload_requires_tae_for_financial_debt(self):
@@ -102,6 +121,8 @@ class NetWorthServicesTests(TestCase):
                 accounting_account_id=None,
                 category=Liability.Category.CREDIT_CARD,
                 annual_interest_tae=None,
+                start_date=date(2026, 1, 1),
+                expected_end_date=None,
             )
 
     def test_validate_asset_payload_requires_tae_for_remunerated_liquidity(self):
@@ -112,11 +133,86 @@ class NetWorthServicesTests(TestCase):
                 category=Asset.Category.CASH,
                 subcategory=Asset.Subcategory.BANK_ACCOUNT,
                 annual_interest_tae=None,
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
+            )
+
+    def test_validate_asset_payload_requires_initial_value_and_term_for_amortization(self):
+        with self.assertRaises(DRFValidationError):
+            validate_asset_payload(
+                tracking_mode=Asset.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Asset.Category.FURNISHINGS,
+                subcategory=Asset.Subcategory.TECHNOLOGY,
+                annual_interest_tae=None,
+                amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
+            )
+
+    def test_validate_liability_payload_rejects_end_date_before_start_date(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.MORTGAGE,
+                annual_interest_tae=Decimal("2.50"),
+                start_date=date(2026, 2, 1),
+                expected_end_date=date(2026, 1, 1),
             )
 
     def test_infer_liability_is_asset_backed(self):
         self.assertTrue(infer_liability_is_asset_backed(financed_asset=object()))
         self.assertFalse(infer_liability_is_asset_backed(financed_asset=None))
+
+    def test_estimate_liability_monthly_payment_simple_fixed_french(self):
+        value = estimate_liability_monthly_payment_simple(
+            amount=Decimal("120000"),
+            annual_interest_tae=Decimal("3.60"),
+            term_months=240,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            rate_type=Liability.RateType.FIXED,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+        )
+        self.assertIsNotNone(value)
+        assert value is not None
+        self.assertGreater(value, Decimal("500"))
+        self.assertLess(value, Decimal("900"))
+
+    def test_estimate_liability_monthly_payment_simple_returns_none_for_non_monthly(self):
+        value = estimate_liability_monthly_payment_simple(
+            amount=Decimal("10000"),
+            annual_interest_tae=Decimal("5.00"),
+            term_months=24,
+            payment_frequency=Liability.PaymentFrequency.YEARLY,
+            rate_type=Liability.RateType.FIXED,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+        )
+        self.assertIsNone(value)
+
+    def test_estimate_liability_outstanding_amount_simple_uses_next_month_first_due(self):
+        liability = Liability(
+            user=self.user,
+            name="ATRIO",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            start_date=date(2024, 9, 1),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("24000.00"),
+            principal_amount=Decimal("24000.00"),
+            term_months=24,
+            rate_type=Liability.RateType.FIXED,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+            is_active=True,
+        )
+        outstanding = estimate_liability_outstanding_amount_simple(
+            liability=liability, as_of_date=date(2026, 2, 24)
+        )
+        # 24 cuotas, primera en oct-2024; a 24-feb-2026 se consideran pagadas hasta feb-2026 (17 cuotas)
+        # quedan 7 cuotas -> 7000 con principal 24000 a 0%.
+        self.assertEqual(outstanding, Decimal("7000.00000000"))
 
     def test_validate_snapshot_payload_computes_or_validates_net_worth(self):
         computed = validate_snapshot_payload(
@@ -296,6 +392,30 @@ class NetWorthServicesTests(TestCase):
         self.assertEqual(totals.liabilities_asset_backed, Decimal("50.00"))
         self.assertEqual(totals.liabilities_unbacked, Decimal("20.00"))
         self.assertIn("cash:bank_account", totals.assets_by_subcategory)
+
+    def test_calculate_totals_uses_effective_liability_amount_when_schedule_available(self):
+        Liability.objects.create(
+            user=self.user,
+            name="Compromiso ATRIO",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            start_date=date(2024, 9, 1),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("24000.00"),
+            principal_amount=Decimal("24000.00"),
+            term_months=24,
+            rate_type=Liability.RateType.FIXED,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+            is_active=True,
+        )
+        totals = calculate_totals(
+            assets_qs=Asset.objects.filter(user=self.user, is_active=True),
+            liabilities_qs=Liability.objects.filter(user=self.user, is_active=True),
+            base_currency="EUR",
+            as_of_date=date(2026, 2, 24),
+        )
+        self.assertEqual(totals.total_liabilities, Decimal("7000.00000000"))
 
     def test_get_base_currency_and_inflation_base_period(self):
         base = get_base_currency_for_user(user=self.user)
@@ -499,6 +619,45 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(liability_res.data["start_date"], "2021-06-15")
 
+    def test_asset_create_accepts_initial_purchase_and_amortization_fields(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Portatil",
+                "category": Asset.Category.FURNISHINGS,
+                "subcategory": Asset.Subcategory.TECHNOLOGY,
+                "currency": "EUR",
+                "start_date": "2024-03-01",
+                "initial_purchase_value": "1800.00",
+                "amortization_method": Asset.AmortizationMethod.STRAIGHT_LINE,
+                "amortization_term_years": 4,
+                "amount": "1200.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["initial_purchase_value"], "1800.00000000")
+        self.assertEqual(response.data["amortization_method"], "straight_line")
+        self.assertEqual(response.data["amortization_term_years"], 4)
+
+    def test_liability_create_rejects_expected_end_date_before_start_date(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-06-01",
+                "expected_end_date": "2026-05-01",
+                "annual_interest_tae": "2.50",
+                "amount": "150000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expected_end_date", response.data["error"]["details"])
+
     def test_liability_create_with_financed_asset_sets_asset_backed(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -525,6 +684,88 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(response.data["is_asset_backed"])
         self.assertEqual(response.data["financed_asset_ref"], asset.id)
+
+    def test_liability_create_generates_budget_commitment_entries_by_year(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Compra vivienda ATRIO",
+                "category": Liability.Category.OTHER,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2024-09-01",
+                "annual_interest_tae": "0.00",
+                "amount": "33010.56",
+                "principal_amount": "33010.56",
+                "term_months": 24,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        liability_id = response.data["id"]
+        rows = AnnualExpenseEntry.objects.filter(
+            user=self.user, source_liability_id=liability_id, is_system_generated=True
+        ).order_by("fiscal_year")
+        self.assertEqual(list(rows.values_list("fiscal_year", flat=True)), [2024, 2025, 2026])
+        row_2026 = rows.get(fiscal_year=2026)
+        self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES)
+        self.assertEqual(row_2026.subcategory, "financial_commitments")
+        self.assertEqual(row_2026.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
+        self.assertEqual(row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+        self.assertEqual(row_2026.term_end_year, 2026)
+        # 9 cuotas (ene-sep 2026) de 1375.44 -> 12378.96
+        self.assertEqual(row_2026.amount_annual, Decimal("12378.96"))
+
+    def test_liability_update_does_not_overwrite_generated_budget_commitment_if_user_edits_it(self):
+        create_response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Compra vivienda ATRIO",
+                "category": Liability.Category.OTHER,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2024-09-01",
+                "annual_interest_tae": "0.00",
+                "amount": "33010.56",
+                "principal_amount": "33010.56",
+                "term_months": 24,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        liability_id = create_response.data["id"]
+
+        generated_2026 = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+            fiscal_year=2026,
+        )
+        generated_2026.name = "Compromiso ATRIO personalizado"
+        generated_2026.amount_annual = Decimal("12000.00")
+        generated_2026.notes = "Editado manualmente por usuario"
+        generated_2026.save(update_fields=["name", "amount_annual", "notes"])
+
+        update_response = self.client.patch(
+            f"/api/net-worth/liabilities/{liability_id}/",
+            {
+                "notes": "Cambio en pasivo",
+                "amount": "20000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK, update_response.data)
+
+        generated_2026.refresh_from_db()
+        self.assertEqual(generated_2026.name, "Compromiso ATRIO personalizado")
+        self.assertEqual(generated_2026.amount_annual, Decimal("12000.00"))
+        self.assertEqual(generated_2026.notes, "Editado manualmente por usuario")
 
     def test_snapshot_from_current_and_delete(self):
         Asset.objects.create(
@@ -676,6 +917,30 @@ class NetWorthSerializerUnitTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         liability = serializer.save()
         self.assertTrue(liability.is_asset_backed)
+
+    def test_liability_serializer_exposes_estimated_monthly_payment_amount(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            annual_interest_tae=Decimal("6.00"),
+            amount=Decimal("10000.00"),
+            term_months=24,
+            rate_type=Liability.RateType.FIXED,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+            is_active=True,
+        )
+        serializer = LiabilitySerializer(
+            liability,
+            context={
+                "request": self.request,
+                "base_currency": "EUR",
+                "financed_asset_queryset": Asset.objects.filter(user=self.user),
+            },
+        )
+        self.assertIsNotNone(serializer.data["estimated_monthly_payment_amount"])
 
     def test_snapshot_viewset_serializer_class_switch(self):
         view = NetWorthSnapshotViewSet()

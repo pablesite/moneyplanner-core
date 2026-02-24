@@ -44,6 +44,11 @@ class Asset(models.Model):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
 
+    class AmortizationMethod(models.TextChoices):
+        NONE = "none", "Sin amortizacion"
+        STRAIGHT_LINE = "straight_line", "Lineal"
+        MANUAL = "manual", "Manual"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets"
     )
@@ -63,6 +68,28 @@ class Asset(models.Model):
     start_date = models.DateField(
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del activo.",
+    )
+    initial_purchase_value = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Valor de compra inicial del activo en la moneda del activo. "
+            "Opcional si no se desea modelar amortizacion."
+        ),
+    )
+    amortization_method = models.CharField(
+        max_length=24,
+        choices=AmortizationMethod.choices,
+        default=AmortizationMethod.NONE,
+        help_text="Modelo de amortizacion/depreciacion del activo (si aplica).",
+    )
+    amortization_term_years = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Vida util/plazo de amortizacion estimado en anos (si aplica).",
     )
     annual_interest_tae = models.DecimalField(
         max_digits=5,
@@ -154,6 +181,22 @@ class Liability(models.Model):
         MANUAL = "manual", "Manual"
         ACCOUNTING = "accounting", "Desde contabilidad"
 
+    class RateType(models.TextChoices):
+        FIXED = "fixed", "Fijo"
+        VARIABLE = "variable", "Variable"
+        MIXED = "mixed", "Mixto"
+
+    class PaymentFrequency(models.TextChoices):
+        MONTHLY = "monthly", "Mensual"
+        QUARTERLY = "quarterly", "Trimestral"
+        YEARLY = "yearly", "Anual"
+
+    class AmortizationSystem(models.TextChoices):
+        FRENCH = "french", "Frances (cuota constante)"
+        GERMAN = "german", "Aleman (amortizacion constante)"
+        AMERICAN = "american", "Americano"
+        MANUAL = "manual", "Manual"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liabilities"
     )
@@ -171,6 +214,35 @@ class Liability(models.Model):
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del pasivo.",
     )
+    expected_end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Fecha prevista de finalizacion del pasivo (si se conoce).",
+    )
+    term_months = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Plazo previsto en meses (alternativa/complemento a expected_end_date).",
+    )
+    rate_type = models.CharField(
+        max_length=16,
+        choices=RateType.choices,
+        default=RateType.FIXED,
+        help_text="Comportamiento del tipo de interes del pasivo.",
+    )
+    payment_frequency = models.CharField(
+        max_length=16,
+        choices=PaymentFrequency.choices,
+        default=PaymentFrequency.MONTHLY,
+        help_text="Frecuencia de pago prevista.",
+    )
+    amortization_system = models.CharField(
+        max_length=16,
+        choices=AmortizationSystem.choices,
+        null=True,
+        blank=True,
+        help_text="Sistema de amortizacion (si se modela).",
+    )
     annual_interest_tae = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -182,22 +254,57 @@ class Liability(models.Model):
             "para hipoteca, prestamo personal y tarjeta."
         ),
     )
-    monthly_payment_amount = models.DecimalField(
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Deuda pendiente (positiva). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
+    )
+    principal_amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
         help_text=(
-            "Cuota mensual manual en la moneda del pasivo. "
-            "Temporal hasta modelar amortizacion y calendario."
+            "Capital inicial/original del pasivo. Si se informa junto con calendario/plazo, "
+            "permite estimar saldo pendiente actual automaticamente."
         ),
     )
-    amount = models.DecimalField(
+    opening_fees_amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
+        null=True,
+        blank=True,
         validators=[MinValueValidator(0)],
-        help_text="Deuda pendiente (positiva). Si tracking_mode=accounting, este campo puede ignorarse en summary.",
+        help_text="Comisiones de apertura (importe) si aplica, especialmente en hipoteca.",
+    )
+    early_repayment_fee_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Comision por amortizacion anticipada (% sobre capital amortizado), si aplica.",
+    )
+    novation_subrogation_fee_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Coste estimado de novacion/subrogacion (importe), si aplica.",
+    )
+    linked_products_monthly_cost = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Coste mensual de productos vinculados (seguros, etc.) si se desea registrar "
+            "como metadata del pasivo."
+        ),
     )
 
     is_active = models.BooleanField(default=True)

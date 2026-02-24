@@ -104,6 +104,14 @@ class AnnualExpenseEntry(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="annual_expense_entries"
     )
+    source_liability = models.ForeignKey(
+        "net_worth.Liability",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="generated_annual_expense_entries",
+    )
+    is_system_generated = models.BooleanField(default=False)
     name = models.CharField(max_length=140)
     category = models.CharField(max_length=32, choices=Category.choices)
     subcategory = models.CharField(max_length=64)
@@ -132,12 +140,14 @@ class AnnualExpenseEntry(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["user", "is_active"]),
+            models.Index(fields=["user", "is_system_generated"], name="budget_ae_user_sysgen_idx"),
             models.Index(
                 fields=["user", "fiscal_year"],
                 name="budget_ae_user_year_idx",
             ),
             models.Index(fields=["user", "category"]),
             models.Index(fields=["user", "subcategory"]),
+            models.Index(fields=["source_liability"], name="budget_ae_src_liab_idx"),
         ]
 
     def __str__(self) -> str:

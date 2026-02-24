@@ -270,9 +270,10 @@ export function computeGuidePhaseDiagnostics(
       const taeRaw = liability.annual_interest_tae;
       const taePct = taeRaw == null || String(taeRaw).trim() === '' ? null : toNumber(taeRaw);
       const hasKnownTae = taePct != null && Number.isFinite(taePct) && taePct >= 0;
-      const hasMonthlyPaymentInput = hasTextValue(liability.monthly_payment_amount);
+      const paymentRaw = liability.estimated_monthly_payment_amount;
+      const hasMonthlyPaymentInput = hasTextValue(paymentRaw);
       const monthlyPaymentAmount = hasMonthlyPaymentInput
-        ? Math.max(0, toNumber(liability.monthly_payment_amount))
+        ? Math.max(0, toNumber(paymentRaw))
         : 0;
       return {
         amountBase,
