@@ -20,6 +20,18 @@ type Props = {
     annual_interest_tae?: string | null;
     monthly_payment_amount?: string | null;
     start_date: string;
+    expected_end_date?: string | null;
+    term_months?: number | string | null;
+    rate_type?: string;
+    payment_frequency?: string;
+    amortization_system?: string | null;
+    opening_fees_amount?: string | null;
+    early_repayment_fee_percent?: string | null;
+    novation_subrogation_fee_amount?: string | null;
+    linked_products_monthly_cost?: string | null;
+    initial_purchase_value?: string | null;
+    amortization_method?: string;
+    amortization_term_years?: number | string | null;
     notes: string;
     currency: string;
     tracking_mode: string;
@@ -48,6 +60,28 @@ const decimalsByCurrency: Record<string, number> = {
   ETH: 8,
 };
 const LIABILITY_CATEGORIES_REQUIRING_TAE = ['mortgage', 'personal_loan', 'credit_card'];
+const LIABILITY_RATE_TYPES = [
+  { value: 'fixed', label: 'Tipo fijo' },
+  { value: 'variable', label: 'Tipo variable' },
+  { value: 'mixed', label: 'Tipo mixto' },
+];
+const LIABILITY_PAYMENT_FREQUENCIES = [
+  { value: 'monthly', label: 'Mensual' },
+  { value: 'quarterly', label: 'Trimestral' },
+  { value: 'yearly', label: 'Anual' },
+];
+const LIABILITY_AMORTIZATION_SYSTEMS = [
+  { value: '', label: 'Sistema amortizacion (opcional)' },
+  { value: 'french', label: 'Frances' },
+  { value: 'german', label: 'Aleman' },
+  { value: 'american', label: 'Americano' },
+  { value: 'manual', label: 'Manual' },
+];
+const ASSET_AMORTIZATION_METHODS = [
+  { value: 'none', label: 'Sin amortizacion' },
+  { value: 'straight_line', label: 'Lineal' },
+  { value: 'manual', label: 'Manual' },
+];
 
 const form = reactive({
   name: '',
@@ -57,6 +91,18 @@ const form = reactive({
   annual_interest_tae: '',
   monthly_payment_amount: '',
   start_date: todayIsoDate(),
+  expected_end_date: '',
+  term_months: '',
+  rate_type: 'fixed',
+  payment_frequency: 'monthly',
+  amortization_system: '',
+  opening_fees_amount: '',
+  early_repayment_fee_percent: '',
+  novation_subrogation_fee_amount: '',
+  linked_products_monthly_cost: '',
+  initial_purchase_value: '',
+  amortization_method: 'none',
+  amortization_term_years: '',
   notes: '',
   currency: '',
   tracking_mode: 'manual',
@@ -78,10 +124,20 @@ const financedAssetOptions = computed(() => {
 });
 
 const showFinancedAsset = computed(() => !!props.showFinancedAsset);
+const isLiabilityForm = computed(() => showFinancedAsset.value);
+const isAssetForm = computed(() => !showFinancedAsset.value);
 const showAnnualInterestInput = computed(
   () => showFinancedAsset.value && LIABILITY_CATEGORIES_REQUIRING_TAE.includes(form.category),
 );
-const showMonthlyPaymentInput = computed(() => showFinancedAsset.value);
+const showMonthlyPaymentInput = computed(() => false);
+const showLiabilityAdvancedFields = computed(() => isLiabilityForm.value);
+const showMortgageFeeFields = computed(
+  () => isLiabilityForm.value && form.category === 'mortgage',
+);
+const showAssetAmortizationFields = computed(() => isAssetForm.value);
+const requiresAssetAmortizationInputs = computed(
+  () => showAssetAmortizationFields.value && form.amortization_method !== 'none',
+);
 const subcategoriesForCategory = computed(() => {
   if (!props.subcategories || !form.category) return [];
   return props.subcategories.filter((s) => s.category === form.category);
@@ -167,12 +223,62 @@ const monthlyPaymentError = computed(() => {
   const { error } = sanitizeAmount(raw, maxDecimals.value);
   return error;
 });
+const assetAmortizationError = computed(() => {
+  if (!requiresAssetAmortizationInputs.value) return '';
+  const purchase = String(form.initial_purchase_value ?? '').trim();
+  if (!purchase) return 'Valor de compra inicial obligatorio si hay amortizacion';
+  const term = String(form.amortization_term_years ?? '').trim();
+  if (!term) return 'Plazo de amortizacion (anos) obligatorio';
+  const years = Number(term);
+  if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortizacion invalido';
+  const normalizedPurchase = sanitizeAmount(purchase, maxDecimals.value);
+  if (!normalizedPurchase.value || normalizedPurchase.error) return 'Valor de compra invalido';
+  return '';
+});
+const liabilityDatesError = computed(() => {
+  if (!showLiabilityAdvancedFields.value) return '';
+  if (!form.expected_end_date || !form.start_date) return '';
+  return form.expected_end_date < form.start_date ? 'Fecha fin debe ser >= fecha inicio' : '';
+});
+const estimatedMonthlyPaymentPreview = computed(() => {
+  if (!showLiabilityAdvancedFields.value) return null;
+  if (String(form.payment_frequency ?? '') !== 'monthly') return null;
+  if (String(form.rate_type ?? '') !== 'fixed') return null;
+  const amortSystem = String(form.amortization_system ?? '').trim();
+  if (amortSystem && amortSystem !== 'french' && amortSystem !== 'manual') return null;
+
+  const amountSanitized = sanitizeAmount(form.amount, maxDecimals.value);
+  if (!amountSanitized.value || amountSanitized.error) return null;
+  const principal = Number(String(amountSanitized.value).replace(',', '.'));
+  const term = Number(String(form.term_months ?? '').trim());
+  const tae = Number(String(form.annual_interest_tae ?? '').trim().replace(',', '.'));
+  if (!Number.isFinite(principal) || principal <= 0) return null;
+  if (!Number.isFinite(term) || term <= 0) return null;
+  if (!Number.isFinite(tae) || tae < 0) return null;
+
+  if (tae === 0) return principal / term;
+  const monthlyRate = tae / 100 / 12;
+  const denominator = 1 - Math.pow(1 + monthlyRate, -term);
+  if (!Number.isFinite(denominator) || denominator === 0) return null;
+  const payment = (principal * monthlyRate) / denominator;
+  return Number.isFinite(payment) ? payment : null;
+});
+const estimatedMonthlyPaymentPreviewText = computed(() => {
+  const value = estimatedMonthlyPaymentPreview.value;
+  if (value == null) return null;
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDecimals.value,
+  }).format(value);
+});
 
 async function submit() {
   if (!form.name || !form.category || !form.currency || !form.amount || !form.start_date) return;
   if (props.subcategories && !form.subcategory) return;
   if (annualInterestError.value) return;
   if (monthlyPaymentError.value) return;
+  if (assetAmortizationError.value) return;
+  if (liabilityDatesError.value) return;
 
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
@@ -189,6 +295,45 @@ async function submit() {
     monthly_payment_amount:
       showMonthlyPaymentInput.value && String(form.monthly_payment_amount ?? '').trim()
         ? sanitizeAmount(form.monthly_payment_amount, maxDecimals.value).value
+        : undefined,
+    expected_end_date:
+      showLiabilityAdvancedFields.value && String(form.expected_end_date ?? '').trim()
+        ? String(form.expected_end_date).trim()
+        : undefined,
+    term_months:
+      showLiabilityAdvancedFields.value && String(form.term_months ?? '').trim()
+        ? Number(String(form.term_months).trim())
+        : undefined,
+    rate_type: showLiabilityAdvancedFields.value ? form.rate_type : undefined,
+    payment_frequency: showLiabilityAdvancedFields.value ? form.payment_frequency : undefined,
+    amortization_system:
+      showLiabilityAdvancedFields.value && String(form.amortization_system ?? '').trim()
+        ? String(form.amortization_system).trim()
+        : undefined,
+    opening_fees_amount:
+      showMortgageFeeFields.value && String(form.opening_fees_amount ?? '').trim()
+        ? sanitizeAmount(form.opening_fees_amount, maxDecimals.value).value
+        : undefined,
+    early_repayment_fee_percent:
+      showMortgageFeeFields.value && String(form.early_repayment_fee_percent ?? '').trim()
+        ? String(form.early_repayment_fee_percent).trim().replace(',', '.')
+        : undefined,
+    novation_subrogation_fee_amount:
+      showMortgageFeeFields.value && String(form.novation_subrogation_fee_amount ?? '').trim()
+        ? sanitizeAmount(form.novation_subrogation_fee_amount, maxDecimals.value).value
+        : undefined,
+    linked_products_monthly_cost:
+      showMortgageFeeFields.value && String(form.linked_products_monthly_cost ?? '').trim()
+        ? sanitizeAmount(form.linked_products_monthly_cost, maxDecimals.value).value
+        : undefined,
+    initial_purchase_value:
+      showAssetAmortizationFields.value && String(form.initial_purchase_value ?? '').trim()
+        ? sanitizeAmount(form.initial_purchase_value, maxDecimals.value).value
+        : undefined,
+    amortization_method: showAssetAmortizationFields.value ? form.amortization_method : undefined,
+    amortization_term_years:
+      requiresAssetAmortizationInputs.value && String(form.amortization_term_years ?? '').trim()
+        ? Number(String(form.amortization_term_years).trim())
         : undefined,
     notes: form.notes,
     currency: form.currency,
@@ -209,6 +354,18 @@ async function submit() {
   form.annual_interest_tae = '';
   form.monthly_payment_amount = '';
   form.start_date = todayIsoDate();
+  form.expected_end_date = '';
+  form.term_months = '';
+  form.rate_type = 'fixed';
+  form.payment_frequency = 'monthly';
+  form.amortization_system = '';
+  form.opening_fees_amount = '';
+  form.early_repayment_fee_percent = '';
+  form.novation_subrogation_fee_amount = '';
+  form.linked_products_monthly_cost = '';
+  form.initial_purchase_value = '';
+  form.amortization_method = 'none';
+  form.amortization_term_years = '';
   form.notes = '';
   form.currency = '';
   form.financed_asset_id = null;
@@ -225,6 +382,20 @@ watch(
     form.annual_interest_tae = initial.annual_interest_tae ?? '';
     form.monthly_payment_amount = initial.monthly_payment_amount ?? '';
     form.start_date = initial.start_date ?? todayIsoDate();
+    form.expected_end_date = initial.expected_end_date ?? '';
+    form.term_months =
+      initial.term_months == null ? '' : String(initial.term_months);
+    form.rate_type = initial.rate_type ?? 'fixed';
+    form.payment_frequency = initial.payment_frequency ?? 'monthly';
+    form.amortization_system = initial.amortization_system ?? '';
+    form.opening_fees_amount = initial.opening_fees_amount ?? '';
+    form.early_repayment_fee_percent = initial.early_repayment_fee_percent ?? '';
+    form.novation_subrogation_fee_amount = initial.novation_subrogation_fee_amount ?? '';
+    form.linked_products_monthly_cost = initial.linked_products_monthly_cost ?? '';
+    form.initial_purchase_value = initial.initial_purchase_value ?? '';
+    form.amortization_method = initial.amortization_method ?? 'none';
+    form.amortization_term_years =
+      initial.amortization_term_years == null ? '' : String(initial.amortization_term_years);
     form.notes = initial.notes ?? '';
     form.currency = initial.currency ?? '';
     form.tracking_mode = initial.tracking_mode ?? 'manual';
@@ -286,6 +457,45 @@ watch(
       <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">
         {{ monthlyPaymentError }}
       </div>
+      <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">
+        {{ assetAmortizationError }}
+      </div>
+      <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">
+        {{ liabilityDatesError }}
+      </div>
+      <div
+        v-if="showLiabilityAdvancedFields && estimatedMonthlyPaymentPreviewText"
+        class="ui-form-help"
+      >
+        Cuota estimada (simple, tipo fijo): {{ estimatedMonthlyPaymentPreviewText }}
+        {{ form.currency || '' }}
+      </div>
+
+      <select
+        v-if="showAssetAmortizationFields"
+        v-model="form.amortization_method"
+        class="select"
+      >
+        <option v-for="opt in ASSET_AMORTIZATION_METHODS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+
+      <input
+        v-if="showAssetAmortizationFields"
+        v-model="form.initial_purchase_value"
+        inputmode="decimal"
+        placeholder="Valor compra inicial (opcional)"
+        class="input"
+      />
+
+      <input
+        v-if="requiresAssetAmortizationInputs"
+        v-model="form.amortization_term_years"
+        inputmode="numeric"
+        placeholder="Plazo amortizacion (anos)"
+        class="input"
+      />
 
       <input
         v-if="showAnnualInterestInput"
@@ -296,10 +506,67 @@ watch(
       />
 
       <input
-        v-if="showMonthlyPaymentInput"
-        v-model="form.monthly_payment_amount"
+        v-if="showLiabilityAdvancedFields"
+        v-model="form.expected_end_date"
+        type="date"
+        class="input"
+      />
+
+      <input
+        v-if="showLiabilityAdvancedFields"
+        v-model="form.term_months"
+        inputmode="numeric"
+        placeholder="Plazo (meses) opcional"
+        class="input"
+      />
+
+      <select v-if="showLiabilityAdvancedFields" v-model="form.rate_type" class="select">
+        <option v-for="opt in LIABILITY_RATE_TYPES" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+
+      <select v-if="showLiabilityAdvancedFields" v-model="form.payment_frequency" class="select">
+        <option v-for="opt in LIABILITY_PAYMENT_FREQUENCIES" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+
+      <select v-if="showLiabilityAdvancedFields" v-model="form.amortization_system" class="select">
+        <option v-for="opt in LIABILITY_AMORTIZATION_SYSTEMS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+
+      <input
+        v-if="showMortgageFeeFields"
+        v-model="form.opening_fees_amount"
         inputmode="decimal"
-        placeholder="Cuota mensual (opcional)"
+        placeholder="Comision apertura (opcional)"
+        class="input"
+      />
+
+      <input
+        v-if="showMortgageFeeFields"
+        v-model="form.early_repayment_fee_percent"
+        inputmode="decimal"
+        placeholder="Comision amort. anticipada % (opcional)"
+        class="input"
+      />
+
+      <input
+        v-if="showMortgageFeeFields"
+        v-model="form.novation_subrogation_fee_amount"
+        inputmode="decimal"
+        placeholder="Coste novacion/subrogacion (opcional)"
+        class="input"
+      />
+
+      <input
+        v-if="showMortgageFeeFields"
+        v-model="form.linked_products_monthly_cost"
+        inputmode="decimal"
+        placeholder="Coste mensual vinculados (opcional)"
         class="input"
       />
 
@@ -326,7 +593,13 @@ watch(
         </button>
         <button
           class="btn btn-primary ui-form-action-btn"
-          :disabled="!!amountError || !!annualInterestError || !!monthlyPaymentError"
+          :disabled="
+            !!amountError ||
+            !!annualInterestError ||
+            !!monthlyPaymentError ||
+            !!assetAmortizationError ||
+            !!liabilityDatesError
+          "
           @click="submit"
         >
           {{ isEdit ? 'Guardar' : 'Crear' }}

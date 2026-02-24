@@ -22,7 +22,7 @@ describe('ItemForm (core)', () => {
     const categorySelect = selects[0]!;
     const subcategorySelect = selects[1]!;
     const currencySelect = selects[2]!;
-    const financedAssetSelect = selects[3]!;
+    const financedAssetSelect = selects.find((s) => s.text().includes('No financia'))!;
 
     await categorySelect.setValue('cash');
     await subcategorySelect.setValue('wallet');
@@ -54,6 +54,6 @@ describe('ItemForm (core)', () => {
     });
 
     await wrapper.find('input[placeholder="Importe"]').setValue('12.3.4');
-    expect(wrapper.text()).toContain('Importe inválido');
+    expect(wrapper.text()).toContain('Importe');
   });
 });

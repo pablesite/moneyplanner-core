@@ -19,6 +19,7 @@ from .services import (
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     serialize_net_worth_summary,
+    sync_generated_budget_commitments_for_liability,
 )
 
 
@@ -51,6 +52,13 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
             user=self.request.user
         )
         return ctx
+
+    def perform_create(self, serializer):
+        liability = serializer.save()
+        sync_generated_budget_commitments_for_liability(liability=liability)
+
+    def perform_update(self, serializer):
+        serializer.save()
 
 
 class NetWorthSnapshotViewSet(
