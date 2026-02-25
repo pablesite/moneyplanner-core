@@ -361,6 +361,61 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["expense_type"], "recurrent")
+        self.assertEqual(serializer.validated_data["cashflow_role"], "temporary_commitment")
+
+    def test_expense_serializer_normalizes_term_recurrent_cashflow_role_to_temporary_commitment(
+        self,
+    ):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Cuota coche",
+                "category": "tangible_assets",
+                "subcategory": "vehicle_purchase",
+                "expense_type": "recurrent",
+                "time_profile": "term_recurrent",
+                "cashflow_role": "asset_purchase",
+                "term_end_year": 2027,
+                "amount_annual": "3600.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["cashflow_role"], "temporary_commitment")
+
+    def test_expense_serializer_normalizes_invalid_structural_cashflow_role(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Gasto hogar",
+                "category": "consumption_expenses",
+                "subcategory": "living_expenses",
+                "expense_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "cashflow_role": "asset_purchase",
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["cashflow_role"], "operating")
+
+    def test_expense_serializer_normalizes_invalid_one_off_cashflow_role(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Evento puntual",
+                "category": "consumption_expenses",
+                "subcategory": "other_consumption_expenses",
+                "expense_type": "one_off",
+                "time_profile": "one_off",
+                "cashflow_role": "temporary_commitment",
+                "amount_annual": "400.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["cashflow_role"], "other")
 
     def test_expense_serializer_validates_partial_update_with_instance_values(self):
         entry = AnnualExpenseEntry.objects.create(

@@ -727,12 +727,16 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES)
         self.assertEqual(row_2026.subcategory, "financial_commitments")
         self.assertEqual(row_2026.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
-        self.assertEqual(row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+        self.assertEqual(
+            row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+        )
         self.assertEqual(row_2026.term_end_year, 2026)
         # 9 cuotas (ene-sep 2026) de 1375.44 -> 12378.96
         self.assertEqual(row_2026.amount_annual, Decimal("12378.96"))
 
-    def test_liability_create_with_financed_real_estate_generates_temporary_commitment_expense(self):
+    def test_liability_create_with_financed_real_estate_generates_temporary_commitment_expense(
+        self,
+    ):
         asset = Asset.objects.create(
             user=self.user,
             name="Entrada casa",
@@ -771,9 +775,7 @@ class NetWorthApiTests(APITestCase):
         row = generated.first()
         self.assertEqual(row.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
         self.assertEqual(row.subcategory, "property_purchase")
-        self.assertEqual(
-            row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
-        )
+        self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
 
     def test_liability_create_quarterly_generates_budget_commitment_entries(self):
         response = self.client.post(
@@ -929,6 +931,55 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(rows.get(fiscal_year=2025).amount_annual, Decimal("11003.52"))
         self.assertEqual(rows.get(fiscal_year=2026).amount_annual, Decimal("11003.52"))
         self.assertEqual(rows.get(fiscal_year=2027).amount_annual, Decimal("8252.64"))
+
+    def test_liability_update_deletes_obsolete_generated_budget_commitment_years(self):
+        create_response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo temporal",
+                "category": Liability.Category.OTHER,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2024-09-01",
+                "annual_interest_tae": "0.00",
+                "amount": "33010.56",
+                "principal_amount": "33010.56",
+                "term_months": 36,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        liability_id = create_response.data["id"]
+
+        rows_before = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        self.assertEqual(
+            list(rows_before.order_by("fiscal_year").values_list("fiscal_year", flat=True)),
+            [2024, 2025, 2026, 2027],
+        )
+
+        update_response = self.client.patch(
+            f"/api/net-worth/liabilities/{liability_id}/",
+            {"term_months": 12},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK, update_response.data)
+
+        rows_after = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        self.assertEqual(
+            list(rows_after.order_by("fiscal_year").values_list("fiscal_year", flat=True)),
+            [2024, 2025],
+        )
 
     def test_snapshot_from_current_and_delete(self):
         Asset.objects.create(

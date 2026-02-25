@@ -91,6 +91,42 @@ def default_expense_cashflow_role_from_category(category: str, subcategory: str)
     return AnnualExpenseEntry.CashflowRole.OPERATING
 
 
+EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES = {
+    AnnualExpenseEntry.CashflowRole.OPERATING,
+    AnnualExpenseEntry.CashflowRole.SAVINGS,
+    AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    AnnualExpenseEntry.CashflowRole.TAX_FEE,
+    AnnualExpenseEntry.CashflowRole.OTHER,
+}
+
+EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES = {
+    AnnualExpenseEntry.CashflowRole.SAVINGS,
+    AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    AnnualExpenseEntry.CashflowRole.TAX_FEE,
+    AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+    AnnualExpenseEntry.CashflowRole.TRANSFER,
+    AnnualExpenseEntry.CashflowRole.OTHER,
+}
+
+
+def normalize_expense_cashflow_role_for_time_profile(
+    *, time_profile: str, cashflow_role: str
+) -> str:
+    if time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
+        return AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+    if time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
+        return (
+            cashflow_role
+            if cashflow_role in EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES
+            else AnnualExpenseEntry.CashflowRole.OTHER
+        )
+    return (
+        cashflow_role
+        if cashflow_role in EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES
+        else AnnualExpenseEntry.CashflowRole.OPERATING
+    )
+
+
 class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
     class Meta:
         model = AnnualIncomeEntry
@@ -200,6 +236,10 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
                 category, subcategory
             )
         attrs["expense_type"] = expense_type_from_time_profile(attrs["time_profile"])
+        attrs["cashflow_role"] = normalize_expense_cashflow_role_for_time_profile(
+            time_profile=attrs["time_profile"],
+            cashflow_role=attrs["cashflow_role"],
+        )
 
         fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
         term_end_year = attrs.get("term_end_year")
