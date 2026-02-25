@@ -200,3 +200,50 @@ class AnnualExpenseMonthlyCheckin(models.Model):
             f"user={self.user_id}, entry={self.annual_expense_entry_id}, "
             f"year={self.fiscal_year}, month={self.month}, status={self.status})"
         )
+
+
+class AnnualIncomeMonthlyCheckin(models.Model):
+    class Status(models.TextChoices):
+        CONFIRMED = "confirmed", "Confirmado"
+        ADJUSTED = "adjusted", "Ajustado"
+        SKIPPED = "skipped", "No ocurrido"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="annual_income_monthly_checkins",
+    )
+    annual_income_entry = models.ForeignKey(
+        AnnualIncomeEntry,
+        on_delete=models.CASCADE,
+        related_name="monthly_checkins",
+    )
+    fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CONFIRMED)
+    executed_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    note = models.CharField(max_length=240, blank=True, default="")
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "core_annualincomemonthlycheckin"
+        ordering = ["-fiscal_year", "-month", "-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "annual_income_entry", "fiscal_year", "month"],
+                name="budget_aimc_unique_user_entry_year_month",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "fiscal_year", "month"], name="budget_aimc_user_ym_idx"),
+            models.Index(fields=["annual_income_entry"], name="budget_aimc_entry_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            "AnnualIncomeMonthlyCheckin("
+            f"user={self.user_id}, entry={self.annual_income_entry_id}, "
+            f"year={self.fiscal_year}, month={self.month}, status={self.status})"
+        )

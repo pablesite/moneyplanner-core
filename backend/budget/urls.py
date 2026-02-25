@@ -5,10 +5,16 @@ from .views import (
     AnnualExpenseEntryViewSet,
     AnnualExpenseMonthlyCheckinViewSet,
     AnnualIncomeEntryViewSet,
+    AnnualIncomeMonthlyCheckinViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"annual-income", AnnualIncomeEntryViewSet, basename="annual-income")
+router.register(
+    r"annual-income-checkins",
+    AnnualIncomeMonthlyCheckinViewSet,
+    basename="annual-income-checkins",
+)
 router.register(r"annual-expense", AnnualExpenseEntryViewSet, basename="annual-expense")
 router.register(
     r"annual-expense-checkins",
