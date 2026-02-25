@@ -5,13 +5,22 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import AnnualExpenseEntry, AnnualExpenseMonthlyCheckin, AnnualIncomeEntry
+from .models import (
+    AnnualExpenseEntry,
+    AnnualExpenseMonthlyCheckin,
+    AnnualIncomeEntry,
+    AnnualIncomeMonthlyCheckin,
+)
 from .serializers import (
     AnnualExpenseEntrySerializer,
     AnnualExpenseMonthlyCheckinSerializer,
     AnnualIncomeEntrySerializer,
+    AnnualIncomeMonthlyCheckinSerializer,
 )
-from .services import build_expense_monthly_plan_vs_executed_summary
+from .services import (
+    build_expense_monthly_plan_vs_executed_summary,
+    build_income_monthly_plan_vs_executed_summary,
+)
 
 
 class AnnualIncomeEntryViewSet(viewsets.ModelViewSet):
@@ -38,6 +47,21 @@ class AnnualIncomeEntryViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(is_active=True)
         total_annual = queryset.aggregate(value=Sum("amount_annual"))["value"] or 0
         return Response({"total_annual": str(total_annual), "currency_hint": "mixed"})
+
+    @action(detail=False, methods=["get"], url_path="monthly-summary")
+    def monthly_summary(self, request):
+        year_param = (request.query_params.get("year") or "").strip()
+        if not year_param:
+            return Response({"detail": "Query param 'year' es obligatorio."}, status=400)
+        try:
+            fiscal_year = int(year_param)
+        except ValueError:
+            return Response({"detail": "Query param 'year' invalido."}, status=400)
+        payload = build_income_monthly_plan_vs_executed_summary(
+            user=request.user,
+            fiscal_year=fiscal_year,
+        )
+        return Response(payload)
 
 
 class AnnualExpenseEntryViewSet(viewsets.ModelViewSet):
@@ -128,6 +152,49 @@ class AnnualExpenseMonthlyCheckinViewSet(viewsets.ModelViewSet):
         status_value = serializer.validated_data.get("status", serializer.instance.status)
         confirmed_at = serializer.instance.confirmed_at
         if status_value == AnnualExpenseMonthlyCheckin.Status.SKIPPED:
+            confirmed_at = None
+        else:
+            confirmed_at = confirmed_at or timezone.now()
+        serializer.save(confirmed_at=confirmed_at)
+
+
+class AnnualIncomeMonthlyCheckinViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = AnnualIncomeMonthlyCheckinSerializer
+
+    def get_queryset(self):
+        queryset = AnnualIncomeMonthlyCheckin.objects.filter(user=self.request.user)
+        year_param = (self.request.query_params.get("year") or "").strip()
+        entry_param = (self.request.query_params.get("annual_income_entry_id") or "").strip()
+        month_param = (self.request.query_params.get("month") or "").strip()
+        if year_param:
+            try:
+                queryset = queryset.filter(fiscal_year=int(year_param))
+            except ValueError:
+                pass
+        if entry_param:
+            try:
+                queryset = queryset.filter(annual_income_entry_id=int(entry_param))
+            except ValueError:
+                pass
+        if month_param:
+            try:
+                queryset = queryset.filter(month=int(month_param))
+            except ValueError:
+                pass
+        return queryset.order_by("-fiscal_year", "-month", "-updated_at")
+
+    def perform_create(self, serializer):
+        status_value = serializer.validated_data.get("status")
+        confirmed_at = None
+        if status_value != AnnualIncomeMonthlyCheckin.Status.SKIPPED:
+            confirmed_at = timezone.now()
+        serializer.save(user=self.request.user, confirmed_at=confirmed_at)
+
+    def perform_update(self, serializer):
+        status_value = serializer.validated_data.get("status", serializer.instance.status)
+        confirmed_at = serializer.instance.confirmed_at
+        if status_value == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
             confirmed_at = None
         else:
             confirmed_at = confirmed_at or timezone.now()

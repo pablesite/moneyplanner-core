@@ -6,7 +6,12 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import AnnualExpenseEntry, AnnualExpenseMonthlyCheckin, AnnualIncomeEntry
+from .models import (
+    AnnualExpenseEntry,
+    AnnualExpenseMonthlyCheckin,
+    AnnualIncomeEntry,
+    AnnualIncomeMonthlyCheckin,
+)
 from .serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 from .services import (
     EXPENSE_TAXONOMY,
@@ -157,6 +162,104 @@ class AnnualIncomeApiTests(APITestCase):
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(list_res.data), 1)
         self.assertEqual(list_res.data[0]["id"], own.id)
+
+    def test_income_checkin_crud_and_monthly_summary(self):
+        recurring = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            income_type="recurrent",
+            time_profile="structural_recurrent",
+            amount_annual=Decimal("24000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        one_off = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Bonus",
+            category="salary",
+            subcategory="bonus_commission",
+            income_type="one_off",
+            time_profile="one_off",
+            amount_annual=Decimal("3000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+
+        create_checkin = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": recurring.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "adjusted",
+                "executed_amount": "2100.00",
+                "note": "Pagas extraorrdinarias prorrateadas",
+            },
+            format="json",
+        )
+        self.assertEqual(create_checkin.status_code, status.HTTP_201_CREATED, create_checkin.data)
+        self.assertEqual(create_checkin.data["executed_amount"], "2100.00")
+
+        list_checkins = self.client.get("/api/budget/annual-income-checkins/?year=2026&month=2")
+        self.assertEqual(list_checkins.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_checkins.data), 1)
+        self.assertEqual(list_checkins.data[0]["annual_income_entry_id"], recurring.id)
+
+        invalid_one_off = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": one_off.id,
+                "fiscal_year": 2026,
+                "month": 5,
+                "status": "confirmed",
+                "executed_amount": "3000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(invalid_one_off.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("annual_income_entry_id", invalid_one_off.data["error"]["details"])
+
+        summary_res = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
+        self.assertEqual(summary_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(summary_res.data["planned_total"], "24000.00")
+        self.assertEqual(summary_res.data["executed_total"], "2100.00")
+        self.assertEqual(summary_res.data["pending_total"], "22000.00")
+        months = {row["month"]: row for row in summary_res.data["months"]}
+        self.assertEqual(months[2]["planned"], "2000.00")
+        self.assertEqual(months[2]["executed"], "2100.00")
+        self.assertEqual(months[2]["pending"], "0.00")
+        self.assertEqual(months[1]["planned"], "2000.00")
+        self.assertEqual(months[1]["pending"], "2000.00")
+        self.assertTrue(summary_res.data["has_executed_data"])
+
+    def test_income_checkin_skipped_nulls_executed_amount(self):
+        income = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Alquiler",
+            category="passive_income",
+            subcategory="real_estate_rent",
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        res = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": income.id,
+                "fiscal_year": 2026,
+                "month": 3,
+                "status": "skipped",
+                "executed_amount": "10.00",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+        self.assertIsNone(res.data["executed_amount"])
+        self.assertIsNone(AnnualIncomeMonthlyCheckin.objects.get(id=res.data["id"]).executed_amount)
 
 
 class AnnualExpenseApiTests(APITestCase):

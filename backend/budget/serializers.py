@@ -1,7 +1,12 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from .models import AnnualExpenseEntry, AnnualExpenseMonthlyCheckin, AnnualIncomeEntry
+from .models import (
+    AnnualExpenseEntry,
+    AnnualExpenseMonthlyCheckin,
+    AnnualIncomeEntry,
+    AnnualIncomeMonthlyCheckin,
+)
 from .services import (
     normalize_currency_code,
     validate_annual_expense_taxonomy,
@@ -351,6 +356,70 @@ class AnnualExpenseMonthlyCheckinSerializer(
                 {"month": "Los gastos puntuales solo admiten check-in en su mes objetivo."}
             )
         if status_value == AnnualExpenseMonthlyCheckin.Status.SKIPPED:
+            attrs["executed_amount"] = None
+        elif executed_amount is serializers.empty and self.instance is None:
+            attrs["executed_amount"] = None
+        return attrs
+
+
+class AnnualIncomeMonthlyCheckinSerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
+    annual_income_entry_id = serializers.PrimaryKeyRelatedField(
+        source="annual_income_entry",
+        queryset=AnnualIncomeEntry.objects.all(),
+    )
+
+    class Meta:
+        model = AnnualIncomeMonthlyCheckin
+        fields = [
+            "id",
+            "annual_income_entry_id",
+            "fiscal_year",
+            "month",
+            "status",
+            "executed_amount",
+            "note",
+            "confirmed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "confirmed_at", "created_at", "updated_at"]
+
+    def validate_executed_amount(self, value):
+        if value is None:
+            return value
+        if value < 0:
+            raise serializers.ValidationError("El importe ejecutado no puede ser negativo.")
+        return value
+
+    def validate_month(self, value: int):
+        if value < 1 or value > 12:
+            raise serializers.ValidationError("Mes invalido (1-12).")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        entry = attrs.get("annual_income_entry") or getattr(self.instance, "annual_income_entry", None)
+        status_value = attrs.get("status") or getattr(self.instance, "status", None)
+        executed_amount = attrs.get("executed_amount", serializers.empty)
+        fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
+
+        if entry is None:
+            raise serializers.ValidationError({"annual_income_entry_id": "Entrada de ingreso requerida."})
+        if user is not None and entry.user_id != user.id:
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "La entrada de ingreso no pertenece al usuario autenticado."}
+            )
+        if fiscal_year is not None and entry.fiscal_year != fiscal_year:
+            raise serializers.ValidationError(
+                {"fiscal_year": "El ejercicio del check-in debe coincidir con el ejercicio del ingreso anual."}
+            )
+        # v1: one-off incomes are excluded from monthly summary until target_month exists in AnnualIncomeEntry.
+        if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "Los ingresos puntuales aun no soportan check-in mensual (falta mes objetivo)."}
+            )
+        if status_value == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
             attrs["executed_amount"] = None
         elif executed_amount is serializers.empty and self.instance is None:
             attrs["executed_amount"] = None
