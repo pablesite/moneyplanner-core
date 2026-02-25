@@ -58,7 +58,8 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         sync_generated_budget_commitments_for_liability(liability=liability)
 
     def perform_update(self, serializer):
-        serializer.save()
+        liability = serializer.save()
+        sync_generated_budget_commitments_for_liability(liability=liability)
 
 
 class NetWorthSnapshotViewSet(

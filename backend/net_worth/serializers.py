@@ -204,6 +204,10 @@ class LiabilitySerializer(serializers.ModelSerializer):
         expected_end_date = attrs.get(
             "expected_end_date", getattr(self.instance, "expected_end_date", None)
         )
+        payment_frequency = attrs.get(
+            "payment_frequency", getattr(self.instance, "payment_frequency", None)
+        )
+        term_months = attrs.get("term_months", getattr(self.instance, "term_months", None))
         validate_liability_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -211,6 +215,8 @@ class LiabilitySerializer(serializers.ModelSerializer):
             annual_interest_tae=annual_interest_tae,
             start_date=start_date,
             expected_end_date=expected_end_date,
+            payment_frequency=payment_frequency,
+            term_months=term_months,
         )
 
         financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))

@@ -107,6 +107,8 @@ def validate_liability_payload(
     annual_interest_tae,
     start_date,
     expected_end_date,
+    payment_frequency: str | None = None,
+    term_months=None,
 ) -> None:
     if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -128,6 +130,16 @@ def validate_liability_payload(
         raise DRFValidationError(
             {"expected_end_date": "Debe ser igual o posterior a start_date."}
         )
+
+    if payment_frequency == Liability.PaymentFrequency.QUARTERLY and term_months not in (None, ""):
+        try:
+            term = int(term_months)
+        except (TypeError, ValueError):
+            term = None
+        if term is not None and term > 0 and term % 3 != 0:
+            raise DRFValidationError(
+                {"term_months": "Para frecuencia trimestral, term_months debe ser multiplo de 3."}
+            )
 
 
 def infer_liability_is_asset_backed(*, financed_asset) -> bool:
@@ -180,6 +192,75 @@ def estimate_liability_monthly_payment_simple(
     return payment.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
 
 
+def _liability_period_months(*, payment_frequency: str | None) -> int | None:
+    if payment_frequency in (None, "", Liability.PaymentFrequency.MONTHLY):
+        return 1
+    if payment_frequency == Liability.PaymentFrequency.QUARTERLY:
+        return 3
+    return None
+
+
+def _liability_periods_per_year(*, payment_frequency: str | None) -> int | None:
+    if payment_frequency in (None, "", Liability.PaymentFrequency.MONTHLY):
+        return 12
+    if payment_frequency == Liability.PaymentFrequency.QUARTERLY:
+        return 4
+    return None
+
+
+def _estimate_liability_periodic_payment_simple(
+    *,
+    amount,
+    annual_interest_tae,
+    term_months,
+    payment_frequency,
+    rate_type,
+    amortization_system,
+) -> Decimal | None:
+    if amount is None or annual_interest_tae is None or term_months is None:
+        return None
+
+    period_months = _liability_period_months(payment_frequency=payment_frequency)
+    periods_per_year = _liability_periods_per_year(payment_frequency=payment_frequency)
+    if period_months is None or periods_per_year is None:
+        return None
+    if rate_type not in (None, "", Liability.RateType.FIXED):
+        return None
+    if amortization_system not in (
+        None,
+        "",
+        Liability.AmortizationSystem.FRENCH,
+        Liability.AmortizationSystem.MANUAL,
+    ):
+        return None
+
+    try:
+        principal = Decimal(amount)
+        tae_pct = Decimal(annual_interest_tae)
+        term_months_int = int(term_months)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+    if principal <= 0 or tae_pct < 0 or term_months_int <= 0:
+        return None
+    if term_months_int % period_months != 0:
+        return None
+
+    n = term_months_int // period_months
+    if n <= 0:
+        return None
+
+    if tae_pct == 0:
+        return (principal / Decimal(n)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+
+    periodic_rate = (tae_pct / Decimal("100")) / Decimal(periods_per_year)
+    denominator = Decimal("1") - (Decimal("1") + periodic_rate) ** Decimal(-n)
+    if denominator == 0:
+        return None
+    payment = principal * periodic_rate / denominator
+    return payment.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+
+
 def _last_day_of_month(year: int, month: int) -> int:
     if month == 12:
         next_month = date(year + 1, 1, 1)
@@ -196,14 +277,18 @@ def _add_months_preserve_day(value: date, months: int) -> date:
     return date(year, month, day)
 
 
-def get_liability_first_payment_date(*, start_date: date) -> date:
-    # v1 convention: start_date is acquisition date; first installment is due next month same day.
-    return _add_months_preserve_day(start_date, 1)
+def get_liability_first_payment_date(*, start_date: date, payment_frequency: str | None = None) -> date:
+    # v1 convention: start_date is acquisition date; first installment is due next period same day.
+    period_months = _liability_period_months(payment_frequency=payment_frequency) or 1
+    return _add_months_preserve_day(start_date, period_months)
 
 
 def build_liability_installment_schedule_simple(*, liability: Liability) -> list[tuple[date, Decimal]]:
+    period_months = _liability_period_months(payment_frequency=liability.payment_frequency)
+    periods_per_year = _liability_periods_per_year(payment_frequency=liability.payment_frequency)
     if (
-        liability.payment_frequency != Liability.PaymentFrequency.MONTHLY
+        period_months is None
+        or periods_per_year is None
         or liability.rate_type != Liability.RateType.FIXED
         or not liability.term_months
     ):
@@ -213,7 +298,7 @@ def build_liability_installment_schedule_simple(*, liability: Liability) -> list
     if principal is None or liability.annual_interest_tae is None or liability.start_date is None:
         return []
 
-    monthly_payment = estimate_liability_monthly_payment_simple(
+    periodic_payment = _estimate_liability_periodic_payment_simple(
         amount=principal,
         annual_interest_tae=liability.annual_interest_tae,
         term_months=liability.term_months,
@@ -221,7 +306,7 @@ def build_liability_installment_schedule_simple(*, liability: Liability) -> list
         rate_type=liability.rate_type,
         amortization_system=liability.amortization_system,
     )
-    if monthly_payment is None:
+    if periodic_payment is None:
         return []
 
     try:
@@ -235,22 +320,27 @@ def build_liability_installment_schedule_simple(*, liability: Liability) -> list
 
     schedule: list[tuple[date, Decimal]] = []
     balance = principal_dec
-    monthly_rate = (tae_pct / Decimal("100")) / Decimal("12")
-    first_due = get_liability_first_payment_date(start_date=liability.start_date)
-    total_installments = int(liability.term_months)
+    periodic_rate = (tae_pct / Decimal("100")) / Decimal(periods_per_year)
+    term_months_int = int(liability.term_months)
+    if term_months_int % period_months != 0:
+        return []
+    total_installments = term_months_int // period_months
+    first_due = get_liability_first_payment_date(
+        start_date=liability.start_date, payment_frequency=liability.payment_frequency
+    )
 
     for idx in range(total_installments):
-        due_date = _add_months_preserve_day(first_due, idx)
-        if monthly_rate == 0:
+        due_date = _add_months_preserve_day(first_due, idx * period_months)
+        if periodic_rate == 0:
             installment = (
-                balance if idx == total_installments - 1 else monthly_payment
+                balance if idx == total_installments - 1 else periodic_payment
             ).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
             principal_component = installment
         else:
-            interest = (balance * monthly_rate).quantize(
+            interest = (balance * periodic_rate).quantize(
                 Decimal("0.00000001"), rounding=ROUND_HALF_UP
             )
-            installment = monthly_payment
+            installment = periodic_payment
             principal_component = installment - interest
             if idx == total_installments - 1:
                 installment = (balance + interest).quantize(
@@ -288,9 +378,16 @@ def estimate_liability_outstanding_amount_simple(
     except (InvalidOperation, TypeError):
         return None
 
-    total_installments = int(liability.term_months)
+    period_months = _liability_period_months(payment_frequency=liability.payment_frequency)
+    periods_per_year = _liability_periods_per_year(payment_frequency=liability.payment_frequency)
+    if period_months is None or periods_per_year is None:
+        return None
+    term_months_int = int(liability.term_months)
+    if term_months_int % period_months != 0:
+        return None
+    total_installments = term_months_int // period_months
     paid_installments = max(0, min(paid_installments, total_installments))
-    monthly_payment = estimate_liability_monthly_payment_simple(
+    periodic_payment = _estimate_liability_periodic_payment_simple(
         amount=principal,
         annual_interest_tae=liability.annual_interest_tae,
         term_months=liability.term_months,
@@ -298,22 +395,22 @@ def estimate_liability_outstanding_amount_simple(
         rate_type=liability.rate_type,
         amortization_system=liability.amortization_system,
     )
-    if monthly_payment is None:
+    if periodic_payment is None:
         return None
 
-    monthly_rate = (tae_pct / Decimal("100")) / Decimal("12")
+    periodic_rate = (tae_pct / Decimal("100")) / Decimal(periods_per_year)
     for idx in range(paid_installments):
         if balance <= 0:
             balance = Decimal("0")
             break
-        if monthly_rate == 0:
-            installment = balance if idx == total_installments - 1 else monthly_payment
+        if periodic_rate == 0:
+            installment = balance if idx == total_installments - 1 else periodic_payment
             principal_component = installment
         else:
-            interest = (balance * monthly_rate).quantize(
+            interest = (balance * periodic_rate).quantize(
                 Decimal("0.00000001"), rounding=ROUND_HALF_UP
             )
-            installment = monthly_payment
+            installment = periodic_payment
             principal_component = installment - interest
             if idx == total_installments - 1:
                 principal_component = balance
@@ -335,26 +432,29 @@ def get_effective_liability_amount(*, liability: Liability, as_of_date: date | N
 def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str, str]:
     from budget.models import AnnualExpenseEntry
 
+    # Debt installments generated from liabilities represent a temporary commitment
+    # cash-flow, even when the financed target is an asset purchase.
+    temporary_commitment_role = AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
         return {
             "category": AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
             "subcategory": "financial_commitments",
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.REAL_ESTATE:
         return {
             "category": AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
             "subcategory": "property_purchase",
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+            "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.VEHICLE:
         return {
             "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
             "subcategory": "vehicle_purchase",
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+            "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.FURNISHINGS:
@@ -369,7 +469,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
             "subcategory": furnishings_map.get(
                 financed_asset.subcategory, "other_tangible_assets"
             ),
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+            "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.INVESTMENTS:
@@ -387,20 +487,20 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
             "subcategory": investments_map.get(
                 financed_asset.subcategory, "other_financial_investments"
             ),
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.CASH:
         return {
             "category": AnnualExpenseEntry.Category.SAVINGS_ALLOCATION,
             "subcategory": "cash_reserve",
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.SAVINGS,
+            "cashflow_role": temporary_commitment_role,
         }
 
     return {
         "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
         "subcategory": "other_tangible_assets",
-        "cashflow_role": AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+        "cashflow_role": temporary_commitment_role,
     }
 
 
@@ -423,27 +523,59 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
     expense_profile = get_generated_liability_expense_profile(liability=liability)
 
     for year, annual_total in totals_by_year.items():
-        AnnualExpenseEntry.objects.get_or_create(
+        generated_defaults = {
+            "name": f"Compromiso pasivo: {liability.name}",
+            "category": expense_profile["category"],
+            "subcategory": expense_profile["subcategory"],
+            "owner_name": "",
+            "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
+            "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            "cashflow_role": expense_profile["cashflow_role"],
+            "event_group": f"liability_{liability.id}",
+            "term_end_year": final_due_year,
+            "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            "currency": liability.currency,
+            "notes": "Generado automaticamente desde pasivo (editable).",
+            "is_active": True,
+        }
+        row, created = AnnualExpenseEntry.objects.get_or_create(
             user=liability.user,
             source_liability=liability,
             is_system_generated=True,
             fiscal_year=year,
-            defaults={
-                "name": f"Compromiso pasivo: {liability.name}",
-                "category": expense_profile["category"],
-                "subcategory": expense_profile["subcategory"],
-                "owner_name": "",
-                "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
-                "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
-                "cashflow_role": expense_profile["cashflow_role"],
-                "event_group": f"liability_{liability.id}",
-                "term_end_year": final_due_year,
-                "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
-                "currency": liability.currency,
-                "notes": "Generado automaticamente desde pasivo (editable).",
-                "is_active": True,
-            },
+            defaults=generated_defaults,
         )
+        if created:
+            continue
+
+        # If the generated row was customized (e.g. user changed name/notes/classification),
+        # avoid overwriting the annual amount. We still refresh structural linkage fields.
+        customization_marker_fields = (
+            "name",
+            "category",
+            "subcategory",
+            "owner_name",
+            "expense_type",
+            "time_profile",
+            "cashflow_role",
+            "notes",
+        )
+        is_customized = any(
+            getattr(row, field_name) != generated_defaults[field_name]
+            for field_name in customization_marker_fields
+        )
+
+        system_owned_fields = ["term_end_year", "currency", "event_group", "is_active"]
+        if not is_customized:
+            system_owned_fields.append("amount_annual")
+        update_fields: list[str] = []
+        for field_name in system_owned_fields:
+            expected = generated_defaults[field_name]
+            if getattr(row, field_name) != expected:
+                setattr(row, field_name, expected)
+                update_fields.append(field_name)
+        if update_fields:
+            row.save(update_fields=update_fields)
 
 
 def create_asset_for_user(*, user, validated_data: dict) -> Asset:
