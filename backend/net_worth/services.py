@@ -83,19 +83,11 @@ def validate_asset_payload(
     if amortization_method and amortization_method != Asset.AmortizationMethod.NONE:
         if initial_purchase_value is None:
             raise DRFValidationError(
-                {
-                    "initial_purchase_value": (
-                        "Requerido si se define amortizacion del activo."
-                    )
-                }
+                {"initial_purchase_value": ("Requerido si se define amortizacion del activo.")}
             )
         if amortization_term_years is None:
             raise DRFValidationError(
-                {
-                    "amortization_term_years": (
-                        "Requerido si se define amortizacion del activo."
-                    )
-                }
+                {"amortization_term_years": ("Requerido si se define amortizacion del activo.")}
             )
 
 
@@ -127,9 +119,7 @@ def validate_liability_payload(
         )
 
     if start_date and expected_end_date and expected_end_date < start_date:
-        raise DRFValidationError(
-            {"expected_end_date": "Debe ser igual o posterior a start_date."}
-        )
+        raise DRFValidationError({"expected_end_date": "Debe ser igual o posterior a start_date."})
 
     if payment_frequency == Liability.PaymentFrequency.QUARTERLY and term_months not in (None, ""):
         try:
@@ -277,13 +267,17 @@ def _add_months_preserve_day(value: date, months: int) -> date:
     return date(year, month, day)
 
 
-def get_liability_first_payment_date(*, start_date: date, payment_frequency: str | None = None) -> date:
+def get_liability_first_payment_date(
+    *, start_date: date, payment_frequency: str | None = None
+) -> date:
     # v1 convention: start_date is acquisition date; first installment is due next period same day.
     period_months = _liability_period_months(payment_frequency=payment_frequency) or 1
     return _add_months_preserve_day(start_date, period_months)
 
 
-def build_liability_installment_schedule_simple(*, liability: Liability) -> list[tuple[date, Decimal]]:
+def build_liability_installment_schedule_simple(
+    *, liability: Liability
+) -> list[tuple[date, Decimal]]:
     period_months = _liability_period_months(payment_frequency=liability.payment_frequency)
     periods_per_year = _liability_periods_per_year(payment_frequency=liability.payment_frequency)
     if (
@@ -332,9 +326,9 @@ def build_liability_installment_schedule_simple(*, liability: Liability) -> list
     for idx in range(total_installments):
         due_date = _add_months_preserve_day(first_due, idx * period_months)
         if periodic_rate == 0:
-            installment = (
-                balance if idx == total_installments - 1 else periodic_payment
-            ).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+            installment = (balance if idx == total_installments - 1 else periodic_payment).quantize(
+                Decimal("0.00000001"), rounding=ROUND_HALF_UP
+            )
             principal_component = installment
         else:
             interest = (balance * periodic_rate).quantize(
@@ -355,7 +349,9 @@ def build_liability_installment_schedule_simple(*, liability: Liability) -> list
         )
         if balance < 0:
             balance = Decimal("0")
-        schedule.append((due_date, installment.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)))
+        schedule.append(
+            (due_date, installment.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP))
+        )
 
     return schedule
 
@@ -424,8 +420,12 @@ def estimate_liability_outstanding_amount_simple(
     return balance.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
 
 
-def get_effective_liability_amount(*, liability: Liability, as_of_date: date | None = None) -> Decimal:
-    estimated = estimate_liability_outstanding_amount_simple(liability=liability, as_of_date=as_of_date)
+def get_effective_liability_amount(
+    *, liability: Liability, as_of_date: date | None = None
+) -> Decimal:
+    estimated = estimate_liability_outstanding_amount_simple(
+        liability=liability, as_of_date=as_of_date
+    )
     return estimated if estimated is not None else liability.amount
 
 
@@ -466,9 +466,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
         }
         return {
             "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
-            "subcategory": furnishings_map.get(
-                financed_asset.subcategory, "other_tangible_assets"
-            ),
+            "subcategory": furnishings_map.get(financed_asset.subcategory, "other_tangible_assets"),
             "cashflow_role": temporary_commitment_role,
         }
 
@@ -577,6 +575,13 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
         if update_fields:
             row.save(update_fields=update_fields)
 
+    # Remove obsolete generated rows when the debt schedule shrinks (for example, term reduction).
+    AnnualExpenseEntry.objects.filter(
+        user=liability.user,
+        source_liability=liability,
+        is_system_generated=True,
+    ).exclude(fiscal_year__in=list(totals_by_year.keys())).delete()
+
 
 def create_asset_for_user(*, user, validated_data: dict) -> Asset:
     return Asset.objects.create(user=user, **validated_data)
@@ -660,7 +665,9 @@ def calculate_totals(
         assets_by_subcategory[subkey] += converted
 
     for liability in liabilities_qs:
-        effective_amount = get_effective_liability_amount(liability=liability, as_of_date=as_of_date)
+        effective_amount = get_effective_liability_amount(
+            liability=liability, as_of_date=as_of_date
+        )
         converted = convert_currency(
             effective_amount, liability.currency, base_currency, date=as_of_date
         )
