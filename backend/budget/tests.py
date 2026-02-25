@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import AnnualExpenseEntry, AnnualIncomeEntry
+from .models import AnnualExpenseEntry, AnnualExpenseMonthlyCheckin, AnnualIncomeEntry
 from .serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 from .services import (
     EXPENSE_TAXONOMY,
@@ -267,6 +267,142 @@ class AnnualExpenseApiTests(APITestCase):
         self.assertEqual(len(list_res.data), 1)
         self.assertEqual(list_res.data[0]["id"], own.id)
 
+    def test_create_one_off_expense_requires_target_month(self):
+        create_res = self.client.post(
+            "/api/budget/annual-expense/",
+            {
+                "name": "Seguro anual coche",
+                "category": "consumption_expenses",
+                "subcategory": "transport_mobility",
+                "expense_type": "one_off",
+                "amount_annual": "600.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("target_month", create_res.data["error"]["details"])
+
+    def test_expense_checkin_crud_and_monthly_summary(self):
+        recurring = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Supermercado",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            expense_type="recurrent",
+            time_profile="structural_recurrent",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        one_off = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Seguro anual",
+            category="consumption_expenses",
+            subcategory="transport_mobility",
+            expense_type="one_off",
+            time_profile="one_off",
+            target_month=3,
+            amount_annual=Decimal("600.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+
+        create_checkin_1 = self.client.post(
+            "/api/budget/annual-expense-checkins/",
+            {
+                "annual_expense_entry_id": recurring.id,
+                "fiscal_year": 2026,
+                "month": 1,
+                "status": "confirmed",
+                "executed_amount": "110.00",
+                "note": "Ajuste enero",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            create_checkin_1.status_code, status.HTTP_201_CREATED, create_checkin_1.data
+        )
+        self.assertEqual(create_checkin_1.data["executed_amount"], "110.00")
+
+        create_checkin_2 = self.client.post(
+            "/api/budget/annual-expense-checkins/",
+            {
+                "annual_expense_entry_id": one_off.id,
+                "fiscal_year": 2026,
+                "month": 3,
+                "status": "adjusted",
+                "executed_amount": "650.00",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            create_checkin_2.status_code, status.HTTP_201_CREATED, create_checkin_2.data
+        )
+
+        invalid_one_off_month = self.client.post(
+            "/api/budget/annual-expense-checkins/",
+            {
+                "annual_expense_entry_id": one_off.id,
+                "fiscal_year": 2026,
+                "month": 4,
+                "status": "confirmed",
+                "executed_amount": "600.00",
+            },
+            format="json",
+        )
+        self.assertEqual(invalid_one_off_month.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("month", invalid_one_off_month.data["error"]["details"])
+
+        list_checkins = self.client.get("/api/budget/annual-expense-checkins/?year=2026")
+        self.assertEqual(list_checkins.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_checkins.data), 2)
+
+        summary_res = self.client.get("/api/budget/annual-expense/monthly-summary/?year=2026")
+        self.assertEqual(summary_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(summary_res.data["planned_total"], "1800.00")
+        self.assertEqual(summary_res.data["executed_total"], "760.00")
+        self.assertEqual(summary_res.data["pending_total"], "1100.00")
+        months = {row["month"]: row for row in summary_res.data["months"]}
+        self.assertEqual(months[1]["planned"], "100.00")
+        self.assertEqual(months[1]["executed"], "110.00")
+        self.assertEqual(months[1]["pending"], "0.00")
+        self.assertEqual(months[3]["planned"], "700.00")  # 100 recurrent + 600 one-off
+        self.assertEqual(months[3]["executed"], "650.00")
+        self.assertEqual(months[3]["pending"], "100.00")
+        self.assertTrue(summary_res.data["has_executed_data"])
+
+    def test_expense_checkin_skipped_nulls_executed_amount(self):
+        expense = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gym",
+            category="consumption_expenses",
+            subcategory="health_wellbeing",
+            amount_annual=Decimal("480.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        res = self.client.post(
+            "/api/budget/annual-expense-checkins/",
+            {
+                "annual_expense_entry_id": expense.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "skipped",
+                "executed_amount": "10.00",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.data)
+        self.assertIsNone(res.data["executed_amount"])
+        self.assertEqual(
+            AnnualExpenseMonthlyCheckin.objects.get(id=res.data["id"]).executed_amount,
+            None,
+        )
+
 
 class BudgetSerializerTests(TestCase):
     def setUp(self):
@@ -409,6 +545,7 @@ class BudgetSerializerTests(TestCase):
                 "expense_type": "one_off",
                 "time_profile": "one_off",
                 "cashflow_role": "temporary_commitment",
+                "target_month": 6,
                 "amount_annual": "400.00",
                 "fiscal_year": 2026,
                 "currency": "EUR",
@@ -416,6 +553,23 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["cashflow_role"], "other")
+
+    def test_expense_serializer_requires_target_month_for_one_off(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Seguro",
+                "category": "consumption_expenses",
+                "subcategory": "transport_mobility",
+                "expense_type": "one_off",
+                "time_profile": "one_off",
+                "cashflow_role": "tax_fee",
+                "amount_annual": "400.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("target_month", serializer.errors)
 
     def test_expense_serializer_validates_partial_update_with_instance_values(self):
         entry = AnnualExpenseEntry.objects.create(
