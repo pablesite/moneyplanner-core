@@ -1,4 +1,8 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.core.exceptions import ValidationError
+
+from .models import AnnualExpenseEntry, AnnualExpenseMonthlyCheckin
 
 INCOME_TAXONOMY: dict[str, set[str]] = {
     "salary": {
@@ -119,3 +123,118 @@ def validate_annual_expense_taxonomy(*, category: str, subcategory: str) -> None
         raise ValidationError("Categoria de gasto anual no valida.")
     if (subcategory or "").strip() not in options:
         raise ValidationError("Subcategoria de gasto anual no valida para la categoria dada.")
+
+
+TWOPLACES = Decimal("0.01")
+
+
+def _round_money(value: Decimal) -> Decimal:
+    return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def planned_expense_monthly_distribution(entry: AnnualExpenseEntry) -> dict[int, Decimal]:
+    amount = Decimal(entry.amount_annual or 0)
+    if amount <= 0:
+        return {}
+    if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
+        if not entry.target_month:
+            return {}
+        return {int(entry.target_month): _round_money(amount)}
+
+    base = _round_money(amount / Decimal("12"))
+    distribution = {month: base for month in range(1, 13)}
+    total = sum(distribution.values(), Decimal("0.00"))
+    delta = _round_money(amount - total)
+    if delta:
+        distribution[12] = _round_money(distribution[12] + delta)
+    return distribution
+
+
+def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
+    entries = list(
+        AnnualExpenseEntry.objects.filter(user=user, fiscal_year=fiscal_year, is_active=True)
+        .only(
+            "id",
+            "fiscal_year",
+            "time_profile",
+            "target_month",
+            "amount_annual",
+        )
+        .order_by("id")
+    )
+    checkins = list(
+        AnnualExpenseMonthlyCheckin.objects.filter(
+            user=user,
+            fiscal_year=fiscal_year,
+        ).only("annual_expense_entry_id", "month", "status", "executed_amount")
+    )
+    checkins_by_key = {
+        (item.annual_expense_entry_id, item.month): item
+        for item in checkins
+        if 1 <= item.month <= 12
+    }
+
+    planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}
+    executed_by_month = {month: Decimal("0.00") for month in range(1, 13)}
+    pending_by_month = {month: Decimal("0.00") for month in range(1, 13)}
+    confirmed_entries_by_month = {month: 0 for month in range(1, 13)}
+    expected_entries_by_month = {month: 0 for month in range(1, 13)}
+
+    for entry in entries:
+        distribution = planned_expense_monthly_distribution(entry)
+        for month, planned_amount in distribution.items():
+            planned_by_month[month] += planned_amount
+            expected_entries_by_month[month] += 1
+            checkin = checkins_by_key.get((entry.id, month))
+            if checkin is None:
+                pending_by_month[month] += planned_amount
+                continue
+            confirmed_entries_by_month[month] += 1
+            if checkin.status == AnnualExpenseMonthlyCheckin.Status.SKIPPED:
+                continue
+            executed_amount = Decimal(checkin.executed_amount or 0)
+            executed_by_month[month] += _round_money(executed_amount)
+
+    planned_total = sum(planned_by_month.values(), Decimal("0.00"))
+    executed_total = sum(executed_by_month.values(), Decimal("0.00"))
+    pending_total = sum(pending_by_month.values(), Decimal("0.00"))
+
+    months_payload = []
+    months_with_checkins = 0
+    expected_slots_total = 0
+    confirmed_slots_total = 0
+    for month in range(1, 13):
+        expected = expected_entries_by_month[month]
+        confirmed = confirmed_entries_by_month[month]
+        expected_slots_total += expected
+        confirmed_slots_total += confirmed
+        if confirmed > 0:
+            months_with_checkins += 1
+        completion_ratio = 1.0 if expected == 0 else (confirmed / expected)
+        months_payload.append(
+            {
+                "month": month,
+                "planned": str(_round_money(planned_by_month[month])),
+                "executed": str(_round_money(executed_by_month[month])),
+                "pending": str(_round_money(pending_by_month[month])),
+                "completion_ratio": round(completion_ratio, 4),
+                "checkins_confirmed": confirmed,
+                "checkins_expected": expected,
+            }
+        )
+
+    total_completion_ratio = (
+        1.0 if expected_slots_total == 0 else round(confirmed_slots_total / expected_slots_total, 4)
+    )
+
+    return {
+        "fiscal_year": fiscal_year,
+        "planned_total": str(_round_money(planned_total)),
+        "executed_total": str(_round_money(executed_total)),
+        "pending_total": str(_round_money(pending_total)),
+        "variance_total": str(_round_money(executed_total - planned_total)),
+        "months": months_payload,
+        "completion_ratio": total_completion_ratio,
+        "months_with_checkins": months_with_checkins,
+        "has_executed_data": any(item["checkins_confirmed"] > 0 for item in months_payload),
+    }

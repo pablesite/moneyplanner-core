@@ -126,6 +126,7 @@ class AnnualExpenseEntry(models.Model):
         max_length=24, choices=CashflowRole.choices, default=CashflowRole.OPERATING
     )
     event_group = models.CharField(max_length=64, blank=True, default="")
+    target_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
     fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
@@ -152,3 +153,50 @@ class AnnualExpenseEntry(models.Model):
 
     def __str__(self) -> str:
         return f"AnnualExpenseEntry(user={self.user_id}, name={self.name}, amount={self.amount_annual})"
+
+
+class AnnualExpenseMonthlyCheckin(models.Model):
+    class Status(models.TextChoices):
+        CONFIRMED = "confirmed", "Confirmado"
+        ADJUSTED = "adjusted", "Ajustado"
+        SKIPPED = "skipped", "No ocurrido"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="annual_expense_monthly_checkins",
+    )
+    annual_expense_entry = models.ForeignKey(
+        AnnualExpenseEntry,
+        on_delete=models.CASCADE,
+        related_name="monthly_checkins",
+    )
+    fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CONFIRMED)
+    executed_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    note = models.CharField(max_length=240, blank=True, default="")
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "core_annualexpensemonthlycheckin"
+        ordering = ["-fiscal_year", "-month", "-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "annual_expense_entry", "fiscal_year", "month"],
+                name="budget_aemc_unique_user_entry_year_month",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "fiscal_year", "month"], name="budget_aemc_user_ym_idx"),
+            models.Index(fields=["annual_expense_entry"], name="budget_aemc_entry_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            "AnnualExpenseMonthlyCheckin("
+            f"user={self.user_id}, entry={self.annual_expense_entry_id}, "
+            f"year={self.fiscal_year}, month={self.month}, status={self.status})"
+        )
