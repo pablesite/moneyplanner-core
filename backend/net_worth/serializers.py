@@ -1,7 +1,8 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Asset, Liability, NetWorthSnapshot
+from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
 from .services import (
     create_asset_for_user,
     create_liability_for_user,
@@ -258,3 +259,62 @@ class LiabilitySerializer(serializers.ModelSerializer):
         ):
             validated_data["principal_amount"] = validated_data["amount"]
         return create_liability_for_user(user=request.user, validated_data=validated_data)
+
+
+class LiquidityMonthlyCheckinSerializer(serializers.ModelSerializer):
+    asset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects.none(),
+        source="asset",
+        write_only=True,
+    )
+    asset_ref = serializers.IntegerField(source="asset_id", read_only=True)
+    asset_detail = AssetMiniSerializer(source="asset", read_only=True)
+
+    class Meta:
+        model = LiquidityMonthlyCheckin
+        fields = [
+            "id",
+            "asset_id",
+            "asset_ref",
+            "asset_detail",
+            "fiscal_year",
+            "month",
+            "status",
+            "closing_balance_real",
+            "note",
+            "confirmed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "confirmed_at", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        liquidity_asset_queryset = self.context.get("liquidity_asset_queryset")
+        if liquidity_asset_queryset is not None:
+            self.fields["asset_id"].queryset = liquidity_asset_queryset
+
+    def validate_month(self, value: int) -> int:
+        if value < 1 or value > 12:
+            raise serializers.ValidationError("Mes invalido (1-12).")
+        return value
+
+    def validate(self, attrs):
+        asset = attrs.get("asset", getattr(self.instance, "asset", None))
+        if asset is None:
+            raise serializers.ValidationError({"asset_id": "Requerido."})
+        if asset.category != Asset.Category.CASH:
+            raise serializers.ValidationError(
+                {"asset_id": "Solo se permiten check-ins de activos de liquidez."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        validated_data["confirmed_at"] = timezone.now()
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data["confirmed_at"] = timezone.now()
+        return super().update(instance, validated_data)

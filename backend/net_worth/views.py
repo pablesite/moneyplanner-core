@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -6,18 +7,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .api import raise_api_validation_error
-from .models import Asset, Liability, NetWorthSnapshot
+from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
 from .serializers import (
     AssetSerializer,
     EmptySerializer,
     LiabilitySerializer,
+    LiquidityMonthlyCheckinSerializer,
     NetWorthSnapshotSerializer,
 )
 from .services import (
+    build_liquidity_monthly_summary,
     build_net_worth_summary,
     create_or_update_snapshot_from_current,
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
+    get_liquidity_asset_queryset_for_user,
     serialize_net_worth_summary,
     sync_generated_budget_commitments_for_liability,
 )
@@ -56,6 +60,19 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         liability = serializer.save()
         sync_generated_budget_commitments_for_liability(liability=liability)
+
+
+class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = LiquidityMonthlyCheckinSerializer
+    queryset = LiquidityMonthlyCheckin.objects.select_related("asset").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["liquidity_asset_queryset"] = get_liquidity_asset_queryset_for_user(
+            user=self.request.user
+        )
+        return ctx
 
     def perform_update(self, serializer):
         liability = serializer.save()
@@ -145,3 +162,26 @@ class NetWorthSummaryAPIView(APIView):
             raise_api_validation_error(exc)
 
         return Response(serialize_net_worth_summary(summary))
+
+
+class LiquidityMonthlySummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            fiscal_year = int(request.query_params.get("year") or timezone.localdate().year)
+            month = int(request.query_params.get("month") or timezone.localdate().month)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "year y month deben ser enteros."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            summary = build_liquidity_monthly_summary(
+                user=request.user,
+                fiscal_year=fiscal_year,
+                month=month,
+            )
+        except ValidationError as exc:
+            raise_api_validation_error(exc)
+        return Response(summary)

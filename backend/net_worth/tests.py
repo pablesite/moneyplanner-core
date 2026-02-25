@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APITestCase
@@ -13,7 +14,7 @@ from rest_framework.test import APIRequestFactory
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
-from .models import Asset, Liability
+from .models import Asset, Liability, LiquidityMonthlyCheckin
 from .serializers import (
     AssetSerializer,
     EmptySerializer,
@@ -1040,6 +1041,112 @@ class NetWorthApiTests(APITestCase):
         response = self.client.get("/api/net-worth/summary/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["inflation_region"])
+
+    def test_liquidity_checkin_create_rejects_non_cash_asset(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        response = self.client.post(
+            "/api/net-worth/liquidity-checkins/",
+            {
+                "asset_id": asset.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "confirmed",
+                "closing_balance_real": "1000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("asset_id", response.data["error"]["details"])
+
+    def test_liquidity_checkin_create_and_monthly_summary(self):
+        bank = Asset.objects.create(
+            user=self.user,
+            name="Cuenta nomina",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("2000.00"),
+            is_active=True,
+        )
+        create_res = self.client.post(
+            "/api/net-worth/liquidity-checkins/",
+            {
+                "asset_id": bank.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "adjusted",
+                "closing_balance_real": "1420.50",
+                "note": "Saldo real fin de mes",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["asset_ref"], bank.id)
+        self.assertEqual(create_res.data["status"], "adjusted")
+        self.assertEqual(create_res.data["closing_balance_real"], "1420.50000000")
+
+        summary_res = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+        self.assertEqual(summary_res.status_code, status.HTTP_200_OK, summary_res.data)
+        self.assertEqual(summary_res.data["checkins_expected"], 1)
+        self.assertEqual(summary_res.data["checkins_confirmed"], 1)
+        self.assertEqual(summary_res.data["planned_total"], "1500.00")
+        self.assertEqual(summary_res.data["executed_total"], "1420.50")
+        self.assertEqual(summary_res.data["deviation_total"], "-79.50")
+        self.assertEqual(len(summary_res.data["rows"]), 1)
+        row = summary_res.data["rows"][0]
+        self.assertEqual(row["asset_id"], bank.id)
+        self.assertEqual(row["planned_closing_balance"], "1500.00")
+        self.assertEqual(row["executed_closing_balance"], "1420.50")
+        self.assertEqual(row["deviation"], "-79.50")
+        self.assertEqual(row["checkin"]["status"], "adjusted")
+
+    def test_liquidity_checkin_belongs_to_user_and_can_be_deleted(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta ahorro",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        checkin = LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=asset,
+            fiscal_year=2026,
+            month=3,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("500.00"),
+            confirmed_at=timezone.make_aware(datetime(2026, 3, 31)),
+        )
+        delete_res = self.client.delete(f"/api/net-worth/liquidity-checkins/{checkin.id}/")
+        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            LiquidityMonthlyCheckin.objects.filter(id=checkin.id, user=self.user).exists()
+        )
+
+    def test_liquidity_monthly_summary_rejects_invalid_month(self):
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=13")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
 
     @patch(
         "net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x")

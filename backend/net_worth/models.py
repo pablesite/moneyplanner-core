@@ -367,3 +367,47 @@ class NetWorthSnapshot(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id} - {self.snapshot_date} - {self.net_worth}"
+
+
+class LiquidityMonthlyCheckin(models.Model):
+    class Status(models.TextChoices):
+        CONFIRMED = "confirmed", "Confirmado"
+        ADJUSTED = "adjusted", "Ajustado"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="liquidity_monthly_checkins",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="liquidity_monthly_checkins",
+    )
+    fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CONFIRMED)
+    closing_balance_real = models.DecimalField(max_digits=20, decimal_places=8)
+    note = models.CharField(max_length=240, blank=True, default="")
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "fiscal_year", "month"], name="nw_liq_chk_user_ym_idx"),
+            models.Index(fields=["asset"], name="nw_liq_chk_asset_idx"),
+        ]
+        ordering = ["-fiscal_year", "-month", "-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "asset", "fiscal_year", "month"],
+                name="unique_liq_checkin_user_asset_year_month",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"LiquidityMonthlyCheckin(user={self.user_id}, asset={self.asset_id}, "
+            f"{self.fiscal_year}-{self.month}, real={self.closing_balance_real})"
+        )
