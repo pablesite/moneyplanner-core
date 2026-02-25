@@ -16,7 +16,13 @@ from accounts.models import UserSettings
 from core.models import InflationIndex
 from core.services import adjust_for_inflation, convert_currency
 
-from .models import ASSET_SUBCATEGORY_MAP, Asset, Liability, NetWorthSnapshot
+from .models import (
+    ASSET_SUBCATEGORY_MAP,
+    Asset,
+    Liability,
+    LiquidityMonthlyCheckin,
+    NetWorthSnapshot,
+)
 
 LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.MORTGAGE,
@@ -611,6 +617,10 @@ def get_financed_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True)
 
 
+def get_liquidity_asset_queryset_for_user(*, user):
+    return Asset.objects.filter(user=user, is_active=True, category=Asset.Category.CASH)
+
+
 def get_amount_base_value(
     *, amount, currency: str, base_currency: str | None, as_of_date: date | None = None
 ):
@@ -714,6 +724,116 @@ def create_or_update_snapshot_from_current(*, user) -> tuple[NetWorthSnapshot, b
             "net_worth": net_worth,
         },
     )
+
+
+def _serialize_money(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def build_liquidity_monthly_summary(*, user, fiscal_year: int, month: int) -> dict[str, object]:
+    if month < 1 or month > 12:
+        raise ValidationError({"month": "month debe estar entre 1 y 12."})
+
+    base_currency = get_base_currency_for_user(user=user)
+    summary_date = date(fiscal_year, month, _last_day_of_month(fiscal_year, month))
+    liquid_assets = list(
+        get_liquidity_asset_queryset_for_user(user=user).order_by("subcategory", "name", "id")
+    )
+    checkins = {
+        row.asset_id: row
+        for row in LiquidityMonthlyCheckin.objects.filter(
+            user=user,
+            fiscal_year=fiscal_year,
+            month=month,
+        ).select_related("asset")
+    }
+
+    rows: list[dict[str, object]] = []
+    planned_total_base = Decimal("0")
+    executed_total_base = Decimal("0")
+    checked_count = 0
+
+    for asset in liquid_assets:
+        planned_native = Decimal(asset.amount or 0)
+        checkin = checkins.get(asset.id)
+        executed_native = checkin.closing_balance_real if checkin is not None else None
+        effective_native = executed_native if executed_native is not None else planned_native
+
+        planned_base = convert_currency(
+            planned_native, asset.currency, base_currency, date=summary_date
+        )
+        executed_base = (
+            convert_currency(executed_native, asset.currency, base_currency, date=summary_date)
+            if executed_native is not None
+            else None
+        )
+        effective_base = convert_currency(
+            effective_native, asset.currency, base_currency, date=summary_date
+        )
+        deviation_base = (
+            (executed_base - planned_base) if executed_base is not None else Decimal("0")
+        )
+
+        planned_total_base += planned_base
+        executed_total_base += effective_base
+        if checkin is not None:
+            checked_count += 1
+
+        rows.append(
+            {
+                "asset_id": asset.id,
+                "asset_name": asset.name,
+                "asset_category": asset.category,
+                "asset_subcategory": asset.subcategory,
+                "currency": asset.currency,
+                "planned_closing_balance": _serialize_money(planned_native),
+                "executed_closing_balance": _serialize_money(executed_native),
+                "effective_closing_balance": _serialize_money(effective_native),
+                "deviation": _serialize_money(
+                    (executed_native - planned_native)
+                    if executed_native is not None
+                    else Decimal("0")
+                ),
+                "planned_closing_balance_base": _serialize_money(planned_base),
+                "executed_closing_balance_base": _serialize_money(executed_base),
+                "effective_closing_balance_base": _serialize_money(effective_base),
+                "deviation_base": _serialize_money(deviation_base),
+                "checkin": (
+                    {
+                        "id": checkin.id,
+                        "status": checkin.status,
+                        "closing_balance_real": _serialize_money(checkin.closing_balance_real),
+                        "note": checkin.note,
+                        "confirmed_at": checkin.confirmed_at.isoformat()
+                        if checkin.confirmed_at
+                        else None,
+                        "updated_at": checkin.updated_at.isoformat()
+                        if checkin.updated_at
+                        else None,
+                    }
+                    if checkin is not None
+                    else None
+                ),
+            }
+        )
+
+    deviation_total_base = executed_total_base - planned_total_base
+    completion_ratio = (checked_count / len(rows)) if rows else 0.0
+
+    return {
+        "fiscal_year": fiscal_year,
+        "month": month,
+        "base_currency": base_currency,
+        "planned_total": _serialize_money(planned_total_base),
+        "executed_total": _serialize_money(executed_total_base),
+        "deviation_total": _serialize_money(deviation_total_base),
+        "completion_ratio": completion_ratio,
+        "checkins_confirmed": checked_count,
+        "checkins_expected": len(rows),
+        "rows": rows,
+    }
 
 
 def build_net_worth_summary(*, user) -> dict[str, object]:
