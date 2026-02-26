@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,15 +16,20 @@ from .serializers import (
     NetWorthSnapshotSerializer,
 )
 from .services import (
-    build_liquidity_monthly_summary,
-    build_net_worth_summary,
-    create_or_update_snapshot_from_current,
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     get_liquidity_asset_queryset_for_user,
-    serialize_net_worth_summary,
     sync_generated_budget_commitments_for_liability,
 )
+from .services_liquidity import (
+    build_liquidity_monthly_summary,
+    parse_liquidity_monthly_summary_period,
+)
+from .services_snapshots import (
+    create_or_update_snapshot_from_current,
+    import_snapshots_bulk_for_user,
+)
+from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
 
 
 class UserScopedQuerySetMixin:
@@ -61,6 +66,10 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         liability = serializer.save()
         sync_generated_budget_commitments_for_liability(liability=liability)
 
+    def perform_update(self, serializer):
+        liability = serializer.save()
+        sync_generated_budget_commitments_for_liability(liability=liability)
+
 
 class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -75,8 +84,7 @@ class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelView
         return ctx
 
     def perform_update(self, serializer):
-        liability = serializer.save()
-        sync_generated_budget_commitments_for_liability(liability=liability)
+        serializer.save()
 
 
 class NetWorthSnapshotViewSet(
@@ -111,42 +119,21 @@ class NetWorthSnapshotViewSet(
     @action(detail=False, methods=["post"], url_path="import-bulk")
     def import_bulk(self, request):
         if not isinstance(request.data, list):
-            return Response(
-                {"detail": "Expected a JSON array of snapshots."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            raise DRFValidationError({"detail": "Expected a JSON array of snapshots."})
 
         serializer = NetWorthSnapshotSerializer(
             data=request.data, many=True, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
 
-        created_count = 0
-        updated_count = 0
-        snapshots = []
-        for row in serializer.validated_data:
-            snapshot, created = NetWorthSnapshot.objects.update_or_create(
-                user=request.user,
-                snapshot_date=row["snapshot_date"],
-                defaults={
-                    "base_currency": row["base_currency"],
-                    "total_assets": row["total_assets"],
-                    "total_liabilities": row["total_liabilities"],
-                    "net_worth": row["net_worth"],
-                },
-            )
-            if created:
-                created_count += 1
-            else:
-                updated_count += 1
-            snapshots.append(snapshot)
+        result = import_snapshots_bulk_for_user(user=request.user, rows=serializer.validated_data)
 
         return Response(
             {
-                "ok": True,
-                "created": created_count,
-                "updated": updated_count,
-                "snapshots": NetWorthSnapshotSerializer(snapshots, many=True).data,
+                "ok": result["ok"],
+                "created": result["created"],
+                "updated": result["updated"],
+                "snapshots": NetWorthSnapshotSerializer(result["snapshots"], many=True).data,
             },
             status=status.HTTP_200_OK,
         )
@@ -168,13 +155,9 @@ class LiquidityMonthlySummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            fiscal_year = int(request.query_params.get("year") or timezone.localdate().year)
-            month = int(request.query_params.get("month") or timezone.localdate().month)
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "year y month deben ser enteros."}, status=status.HTTP_400_BAD_REQUEST
-            )
+        fiscal_year, month = parse_liquidity_monthly_summary_period(
+            query_params=request.query_params
+        )
 
         try:
             summary = build_liquidity_monthly_summary(

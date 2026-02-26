@@ -45,6 +45,10 @@ class CoreAuthModeApiTests(APITestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get("/api/auth/link-token/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"]["code"], "feature_disabled")
+        self.assertIn("message", response.data["error"])
+        self.assertIn("details", response.data["error"])
 
     @override_settings(CORE_LINKING_SHARED_SECRET="test-shared-secret-32-bytes-minimum")
     def test_link_token_returns_one_time_payload(self):

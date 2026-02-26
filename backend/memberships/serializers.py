@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
 from .services import (
+    create_member_with_default_ownership,
     create_ownership,
     ownership_is_in_use,
     update_ownership,
@@ -11,6 +12,11 @@ from .services import (
 
 
 class FamilyMemberSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return create_member_with_default_ownership(user=user, validated_data=validated_data)
+
     class Meta:
         model = FamilyMember
         fields = ["id", "name", "role", "is_active"]

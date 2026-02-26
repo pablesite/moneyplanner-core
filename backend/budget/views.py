@@ -2,6 +2,7 @@ from django.utils import timezone
 from django.db.models import Sum
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -52,11 +53,11 @@ class AnnualIncomeEntryViewSet(viewsets.ModelViewSet):
     def monthly_summary(self, request):
         year_param = (request.query_params.get("year") or "").strip()
         if not year_param:
-            return Response({"detail": "Query param 'year' es obligatorio."}, status=400)
+            raise DRFValidationError({"year": "Query param 'year' es obligatorio."})
         try:
             fiscal_year = int(year_param)
         except ValueError:
-            return Response({"detail": "Query param 'year' invalido."}, status=400)
+            raise DRFValidationError({"year": "Query param 'year' invalido."})
         payload = build_income_monthly_plan_vs_executed_summary(
             user=request.user,
             fiscal_year=fiscal_year,
@@ -103,11 +104,11 @@ class AnnualExpenseEntryViewSet(viewsets.ModelViewSet):
     def monthly_summary(self, request):
         year_param = (request.query_params.get("year") or "").strip()
         if not year_param:
-            return Response({"detail": "Query param 'year' es obligatorio."}, status=400)
+            raise DRFValidationError({"year": "Query param 'year' es obligatorio."})
         try:
             fiscal_year = int(year_param)
         except ValueError:
-            return Response({"detail": "Query param 'year' invalido."}, status=400)
+            raise DRFValidationError({"year": "Query param 'year' invalido."})
         payload = build_expense_monthly_plan_vs_executed_summary(
             user=request.user,
             fiscal_year=fiscal_year,

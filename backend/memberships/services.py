@@ -8,6 +8,9 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from .models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
 
 
+# Member services
+
+
 def ensure_individual_ownership_for_member(*, user, member: FamilyMember) -> Ownership:
     return Ownership.objects.get_or_create(
         user=user,
@@ -65,6 +68,50 @@ def ensure_primary_family_member_for_user(*, user) -> FamilyMember:
     )
 
 
+def member_is_in_use(member: FamilyMember) -> bool:
+    shared_ownership_ids = Ownership.objects.filter(
+        user=member.user,
+        kind=Ownership.Kind.SHARED,
+        splits__member=member,
+    ).values_list("id", flat=True)
+
+    individual_ids = Ownership.objects.filter(
+        user=member.user,
+        kind=Ownership.Kind.INDIVIDUAL,
+        member=member,
+    ).values_list("id", flat=True)
+
+    candidate_ids = set(shared_ownership_ids) | set(individual_ids)
+    if not candidate_ids:
+        return False
+
+    return any(
+        ownership_is_in_use(o)
+        for o in Ownership.objects.filter(id__in=candidate_ids).only(
+            "id", "user_id", "kind", "member_id"
+        )
+    )
+
+
+def assert_member_can_be_deleted(member: FamilyMember) -> None:
+    if Ownership.objects.filter(
+        user=member.user, kind=Ownership.Kind.SHARED, splits__member=member
+    ).exists():
+        raise DRFValidationError(
+            {
+                "detail": (
+                    "Este miembro aparece en una titularidad compartida. "
+                    "Elimina/ajusta esa titularidad antes."
+                )
+            }
+        )
+
+    if member_is_in_use(member):
+        raise DRFValidationError(
+            {"detail": "No se puede eliminar este miembro porque esta en uso."}
+        )
+
+
 @transaction.atomic
 def delete_member_and_individual_ownership(*, member: FamilyMember) -> None:
     assert_member_can_be_deleted(member)
@@ -76,11 +123,21 @@ def delete_member_and_individual_ownership(*, member: FamilyMember) -> None:
     member.delete()
 
 
+# Ownership services
+
+
 def assert_member_belongs_to_user(*, user, member: FamilyMember | None) -> None:
     if member is None or user is None:
         return
     if member.user_id != user.id:
         raise DRFValidationError({"member": "El miembro no pertenece a este usuario."})
+
+
+def validate_split_percent(*, percent) -> None:
+    if percent <= 0:
+        raise DRFValidationError({"percent": "El porcentaje debe ser > 0."})
+    if percent > 100:
+        raise DRFValidationError({"percent": "El porcentaje no puede ser > 100."})
 
 
 def validate_ownership_payload(*, user, kind, member, splits) -> None:
@@ -102,7 +159,6 @@ def validate_ownership_payload(*, user, kind, member, splits) -> None:
         )
 
     member_ids = [split["member_id"] for split in splits]
-
     if len(member_ids) != len(set(member_ids)):
         raise DRFValidationError({"splits": "No puede haber miembros duplicados en splits."})
 
@@ -121,13 +177,6 @@ def validate_ownership_payload(*, user, kind, member, splits) -> None:
         raise DRFValidationError(
             {"splits": f"La suma de porcentajes debe ser 100. Ahora es {total}."}
         )
-
-
-def validate_split_percent(*, percent) -> None:
-    if percent <= 0:
-        raise DRFValidationError({"percent": "El porcentaje debe ser > 0."})
-    if percent > 100:
-        raise DRFValidationError({"percent": "El porcentaje no puede ser > 100."})
 
 
 def validate_ownership_write_payload(*, user, instance: Ownership | None, attrs: dict) -> None:
@@ -182,6 +231,30 @@ def save_ownership(*, user, instance: Ownership | None, validated_data: dict) ->
     return instance
 
 
+def ownership_is_in_use(ownership: Ownership) -> bool:
+    return OwnershipLink.objects.filter(ownership=ownership).exists()
+
+
+def assert_ownership_can_be_updated(ownership: Ownership) -> None:
+    if ownership.kind == Ownership.Kind.INDIVIDUAL:
+        raise DRFValidationError({"detail": "La titularidad individual no se puede editar."})
+
+    if ownership_is_in_use(ownership):
+        raise DRFValidationError(
+            {"detail": "Esta titularidad ya esta en uso. Crea una nueva en lugar de editarla."}
+        )
+
+
+def assert_ownership_can_be_deleted(ownership: Ownership) -> None:
+    if ownership.kind == Ownership.Kind.INDIVIDUAL:
+        raise DRFValidationError({"detail": "La titularidad individual no se puede eliminar."})
+
+    if ownership_is_in_use(ownership):
+        raise DRFValidationError(
+            {"detail": "Esta titularidad ya esta en uso. No se puede eliminar."}
+        )
+
+
 @transaction.atomic
 def create_ownership(*, user, validated_data: dict) -> Ownership:
     validate_ownership_write_payload(user=user, instance=None, attrs=validated_data)
@@ -199,6 +272,9 @@ def update_ownership(*, ownership: Ownership, user, validated_data: dict) -> Own
 def delete_ownership(*, ownership: Ownership) -> None:
     assert_ownership_can_be_deleted(ownership)
     ownership.delete()
+
+
+# Ownership link services
 
 
 def get_ownership_for_user(*, user, ownership_id: int) -> Ownership:
@@ -248,68 +324,3 @@ def sync_ownership_link(
         defaults={"ownership": ownership},
     )
     return {"ok": True, "ownership_id": link.ownership_id}
-
-
-def ownership_is_in_use(ownership: Ownership) -> bool:
-    return OwnershipLink.objects.filter(ownership=ownership).exists()
-
-
-def member_is_in_use(member: FamilyMember) -> bool:
-    shared_ownership_ids = Ownership.objects.filter(
-        user=member.user,
-        kind=Ownership.Kind.SHARED,
-        splits__member=member,
-    ).values_list("id", flat=True)
-
-    individual_ids = Ownership.objects.filter(
-        user=member.user,
-        kind=Ownership.Kind.INDIVIDUAL,
-        member=member,
-    ).values_list("id", flat=True)
-
-    candidate_ids = set(shared_ownership_ids) | set(individual_ids)
-    if not candidate_ids:
-        return False
-
-    return any(
-        ownership_is_in_use(o)
-        for o in Ownership.objects.filter(id__in=candidate_ids).only(
-            "id", "user_id", "kind", "member_id"
-        )
-    )
-
-
-def assert_member_can_be_deleted(member: FamilyMember) -> None:
-    if Ownership.objects.filter(
-        user=member.user, kind=Ownership.Kind.SHARED, splits__member=member
-    ).exists():
-        raise DRFValidationError(
-            {
-                "detail": "Este miembro aparece en una titularidad compartida. Elimina/ajusta esa titularidad antes."
-            }
-        )
-
-    if member_is_in_use(member):
-        raise DRFValidationError(
-            {"detail": "No se puede eliminar este miembro porque esta en uso."}
-        )
-
-
-def assert_ownership_can_be_updated(ownership: Ownership) -> None:
-    if ownership.kind == Ownership.Kind.INDIVIDUAL:
-        raise DRFValidationError({"detail": "La titularidad individual no se puede editar."})
-
-    if ownership_is_in_use(ownership):
-        raise DRFValidationError(
-            {"detail": "Esta titularidad ya esta en uso. Crea una nueva en lugar de editarla."}
-        )
-
-
-def assert_ownership_can_be_deleted(ownership: Ownership) -> None:
-    if ownership.kind == Ownership.Kind.INDIVIDUAL:
-        raise DRFValidationError({"detail": "La titularidad individual no se puede eliminar."})
-
-    if ownership_is_in_use(ownership):
-        raise DRFValidationError(
-            {"detail": "Esta titularidad ya esta en uso. No se puede eliminar."}
-        )

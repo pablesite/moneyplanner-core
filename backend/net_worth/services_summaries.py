@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import cast
+
+
+def _build_net_worth_summary_impl(
+    *,
+    user,
+    get_base_currency_for_user_fn,
+    get_active_positions_fn,
+    calculate_totals_fn,
+    get_inflation_base_period_fn,
+    timezone_localdate_fn,
+    adjust_for_inflation_fn,
+) -> dict[str, object]:
+    today = timezone_localdate_fn()
+    base_currency = get_base_currency_for_user_fn(user=user)
+    assets_qs, liabilities_qs = get_active_positions_fn(user=user)
+    totals = calculate_totals_fn(
+        assets_qs=assets_qs,
+        liabilities_qs=liabilities_qs,
+        base_currency=base_currency,
+        as_of_date=today,
+    )
+
+    net_worth = totals.total_assets - totals.total_liabilities
+    inflation_region = "ES" if base_currency == "EUR" else None
+    inflation_base_period = None
+
+    total_assets_real = None
+    total_liabilities_real = None
+    net_worth_real = None
+    assets_by_category_real = None
+    liabilities_by_category_real = None
+    liabilities_asset_backed_real = None
+    liabilities_unbacked_real = None
+
+    if inflation_region is not None:
+        inflation_base_period = get_inflation_base_period_fn(region=inflation_region)
+
+        total_assets_real = adjust_for_inflation_fn(
+            totals.total_assets,
+            date=today,
+            region=inflation_region,
+            base_period=inflation_base_period,
+        )
+        total_liabilities_real = adjust_for_inflation_fn(
+            totals.total_liabilities,
+            date=today,
+            region=inflation_region,
+            base_period=inflation_base_period,
+        )
+        net_worth_real = adjust_for_inflation_fn(
+            net_worth,
+            date=today,
+            region=inflation_region,
+            base_period=inflation_base_period,
+        )
+        assets_by_category_real = {
+            category: adjust_for_inflation_fn(
+                amount,
+                date=today,
+                region=inflation_region,
+                base_period=inflation_base_period,
+            )
+            for category, amount in totals.assets_by_category.items()
+        }
+        liabilities_by_category_real = {
+            category: adjust_for_inflation_fn(
+                amount,
+                date=today,
+                region=inflation_region,
+                base_period=inflation_base_period,
+            )
+            for category, amount in totals.liabilities_by_category.items()
+        }
+        liabilities_asset_backed_real = adjust_for_inflation_fn(
+            totals.liabilities_asset_backed,
+            date=today,
+            region=inflation_region,
+            base_period=inflation_base_period,
+        )
+        liabilities_unbacked_real = adjust_for_inflation_fn(
+            totals.liabilities_unbacked,
+            date=today,
+            region=inflation_region,
+            base_period=inflation_base_period,
+        )
+
+    return {
+        "base_currency": base_currency,
+        "total_assets": totals.total_assets,
+        "total_liabilities": totals.total_liabilities,
+        "net_worth": net_worth,
+        "assets_by_category": totals.assets_by_category,
+        "assets_by_subcategory": totals.assets_by_subcategory,
+        "liabilities_by_category": totals.liabilities_by_category,
+        "inflation_region": inflation_region,
+        "inflation_base_period": inflation_base_period,
+        "total_assets_real": total_assets_real,
+        "total_liabilities_real": total_liabilities_real,
+        "net_worth_real": net_worth_real,
+        "assets_by_category_real": assets_by_category_real,
+        "liabilities_by_category_real": liabilities_by_category_real,
+        "liabilities_asset_backed": totals.liabilities_asset_backed,
+        "liabilities_unbacked": totals.liabilities_unbacked,
+        "liabilities_asset_backed_real": liabilities_asset_backed_real,
+        "liabilities_unbacked_real": liabilities_unbacked_real,
+    }
+
+
+def build_net_worth_summary(*, user) -> dict[str, object]:
+    # Local import keeps patching compatibility through `net_worth.services` during transition.
+    from . import services as services_facade
+
+    return _build_net_worth_summary_impl(
+        user=user,
+        get_base_currency_for_user_fn=services_facade.get_base_currency_for_user,
+        get_active_positions_fn=services_facade._get_active_positions,
+        calculate_totals_fn=services_facade.calculate_totals,
+        get_inflation_base_period_fn=services_facade.get_inflation_base_period,
+        timezone_localdate_fn=services_facade.timezone.localdate,
+        adjust_for_inflation_fn=services_facade.adjust_for_inflation,
+    )
+
+
+def serialize_net_worth_summary(summary: dict[str, object]) -> dict[str, object]:
+    assets_by_category = cast(dict[str, Decimal], summary["assets_by_category"])
+    assets_by_subcategory = cast(dict[str, Decimal], summary["assets_by_subcategory"])
+    liabilities_by_category = cast(dict[str, Decimal], summary["liabilities_by_category"])
+    assets_by_category_real = cast(dict[str, Decimal] | None, summary["assets_by_category_real"])
+    liabilities_by_category_real = cast(
+        dict[str, Decimal] | None, summary["liabilities_by_category_real"]
+    )
+
+    return {
+        "base_currency": summary["base_currency"],
+        "total_assets": str(summary["total_assets"]),
+        "total_liabilities": str(summary["total_liabilities"]),
+        "net_worth": str(summary["net_worth"]),
+        "assets_by_category": {k: str(v) for k, v in assets_by_category.items()},
+        "assets_by_subcategory": {k: str(v) for k, v in assets_by_subcategory.items()},
+        "liabilities_by_category": {k: str(v) for k, v in liabilities_by_category.items()},
+        "inflation_region": summary["inflation_region"],
+        "inflation_base_period": (
+            str(summary["inflation_base_period"]) if summary["inflation_base_period"] else None
+        ),
+        "total_assets_real": (
+            str(summary["total_assets_real"]) if summary["total_assets_real"] is not None else None
+        ),
+        "total_liabilities_real": (
+            str(summary["total_liabilities_real"])
+            if summary["total_liabilities_real"] is not None
+            else None
+        ),
+        "net_worth_real": (
+            str(summary["net_worth_real"]) if summary["net_worth_real"] is not None else None
+        ),
+        "assets_by_category_real": (
+            {k: str(v) for k, v in assets_by_category_real.items()}
+            if assets_by_category_real is not None
+            else None
+        ),
+        "liabilities_by_category_real": (
+            {k: str(v) for k, v in liabilities_by_category_real.items()}
+            if liabilities_by_category_real is not None
+            else None
+        ),
+        "liabilities_asset_backed": str(summary["liabilities_asset_backed"]),
+        "liabilities_unbacked": str(summary["liabilities_unbacked"]),
+        "liabilities_asset_backed_real": (
+            str(summary["liabilities_asset_backed_real"])
+            if summary["liabilities_asset_backed_real"] is not None
+            else None
+        ),
+        "liabilities_unbacked_real": (
+            str(summary["liabilities_unbacked_real"])
+            if summary["liabilities_unbacked_real"] is not None
+            else None
+        ),
+    }

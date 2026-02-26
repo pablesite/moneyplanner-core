@@ -12,13 +12,11 @@ from .serializers import (
     OwnershipWriteSerializer,
 )
 from .services import (
-    create_member_with_default_ownership,
     delete_member_and_individual_ownership,
     delete_ownership,
     ensure_primary_family_member_for_user,
     list_ownership_links_for_user,
     sync_ownership_link_from_payload,
-    update_ownership,
 )
 
 
@@ -33,17 +31,8 @@ class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = FamilyMember.objects.all()
 
-    def perform_create(self, serializer):
-        member = create_member_with_default_ownership(
-            user=self.request.user,
-            validated_data=serializer.validated_data,
-        )
-        serializer.instance = member
-
-    def destroy(self, request, *args, **kwargs):
-        member = self.get_object()
-        delete_member_and_individual_ownership(member=member)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def perform_destroy(self, instance):
+        delete_member_and_individual_ownership(member=instance)
 
     @action(detail=False, methods=["post"], url_path="ensure-primary")
     def ensure_primary(self, request):
@@ -65,19 +54,8 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
             return OwnershipReadSerializer
         return OwnershipWriteSerializer
 
-    def perform_update(self, serializer):
-        instance = self.get_object()
-        updated = update_ownership(
-            ownership=instance,
-            user=self.request.user,
-            validated_data=serializer.validated_data,
-        )
-        serializer.instance = updated
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
+    def perform_destroy(self, instance):
         delete_ownership(ownership=instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class OwnershipLinkViewSet(UserScopedQuerySetMixin, viewsets.GenericViewSet):
