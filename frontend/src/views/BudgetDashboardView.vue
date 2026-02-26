@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { coreApi } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import {
@@ -16,6 +17,7 @@ type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 const props = withDefaults(defineProps<{ mode?: BudgetDashboardMode }>(), {
   mode: 'budget',
 });
+const route = useRoute();
 
 type ExpenseMonthlySummaryMonth = {
   month: number;
@@ -38,6 +40,9 @@ type ExpenseMonthlySummaryResponse = {
   months_with_checkins: number;
   has_executed_data: boolean;
 };
+
+type IncomeMonthlySummaryMonth = ExpenseMonthlySummaryMonth;
+type IncomeMonthlySummaryResponse = ExpenseMonthlySummaryResponse;
 
 type ExpenseMonthlyCheckinApiItem = {
   id: number;
@@ -197,6 +202,7 @@ const monthLabels = [
 ];
 const selectedExecutionMonth = ref(new Date().getMonth() + 1);
 const expenseMonthlySummary = ref<ExpenseMonthlySummaryResponse | null>(null);
+const incomeMonthlySummary = ref<IncomeMonthlySummaryResponse | null>(null);
 const expenseCheckinsByEntryId = ref<Record<number, ExpenseMonthlyCheckinApiItem>>({});
 const expenseExecutionLoading = ref(false);
 const expenseExecutionBusyEntryId = ref<number | null>(null);
@@ -226,7 +232,13 @@ const expenseCategoryLabels = new Map(
 const expenseSubcategoryLabels = new Map(
   expenseSubcategories.map((row) => [row.value, row.label] as const),
 );
-const isMonthlyCloseView = computed(() => props.mode === 'monthly-close');
+const isMonthlyCloseView = computed(
+  () =>
+    props.mode === 'monthly-close' ||
+    route.name === 'monthly-close' ||
+    route.path === '/cierre-mensual' ||
+    route.path.startsWith('/cierre-mensual/'),
+);
 const monthlyCloseFlowSteps = computed<{ id: MonthlyCloseStepId; label: string; subtitle: string }[]>(() => [
   { id: 'liq', label: 'Liquidez', subtitle: 'Saldo real de cuentas' },
   { id: 'income', label: 'Ingresos', subtitle: 'Confirmar / ajustar' },
@@ -459,6 +471,14 @@ const expenseSummaryByMonth = computed(() => {
   return map;
 });
 
+const incomeSummaryByMonth = computed(() => {
+  const map = new Map<number, IncomeMonthlySummaryMonth>();
+  for (const row of incomeMonthlySummary.value?.months ?? []) {
+    map.set(row.month, row);
+  }
+  return map;
+});
+
 const selectedExpenseSummaryMonth = computed(() => {
   return expenseSummaryByMonth.value.get(selectedExecutionMonth.value) ?? null;
 });
@@ -510,6 +530,37 @@ const selectedIncomeMonthCompletionRatio = computed(() => {
   if (!total) return 1;
   const checked = monthlyIncomeExecutionEntries.value.filter((row) => !!row.checkin).length;
   return checked / total;
+});
+
+const incomeEvolutionMonths = computed(() => {
+  const rows = monthLabels.map((label, index) => {
+    const month = index + 1;
+    const summary = incomeSummaryByMonth.value.get(month);
+    const planned = toNumberOrZero(summary?.planned);
+    const executed = toNumberOrZero(summary?.executed);
+    return {
+      month,
+      label,
+      planned,
+      executed,
+      hasExecuted: (summary?.checkins_confirmed ?? 0) > 0 || executed > 0,
+    };
+  });
+  const maxMonthAmount = Math.max(1, ...rows.map((row) => Math.max(row.planned, row.executed)));
+  const toHeightPct = (value: number) => {
+    if (value <= 0) return 0;
+    return Math.max(6, Math.min(100, (value / maxMonthAmount) * 100));
+  };
+  return rows.map((row) => ({
+    ...row,
+    planHeightPct: toHeightPct(row.planned),
+    execHeightPct: toHeightPct(row.executed),
+  }));
+});
+
+const incomeEvolutionBaseMonthly = computed(() => {
+  if (incomeMonthlySummary.value) return toNumberOrZero(incomeMonthlySummary.value.planned_total) / 12;
+  return plannedIncomeTotal.value / 12;
 });
 
 const selectedLiquidityMonthPlanned = computed(() =>
@@ -1130,11 +1181,23 @@ async function loadIncomeCheckinsForSelectedMonth(): Promise<void> {
   }
 }
 
+async function loadIncomeExecutionSummary(year = fiscalYear.value): Promise<void> {
+  try {
+    const response = await coreApi.get<IncomeMonthlySummaryResponse>(
+      '/api/budget/annual-income/monthly-summary/',
+      { params: { year } },
+    );
+    incomeMonthlySummary.value = response.data ?? null;
+  } catch (e: unknown) {
+    incomeExecutionError.value = toApiErrorMessage(e);
+  }
+}
+
 async function refreshIncomeExecutionData(): Promise<void> {
   incomeExecutionLoading.value = true;
   incomeExecutionError.value = null;
   try {
-    await loadIncomeCheckinsForSelectedMonth();
+    await Promise.all([loadIncomeExecutionSummary(), loadIncomeCheckinsForSelectedMonth()]);
   } finally {
     incomeExecutionLoading.value = false;
   }
@@ -1985,7 +2048,7 @@ watch(
     </section>
 
     <section
-      v-if="!isMonthlyCloseView || (isMonthlyCloseView && activeMonthlyCloseStep === 'liq')"
+      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'liq'"
       class="card ui-pro-panel ui-budget-checkin mt-3"
     >
       <div class="ui-budget-checkin-header">
@@ -2509,36 +2572,84 @@ watch(
         <div class="ui-budget-evolution-head">
           <div>
             <h3>Evolucion ejecutada (barras)</h3>
-            <p>
+            <p v-if="section.id === 'income'">
+              Compara `Previsto` vs `Ejecutado` por mes usando los check-ins del cierre mensual
+              (ingresos recurrentes).
+            </p>
+            <p v-else>
               Preparado para comparar `Previsto` vs `Ejecutado` por mes. Actualmente en modo
               placeholder hasta implementar contabilidad.
             </p>
           </div>
-          <span class="ui-budget-pill">Pendiente contabilidad</span>
+          <span class="ui-budget-pill">
+            {{ section.id === 'income' ? 'Cierre mensual activo' : 'Pendiente contabilidad' }}
+          </span>
         </div>
 
-        <div class="ui-budget-evolution-bars" aria-label="Placeholder de barras de evolucion">
+        <div
+          class="ui-budget-evolution-bars"
+          :aria-label="
+            section.id === 'income'
+              ? 'Barras de evolucion de ingresos previsto vs ejecutado por mes'
+              : 'Placeholder de barras de evolucion'
+          "
+        >
           <div
-            v-for="month in monthLabels"
-            :key="`${section.id}-${month}`"
+            v-for="point in section.id === 'income' ? incomeEvolutionMonths : monthLabels.map((label) => ({ label }))"
+            :key="`${section.id}-${point.label}`"
             class="ui-budget-month-col"
           >
             <div class="ui-budget-month-rail">
-              <div class="ui-budget-month-plan" />
-              <div class="ui-budget-month-exec-pending" />
+              <div
+                class="ui-budget-month-plan"
+                :style="
+                  section.id === 'income' && 'planHeightPct' in point
+                    ? { height: `${point.planHeightPct}%` }
+                    : undefined
+                "
+                :title="
+                  section.id === 'income' && 'planned' in point
+                    ? `Previsto ${point.label}: ${formatMoney(point.planned)} EUR`
+                    : undefined
+                "
+              />
+              <div
+                :class="
+                  section.id === 'income' && 'hasExecuted' in point && point.hasExecuted
+                    ? 'ui-budget-month-exec'
+                    : 'ui-budget-month-exec-pending'
+                "
+                :style="
+                  section.id === 'income' && 'execHeightPct' in point
+                    ? { height: `${point.execHeightPct}%` }
+                    : undefined
+                "
+                :title="
+                  section.id === 'income' && 'executed' in point
+                    ? `Ejecutado ${point.label}: ${formatMoney(point.executed)} EUR`
+                    : undefined
+                "
+              />
             </div>
-            <span class="ui-budget-month-label">{{ month }}</span>
+            <span class="ui-budget-month-label">{{ point.label }}</span>
           </div>
         </div>
 
         <div class="ui-budget-evolution-legend">
           <span><i class="ui-budget-legend-dot ui-budget-legend-plan" /> Previsto</span>
-          <span
-            ><i class="ui-budget-legend-dot ui-budget-legend-exec" /> Ejecutado (pendiente)</span
-          >
+          <span v-if="section.id === 'income'">
+            <i class="ui-budget-legend-dot ui-budget-legend-exec-solid" /> Ejecutado
+          </span>
+          <span v-else>
+            <i class="ui-budget-legend-dot ui-budget-legend-exec" /> Ejecutado (pendiente)
+          </span>
           <span>
-            Base mensual orientativa:
-            <strong>{{ formatCompactMoney(section.totalAnnual / 12) }} EUR</strong>
+            {{ section.id === 'income' ? 'Base recurrente mensual:' : 'Base mensual orientativa:' }}
+            <strong>{{
+              formatCompactMoney(section.id === 'income' ? incomeEvolutionBaseMonthly : section.totalAnnual / 12)
+            }}
+              EUR</strong
+            >
           </span>
         </div>
       </div>
@@ -3633,9 +3744,9 @@ watch(
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   padding: 6px 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
   gap: 4px;
 }
 
@@ -3644,6 +3755,7 @@ watch(
   border-radius: 6px;
   background: linear-gradient(180deg, rgba(110, 209, 255, 0.28), rgba(110, 209, 255, 0.12));
   border: 1px solid rgba(110, 209, 255, 0.2);
+  min-height: 3px;
 }
 
 .ui-budget-month-exec-pending {
@@ -3655,6 +3767,15 @@ watch(
     rgba(255, 255, 255, 0.08) 0 4px,
     rgba(255, 255, 255, 0.02) 4px 8px
   );
+  min-height: 3px;
+}
+
+.ui-budget-month-exec {
+  height: 22%;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(110, 255, 214, 0.34), rgba(54, 211, 153, 0.16));
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  min-height: 3px;
 }
 
 .ui-budget-month-label {
@@ -3686,6 +3807,10 @@ watch(
 .ui-budget-legend-exec {
   background: rgba(255, 255, 255, 0.2);
   border: 1px dashed rgba(255, 255, 255, 0.35);
+}
+
+.ui-budget-legend-exec-solid {
+  background: rgba(94, 234, 212, 0.75);
 }
 
 .ui-budget-groups {
