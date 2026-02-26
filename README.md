@@ -1,89 +1,33 @@
-# moneyplanner core
+# MoneyPlanner Core (OSS)
 
-Open-source basic net-worth manager with Vue frontend and Django/DRF backend.
+Base open-core de MoneyPlanner.
+
+## Qué incluye hoy
+1. Patrimonio
+2. Presupuesto y cierre mensual
+3. Introducción de datos
+4. Guía / coach financiero v1
+5. Familia / titularidad
 
 ## Stack
-1. Frontend: Vue 3 + Vite
-2. Backend: Django + DRF + SimpleJWT
-3. DB: PostgreSQL 16
-4. Local infra: Docker Compose
+1. `backend/` Django + DRF
+2. `frontend/` Vue + Vite
+3. PostgreSQL
+4. Docker Compose
 
-## Version
-- Current version is defined in `VERSION`.
-- Releases are tagged as `vX.Y.Z` in Git.
+## Arranque rápido
+1. `docker compose up --build -d`
+2. Frontend: `http://localhost:5173`
+3. Backend: `http://localhost:8000`
 
-## Requirements
-1. Docker Desktop
+## Documentación (comunidad)
+1. `core/docs/README.md`
+2. `core/docs/como-contribuir.md`
+3. `core/docs/roadmap-comunidad.md`
+4. `CONTRIBUTING.md`
+5. `RELEASING.md`
 
-## Quick Start (Docker)
-1. Create `backend/.env` from `backend/.env.example`.
-2. (Optional) Create root `.env` if you want to override `POSTGRES_*` in Docker.
-3. Start all services:
-
-```bash
-docker compose up --build
-```
-
-Local endpoints:
-1. Frontend: `http://localhost:5173`
-2. Backend API: `http://localhost:8000`
-
-## Backend Env Vars
-Backend reads `backend/.env`. Minimal example:
-
-```env
-DJANGO_SECRET_KEY=dev-insecure-secret
-DJANGO_DEBUG=1
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-CORS_ALLOWED_ORIGINS=http://localhost:5173
-
-DB_NAME=core
-DB_USER=core
-DB_PASSWORD=core
-DB_HOST=db
-DB_PORT=5432
-
-SEED_CREATE_ADMIN=1
-SEED_ADMIN_USERNAME=admin
-SEED_ADMIN_EMAIL=admin@example.com
-SEED_ADMIN_PASSWORD=admin
-SEED_FORCE_ADMIN_PASSWORD=0
-
-FX_PIVOT=USD
-```
-
-## Seed Data
-On Docker startup backend runs:
-1. `python manage.py migrate`
-2. `python manage.py seed`
-
-Manual run:
-
-```bash
-docker compose exec backend python manage.py seed
-```
-
-## Migrations
-
-```bash
-docker compose exec backend python manage.py makemigrations
-docker compose exec backend python manage.py migrate
-```
-
-## Core Scope (Current)
-1. Authentication + user settings
-2. Assets
-3. Liabilities
-4. Net-worth summary
-5. Daily snapshots
-6. Annual income entries with fiscal year support and yearly totals
-
-## Troubleshooting
-1. API not responding: `docker compose logs -f backend`
-2. CORS issues: verify `CORS_ALLOWED_ORIGINS` in `backend/.env`
-3. Port conflicts: adjust ports in `docker-compose.yml`
-
-## OSS Collaboration
-1. Contribution guide: `CONTRIBUTING.md`
-2. Release/versioning policy: `RELEASING.md`
-
+## Objetivo del repo público
+1. Publicar una base útil desde ya.
+2. Mejorar calidad y UX con feedback real.
+3. Recibir ideas y contribuciones de la comunidad.
