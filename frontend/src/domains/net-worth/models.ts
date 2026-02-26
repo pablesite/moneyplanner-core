@@ -62,6 +62,14 @@ export type Summary = {
   liabilities_by_category_real: Record<string, string> | null;
 };
 
+export type Ownership = {
+  id: number;
+  kind: 'individual' | 'shared';
+  member: { id: number; name: string; role: 'adult' | 'child' } | null;
+  splits: { member: { id: number; name: string; role: 'adult' | 'child' }; percent: string }[];
+  notes: string;
+};
+
 export type NetWorthWritePayload = Partial<Asset> & {
   financed_asset_id?: number | null;
 };

@@ -3,6 +3,7 @@ export * from './charts';
 export * from './composables';
 export * from './extensions';
 export * from './models';
+export * from './ownership';
 export * from './store';
 export { default as ItemForm } from './components/ItemForm.vue';
 export { default as ItemList } from './components/ItemList.vue';

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
 import { useAuxDataPage } from '@/domains/aux-data';
+import { FamilyMemberManager, OwnershipManager } from '@/domains/people';
 
 const {
   loading,
@@ -21,11 +22,14 @@ const {
 } = useAuxDataPage();
 
 const sections = reactive({
-  ipc: true,
+  family: true,
+  ipc: false,
   fx: false,
 });
+type FamilyTab = 'members' | 'ownerships';
+const familyTab = ref<FamilyTab>('members');
 
-function toggleSection(section: 'ipc' | 'fx'): void {
+function toggleSection(section: 'family' | 'ipc' | 'fx'): void {
   sections[section] = !sections[section];
 }
 </script>
@@ -36,6 +40,43 @@ function toggleSection(section: 'ipc' | 'fx'): void {
 
     <div v-if="error" class="alert mt-3">{{ error }}</div>
     <div v-if="successMessage" class="ui-alert-success">{{ successMessage }}</div>
+
+    <section class="card ui-pro-panel ui-settings-accordion-item">
+      <button
+        class="ui-settings-toggle"
+        type="button"
+        :aria-expanded="sections.family"
+        @click="toggleSection('family')"
+      >
+        <span class="ui-settings-toggle-title">Miembros de la familia</span>
+        <span class="ui-settings-toggle-icon" aria-hidden="true">
+          {{ sections.family ? '-' : '+' }}
+        </span>
+      </button>
+      <div v-if="sections.family" class="ui-settings-content">
+        <div class="ui-settings-family-tabs">
+          <button
+            class="btn opacity-60"
+            type="button"
+            :class="{ '!opacity-100': familyTab === 'members' }"
+            @click="familyTab = 'members'"
+          >
+            Miembros
+          </button>
+          <button
+            class="btn opacity-60"
+            type="button"
+            :class="{ '!opacity-100': familyTab === 'ownerships' }"
+            @click="familyTab = 'ownerships'"
+          >
+            Titularidades
+          </button>
+        </div>
+
+        <FamilyMemberManager v-if="familyTab === 'members'" />
+        <OwnershipManager v-else />
+      </div>
+    </section>
 
     <section class="card ui-pro-panel ui-settings-accordion-item">
       <button
@@ -178,52 +219,3 @@ function toggleSection(section: 'ipc' | 'fx'): void {
     <div v-if="loading" class="ui-status-line">Cargando datos auxiliares...</div>
   </div>
 </template>
-
-<style scoped>
-.ui-settings-page-title {
-  margin: 0 0 4px;
-}
-
-.ui-settings-accordion-item {
-  padding: 0;
-  overflow: hidden;
-}
-
-.ui-settings-toggle {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-.ui-settings-toggle:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.ui-settings-toggle-title {
-  text-align: left;
-  font-weight: 600;
-}
-
-.ui-settings-toggle-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-
-.ui-settings-content {
-  border-top: 1px solid rgba(255, 255, 255, 0.09);
-  padding: 12px 14px 14px;
-}
-</style>

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "core",
     "budget.apps.BudgetConfig",
     "accounts.apps.AccountsConfig",
+    "memberships.apps.MembershipsConfig",
     "net_worth",
 ]
 

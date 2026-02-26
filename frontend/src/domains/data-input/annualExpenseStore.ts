@@ -31,6 +31,7 @@ export type AnnualExpenseEntry = {
   timeProfile: AnnualTimeProfile;
   cashflowRole: AnnualExpenseCashflowRole;
   eventGroup: string;
+  targetMonth: number | null;
   termEndYear: number | null;
   amountAnnual: number;
   fiscalYear: number;
@@ -48,6 +49,7 @@ export type AnnualExpenseDraft = {
   timeProfile?: AnnualTimeProfile;
   cashflowRole?: AnnualExpenseCashflowRole;
   eventGroup?: string;
+  targetMonth?: number | null;
   termEndYear?: number | null;
   amountAnnual: string;
   fiscalYear: number;
@@ -69,6 +71,7 @@ type AnnualExpenseApiItem = {
   time_profile?: AnnualTimeProfile;
   cashflow_role?: AnnualExpenseCashflowRole;
   event_group?: string;
+  target_month?: number | null;
   term_end_year?: number | null;
   amount_annual: string;
   fiscal_year: number;
@@ -97,6 +100,7 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
     timeProfile,
     cashflowRole: item.cashflow_role ?? 'operating',
     eventGroup: item.event_group ?? '',
+    targetMonth: item.target_month == null ? null : Number(item.target_month),
     termEndYear: item.term_end_year == null ? null : Number(item.term_end_year),
     amountAnnual: Number(item.amount_annual),
     fiscalYear: Number(item.fiscal_year),
@@ -161,6 +165,7 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
           (draft.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent'),
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
+        target_month: draft.targetMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
@@ -211,6 +216,7 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
           (draft.expenseType === 'one_off' ? 'one_off' : 'structural_recurrent'),
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
+        target_month: draft.targetMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
