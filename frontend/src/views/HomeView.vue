@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { RouterLink } from 'vue-router';
-import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
-import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
+import { useAnnualExpenseStore, useAnnualIncomeStore } from '@/domains/data-input';
+import ScoreGradeBadge from '@/domains/guide/components/ScoreGradeBadge.vue';
 import { computeGuidePhaseDiagnostics } from '@/domains/guide/phaseDiagnostics';
 import { getActiveGuidePhase, guidePhases, type GuidePhase } from '@/domains/guide/phases';
 import { gradeFromScore, scoreColor } from '@/domains/guide/scoreVisuals';
-import { useNetWorthStore } from '@/stores/netWorth';
+import { useNetWorthStore } from '@/domains/net-worth';
 
 const phases = guidePhases;
 const store = useNetWorthStore();
-const annualIncomeStore = useAnnualIncomeStore('saas');
-const annualExpenseStore = useAnnualExpenseStore('saas');
+const annualIncomeStore = useAnnualIncomeStore('core');
+const annualExpenseStore = useAnnualExpenseStore('core');
 const sharedPhaseDiagnostics = computed(() =>
   computeGuidePhaseDiagnostics({
-    summary: store.summary as (typeof store.summary & { liabilities_unbacked?: string | null }),
+    summary: store.summary as typeof store.summary & { liabilities_unbacked?: string | null },
     assets: store.assets,
     liabilities: store.liabilities,
     annualIncomeEntries: annualIncomeStore.entries.value,
@@ -22,7 +22,6 @@ const sharedPhaseDiagnostics = computed(() =>
   }),
 );
 const activePhase = computed(() => getActiveGuidePhase());
-const completedPhases = computed(() => phases.filter((phase) => phase.progress >= 100).length);
 
 function phaseState(phase: GuidePhase): 'done' | 'active' | 'next' {
   if (phase.progress >= 100) return 'done';
@@ -33,6 +32,12 @@ function phaseState(phase: GuidePhase): 'done' | 'active' | 'next' {
 function phaseDetailTo(phaseId: number): string {
   return `/guia/fases/${phaseId}`;
 }
+
+type PhaseSnapshot = {
+  phase: GuidePhase;
+  score: number;
+  grade: string;
+};
 
 type SummaryExtended = {
   liabilities_unbacked?: string | null;
@@ -86,7 +91,9 @@ const chartRows = computed(() => {
 
 const assetRows = computed(() => chartRows.value.filter((row) => row.assets > 0));
 const activeAssets = computed(() => store.assets.filter((asset) => asset.is_active));
-const activeLiabilities = computed(() => store.liabilities.filter((liability) => liability.is_active));
+const activeLiabilities = computed(() =>
+  store.liabilities.filter((liability) => liability.is_active),
+);
 const liabilitiesValue = computed(() => Math.max(0, toNumber(store.summary?.total_liabilities)));
 
 const illiquidInvestmentSubcategories = new Set([
@@ -203,7 +210,8 @@ const totalMonthlyDebtPaymentValue = computed(() =>
 
 const recurrentAnnualIncomeValue = computed(() =>
   annualIncomeStore.entries.value.reduce(
-    (acc, entry) => (entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc),
+    (acc, entry) =>
+      entry.incomeType === 'recurrent' ? acc + Number(entry.amountAnnual ?? 0) : acc,
     0,
   ),
 );
@@ -343,15 +351,41 @@ function phaseDonutStyle(phase: GuidePhase): Record<string, string> {
   };
 }
 
-function phaseGradeLabel(phase: GuidePhase): string {
-  return gradeFromScore(phaseDisplayProgress(phase));
+const phaseSnapshots = computed<PhaseSnapshot[]>(() =>
+  phases.map((phase) => {
+    const score = phaseDisplayProgress(phase);
+    return {
+      phase,
+      score,
+      grade: gradeFromScore(score),
+    };
+  }),
+);
+
+const mostTensePhase = computed(
+  () => phaseSnapshots.value.slice().sort((a, b) => a.score - b.score)[0] ?? null,
+);
+
+const strongestPhase = computed(
+  () => phaseSnapshots.value.slice().sort((a, b) => b.score - a.score)[0] ?? null,
+);
+
+function phaseSummaryStyle(snapshot: PhaseSnapshot | null): Record<string, string> {
+  if (!snapshot) return {};
+  const color = scoreColor(snapshot.score);
+  return {
+    borderColor: color.replace(')', ' / 0.28)'),
+  };
 }
 
-function phaseBadgeStyle(phase: GuidePhase): Record<string, string> {
+function phaseCardStyle(phase: GuidePhase): Record<string, string> {
   const score = phaseDisplayProgress(phase);
+  const grade = gradeFromScore(score);
+  const tintColor =
+    grade === 'A' || grade === 'B' ? scoreColor(score).replace(')', ' / 0.08)') : 'transparent';
   return {
-    color: scoreColor(score),
-    borderColor: 'rgba(255, 255, 255, 0.22)',
+    '--ui-home-phase-border-color': scoreColor(score),
+    '--ui-home-phase-tint': tintColor,
   };
 }
 
@@ -368,22 +402,35 @@ onMounted(() => {
     <section class="card ui-pro-panel ui-home-intro">
       <div class="ui-home-intro-text">
         <p class="ui-pro-kicker">Guia financiera</p>
-        <h1 class="h1 ui-home-title">
-          Ruta activa: Fase {{ activePhase.id }} - {{ activePhase.title }}
-        </h1>
+        <h1 class="h1 ui-home-title">Mapa de fases financieras</h1>
         <p class="subtle ui-home-copy">
-          Hoja de ruta por fases para avanzar sin perder el foco. Entra en cada fase para ver
-          diagnostico, contexto y siguientes acciones.
+          Cada fase refleja una dimension distinta de tu situacion. Mejorar una puede afectar
+          temporalmente a otra, asi que conviene revisar el equilibrio global.
+        </p>
+        <p v-if="mostTensePhase" class="ui-home-focus-line">
+          <span class="ui-home-focus-label">Foco actual:</span>
+          F{{ mostTensePhase.phase.id }} - {{ mostTensePhase.phase.title }}
+          <span class="ui-home-focus-meta">
+            ({{ mostTensePhase.grade }} · {{ mostTensePhase.score }}%)
+          </span>
         </p>
       </div>
       <div class="ui-home-intro-kpis">
-        <div class="ui-home-intro-kpi">
-          <span>Fases completadas</span>
-          <strong>{{ completedPhases }}/{{ phases.length }}</strong>
+        <div class="ui-home-intro-kpi" :style="phaseSummaryStyle(mostTensePhase)">
+          <span>Mayor tension</span>
+          <strong v-if="mostTensePhase">
+            F{{ mostTensePhase.phase.id }} · {{ mostTensePhase.grade }} ·
+            {{ mostTensePhase.score }}%
+          </strong>
+          <strong v-else>-</strong>
         </div>
-        <div class="ui-home-intro-kpi">
-          <span>Progreso fase activa</span>
-          <strong>{{ activePhase.progress }}%</strong>
+        <div class="ui-home-intro-kpi" :style="phaseSummaryStyle(strongestPhase)">
+          <span>Mejor posicionada</span>
+          <strong v-if="strongestPhase">
+            F{{ strongestPhase.phase.id }} · {{ strongestPhase.grade }} ·
+            {{ strongestPhase.score }}%
+          </strong>
+          <strong v-else>-</strong>
         </div>
       </div>
     </section>
@@ -399,6 +446,7 @@ onMounted(() => {
           v-for="phase in phases"
           :key="phase.id"
           class="ui-home-phase-card"
+          :style="phaseCardStyle(phase)"
           :class="{
             'ui-home-phase-done': phaseState(phase) === 'done',
             'ui-home-phase-active': phaseState(phase) === 'active',
@@ -407,9 +455,7 @@ onMounted(() => {
           <RouterLink class="ui-home-phase-link" :to="phaseDetailTo(phase.id)">
             <div class="ui-home-phase-head">
               <span class="ui-home-phase-id">F{{ phase.id }}</span>
-              <span class="badge" :style="phaseBadgeStyle(phase)">{{
-                phaseGradeLabel(phase)
-              }}</span>
+              <ScoreGradeBadge :score="phaseDisplayProgress(phase)" />
             </div>
 
             <div class="ui-home-phase-title">{{ phase.title }}</div>
@@ -426,62 +472,3 @@ onMounted(() => {
     </article>
   </div>
 </template>
-
-<style scoped>
-.ui-home-intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: end;
-}
-
-.ui-home-intro-kpis {
-  display: grid;
-  gap: 8px;
-  min-width: 220px;
-}
-
-.ui-home-intro-kpi {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  display: grid;
-  gap: 3px;
-}
-
-.ui-home-intro-kpi span {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.ui-home-intro-kpi strong {
-  font-size: 21px;
-}
-
-.ui-home-phase-link {
-  color: inherit;
-  text-decoration: none;
-  display: grid;
-  gap: 8px;
-  height: 100%;
-}
-
-.ui-home-phase-cta {
-  margin-top: auto;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(45, 212, 191, 0.95);
-}
-
-@media (max-width: 860px) {
-  .ui-home-intro {
-    grid-template-columns: 1fr;
-  }
-
-  .ui-home-intro-kpis {
-    min-width: 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-</style>
