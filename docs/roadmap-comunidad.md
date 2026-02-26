@@ -7,7 +7,11 @@ Consolidar una base open-core potente, usable y facil de mejorar por la comunida
 1. Estabilidad y bugs en flujos existentes.
 2. UX de introduccion de datos (menos friccion).
 3. Calidad: tests y validaciones.
-4. Documentacion y onboarding de colaboradores.
+4. Refactor del backend por fases (mantenibilidad).
+5. Documentacion y onboarding de colaboradores.
+
+## Roadmaps activos
+1. Backend refactor (profundo): `core/docs/roadmap-refactor-backend.md`
 
 ## Modulos en evolucion
 1. Patrimonio
@@ -24,6 +28,7 @@ Consolidar una base open-core potente, usable y facil de mejorar por la comunida
 3. Mejoras de accesibilidad y responsive.
 4. Export/import y validacion de datos.
 5. DX: scripts y docs de desarrollo.
+6. Refactors pequenos del backend con tests previos.
 
 ## No prioritario ahora
 1. Nuevos modulos grandes antes de estabilizar los existentes.
