@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
+import { useAnnualExpenseStore, useAnnualIncomeStore } from '@/domains/data-input';
 import { RouterLink, useRoute } from 'vue-router';
-import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
+import ScoreGradeLabel from '@/domains/guide/components/ScoreGradeLabel.vue';
+import ScoreHealthBadge from '@/domains/guide/components/ScoreHealthBadge.vue';
+import ScoreMeterRow from '@/domains/guide/components/ScoreMeterRow.vue';
 import { computeGuidePhaseDiagnostics } from '@/domains/guide/phaseDiagnostics';
 import { findGuidePhaseById, guidePhases } from '@/domains/guide/phases';
-import { gradeFromScore, scoreBadgeStyle, scoreColor } from '@/domains/guide/scoreVisuals';
-import { useNetWorthStore } from '@/stores/netWorth';
+import { useNetWorthStore } from '@/domains/net-worth';
 
 type ScoreTone = 'solid' | 'medium' | 'watch' | 'risk';
 
@@ -56,6 +57,12 @@ type SummarySection = {
   cards: SummaryCard[];
 };
 
+type PhaseQuickAction = {
+  id: string;
+  label: string;
+  to: string;
+};
+
 const route = useRoute();
 const store = useNetWorthStore();
 const annualIncomeStore = useAnnualIncomeStore('saas');
@@ -80,6 +87,118 @@ const hasDiagnosticPhase = computed(
     isEmergencyFundPhase.value ||
     isNetWorthHealthPhase.value,
 );
+const phaseQuickActions = computed<PhaseQuickAction[]>(() => {
+  const phaseValue = phase.value;
+  if (!phaseValue) return [];
+
+  const actionsById: Record<number, PhaseQuickAction[]> = {
+    1: [
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+    ],
+    2: [
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+    ],
+    3: [
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+    ],
+    4: [
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+    ],
+    5: [
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+    ],
+  };
+
+  return (
+    actionsById[phaseValue.id] ?? [
+      {
+        id: 'data-input',
+        label: 'Datos',
+        to: '/introduccion-datos',
+      },
+      {
+        id: 'budget',
+        label: 'Presupuesto',
+        to: '/presupuesto',
+      },
+      {
+        id: 'net-worth',
+        label: 'Patrimonio',
+        to: '/patrimonio',
+      },
+    ]
+  );
+});
 const summaryExtended = computed(() => store.summary as SummaryExtended | null);
 const sharedPhaseDiagnostics = computed(() =>
   computeGuidePhaseDiagnostics({
@@ -154,18 +273,6 @@ function weightedScore(items: { score: number; weight: number }[]): number {
   if (totalWeight <= 0) return 0;
   const sum = items.reduce((acc, item) => acc + item.score * item.weight, 0);
   return clamp(sum / totalWeight, 0, 100);
-}
-
-function scoreFillStyle(score: number): Record<string, string> {
-  const normalized = clamp(score, 0, 100);
-  return {
-    width: `${normalized}%`,
-    backgroundColor: scoreColor(score),
-  };
-}
-
-function gradeStyle(score: number): Record<string, string> {
-  return { color: scoreColor(score) };
 }
 
 const chartRows = computed(() => {
@@ -533,11 +640,13 @@ const structuralOperatingMonthlyExpenseValue = computed(() =>
   recurrentOperationalExpenseValue.value > 0 ? recurrentOperationalExpenseValue.value / 12 : null,
 );
 const currentCommittedMonthlyExpenseValue = computed(() => {
-  const annualCommitted = recurrentOperationalExpenseValue.value + temporaryCommitmentExpenseValue.value;
+  const annualCommitted =
+    recurrentOperationalExpenseValue.value + temporaryCommitmentExpenseValue.value;
   return annualCommitted > 0 ? annualCommitted / 12 : null;
 });
 const emergencyCoverageMonthsBaseValue = computed(() =>
-  structuralOperatingMonthlyExpenseValue.value != null && structuralOperatingMonthlyExpenseValue.value > 0
+  structuralOperatingMonthlyExpenseValue.value != null &&
+  structuralOperatingMonthlyExpenseValue.value > 0
     ? emergencyLiquidAssetsValue.value / structuralOperatingMonthlyExpenseValue.value
     : null,
 );
@@ -764,7 +873,6 @@ const globalScoreValue = computed(() => {
 });
 
 const globalToneValue = computed(() => toneFromScore(globalScoreValue.value));
-const globalBadgeStyleValue = computed(() => scoreBadgeStyle(globalScoreValue.value));
 
 const globalLabelValue = computed(() => {
   const tone = globalToneValue.value;
@@ -1068,7 +1176,8 @@ const cashFlowSummarySections = computed<SummarySection[]>(() => {
     {
       id: 'cashflow-core',
       title: 'Caja Recurrente',
-      description: 'Lectura principal de tension de caja: base operativa y cargas temporales de caja.',
+      description:
+        'Lectura principal de tension de caja: base operativa y cargas temporales de caja.',
       columns: 4,
       cards: [
         {
@@ -1417,7 +1526,19 @@ watch(hasDiagnosticPhase, () => {
   <div class="container ui-pro-page">
     <section class="card ui-pro-panel ui-guide-phase-head">
       <div class="ui-guide-phase-nav-row">
-        <RouterLink class="ui-guide-back-link" to="/inicio">Ver ruta completa</RouterLink>
+        <div class="ui-guide-phase-nav-links">
+          <RouterLink class="ui-guide-back-link" to="/">Ver ruta completa</RouterLink>
+          <div v-if="phaseQuickActions.length" class="ui-guide-phase-inline-actions">
+            <RouterLink
+              v-for="action in phaseQuickActions"
+              :key="action.id"
+              class="ui-guide-phase-inline-action-link"
+              :to="action.to"
+            >
+              {{ action.label }}
+            </RouterLink>
+          </div>
+        </div>
         <div class="ui-guide-phase-switch">
           <RouterLink
             v-for="phaseItem in guidePhases"
@@ -1502,35 +1623,22 @@ watch(hasDiagnosticPhase, () => {
       </div>
 
       <div class="ui-guide-score-top">
-        <div
-          class="ui-guide-health-score-badge"
-          :class="`ui-guide-health-${globalToneValue}`"
-          :style="globalBadgeStyleValue"
-        >
-          <span class="ui-guide-health-score-text">{{ globalLabelValue }}</span>
-          <strong class="ui-guide-health-score-value"
-            >{{ formatNumber(globalScoreValue, 0) }}%</strong
-          >
-        </div>
+        <ScoreHealthBadge
+          :label="globalLabelValue"
+          :score="globalScoreValue"
+          :tone="globalToneValue"
+          :formatted-score="`${formatNumber(globalScoreValue, 0)}%`"
+        />
       </div>
 
-      <div class="ui-guide-meter-row">
-        <span class="ui-guide-grade ui-guide-grade-global" :style="gradeStyle(globalScoreValue)">{{
-          gradeFromScore(globalScoreValue)
-        }}</span>
-        <div class="ui-guide-global-meter">
-          <span class="ui-guide-global-meter-fill" :style="scoreFillStyle(globalScoreValue)"></span>
-        </div>
-      </div>
+      <ScoreMeterRow :score="globalScoreValue" large-grade />
 
       <div class="ui-guide-score-grid" :class="`ui-guide-score-grid-cols-${scoreCards.length}`">
         <article v-for="card in scoreCards" :key="card.id" class="ui-guide-score-card">
           <div class="ui-guide-score-card-head">
             <h3 class="ui-guide-score-card-title">{{ card.title }}</h3>
             <div class="ui-guide-score-card-value-wrap">
-              <span class="ui-guide-score-card-grade" :style="gradeStyle(card.score)">{{
-                gradeFromScore(card.score)
-              }}</span>
+              <ScoreGradeLabel :score="card.score" class="ui-guide-score-card-grade" />
               <div class="ui-guide-score-card-value">{{ formatNumber(card.score, 0) }}%</div>
             </div>
           </div>
@@ -1551,14 +1659,12 @@ watch(hasDiagnosticPhase, () => {
                   >
                 </strong>
               </div>
-              <div v-if="kpi.score != null" class="ui-guide-meter-row ui-guide-meter-row-kpi">
-                <span class="ui-guide-grade" :style="gradeStyle(kpi.score)">{{
-                  gradeFromScore(kpi.score)
-                }}</span>
-                <div class="ui-guide-score-kpi-track">
-                  <span class="ui-guide-score-kpi-fill" :style="scoreFillStyle(kpi.score)"></span>
-                </div>
-              </div>
+              <ScoreMeterRow
+                v-if="kpi.score != null"
+                :score="kpi.score"
+                row-class="ui-guide-meter-row-kpi"
+                track-class="ui-guide-score-kpi-track"
+              />
               <div v-else class="ui-guide-score-kpi-pending">Indicador informativo (no puntua)</div>
               <div class="ui-guide-score-kpi-hint">{{ kpi.hint }}</div>
               <div v-if="kpi.detailText" class="ui-guide-score-kpi-hint">{{ kpi.detailText }}</div>
@@ -1590,7 +1696,9 @@ watch(hasDiagnosticPhase, () => {
                   </p>
                 </div>
                 <div
-                  v-if="section.id === 'cashflow-extraordinary' && extraordinaryEventGroupOptions.length"
+                  v-if="
+                    section.id === 'cashflow-extraordinary' && extraordinaryEventGroupOptions.length
+                  "
                   class="ui-guide-section-filter"
                 >
                   <span class="ui-guide-section-filter-label">Evento</span>
@@ -1599,9 +1707,17 @@ watch(hasDiagnosticPhase, () => {
                       <span class="ui-select-popover-text ui-guide-event-filter-summary-text">
                         {{ selectedExtraordinaryEventGroupLabel }}
                       </span>
-                      <span class="ui-select-popover-caret ui-guide-event-filter-summary-caret" aria-hidden="true">⌄</span>
+                      <span
+                        class="ui-select-popover-caret ui-guide-event-filter-summary-caret"
+                        aria-hidden="true"
+                        >⌄</span
+                      >
                     </summary>
-                    <div class="ui-select-popover-menu ui-guide-event-filter-menu" role="listbox" aria-label="Evento">
+                    <div
+                      class="ui-select-popover-menu ui-guide-event-filter-menu"
+                      role="listbox"
+                      aria-label="Evento"
+                    >
                       <button
                         type="button"
                         class="ui-select-popover-option ui-guide-event-filter-option"
@@ -1703,6 +1819,13 @@ watch(hasDiagnosticPhase, () => {
   flex-wrap: wrap;
 }
 
+.ui-guide-phase-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .ui-guide-back-link {
   color: rgba(45, 212, 191, 0.95);
   text-decoration: none;
@@ -1712,6 +1835,29 @@ watch(hasDiagnosticPhase, () => {
 
 .ui-guide-back-link:hover {
   text-decoration: underline;
+}
+
+.ui-guide-phase-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ui-guide-phase-inline-action-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-guide-phase-inline-action-link:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.06);
 }
 
 .ui-guide-phase-switch {
@@ -1779,90 +1925,9 @@ watch(hasDiagnosticPhase, () => {
   align-items: center;
 }
 
-.ui-guide-health-score-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  line-height: 1;
-}
-
-.ui-guide-health-score-text {
-  white-space: nowrap;
-}
-
-.ui-guide-health-score-value {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: rgba(255, 255, 255, 0.96);
-}
-
-.ui-guide-health-solid {
-  background: rgba(74, 222, 128, 0.16);
-  color: rgba(134, 239, 172, 0.95);
-}
-
-.ui-guide-health-medium {
-  background: rgba(163, 230, 53, 0.18);
-  color: rgba(190, 242, 100, 0.95);
-}
-
-.ui-guide-health-watch {
-  background: rgba(250, 204, 21, 0.16);
-  color: rgba(253, 224, 71, 0.95);
-}
-
-.ui-guide-health-risk {
-  background: rgba(251, 113, 133, 0.16);
-  color: rgba(251, 113, 133, 0.95);
-}
-
 .ui-guide-health-copy {
   font-size: 14px;
   color: var(--muted);
-}
-
-.ui-guide-global-meter {
-  flex: 1 1 auto;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.ui-guide-global-meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-}
-
-.ui-guide-meter-row {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ui-guide-meter-row-kpi {
-  margin-top: 4px;
-}
-
-.ui-guide-grade {
-  min-width: 16px;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
-}
-
-.ui-guide-grade-global {
-  font-size: 28px;
-  font-weight: 800;
 }
 
 .ui-guide-score-grid {
@@ -1956,22 +2021,6 @@ watch(hasDiagnosticPhase, () => {
   color: hsl(34 100% 72%);
   border: 1px solid hsl(34 100% 68% / 0.45);
   background: hsl(34 100% 50% / 0.14);
-}
-
-.ui-guide-score-kpi-track {
-  flex: 1 1 auto;
-  height: 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.ui-guide-score-kpi-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  width: 0%;
-  background: hsl(0 82% 52%);
 }
 
 .ui-guide-score-kpi-hint {
