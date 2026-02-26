@@ -2716,17 +2716,20 @@ watch(
 
 .ui-monthly-close-flow {
   margin-top: 12px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .ui-monthly-close-step-chip {
   display: grid;
   gap: 3px;
-  text-align: left;
-  min-width: 180px;
+  justify-items: center;
+  text-align: center;
+  width: 100%;
+  min-width: 0;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
@@ -2749,8 +2752,26 @@ watch(
 }
 
 .ui-monthly-close-arrow {
+  display: grid;
+  place-items: center;
   color: rgba(255, 255, 255, 0.6);
   font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .ui-monthly-close-flow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .ui-monthly-close-step-chip {
+    min-width: min(100%, 220px);
+  }
+
+  .ui-monthly-close-arrow {
+    display: none;
+  }
 }
 
 .ui-monthly-close-step-headline {
