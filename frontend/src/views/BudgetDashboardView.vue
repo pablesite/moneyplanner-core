@@ -1820,7 +1820,7 @@ watch(
     </div>
 
     <section
-      v-if="!isMonthlyCloseView || (isMonthlyCloseView && activeMonthlyCloseStep === 'expense')"
+      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'expense'"
       class="card ui-pro-panel ui-budget-checkin mt-3"
     >
       <div class="ui-budget-checkin-header">
