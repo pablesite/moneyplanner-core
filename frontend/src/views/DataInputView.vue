@@ -1,35 +1,56 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { api } from '@/lib/api';
+import { api, coreApi } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import {
   ItemForm,
   ItemList,
+  type Ownership,
   useNetWorthViewExtensions,
   useNetWorthViewState,
 } from '@/domains/net-worth';
 import type { NetWorthWritePayload } from '@/domains/net-worth/models';
 import { BaseModal } from '@/domains/ui';
 import {
-  useAnnualIncomeStore,
-  type AnnualIncomeCashflowRole,
-  type AnnualTimeProfile as IncomeTimeProfile,
-} from '@/domains/data-input/annualIncomeStore';
-import {
-  useAnnualExpenseStore,
-  type AnnualExpenseCashflowRole,
-  type AnnualTimeProfile as ExpenseTimeProfile,
-} from '@/domains/data-input/annualExpenseStore';
-import {
+  AnnualEntryModalForm,
   expenseCategories,
   expenseSubcategories,
   type ExpenseCategoryKey,
-} from '@/domains/data-input/expenseTaxonomy';
-import {
   incomeCategories,
   incomeSubcategories,
   type IncomeCategoryKey,
-} from '@/domains/data-input/incomeTaxonomy';
+  useAnnualIncomeStore,
+  type AnnualIncomeCashflowRole,
+  type AnnualIncomeTimeProfile as IncomeTimeProfile,
+  useAnnualExpenseStore,
+  type AnnualExpenseCashflowRole,
+  type AnnualExpenseTimeProfile as ExpenseTimeProfile,
+} from '@/domains/data-input';
+import {
+  buildImportPreviewMessage,
+  buildPortableFilename,
+  type ImportMode,
+  normalizeImportedAssetTae,
+  normalizeImportedLiabilityTae,
+  normalizeOptionalText,
+  parsePortableDataBundle,
+  type PortableAnnualExpenseRecord,
+  type PortableAnnualIncomeRecord,
+  type PortableAssetRecord,
+  type PortableDataBundle,
+  type PortableFamilyMemberRecord,
+  type PortableLiabilityRecord,
+  type PortableOwnershipLinkRecord,
+  type PortableOwnershipRecord,
+  type PortablePremiumData,
+  type PortableSettingsRecord,
+  type PortableSnapshotRecord,
+  toPortableAnnualExpenseRecord,
+  toPortableAnnualIncomeRecord,
+  toPortableAssetRecord,
+  toPortableLiabilityRecord,
+  toPortableOwnershipRecord,
+} from '@/domains/data-input/portableBundle';
 
 const {
   store,
@@ -82,7 +103,8 @@ const hydratingAnnualIncomeForm = ref(false);
 const hydratingAnnualExpenseForm = ref(false);
 const expandedIncomeCats = ref<Set<string>>(new Set());
 const expandedExpenseCats = ref<Set<string>>(new Set());
-const fiscalYear = ref(2026);
+const assetOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
+const liabilityOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
 const generatedLiabilityExpenseReview = ref<{
   liabilityId: number;
   liabilityName: string;
@@ -98,20 +120,17 @@ const generatedLiabilityExpenseReview = ref<{
     notes: string;
   }[];
 } | null>(null);
-const fiscalYearOptions = computed(() => {
-  const current = new Date().getFullYear();
-  const years = new Set<number>([current - 1, current, current + 1, 2026]);
-  return Array.from(years).sort((a, b) => b - a);
-});
 
 const annualIncomeForm = reactive({
   category: 'salary' as IncomeCategoryKey,
   subcategory: 'employee_salary',
   name: '',
+  owner: '',
   isRecurrent: true,
   timeProfile: 'structural_recurrent' as IncomeTimeProfile,
   cashflowRole: 'operating' as AnnualIncomeCashflowRole,
   eventGroup: '',
+  targetMonth: '',
   termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
@@ -122,10 +141,12 @@ const annualExpenseForm = reactive({
   category: 'consumption_expenses' as ExpenseCategoryKey,
   subcategory: 'living_expenses',
   name: '',
+  owner: '',
   isRecurrent: true,
   timeProfile: 'structural_recurrent' as ExpenseTimeProfile,
   cashflowRole: 'operating' as AnnualExpenseCashflowRole,
   eventGroup: '',
+  targetMonth: '',
   termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
@@ -133,14 +154,283 @@ const annualExpenseForm = reactive({
   notes: '',
 });
 
+type AnnualModalPatch = Partial<{
+  category: string;
+  subcategory: string;
+  name: string;
+  owner: string;
+  timeProfile: string;
+  cashflowRole: string;
+  eventGroup: string;
+  targetMonth: string;
+  termEndYear: string;
+  amountInputPeriod: 'annual' | 'monthly';
+  amountAnnual: string;
+  currency: string;
+  notes: string;
+}>;
+
+function patchAnnualIncomeForm(patch: AnnualModalPatch): void {
+  Object.assign(annualIncomeForm, patch);
+}
+
+function patchAnnualExpenseForm(patch: AnnualModalPatch): void {
+  Object.assign(annualExpenseForm, patch);
+  normalizeExpenseCashflowRoleForCurrentTimeProfile();
+}
+
 const annualSubcategoryOptions = computed(() =>
   incomeSubcategories.filter((row) => row.category === annualIncomeForm.category),
 );
 const annualExpenseSubcategoryOptions = computed(() =>
   expenseSubcategories.filter((row) => row.category === annualExpenseForm.category),
 );
-const filteredAnnualIncomeEntries = computed(() => annualIncomeEntries.value);
-const filteredAnnualExpenseEntries = computed(() => annualExpenseEntries.value);
+type OwnerOption = { key: string; value: string; label: string };
+type SelectOption = { value: string; label: string };
+
+const incomeTimeProfileOptions: SelectOption[] = [
+  { value: 'structural_recurrent', label: 'Recurrente estructural (base)' },
+  { value: 'term_recurrent', label: 'Recurrente temporal (con fin)' },
+  { value: 'one_off', label: 'Puntual / extraordinario' },
+];
+
+const incomeCashflowRoleOptions: SelectOption[] = [
+  { value: 'operating', label: 'Naturaleza: Operativo' },
+  { value: 'transfer', label: 'Naturaleza: Transferencia/apoyo' },
+  { value: 'asset_sale', label: 'Naturaleza: Venta de activo' },
+  { value: 'tax_adjustment', label: 'Naturaleza: Ajuste fiscal' },
+  { value: 'other', label: 'Naturaleza: Otro' },
+];
+
+const expenseTimeProfileOptions: SelectOption[] = [
+  { value: 'structural_recurrent', label: 'Recurrente estructural (estilo de vida)' },
+  { value: 'term_recurrent', label: 'Recurrente temporal (cuotas/compromiso)' },
+  { value: 'one_off', label: 'Puntual / extraordinario' },
+];
+
+const expenseCashflowRoleOptions: SelectOption[] = [
+  { value: 'operating', label: 'Naturaleza: Operativo' },
+  { value: 'temporary_commitment', label: 'Naturaleza: Compromiso temporal' },
+  { value: 'savings', label: 'Naturaleza: Ahorro' },
+  { value: 'investment', label: 'Naturaleza: Inversion' },
+  { value: 'asset_purchase', label: 'Naturaleza: Compra de activo' },
+  { value: 'tax_fee', label: 'Naturaleza: Impuestos/gastos' },
+  { value: 'transfer', label: 'Naturaleza: Transferencia' },
+  { value: 'other', label: 'Naturaleza: Otro' },
+];
+
+const EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES: AnnualExpenseCashflowRole[] = [
+  'operating',
+  'savings',
+  'investment',
+  'tax_fee',
+  'other',
+];
+const EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES: AnnualExpenseCashflowRole[] = [
+  'savings',
+  'investment',
+  'tax_fee',
+  'asset_purchase',
+  'transfer',
+  'other',
+];
+
+function allowedExpenseCashflowRolesForTimeProfile(
+  timeProfile: ExpenseTimeProfile,
+): AnnualExpenseCashflowRole[] {
+  if (timeProfile === 'term_recurrent') return ['temporary_commitment'];
+  if (timeProfile === 'one_off') return EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES;
+  return EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES;
+}
+
+const filteredExpenseCashflowRoleOptions = computed<SelectOption[]>(() => {
+  const allowed = new Set(allowedExpenseCashflowRolesForTimeProfile(annualExpenseForm.timeProfile));
+  return expenseCashflowRoleOptions.filter((option) =>
+    allowed.has(option.value as AnnualExpenseCashflowRole),
+  );
+});
+
+const showExpenseCashflowRoleField = computed(
+  () => annualExpenseForm.timeProfile !== 'term_recurrent',
+);
+
+function normalizeExpenseCashflowRoleForCurrentTimeProfile(): void {
+  const allowed = allowedExpenseCashflowRolesForTimeProfile(annualExpenseForm.timeProfile);
+  if (!allowed.length) return;
+  if (allowed.includes(annualExpenseForm.cashflowRole)) return;
+
+  if (annualExpenseForm.timeProfile === 'term_recurrent') {
+    annualExpenseForm.cashflowRole = 'temporary_commitment';
+    return;
+  }
+
+  const suggested = defaultExpenseCashflowRole(
+    annualExpenseForm.category,
+    annualExpenseForm.subcategory,
+  );
+  annualExpenseForm.cashflowRole = allowed.includes(suggested) ? suggested : allowed[0]!;
+}
+
+function formatOwnershipPercent(raw: string): string {
+  const value = Number(String(raw).replace(',', '.'));
+  if (!Number.isFinite(value)) return `${raw}%`;
+  const rounded = Math.round(value * 100) / 100;
+  const normalized = Number.isInteger(rounded)
+    ? String(rounded)
+    : String(rounded).replace(/\.?0+$/, '');
+  return `${normalized}%`;
+}
+
+function sharedOwnershipLabel(
+  splits: { member: { id: number; name: string; role: 'adult' | 'child' }; percent: string }[],
+): string {
+  if (!splits.length) return 'Compartido';
+  const details = splits.map(
+    (split) => `${split.member.name} ${formatOwnershipPercent(split.percent)}`,
+  );
+  return `Compartido (${details.join(' / ')})`;
+}
+
+const ownerOptions = computed(() => {
+  const options = new Map<string, OwnerOption>();
+  for (const ownership of store.ownerships ?? []) {
+    if (ownership.kind === 'individual' && ownership.member) {
+      const value = ownership.member.name;
+      options.set(`individual:${ownership.member.id}`, {
+        key: `individual:${ownership.member.id}`,
+        value,
+        label: value,
+      });
+    }
+    if (ownership.kind === 'shared') {
+      const label = sharedOwnershipLabel(ownership.splits ?? []);
+      options.set(`shared:${ownership.id}`, {
+        key: `shared:${ownership.id}`,
+        value: label,
+        label,
+      });
+    }
+  }
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
+});
+
+const sharedOwnershipAllocationsByLabel = computed(() => {
+  const map = new Map<string, { name: string; share: number }[]>();
+  for (const ownership of store.ownerships ?? []) {
+    if (ownership.kind !== 'shared') continue;
+    const label = sharedOwnershipLabel(ownership.splits ?? []);
+    const shares = (ownership.splits ?? [])
+      .map((split) => {
+        const share = Number(String(split.percent ?? '').replace(',', '.'));
+        const name = split.member?.name?.trim() ?? '';
+        if (!name || !Number.isFinite(share) || share <= 0) return null;
+        return { name, share };
+      })
+      .filter((row): row is { name: string; share: number } => row != null);
+    if (shares.length) {
+      map.set(label, shares);
+    }
+  }
+  return map;
+});
+
+function normalizeOwnerKey(raw: string): string {
+  return String(raw ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+const annualOwnerFilterOptions = computed(() =>
+  ownerOptions.value
+    .filter((option) => option.key.startsWith('individual:'))
+    .sort((a, b) => a.label.localeCompare(b.label)),
+);
+const showOwnerField = computed(() => ownerOptions.value.length > 1);
+const annualIncomeOwnerFilter = ref<string>('all');
+const annualExpenseOwnerFilter = ref<string>('all');
+const fiscalYear = ref(2026);
+const fiscalYearOptions = computed(() => {
+  const current = new Date().getFullYear();
+  const years = new Set<number>([current - 1, current, current + 1, 2026]);
+  return Array.from(years).sort((a, b) => b - a);
+});
+
+function parseSharedOwnerShares(ownerLabel: string): { name: string; share: number }[] {
+  const text = String(ownerLabel ?? '').trim();
+  if (!text) return [];
+  const match = text.match(/^Compartido\s*\((.*)\)$/i);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(/\s*(?:\/|,|;)\s*/)
+    .map((part) => {
+      const piece = part.trim();
+      const parsed = piece.match(/^(.*)\s+(\d+(?:[.,]\d+)?)\s*%?$/);
+      if (!parsed?.[1] || !parsed[2]) return null;
+      const name = parsed[1].trim();
+      const share = Number(parsed[2].replace(',', '.'));
+      if (!name || !Number.isFinite(share) || share <= 0) return null;
+      return { name, share };
+    })
+    .filter((row): row is { name: string; share: number } => row != null);
+}
+
+function allocatedFractionForAnnualOwner(ownerLabel: string, selectedOwner: string): number {
+  if (selectedOwner === 'all') return 1;
+  const text = String(ownerLabel ?? '').trim();
+  if (!text) return 0;
+  if (text.localeCompare(selectedOwner, 'es', { sensitivity: 'base' }) === 0) return 1;
+
+  const normalizedText = normalizeOwnerKey(text);
+  const sharedEntries = Array.from(sharedOwnershipAllocationsByLabel.value.entries());
+  const sharedFromOwnerships = sharedEntries.find(
+    ([label]) => normalizeOwnerKey(label) === normalizedText,
+  )?.[1];
+  const fallbackBareShared =
+    normalizeOwnerKey(text) === 'compartido' && sharedEntries.length === 1
+      ? sharedEntries[0]?.[1]
+      : null;
+  const shared = sharedFromOwnerships ?? fallbackBareShared ?? parseSharedOwnerShares(text);
+  if (!shared.length) return 0;
+  const totalShare = shared.reduce((sum, row) => sum + row.share, 0);
+  const matchedShare = shared
+    .filter((row) => normalizeOwnerKey(row.name) === normalizeOwnerKey(selectedOwner))
+    .reduce((sum, row) => sum + row.share, 0);
+  if (!Number.isFinite(matchedShare) || matchedShare <= 0) return 0;
+
+  if (totalShare > 0 && totalShare <= 1.0001) {
+    return matchedShare / totalShare;
+  }
+  if (totalShare > 0 && totalShare <= 100.0001) {
+    return matchedShare / 100;
+  }
+  return matchedShare / totalShare;
+}
+
+function filterAnnualEntriesByOwner<T extends { owner: string; amountAnnual: number }>(
+  list: T[],
+  selectedOwner: string,
+): T[] {
+  if (selectedOwner === 'all') return list;
+  if (selectedOwner === 'unassigned') {
+    return list.filter((entry) => !String(entry.owner ?? '').trim());
+  }
+  return list
+    .map((entry) => {
+      const fraction = allocatedFractionForAnnualOwner(entry.owner, selectedOwner);
+      return fraction > 0 ? { ...entry, amountAnnual: entry.amountAnnual * fraction } : null;
+    })
+    .filter((entry): entry is T => entry != null && entry.amountAnnual > 0);
+}
+
+const filteredAnnualIncomeEntries = computed(() =>
+  filterAnnualEntriesByOwner(annualIncomeEntries.value, annualIncomeOwnerFilter.value),
+);
+const filteredAnnualExpenseEntries = computed(() =>
+  filterAnnualEntriesByOwner(annualExpenseEntries.value, annualExpenseOwnerFilter.value),
+);
 
 const filteredAnnualIncomeTotal = computed(() =>
   filteredAnnualIncomeEntries.value.reduce((sum, entry) => sum + entry.amountAnnual, 0),
@@ -203,6 +493,57 @@ watch(
     }
   },
 );
+watch(
+  ownerOptions,
+  (options) => {
+    const singleOwner = options[0];
+    if (options.length === 1) {
+      annualIncomeForm.owner = singleOwner?.value ?? '';
+      annualExpenseForm.owner = singleOwner?.value ?? '';
+      return;
+    }
+    if (options.length === 0) {
+      annualIncomeForm.owner = '';
+      annualExpenseForm.owner = '';
+      return;
+    }
+    if (
+      annualIncomeForm.owner &&
+      !options.some((option) => option.value === annualIncomeForm.owner)
+    ) {
+      annualIncomeForm.owner = '';
+    }
+    if (
+      annualExpenseForm.owner &&
+      !options.some((option) => option.value === annualExpenseForm.owner)
+    ) {
+      annualExpenseForm.owner = '';
+    }
+  },
+  { immediate: true },
+);
+watch(
+  [annualOwnerFilterOptions, annualIncomeEntries],
+  ([options]) => {
+    const filter = annualIncomeOwnerFilter.value;
+    if (filter === 'all' || filter === 'unassigned') return;
+    if (!options.some((option) => option.value === filter)) {
+      annualIncomeOwnerFilter.value = 'all';
+    }
+  },
+  { immediate: true },
+);
+watch(
+  [annualOwnerFilterOptions, annualExpenseEntries],
+  ([options]) => {
+    const filter = annualExpenseOwnerFilter.value;
+    if (filter === 'all' || filter === 'unassigned') return;
+    if (!options.some((option) => option.value === filter)) {
+      annualExpenseOwnerFilter.value = 'all';
+    }
+  },
+  { immediate: true },
+);
 
 function formatMoneyAmount(value: number, currency: string): string {
   return new Intl.NumberFormat('es-ES', {
@@ -222,8 +563,65 @@ function parseNumeric(raw: unknown): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-const assetsTotalBase = computed(() => parseNumeric(store.summary?.total_assets ?? '0'));
-const liabilitiesTotalBase = computed(() => parseNumeric(store.summary?.total_liabilities ?? '0'));
+const ownershipById = computed(() => {
+  const map = new Map<number, Ownership>();
+  for (const ownership of store.ownerships ?? []) {
+    map.set(ownership.id, ownership);
+  }
+  return map;
+});
+
+function normalizeOwnershipSharePercent(raw: unknown): number {
+  const value = parseNumeric(raw);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value <= 1 ? value * 100 : value;
+}
+
+function allocatedFractionForNetWorthOwner(
+  ownershipRef: number | null | undefined,
+  selectedOwner: number | 'all' | 'unassigned',
+): number {
+  if (selectedOwner === 'all') return 1;
+  if (selectedOwner === 'unassigned') return ownershipRef == null ? 1 : 0;
+  if (ownershipRef == null) return 0;
+
+  const ownership = ownershipById.value.get(ownershipRef);
+  if (!ownership) return 0;
+
+  if (ownership.kind === 'individual') {
+    return ownership.member?.id === selectedOwner ? 1 : 0;
+  }
+
+  const split = (ownership.splits ?? []).find((row) => row.member?.id === selectedOwner);
+  if (!split) return 0;
+  return normalizeOwnershipSharePercent(split.percent) / 100;
+}
+
+function filteredNetWorthTotalBase(
+  items: Array<{ amount_base?: string | null; ownership_ref?: number | null }>,
+  selectedOwner: number | 'all' | 'unassigned',
+): number {
+  let total = 0;
+  for (const item of items) {
+    const amountBase = parseNumeric(item.amount_base ?? '0');
+    if (!Number.isFinite(amountBase) || amountBase === 0) continue;
+    const fraction = allocatedFractionForNetWorthOwner(item.ownership_ref, selectedOwner);
+    if (fraction <= 0) continue;
+    total += amountBase * fraction;
+  }
+  return total;
+}
+
+const assetsTotalBase = computed(() =>
+  assetOwnershipFilter.value === 'all'
+    ? parseNumeric(store.summary?.total_assets ?? '0')
+    : filteredNetWorthTotalBase(store.assets, assetOwnershipFilter.value),
+);
+const liabilitiesTotalBase = computed(() =>
+  liabilityOwnershipFilter.value === 'all'
+    ? parseNumeric(store.summary?.total_liabilities ?? '0')
+    : filteredNetWorthTotalBase(store.liabilities, liabilityOwnershipFilter.value),
+);
 const netAssetsBase = computed(() => assetsTotalBase.value - liabilitiesTotalBase.value);
 const netAssetsCurrency = computed(
   () => store.baseCurrency ?? store.summary?.base_currency ?? 'EUR',
@@ -302,6 +700,15 @@ function expenseCashflowRoleLabel(role: AnnualExpenseCashflowRole): string {
   return 'Otro';
 }
 
+function shouldHideExpenseCashflowRoleLabel(params: {
+  timeProfile: ExpenseTimeProfile;
+  cashflowRole: AnnualExpenseCashflowRole;
+}): boolean {
+  return (
+    params.timeProfile === 'term_recurrent' && params.cashflowRole === 'temporary_commitment'
+  );
+}
+
 function timeProfileDotClass(
   timeProfile: IncomeTimeProfile | ExpenseTimeProfile | undefined,
 ): string {
@@ -309,12 +716,14 @@ function timeProfileDotClass(
   if (timeProfile === 'one_off') return 'income-rec-dot-one-off';
   return 'income-rec-dot-recurrent';
 }
+
 function defaultIncomeCashflowRole(category: IncomeCategoryKey): AnnualIncomeCashflowRole {
   if (category === 'capital_gains') return 'asset_sale';
   if (category === 'transfers_support' || category === 'public_benefits') return 'transfer';
   if (category === 'other_income') return 'other';
   return 'operating';
 }
+
 function defaultExpenseCashflowRole(
   category: ExpenseCategoryKey,
   subcategory: string,
@@ -481,13 +890,16 @@ const annualExpenseGroups = computed<AnnualExpenseGroup[]>(() => {
 });
 
 function resetIncomeForm(): void {
+  const singleOwner = ownerOptions.value[0];
   annualIncomeForm.category = 'salary';
   annualIncomeForm.subcategory = 'employee_salary';
   annualIncomeForm.name = '';
+  annualIncomeForm.owner = ownerOptions.value.length === 1 ? (singleOwner?.value ?? '') : '';
   annualIncomeForm.isRecurrent = true;
   annualIncomeForm.timeProfile = 'structural_recurrent';
   annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
   annualIncomeForm.eventGroup = '';
+  annualIncomeForm.targetMonth = '';
   annualIncomeForm.termEndYear = '';
   annualIncomeForm.amountInputPeriod = 'annual';
   annualIncomeForm.amountAnnual = '';
@@ -495,9 +907,11 @@ function resetIncomeForm(): void {
   annualIncomeForm.notes = '';
 }
 function resetExpenseForm(): void {
+  const singleOwner = ownerOptions.value[0];
   annualExpenseForm.category = 'consumption_expenses';
   annualExpenseForm.subcategory = 'living_expenses';
   annualExpenseForm.name = '';
+  annualExpenseForm.owner = ownerOptions.value.length === 1 ? (singleOwner?.value ?? '') : '';
   annualExpenseForm.isRecurrent = true;
   annualExpenseForm.timeProfile = 'structural_recurrent';
   annualExpenseForm.cashflowRole = defaultExpenseCashflowRole(
@@ -505,6 +919,7 @@ function resetExpenseForm(): void {
     annualExpenseForm.subcategory,
   );
   annualExpenseForm.eventGroup = '';
+  annualExpenseForm.targetMonth = '';
   annualExpenseForm.termEndYear = '';
   annualExpenseForm.amountInputPeriod = 'annual';
   annualExpenseForm.amountAnnual = '';
@@ -520,10 +935,12 @@ function openIncomeModal(entry?: AnnualIncomeEntry): void {
     annualIncomeForm.category = entry.category;
     annualIncomeForm.subcategory = entry.subcategory;
     annualIncomeForm.name = entry.name;
+    annualIncomeForm.owner = entry.owner || '';
     annualIncomeForm.isRecurrent = entry.incomeType === 'recurrent';
     annualIncomeForm.timeProfile = entry.timeProfile;
     annualIncomeForm.cashflowRole = entry.cashflowRole;
     annualIncomeForm.eventGroup = entry.eventGroup || '';
+    annualIncomeForm.targetMonth = '';
     annualIncomeForm.termEndYear =
       entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
     annualIncomeForm.amountInputPeriod = 'annual';
@@ -547,16 +964,20 @@ function openExpenseModal(entry?: AnnualExpenseEntry): void {
     annualExpenseForm.category = entry.category;
     annualExpenseForm.subcategory = entry.subcategory;
     annualExpenseForm.name = entry.name;
+    annualExpenseForm.owner = entry.owner || '';
     annualExpenseForm.isRecurrent = entry.expenseType === 'recurrent';
     annualExpenseForm.timeProfile = entry.timeProfile;
     annualExpenseForm.cashflowRole = entry.cashflowRole;
     annualExpenseForm.eventGroup = entry.eventGroup || '';
+    annualExpenseForm.targetMonth =
+      entry.targetMonth == null ? '' : String(Number(entry.targetMonth));
     annualExpenseForm.termEndYear =
       entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
     annualExpenseForm.amountInputPeriod = 'annual';
     annualExpenseForm.amountAnnual = String(entry.amountAnnual);
     annualExpenseForm.currency = entry.currency;
     annualExpenseForm.notes = entry.notes || '';
+    normalizeExpenseCashflowRoleForCurrentTimeProfile();
   } else {
     editingExpenseId.value = null;
     resetExpenseForm();
@@ -618,7 +1039,9 @@ function openGeneratedExpenseReviewEntryFromVisibleYear(): void {
   openExpenseModal(entry);
 }
 
-async function submitLiabilityWithExpenseReview(payload: NetWorthWritePayload): Promise<void> {
+async function submitLiabilityWithExpenseReview(
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
   const createdLiability = await store.createLiability(payload);
   if (!createdLiability) return;
 
@@ -677,6 +1100,7 @@ watch(
   (timeProfile) => {
     annualIncomeForm.isRecurrent = timeProfile !== 'one_off';
     if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndYear = '';
+    if (timeProfile !== 'one_off') annualIncomeForm.targetMonth = '';
   },
 );
 watch(
@@ -684,21 +1108,21 @@ watch(
   (timeProfile) => {
     annualExpenseForm.isRecurrent = timeProfile !== 'one_off';
     if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndYear = '';
+    if (timeProfile !== 'one_off') annualExpenseForm.targetMonth = '';
+    normalizeExpenseCashflowRoleForCurrentTimeProfile();
   },
 );
-watch(
-  () => annualIncomeForm.category,
-  () => {
-    if (hydratingAnnualIncomeForm.value) return;
-    annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
-  },
-);
+watch([() => annualIncomeForm.category], () => {
+  if (hydratingAnnualIncomeForm.value) return;
+  annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
+});
 watch([() => annualExpenseForm.category, () => annualExpenseForm.subcategory], () => {
   if (hydratingAnnualExpenseForm.value) return;
   annualExpenseForm.cashflowRole = defaultExpenseCashflowRole(
     annualExpenseForm.category,
     annualExpenseForm.subcategory,
   );
+  normalizeExpenseCashflowRoleForCurrentTimeProfile();
 });
 
 async function submitAnnualIncome(): Promise<void> {
@@ -713,6 +1137,7 @@ async function submitAnnualIncome(): Promise<void> {
     name: annualIncomeForm.name,
     category: annualIncomeForm.category,
     subcategory: annualIncomeForm.subcategory,
+    owner: annualIncomeForm.owner,
     incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
     timeProfile: annualIncomeForm.timeProfile,
     cashflowRole: annualIncomeForm.cashflowRole,
@@ -743,7 +1168,9 @@ async function submitAnnualIncome(): Promise<void> {
 async function removeAnnualIncome(id: number): Promise<void> {
   await deleteIncomeEntry(id, fiscalYear.value);
 }
+
 async function submitAnnualExpense(): Promise<void> {
+  normalizeExpenseCashflowRoleForCurrentTimeProfile();
   const rawAmount = Number(String(annualExpenseForm.amountAnnual).replace(',', '.'));
   const normalizedAmount = Number.isFinite(rawAmount)
     ? annualExpenseForm.amountInputPeriod === 'monthly'
@@ -755,12 +1182,17 @@ async function submitAnnualExpense(): Promise<void> {
     name: annualExpenseForm.name,
     category: annualExpenseForm.category,
     subcategory: annualExpenseForm.subcategory,
+    owner: annualExpenseForm.owner,
     expenseType: (annualExpenseForm.isRecurrent ? 'recurrent' : 'one_off') as
       | 'recurrent'
       | 'one_off',
     timeProfile: annualExpenseForm.timeProfile,
     cashflowRole: annualExpenseForm.cashflowRole,
     eventGroup: annualExpenseForm.eventGroup,
+    targetMonth:
+      annualExpenseForm.timeProfile === 'one_off' && String(annualExpenseForm.targetMonth).trim()
+        ? Number(annualExpenseForm.targetMonth)
+        : null,
     termEndYear:
       annualExpenseForm.timeProfile === 'term_recurrent' &&
       String(annualExpenseForm.termEndYear).trim()
@@ -787,122 +1219,6 @@ async function removeAnnualExpense(id: number): Promise<void> {
   await deleteExpenseEntry(id, fiscalYear.value);
 }
 
-type PortableAnnualIncomeRecord = {
-  id: number;
-  name: string;
-  category: string;
-  subcategory: string;
-  owner_name?: string;
-  income_type: 'recurrent' | 'one_off';
-  time_profile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
-  cashflow_role?: 'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
-  event_group?: string;
-  term_end_year?: number | null;
-  amount_annual: string;
-  fiscal_year: number;
-  currency: string;
-  notes: string;
-  is_active?: boolean;
-};
-
-type PortableAnnualExpenseRecord = {
-  id: number;
-  name: string;
-  category: string;
-  subcategory: string;
-  owner_name?: string;
-  expense_type: 'recurrent' | 'one_off';
-  time_profile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
-  cashflow_role?:
-    | 'operating'
-    | 'temporary_commitment'
-    | 'savings'
-    | 'investment'
-    | 'asset_purchase'
-    | 'tax_fee'
-    | 'transfer'
-    | 'other';
-  event_group?: string;
-  term_end_year?: number | null;
-  amount_annual: string;
-  fiscal_year: number;
-  currency: string;
-  notes: string;
-  is_active?: boolean;
-};
-
-type PortableAssetRecord = {
-  id: number;
-  name: string;
-  category: string;
-  subcategory: string;
-  tracking_mode: string;
-  accounting_account_id: number | null;
-  currency: string;
-  start_date?: string;
-  initial_purchase_value?: string | null;
-  amortization_method?: string;
-  amortization_term_years?: number | null;
-  annual_interest_tae?: string | null;
-  amount: string;
-  is_active: boolean;
-  notes: string;
-};
-
-type PortableLiabilityRecord = {
-  id: number;
-  name: string;
-  category: string;
-  tracking_mode: string;
-  accounting_account_id: number | null;
-  currency: string;
-  start_date?: string;
-  expected_end_date?: string | null;
-  term_months?: number | null;
-  rate_type?: string;
-  payment_frequency?: string;
-  amortization_system?: string | null;
-  annual_interest_tae?: string | null;
-  monthly_payment_amount?: string | null;
-  principal_amount?: string | null;
-  opening_fees_amount?: string | null;
-  early_repayment_fee_percent?: string | null;
-  novation_subrogation_fee_amount?: string | null;
-  linked_products_monthly_cost?: string | null;
-  amount: string;
-  is_active: boolean;
-  notes: string;
-  financed_asset_ref?: number | null;
-};
-
-type PortableSnapshotRecord = {
-  id: number;
-  snapshot_date: string;
-  base_currency: string;
-  total_assets: string;
-  total_liabilities: string;
-  net_worth: string;
-  created_at?: string;
-};
-
-type PortableSettingsRecord = {
-  base_currency: string;
-};
-
-type PortableDataBundle = {
-  schema_version: 1;
-  exported_at: string;
-  source_app: 'core';
-  settings?: PortableSettingsRecord;
-  data: {
-    annual_income: PortableAnnualIncomeRecord[];
-    annual_expense: PortableAnnualExpenseRecord[];
-    assets: PortableAssetRecord[];
-    liabilities: PortableLiabilityRecord[];
-    snapshots?: PortableSnapshotRecord[];
-  };
-};
-
 const dataTransferBusy = ref(false);
 const dataTransferBusyLabel = ref<string | null>(null);
 const dataTransferStatus = ref<string | null>(null);
@@ -910,7 +1226,6 @@ const dataTransferError = ref<string | null>(null);
 const dataTransferToastMessage = ref<string | null>(null);
 const dataTransferToastKind = ref<'success' | 'error'>('success');
 const importFileInputRef = ref<HTMLInputElement | null>(null);
-type ImportMode = 'append' | 'replace';
 const pendingImportMode = ref<ImportMode>('append');
 let dataTransferToastTimer: number | null = null;
 
@@ -945,105 +1260,6 @@ function showDataTransferToast(message: string, kind: 'success' | 'error' = 'suc
   }, 5000);
 }
 
-function normalizeOptionalText(raw: unknown): string | null {
-  if (raw == null) return null;
-  const text = String(raw).trim();
-  return text ? text : null;
-}
-
-function normalizeImportedAssetTae(asset: PortableAssetRecord): string | null {
-  const normalized = normalizeOptionalText(asset.annual_interest_tae);
-  if (normalized != null) return normalized;
-
-  const category = String(asset.category ?? '').trim();
-  const subcategory = String(asset.subcategory ?? '').trim();
-  const requiresTae =
-    category === 'cash' &&
-    (subcategory === 'bank_account' ||
-      subcategory === 'crypto_spot_earn' ||
-      subcategory === 'other');
-
-  // Backward compatibility: older exports may not include TAE for assets that are now required.
-  return requiresTae ? '0' : null;
-}
-
-function normalizeImportedLiabilityTae(liability: PortableLiabilityRecord): string | null {
-  const normalized = normalizeOptionalText(liability.annual_interest_tae);
-  if (normalized != null) return normalized;
-
-  const category = String(liability.category ?? '').trim();
-  const requiresTae =
-    category === 'mortgage' || category === 'personal_loan' || category === 'credit_card';
-
-  // Backward compatibility: older exports may not include TAE for liabilities that are now required.
-  return requiresTae ? '0' : null;
-}
-
-function formatImportYearSummary(
-  entries: Array<{ fiscal_year: number; amount_annual: string | number }>,
-  label: string,
-): string {
-  if (!entries.length) return `${label}: 0`;
-  const totals = new Map<number, { count: number; amount: number }>();
-  for (const entry of entries) {
-    const year = Number(entry.fiscal_year);
-    const amount = Number(entry.amount_annual ?? 0);
-    const prev = totals.get(year) ?? { count: 0, amount: 0 };
-    totals.set(year, {
-      count: prev.count + 1,
-      amount: prev.amount + (Number.isFinite(amount) ? amount : 0),
-    });
-  }
-  const segments = [...totals.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(
-      ([year, info]) =>
-        `${year}: ${info.count} (${new Intl.NumberFormat('es-ES', {
-          maximumFractionDigits: 2,
-          minimumFractionDigits: 0,
-        }).format(info.amount)})`,
-    );
-  return `${label}: ${segments.join(' | ')}`;
-}
-
-function buildImportPreviewMessage(bundle: PortableDataBundle, mode: ImportMode): string {
-  const snapshots = bundle.data.snapshots ?? [];
-  const snapshotRange =
-    snapshots.length > 0
-      ? `${[...snapshots].map((s) => s.snapshot_date).sort()[0]} .. ${
-          [...snapshots]
-            .map((s) => s.snapshot_date)
-            .sort()
-            .slice(-1)[0]
-        }`
-      : 'sin snapshots';
-  const lines = [
-    mode === 'replace'
-      ? 'Se reemplazaran los datos actuales por el archivo:'
-      : 'Se importaran datos (modo aditivo):',
-    `- Ingresos: ${bundle.data.annual_income.length}`,
-    `- Gastos: ${bundle.data.annual_expense.length}`,
-    `- Activos: ${bundle.data.assets.length}`,
-    `- Pasivos: ${bundle.data.liabilities.length}`,
-    `- Snapshots: ${snapshots.length} (${snapshotRange})`,
-    `- Configuracion base_currency: ${bundle.settings?.base_currency ?? 'sin incluir'}`,
-    '',
-    formatImportYearSummary(bundle.data.annual_income, 'Ingresos por ano'),
-    formatImportYearSummary(bundle.data.annual_expense, 'Gastos por ano'),
-    '',
-    mode === 'replace'
-      ? 'Se borraran primero los datos actuales de estos bloques (incluidos snapshots).'
-      : 'La importacion anade registros y actualiza settings/snapshots importados.',
-    'Continuar?',
-  ];
-  return lines.join('\n');
-}
-
-function buildPortableFilename(): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `moneyplanner-core-data-${timestamp}.json`;
-}
-
 function triggerImportDialog(mode: ImportMode = 'append'): void {
   clearDataTransferFeedback();
   pendingImportMode.value = mode;
@@ -1055,15 +1271,27 @@ async function exportDataBundle(): Promise<void> {
   dataTransferBusyLabel.value = 'Exportando datos...';
   dataTransferBusy.value = true;
   try {
-    const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes, settingsRes] =
-      await Promise.all([
-        api.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
-        api.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
-        api.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
-        api.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-        api.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
-        api.get<PortableSettingsRecord>('/api/auth/settings/'),
-      ]);
+    const [
+      incomeRes,
+      expenseRes,
+      assetsRes,
+      liabilitiesRes,
+      snapshotsRes,
+      settingsRes,
+      membersRes,
+      ownershipsRes,
+      linksRes,
+    ] = await Promise.all([
+      coreApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+      coreApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
+      coreApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+      coreApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+      coreApi.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
+      coreApi.get<PortableSettingsRecord>('/api/auth/settings/'),
+      api.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+      api.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+      api.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+    ]);
 
     const payload: PortableDataBundle = {
       schema_version: 1,
@@ -1071,11 +1299,16 @@ async function exportDataBundle(): Promise<void> {
       source_app: 'core',
       settings: settingsRes.data ?? undefined,
       data: {
-        annual_income: (incomeRes.data ?? []).slice(),
-        annual_expense: (expenseRes.data ?? []).slice(),
-        assets: (assetsRes.data ?? []).slice(),
-        liabilities: (liabilitiesRes.data ?? []).slice(),
+        annual_income: (incomeRes.data ?? []).map(toPortableAnnualIncomeRecord),
+        annual_expense: (expenseRes.data ?? []).map(toPortableAnnualExpenseRecord),
+        assets: (assetsRes.data ?? []).map((row) => toPortableAssetRecord(row)),
+        liabilities: (liabilitiesRes.data ?? []).map((row) => toPortableLiabilityRecord(row)),
         snapshots: (snapshotsRes.data ?? []).slice(),
+      },
+      premium: {
+        family_members: (membersRes.data ?? []).slice(),
+        ownerships: (ownershipsRes.data ?? []).map((row) => toPortableOwnershipRecord(row)),
+        ownership_links: (linksRes.data ?? []).slice(),
       },
     };
 
@@ -1089,7 +1322,7 @@ async function exportDataBundle(): Promise<void> {
     link.remove();
     URL.revokeObjectURL(url);
 
-    dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos y ${payload.data.snapshots?.length ?? 0} snapshots.`;
+    dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos, ${payload.data.snapshots?.length ?? 0} snapshots, ${payload.premium?.family_members.length ?? 0} miembros y ${payload.premium?.ownerships.length ?? 0} titularidades.`;
   } catch (e: unknown) {
     dataTransferError.value = `No se pudo exportar: ${toApiErrorMessage(e)}`;
   } finally {
@@ -1098,63 +1331,112 @@ async function exportDataBundle(): Promise<void> {
   }
 }
 
-function parsePortableDataBundle(raw: string): PortableDataBundle {
-  const parsed = JSON.parse(raw) as Partial<PortableDataBundle>;
-  if (parsed?.schema_version !== 1 || !parsed.data) {
-    throw new Error('Formato de archivo no compatible.');
-  }
-  const { annual_income, annual_expense, assets, liabilities, snapshots } =
-    parsed.data as PortableDataBundle['data'];
-  if (
-    !Array.isArray(annual_income) ||
-    !Array.isArray(annual_expense) ||
-    !Array.isArray(assets) ||
-    !Array.isArray(liabilities)
-  ) {
-    throw new Error('El archivo no contiene las colecciones esperadas.');
-  }
-  return {
-    schema_version: 1,
-    exported_at: String(parsed.exported_at ?? ''),
-    source_app: 'core',
-    settings:
-      parsed.settings && typeof parsed.settings === 'object'
-        ? { base_currency: String((parsed.settings as PortableSettingsRecord).base_currency ?? '') }
-        : undefined,
-    data: {
-      annual_income,
-      annual_expense,
-      assets,
-      liabilities,
-      snapshots: Array.isArray(snapshots) ? snapshots : [],
-    },
-  };
-}
-
-async function clearExistingDataForReplace(): Promise<void> {
+async function clearExistingCoreDataForReplace(): Promise<void> {
   const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
-    api.get<{ id: number }[]>('/api/budget/annual-income/'),
-    api.get<{ id: number }[]>('/api/budget/annual-expense/'),
-    api.get<{ id: number }[]>('/api/net-worth/assets/'),
-    api.get<{ id: number }[]>('/api/net-worth/liabilities/'),
-    api.get<{ id: number }[]>('/api/net-worth/snapshots/'),
+    coreApi.get<{ id: number }[]>('/api/budget/annual-income/'),
+    coreApi.get<{ id: number }[]>('/api/budget/annual-expense/'),
+    coreApi.get<{ id: number }[]>('/api/net-worth/assets/'),
+    coreApi.get<{ id: number }[]>('/api/net-worth/liabilities/'),
+    coreApi.get<{ id: number }[]>('/api/net-worth/snapshots/'),
   ]);
 
   for (const item of [...(liabilitiesRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/net-worth/liabilities/${item.id}/`);
+    await coreApi.delete(`/api/net-worth/liabilities/${item.id}/`);
   }
   for (const item of [...(assetsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/net-worth/assets/${item.id}/`);
+    await coreApi.delete(`/api/net-worth/assets/${item.id}/`);
   }
   for (const item of [...(incomeRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/budget/annual-income/${item.id}/`);
+    await coreApi.delete(`/api/budget/annual-income/${item.id}/`);
   }
   for (const item of [...(expenseRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/budget/annual-expense/${item.id}/`);
+    await coreApi.delete(`/api/budget/annual-expense/${item.id}/`);
   }
   for (const item of [...(snapshotsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/net-worth/snapshots/${item.id}/`);
+    await coreApi.delete(`/api/net-worth/snapshots/${item.id}/`);
   }
+}
+
+async function clearExistingPremiumDataForReplace(): Promise<void> {
+  const [linksRes, ownershipsRes, membersRes] = await Promise.all([
+    api.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+    api.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+    api.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+  ]);
+
+  for (const link of linksRes.data ?? []) {
+    await api.post('/api/ownership-links/sync/', {
+      target_type: link.target_type,
+      target_id: link.target_id,
+      ownership_id: null,
+    });
+  }
+
+  for (const ownership of [...(ownershipsRes.data ?? [])]
+    .filter((row) => row.kind === 'shared')
+    .sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/ownerships/${ownership.id}/`);
+  }
+
+  for (const member of [...(membersRes.data ?? [])].sort((a, b) => b.id - a.id)) {
+    await api.delete(`/api/family-members/${member.id}/`);
+  }
+}
+
+async function importPremiumPeopleData(
+  premium: PortablePremiumData | undefined,
+): Promise<Map<number, number>> {
+  const ownershipIdMap = new Map<number, number>();
+  if (!premium) return ownershipIdMap;
+
+  const memberIdMap = new Map<number, number>();
+  const sortedMembers = [...premium.family_members].sort((a, b) => a.id - b.id);
+  for (const member of sortedMembers) {
+    const res = await api.post<{ id: number }>('/api/family-members/', {
+      name: member.name,
+      role: member.role,
+      is_active: member.is_active ?? true,
+    });
+    if (typeof res.data?.id === 'number') memberIdMap.set(member.id, res.data.id);
+  }
+
+  const currentOwnershipsRes = await api.get<PortableOwnershipRecord[]>('/api/ownerships/');
+  const currentOwnerships = currentOwnershipsRes.data ?? [];
+  const exportedIndividuals = premium.ownerships.filter(
+    (ownership) => ownership.kind === 'individual' && ownership.member,
+  );
+  for (const ownership of exportedIndividuals) {
+    const oldMemberId = ownership.member?.id;
+    if (oldMemberId == null) continue;
+    const newMemberId = memberIdMap.get(oldMemberId);
+    if (newMemberId == null) continue;
+    const mapped = currentOwnerships.find(
+      (candidate) => candidate.kind === 'individual' && candidate.member?.id === newMemberId,
+    );
+    if (mapped) ownershipIdMap.set(ownership.id, mapped.id);
+  }
+
+  const exportedShared = premium.ownerships
+    .filter((ownership) => ownership.kind === 'shared')
+    .sort((a, b) => a.id - b.id);
+  for (const ownership of exportedShared) {
+    const splits = ownership.splits
+      .map((split) => {
+        const memberId = memberIdMap.get(split.member.id);
+        if (memberId == null) return null;
+        return { member_id: memberId, percent: String(split.percent) };
+      })
+      .filter((split): split is { member_id: number; percent: string } => split != null);
+    if (!splits.length) continue;
+    const res = await api.post<{ id: number }>('/api/ownerships/', {
+      kind: 'shared',
+      member: null,
+      splits,
+    });
+    if (typeof res.data?.id === 'number') ownershipIdMap.set(ownership.id, res.data.id);
+  }
+
+  return ownershipIdMap;
 }
 
 function setDataImportBusyState(importMode: 'append' | 'replace') {
@@ -1187,7 +1469,16 @@ async function importPortableAssets(
       is_active: asset.is_active ?? true,
       notes: asset.notes ?? '',
     };
-    const res = await api.post<{ id: number }>('/api/net-worth/assets/', assetPayload);
+    let res;
+    try {
+      res = await coreApi.post<{ id: number }>('/api/net-worth/assets/', assetPayload);
+    } catch (e: unknown) {
+      // Compatibilidad con backends core que aun no exponen/aceptan `notes` en AssetSerializer.
+      const message = toApiErrorMessage(e).toLowerCase();
+      if (!message.includes('notes')) throw e;
+      const { notes: _ignoredNotes, ...assetPayloadWithoutNotes } = assetPayload;
+      res = await coreApi.post<{ id: number }>('/api/net-worth/assets/', assetPayloadWithoutNotes);
+    }
     if (typeof res.data?.id === 'number') assetIdMap.set(asset.id, res.data.id);
   }
   return { sortedAssets, assetIdMap };
@@ -1196,7 +1487,8 @@ async function importPortableAssets(
 async function importPortableLiabilities(
   liabilities: PortableLiabilityRecord[],
   assetIdMap: Map<number, number>,
-): Promise<PortableLiabilityRecord[]> {
+): Promise<{ sortedLiabilities: PortableLiabilityRecord[]; liabilityIdMap: Map<number, number> }> {
+  const liabilityIdMap = new Map<number, number>();
   const sortedLiabilities = [...liabilities].sort((a, b) => a.id - b.id);
   for (const liability of sortedLiabilities) {
     const financedAssetId =
@@ -1228,9 +1520,10 @@ async function importPortableLiabilities(
       notes: liability.notes ?? '',
       financed_asset_id: financedAssetId,
     };
-    await api.post('/api/net-worth/liabilities/', liabilityPayload);
+    const res = await coreApi.post<{ id: number }>('/api/net-worth/liabilities/', liabilityPayload);
+    if (typeof res.data?.id === 'number') liabilityIdMap.set(liability.id, res.data.id);
   }
-  return sortedLiabilities;
+  return { sortedLiabilities, liabilityIdMap };
 }
 
 async function importPortableAnnualIncomeEntries(
@@ -1238,7 +1531,7 @@ async function importPortableAnnualIncomeEntries(
 ): Promise<PortableAnnualIncomeRecord[]> {
   const sortedIncome = [...annualIncome].sort((a, b) => a.id - b.id);
   for (const entry of sortedIncome) {
-    await api.post('/api/budget/annual-income/', {
+    await coreApi.post('/api/budget/annual-income/', {
       name: entry.name,
       category: entry.category,
       subcategory: entry.subcategory,
@@ -1263,7 +1556,7 @@ async function importPortableAnnualExpenseEntries(
 ): Promise<PortableAnnualExpenseRecord[]> {
   const sortedExpense = [...annualExpense].sort((a, b) => a.id - b.id);
   for (const entry of sortedExpense) {
-    await api.post('/api/budget/annual-expense/', {
+    await coreApi.post('/api/budget/annual-expense/', {
       name: entry.name,
       category: entry.category,
       subcategory: entry.subcategory,
@@ -1285,10 +1578,10 @@ async function importPortableAnnualExpenseEntries(
 
 async function importPortableSettingsAndSnapshots(bundle: PortableDataBundle): Promise<void> {
   if (bundle.settings?.base_currency) {
-    await api.put('/api/auth/settings/', { base_currency: bundle.settings.base_currency });
+    await coreApi.put('/api/auth/settings/', { base_currency: bundle.settings.base_currency });
   }
   if (!Array.isArray(bundle.data.snapshots) || !bundle.data.snapshots.length) return;
-  await api.post(
+  await coreApi.post(
     '/api/net-worth/snapshots/import-bulk/',
     bundle.data.snapshots.map((snapshot) => ({
       snapshot_date: snapshot.snapshot_date,
@@ -1298,6 +1591,28 @@ async function importPortableSettingsAndSnapshots(bundle: PortableDataBundle): P
       net_worth: snapshot.net_worth,
     })),
   );
+}
+
+async function importPremiumOwnershipLinks(
+  premium: PortablePremiumData | undefined,
+  ownershipIdMap: Map<number, number>,
+  assetIdMap: Map<number, number>,
+  liabilityIdMap: Map<number, number>,
+): Promise<void> {
+  if (!premium) return;
+  for (const link of premium.ownership_links) {
+    const mappedTargetId =
+      link.target_type === 'asset'
+        ? (assetIdMap.get(link.target_id) ?? null)
+        : (liabilityIdMap.get(link.target_id) ?? null);
+    const mappedOwnershipId = ownershipIdMap.get(link.ownership_id) ?? null;
+    if (mappedTargetId == null || mappedOwnershipId == null) continue;
+    await api.post('/api/ownership-links/sync/', {
+      target_type: link.target_type,
+      target_id: mappedTargetId,
+      ownership_id: mappedOwnershipId,
+    });
+  }
 }
 
 async function refreshImportedDataViews(): Promise<void> {
@@ -1324,9 +1639,13 @@ function buildImportCompletionStatus(params: {
     sortedAssetsCount,
     sortedLiabilitiesCount,
   } = params;
+  const peopleSummary = bundle.premium
+    ? `, ${bundle.premium.family_members.length} miembros, ${bundle.premium.ownerships.length} titularidades y ${bundle.premium.ownership_links.length} enlaces de titularidad`
+    : '';
+  const snapshotsSummary = `, ${bundle.data.snapshots?.length ?? 0} snapshots`;
   return importMode === 'replace'
-    ? `Reemplazo completado: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${bundle.data.snapshots?.length ?? 0} snapshots.`
-    : `Importacion completada: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos, ${sortedLiabilitiesCount} pasivos y ${bundle.data.snapshots?.length ?? 0} snapshots.`;
+    ? `Reemplazo completado: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos y ${sortedLiabilitiesCount} pasivos${snapshotsSummary}${peopleSummary}.`
+    : `Importacion completada: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos y ${sortedLiabilitiesCount} pasivos${snapshotsSummary}${peopleSummary}.`;
 }
 
 async function importDataFromFile(event: Event): Promise<void> {
@@ -1340,6 +1659,7 @@ async function importDataFromFile(event: Event): Promise<void> {
     const content = await file.text();
     const bundle = parsePortableDataBundle(content);
     const importMode = pendingImportMode.value;
+    const hasPremiumPayload = Boolean(bundle.premium);
 
     const proceed = window.confirm(buildImportPreviewMessage(bundle, importMode));
     if (!proceed) return;
@@ -1347,14 +1667,22 @@ async function importDataFromFile(event: Event): Promise<void> {
     setDataImportBusyState(importMode);
 
     if (importMode === 'replace') {
-      await clearExistingDataForReplace();
+      await clearExistingCoreDataForReplace();
+      if (hasPremiumPayload) {
+        await clearExistingPremiumDataForReplace();
+      }
     }
 
+    const ownershipIdMap = await importPremiumPeopleData(bundle.premium);
     const { sortedAssets, assetIdMap } = await importPortableAssets(bundle.data.assets);
-    const sortedLiabilities = await importPortableLiabilities(bundle.data.liabilities, assetIdMap);
+    const { sortedLiabilities, liabilityIdMap } = await importPortableLiabilities(
+      bundle.data.liabilities,
+      assetIdMap,
+    );
     const sortedIncome = await importPortableAnnualIncomeEntries(bundle.data.annual_income);
     const sortedExpense = await importPortableAnnualExpenseEntries(bundle.data.annual_expense);
     await importPortableSettingsAndSnapshots(bundle);
+    await importPremiumOwnershipLinks(bundle.premium, ownershipIdMap, assetIdMap, liabilityIdMap);
     await refreshImportedDataViews();
 
     dataTransferStatus.value = buildImportCompletionStatus({
@@ -1505,7 +1833,7 @@ watch(
             <div class="ui-flow-air-meta">
               <span class="ui-flow-air-subtitle">Ingresos y gastos</span>
               <select
-                id="fiscal-year-income-expense-core"
+                id="fiscal-year-income-expense"
                 v-model.number="fiscalYear"
                 class="select nw-select-sm ui-flow-air-year-select"
                 aria-label="Ejercicio"
@@ -1529,6 +1857,17 @@ watch(
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Ingresos anuales</h2>
+            <select v-model="annualIncomeOwnerFilter" class="select nw-select-sm">
+              <option value="all">Todos los miembros</option>
+              <option value="unassigned">Sin asignar</option>
+              <option
+                v-for="option in annualOwnerFilterOptions"
+                :key="option.key"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -1556,11 +1895,12 @@ watch(
         <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
           No hay ingresos anuales todavia.
         </div>
+
         <div
           v-else-if="!filteredAnnualIncomeEntries.length && !annualIncomeLoading"
           class="subtle mt-3"
         >
-          No hay ingresos en el ejercicio {{ fiscalYear }}.
+          No hay ingresos con este filtro.
         </div>
 
         <div v-else class="mt-3 grid gap-4">
@@ -1630,6 +1970,7 @@ watch(
                             aria-hidden="true"
                           ></span>
                           <span class="item-name-text">{{ entry.name }}</span>
+                          <span v-if="entry.owner" class="badge">{{ entry.owner }}</span>
                         </div>
                         <div class="nw-item-submeta">
                           {{ timeProfileLabel(entry.timeProfile) }} .
@@ -1677,6 +2018,17 @@ watch(
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Gastos anuales</h2>
+            <select v-model="annualExpenseOwnerFilter" class="select nw-select-sm">
+              <option value="all">Todos los miembros</option>
+              <option value="unassigned">Sin asignar</option>
+              <option
+                v-for="option in annualOwnerFilterOptions"
+                :key="option.key"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -1696,7 +2048,6 @@ watch(
         <div class="nw-list-header-totals">
           <div class="nw-list-total-details">Total anual</div>
         </div>
-
         <div v-if="annualExpenseError" class="alert mt-3">{{ annualExpenseError }}</div>
         <div v-else-if="annualExpenseApiError" class="alert mt-3">{{ annualExpenseApiError }}</div>
 
@@ -1707,7 +2058,7 @@ watch(
           v-else-if="!filteredAnnualExpenseEntries.length && !annualExpenseLoading"
           class="subtle mt-3"
         >
-          No hay gastos en el ejercicio {{ fiscalYear }}.
+          No hay gastos con este filtro.
         </div>
 
         <div v-else class="mt-3 grid gap-4">
@@ -1780,6 +2131,7 @@ watch(
                             aria-hidden="true"
                           ></span>
                           <span class="item-name-text">{{ entry.name }}</span>
+                          <span v-if="entry.owner" class="badge">{{ entry.owner }}</span>
                         </div>
                         <div class="nw-item-submeta">
                           {{ timeProfileLabel(entry.timeProfile) }} .
@@ -1848,6 +2200,7 @@ watch(
 
     <div class="grid-2">
       <ItemList
+        v-model:ownership-filter-value="assetOwnershipFilter"
         title="Activos"
         :items="store.assets"
         :categories="assetCategories"
@@ -1864,6 +2217,7 @@ watch(
       />
 
       <ItemList
+        v-model:ownership-filter-value="liabilityOwnershipFilter"
         title="Pasivos"
         :items="store.liabilities"
         :categories="liabilityCategories"
@@ -1912,9 +2266,9 @@ watch(
     >
       <div v-if="generatedLiabilityExpenseReview" class="grid gap-3">
         <div class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90">
-          Se han generado {{ generatedLiabilityExpenseReview.entries.length }}
-          gasto(s) anual(es) automáticos para este pasivo. Revísalos y confirma que la
-          clasificación (categoría/subcategoría/naturaleza) es correcta.
+          Se han generado gastos recurrentes en {{ generatedLiabilityExpenseReview.entries.length }}
+          anualidades para este pasivo. Revisalos y confirma que la
+          clasificacion (categoria/subcategoria/naturaleza) es correcta.
         </div>
 
         <div class="grid gap-2">
@@ -1931,7 +2285,16 @@ watch(
             </div>
             <div class="mt-1 text-xs text-white/70">
               {{ expenseCategoryLabel(entry.category) }} / {{ expenseSubcategoryLabel(entry.subcategory) }}
-              . {{ expenseCashflowRoleLabel(entry.cashflowRole as AnnualExpenseCashflowRole) }}
+              <template
+                v-if="
+                  !shouldHideExpenseCashflowRoleLabel({
+                    timeProfile: entry.timeProfile as ExpenseTimeProfile,
+                    cashflowRole: entry.cashflowRole as AnnualExpenseCashflowRole,
+                  })
+                "
+              >
+                . {{ expenseCashflowRoleLabel(entry.cashflowRole as AnnualExpenseCashflowRole) }}
+              </template>
               . {{ timeProfileLabel(entry.timeProfile as ExpenseTimeProfile) }}
             </div>
             <div v-if="entry.notes" class="mt-1 text-xs text-white/55">
@@ -1979,249 +2342,43 @@ watch(
       />
     </BaseModal>
 
-    <BaseModal :open="showIncomeModal" :title="incomeModalTitle" @close="closeIncomeModal">
-      <div class="grid gap-2.5 md:grid-cols-2">
-        <select v-model="annualIncomeForm.category" class="select ui-data-field">
-          <option
-            v-for="category in incomeCategories"
-            :key="category.value"
-            :value="category.value"
-          >
-            {{ category.label }}
-          </option>
-        </select>
-        <select v-model="annualIncomeForm.subcategory" class="select ui-data-field">
-          <option
-            v-for="subcategory in annualSubcategoryOptions"
-            :key="subcategory.value"
-            :value="subcategory.value"
-          >
-            {{ subcategory.label }}
-          </option>
-        </select>
-        <input
-          v-model="annualIncomeForm.name"
-          class="input ui-data-field md:col-span-2"
-          placeholder="Concepto (ej: CTN, Regalos Pablo)"
-        />
-        <select v-model="annualIncomeForm.timeProfile" class="select ui-data-field">
-          <option value="structural_recurrent">Recurrente estructural (base)</option>
-          <option value="term_recurrent">Recurrente temporal (con fin)</option>
-          <option value="one_off">Puntual / extraordinario</option>
-        </select>
-        <select v-model="annualIncomeForm.cashflowRole" class="select ui-data-field">
-          <option value="operating">Naturaleza: Operativo</option>
-          <option value="transfer">Naturaleza: Transferencia/apoyo</option>
-          <option value="asset_sale">Naturaleza: Venta de activo</option>
-          <option value="tax_adjustment">Naturaleza: Ajuste fiscal</option>
-          <option value="other">Naturaleza: Otro</option>
-        </select>
-        <input
-          v-model="annualIncomeForm.eventGroup"
-          class="input ui-data-field"
-          placeholder="Grupo de evento (opcional, ej: vivienda_2026)"
-        />
-        <input
-          v-if="annualIncomeForm.timeProfile === 'term_recurrent'"
-          v-model="annualIncomeForm.termEndYear"
-          class="input ui-data-field"
-          inputmode="numeric"
-          placeholder="Ano fin compromiso (ej: 2027)"
-        />
-        <div
-          class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_120px]"
-        >
-          <input
-            v-model="annualIncomeForm.amountAnnual"
-            class="input ui-data-field"
-            inputmode="decimal"
-            :placeholder="incomeAmountInputPlaceholder"
-          />
-          <div class="grid justify-items-center gap-1">
-            <button
-              type="button"
-              class="relative inline-flex h-[34px] w-[58px] items-center rounded-full border transition"
-              :class="
-                annualIncomeForm.amountInputPeriod === 'monthly'
-                  ? 'border-teal-300/60 bg-teal-400/20'
-                  : 'border-white/20 bg-white/5'
-              "
-              :disabled="annualIncomeForm.timeProfile === 'one_off'"
-              aria-label="Cambiar periodicidad mensual/anual"
-              @click="
-                annualIncomeForm.amountInputPeriod =
-                  annualIncomeForm.amountInputPeriod === 'annual' ? 'monthly' : 'annual'
-              "
-            >
-              <span
-                class="inline-block h-6 w-6 rounded-full bg-white/90 transition-transform"
-                :class="
-                  annualIncomeForm.amountInputPeriod === 'monthly'
-                    ? 'translate-x-7'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-            <span class="subtle text-[11px]">
-              <span :class="annualIncomeForm.amountInputPeriod === 'annual' ? 'text-white/90' : ''">
-                Anual
-              </span>
-              /
-              <span
-                :class="annualIncomeForm.amountInputPeriod === 'monthly' ? 'text-white/90' : ''"
-              >
-                Mensual
-              </span>
-            </span>
-          </div>
-          <select v-model="annualIncomeForm.currency" class="select ui-data-field">
-            <option value="EUR">EUR</option>
-            <option value="USD">USD</option>
-          </select>
-        </div>
-        <textarea
-          v-model="annualIncomeForm.notes"
-          class="textarea md:col-span-2"
-          rows="2"
-          placeholder="Notas (opcional)"
-        />
-        <div class="actions md:col-span-2">
-          <button class="btn btn-ghost" type="button" @click="closeIncomeModal">Cancelar</button>
-          <button
-            class="btn btn-primary"
-            type="button"
-            :disabled="annualIncomeLoading"
-            @click="submitAnnualIncome"
-          >
-            {{ incomeSubmitLabel }}
-          </button>
-        </div>
-      </div>
-    </BaseModal>
+    <AnnualEntryModalForm
+      :open="showIncomeModal"
+      :title="incomeModalTitle"
+      :form="annualIncomeForm"
+      :loading="annualIncomeLoading"
+      :submit-label="incomeSubmitLabel"
+      :category-options="incomeCategories"
+      :subcategory-options="annualSubcategoryOptions"
+      :show-owner-field="showOwnerField"
+      :owner-options="ownerOptions"
+      :time-profile-options="incomeTimeProfileOptions"
+      :cashflow-role-options="incomeCashflowRoleOptions"
+      name-placeholder="Concepto (ej: CTN, Regalos Pablo)"
+      :amount-placeholder="incomeAmountInputPlaceholder"
+      @patch="patchAnnualIncomeForm"
+      @close="closeIncomeModal"
+      @submit="submitAnnualIncome"
+    />
 
-    <BaseModal :open="showExpenseModal" :title="expenseModalTitle" @close="closeExpenseModal">
-      <div class="grid gap-2.5 md:grid-cols-2">
-        <select v-model="annualExpenseForm.category" class="select ui-data-field">
-          <option
-            v-for="category in expenseCategories"
-            :key="category.value"
-            :value="category.value"
-          >
-            {{ category.label }}
-          </option>
-        </select>
-        <select v-model="annualExpenseForm.subcategory" class="select ui-data-field">
-          <option
-            v-for="subcategory in annualExpenseSubcategoryOptions"
-            :key="subcategory.value"
-            :value="subcategory.value"
-          >
-            {{ subcategory.label }}
-          </option>
-        </select>
-        <input
-          v-model="annualExpenseForm.name"
-          class="input ui-data-field md:col-span-2"
-          placeholder="Concepto (ej: Alimentacion, Hipoteca)"
-        />
-        <select v-model="annualExpenseForm.timeProfile" class="select ui-data-field">
-          <option value="structural_recurrent">Recurrente estructural (estilo de vida)</option>
-          <option value="term_recurrent">Recurrente temporal (cuotas/compromiso)</option>
-          <option value="one_off">Puntual / extraordinario</option>
-        </select>
-        <select v-model="annualExpenseForm.cashflowRole" class="select ui-data-field">
-          <option value="operating">Naturaleza: Operativo</option>
-          <option value="temporary_commitment">Naturaleza: Compromiso temporal</option>
-          <option value="savings">Naturaleza: Ahorro</option>
-          <option value="investment">Naturaleza: Inversion</option>
-          <option value="asset_purchase">Naturaleza: Compra de activo</option>
-          <option value="tax_fee">Naturaleza: Impuestos/gastos</option>
-          <option value="transfer">Naturaleza: Transferencia</option>
-          <option value="other">Naturaleza: Otro</option>
-        </select>
-        <input
-          v-model="annualExpenseForm.eventGroup"
-          class="input ui-data-field"
-          placeholder="Grupo de evento (opcional, ej: vivienda_2026)"
-        />
-        <input
-          v-if="annualExpenseForm.timeProfile === 'term_recurrent'"
-          v-model="annualExpenseForm.termEndYear"
-          class="input ui-data-field"
-          inputmode="numeric"
-          placeholder="Ano fin compromiso (ej: 2027)"
-        />
-        <div
-          class="grid items-center gap-2.5 md:col-span-2 md:grid-cols-[minmax(0,1fr)_auto_120px]"
-        >
-          <input
-            v-model="annualExpenseForm.amountAnnual"
-            class="input ui-data-field"
-            inputmode="decimal"
-            :placeholder="expenseAmountInputPlaceholder"
-          />
-          <div class="grid justify-items-center gap-1">
-            <button
-              type="button"
-              class="relative inline-flex h-[34px] w-[58px] items-center rounded-full border transition"
-              :class="
-                annualExpenseForm.amountInputPeriod === 'monthly'
-                  ? 'border-teal-300/60 bg-teal-400/20'
-                  : 'border-white/20 bg-white/5'
-              "
-              :disabled="annualExpenseForm.timeProfile === 'one_off'"
-              aria-label="Cambiar periodicidad mensual/anual"
-              @click="
-                annualExpenseForm.amountInputPeriod =
-                  annualExpenseForm.amountInputPeriod === 'annual' ? 'monthly' : 'annual'
-              "
-            >
-              <span
-                class="inline-block h-6 w-6 rounded-full bg-white/90 transition-transform"
-                :class="
-                  annualExpenseForm.amountInputPeriod === 'monthly'
-                    ? 'translate-x-7'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-            <span class="subtle text-[11px]">
-              <span
-                :class="annualExpenseForm.amountInputPeriod === 'annual' ? 'text-white/90' : ''"
-              >
-                Anual
-              </span>
-              /
-              <span
-                :class="annualExpenseForm.amountInputPeriod === 'monthly' ? 'text-white/90' : ''"
-              >
-                Mensual
-              </span>
-            </span>
-          </div>
-          <select v-model="annualExpenseForm.currency" class="select ui-data-field">
-            <option value="EUR">EUR</option>
-            <option value="USD">USD</option>
-          </select>
-        </div>
-        <textarea
-          v-model="annualExpenseForm.notes"
-          class="textarea md:col-span-2"
-          rows="2"
-          placeholder="Notas (opcional)"
-        />
-        <div class="actions md:col-span-2">
-          <button class="btn btn-ghost" type="button" @click="closeExpenseModal">Cancelar</button>
-          <button
-            class="btn btn-primary"
-            type="button"
-            :disabled="annualExpenseLoading"
-            @click="submitAnnualExpense"
-          >
-            {{ expenseSubmitLabel }}
-          </button>
-        </div>
-      </div>
-    </BaseModal>
+    <AnnualEntryModalForm
+      :open="showExpenseModal"
+      :title="expenseModalTitle"
+      :form="annualExpenseForm"
+      :loading="annualExpenseLoading"
+      :submit-label="expenseSubmitLabel"
+      :category-options="expenseCategories"
+      :subcategory-options="annualExpenseSubcategoryOptions"
+      :show-owner-field="showOwnerField"
+      :owner-options="ownerOptions"
+      :time-profile-options="expenseTimeProfileOptions"
+      :cashflow-role-options="filteredExpenseCashflowRoleOptions"
+      :show-cashflow-role-field="showExpenseCashflowRoleField"
+      name-placeholder="Concepto (ej: Alimentacion, Hipoteca)"
+      :amount-placeholder="expenseAmountInputPlaceholder"
+      @patch="patchAnnualExpenseForm"
+      @close="closeExpenseModal"
+      @submit="submitAnnualExpense"
+    />
   </div>
 </template>
