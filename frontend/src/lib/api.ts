@@ -9,6 +9,8 @@ import {
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const api = axios.create({ baseURL });
+// Compatibility alias used by SaaS-derived views that call Core endpoints explicitly.
+export const coreApi = api;
 const refreshClient = axios.create({ baseURL });
 
 type PendingCallback = (token: string | null) => void;

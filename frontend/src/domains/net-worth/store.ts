@@ -1,26 +1,34 @@
 import { defineStore } from 'pinia';
 import { toApiErrorMessage } from '@/lib/errors';
-import { coreNetWorthApi } from '@/domains/net-worth/api';
+import { coreNetWorthApi, premiumOwnershipApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
+import { attachOwnershipRef, buildOwnershipMaps } from '@/domains/net-worth/ownership';
 import type {
   Asset,
   Liability,
   NetWorthWritePayload,
+  Ownership,
   Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
 
-export type { Asset, Liability, Snapshot, Summary } from '@/domains/net-worth/models';
+export type { Asset, Liability, Ownership, Snapshot, Summary } from '@/domains/net-worth/models';
+
+type OwnershipAwarePayload = NetWorthWritePayload & { ownership_id?: number | null };
 
 export const useNetWorthStore = defineStore('netWorth', {
   state: () => ({
     loading: false as boolean,
     error: null as string | null,
+
     baseCurrency: null as string | null,
+
     summary: null as Summary | null,
     assets: [] as Asset[],
     liabilities: [] as Liability[],
     snapshots: [] as Snapshot[],
+
+    ownerships: [] as Ownership[],
   }),
 
   getters: {
@@ -40,12 +48,19 @@ export const useNetWorthStore = defineStore('netWorth', {
           coreNetWorthApi.getLiabilities(),
           coreNetWorthApi.getSnapshots(),
         ]);
+        const [ownershipsRes, linksRes] = await Promise.all([
+          premiumOwnershipApi.getOwnerships(),
+          premiumOwnershipApi.getOwnershipLinks(),
+        ]);
+        const links = linksRes.data;
+        const { assetOwnership, liabilityOwnership } = buildOwnershipMaps(links);
 
         this.summary = summaryRes.data;
         this.baseCurrency = summaryRes.data.base_currency;
-        this.assets = assetsRes.data;
-        this.liabilities = liabilitiesRes.data;
+        this.assets = attachOwnershipRef(assetsRes.data, assetOwnership);
+        this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
         this.snapshots = snapshotsRes.data;
+        this.ownerships = ownershipsRes.data;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
@@ -78,11 +93,19 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-    async createAsset(payload: NetWorthWritePayload) {
+    async createAsset(payload: OwnershipAwarePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.createAsset(payload);
+        const { ownership_id = null, ...corePayload } = payload;
+        const res = await coreNetWorthApi.createAsset(corePayload);
+        if (res?.data?.id) {
+          await premiumOwnershipApi.syncOwnershipLink({
+            target_type: 'asset',
+            target_id: res.data.id,
+            ownership_id,
+          });
+        }
         await this.refreshAll();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
@@ -91,11 +114,17 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-    async updateAsset(id: number, payload: NetWorthWritePayload) {
+    async updateAsset(id: number, payload: OwnershipAwarePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.updateAsset(id, payload);
+        const { ownership_id = null, ...corePayload } = payload;
+        await coreNetWorthApi.updateAsset(id, corePayload);
+        await premiumOwnershipApi.syncOwnershipLink({
+          target_type: 'asset',
+          target_id: id,
+          ownership_id,
+        });
         await this.refreshAll();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
@@ -108,13 +137,21 @@ export const useNetWorthStore = defineStore('netWorth', {
       return this.updateAsset(id, { is_active: false });
     },
 
-    async createLiability(payload: NetWorthWritePayload) {
+    async createLiability(payload: OwnershipAwarePayload) {
       this.loading = true;
       this.error = null;
       let createdLiability: Liability | null = null;
       try {
-        const response = await coreNetWorthApi.createLiability(payload);
-        createdLiability = response.data;
+        const { ownership_id = null, ...corePayload } = payload;
+        const res = await coreNetWorthApi.createLiability(corePayload);
+        createdLiability = res?.data ?? null;
+        if (res?.data?.id) {
+          await premiumOwnershipApi.syncOwnershipLink({
+            target_type: 'liability',
+            target_id: res.data.id,
+            ownership_id,
+          });
+        }
         await this.refreshAll();
         return createdLiability;
       } catch (e: unknown) {
@@ -123,7 +160,7 @@ export const useNetWorthStore = defineStore('netWorth', {
           try {
             await this.refreshAll();
           } catch {
-            // keep original error; el pasivo ya existe
+            // keep original error; pasivo ya fue creado en core
           }
           return createdLiability;
         }
@@ -133,11 +170,17 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-    async updateLiability(id: number, payload: NetWorthWritePayload) {
+    async updateLiability(id: number, payload: OwnershipAwarePayload) {
       this.loading = true;
       this.error = null;
       try {
-        await coreNetWorthApi.updateLiability(id, payload);
+        const { ownership_id = null, ...corePayload } = payload;
+        await coreNetWorthApi.updateLiability(id, corePayload);
+        await premiumOwnershipApi.syncOwnershipLink({
+          target_type: 'liability',
+          target_id: id,
+          ownership_id,
+        });
         await this.refreshAll();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);

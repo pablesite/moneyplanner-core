@@ -81,7 +81,10 @@ export type AppCapabilities = AppCapabilitiesV2 & AppCapabilitiesCompat;
 function buildCompat(capabilities: AppCapabilitiesV2): AppCapabilitiesCompat {
   return {
     isPremium: capabilities.planCode === 'cloud_pro' || capabilities.planCode === 'cloud_premium',
-    people: capabilities.familyCloud.sharedFamilyViews || capabilities.premium.familyMode,
+    people:
+      capabilities.core.familyLogicalModel ||
+      capabilities.familyCloud.sharedFamilyViews ||
+      capabilities.premium.familyMode,
     ownership: capabilities.core.familyLogicalModel || capabilities.premium.familyMode,
   };
 }
@@ -118,7 +121,7 @@ export const capabilities: AppCapabilities = withCompat({
     statsBasic: true,
     dataPortabilityBasic: true,
     onboardingAssisted: false,
-    familyLogicalModel: false,
+    familyLogicalModel: true,
     coachV1: true,
     coachPhase5: false,
     financialSimulatorBasic: false,
@@ -233,7 +236,7 @@ export function canUseFamilyMode(source: AppCapabilities = capabilities): boolea
 }
 
 export function canUsePeople(source: AppCapabilities = capabilities): boolean {
-  return source.familyCloud.sharedFamilyViews || source.compat.people;
+  return source.core.familyLogicalModel || source.familyCloud.sharedFamilyViews || source.compat.people;
 }
 
 export function canUseOwnership(source: AppCapabilities = capabilities): boolean {

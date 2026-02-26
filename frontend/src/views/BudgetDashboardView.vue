@@ -1,9 +1,108 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useAnnualExpenseStore } from '@/domains/data-input/annualExpenseStore';
-import { useAnnualIncomeStore } from '@/domains/data-input/annualIncomeStore';
-import { expenseCategories, expenseSubcategories } from '@/domains/data-input/expenseTaxonomy';
-import { incomeCategories, incomeSubcategories } from '@/domains/data-input/incomeTaxonomy';
+import { coreApi } from '@/lib/api';
+import { toApiErrorMessage } from '@/lib/errors';
+import {
+  expenseCategories,
+  expenseSubcategories,
+  incomeCategories,
+  incomeSubcategories,
+  useAnnualExpenseStore,
+  useAnnualIncomeStore,
+} from '@/domains/data-input';
+
+type BudgetDashboardMode = 'budget' | 'monthly-close';
+type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
+const props = withDefaults(defineProps<{ mode?: BudgetDashboardMode }>(), {
+  mode: 'budget',
+});
+
+type ExpenseMonthlySummaryMonth = {
+  month: number;
+  planned: string;
+  executed: string;
+  pending: string;
+  completion_ratio: number;
+  checkins_confirmed: number;
+  checkins_expected: number;
+};
+
+type ExpenseMonthlySummaryResponse = {
+  fiscal_year: number;
+  planned_total: string;
+  executed_total: string;
+  pending_total: string;
+  variance_total: string;
+  months: ExpenseMonthlySummaryMonth[];
+  completion_ratio: number;
+  months_with_checkins: number;
+  has_executed_data: boolean;
+};
+
+type ExpenseMonthlyCheckinApiItem = {
+  id: number;
+  annual_expense_entry_id: number;
+  fiscal_year: number;
+  month: number;
+  status: 'confirmed' | 'adjusted' | 'skipped';
+  executed_amount: string | null;
+  note: string;
+  confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type IncomeMonthlyCheckinApiItem = {
+  id: number;
+  annual_income_entry_id: number;
+  fiscal_year: number;
+  month: number;
+  status: 'confirmed' | 'adjusted' | 'skipped';
+  executed_amount: string | null;
+  note: string;
+  confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LiquidityMonthlyCheckinApiItem = {
+  id: number;
+  status: 'confirmed' | 'adjusted';
+  closing_balance_real: string;
+  note: string;
+  confirmed_at: string | null;
+  updated_at: string | null;
+};
+
+type LiquidityMonthlySummaryRow = {
+  asset_id: number;
+  asset_name: string;
+  asset_category: string;
+  asset_subcategory: string;
+  currency: string;
+  planned_closing_balance: string;
+  executed_closing_balance: string | null;
+  effective_closing_balance: string;
+  deviation: string;
+  planned_closing_balance_base: string;
+  executed_closing_balance_base: string | null;
+  effective_closing_balance_base: string;
+  deviation_base: string;
+  checkin: LiquidityMonthlyCheckinApiItem | null;
+};
+
+type LiquidityMonthlySummaryResponse = {
+  fiscal_year: number;
+  month: number;
+  base_currency: string;
+  planned_total: string;
+  executed_total: string;
+  deviation_total: string;
+  completion_ratio: number;
+  checkins_confirmed: number;
+  checkins_expected: number;
+  rows: LiquidityMonthlySummaryRow[];
+};
 
 type BudgetRow = {
   key: string;
@@ -45,6 +144,33 @@ type BudgetExecutionPreview = {
   overflow: boolean;
 };
 
+type MonthlyResultBreakdownSubrow = {
+  key: string;
+  subcategoryKey: string;
+  subcategoryLabel: string;
+  lineCount: number;
+  plannedTotal: number;
+  executedTotal: number;
+  deviation: number;
+  checkedCount: number;
+  completionRatio: number;
+  shareOfExecuted: number;
+};
+
+type MonthlyResultBreakdownGroup = {
+  key: string;
+  categoryKey: string;
+  categoryLabel: string;
+  lineCount: number;
+  plannedTotal: number;
+  executedTotal: number;
+  deviation: number;
+  checkedCount: number;
+  completionRatio: number;
+  shareOfExecuted: number;
+  rows: MonthlyResultBreakdownSubrow[];
+};
+
 const incomeStore = useAnnualIncomeStore('saas');
 const expenseStore = useAnnualExpenseStore('saas');
 
@@ -69,6 +195,24 @@ const monthLabels = [
   'Nov',
   'Dic',
 ];
+const selectedExecutionMonth = ref(new Date().getMonth() + 1);
+const expenseMonthlySummary = ref<ExpenseMonthlySummaryResponse | null>(null);
+const expenseCheckinsByEntryId = ref<Record<number, ExpenseMonthlyCheckinApiItem>>({});
+const expenseExecutionLoading = ref(false);
+const expenseExecutionBusyEntryId = ref<number | null>(null);
+const expenseExecutionError = ref<string | null>(null);
+const expenseAdjustAmounts = ref<Record<number, string>>({});
+const incomeCheckinsByEntryId = ref<Record<number, IncomeMonthlyCheckinApiItem>>({});
+const incomeExecutionLoading = ref(false);
+const incomeExecutionBusyEntryId = ref<number | null>(null);
+const incomeExecutionError = ref<string | null>(null);
+const incomeAdjustAmounts = ref<Record<number, string>>({});
+const liquidityMonthlySummary = ref<LiquidityMonthlySummaryResponse | null>(null);
+const liquidityExecutionLoading = ref(false);
+const liquidityExecutionBusyAssetId = ref<number | null>(null);
+const liquidityExecutionError = ref<string | null>(null);
+const liquidityAdjustAmounts = ref<Record<number, string>>({});
+const activeMonthlyCloseStep = ref<MonthlyCloseStepId>('liq');
 
 const incomeCategoryLabels = new Map(
   incomeCategories.map((row) => [row.value, row.label] as const),
@@ -82,6 +226,27 @@ const expenseCategoryLabels = new Map(
 const expenseSubcategoryLabels = new Map(
   expenseSubcategories.map((row) => [row.value, row.label] as const),
 );
+const isMonthlyCloseView = computed(() => props.mode === 'monthly-close');
+const monthlyCloseFlowSteps = computed<{ id: MonthlyCloseStepId; label: string; subtitle: string }[]>(() => [
+  { id: 'liq', label: 'Liquidez', subtitle: 'Saldo real de cuentas' },
+  { id: 'income', label: 'Ingresos', subtitle: 'Confirmar / ajustar' },
+  { id: 'expense', label: 'Gastos', subtitle: 'Confirmar / ajustar' },
+  { id: 'result', label: 'Resultado', subtitle: 'Residual y KPIs' },
+]);
+const monthlyCloseStepIds = computed(() => monthlyCloseFlowSteps.value.map((s) => s.id));
+const activeMonthlyCloseStepIndex = computed(() =>
+  monthlyCloseStepIds.value.findIndex((id) => id === activeMonthlyCloseStep.value),
+);
+const previousMonthlyCloseStep = computed<MonthlyCloseStepId | null>(() => {
+  const idx = activeMonthlyCloseStepIndex.value;
+  if (idx <= 0) return null;
+  return monthlyCloseStepIds.value[idx - 1] ?? null;
+});
+const nextMonthlyCloseStep = computed<MonthlyCloseStepId | null>(() => {
+  const idx = activeMonthlyCloseStepIndex.value;
+  if (idx < 0 || idx >= monthlyCloseStepIds.value.length - 1) return null;
+  return monthlyCloseStepIds.value[idx + 1] ?? null;
+});
 
 const fiscalYearOptions = computed(() => {
   const years = new Set<number>([
@@ -188,6 +353,18 @@ function closePopoverFromClick(event: Event): void {
   if (details) details.open = false;
 }
 
+function setActiveMonthlyCloseStep(step: MonthlyCloseStepId): void {
+  activeMonthlyCloseStep.value = step;
+}
+
+function goToPreviousMonthlyCloseStep(): void {
+  if (previousMonthlyCloseStep.value) activeMonthlyCloseStep.value = previousMonthlyCloseStep.value;
+}
+
+function goToNextMonthlyCloseStep(): void {
+  if (nextMonthlyCloseStep.value) activeMonthlyCloseStep.value = nextMonthlyCloseStep.value;
+}
+
 function selectOwnershipFilterOption(value: string, event: Event): void {
   ownershipFilter.value = value;
   closePopoverFromClick(event);
@@ -254,11 +431,483 @@ const plannedIncomeTotal = computed(() => sumPlanned(filteredIncomeEntries.value
 const plannedExpenseTotal = computed(() => sumPlanned(filteredExpenseEntries.value));
 const plannedBalanceTotal = computed(() => plannedIncomeTotal.value - plannedExpenseTotal.value);
 
-const executionStatusLabel = computed(() => 'Pendiente modulo contabilidad');
-const executionStatusDetail = computed(
-  () =>
-    'Las barras de ejecucion se activaran cuando exista el read-model agregado del modulo de contabilidad (hito 14).',
+function toNumberOrZero(raw: unknown): number {
+  const n = Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function monthlyPlannedAmountForExpenseEntry(
+  entry: (typeof expenseEntries.value)[number],
+  month: number,
+): number {
+  if (entry.expenseType === 'one_off') {
+    return entry.targetMonth === month ? toNumberOrZero(entry.amountAnnual) : 0;
+  }
+  return toNumberOrZero(entry.amountAnnual) / 12;
+}
+
+function monthlyPlannedAmountForIncomeEntry(entry: (typeof incomeEntries.value)[number], _month: number): number {
+  if (entry.incomeType === 'one_off') return 0;
+  return toNumberOrZero(entry.amountAnnual) / 12;
+}
+
+const expenseSummaryByMonth = computed(() => {
+  const map = new Map<number, ExpenseMonthlySummaryMonth>();
+  for (const row of expenseMonthlySummary.value?.months ?? []) {
+    map.set(row.month, row);
+  }
+  return map;
+});
+
+const selectedExpenseSummaryMonth = computed(() => {
+  return expenseSummaryByMonth.value.get(selectedExecutionMonth.value) ?? null;
+});
+
+const selectedExpenseMonthPlanned = computed(() =>
+  toNumberOrZero(selectedExpenseSummaryMonth.value?.planned),
 );
+const selectedExpenseMonthExecuted = computed(() =>
+  toNumberOrZero(selectedExpenseSummaryMonth.value?.executed),
+);
+const selectedExpenseMonthDeviation = computed(
+  () => selectedExpenseMonthExecuted.value - selectedExpenseMonthPlanned.value,
+);
+
+const monthlyIncomeExecutionEntries = computed(() => {
+  return incomeEntries.value
+    .filter((entry) => entry.fiscalYear === fiscalYear.value && entry.incomeType !== 'one_off')
+    .map((entry) => {
+      const checkin = incomeCheckinsByEntryId.value[entry.id] ?? null;
+      const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
+      return {
+        entry,
+        planned,
+        checkin,
+        executed:
+          checkin && checkin.status !== 'skipped'
+            ? toNumberOrZero(checkin.executed_amount)
+            : null,
+      };
+    })
+    .filter((row) => row.planned > 0)
+    .sort((a, b) => b.planned - a.planned || a.entry.name.localeCompare(b.entry.name, 'es'));
+});
+
+const selectedIncomeMonthPlanned = computed(() =>
+  monthlyIncomeExecutionEntries.value.reduce((sum, row) => sum + row.planned, 0),
+);
+const selectedIncomeMonthExecuted = computed(() =>
+  monthlyIncomeExecutionEntries.value.reduce(
+    (sum, row) => sum + (row.checkin && row.executed != null ? row.executed : 0),
+    0,
+  ),
+);
+const selectedIncomeMonthDeviation = computed(
+  () => selectedIncomeMonthExecuted.value - selectedIncomeMonthPlanned.value,
+);
+const selectedIncomeMonthCompletionRatio = computed(() => {
+  const total = monthlyIncomeExecutionEntries.value.length;
+  if (!total) return 1;
+  const checked = monthlyIncomeExecutionEntries.value.filter((row) => !!row.checkin).length;
+  return checked / total;
+});
+
+const selectedLiquidityMonthPlanned = computed(() =>
+  toNumberOrZero(liquidityMonthlySummary.value?.planned_total),
+);
+const selectedLiquidityMonthExecuted = computed(() =>
+  toNumberOrZero(liquidityMonthlySummary.value?.executed_total),
+);
+const selectedLiquidityMonthDeviation = computed(
+  () => selectedLiquidityMonthExecuted.value - selectedLiquidityMonthPlanned.value,
+);
+const selectedLiquidityStartBase = computed(() => selectedLiquidityMonthPlanned.value);
+const selectedMonthlyCloseExpected = computed(
+  () => selectedLiquidityStartBase.value + selectedIncomeMonthExecuted.value - selectedExpenseMonthExecuted.value,
+);
+const selectedMonthlyCloseResidual = computed(
+  () => selectedLiquidityMonthExecuted.value - selectedMonthlyCloseExpected.value,
+);
+const selectedMonthlyCloseCompletionRatio = computed(() => {
+  const ratios = [
+    monthlyLiquidityExecutionRows.value.length
+      ? (liquidityMonthlySummary.value?.completion_ratio ?? 0)
+      : 1,
+    selectedIncomeMonthCompletionRatio.value,
+    selectedExpenseSummaryMonth.value?.completion_ratio ?? (monthlyExpenseExecutionEntries.value.length ? 0 : 1),
+  ];
+  return ratios.reduce((sum, r) => sum + r, 0) / ratios.length;
+});
+
+const monthlyLiquidityExecutionRows = computed(() =>
+  (liquidityMonthlySummary.value?.rows ?? []).map((row) => {
+    const planned = toNumberOrZero(row.planned_closing_balance);
+    const executed = row.checkin ? toNumberOrZero(row.executed_closing_balance) : null;
+    return { ...row, planned, executed };
+  }),
+);
+
+const monthlyExpenseExecutionEntries = computed(() => {
+  const month = selectedExecutionMonth.value;
+  return expenseEntries.value
+    .filter((entry) => {
+      if (entry.expenseType === 'one_off') return entry.targetMonth === month;
+      return true;
+    })
+    .map((entry) => {
+      const checkin = expenseCheckinsByEntryId.value[entry.id] ?? null;
+      const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
+      return {
+        entry,
+        planned,
+        checkin,
+        executed:
+          checkin && checkin.status !== 'skipped'
+            ? toNumberOrZero(checkin.executed_amount)
+            : null,
+      };
+    })
+    .filter((row) => row.planned > 0)
+    .sort(
+      (a, b) =>
+        expenseCheckinCategorySortWeight(a.entry.category) -
+          expenseCheckinCategorySortWeight(b.entry.category) ||
+        b.planned - a.planned ||
+        a.entry.name.localeCompare(b.entry.name, 'es'),
+    );
+});
+
+const groupedMonthlyExpenseExecutionEntries = computed(() => {
+  type Row = (typeof monthlyExpenseExecutionEntries.value)[number];
+  const groups = new Map<
+    string,
+    {
+      categoryKey: string;
+      categoryLabel: string;
+      rows: Row[];
+      plannedTotal: number;
+      executedTotal: number;
+      checkedCount: number;
+    }
+  >();
+
+  for (const row of monthlyExpenseExecutionEntries.value) {
+    const key = row.entry.category;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        categoryKey: key,
+        categoryLabel: shortExpenseCategoryLabel(key),
+        rows: [],
+        plannedTotal: 0,
+        executedTotal: 0,
+        checkedCount: 0,
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+    group.plannedTotal += row.planned;
+    if (row.checkin) {
+      group.checkedCount += 1;
+      if (row.checkin.status !== 'skipped' && row.executed != null) {
+        group.executedTotal += row.executed;
+      }
+    }
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      deviation: group.executedTotal - group.plannedTotal,
+      completionRatio: group.rows.length ? group.checkedCount / group.rows.length : 0,
+    }))
+    .sort(
+      (a, b) =>
+        expenseCheckinCategorySortWeight(a.categoryKey) -
+          expenseCheckinCategorySortWeight(b.categoryKey) ||
+        b.plannedTotal - a.plannedTotal,
+    );
+});
+
+function buildMonthlyResultBreakdown<
+  TEntry extends { category: string; subcategory: string },
+  TRow extends {
+    entry: TEntry;
+    planned: number;
+    checkin: { status: 'confirmed' | 'adjusted' | 'skipped' } | null;
+    executed: number | null;
+  },
+>(
+  rows: TRow[],
+  categoryLabels: Map<string, string>,
+  subcategoryLabels: Map<string, string>,
+  executedSectionTotal: number,
+): MonthlyResultBreakdownGroup[] {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      categoryKey: string;
+      categoryLabel: string;
+      lineCount: number;
+      plannedTotal: number;
+      executedTotal: number;
+      checkedCount: number;
+      rows: Map<
+        string,
+        {
+          key: string;
+          subcategoryKey: string;
+          subcategoryLabel: string;
+          lineCount: number;
+          plannedTotal: number;
+          executedTotal: number;
+          checkedCount: number;
+        }
+      >;
+    }
+  >();
+
+  for (const row of rows) {
+    const categoryKey = row.entry.category;
+    const subcategoryKey = row.entry.subcategory;
+    const planned = Number.isFinite(row.planned) ? row.planned : 0;
+    const executed =
+      row.checkin && row.checkin.status !== 'skipped' && row.executed != null && Number.isFinite(row.executed)
+        ? row.executed
+        : 0;
+    const isChecked = !!row.checkin;
+
+    let group = groups.get(categoryKey);
+    if (!group) {
+      group = {
+        key: categoryKey,
+        categoryKey,
+        categoryLabel: categoryLabels.get(categoryKey) ?? categoryKey,
+        lineCount: 0,
+        plannedTotal: 0,
+        executedTotal: 0,
+        checkedCount: 0,
+        rows: new Map(),
+      };
+      groups.set(categoryKey, group);
+    }
+
+    group.lineCount += 1;
+    group.plannedTotal += planned;
+    group.executedTotal += executed;
+    if (isChecked) group.checkedCount += 1;
+
+    let subrow = group.rows.get(subcategoryKey);
+    if (!subrow) {
+      subrow = {
+        key: `${categoryKey}::${subcategoryKey}`,
+        subcategoryKey,
+        subcategoryLabel: subcategoryLabels.get(subcategoryKey) ?? subcategoryKey,
+        lineCount: 0,
+        plannedTotal: 0,
+        executedTotal: 0,
+        checkedCount: 0,
+      };
+      group.rows.set(subcategoryKey, subrow);
+    }
+
+    subrow.lineCount += 1;
+    subrow.plannedTotal += planned;
+    subrow.executedTotal += executed;
+    if (isChecked) subrow.checkedCount += 1;
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const rowsSorted = Array.from(group.rows.values())
+        .map((subrow) => ({
+          ...subrow,
+          deviation: subrow.executedTotal - subrow.plannedTotal,
+          completionRatio: subrow.lineCount ? subrow.checkedCount / subrow.lineCount : 0,
+          shareOfExecuted:
+            executedSectionTotal > 0 ? subrow.executedTotal / executedSectionTotal : 0,
+        }))
+        .sort(
+          (a, b) =>
+            b.executedTotal - a.executedTotal ||
+            b.plannedTotal - a.plannedTotal ||
+            a.subcategoryLabel.localeCompare(b.subcategoryLabel, 'es'),
+        );
+
+      return {
+        key: group.key,
+        categoryKey: group.categoryKey,
+        categoryLabel: group.categoryLabel,
+        lineCount: group.lineCount,
+        plannedTotal: group.plannedTotal,
+        executedTotal: group.executedTotal,
+        deviation: group.executedTotal - group.plannedTotal,
+        checkedCount: group.checkedCount,
+        completionRatio: group.lineCount ? group.checkedCount / group.lineCount : 0,
+        shareOfExecuted: executedSectionTotal > 0 ? group.executedTotal / executedSectionTotal : 0,
+        rows: rowsSorted,
+      } satisfies MonthlyResultBreakdownGroup;
+    })
+    .sort(
+      (a, b) =>
+        b.executedTotal - a.executedTotal ||
+        b.plannedTotal - a.plannedTotal ||
+        a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
+    );
+}
+
+const monthlyIncomeResultBreakdown = computed(() =>
+  buildMonthlyResultBreakdown(
+    monthlyIncomeExecutionEntries.value,
+    incomeCategoryLabels,
+    incomeSubcategoryLabels,
+    selectedIncomeMonthExecuted.value,
+  ),
+);
+
+const monthlyExpenseResultBreakdown = computed(() =>
+  buildMonthlyResultBreakdown(
+    monthlyExpenseExecutionEntries.value,
+    expenseCategoryLabels,
+    expenseSubcategoryLabels,
+    selectedExpenseMonthExecuted.value,
+  ),
+);
+
+const selectedMonthlyExecutedVolume = computed(
+  () => selectedIncomeMonthExecuted.value + selectedExpenseMonthExecuted.value,
+);
+const selectedMonthlyResidualAbs = computed(() => Math.abs(selectedMonthlyCloseResidual.value));
+const selectedMonthlyResidualVolumeRatio = computed(() =>
+  selectedMonthlyExecutedVolume.value > 0
+    ? selectedMonthlyResidualAbs.value / selectedMonthlyExecutedVolume.value
+    : null,
+);
+const selectedMonthlyResidualIncomeRatio = computed(() =>
+  selectedIncomeMonthExecuted.value > 0
+    ? selectedMonthlyResidualAbs.value / selectedIncomeMonthExecuted.value
+    : null,
+);
+const selectedMonthlyResidualExpenseRatio = computed(() =>
+  selectedExpenseMonthExecuted.value > 0
+    ? selectedMonthlyResidualAbs.value / selectedExpenseMonthExecuted.value
+    : null,
+);
+const selectedMonthlyResidualExpectedCloseRatio = computed(() =>
+  Math.abs(selectedMonthlyCloseExpected.value) > 0
+    ? selectedMonthlyResidualAbs.value / Math.abs(selectedMonthlyCloseExpected.value)
+    : null,
+);
+
+const selectedMonthlyResidualSeverity = computed<'ok' | 'watch' | 'alert'>(() => {
+  const ratio = selectedMonthlyResidualVolumeRatio.value;
+  if (ratio == null) return 'ok';
+  if (ratio <= 0.01) return 'ok';
+  if (ratio <= 0.03) return 'watch';
+  return 'alert';
+});
+
+const selectedMonthlyResidualSeverityLabel = computed(() => {
+  if (selectedMonthlyResidualSeverity.value === 'ok') return 'Conciliacion OK';
+  if (selectedMonthlyResidualSeverity.value === 'watch') return 'Revisar residual';
+  return 'Residual alto';
+});
+
+const resultReconciliationFlowRows = computed(() => [
+  {
+    id: 'start',
+    label: 'Liquidez inicio (referencia)',
+    amount: selectedLiquidityStartBase.value,
+    tone: 'neutral' as const,
+    meta: 'Base de referencia del paso de liquidez',
+  },
+  {
+    id: 'income',
+    label: 'Ingresos ejecutados',
+    amount: selectedIncomeMonthExecuted.value,
+    tone: 'positive' as const,
+    meta:
+      selectedMonthlyExecutedVolume.value > 0
+        ? `${formatPercent(selectedIncomeMonthExecuted.value / selectedMonthlyExecutedVolume.value, 0)} del volumen`
+        : undefined,
+  },
+  {
+    id: 'expense',
+    label: 'Gastos ejecutados',
+    amount: -selectedExpenseMonthExecuted.value,
+    tone: 'warning' as const,
+    meta:
+      selectedMonthlyExecutedVolume.value > 0
+        ? `${formatPercent(selectedExpenseMonthExecuted.value / selectedMonthlyExecutedVolume.value, 0)} del volumen`
+        : undefined,
+  },
+  {
+    id: 'expected-close',
+    label: 'Cierre esperado',
+    amount: selectedMonthlyCloseExpected.value,
+    tone: 'neutral' as const,
+    meta: 'Liquidez inicio + ingresos - gastos',
+    isResult: true,
+  },
+  {
+    id: 'residual',
+    label: 'Ajuste de conciliacion (residual)',
+    amount: selectedMonthlyCloseResidual.value,
+    tone: selectedMonthlyCloseResidual.value < 0 ? ('negative' as const) : ('positive' as const),
+    meta:
+      selectedMonthlyResidualVolumeRatio.value == null
+        ? 'Sin volumen ejecutado'
+        : `${formatPercent(selectedMonthlyResidualVolumeRatio.value, 1)} del volumen ejecutado`,
+  },
+  {
+    id: 'real-close',
+    label: 'Cierre real',
+    amount: selectedLiquidityMonthExecuted.value,
+    tone: 'neutral' as const,
+    meta: 'Cierre de liquidez confirmado',
+    isResult: true,
+  },
+]);
+
+const resultReconciliationCompositionRows = computed(() => {
+  const volume = selectedMonthlyExecutedVolume.value;
+  return [
+    {
+      id: 'income',
+      label: 'Ingresos ejecutados',
+      amount: selectedIncomeMonthExecuted.value,
+      shareOfVolume: volume > 0 ? selectedIncomeMonthExecuted.value / volume : null,
+      tone: 'positive' as const,
+    },
+    {
+      id: 'expense',
+      label: 'Gastos ejecutados',
+      amount: selectedExpenseMonthExecuted.value,
+      shareOfVolume: volume > 0 ? selectedExpenseMonthExecuted.value / volume : null,
+      tone: 'warning' as const,
+    },
+    {
+      id: 'residual',
+      label: 'Ajuste de conciliacion (residual)',
+      amount: selectedMonthlyCloseResidual.value,
+      shareOfVolume: volume > 0 ? selectedMonthlyResidualAbs.value / volume : null,
+      tone: selectedMonthlyCloseResidual.value < 0 ? ('negative' as const) : ('neutral' as const),
+    },
+  ];
+});
+
+const executionStatusLabel = computed(() => {
+  if (!expenseMonthlySummary.value) return 'Cargando contabilidad';
+  if (expenseMonthlySummary.value.has_executed_data) return 'Activo (gastos)';
+  return 'Sin check-ins (gastos)';
+});
+const executionStatusDetail = computed(() => {
+  if (!expenseMonthlySummary.value) {
+    return 'Cargando agregados mensuales de gastos (plan vs ejecutado).';
+  }
+  return `Gastos: ${expenseMonthlySummary.value.months_with_checkins}/12 meses con check-ins. Ingresos sigue pendiente en 14C.`;
+});
 
 function formatMoney(value: number, decimals = 2): string {
   return new Intl.NumberFormat('es-ES', {
@@ -266,6 +915,10 @@ function formatMoney(value: number, decimals = 2): string {
     maximumFractionDigits: decimals,
     useGrouping: true,
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatSignedMoney(value: number, decimals = 2): string {
+  return `${value > 0 ? '+' : ''}${formatMoney(value, decimals)}`;
 }
 
 function formatPercent(value: number | null, decimals = 0): string {
@@ -464,10 +1117,538 @@ async function refreshBudgetData(year = fiscalYear.value): Promise<void> {
   await Promise.all([incomeStore.loadAll(year), expenseStore.loadAll(year)]);
 }
 
+async function loadIncomeCheckinsForSelectedMonth(): Promise<void> {
+  try {
+    const response = await coreApi.get<IncomeMonthlyCheckinApiItem[]>('/api/budget/annual-income-checkins/', {
+      params: { year: fiscalYear.value, month: selectedExecutionMonth.value },
+    });
+    const nextMap: Record<number, IncomeMonthlyCheckinApiItem> = {};
+    for (const row of response.data ?? []) nextMap[row.annual_income_entry_id] = row;
+    incomeCheckinsByEntryId.value = nextMap;
+  } catch (e: unknown) {
+    incomeExecutionError.value = toApiErrorMessage(e);
+  }
+}
+
+async function refreshIncomeExecutionData(): Promise<void> {
+  incomeExecutionLoading.value = true;
+  incomeExecutionError.value = null;
+  try {
+    await loadIncomeCheckinsForSelectedMonth();
+  } finally {
+    incomeExecutionLoading.value = false;
+  }
+}
+
+async function loadExpenseExecutionSummary(year = fiscalYear.value): Promise<void> {
+  try {
+    const response = await coreApi.get<ExpenseMonthlySummaryResponse>(
+      '/api/budget/annual-expense/monthly-summary/',
+      { params: { year } },
+    );
+    expenseMonthlySummary.value = response.data ?? null;
+  } catch (e: unknown) {
+    expenseExecutionError.value = toApiErrorMessage(e);
+  }
+}
+
+async function loadExpenseCheckinsForSelectedMonth(): Promise<void> {
+  try {
+    const response = await coreApi.get<ExpenseMonthlyCheckinApiItem[]>('/api/budget/annual-expense-checkins/', {
+      params: { year: fiscalYear.value, month: selectedExecutionMonth.value },
+    });
+    const nextMap: Record<number, ExpenseMonthlyCheckinApiItem> = {};
+    for (const row of response.data ?? []) {
+      nextMap[row.annual_expense_entry_id] = row;
+    }
+    expenseCheckinsByEntryId.value = nextMap;
+  } catch (e: unknown) {
+    expenseExecutionError.value = toApiErrorMessage(e);
+  }
+}
+
+async function refreshExpenseExecutionData(): Promise<void> {
+  expenseExecutionLoading.value = true;
+  expenseExecutionError.value = null;
+  try {
+    await Promise.all([loadExpenseExecutionSummary(), loadExpenseCheckinsForSelectedMonth()]);
+  } finally {
+    expenseExecutionLoading.value = false;
+  }
+}
+
+function suggestedExecutedAmountForRow(row: (typeof monthlyExpenseExecutionEntries.value)[number]): string {
+  if (row.checkin?.status === 'skipped') return '0.00';
+  if (row.executed != null) return row.executed.toFixed(2);
+  return row.planned.toFixed(2);
+}
+
+function ensureExpenseAdjustAmountPrefilled(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+): void {
+  const current = String(expenseAdjustAmounts.value[row.entry.id] ?? '').trim();
+  if (current) return;
+  expenseAdjustAmounts.value[row.entry.id] = suggestedExecutedAmountForRow(row);
+}
+
+function parseDecimalInput(raw: string): number | null {
+  const normalized = raw.trim().replace(',', '.');
+  if (!normalized) return null;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+function checkinStatusLabel(
+  status: ExpenseMonthlyCheckinApiItem['status'] | IncomeMonthlyCheckinApiItem['status'],
+): string {
+  if (status === 'confirmed') return 'Confirmado';
+  if (status === 'adjusted') return 'Ajustado';
+  return 'No ocurrió';
+}
+
+function incomeCheckinRowSummary(row: (typeof monthlyIncomeExecutionEntries.value)[number]): string {
+  const subcategory = incomeSubcategoryLabels.get(row.entry.subcategory) ?? row.entry.subcategory;
+  return `${subcategory} · ${row.entry.name}`;
+}
+
+function suggestedIncomeExecutedAmountForRow(row: (typeof monthlyIncomeExecutionEntries.value)[number]): string {
+  if (row.checkin?.status === 'skipped') return '0.00';
+  if (row.executed != null) return row.executed.toFixed(2);
+  return row.planned.toFixed(2);
+}
+
+function ensureIncomeAdjustAmountPrefilled(row: (typeof monthlyIncomeExecutionEntries.value)[number]): void {
+  const current = String(incomeAdjustAmounts.value[row.entry.id] ?? '').trim();
+  if (current) return;
+  incomeAdjustAmounts.value[row.entry.id] = suggestedIncomeExecutedAmountForRow(row);
+}
+
+async function clearIncomeCheckin(row: (typeof monthlyIncomeExecutionEntries.value)[number]): Promise<void> {
+  const existing = incomeCheckinsByEntryId.value[row.entry.id];
+  if (!existing) return;
+  incomeExecutionBusyEntryId.value = row.entry.id;
+  incomeExecutionError.value = null;
+  try {
+    await coreApi.delete(`/api/budget/annual-income-checkins/${existing.id}/`);
+    await refreshIncomeExecutionData();
+  } catch (e: unknown) {
+    incomeExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    incomeExecutionBusyEntryId.value = null;
+  }
+}
+
+async function upsertIncomeCheckin(
+  row: (typeof monthlyIncomeExecutionEntries.value)[number],
+  status: 'confirmed' | 'adjusted',
+): Promise<void> {
+  incomeExecutionError.value = null;
+  incomeExecutionBusyEntryId.value = row.entry.id;
+  try {
+    const parsed = parseDecimalInput(String(incomeAdjustAmounts.value[row.entry.id] ?? '').trim());
+    if (parsed == null) {
+      incomeExecutionError.value = 'Indica un importe valido para confirmar (por ejemplo 123,45).';
+      return;
+    }
+    incomeAdjustAmounts.value[row.entry.id] = parsed.toFixed(2);
+    const payload = {
+      annual_income_entry_id: row.entry.id,
+      fiscal_year: fiscalYear.value,
+      month: selectedExecutionMonth.value,
+      status,
+      executed_amount: parsed.toFixed(2),
+    };
+    const existing = incomeCheckinsByEntryId.value[row.entry.id];
+    if (existing) await coreApi.patch(`/api/budget/annual-income-checkins/${existing.id}/`, payload);
+    else await coreApi.post('/api/budget/annual-income-checkins/', payload);
+    await refreshIncomeExecutionData();
+  } catch (e: unknown) {
+    incomeExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    incomeExecutionBusyEntryId.value = null;
+  }
+}
+
+async function saveIncomeCheckinFromInput(
+  row: (typeof monthlyIncomeExecutionEntries.value)[number],
+): Promise<void> {
+  ensureIncomeAdjustAmountPrefilled(row);
+  const parsed = parseDecimalInput(String(incomeAdjustAmounts.value[row.entry.id] ?? '').trim());
+  if (parsed == null) {
+    incomeExecutionError.value = 'Indica un importe valido para confirmar (por ejemplo 123,45).';
+    return;
+  }
+  incomeAdjustAmounts.value[row.entry.id] = parsed.toFixed(2);
+  const status = amountsEqualCents(parsed, row.planned) ? 'confirmed' : 'adjusted';
+  await upsertIncomeCheckin(row, status);
+}
+
+async function onIncomeCheckinCheckboxToggle(
+  row: (typeof monthlyIncomeExecutionEntries.value)[number],
+  checked: boolean,
+): Promise<void> {
+  if (checked) {
+    await saveIncomeCheckinFromInput(row);
+    return;
+  }
+  await clearIncomeCheckin(row);
+}
+
+async function onIncomeAdjustAmountBlur(
+  row: (typeof monthlyIncomeExecutionEntries.value)[number],
+): Promise<void> {
+  if (!incomeCheckinsByEntryId.value[row.entry.id]) return;
+  await saveIncomeCheckinFromInput(row);
+}
+
+async function resetIncomeCheckinDraftValue(
+  row: (typeof monthlyIncomeExecutionEntries.value)[number],
+  mode: 'zero' | 'planned',
+): Promise<void> {
+  incomeAdjustAmounts.value[row.entry.id] = mode === 'zero' ? '0.00' : row.planned.toFixed(2);
+  if (incomeCheckinsByEntryId.value[row.entry.id]) await clearIncomeCheckin(row);
+}
+
+function cleanedExpenseCheckinName(name: string): string {
+  return name.replace(/^Compromiso pasivo:\s*/i, '').trim();
+}
+
+function shortExpenseCategoryLabel(category: string): string {
+  if (category === 'real_estate_assets') return 'Act. Inm';
+  if (category === 'tangible_assets') return 'Act. Mob';
+  if (category === 'consumption_expenses') return 'Gastos';
+  if (category === 'financial_investments') return 'Inv. Fin';
+  if (category === 'savings_allocation') return 'Ahorro';
+  return expenseCategoryLabels.get(category as (typeof expenseCategories)[number]['value']) ?? category;
+}
+
+function expenseCheckinCategorySortWeight(category: string): number {
+  if (category === 'real_estate_assets') return 0; // Act. Inm
+  if (category === 'tangible_assets') return 1; // Act. mob
+  if (category === 'financial_investments') return 2; // Inversiones
+  if (category === 'consumption_expenses') return 3; // Gastos
+  if (category === 'savings_allocation') return 4; // Ahorro
+  return 99;
+}
+
+function amountsEqualCents(left: number, right: number): boolean {
+  return Math.round(left * 100) === Math.round(right * 100);
+}
+
+function expenseCheckinRowSummary(row: (typeof monthlyExpenseExecutionEntries.value)[number]): string {
+  const name = cleanedExpenseCheckinName(row.entry.name);
+  const subcategory = expenseSubcategoryLabels.get(row.entry.subcategory) ?? row.entry.subcategory;
+  return `${subcategory} · ${name}`;
+}
+
+async function clearExpenseCheckin(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+): Promise<void> {
+  const existing = expenseCheckinsByEntryId.value[row.entry.id];
+  if (!existing) return;
+  expenseExecutionBusyEntryId.value = row.entry.id;
+  expenseExecutionError.value = null;
+  try {
+    await coreApi.delete(`/api/budget/annual-expense-checkins/${existing.id}/`);
+    await refreshExpenseExecutionData();
+  } catch (e: unknown) {
+    expenseExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    expenseExecutionBusyEntryId.value = null;
+  }
+}
+
+function setExpenseAdjustAmountZero(row: (typeof monthlyExpenseExecutionEntries.value)[number]): void {
+  expenseAdjustAmounts.value[row.entry.id] = '0.00';
+}
+
+function setExpenseAdjustAmountPlanned(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+): void {
+  expenseAdjustAmounts.value[row.entry.id] = row.planned.toFixed(2);
+}
+
+async function resetExpenseCheckinDraftValue(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+  mode: 'zero' | 'planned',
+): Promise<void> {
+  if (mode === 'zero') setExpenseAdjustAmountZero(row);
+  else setExpenseAdjustAmountPlanned(row);
+  if (expenseCheckinsByEntryId.value[row.entry.id]) {
+    await clearExpenseCheckin(row);
+  }
+}
+
+async function saveExpenseCheckinFromInput(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+): Promise<void> {
+  ensureExpenseAdjustAmountPrefilled(row);
+  const rawAdjusted = String(expenseAdjustAmounts.value[row.entry.id] ?? '').trim();
+  const parsedAdjusted = parseDecimalInput(rawAdjusted);
+  if (parsedAdjusted == null) {
+    expenseExecutionError.value =
+      'Indica un importe valido para confirmar (por ejemplo 123,45).';
+    return;
+  }
+  expenseAdjustAmounts.value[row.entry.id] = parsedAdjusted.toFixed(2);
+  const status = amountsEqualCents(parsedAdjusted, row.planned) ? 'confirmed' : 'adjusted';
+  await upsertExpenseCheckin(row, status);
+}
+
+async function onExpenseCheckinCheckboxToggle(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+  checked: boolean,
+): Promise<void> {
+  if (checked) {
+    await saveExpenseCheckinFromInput(row);
+    return;
+  }
+  await clearExpenseCheckin(row);
+}
+
+async function onExpenseAdjustAmountBlur(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+): Promise<void> {
+  if (!expenseCheckinsByEntryId.value[row.entry.id]) return;
+  await saveExpenseCheckinFromInput(row);
+}
+
+async function upsertExpenseCheckin(
+  row: (typeof monthlyExpenseExecutionEntries.value)[number],
+  status: 'confirmed' | 'adjusted',
+): Promise<void> {
+  expenseExecutionError.value = null;
+  expenseExecutionBusyEntryId.value = row.entry.id;
+  try {
+    const existing = expenseCheckinsByEntryId.value[row.entry.id];
+    const draftAmount = String(expenseAdjustAmounts.value[row.entry.id] ?? '').trim();
+
+    const payload = {
+      annual_expense_entry_id: row.entry.id,
+      fiscal_year: fiscalYear.value,
+      month: selectedExecutionMonth.value,
+      status,
+      executed_amount: draftAmount || null,
+    };
+
+    if (existing) {
+      await coreApi.patch(`/api/budget/annual-expense-checkins/${existing.id}/`, payload);
+    } else {
+      await coreApi.post('/api/budget/annual-expense-checkins/', payload);
+    }
+    await refreshExpenseExecutionData();
+  } catch (e: unknown) {
+    expenseExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    expenseExecutionBusyEntryId.value = null;
+  }
+}
+
+function shortLiquiditySubcategoryLabel(subcategory: string): string {
+  if (subcategory === 'bank_account') return 'Cuenta bancaria';
+  if (subcategory === 'wallet') return 'Monedero';
+  if (subcategory === 'crypto_spot_earn') return 'Spot/Earn';
+  return 'Liquidez';
+}
+
+function liquidityCheckinRowSummary(row: (typeof monthlyLiquidityExecutionRows.value)[number]): string {
+  return `${shortLiquiditySubcategoryLabel(row.asset_subcategory)} · ${row.asset_name}`;
+}
+
+function suggestedLiquidityClosingBalanceForRow(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): string {
+  if (row.executed != null) return row.executed.toFixed(2);
+  return row.planned.toFixed(2);
+}
+
+function ensureLiquidityAdjustAmountPrefilled(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): void {
+  const current = String(liquidityAdjustAmounts.value[row.asset_id] ?? '').trim();
+  if (current) return;
+  liquidityAdjustAmounts.value[row.asset_id] = suggestedLiquidityClosingBalanceForRow(row);
+}
+
+async function loadLiquidityExecutionSummary(): Promise<void> {
+  try {
+    const response = await coreApi.get<LiquidityMonthlySummaryResponse>(
+      '/api/net-worth/liquidity/monthly-summary/',
+      { params: { year: fiscalYear.value, month: selectedExecutionMonth.value } },
+    );
+    liquidityMonthlySummary.value = response.data ?? null;
+  } catch (e: unknown) {
+    liquidityExecutionError.value = toApiErrorMessage(e);
+  }
+}
+
+async function refreshLiquidityExecutionData(): Promise<void> {
+  liquidityExecutionLoading.value = true;
+  liquidityExecutionError.value = null;
+  try {
+    await loadLiquidityExecutionSummary();
+  } finally {
+    liquidityExecutionLoading.value = false;
+  }
+}
+
+async function clearLiquidityCheckin(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): Promise<void> {
+  if (!row.checkin) return;
+  liquidityExecutionBusyAssetId.value = row.asset_id;
+  liquidityExecutionError.value = null;
+  try {
+    await coreApi.delete(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`);
+    await refreshLiquidityExecutionData();
+  } catch (e: unknown) {
+    liquidityExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    liquidityExecutionBusyAssetId.value = null;
+  }
+}
+
+function setLiquidityAdjustAmountZero(row: (typeof monthlyLiquidityExecutionRows.value)[number]): void {
+  liquidityAdjustAmounts.value[row.asset_id] = '0.00';
+}
+
+function setLiquidityAdjustAmountPlanned(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): void {
+  liquidityAdjustAmounts.value[row.asset_id] = row.planned.toFixed(2);
+}
+
+async function resetLiquidityCheckinDraftValue(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+  mode: 'zero' | 'planned',
+): Promise<void> {
+  if (mode === 'zero') setLiquidityAdjustAmountZero(row);
+  else setLiquidityAdjustAmountPlanned(row);
+  if (row.checkin) {
+    await clearLiquidityCheckin(row);
+  }
+}
+
+async function upsertLiquidityCheckin(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+  status: 'confirmed' | 'adjusted',
+): Promise<void> {
+  liquidityExecutionError.value = null;
+  liquidityExecutionBusyAssetId.value = row.asset_id;
+  try {
+    const rawAdjusted = String(liquidityAdjustAmounts.value[row.asset_id] ?? '').trim();
+    const parsedAdjusted = parseDecimalInput(rawAdjusted);
+    if (parsedAdjusted == null) {
+      liquidityExecutionError.value = 'Indica un saldo válido para confirmar (por ejemplo 1234,56).';
+      return;
+    }
+    liquidityAdjustAmounts.value[row.asset_id] = parsedAdjusted.toFixed(2);
+    const payload = {
+      asset_id: row.asset_id,
+      fiscal_year: fiscalYear.value,
+      month: selectedExecutionMonth.value,
+      status,
+      closing_balance_real: parsedAdjusted.toFixed(2),
+    };
+    if (row.checkin) {
+      await coreApi.patch(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`, payload);
+    } else {
+      await coreApi.post('/api/net-worth/liquidity-checkins/', payload);
+    }
+    await refreshLiquidityExecutionData();
+  } catch (e: unknown) {
+    liquidityExecutionError.value = toApiErrorMessage(e);
+  } finally {
+    liquidityExecutionBusyAssetId.value = null;
+  }
+}
+
+async function saveLiquidityCheckinFromInput(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): Promise<void> {
+  ensureLiquidityAdjustAmountPrefilled(row);
+  const rawAdjusted = String(liquidityAdjustAmounts.value[row.asset_id] ?? '').trim();
+  const parsedAdjusted = parseDecimalInput(rawAdjusted);
+  if (parsedAdjusted == null) {
+    liquidityExecutionError.value = 'Indica un saldo válido para confirmar (por ejemplo 1234,56).';
+    return;
+  }
+  const status = amountsEqualCents(parsedAdjusted, row.planned) ? 'confirmed' : 'adjusted';
+  await upsertLiquidityCheckin(row, status);
+}
+
+async function onLiquidityCheckinCheckboxToggle(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+  checked: boolean,
+): Promise<void> {
+  if (checked) {
+    await saveLiquidityCheckinFromInput(row);
+    return;
+  }
+  await clearLiquidityCheckin(row);
+}
+
+async function onLiquidityAdjustAmountBlur(
+  row: (typeof monthlyLiquidityExecutionRows.value)[number],
+): Promise<void> {
+  if (!row.checkin) return;
+  await saveLiquidityCheckinFromInput(row);
+}
+
+watch(
+  monthlyIncomeExecutionEntries,
+  (rows) => {
+    for (const row of rows) ensureIncomeAdjustAmountPrefilled(row);
+  },
+  { immediate: true },
+);
+
+watch(
+  monthlyExpenseExecutionEntries,
+  (rows) => {
+    for (const row of rows) {
+      ensureExpenseAdjustAmountPrefilled(row);
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  monthlyLiquidityExecutionRows,
+  (rows) => {
+    for (const row of rows) {
+      ensureLiquidityAdjustAmountPrefilled(row);
+    }
+  },
+  { immediate: true },
+);
+
 watch(
   fiscalYear,
   (year) => {
-    void refreshBudgetData(year);
+    void Promise.all([
+      refreshBudgetData(year),
+      refreshIncomeExecutionData(),
+      refreshExpenseExecutionData(),
+      refreshLiquidityExecutionData(),
+    ]);
+  },
+  { immediate: true },
+);
+
+watch(selectedExecutionMonth, () => {
+  void Promise.all([
+    loadIncomeCheckinsForSelectedMonth(),
+    loadExpenseCheckinsForSelectedMonth(),
+    refreshLiquidityExecutionData(),
+  ]);
+});
+
+watch(
+  isMonthlyCloseView,
+  (enabled) => {
+    if (enabled) activeMonthlyCloseStep.value = 'liq';
   },
   { immediate: true },
 );
@@ -475,7 +1656,44 @@ watch(
 
 <template>
   <div class="container ui-pro-page relative">
-    <section class="card ui-pro-panel ui-budget-hero">
+    <section v-if="isMonthlyCloseView" class="card ui-pro-panel ui-budget-hero">
+      <div class="ui-budget-hero-header">
+        <div>
+          <p class="ui-pro-kicker">Cierre mensual</p>
+          <h1 class="ui-budget-title">Flujo de cierre mensual</h1>
+          <p class="ui-budget-subtitle">
+            Empieza por la liquidez real, luego confirma ingresos y gastos, y termina revisando el residual contable.
+          </p>
+        </div>
+        <div class="ui-budget-checkin-controls">
+          <label>
+            <span>Mes</span>
+            <select v-model="selectedExecutionMonth" class="select ui-data-field">
+              <option v-for="(label, index) in monthLabels" :key="`close-${label}`" :value="index + 1">
+                {{ label }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="ui-monthly-close-flow">
+        <template v-for="(step, index) in monthlyCloseFlowSteps" :key="step.id">
+          <button
+            type="button"
+            class="ui-monthly-close-step-chip"
+            :class="{ 'ui-monthly-close-step-chip-active': activeMonthlyCloseStep === step.id }"
+            :aria-pressed="activeMonthlyCloseStep === step.id"
+            @click="setActiveMonthlyCloseStep(step.id)"
+          >
+            <strong>{{ index + 1 }}. {{ step.label }}</strong>
+            <span>{{ step.subtitle }}</span>
+          </button>
+          <div v-if="index < monthlyCloseFlowSteps.length - 1" class="ui-monthly-close-arrow">→</div>
+        </template>
+      </div>
+    </section>
+
+    <section v-if="!isMonthlyCloseView" class="card ui-pro-panel ui-budget-hero">
       <div class="ui-budget-hero-header">
         <div>
           <p class="ui-pro-kicker">Presupuesto</p>
@@ -591,11 +1809,610 @@ watch(
       </div>
     </section>
 
-    <div v-if="firstError" class="alert mt-3">
+    <div v-if="!isMonthlyCloseView && firstError" class="alert mt-3">
       {{ firstError }}
     </div>
+    <div v-if="!isMonthlyCloseView && expenseExecutionError" class="alert mt-3">
+      {{ expenseExecutionError }}
+    </div>
+    <div v-if="!isMonthlyCloseView && liquidityExecutionError" class="alert mt-3">
+      {{ liquidityExecutionError }}
+    </div>
 
-    <section v-if="!hasAnyPlannedData && !isLoading" class="card ui-pro-panel ui-budget-empty mt-3">
+    <section
+      v-if="!isMonthlyCloseView || (isMonthlyCloseView && activeMonthlyCloseStep === 'expense')"
+      class="card ui-pro-panel ui-budget-checkin mt-3"
+    >
+      <div class="ui-budget-checkin-header">
+        <div>
+          <div v-if="isMonthlyCloseView" class="ui-monthly-close-step-headline">
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToPreviousMonthlyCloseStep()">←</button>
+            <h2 class="ui-budget-checkin-title">Paso 3 · Check-in mensual de gastos</h2>
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToNextMonthlyCloseStep()">→</button>
+          </div>
+          <h2 v-else class="ui-budget-checkin-title">Check-in mensual de gastos</h2>
+          <p class="ui-budget-checkin-subtitle">
+            Cierre mensual rápido de `Gastos` (14C v1). `Ingresos` se integrará después con el mismo patrón.
+          </p>
+        </div>
+        <div v-if="!isMonthlyCloseView" class="ui-budget-checkin-controls">
+          <label>
+            <span>Mes</span>
+            <select v-model="selectedExecutionMonth" class="select ui-data-field" :disabled="expenseExecutionLoading">
+              <option v-for="(label, index) in monthLabels" :key="label" :value="index + 1">
+                {{ label }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div v-if="expenseMonthlySummary" class="ui-budget-checkin-summary-grid">
+        <article class="ui-budget-checkin-kpi">
+          <span>Previsto mes</span>
+          <strong>{{ formatMoney(selectedExpenseMonthPlanned) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Ejecutado mes</span>
+          <strong>{{ formatMoney(selectedExpenseMonthExecuted) }} €</strong>
+        </article>
+        <article
+          class="ui-budget-checkin-kpi"
+          :class="{
+            'ui-budget-checkin-kpi-danger': selectedExpenseMonthDeviation > 0,
+            'ui-budget-checkin-kpi-good': selectedExpenseMonthDeviation < 0,
+          }"
+        >
+          <span>Desviación del mes</span>
+          <strong>
+            {{ selectedExpenseMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedExpenseMonthDeviation) }} €
+          </strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Completitud</span>
+          <strong>{{ formatPercent(selectedExpenseSummaryMonth?.completion_ratio ?? null, 0) }}</strong>
+        </article>
+      </div>
+
+      <div class="ui-budget-checkin-list">
+        <div v-if="expenseExecutionLoading" class="subtle">Cargando check-ins mensuales...</div>
+        <div v-else-if="!groupedMonthlyExpenseExecutionEntries.length" class="subtle">
+          No hay gastos previstos para este mes con los filtros actuales.
+        </div>
+        <div v-else class="ui-budget-checkin-groups-box">
+          <details
+            v-for="group in groupedMonthlyExpenseExecutionEntries"
+            :key="`expense-checkin-group-${group.categoryKey}`"
+            class="ui-budget-checkin-group"
+            open
+          >
+            <summary class="ui-budget-checkin-group-summary">
+              <div class="ui-budget-checkin-group-title-wrap">
+                <strong class="ui-budget-checkin-group-title">{{ group.categoryLabel }}</strong>
+                <span class="ui-budget-checkin-group-meta">
+                  {{ group.rows.length }} líneas ·
+                  {{ Math.round(group.completionRatio * 100) }} % completitud
+                </span>
+              </div>
+              <div class="ui-budget-checkin-group-kpis">
+                <span>P {{ formatMoney(group.plannedTotal) }} €</span>
+                <span>E {{ formatMoney(group.executedTotal) }} €</span>
+                <span
+                  :class="{
+                    'ui-budget-checkin-group-dev-pos': group.deviation > 0,
+                    'ui-budget-checkin-group-dev-neg': group.deviation < 0,
+                  }"
+                >
+                  D {{ group.deviation > 0 ? '+' : '' }}{{ formatMoney(group.deviation) }} €
+                </span>
+              </div>
+            </summary>
+
+            <div class="ui-budget-checkin-group-rows">
+              <article
+                v-for="row in group.rows"
+                :key="`expense-checkin-${row.entry.id}`"
+                class="ui-budget-checkin-row"
+              >
+                <div class="ui-budget-checkin-row-main">
+                  <div class="ui-budget-checkin-row-title" :title="expenseCheckinRowSummary(row)">
+                    {{ expenseCheckinRowSummary(row) }}
+                    <span class="ui-budget-checkin-row-planned">
+                      (Previsto {{ formatMoney(row.planned) }} €)
+                    </span>
+                    <template v-if="row.entry.expenseType === 'one_off'"> · Puntual</template>
+                  </div>
+                  <div v-if="row.checkin" class="ui-budget-checkin-row-state">
+                    <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
+                    <template v-if="row.checkin.status !== 'skipped' && row.executed != null">
+                      ({{ formatMoney(row.executed) }} €)
+                    </template>
+                  </div>
+                </div>
+
+                <div class="ui-budget-checkin-row-actions">
+                  <div class="ui-budget-checkin-adjust">
+                    <div class="ui-budget-checkin-quick-actions">
+                      <button
+                        type="button"
+                        class="btn ui-budget-checkin-mini-btn"
+                        :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                        title="Poner importe ejecutado a 0"
+                        @click="resetExpenseCheckinDraftValue(row, 'zero')"
+                      >
+                        Borrar
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ui-budget-checkin-mini-btn"
+                        :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                        title="Restaurar importe previsto del mes"
+                        @click="resetExpenseCheckinDraftValue(row, 'planned')"
+                      >
+                        Previsto
+                      </button>
+                    </div>
+                    <input
+                      v-model="expenseAdjustAmounts[row.entry.id]"
+                      inputmode="decimal"
+                      class="input ui-data-field"
+                      placeholder="Importe ejecutado"
+                      @focus="ensureExpenseAdjustAmountPrefilled(row)"
+                      @blur="onExpenseAdjustAmountBlur(row)"
+                      @keydown.enter.prevent="saveExpenseCheckinFromInput(row)"
+                    />
+                  </div>
+                  <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
+                    <input
+                      type="checkbox"
+                      :checked="!!row.checkin"
+                      :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                      aria-label="Confirmar check-in del mes"
+                      @change="
+                        onExpenseCheckinCheckboxToggle(
+                          row,
+                          Boolean(($event.target as HTMLInputElement).checked),
+                        )
+                      "
+                    />
+                  </label>
+                </div>
+              </article>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="!isMonthlyCloseView || (isMonthlyCloseView && activeMonthlyCloseStep === 'liq')"
+      class="card ui-pro-panel ui-budget-checkin mt-3"
+    >
+      <div class="ui-budget-checkin-header">
+        <div>
+          <div v-if="isMonthlyCloseView" class="ui-monthly-close-step-headline">
+            <button
+              type="button"
+              class="btn ui-monthly-close-step-nav-btn"
+              :disabled="!previousMonthlyCloseStep"
+              @click="goToPreviousMonthlyCloseStep()"
+            >
+              ←
+            </button>
+            <h2 class="ui-budget-checkin-title">Paso 1 · Cierre de liquidez</h2>
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToNextMonthlyCloseStep()">→</button>
+          </div>
+          <h2 v-else class="ui-budget-checkin-title">Cierre de liquidez</h2>
+          <p class="ui-budget-checkin-subtitle">
+            Ajusta el saldo real de cuentas y activos líquidos para el mes seleccionado (14C v1).
+          </p>
+        </div>
+        <div v-if="!isMonthlyCloseView" class="ui-budget-checkin-controls">
+          <label>
+            <span>Mes</span>
+            <select
+              v-model="selectedExecutionMonth"
+              class="select ui-data-field"
+              :disabled="liquidityExecutionLoading"
+            >
+              <option v-for="(label, index) in monthLabels" :key="`liq-${label}`" :value="index + 1">
+                {{ label }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div v-if="liquidityMonthlySummary" class="ui-budget-checkin-summary-grid">
+        <article class="ui-budget-checkin-kpi">
+          <span>Saldo referencia</span>
+          <strong>{{ formatMoney(selectedLiquidityMonthPlanned) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Real cierre</span>
+          <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} €</strong>
+        </article>
+        <article
+          class="ui-budget-checkin-kpi"
+          :class="{
+            'ui-budget-checkin-kpi-danger': selectedLiquidityMonthDeviation < 0,
+            'ui-budget-checkin-kpi-good': selectedLiquidityMonthDeviation > 0,
+          }"
+        >
+          <span>Desviación liquidez</span>
+          <strong>
+            {{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+          </strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Completitud</span>
+          <strong>{{ formatPercent(liquidityMonthlySummary.completion_ratio ?? null, 0) }}</strong>
+        </article>
+      </div>
+
+      <div class="ui-budget-checkin-list">
+        <div v-if="liquidityExecutionLoading" class="subtle">Cargando cierre de liquidez...</div>
+        <div v-else-if="!monthlyLiquidityExecutionRows.length" class="subtle">
+          No hay activos de liquidez activos para este mes.
+        </div>
+        <div v-else class="ui-budget-checkin-groups-box">
+          <div class="ui-budget-checkin-group">
+            <div class="ui-budget-checkin-group-summary">
+              <div class="ui-budget-checkin-group-title-wrap">
+                <strong class="ui-budget-checkin-group-title">Activos líquidos</strong>
+                <span class="ui-budget-checkin-group-meta">
+                  {{ monthlyLiquidityExecutionRows.length }} cuentas ·
+                  {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }} completitud
+                </span>
+              </div>
+              <div class="ui-budget-checkin-group-kpis">
+                <span>Ref {{ formatMoney(selectedLiquidityMonthPlanned) }} €</span>
+                <span>E {{ formatMoney(selectedLiquidityMonthExecuted) }} €</span>
+                <span
+                  :class="{
+                    'ui-budget-checkin-group-dev-pos': selectedLiquidityMonthDeviation > 0,
+                    'ui-budget-checkin-group-dev-neg': selectedLiquidityMonthDeviation < 0,
+                  }"
+                >
+                  D {{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+                </span>
+              </div>
+            </div>
+
+            <div class="ui-budget-checkin-group-rows">
+              <article
+                v-for="row in monthlyLiquidityExecutionRows"
+                :key="`liquidity-checkin-${row.asset_id}`"
+                class="ui-budget-checkin-row"
+              >
+                <div class="ui-budget-checkin-row-main">
+                  <div class="ui-budget-checkin-row-title" :title="liquidityCheckinRowSummary(row)">
+                    {{ liquidityCheckinRowSummary(row) }}
+                    <span class="ui-budget-checkin-row-planned">
+                      (Referencia {{ formatMoney(row.planned) }} {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    </span>
+                  </div>
+                  <div v-if="row.checkin" class="ui-budget-checkin-row-state">
+                    <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
+                    <template v-if="row.executed != null">
+                      ({{ formatMoney(row.executed) }} {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    </template>
+                  </div>
+                </div>
+
+                <div class="ui-budget-checkin-row-actions">
+                  <div class="ui-budget-checkin-adjust">
+                    <div class="ui-budget-checkin-quick-actions">
+                      <button
+                        type="button"
+                        class="btn ui-budget-checkin-mini-btn"
+                        :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                        title="Poner saldo real a 0"
+                        @click="resetLiquidityCheckinDraftValue(row, 'zero')"
+                      >
+                        Borrar
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ui-budget-checkin-mini-btn"
+                        :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                        title="Restaurar saldo de referencia"
+                        @click="resetLiquidityCheckinDraftValue(row, 'planned')"
+                      >
+                        Referencia
+                      </button>
+                    </div>
+                    <input
+                      v-model="liquidityAdjustAmounts[row.asset_id]"
+                      inputmode="decimal"
+                      class="input ui-data-field"
+                      placeholder="Saldo real"
+                      @focus="ensureLiquidityAdjustAmountPrefilled(row)"
+                      @blur="onLiquidityAdjustAmountBlur(row)"
+                      @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
+                    />
+                  </div>
+                  <label class="ui-budget-checkin-confirm" title="Confirmar cierre de liquidez">
+                    <input
+                      type="checkbox"
+                      :checked="!!row.checkin"
+                      :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                      aria-label="Confirmar cierre de liquidez"
+                      @change="
+                        onLiquidityCheckinCheckboxToggle(
+                          row,
+                          Boolean(($event.target as HTMLInputElement).checked),
+                        )
+                      "
+                    />
+                  </label>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section
+      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'income'"
+      class="card ui-pro-panel ui-budget-checkin mt-3"
+    >
+      <div class="ui-budget-checkin-header">
+        <div>
+          <div class="ui-monthly-close-step-headline">
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToPreviousMonthlyCloseStep()">&larr;</button>
+            <h2 class="ui-budget-checkin-title">Paso 2 ? Check-in mensual de ingresos</h2>
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToNextMonthlyCloseStep()">&rarr;</button>
+          </div>
+          <p class="ui-budget-checkin-subtitle">
+            Confirma o ajusta ingresos recurrentes del mes. Los puntuales se integraran cuando tengan mes objetivo.
+          </p>
+        </div>
+      </div>
+      <div class="ui-budget-checkin-summary-grid">
+        <article class="ui-budget-checkin-kpi">
+          <span>Previsto mes</span>
+          <strong>{{ formatMoney(selectedIncomeMonthPlanned) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Ejecutado mes</span>
+          <strong>{{ formatMoney(selectedIncomeMonthExecuted) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi" :class="{ 'ui-budget-checkin-kpi-good': selectedIncomeMonthDeviation > 0, 'ui-budget-checkin-kpi-danger': selectedIncomeMonthDeviation < 0 }">
+          <span>Desviacion del mes</span>
+          <strong>{{ selectedIncomeMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedIncomeMonthDeviation) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi">
+          <span>Completitud</span>
+          <strong>{{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }}</strong>
+        </article>
+      </div>
+      <div class="ui-budget-checkin-list">
+        <div v-if="incomeExecutionLoading" class="subtle">Cargando check-ins de ingresos...</div>
+        <div v-else-if="incomeExecutionError" class="subtle text-red-400">{{ incomeExecutionError }}</div>
+        <div v-else-if="!monthlyIncomeExecutionEntries.length" class="subtle">No hay ingresos recurrentes previstos para este mes.</div>
+        <div v-else class="ui-budget-checkin-groups-box">
+          <div class="ui-budget-checkin-group">
+            <div class="ui-budget-checkin-group-summary">
+              <div class="ui-budget-checkin-group-title-wrap">
+                <strong class="ui-budget-checkin-group-title">Ingresos recurrentes</strong>
+                <span class="ui-budget-checkin-group-meta">{{ monthlyIncomeExecutionEntries.length }} lineas · {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud</span>
+              </div>
+              <div class="ui-budget-checkin-group-kpis">
+                <span>P {{ formatMoney(selectedIncomeMonthPlanned) }} €</span>
+                <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} €</span>
+                <span :class="{ 'ui-budget-checkin-group-dev-pos': selectedIncomeMonthDeviation > 0, 'ui-budget-checkin-group-dev-neg': selectedIncomeMonthDeviation < 0 }">D {{ selectedIncomeMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedIncomeMonthDeviation) }} €</span>
+              </div>
+            </div>
+            <div class="ui-budget-checkin-group-rows">
+              <article v-for="row in monthlyIncomeExecutionEntries" :key="`income-checkin-${row.entry.id}`" class="ui-budget-checkin-row">
+                <div class="ui-budget-checkin-row-main">
+                  <div class="ui-budget-checkin-row-title" :title="incomeCheckinRowSummary(row)">
+                    {{ incomeCheckinRowSummary(row) }}
+                    <span class="ui-budget-checkin-row-planned">(Previsto {{ formatMoney(row.planned) }} €)</span>
+                  </div>
+                  <div v-if="row.checkin" class="ui-budget-checkin-row-state">
+                    <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
+                    <template v-if="row.checkin.status !== 'skipped' && row.executed != null">({{ formatMoney(row.executed) }} €)</template>
+                  </div>
+                </div>
+                <div class="ui-budget-checkin-row-actions">
+                  <div class="ui-budget-checkin-adjust">
+                    <div class="ui-budget-checkin-quick-actions">
+                      <button type="button" class="btn ui-budget-checkin-mini-btn" :disabled="incomeExecutionBusyEntryId === row.entry.id" @click="resetIncomeCheckinDraftValue(row, 'zero')">Borrar</button>
+                      <button type="button" class="btn ui-budget-checkin-mini-btn" :disabled="incomeExecutionBusyEntryId === row.entry.id" @click="resetIncomeCheckinDraftValue(row, 'planned')">Previsto</button>
+                    </div>
+                    <input v-model="incomeAdjustAmounts[row.entry.id]" inputmode="decimal" class="input ui-data-field" placeholder="Importe ejecutado" @focus="ensureIncomeAdjustAmountPrefilled(row)" @blur="onIncomeAdjustAmountBlur(row)" @keydown.enter.prevent="saveIncomeCheckinFromInput(row)" />
+                  </div>
+                  <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
+                    <input type="checkbox" :checked="!!row.checkin" :disabled="incomeExecutionBusyEntryId === row.entry.id" @change="onIncomeCheckinCheckboxToggle(row, Boolean(($event.target as HTMLInputElement).checked))" />
+                  </label>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section
+      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'result'"
+      class="card ui-pro-panel ui-budget-checkin mt-3"
+    >
+      <div class="ui-budget-checkin-header">
+        <div>
+          <div class="ui-monthly-close-step-headline">
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToPreviousMonthlyCloseStep()">&larr;</button>
+            <h2 class="ui-budget-checkin-title">Paso 4 · Resultado</h2>
+            <button type="button" class="btn ui-monthly-close-step-nav-btn" disabled>&rarr;</button>
+          </div>
+          <p class="ui-budget-checkin-subtitle">
+            Residual contable provisional a partir de liquidez real y de ingresos/gastos confirmados del mes.
+          </p>
+        </div>
+      </div>
+      <div class="ui-budget-checkin-summary-grid">
+        <article class="ui-budget-checkin-kpi"><span>Liquidez inicio</span><strong>{{ formatMoney(selectedLiquidityStartBase) }} €</strong></article>
+        <article class="ui-budget-checkin-kpi"><span>Cierre esperado</span><strong>{{ formatMoney(selectedMonthlyCloseExpected) }} €</strong></article>
+        <article class="ui-budget-checkin-kpi"><span>Cierre real</span><strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} €</strong></article>
+        <article class="ui-budget-checkin-kpi" :class="{ 'ui-budget-checkin-kpi-danger': selectedMonthlyCloseResidual < 0, 'ui-budget-checkin-kpi-good': selectedMonthlyCloseResidual > 0 }">
+          <span>Residual contable</span>
+          <strong>{{ selectedMonthlyCloseResidual > 0 ? '+' : '' }}{{ formatMoney(selectedMonthlyCloseResidual) }} €</strong>
+        </article>
+        <article class="ui-budget-checkin-kpi"><span>Ingresos ejecutados</span><strong>{{ formatMoney(selectedIncomeMonthExecuted) }} €</strong></article>
+        <article class="ui-budget-checkin-kpi"><span>Gastos ejecutados</span><strong>{{ formatMoney(selectedExpenseMonthExecuted) }} €</strong></article>
+        <article class="ui-budget-checkin-kpi"><span>Completitud cierre</span><strong>{{ formatPercent(selectedMonthlyCloseCompletionRatio, 0) }}</strong></article>
+        <article class="ui-budget-checkin-kpi"><span>Desviacion liquidez</span><strong>{{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €</strong></article>
+      </div>
+      <div class="ui-budget-result-grid">
+        <section class="ui-budget-result-card">
+          <div class="ui-budget-result-card-head">
+            <h3 class="ui-budget-result-card-title">Conciliacion de cierre</h3>
+            <div class="ui-budget-result-card-meta">Volumen ejecutado {{ formatMoney(selectedMonthlyExecutedVolume) }} EUR</div>
+          </div>
+          <div class="ui-budget-recon-flow">
+            <div
+              v-for="row in resultReconciliationFlowRows"
+              :key="row.id"
+              class="ui-budget-recon-flow-row"
+              :class="{
+                'ui-budget-recon-flow-row-result': !!row.isResult,
+                'ui-budget-recon-flow-row-positive': row.tone === 'positive',
+                'ui-budget-recon-flow-row-warning': row.tone === 'warning',
+                'ui-budget-recon-flow-row-negative': row.tone === 'negative',
+              }"
+            >
+              <div class="ui-budget-recon-flow-row-main">
+                <div class="ui-budget-recon-flow-label">{{ row.label }}</div>
+                <div v-if="row.meta" class="ui-budget-recon-flow-meta">{{ row.meta }}</div>
+              </div>
+              <strong class="ui-budget-recon-flow-value">{{ formatSignedMoney(row.amount) }} EUR</strong>
+            </div>
+          </div>
+        </section>
+        <section class="ui-budget-result-card">
+          <div class="ui-budget-result-card-head">
+            <h3 class="ui-budget-result-card-title">Ajuste de conciliacion</h3>
+            <div class="ui-budget-result-badge" :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`">
+              {{ selectedMonthlyResidualSeverityLabel }}
+            </div>
+          </div>
+          <div class="ui-budget-result-residual-kpis">
+            <article class="ui-budget-result-mini-kpi"><span>Residual no contabilizado</span><strong>{{ formatSignedMoney(selectedMonthlyCloseResidual) }} EUR</strong></article>
+            <article class="ui-budget-result-mini-kpi"><span>% sobre volumen ejecutado</span><strong>{{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }}</strong></article>
+            <article class="ui-budget-result-mini-kpi"><span>% sobre ingresos ejecutados</span><strong>{{ formatPercent(selectedMonthlyResidualIncomeRatio, 1) }}</strong></article>
+            <article class="ui-budget-result-mini-kpi"><span>% sobre gastos ejecutados</span><strong>{{ formatPercent(selectedMonthlyResidualExpenseRatio, 1) }}</strong></article>
+            <article class="ui-budget-result-mini-kpi"><span>% impacto sobre cierre esperado</span><strong>{{ formatPercent(selectedMonthlyResidualExpectedCloseRatio, 1) }}</strong></article>
+            <article class="ui-budget-result-mini-kpi">
+              <span>Lectura</span>
+              <strong>{{
+                selectedMonthlyCloseResidual < 0
+                  ? 'Falta caja vs explicado'
+                  : selectedMonthlyCloseResidual > 0
+                    ? 'Sobra caja vs explicado'
+                    : 'Sin diferencia'
+              }}</strong>
+            </article>
+          </div>
+          <div class="ui-budget-result-composition">
+            <div v-for="row in resultReconciliationCompositionRows" :key="row.id" class="ui-budget-result-composition-row">
+              <div class="ui-budget-result-composition-main">
+                <span>{{ row.label }}</span>
+                <small>{{ formatSignedMoney(row.amount) }} EUR</small>
+              </div>
+              <div class="ui-budget-result-composition-bar">
+                <div
+                  class="ui-budget-result-composition-fill"
+                  :class="{
+                    'ui-budget-result-composition-fill-positive': row.tone === 'positive',
+                    'ui-budget-result-composition-fill-warning': row.tone === 'warning',
+                    'ui-budget-result-composition-fill-negative': row.tone === 'negative',
+                  }"
+                  :style="{
+                    width: `${
+                      row.shareOfVolume == null || row.shareOfVolume <= 0
+                        ? 0
+                        : Math.max(4, Math.min(100, row.shareOfVolume * 100))
+                    }%`,
+                  }"
+                />
+              </div>
+              <div class="ui-budget-result-composition-share">{{ formatPercent(row.shareOfVolume, 1) }}</div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="ui-budget-result-grid ui-budget-result-grid-detail">
+        <section class="ui-budget-result-card">
+          <div class="ui-budget-result-card-head">
+            <h3 class="ui-budget-result-card-title">Ingresos ejecutados (detalle del mes)</h3>
+            <div class="ui-budget-result-card-meta">{{ monthlyIncomeExecutionEntries.length }} lineas</div>
+          </div>
+          <div v-if="!monthlyIncomeResultBreakdown.length" class="subtle">No hay ingresos ejecutables para este mes.</div>
+          <div v-else class="ui-budget-result-breakdown-list">
+            <article v-for="group in monthlyIncomeResultBreakdown" :key="`result-income-${group.key}`" class="ui-budget-result-breakdown-group">
+              <div class="ui-budget-result-breakdown-group-head">
+                <div>
+                  <strong>{{ group.categoryLabel }}</strong>
+                  <div class="ui-budget-result-breakdown-submeta">{{ group.lineCount }} lineas - {{ formatPercent(group.completionRatio, 0) }} completitud</div>
+                </div>
+                <div class="ui-budget-result-breakdown-kpis">
+                  <span>E {{ formatMoney(group.executedTotal) }} EUR</span>
+                  <span>P {{ formatMoney(group.plannedTotal) }} EUR</span>
+                  <span :class="{ 'ui-budget-checkin-group-dev-pos': group.deviation > 0, 'ui-budget-checkin-group-dev-neg': group.deviation < 0 }">D {{ formatSignedMoney(group.deviation) }} EUR</span>
+                  <span>{{ formatPercent(group.shareOfExecuted, 0) }} del total</span>
+                </div>
+              </div>
+              <div class="ui-budget-result-breakdown-rows">
+                <div v-for="row in group.rows.slice(0, 5)" :key="row.key" class="ui-budget-result-breakdown-row">
+                  <span class="ui-budget-result-breakdown-name">{{ row.subcategoryLabel }}</span>
+                  <span>{{ formatMoney(row.executedTotal) }} EUR</span>
+                  <span>{{ formatPercent(row.shareOfExecuted, 0) }}</span>
+                  <span :class="{ 'ui-budget-checkin-group-dev-pos': row.deviation > 0, 'ui-budget-checkin-group-dev-neg': row.deviation < 0 }">{{ formatSignedMoney(row.deviation) }} EUR</span>
+                </div>
+                <div v-if="group.rows.length > 5" class="ui-budget-result-breakdown-more">+ {{ group.rows.length - 5 }} subcategorias mas</div>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section class="ui-budget-result-card">
+          <div class="ui-budget-result-card-head">
+            <h3 class="ui-budget-result-card-title">Gastos ejecutados (detalle del mes)</h3>
+            <div class="ui-budget-result-card-meta">{{ monthlyExpenseExecutionEntries.length }} lineas</div>
+          </div>
+          <div v-if="!monthlyExpenseResultBreakdown.length" class="subtle">No hay gastos ejecutables para este mes.</div>
+          <div v-else class="ui-budget-result-breakdown-list">
+            <article v-for="group in monthlyExpenseResultBreakdown" :key="`result-expense-${group.key}`" class="ui-budget-result-breakdown-group">
+              <div class="ui-budget-result-breakdown-group-head">
+                <div>
+                  <strong>{{ group.categoryLabel }}</strong>
+                  <div class="ui-budget-result-breakdown-submeta">{{ group.lineCount }} lineas - {{ formatPercent(group.completionRatio, 0) }} completitud</div>
+                </div>
+                <div class="ui-budget-result-breakdown-kpis">
+                  <span>E {{ formatMoney(group.executedTotal) }} EUR</span>
+                  <span>P {{ formatMoney(group.plannedTotal) }} EUR</span>
+                  <span :class="{ 'ui-budget-checkin-group-dev-pos': group.deviation > 0, 'ui-budget-checkin-group-dev-neg': group.deviation < 0 }">D {{ formatSignedMoney(group.deviation) }} EUR</span>
+                  <span>{{ formatPercent(group.shareOfExecuted, 0) }} del total</span>
+                </div>
+              </div>
+              <div class="ui-budget-result-breakdown-rows">
+                <div v-for="row in group.rows.slice(0, 5)" :key="row.key" class="ui-budget-result-breakdown-row">
+                  <span class="ui-budget-result-breakdown-name">{{ row.subcategoryLabel }}</span>
+                  <span>{{ formatMoney(row.executedTotal) }} EUR</span>
+                  <span>{{ formatPercent(row.shareOfExecuted, 0) }}</span>
+                  <span :class="{ 'ui-budget-checkin-group-dev-pos': row.deviation > 0, 'ui-budget-checkin-group-dev-neg': row.deviation < 0 }">{{ formatSignedMoney(row.deviation) }} EUR</span>
+                </div>
+                <div v-if="group.rows.length > 5" class="ui-budget-result-breakdown-more">+ {{ group.rows.length - 5 }} subcategorias mas</div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section
+      v-if="!isMonthlyCloseView && !hasAnyPlannedData && !isLoading"
+      class="card ui-pro-panel ui-budget-empty mt-3"
+    >
       <h2 class="mt-0">Sin presupuesto anual para {{ fiscalYear }}</h2>
       <p class="subtle mb-0">
         Carga primero `Ingresos anuales` y `Gastos anuales` en `Introduccion de datos` para ver el
@@ -607,6 +2424,7 @@ watch(
     </section>
 
     <section
+      v-show="!isMonthlyCloseView"
       v-for="section in sections"
       :key="section.id"
       class="card ui-pro-panel ui-budget-section mt-3"
@@ -896,6 +2714,81 @@ watch(
   gap: 10px;
 }
 
+.ui-monthly-close-flow {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-monthly-close-step-chip {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  min-width: 180px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.ui-monthly-close-step-chip strong {
+  font-size: 0.88rem;
+}
+
+.ui-monthly-close-step-chip span {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.ui-monthly-close-step-chip-active {
+  border-color: rgba(45, 212, 191, 0.55);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.ui-monthly-close-arrow {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+}
+
+.ui-monthly-close-step-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ui-monthly-close-step-headline .ui-budget-checkin-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-monthly-close-step-nav-btn {
+  min-width: 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 800;
+}
+
+.ui-monthly-close-step-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ui-monthly-close-step-nav-btn:disabled {
+  opacity: 0.3;
+}
+
 .ui-budget-year-picker {
   display: grid;
   gap: 4px;
@@ -1005,6 +2898,531 @@ watch(
   color: #ccfff1;
   text-decoration: none;
   background: rgba(55, 191, 163, 0.08);
+}
+
+.ui-budget-checkin {
+  display: grid;
+  gap: 12px;
+}
+
+.ui-budget-checkin-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.ui-budget-checkin-header > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-budget-checkin-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ui-budget-checkin-subtitle {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.82rem;
+}
+
+.ui-budget-checkin-controls label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ui-budget-checkin-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ui-budget-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-budget-result-grid-detail {
+  margin-top: 2px;
+}
+
+.ui-budget-result-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.ui-budget-result-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.ui-budget-result-card-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.ui-budget-result-card-meta {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+.ui-budget-result-badge {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.ui-budget-result-badge-ok {
+  color: rgba(141, 241, 188, 0.95);
+  border-color: rgba(97, 216, 155, 0.28);
+  background: rgba(44, 196, 129, 0.05);
+}
+
+.ui-budget-result-badge-watch {
+  color: rgba(255, 221, 135, 0.95);
+  border-color: rgba(255, 191, 66, 0.28);
+  background: rgba(255, 191, 66, 0.05);
+}
+
+.ui-budget-result-badge-alert {
+  color: rgba(255, 140, 140, 0.96);
+  border-color: rgba(255, 92, 92, 0.3);
+  background: rgba(255, 72, 72, 0.05);
+}
+
+.ui-budget-recon-flow {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-budget-recon-flow-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.ui-budget-recon-flow-row-result {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ui-budget-recon-flow-row-positive .ui-budget-recon-flow-value {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-recon-flow-row-warning .ui-budget-recon-flow-value {
+  color: rgba(255, 221, 135, 0.95);
+}
+
+.ui-budget-recon-flow-row-negative .ui-budget-recon-flow-value {
+  color: rgba(255, 140, 140, 0.96);
+}
+
+.ui-budget-recon-flow-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ui-budget-recon-flow-label {
+  font-size: 0.82rem;
+}
+
+.ui-budget-recon-flow-meta {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.72rem;
+}
+
+.ui-budget-recon-flow-value {
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.ui-budget-result-residual-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ui-budget-result-mini-kpi {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.012);
+  padding: 8px 9px;
+  display: grid;
+  gap: 3px;
+}
+
+.ui-budget-result-mini-kpi span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.72rem;
+}
+
+.ui-budget-result-mini-kpi strong {
+  font-size: 0.88rem;
+}
+
+.ui-budget-result-composition {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-budget-result-composition-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(90px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ui-budget-result-composition-main {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.ui-budget-result-composition-main span {
+  font-size: 0.78rem;
+}
+
+.ui-budget-result-composition-main small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.7rem;
+}
+
+.ui-budget-result-composition-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ui-budget-result-composition-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.ui-budget-result-composition-fill-positive {
+  background: linear-gradient(90deg, rgba(44, 196, 129, 0.55), rgba(141, 241, 188, 0.85));
+}
+
+.ui-budget-result-composition-fill-warning {
+  background: linear-gradient(90deg, rgba(255, 191, 66, 0.55), rgba(255, 221, 135, 0.85));
+}
+
+.ui-budget-result-composition-fill-negative {
+  background: linear-gradient(90deg, rgba(255, 72, 72, 0.55), rgba(255, 140, 140, 0.86));
+}
+
+.ui-budget-result-composition-share {
+  font-size: 0.73rem;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+}
+
+.ui-budget-result-breakdown-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-budget-result-breakdown-group {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.ui-budget-result-breakdown-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 9px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ui-budget-result-breakdown-submeta {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.7rem;
+  margin-top: 2px;
+}
+
+.ui-budget-result-breakdown-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.ui-budget-result-breakdown-rows {
+  display: grid;
+  gap: 0;
+}
+
+.ui-budget-result-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 9px;
+  font-size: 0.74rem;
+}
+
+.ui-budget-result-breakdown-row + .ui-budget-result-breakdown-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ui-budget-result-breakdown-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-budget-result-breakdown-more {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.72rem;
+  padding: 7px 9px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ui-budget-checkin-kpi {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.ui-budget-checkin-kpi span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.74rem;
+}
+
+.ui-budget-checkin-kpi strong {
+  font-size: 0.98rem;
+}
+
+.ui-budget-checkin-kpi-danger {
+  border-color: rgba(255, 108, 108, 0.28);
+  background: rgba(255, 72, 72, 0.04);
+}
+
+.ui-budget-checkin-kpi-danger span,
+.ui-budget-checkin-kpi-danger strong {
+  color: rgba(255, 132, 132, 0.95);
+}
+
+.ui-budget-checkin-kpi-good {
+  border-color: rgba(97, 216, 155, 0.24);
+  background: rgba(44, 196, 129, 0.04);
+}
+
+.ui-budget-checkin-kpi-good span,
+.ui-budget-checkin-kpi-good strong {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-checkin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-budget-checkin-groups-box {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+}
+
+.ui-budget-checkin-group + .ui-budget-checkin-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ui-budget-checkin-group-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.ui-budget-checkin-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-budget-checkin-group-title-wrap {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ui-budget-checkin-group-title {
+  font-size: 0.85rem;
+}
+
+.ui-budget-checkin-group-meta {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.72rem;
+}
+
+.ui-budget-checkin-group-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.74rem;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.ui-budget-checkin-group-dev-pos {
+  color: rgba(255, 132, 132, 0.95);
+}
+
+.ui-budget-checkin-group-dev-neg {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-checkin-group-rows {
+  display: grid;
+  gap: 0;
+  padding: 0 8px 8px 28px;
+}
+
+.ui-budget-checkin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 7px 2px;
+  background: transparent;
+}
+
+.ui-budget-checkin-group-rows .ui-budget-checkin-row:first-child {
+  border-top: none;
+}
+
+.ui-budget-checkin-row-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-budget-checkin-row-planned {
+  margin-left: 6px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.72rem;
+}
+
+.ui-budget-checkin-row-meta,
+.ui-budget-checkin-row-state {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.ui-budget-checkin-row-state {
+  margin-top: 3px;
+}
+
+.ui-budget-checkin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ui-budget-checkin-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  min-width: 30px;
+}
+
+.ui-budget-checkin-confirm input {
+  accent-color: rgb(22, 163, 137);
+  width: 16px;
+  height: 16px;
+}
+
+.ui-budget-checkin-adjust {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-budget-checkin-quick-actions {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, auto));
+  gap: 4px;
+}
+
+.ui-budget-checkin-mini-btn {
+  min-width: 66px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.ui-budget-checkin-adjust .input {
+  width: 132px;
+}
+
+@media (max-width: 900px) {
+  .ui-budget-checkin-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ui-budget-checkin-group-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ui-budget-checkin-group-kpis {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .ui-budget-checkin-row-actions {
+    justify-content: flex-start;
+  }
+  .ui-budget-checkin-adjust {
+    flex-wrap: wrap;
+  }
+  .ui-budget-checkin-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, auto));
+    grid-template-rows: none;
+  }
 }
 
 .ui-budget-section {
@@ -1531,6 +3949,19 @@ watch(
     grid-column: span 6;
   }
 
+  .ui-budget-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-budget-result-breakdown-group-head {
+    display: grid;
+  }
+
+  .ui-budget-result-breakdown-kpis {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
   .ui-budget-row {
     display: grid;
     gap: 8px;
@@ -1576,6 +4007,20 @@ watch(
 
   .ui-budget-kpi {
     grid-column: span 12;
+  }
+
+  .ui-budget-result-residual-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-budget-result-composition-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .ui-budget-result-breakdown-row {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
   }
 
   .ui-budget-evolution-bars {
