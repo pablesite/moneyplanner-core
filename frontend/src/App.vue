@@ -17,7 +17,7 @@ const sidebarOpen = ref(false);
 const accountMenuOpen = ref(false);
 const accountMenuRef = ref<HTMLElement | null>(null);
 const accountLabel = ref('Mi cuenta');
-const accountRole = ref('Core');
+const accountRole = ref('');
 const accountPlan = ref('');
 
 const hasToken = computed(() => hasAccessToken.value);
@@ -135,12 +135,12 @@ watch(
   (tokenPresent) => {
     if (!tokenPresent) {
       accountLabel.value = 'Mi cuenta';
-      accountRole.value = 'Core';
+      accountRole.value = '';
       accountPlan.value = '';
       return;
     }
     accountLabel.value = 'Mi cuenta';
-    accountRole.value = 'Core';
+    accountRole.value = '';
     accountPlan.value = '';
   },
   { immediate: true },
@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
           <div class="ui-shell-brand-mark">MP</div>
           <div class="ui-shell-brand-text">
             <strong>Moneyplanner</strong>
-            <span>Core</span>
+            <span>Coach financiero</span>
           </div>
         </div>
         <button
