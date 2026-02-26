@@ -152,12 +152,12 @@ export function useNetWorthViewState() {
     }
   };
 
-  async function submitAsset(payload: NetWorthWritePayload) {
+  async function submitAsset(payload: NetWorthWritePayload & { ownership_id?: number | null }) {
     await store.createAsset(payload);
     showAssetModal.value = false;
   }
 
-  async function submitLiability(payload: NetWorthWritePayload) {
+  async function submitLiability(payload: NetWorthWritePayload & { ownership_id?: number | null }) {
     await store.createLiability(payload);
     showLiabilityModal.value = false;
   }
@@ -216,11 +216,12 @@ export function useNetWorthViewState() {
       currency: item.currency ?? '',
       tracking_mode: item.tracking_mode ?? 'manual',
       is_active: item.is_active ?? true,
+      ownership_id: item.ownership_ref ?? null,
       financed_asset_id: item.financed_asset_ref ?? null,
     };
   });
 
-  async function submitEdit(payload: NetWorthWritePayload) {
+  async function submitEdit(payload: NetWorthWritePayload & { ownership_id?: number | null }) {
     if (!editItem.value || !editKind.value) return;
     const id = editItem.value.id;
 
