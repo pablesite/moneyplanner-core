@@ -15,6 +15,7 @@ from .services import (
     create_member_with_default_ownership,
     delete_member_and_individual_ownership,
     delete_ownership,
+    ensure_primary_family_member_for_user,
     list_ownership_links_for_user,
     sync_ownership_link_from_payload,
     update_ownership,
@@ -43,6 +44,12 @@ class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         member = self.get_object()
         delete_member_and_individual_ownership(member=member)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"], url_path="ensure-primary")
+    def ensure_primary(self, request):
+        member = ensure_primary_family_member_for_user(user=request.user)
+        serializer = self.get_serializer(member)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
