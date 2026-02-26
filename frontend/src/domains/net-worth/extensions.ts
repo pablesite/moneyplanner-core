@@ -1,4 +1,5 @@
 import { computed, type Component, type ComputedRef } from 'vue';
+import { capabilities } from '@/domains/capabilities';
 
 type ExtensionProps = Record<string, unknown>;
 
@@ -8,23 +9,40 @@ export type NetWorthViewExtensions = {
   itemListProps: ComputedRef<ExtensionProps>;
 };
 
-export function useNetWorthViewExtensions(_store?: unknown): NetWorthViewExtensions {
-  const emptyProps = computed<ExtensionProps>(() => {
-    if (!_store || typeof _store !== 'object') return {};
+export function useNetWorthViewExtensions(store?: unknown): NetWorthViewExtensions {
+  const ownershipProps = computed<ExtensionProps>(() => {
     const baseCurrency =
-      ('baseCurrency' in _store && typeof (_store as { baseCurrency?: unknown }).baseCurrency === 'string'
-        ? (_store as { baseCurrency?: string | null }).baseCurrency
-        : null) ??
-      (('summary' in _store &&
-        typeof (_store as { summary?: { base_currency?: unknown } | null }).summary?.base_currency ===
-          'string')
-        ? String((_store as { summary?: { base_currency?: string | null } | null }).summary?.base_currency)
-        : null);
-    return baseCurrency ? { defaultCurrency: baseCurrency } : {};
+      store && typeof store === 'object'
+        ? (('baseCurrency' in store &&
+            typeof (store as { baseCurrency?: unknown }).baseCurrency === 'string'
+            ? (store as { baseCurrency?: string | null }).baseCurrency
+            : null) ??
+          (('summary' in store &&
+            typeof (store as { summary?: { base_currency?: unknown } | null }).summary?.base_currency ===
+              'string')
+            ? String((store as { summary?: { base_currency?: string | null } | null }).summary?.base_currency)
+            : null))
+        : null;
+    const baseProps = baseCurrency ? { defaultCurrency: baseCurrency } : {};
+
+    if (!capabilities.people || !store || typeof store !== 'object') {
+      return baseProps;
+    }
+    if (!('ownerships' in store)) {
+      return baseProps;
+    }
+
+    const ownerships = (store as { ownerships?: unknown }).ownerships;
+    if (!Array.isArray(ownerships)) {
+      return baseProps;
+    }
+
+    return { ...baseProps, ownerships };
   });
+
   return {
     HeaderActions: null,
-    itemFormProps: emptyProps,
-    itemListProps: emptyProps,
+    itemFormProps: ownershipProps,
+    itemListProps: ownershipProps,
   };
 }
