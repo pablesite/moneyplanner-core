@@ -21,10 +21,9 @@ Base open-core de MoneyPlanner.
 3. Backend: `http://localhost:8000`
 
 ## Documentacion (comunidad)
-1. `core/docs/README.md`
-2. `core/docs/roadmap-comunidad.md`
-3. `CONTRIBUTING.md`
-4. `RELEASING.md`
+1. `core/docs/roadmap-comunidad.md`
+2. `CONTRIBUTING.md`
+3. `RELEASING.md`
 
 ## Objetivo del repo publico
 1. Publicar una base util desde ya.
