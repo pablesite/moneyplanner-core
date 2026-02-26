@@ -1005,6 +1005,8 @@ class NetWorthApiTests(APITestCase):
     def test_summary_returns_400_without_inflation_index_for_eur(self):
         response = self.client.get("/api/net-worth/summary/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("error", response.data)
 
     def test_summary_returns_200_with_inflation_index(self):
         InflationIndex.objects.create(
@@ -1118,6 +1120,52 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row["deviation"], "-79.50")
         self.assertEqual(row["checkin"]["status"], "adjusted")
 
+    def test_liquidity_checkin_update_does_not_trigger_liability_sync_and_updates_row(self):
+        bank = Asset.objects.create(
+            user=self.user,
+            name="Cuenta nomina",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        create_res = self.client.post(
+            "/api/net-worth/liquidity-checkins/",
+            {
+                "asset_id": bank.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "confirmed",
+                "closing_balance_real": "1500.00",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        checkin_id = create_res.data["id"]
+
+        patch_res = self.client.patch(
+            f"/api/net-worth/liquidity-checkins/{checkin_id}/",
+            {
+                "status": "adjusted",
+                "closing_balance_real": "1420.50",
+                "note": "Ajuste por saldo real",
+            },
+            format="json",
+        )
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK, patch_res.data)
+        self.assertEqual(patch_res.data["status"], "adjusted")
+        self.assertEqual(patch_res.data["closing_balance_real"], "1420.50000000")
+        self.assertEqual(patch_res.data["note"], "Ajuste por saldo real")
+        self.assertIsNotNone(patch_res.data["confirmed_at"])
+
+        checkin = LiquidityMonthlyCheckin.objects.get(id=checkin_id, user=self.user)
+        self.assertEqual(checkin.status, LiquidityMonthlyCheckin.Status.ADJUSTED)
+        self.assertEqual(checkin.closing_balance_real, Decimal("1420.50000000"))
+        self.assertEqual(checkin.note, "Ajuste por saldo real")
+        self.assertIsNotNone(checkin.confirmed_at)
+
     def test_liquidity_checkin_belongs_to_user_and_can_be_deleted(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -1147,6 +1195,161 @@ class NetWorthApiTests(APITestCase):
     def test_liquidity_monthly_summary_rejects_invalid_month(self):
         response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=13")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+
+    def test_liquidity_monthly_summary_rejects_non_integer_params_with_canonical_error_shape(self):
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=x&month=y")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertEqual(
+            response.data["error"]["details"]["detail"],
+            "year y month deben ser enteros.",
+        )
+
+    def test_snapshot_import_bulk_requires_json_array_with_canonical_error_shape(self):
+        response = self.client.post(
+            "/api/net-worth/snapshots/import-bulk/",
+            {"snapshot_date": "2026-02-18"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertEqual(
+            response.data["error"]["details"]["detail"],
+            "Expected a JSON array of snapshots.",
+        )
+
+    def test_snapshot_import_bulk_upserts_and_returns_counts(self):
+        first_import = self.client.post(
+            "/api/net-worth/snapshots/import-bulk/",
+            [
+                {
+                    "snapshot_date": "2026-02-18",
+                    "base_currency": "EUR",
+                    "total_assets": "100.00",
+                    "total_liabilities": "40.00",
+                    "net_worth": "60.00",
+                },
+                {
+                    "snapshot_date": "2026-02-19",
+                    "base_currency": "EUR",
+                    "total_assets": "110.00",
+                    "total_liabilities": "45.00",
+                    "net_worth": "65.00",
+                },
+            ],
+            format="json",
+        )
+        self.assertEqual(first_import.status_code, status.HTTP_200_OK, first_import.data)
+        self.assertTrue(first_import.data["ok"])
+        self.assertEqual(first_import.data["created"], 2)
+        self.assertEqual(first_import.data["updated"], 0)
+        self.assertEqual(len(first_import.data["snapshots"]), 2)
+
+        second_import = self.client.post(
+            "/api/net-worth/snapshots/import-bulk/",
+            [
+                {
+                    "snapshot_date": "2026-02-19",
+                    "base_currency": "EUR",
+                    "total_assets": "120.00",
+                    "total_liabilities": "50.00",
+                    "net_worth": "70.00",
+                },
+                {
+                    "snapshot_date": "2026-02-20",
+                    "base_currency": "EUR",
+                    "total_assets": "130.00",
+                    "total_liabilities": "55.00",
+                    "net_worth": "75.00",
+                },
+            ],
+            format="json",
+        )
+        self.assertEqual(second_import.status_code, status.HTTP_200_OK, second_import.data)
+        self.assertTrue(second_import.data["ok"])
+        self.assertEqual(second_import.data["created"], 1)
+        self.assertEqual(second_import.data["updated"], 1)
+
+        list_res = self.client.get("/api/net-worth/snapshots/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK, list_res.data)
+        self.assertEqual(len(list_res.data), 3)
+        by_date = {row["snapshot_date"]: row for row in list_res.data}
+        self.assertEqual(by_date["2026-02-19"]["total_assets"], "120.00")
+        self.assertEqual(by_date["2026-02-19"]["net_worth"], "70.00")
+
+    def test_assets_liabilities_and_snapshots_lists_are_user_scoped(self):
+        other_user = get_user_model().objects.create_user(username="nw_other", password="pass1234")
+
+        Asset.objects.create(
+            user=other_user,
+            name="Cuenta ajena",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1.00"),
+            is_active=True,
+        )
+        Liability.objects.create(
+            user=other_user,
+            name="Prestamo ajeno",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1.00"),
+            is_active=True,
+        )
+        create_snapshot_for_user(
+            user=other_user,
+            validated_data={
+                "snapshot_date": date(2026, 2, 1),
+                "base_currency": "EUR",
+                "total_assets": Decimal("1.00"),
+                "total_liabilities": Decimal("1.00"),
+                "net_worth": Decimal("0.00"),
+            },
+        )
+
+        own_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta propia",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        own_liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo propio",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("10.00"),
+            is_active=True,
+        )
+        own_snapshot = create_snapshot_for_user(
+            user=self.user,
+            validated_data={
+                "snapshot_date": date(2026, 2, 2),
+                "base_currency": "EUR",
+                "total_assets": Decimal("100.00"),
+                "total_liabilities": Decimal("10.00"),
+                "net_worth": Decimal("90.00"),
+            },
+        )
+
+        assets_res = self.client.get("/api/net-worth/assets/")
+        self.assertEqual(assets_res.status_code, status.HTTP_200_OK, assets_res.data)
+        self.assertEqual([row["id"] for row in assets_res.data], [own_asset.id])
+
+        liabilities_res = self.client.get("/api/net-worth/liabilities/")
+        self.assertEqual(liabilities_res.status_code, status.HTTP_200_OK, liabilities_res.data)
+        self.assertEqual([row["id"] for row in liabilities_res.data], [own_liability.id])
+
+        snapshots_res = self.client.get("/api/net-worth/snapshots/")
+        self.assertEqual(snapshots_res.status_code, status.HTTP_200_OK, snapshots_res.data)
+        self.assertEqual([row["id"] for row in snapshots_res.data], [own_snapshot.id])
 
     @patch(
         "net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x")
@@ -1154,6 +1357,8 @@ class NetWorthApiTests(APITestCase):
     def test_snapshot_from_current_returns_400_on_validation_error(self, _mock_create):
         response = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertEqual(response.data["error"]["details"]["detail"], "x")
 
 
 class NetWorthSerializerUnitTests(TestCase):

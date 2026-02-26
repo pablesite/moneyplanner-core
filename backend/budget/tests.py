@@ -261,6 +261,61 @@ class AnnualIncomeApiTests(APITestCase):
         self.assertIsNone(res.data["executed_amount"])
         self.assertIsNone(AnnualIncomeMonthlyCheckin.objects.get(id=res.data["id"]).executed_amount)
 
+    def test_income_checkin_update_preserves_and_clears_confirmed_at_by_status(self):
+        income = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        create_res = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": income.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "confirmed",
+                "executed_amount": "1000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertIsNotNone(create_res.data["confirmed_at"])
+        checkin_id = create_res.data["id"]
+
+        skipped_res = self.client.patch(
+            f"/api/budget/annual-income-checkins/{checkin_id}/",
+            {"status": "skipped"},
+            format="json",
+        )
+        self.assertEqual(skipped_res.status_code, status.HTTP_200_OK, skipped_res.data)
+        self.assertIsNone(skipped_res.data["confirmed_at"])
+
+        adjusted_res = self.client.patch(
+            f"/api/budget/annual-income-checkins/{checkin_id}/",
+            {"status": "adjusted", "executed_amount": "950.00"},
+            format="json",
+        )
+        self.assertEqual(adjusted_res.status_code, status.HTTP_200_OK, adjusted_res.data)
+        self.assertIsNotNone(adjusted_res.data["confirmed_at"])
+        self.assertEqual(adjusted_res.data["executed_amount"], "950.00")
+
+    def test_income_monthly_summary_requires_year_with_canonical_error_shape(self):
+        response = self.client.get("/api/budget/annual-income/monthly-summary/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("year", response.data["error"]["details"])
+
+    def test_income_monthly_summary_invalid_year_uses_canonical_error_shape(self):
+        response = self.client.get("/api/budget/annual-income/monthly-summary/?year=nope")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("year", response.data["error"]["details"])
+
 
 class AnnualExpenseApiTests(APITestCase):
     def setUp(self):
@@ -505,6 +560,61 @@ class AnnualExpenseApiTests(APITestCase):
             AnnualExpenseMonthlyCheckin.objects.get(id=res.data["id"]).executed_amount,
             None,
         )
+
+    def test_expense_checkin_update_preserves_and_clears_confirmed_at_by_status(self):
+        expense = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Supermercado",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        create_res = self.client.post(
+            "/api/budget/annual-expense-checkins/",
+            {
+                "annual_expense_entry_id": expense.id,
+                "fiscal_year": 2026,
+                "month": 2,
+                "status": "confirmed",
+                "executed_amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertIsNotNone(create_res.data["confirmed_at"])
+        checkin_id = create_res.data["id"]
+
+        skipped_res = self.client.patch(
+            f"/api/budget/annual-expense-checkins/{checkin_id}/",
+            {"status": "skipped"},
+            format="json",
+        )
+        self.assertEqual(skipped_res.status_code, status.HTTP_200_OK, skipped_res.data)
+        self.assertIsNone(skipped_res.data["confirmed_at"])
+
+        adjusted_res = self.client.patch(
+            f"/api/budget/annual-expense-checkins/{checkin_id}/",
+            {"status": "adjusted", "executed_amount": "95.00"},
+            format="json",
+        )
+        self.assertEqual(adjusted_res.status_code, status.HTTP_200_OK, adjusted_res.data)
+        self.assertIsNotNone(adjusted_res.data["confirmed_at"])
+        self.assertEqual(adjusted_res.data["executed_amount"], "95.00")
+
+    def test_expense_monthly_summary_requires_year_with_canonical_error_shape(self):
+        response = self.client.get("/api/budget/annual-expense/monthly-summary/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("year", response.data["error"]["details"])
+
+    def test_expense_monthly_summary_invalid_year_uses_canonical_error_shape(self):
+        response = self.client.get("/api/budget/annual-expense/monthly-summary/?year=nope")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("year", response.data["error"]["details"])
 
 
 class BudgetSerializerTests(TestCase):
