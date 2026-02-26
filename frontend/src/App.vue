@@ -16,29 +16,68 @@ const router = useRouter();
 const sidebarOpen = ref(false);
 const accountMenuOpen = ref(false);
 const accountMenuRef = ref<HTMLElement | null>(null);
+const accountLabel = ref('Mi cuenta');
+const accountRole = ref('Core');
+const accountPlan = ref('');
 
-const hasToken = computed(() => hasAccessToken());
+const hasToken = computed(() => hasAccessToken.value);
 const isLoginRoute = computed(() => route.name === 'login');
-const navItems = computed<NavItem[]>(() => [
-  { id: 'home', icon: 'GU', label: 'Guia', hint: 'Plan paso a paso', to: '/inicio' },
-  {
-    id: 'data-input',
-    icon: 'IN',
-    label: 'Introduccion de datos',
-    hint: 'Ingresos, gastos, activos y pasivos',
-    to: '/introduccion-datos',
-  },
-  { id: 'net-worth', icon: 'PT', label: 'Patrimonio', hint: 'Estado financiero', to: '/' },
-  {
-    id: 'budget',
-    icon: 'PR',
-    label: 'Presupuesto',
-    hint: 'Plan anual de ingresos y gastos',
-    to: '/presupuesto',
-  },
-]);
+const navItems = computed<NavItem[]>(() => {
+  const baseItems: NavItem[] = [
+    { id: 'home', icon: 'GU', label: 'Guia', hint: 'Plan paso a paso', to: '/' },
+    {
+      id: 'data-input',
+      icon: 'IN',
+      label: 'Introduccion de datos',
+      hint: 'Ingresos, gastos, activos y pasivos',
+      to: '/introduccion-datos',
+    },
+    {
+      id: 'net-worth',
+      icon: 'PT',
+      label: 'Patrimonio',
+      hint: 'Estado financiero',
+      to: '/patrimonio',
+    },
+    {
+      id: 'budget',
+      icon: 'PR',
+      label: 'Presupuesto',
+      hint: 'Plan anual de ingresos y gastos',
+      to: '/presupuesto',
+    },
+    {
+      id: 'monthly-close',
+      icon: 'CM',
+      label: 'Cierre mensual',
+      hint: 'Liquidez, ingresos, gastos y residual',
+      to: '/cierre-mensual',
+    },
+  ];
+
+  return baseItems;
+});
 
 const pageTitle = 'moneyplanner';
+
+function isNavItemActive(item: NavItem): boolean {
+  if (item.id === 'home') {
+    return route.path === '/' || route.path.startsWith('/guia/');
+  }
+  return route.path === item.to || route.path.startsWith(`${item.to}/`);
+}
+
+const accountInitials = computed(() => {
+  const text = accountLabel.value.trim();
+  if (!text || text === 'Mi cuenta') return 'MC';
+  const words = text.split(/\s+/).filter(Boolean);
+  const first = words[0] ?? '';
+  const second = words[1] ?? '';
+  if (!second) {
+    return first.slice(0, 2).toUpperCase();
+  }
+  return `${first[0] ?? ''}${second[0] ?? ''}`.toUpperCase();
+});
 
 function toggleSidebar(): void {
   sidebarOpen.value = !sidebarOpen.value;
@@ -91,6 +130,22 @@ watch(
   },
 );
 
+watch(
+  hasToken,
+  (tokenPresent) => {
+    if (!tokenPresent) {
+      accountLabel.value = 'Mi cuenta';
+      accountRole.value = 'Core';
+      accountPlan.value = '';
+      return;
+    }
+    accountLabel.value = 'Mi cuenta';
+    accountRole.value = 'Core';
+    accountPlan.value = '';
+  },
+  { immediate: true },
+);
+
 window.addEventListener('keydown', handleGlobalKeydown);
 document.addEventListener('click', handleGlobalClick);
 onBeforeUnmount(() => {
@@ -132,8 +187,8 @@ onBeforeUnmount(() => {
           :key="item.id"
           :to="item.to"
           class="ui-shell-link"
+          :class="{ 'ui-shell-link-active': isNavItemActive(item) }"
           :title="`${item.label}: ${item.hint}`"
-          active-class="ui-shell-link-active"
           @click="closeSidebar"
         >
           <span class="ui-shell-link-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -155,7 +210,7 @@ onBeforeUnmount(() => {
         >
           <span aria-hidden="true">&#9776;</span>
         </button>
-        <RouterLink class="ui-shell-header-title-link" to="/inicio">
+        <RouterLink class="ui-shell-header-title-link" to="/">
           <div class="ui-shell-header-title">{{ pageTitle }}</div>
         </RouterLink>
         <div v-if="hasToken" ref="accountMenuRef" class="ui-shell-account-menu">
@@ -166,14 +221,26 @@ onBeforeUnmount(() => {
             aria-haspopup="menu"
             @click="toggleAccountMenu"
           >
-            <span class="ui-shell-account-avatar">MC</span>
+            <span class="ui-shell-account-avatar">{{ accountInitials }}</span>
             <span class="ui-shell-account-info">
-              <span class="ui-shell-account-name">Mi cuenta</span>
-              <span class="ui-shell-account-meta">Core</span>
+              <span class="ui-shell-account-name">{{ accountLabel }}</span>
+              <span class="ui-shell-account-meta">
+                <span v-if="accountRole">{{ accountRole }}</span>
+                <span v-if="accountRole && accountPlan"> | </span>
+                <span v-if="accountPlan">{{ accountPlan }}</span>
+              </span>
             </span>
           </button>
 
           <div v-if="accountMenuOpen" class="ui-shell-account-dropdown" role="menu">
+            <RouterLink
+              class="ui-shell-account-item"
+              to="/account"
+              role="menuitem"
+              @click="closeAccountMenu"
+            >
+              Perfil
+            </RouterLink>
             <RouterLink
               class="ui-shell-account-item"
               to="/data"
