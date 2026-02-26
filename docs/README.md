@@ -1,19 +1,19 @@
-# Documentación del Core (OSS)
+# Documentacion del Core (OSS)
 
-Documentación corta y actual para colaboradores.
+Documentacion corta y actual para colaboradores.
 
 ## Leer primero
 1. `core/README.md`
-2. `core/docs/como-contribuir.md`
+2. `CONTRIBUTING.md`
 3. `core/docs/roadmap-comunidad.md`
 
 ## Alcance
 1. Este repo es la base open-core.
-2. No incluye extras SaaS (RBAC SaaS, suscripción, admin SaaS, linking SaaS/Core).
-3. Sí incluye dominio funcional base (patrimonio, presupuesto, guía, familia/titularidad, etc.).
+2. Incluye el dominio funcional base (patrimonio, presupuesto, guia, familia/titularidad, etc.).
+3. Este repo no documenta servicios externos ni productos aparte.
 
-## Cómo ayudar
-1. Reportando bugs con pasos de reproducción.
-2. Mejorando UX/flujo de entrada de datos.
-3. Añadiendo tests y calidad.
-4. Proponiendo mejoras en roadmap.
+## Como ayudar
+1. Reportando bugs con pasos de reproduccion.
+2. Mejorando UX y flujo de entrada de datos.
+3. Anadiendo tests y calidad.
+4. Proponiendo mejoras en el roadmap.
