@@ -2,11 +2,11 @@
 
 Base open-core de MoneyPlanner.
 
-## Qué incluye hoy
+## Que incluye hoy
 1. Patrimonio
 2. Presupuesto y cierre mensual
-3. Introducción de datos
-4. Guía / coach financiero v1
+3. Introduccion de datos
+4. Guia / coach financiero v1
 5. Familia / titularidad
 
 ## Stack
@@ -15,19 +15,18 @@ Base open-core de MoneyPlanner.
 3. PostgreSQL
 4. Docker Compose
 
-## Arranque rápido
+## Arranque rapido
 1. `docker compose up --build -d`
 2. Frontend: `http://localhost:5173`
 3. Backend: `http://localhost:8000`
 
-## Documentación (comunidad)
+## Documentacion (comunidad)
 1. `core/docs/README.md`
-2. `core/docs/como-contribuir.md`
-3. `core/docs/roadmap-comunidad.md`
-4. `CONTRIBUTING.md`
-5. `RELEASING.md`
+2. `core/docs/roadmap-comunidad.md`
+3. `CONTRIBUTING.md`
+4. `RELEASING.md`
 
-## Objetivo del repo público
-1. Publicar una base útil desde ya.
+## Objetivo del repo publico
+1. Publicar una base util desde ya.
 2. Mejorar calidad y UX con feedback real.
 3. Recibir ideas y contribuciones de la comunidad.
