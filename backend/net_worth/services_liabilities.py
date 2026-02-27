@@ -15,6 +15,23 @@ LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.CREDIT_CARD,
 }
 
+FURNISHINGS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
+    cast(str, Asset.Subcategory.VEHICLES): "vehicle_purchase",
+    cast(str, Asset.Subcategory.HOME_FURNISHINGS): "home_furniture_appliances",
+    cast(str, Asset.Subcategory.TECHNOLOGY): "technology_devices",
+    cast(str, Asset.Subcategory.JEWELRY): "jewelry_collectibles",
+}
+
+INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
+    cast(str, Asset.Subcategory.FUNDS): "index_funds_etf",
+    cast(str, Asset.Subcategory.ETFS): "index_funds_etf",
+    cast(str, Asset.Subcategory.PENSION_PLANS): "pension_plan",
+    cast(str, Asset.Subcategory.STOCKS): "stocks_dividends",
+    cast(str, Asset.Subcategory.CRYPTOCURRENCIES): "crypto",
+    cast(str, Asset.Subcategory.CROWDLENDING): "crowdlending_p2p",
+    cast(str, Asset.Subcategory.ROBOADVISOR): "roboadvisor",
+}
+
 
 def validate_liability_payload(
     *,
@@ -356,75 +373,102 @@ def get_effective_liability_amount(
     return estimated if estimated is not None else liability.amount
 
 
+def _build_expense_profile(
+    *, category: str, subcategory: str, cashflow_role: str
+) -> dict[str, str]:
+    return {
+        "category": category,
+        "subcategory": subcategory,
+        "cashflow_role": cashflow_role,
+    }
+
+
+def _get_unbacked_liability_expense_profile(*, temporary_commitment_role: str) -> dict[str, str]:
+    from budget.models import AnnualExpenseEntry
+
+    return _build_expense_profile(
+        category=cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES),
+        subcategory="financial_commitments",
+        cashflow_role=temporary_commitment_role,
+    )
+
+
+def _get_furnishings_expense_profile(
+    *, subcategory: str, temporary_commitment_role: str
+) -> dict[str, str]:
+    from budget.models import AnnualExpenseEntry
+
+    return _build_expense_profile(
+        category=cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
+        subcategory=FURNISHINGS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY.get(
+            subcategory, "other_tangible_assets"
+        ),
+        cashflow_role=temporary_commitment_role,
+    )
+
+
+def _get_investments_expense_profile(
+    *, subcategory: str, temporary_commitment_role: str
+) -> dict[str, str]:
+    from budget.models import AnnualExpenseEntry
+
+    return _build_expense_profile(
+        category=cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
+        subcategory=INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY.get(
+            subcategory, "other_financial_investments"
+        ),
+        cashflow_role=temporary_commitment_role,
+    )
+
+
 def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str, str]:
     from budget.models import AnnualExpenseEntry
 
     temporary_commitment_role = cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES),
-            "subcategory": "financial_commitments",
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _get_unbacked_liability_expense_profile(
+            temporary_commitment_role=temporary_commitment_role
+        )
 
     if financed_asset.category == Asset.Category.REAL_ESTATE:
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
-            "subcategory": "property_purchase",
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _build_expense_profile(
+            category=cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
+            subcategory="property_purchase",
+            cashflow_role=temporary_commitment_role,
+        )
 
     if financed_asset.category == Asset.Category.VEHICLE:
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
-            "subcategory": "vehicle_purchase",
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _build_expense_profile(
+            category=cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
+            subcategory="vehicle_purchase",
+            cashflow_role=temporary_commitment_role,
+        )
 
     if financed_asset.category == Asset.Category.FURNISHINGS:
-        furnishings_map = {
-            Asset.Subcategory.VEHICLES: "vehicle_purchase",
-            Asset.Subcategory.HOME_FURNISHINGS: "home_furniture_appliances",
-            Asset.Subcategory.TECHNOLOGY: "technology_devices",
-            Asset.Subcategory.JEWELRY: "jewelry_collectibles",
-        }
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
-            "subcategory": furnishings_map.get(financed_asset.subcategory, "other_tangible_assets"),
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _get_furnishings_expense_profile(
+            subcategory=financed_asset.subcategory,
+            temporary_commitment_role=temporary_commitment_role,
+        )
 
     if financed_asset.category == Asset.Category.INVESTMENTS:
-        investments_map = {
-            Asset.Subcategory.FUNDS: "index_funds_etf",
-            Asset.Subcategory.ETFS: "index_funds_etf",
-            Asset.Subcategory.PENSION_PLANS: "pension_plan",
-            Asset.Subcategory.STOCKS: "stocks_dividends",
-            Asset.Subcategory.CRYPTOCURRENCIES: "crypto",
-            Asset.Subcategory.CROWDLENDING: "crowdlending_p2p",
-            Asset.Subcategory.ROBOADVISOR: "roboadvisor",
-        }
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
-            "subcategory": investments_map.get(
-                financed_asset.subcategory, "other_financial_investments"
-            ),
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _get_investments_expense_profile(
+            subcategory=financed_asset.subcategory,
+            temporary_commitment_role=temporary_commitment_role,
+        )
 
     if financed_asset.category == Asset.Category.CASH:
-        return {
-            "category": cast(str, AnnualExpenseEntry.Category.SAVINGS_ALLOCATION),
-            "subcategory": "cash_reserve",
-            "cashflow_role": temporary_commitment_role,
-        }
+        return _build_expense_profile(
+            category=cast(str, AnnualExpenseEntry.Category.SAVINGS_ALLOCATION),
+            subcategory="cash_reserve",
+            cashflow_role=temporary_commitment_role,
+        )
 
-    return {
-        "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
-        "subcategory": "other_tangible_assets",
-        "cashflow_role": temporary_commitment_role,
-    }
+    return _build_expense_profile(
+        category=cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
+        subcategory="other_tangible_assets",
+        cashflow_role=temporary_commitment_role,
+    )
 
 
 def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> None:

@@ -31,6 +31,11 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 8. 2026-02-27: `accounts.UserSettingsAPIView.put` alineado a update con
    serializer de instancia, con test API de regresion para mantener el mismo
    registro `UserSettings` en el `PUT`.
+9. 2026-02-27: tests API minimos agregados en `backend/core/tests.py` para
+   `fx-rates` e `inflation` (permisos, create/list y shape canonico de errores).
+10. 2026-02-27: refactor interno en `backend/net_worth/services_liabilities.py`
+    para reducir complejidad en `get_generated_liability_expense_profile`
+    (helpers privados + mapas de subcategoria reutilizables), sin cambios funcionales.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)
