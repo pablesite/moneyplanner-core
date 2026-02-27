@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 from uuid import uuid4
 import jwt
 
-from .models import ExternalIdentity
+from .models import ExternalIdentity, UserSettings
 from .services import get_or_create_user_settings, update_user_settings
 
 
@@ -82,6 +82,24 @@ class CoreAuthModeApiTests(APITestCase):
         )
         self.assertEqual(refresh_res.status_code, status.HTTP_200_OK)
         self.assertIn("access", refresh_res.data)
+
+    def test_settings_put_updates_existing_row(self):
+        settings_obj, _ = UserSettings.objects.get_or_create(
+            user=self.user, defaults={"base_currency": "EUR"}
+        )
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.put(
+            "/api/auth/settings/",
+            {"base_currency": "USD"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["base_currency"], "USD")
+
+        refreshed = UserSettings.objects.get(user=self.user)
+        self.assertEqual(refreshed.id, settings_obj.id)
+        self.assertEqual(refreshed.base_currency, "USD")
 
 
 @override_settings(
