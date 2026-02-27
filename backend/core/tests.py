@@ -2,8 +2,11 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test.utils import override_settings
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from .models import FxRate, InflationIndex
 from .services import (
@@ -214,3 +217,76 @@ class CoreServicesTests(TestCase):
 
         with self.assertRaises(ValidationError):
             adjust_for_inflation(Decimal("10"), date=date(2026, 2, 1), region="ES")
+
+
+class CoreApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="core_api_user",
+            password="pass1234",
+        )
+
+    def test_fx_rates_requires_auth_with_canonical_error_shape(self):
+        response = self.client.get("/api/core/fx-rates/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"]["code"], "unauthorized")
+        self.assertIn("message", response.data["error"])
+        self.assertIn("details", response.data["error"])
+
+    def test_inflation_requires_auth_with_canonical_error_shape(self):
+        response = self.client.get("/api/core/inflation/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"]["code"], "unauthorized")
+        self.assertIn("message", response.data["error"])
+        self.assertIn("details", response.data["error"])
+
+    def test_fx_rates_create_and_list(self):
+        self.client.force_authenticate(user=self.user)
+        create_response = self.client.post(
+            "/api/core/fx-rates/",
+            {
+                "rate_date": "2026-02-01",
+                "from_currency": "usd",
+                "to_currency": "eur",
+                "rate": "0.90",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        self.assertEqual(create_response.data["from_currency"], "USD")
+        self.assertEqual(create_response.data["to_currency"], "EUR")
+
+        list_response = self.client.get("/api/core/fx-rates/")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_response.data), 1)
+
+    def test_fx_rates_rejects_invalid_currency_with_canonical_error_shape(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            "/api/core/fx-rates/",
+            {
+                "rate_date": "2026-02-01",
+                "from_currency": "EU",
+                "to_currency": "USD",
+                "rate": "1.10",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("non_field_errors", response.data["error"]["details"])
+
+    def test_inflation_rejects_non_month_start_period_with_canonical_error_shape(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            "/api/core/inflation/",
+            {
+                "region": "ES",
+                "period": "2026-02-02",
+                "index": "101.1234",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("period", response.data["error"]["details"])
