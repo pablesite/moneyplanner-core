@@ -14,14 +14,14 @@ from rest_framework.test import APIRequestFactory
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
-from .models import Asset, Liability, LiquidityMonthlyCheckin
-from .serializers import (
+from ..models import Asset, Liability, LiquidityMonthlyCheckin
+from ..serializers import (
     AssetSerializer,
     EmptySerializer,
     LiabilitySerializer,
     NetWorthSnapshotSerializer,
 )
-from .services import (
+from ..services import (
     NetWorthTotals,
     build_net_worth_summary,
     calculate_totals,
@@ -41,7 +41,7 @@ from .services import (
     validate_liability_payload,
     validate_snapshot_payload,
 )
-from .views import NetWorthSnapshotViewSet
+from ..views import NetWorthSnapshotViewSet
 
 
 class NetWorthServicesTests(TestCase):

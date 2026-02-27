@@ -39,6 +39,9 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 11. 2026-02-27: `backend/memberships/tests.py` migrado a paquete
     `backend/memberships/tests/` separado en `test_api.py` y `test_services.py`
     sin cambios funcionales.
+12. 2026-02-27: `backend/net_worth/tests.py` migrado a paquete
+    `backend/net_worth/tests/` (`test_net_worth.py`) manteniendo cobertura y
+    discovery de Django sin cambios funcionales.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)
