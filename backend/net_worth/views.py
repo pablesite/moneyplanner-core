@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -16,6 +17,7 @@ from .serializers import (
     NetWorthSnapshotSerializer,
 )
 from .services import (
+    delete_generated_budget_commitments_for_liability,
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     get_liquidity_asset_queryset_for_user,
@@ -63,6 +65,11 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         liability = serializer.save()
         sync_generated_budget_commitments_for_liability(liability=liability)
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            delete_generated_budget_commitments_for_liability(liability=instance)
+            instance.delete()
 
 
 class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):

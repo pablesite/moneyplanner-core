@@ -192,3 +192,35 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
+
+    def test_expense_serializer_keeps_event_group_and_term_end_year_for_system_generated_liability(
+        self,
+    ):
+        entry = AnnualExpenseEntry(
+            user=self.user,
+            source_liability_id=123,
+            is_system_generated=True,
+            name="Hipoteca",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type="recurrent",
+            time_profile="term_recurrent",
+            cashflow_role="temporary_commitment",
+            event_group="liability_123",
+            term_end_year=2032,
+            amount_annual=Decimal("7200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        serializer = AnnualExpenseEntrySerializer(
+            entry,
+            data={
+                "time_profile": "term_recurrent",
+                "event_group": "manual_override",
+                "term_end_year": 2040,
+            },
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["event_group"], "liability_123")
+        self.assertEqual(serializer.validated_data["term_end_year"], 2032)

@@ -20,6 +20,7 @@ defineProps<Props>();
 const emit = defineEmits<{
   (e: 'edit', id: number): void;
   (e: 'archive', id: number): void;
+  (e: 'delete', id: number): void;
 }>();
 </script>
 
@@ -47,6 +48,9 @@ const emit = defineEmits<{
         aria-label="Archivar"
         @click="emit('archive', item.id)"
       >
+        &#128230;
+      </button>
+      <button class="icon-btn" title="Eliminar" aria-label="Eliminar" @click="emit('delete', item.id)">
         &#128465;&#65039;
       </button>
     </div>

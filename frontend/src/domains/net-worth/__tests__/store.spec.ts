@@ -12,10 +12,17 @@ const mocks = vi.hoisted(() => ({
     deleteSnapshot: vi.fn(),
     createAsset: vi.fn(),
     updateAsset: vi.fn(),
+    deleteAsset: vi.fn(),
     createLiability: vi.fn(),
     updateLiability: vi.fn(),
+    deleteLiability: vi.fn(),
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
+  },
+  premiumOwnershipApi: {
+    getOwnerships: vi.fn(),
+    getOwnershipLinks: vi.fn(),
+    syncOwnershipLink: vi.fn(),
   },
   buildByCategoryChart: vi.fn(() => ({ labels: [], assets: [], liabilities: [] })),
   toApiErrorMessage: vi.fn(() => 'mapped-error'),
@@ -23,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/domains/net-worth/api', () => ({
   coreNetWorthApi: mocks.coreNetWorthApi,
+  premiumOwnershipApi: mocks.premiumOwnershipApi,
 }));
 
 vi.mock('@/domains/net-worth/charts', () => ({
@@ -37,6 +45,8 @@ describe('net worth store (core)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    mocks.premiumOwnershipApi.getOwnerships.mockResolvedValue({ data: [] });
+    mocks.premiumOwnershipApi.getOwnershipLinks.mockResolvedValue({ data: [] });
   });
 
   it('refreshes summary datasets', async () => {
@@ -49,8 +59,8 @@ describe('net worth store (core)', () => {
     await store.refreshAll();
 
     expect(store.baseCurrency).toBe('EUR');
-    expect(store.assets).toEqual([{ id: 1 }]);
-    expect(store.liabilities).toEqual([{ id: 2 }]);
+    expect(store.assets).toEqual([{ id: 1, ownership_ref: null }]);
+    expect(store.liabilities).toEqual([{ id: 2, ownership_ref: null }]);
     expect(store.snapshots).toEqual([{ id: 3 }]);
     expect(store.loading).toBe(false);
   });
@@ -94,6 +104,8 @@ describe('net worth store (core)', () => {
 
     await store.archiveAsset(11);
     expect(mocks.coreNetWorthApi.updateAsset).toHaveBeenCalledWith(11, { is_active: false });
+    await store.deleteAsset(11);
+    expect(mocks.coreNetWorthApi.deleteAsset).toHaveBeenCalledWith(11);
 
     await store.createLiability({ name: 'Debt' });
     expect(mocks.coreNetWorthApi.createLiability).toHaveBeenCalledWith({ name: 'Debt' });
@@ -103,6 +115,8 @@ describe('net worth store (core)', () => {
 
     await store.archiveLiability(22);
     expect(mocks.coreNetWorthApi.updateLiability).toHaveBeenCalledWith(22, { is_active: false });
+    await store.deleteLiability(22);
+    expect(mocks.coreNetWorthApi.deleteLiability).toHaveBeenCalledWith(22);
   });
 
   it('deletes snapshots and maps delete errors', async () => {

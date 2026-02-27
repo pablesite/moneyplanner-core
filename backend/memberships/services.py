@@ -309,12 +309,24 @@ def sync_ownership_link_from_payload(*, user, payload: dict) -> dict[str, object
 def sync_ownership_link(
     *, user, target_type: str, target_id: int, ownership: Ownership | None
 ) -> dict[str, object]:
+    def _sync_generated_liability_commitments_if_needed() -> None:
+        if target_type != OwnershipLink.TargetType.LIABILITY:
+            return
+        from net_worth.models import Liability
+        from net_worth.services import sync_generated_budget_commitments_for_liability
+
+        liability = Liability.objects.filter(user=user, id=target_id).first()
+        if liability is None:
+            return
+        sync_generated_budget_commitments_for_liability(liability=liability)
+
     if ownership is None:
         OwnershipLink.objects.filter(
             user=user,
             target_type=target_type,
             target_id=target_id,
         ).delete()
+        _sync_generated_liability_commitments_if_needed()
         return {"ok": True, "ownership_id": None}
 
     link, _created = OwnershipLink.objects.update_or_create(
@@ -323,4 +335,5 @@ def sync_ownership_link(
         target_id=target_id,
         defaults={"ownership": ownership},
     )
+    _sync_generated_liability_commitments_if_needed()
     return {"ok": True, "ownership_id": link.ownership_id}

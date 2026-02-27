@@ -205,7 +205,15 @@ const showAssetAnnualInterestInput = computed(
   () => isAssetForm.value && showAnnualInterestInput.value,
 );
 const showMonthlyPaymentInput = computed(() => false);
-const showLiabilityAdvancedFields = computed(() => isLiabilityForm.value);
+const isCreditCardLiability = computed(
+  () => isLiabilityForm.value && String(form.category ?? '').trim() === 'credit_card',
+);
+const showLiabilityAdvancedFields = computed(
+  () => isLiabilityForm.value && !isCreditCardLiability.value,
+);
+const showLiabilityTaeOnlyField = computed(
+  () => isLiabilityForm.value && !showLiabilityAdvancedFields.value,
+);
 const showMortgageFeeFields = computed(
   () => isLiabilityForm.value && form.category === 'mortgage',
 );
@@ -743,17 +751,17 @@ watch(
 <template>
   <div>
     <div class="ui-item-form-grid">
-      <label class="ui-item-form-field ui-item-form-field-span-2">
-        <span class="ui-item-form-label">Nombre</span>
-        <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
-      </label>
-
-      <label class="ui-item-form-field">
+      <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': isLiabilityForm }]">
         <span class="ui-item-form-label">Categoría</span>
         <select v-model="form.category" :class="['select ui-data-field', { 'ui-select-placeholder': !form.category }]">
           <option value="" disabled>Selecciona categoría</option>
           <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
+      </label>
+
+      <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': !isLiabilityForm }]">
+        <span class="ui-item-form-label">Nombre</span>
+        <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
       </label>
 
       <label v-if="props.subcategories" class="ui-item-form-field">
@@ -783,6 +791,10 @@ watch(
       </label>
 
       <label v-if="showAssetAnnualInterestInput" class="ui-item-form-field">
+        <span class="ui-item-form-label">TAE anual (%)</span>
+        <input v-model="form.annual_interest_tae" inputmode="decimal" placeholder="TAE anual (%)" class="input ui-data-field" />
+      </label>
+      <label v-if="showLiabilityTaeOnlyField" class="ui-item-form-field">
         <span class="ui-item-form-label">TAE anual (%)</span>
         <input v-model="form.annual_interest_tae" inputmode="decimal" placeholder="TAE anual (%)" class="input ui-data-field" />
       </label>
@@ -864,7 +876,7 @@ watch(
 
       <label class="ui-item-form-field ui-item-form-field-span-2">
         <span class="ui-item-form-label">Notas</span>
-        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
+        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea ui-data-field"></textarea>
       </label>
 
       <div class="ui-item-form-feedback ui-item-form-field-span-2">
@@ -877,7 +889,6 @@ watch(
       </div>
 
       <div class="ui-item-form-footer ui-item-form-field-span-2">
-        <label class="checkbox-row"><input v-model="form.is_active" type="checkbox" /> Activo</label>
         <div class="ui-form-actions ui-item-form-actions">
           <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">Cancelar</button>
           <button class="btn btn-primary ui-form-action-btn" :disabled="!!amountError || !!annualInterestError || !!monthlyPaymentError || !!assetAmortizationError || !!liabilityDatesError || !!liabilityScheduleError" @click="submit">
