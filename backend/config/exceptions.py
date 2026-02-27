@@ -8,7 +8,7 @@ When SaaS needs the same contract, mirror this module in
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.exceptions import ErrorDetail, ValidationError
+from rest_framework.exceptions import APIException, ErrorDetail, ValidationError
 from rest_framework.views import exception_handler
 
 
@@ -23,6 +23,8 @@ def _normalize_error_details(detail):
 
 
 def _infer_error_code(status_code: int, exc) -> str:
+    if isinstance(exc, APIException) and getattr(exc, "default_code", None) == "feature_disabled":
+        return "feature_disabled"
     if isinstance(exc, ValidationError):
         return "validation_error"
     if status_code == status.HTTP_401_UNAUTHORIZED:

@@ -3,6 +3,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.utils import timezone
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +14,12 @@ from uuid import uuid4
 
 from .serializers import UserSettingsSerializer
 from .services import get_or_create_user_settings, update_user_settings
+
+
+class FeatureDisabledException(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "feature_disabled"
+    default_detail = "Feature disabled."
 
 
 class UserSettingsAPIView(APIView):
@@ -85,15 +92,11 @@ class CoreLinkTokenAPIView(APIView):
     def get(self, request):
         secret = getattr(settings, "CORE_LINKING_SHARED_SECRET", "")
         if not secret:
-            return Response(
-                {
-                    "error": {
-                        "code": "feature_disabled",
-                        "message": "Token de vinculacion deshabilitado por configuracion.",
-                        "details": {"core_linking_enabled": False},
-                    }
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+            raise FeatureDisabledException(
+                detail={
+                    "detail": "Token de vinculacion deshabilitado por configuracion.",
+                    "core_linking_enabled": False,
+                }
             )
 
         expires_in = int(getattr(settings, "CORE_LINKING_TOKEN_MAX_AGE_SECONDS", 300))
