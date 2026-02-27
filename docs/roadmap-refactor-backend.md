@@ -36,6 +36,9 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 10. 2026-02-27: refactor interno en `backend/net_worth/services_liabilities.py`
     para reducir complejidad en `get_generated_liability_expense_profile`
     (helpers privados + mapas de subcategoria reutilizables), sin cambios funcionales.
+11. 2026-02-27: `backend/memberships/tests.py` migrado a paquete
+    `backend/memberships/tests/` separado en `test_api.py` y `test_services.py`
+    sin cambios funcionales.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)
