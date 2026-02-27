@@ -137,6 +137,19 @@ export const useNetWorthStore = defineStore('netWorth', {
       return this.updateAsset(id, { is_active: false });
     },
 
+    async deleteAsset(id: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await coreNetWorthApi.deleteAsset(id);
+        await this.refreshAll();
+      } catch (e: unknown) {
+        this.error = toApiErrorMessage(e);
+      } finally {
+        this.loading = false;
+      }
+    },
+
     async createLiability(payload: OwnershipAwarePayload) {
       this.loading = true;
       this.error = null;
@@ -191,6 +204,19 @@ export const useNetWorthStore = defineStore('netWorth', {
 
     async archiveLiability(id: number) {
       return this.updateLiability(id, { is_active: false });
+    },
+
+    async deleteLiability(id: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await coreNetWorthApi.deleteLiability(id);
+        await this.refreshAll();
+      } catch (e: unknown) {
+        this.error = toApiErrorMessage(e);
+      } finally {
+        this.loading = false;
+      }
     },
 
     async fetchSettings() {

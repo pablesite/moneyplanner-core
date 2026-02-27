@@ -18,7 +18,7 @@ describe('ItemDisplayRow', () => {
     expect(wrapper.text()).toContain('1,000.00');
   });
 
-  it('emits edit and archive events with item id', async () => {
+  it('emits edit, archive and delete events with item id', async () => {
     const wrapper = mount(ItemDisplayRow, {
       props: {
         item: { id: 11, name: 'Hipoteca', is_active: false, currency: 'EUR' },
@@ -32,9 +32,11 @@ describe('ItemDisplayRow', () => {
 
     await wrapper.get('button[aria-label="Editar"]').trigger('click');
     await wrapper.get('button[aria-label="Archivar"]').trigger('click');
+    await wrapper.get('button[aria-label="Eliminar"]').trigger('click');
 
     expect(wrapper.emitted('edit')?.[0]).toEqual([11]);
     expect(wrapper.emitted('archive')?.[0]).toEqual([11]);
+    expect(wrapper.emitted('delete')?.[0]).toEqual([11]);
     expect(wrapper.text()).toContain('Financia: Casa');
   });
 });

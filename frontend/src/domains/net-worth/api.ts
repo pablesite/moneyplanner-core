@@ -42,11 +42,17 @@ export const coreNetWorthApi = {
   updateAsset(id: number, payload: NetWorthWritePayload) {
     return coreApi.patch<Asset>(`/api/net-worth/assets/${id}/`, payload);
   },
+  deleteAsset(id: number) {
+    return coreApi.delete(`/api/net-worth/assets/${id}/`);
+  },
   createLiability(payload: NetWorthWritePayload) {
     return coreApi.post<Liability>('/api/net-worth/liabilities/', payload);
   },
   updateLiability(id: number, payload: NetWorthWritePayload) {
     return coreApi.patch<Liability>(`/api/net-worth/liabilities/${id}/`, payload);
+  },
+  deleteLiability(id: number) {
+    return coreApi.delete(`/api/net-worth/liabilities/${id}/`);
   },
   getSettings() {
     return coreApi.get<Settings>('/api/auth/settings/');

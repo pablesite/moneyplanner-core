@@ -74,4 +74,35 @@ describe('ItemForm (core)', () => {
     await wrapper.find('input[placeholder="Importe"]').setValue('12.3.4');
     expect(wrapper.text()).toContain('Importe');
   });
+
+  it('does not require schedule fields for credit card liabilities', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo pasivo',
+        categories: [{ value: 'credit_card', label: 'Tarjeta' }],
+        showFinancedAsset: true,
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Tarjeta ECI');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('credit_card');
+    await selects[1]!.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('213');
+    await wrapper.find('input[placeholder="TAE anual (%)"]').setValue('19.5');
+
+    expect(wrapper.text()).not.toContain('Indica cuotas o fecha fin');
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'credit_card',
+        amount: '213',
+        annual_interest_tae: '19.5',
+      }),
+    );
+  });
 });

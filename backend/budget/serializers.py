@@ -254,6 +254,13 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             time_profile=attrs["time_profile"],
             cashflow_role=attrs["cashflow_role"],
         )
+        if (
+            self.instance is not None
+            and self.instance.is_system_generated
+            and self.instance.source_liability_id is not None
+        ):
+            attrs["event_group"] = self.instance.event_group
+            attrs["term_end_year"] = self.instance.term_end_year
 
         fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
         target_month = attrs.get("target_month")

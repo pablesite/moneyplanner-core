@@ -24,6 +24,7 @@ from .services_liquidity import (
 from .services_liabilities import (
     _last_day_of_month as _liab_last_day_of_month,
     build_liability_installment_schedule_simple as _liab_build_liability_installment_schedule_simple,
+    delete_generated_budget_commitments_for_liability as _liab_delete_generated_budget_commitments_for_liability,
     estimate_liability_monthly_payment_simple as _liab_estimate_liability_monthly_payment_simple,
     estimate_liability_outstanding_amount_simple as _liab_estimate_liability_outstanding_amount_simple,
     get_effective_liability_amount as _liab_get_effective_liability_amount,
@@ -77,6 +78,9 @@ get_effective_liability_amount = _liab_get_effective_liability_amount
 get_generated_liability_expense_profile = _liab_get_generated_liability_expense_profile
 sync_generated_budget_commitments_for_liability = (
     _liab_sync_generated_budget_commitments_for_liability
+)
+delete_generated_budget_commitments_for_liability = (
+    _liab_delete_generated_budget_commitments_for_liability
 )
 create_asset_for_user = _create_asset_for_user
 create_liability_for_user = _create_liability_for_user

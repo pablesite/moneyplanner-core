@@ -14,6 +14,7 @@ from rest_framework.test import APIRequestFactory
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
+from memberships.models import FamilyMember, Ownership, OwnershipSplit
 from ..models import Asset, Liability, LiquidityMonthlyCheckin
 from ..serializers import (
     AssetSerializer,
@@ -778,6 +779,107 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row.subcategory, "property_purchase")
         self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
 
+    def test_mortgage_liability_generates_mortgage_principal_temporary_recurrent_expense(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca vivienda habitual",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "180000.00",
+                "principal_amount": "180000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=response.data["id"],
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertTrue(generated.exists())
+        row = generated.first()
+        self.assertEqual(row.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
+        self.assertEqual(row.subcategory, "mortgage_principal")
+        self.assertEqual(row.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
+        self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+
+    def test_liability_generated_expense_owner_name_follows_ownership_link(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca titularidad",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "180000.00",
+                "principal_amount": "180000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        liability_id = response.data["id"]
+
+        generated_before = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertTrue(generated_before.exists())
+        self.assertEqual(generated_before.first().owner_name, "")
+
+        ana = FamilyMember.objects.create(
+            user=self.user,
+            name="Ana",
+            role=FamilyMember.Role.ADULT,
+            is_active=True,
+        )
+        pablo = FamilyMember.objects.create(
+            user=self.user,
+            name="Pablo",
+            role=FamilyMember.Role.ADULT,
+            is_active=True,
+        )
+        shared = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED, member=None)
+        OwnershipSplit.objects.create(ownership=shared, member=ana, percent=Decimal("50.00"))
+        OwnershipSplit.objects.create(ownership=shared, member=pablo, percent=Decimal("50.00"))
+
+        sync_response = self.client.post(
+            "/api/ownership-links/sync/",
+            {
+                "target_type": "liability",
+                "target_id": liability_id,
+                "ownership_id": shared.id,
+            },
+            format="json",
+        )
+        self.assertEqual(sync_response.status_code, status.HTTP_200_OK, sync_response.data)
+
+        generated_after = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        self.assertTrue(generated_after.exists())
+        for row in generated_after:
+            self.assertIn("Compartido", row.owner_name)
+            self.assertIn("Ana", row.owner_name)
+            self.assertIn("Pablo", row.owner_name)
+            self.assertIn("50%", row.owner_name)
+
     def test_liability_create_quarterly_generates_budget_commitment_entries(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
@@ -827,6 +929,88 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("term_months", response.data["error"]["details"])
+
+    def test_liability_delete_removes_generated_budget_commitments_for_all_years(self):
+        create_response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca prueba borrado",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2024-09-01",
+                "annual_interest_tae": "2.50",
+                "amount": "180000.00",
+                "principal_amount": "180000.00",
+                "term_months": 36,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        liability_id = create_response.data["id"]
+
+        generated_before = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        self.assertTrue(generated_before.exists())
+        self.assertGreaterEqual(generated_before.count(), 2)
+
+        delete_response = self.client.delete(f"/api/net-worth/liabilities/{liability_id}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Liability.objects.filter(user=self.user, id=liability_id).exists())
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                source_liability_id=liability_id,
+                is_system_generated=True,
+            ).exists()
+        )
+
+    def test_liability_delete_removes_generated_budget_commitments_by_event_group_fallback(self):
+        create_response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo fallback event group",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "12000.00",
+                "principal_amount": "12000.00",
+                "term_months": 24,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        liability_id = create_response.data["id"]
+        event_group = f"liability_{liability_id}"
+
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        self.assertTrue(generated.exists())
+        generated.update(source_liability=None)
+
+        delete_response = self.client.delete(f"/api/net-worth/liabilities/{liability_id}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                is_system_generated=True,
+                event_group=event_group,
+            ).exists()
+        )
 
     def test_liability_update_does_not_overwrite_generated_budget_commitment_if_user_edits_it(self):
         create_response = self.client.post(

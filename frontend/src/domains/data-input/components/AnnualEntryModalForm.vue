@@ -41,6 +41,8 @@ const props = withDefaults(
     timeProfileOptions: ReadonlyArray<SelectOption>;
     cashflowRoleOptions: ReadonlyArray<SelectOption>;
     showCashflowRoleField?: boolean;
+    showEventGroupField?: boolean;
+    showTermEndYearField?: boolean;
     namePlaceholder: string;
     amountPlaceholder: string;
     eventGroupPlaceholder?: string;
@@ -52,6 +54,8 @@ const props = withDefaults(
     loading: false,
     showOwnerField: false,
     showCashflowRoleField: true,
+    showEventGroupField: true,
+    showTermEndYearField: true,
     ownerOptions: () => [],
     eventGroupPlaceholder: 'Grupo de evento (opcional, ej: vivienda_2026)',
     termEndYearPlaceholder: 'Ano fin compromiso (ej: 2027)',
@@ -144,6 +148,7 @@ const emit = defineEmits<{
       </select>
 
       <input
+        v-if="showEventGroupField"
         :value="form.eventGroup"
         class="input ui-data-field"
         :placeholder="eventGroupPlaceholder"
@@ -164,7 +169,7 @@ const emit = defineEmits<{
       />
 
       <input
-        v-if="form.timeProfile === 'term_recurrent'"
+        v-if="showTermEndYearField && form.timeProfile === 'term_recurrent'"
         :value="form.termEndYear"
         class="input ui-data-field"
         inputmode="numeric"
@@ -189,7 +194,7 @@ const emit = defineEmits<{
 
       <textarea
         :value="form.notes"
-        class="textarea md:col-span-2"
+        class="textarea ui-data-field md:col-span-2"
         rows="2"
         :placeholder="notesPlaceholder"
         @input="

@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import cast
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
@@ -425,6 +426,13 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
     from budget.models import AnnualExpenseEntry
 
     temporary_commitment_role = cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+    if liability.category == Liability.Category.MORTGAGE:
+        return _build_expense_profile(
+            category=cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
+            subcategory="mortgage_principal",
+            cashflow_role=temporary_commitment_role,
+        )
+
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
         return _get_unbacked_liability_expense_profile(
@@ -471,6 +479,51 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
     )
 
 
+def _format_ownership_percent(value: Decimal) -> str:
+    quantized = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    text = format(quantized, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _get_generated_liability_owner_name(*, liability: Liability) -> str:
+    from memberships.models import Ownership, OwnershipLink
+
+    link = (
+        OwnershipLink.objects.filter(
+            user=liability.user,
+            target_type=OwnershipLink.TargetType.LIABILITY,
+            target_id=liability.id,
+        )
+        .select_related("ownership", "ownership__member")
+        .first()
+    )
+    if link is None:
+        return ""
+
+    ownership = link.ownership
+    if ownership.kind == Ownership.Kind.INDIVIDUAL:
+        member_name = getattr(ownership.member, "name", "") or ""
+        return str(member_name).strip()
+
+    if ownership.kind == Ownership.Kind.SHARED:
+        splits = ownership.splits.select_related("member").order_by("id")
+        parts: list[str] = []
+        for split in splits:
+            member_name = getattr(split.member, "name", "") or ""
+            name = str(member_name).strip()
+            if not name:
+                continue
+            percent = _format_ownership_percent(Decimal(split.percent))
+            parts.append(f"{name} {percent}%")
+        if parts:
+            return f"Compartido ({' / '.join(parts)})"
+        return "Compartido"
+
+    return ""
+
+
 def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> None:
     from budget.models import AnnualExpenseEntry
 
@@ -488,13 +541,14 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
         totals_by_year[due_date.year] += installment
 
     expense_profile = get_generated_liability_expense_profile(liability=liability)
+    owner_name = _get_generated_liability_owner_name(liability=liability)
 
     for year, annual_total in totals_by_year.items():
         generated_defaults = {
             "name": f"Compromiso pasivo: {liability.name}",
             "category": expense_profile["category"],
             "subcategory": expense_profile["subcategory"],
-            "owner_name": "",
+            "owner_name": owner_name,
             "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
             "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
             "cashflow_role": expense_profile["cashflow_role"],
@@ -519,7 +573,6 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             "name",
             "category",
             "subcategory",
-            "owner_name",
             "expense_type",
             "time_profile",
             "cashflow_role",
@@ -530,7 +583,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             for field_name in customization_marker_fields
         )
 
-        system_owned_fields = ["term_end_year", "currency", "event_group", "is_active"]
+        system_owned_fields = ["owner_name", "term_end_year", "currency", "event_group", "is_active"]
         if not is_customized:
             system_owned_fields.append("amount_annual")
         update_fields: list[str] = []
@@ -547,3 +600,13 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
         source_liability=liability,
         is_system_generated=True,
     ).exclude(fiscal_year__in=list(totals_by_year.keys())).delete()
+
+
+def delete_generated_budget_commitments_for_liability(*, liability: Liability) -> None:
+    from budget.models import AnnualExpenseEntry
+
+    event_group = f"liability_{liability.id}"
+    AnnualExpenseEntry.objects.filter(
+        user=liability.user,
+        is_system_generated=True,
+    ).filter(Q(source_liability=liability) | Q(event_group=event_group)).delete()

@@ -99,22 +99,31 @@ const editingIncomeId = ref<number | null>(null);
 const editingExpenseId = ref<number | null>(null);
 const showExpenseModal = ref(false);
 const showGeneratedLiabilityExpenseModal = ref(false);
+const bulkEditingGeneratedLiabilityId = ref<number | null>(null);
+const bulkEditingGeneratedExpenseIds = ref<number[]>([]);
 const hydratingAnnualIncomeForm = ref(false);
 const hydratingAnnualExpenseForm = ref(false);
 const expandedIncomeCats = ref<Set<string>>(new Set());
 const expandedExpenseCats = ref<Set<string>>(new Set());
 const assetOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
 const liabilityOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
+const showArchivedNetWorth = ref(false);
 const generatedLiabilityExpenseReview = ref<{
   liabilityId: number;
   liabilityName: string;
   entries: {
     id: number;
     fiscalYear: number;
+    name: string;
+    owner: string;
     category: string;
     subcategory: string;
+    expenseType: string;
     cashflowRole: string;
     timeProfile: string;
+    eventGroup: string;
+    targetMonth: number | null;
+    termEndYear: number | null;
     amountAnnual: number;
     currency: string;
     notes: string;
@@ -203,9 +212,9 @@ const incomeCashflowRoleOptions: SelectOption[] = [
 ];
 
 const expenseTimeProfileOptions: SelectOption[] = [
-  { value: 'structural_recurrent', label: 'Recurrente estructural (estilo de vida)' },
-  { value: 'term_recurrent', label: 'Recurrente temporal (cuotas/compromiso)' },
-  { value: 'one_off', label: 'Puntual / extraordinario' },
+  { value: 'structural_recurrent', label: 'Estilo de vida' },
+  { value: 'term_recurrent', label: 'Cuotas/Compromisos' },
+  { value: 'one_off', label: 'Puntual/Extraordinario' },
 ];
 
 const expenseCashflowRoleOptions: SelectOption[] = [
@@ -441,10 +450,20 @@ const filteredAnnualExpenseTotal = computed(() =>
 const annualBalanceTotal = computed(
   () => filteredAnnualIncomeTotal.value - filteredAnnualExpenseTotal.value,
 );
+const activeAssets = computed(() => store.assets.filter((item) => item.is_active !== false));
+const activeLiabilities = computed(() =>
+  store.liabilities.filter((item) => item.is_active !== false),
+);
+const visibleAssets = computed(() =>
+  showArchivedNetWorth.value ? store.assets : activeAssets.value,
+);
+const visibleLiabilities = computed(() =>
+  showArchivedNetWorth.value ? store.liabilities : activeLiabilities.value,
+);
 const annualIncomeCount = computed(() => annualIncomeEntries.value.length);
 const annualExpenseCount = computed(() => annualExpenseEntries.value.length);
-const assetsCount = computed(() => store.assets.length);
-const liabilitiesCount = computed(() => store.liabilities.length);
+const assetsCount = computed(() => activeAssets.value.length);
+const liabilitiesCount = computed(() => activeLiabilities.value.length);
 const hasIncomeData = computed(() => annualIncomeCount.value > 0);
 const hasExpenseData = computed(() => annualExpenseCount.value > 0);
 const hasAssetData = computed(() => assetsCount.value > 0);
@@ -996,6 +1015,8 @@ function closeIncomeModal(): void {
 function closeExpenseModal(): void {
   showExpenseModal.value = false;
   editingExpenseId.value = null;
+  bulkEditingGeneratedLiabilityId.value = null;
+  bulkEditingGeneratedExpenseIds.value = [];
   resetExpenseForm();
 }
 
@@ -1012,16 +1033,63 @@ const expenseAmountInputPlaceholder = computed(() =>
   annualExpenseForm.amountInputPeriod === 'monthly' ? 'Importe mensual' : 'Importe anual',
 );
 const expenseModalTitle = computed(() =>
-  editingExpenseId.value === null ? 'Nuevo gasto anual' : 'Editar gasto anual',
+  editingExpenseId.value === null
+    ? 'Nuevo gasto anual'
+    : bulkEditingGeneratedLiabilityId.value != null
+      ? 'Editar gasto generado (todos los ejercicios)'
+      : 'Editar gasto anual',
 );
 const expenseSubmitLabel = computed(() =>
-  editingExpenseId.value === null ? 'Guardar gasto' : 'Guardar cambios',
+  editingExpenseId.value === null
+    ? 'Guardar gasto'
+    : bulkEditingGeneratedLiabilityId.value != null
+      ? 'Aplicar a todos'
+      : 'Guardar cambios',
+);
+const editingSystemGeneratedLiabilityExpense = computed(() => {
+  if (bulkEditingGeneratedLiabilityId.value != null) return true;
+  if (editingExpenseId.value == null) return false;
+  const entry = annualExpenseEntries.value.find((row) => row.id === editingExpenseId.value);
+  return Boolean(entry?.isSystemGenerated && entry?.sourceLiabilityId != null);
+});
+const expenseBulkEditHint = computed(() =>
+  bulkEditingGeneratedLiabilityId.value != null
+    ? 'Se aplicará en todos los ejercicios de este pasivo. Se mantiene el importe y el año de cada ejercicio.'
+    : 'Notas (opcional)',
 );
 const generatedLiabilityExpenseReviewTitle = computed(() =>
   generatedLiabilityExpenseReview.value
     ? `Gasto generado por pasivo: ${generatedLiabilityExpenseReview.value.liabilityName}`
     : 'Gasto generado por pasivo',
 );
+
+function setGeneratedLiabilityExpenseReview(
+  liabilityId: number,
+  liabilityName: string,
+  entries: AnnualExpenseEntry[],
+): void {
+  generatedLiabilityExpenseReview.value = {
+    liabilityId,
+    liabilityName,
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      fiscalYear: entry.fiscalYear,
+      name: entry.name,
+      owner: entry.owner,
+      category: entry.category,
+      subcategory: entry.subcategory,
+      expenseType: entry.expenseType,
+      cashflowRole: entry.cashflowRole,
+      timeProfile: entry.timeProfile,
+      eventGroup: entry.eventGroup,
+      targetMonth: entry.targetMonth,
+      termEndYear: entry.termEndYear,
+      amountAnnual: entry.amountAnnual,
+      currency: entry.currency,
+      notes: entry.notes,
+    })),
+  };
+}
 
 function closeGeneratedLiabilityExpenseModal(): void {
   showGeneratedLiabilityExpenseModal.value = false;
@@ -1037,6 +1105,40 @@ function openGeneratedExpenseReviewEntryFromVisibleYear(): void {
   if (!entry) return;
   closeGeneratedLiabilityExpenseModal();
   openExpenseModal(entry);
+}
+
+function openGeneratedExpenseBulkEdit(): void {
+  const review = generatedLiabilityExpenseReview.value;
+  if (!review?.entries.length) return;
+  const first = review.entries[0]!;
+
+  annualExpenseError.value = null;
+  hydratingAnnualExpenseForm.value = true;
+  editingExpenseId.value = first.id;
+  bulkEditingGeneratedLiabilityId.value = review.liabilityId;
+  bulkEditingGeneratedExpenseIds.value = review.entries.map((entry) => entry.id);
+  annualExpenseForm.category = first.category as ExpenseCategoryKey;
+  annualExpenseForm.subcategory = first.subcategory;
+  annualExpenseForm.name = first.name;
+  annualExpenseForm.owner = first.owner || '';
+  annualExpenseForm.isRecurrent = first.expenseType === 'recurrent';
+  annualExpenseForm.timeProfile = first.timeProfile as ExpenseTimeProfile;
+  annualExpenseForm.cashflowRole = first.cashflowRole as AnnualExpenseCashflowRole;
+  annualExpenseForm.eventGroup = first.eventGroup || '';
+  annualExpenseForm.targetMonth =
+    first.targetMonth == null ? '' : String(Number(first.targetMonth));
+  annualExpenseForm.termEndYear =
+    first.termEndYear == null ? '' : String(Number(first.termEndYear));
+  annualExpenseForm.amountInputPeriod = 'annual';
+  annualExpenseForm.amountAnnual = String(first.amountAnnual);
+  annualExpenseForm.currency = first.currency;
+  annualExpenseForm.notes = first.notes || '';
+  normalizeExpenseCashflowRoleForCurrentTimeProfile();
+  showGeneratedLiabilityExpenseModal.value = false;
+  showExpenseModal.value = true;
+  void nextTick(() => {
+    hydratingAnnualExpenseForm.value = false;
+  });
 }
 
 async function submitLiabilityWithExpenseReview(
@@ -1056,24 +1158,22 @@ async function submitLiabilityWithExpenseReview(
 
     if (!systemGeneratedEntries.length) return;
 
-    generatedLiabilityExpenseReview.value = {
-      liabilityId: createdLiability.id,
-      liabilityName: createdLiability.name,
-      entries: systemGeneratedEntries.map((entry) => ({
-        id: entry.id,
-        fiscalYear: entry.fiscalYear,
-        category: entry.category,
-        subcategory: entry.subcategory,
-        cashflowRole: entry.cashflowRole,
-        timeProfile: entry.timeProfile,
-        amountAnnual: entry.amountAnnual,
-        currency: entry.currency,
-        notes: entry.notes,
-      })),
-    };
+    setGeneratedLiabilityExpenseReview(
+      createdLiability.id,
+      createdLiability.name,
+      systemGeneratedEntries,
+    );
     showGeneratedLiabilityExpenseModal.value = true;
   } catch (e: unknown) {
     annualExpenseError.value = `Pasivo creado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
+  }
+}
+
+async function deleteLiabilityAndReloadExpenses(id: number): Promise<void> {
+  await store.deleteLiability(id);
+  await loadAnnualExpense(fiscalYear.value);
+  if (generatedLiabilityExpenseReview.value?.liabilityId === id) {
+    closeGeneratedLiabilityExpenseModal();
   }
 }
 
@@ -1203,6 +1303,57 @@ async function submitAnnualExpense(): Promise<void> {
     currency: annualExpenseForm.currency,
     notes: annualExpenseForm.notes,
   };
+
+  if (
+    bulkEditingGeneratedLiabilityId.value != null &&
+    bulkEditingGeneratedExpenseIds.value.length
+  ) {
+    try {
+      for (const id of bulkEditingGeneratedExpenseIds.value) {
+        await coreApi.patch(`/api/budget/annual-expense/${id}/`, {
+          name: draft.name,
+          category: draft.category,
+          subcategory: draft.subcategory,
+          owner_name: draft.owner,
+          expense_type: draft.expenseType,
+          time_profile: draft.timeProfile,
+          cashflow_role: draft.cashflowRole,
+          event_group: draft.eventGroup,
+          target_month: draft.targetMonth,
+          term_end_year: draft.termEndYear,
+          notes: draft.notes,
+        });
+      }
+
+      await loadAnnualExpense(fiscalYear.value);
+      if (generatedLiabilityExpenseReview.value?.liabilityId === bulkEditingGeneratedLiabilityId.value) {
+        const refreshedEntries = await listBySourceLiability(
+          generatedLiabilityExpenseReview.value.liabilityId,
+        );
+        const systemGeneratedEntries = refreshedEntries
+          .filter(
+            (entry) =>
+              entry.isSystemGenerated &&
+              entry.sourceLiabilityId === generatedLiabilityExpenseReview.value?.liabilityId,
+          )
+          .sort((a, b) => a.fiscalYear - b.fiscalYear);
+        setGeneratedLiabilityExpenseReview(
+          generatedLiabilityExpenseReview.value.liabilityId,
+          generatedLiabilityExpenseReview.value.liabilityName,
+          systemGeneratedEntries,
+        );
+      }
+      annualExpenseError.value = null;
+      closeExpenseModal();
+      resetExpenseForm();
+      showGeneratedLiabilityExpenseModal.value = true;
+      return;
+    } catch (e: unknown) {
+      annualExpenseError.value = toApiErrorMessage(e);
+      return;
+    }
+  }
+
   const result =
     editingExpenseId.value === null
       ? await addExpenseEntry(draft, fiscalYear.value)
@@ -2198,11 +2349,19 @@ watch(
       </div>
     </section>
 
+    <div class="mb-2 text-sm text-white/80">
+      <label class="checkbox-row">
+        <input v-model="showArchivedNetWorth" type="checkbox" />
+        Ver archivados
+      </label>
+    </div>
+
     <div class="grid-2">
       <ItemList
         v-model:ownership-filter-value="assetOwnershipFilter"
         title="Activos"
-        :items="store.assets"
+        :items="visibleAssets"
+        :show-archived="showArchivedNetWorth"
         :categories="assetCategories"
         :subcategories="assetSubcategories"
         :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
@@ -2212,6 +2371,7 @@ watch(
         v-bind="itemListProps"
         :on-update="store.updateAsset"
         :on-archive="store.archiveAsset"
+        :on-delete="store.deleteAsset"
         :on-add="() => (showAssetModal = true)"
         :on-edit="(it) => openEdit(it, 'asset')"
       />
@@ -2219,15 +2379,17 @@ watch(
       <ItemList
         v-model:ownership-filter-value="liabilityOwnershipFilter"
         title="Pasivos"
-        :items="store.liabilities"
+        :items="visibleLiabilities"
+        :show-archived="showArchivedNetWorth"
         :categories="liabilityCategories"
         :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
         :category-totals-base="store.summary?.liabilities_by_category ?? {}"
         :total-base="store.summary?.total_liabilities ?? '0'"
         v-bind="itemListProps"
-        :assets="store.assets"
+        :assets="activeAssets"
         :on-update="store.updateLiability"
         :on-archive="store.archiveLiability"
+        :on-delete="deleteLiabilityAndReloadExpenses"
         :on-add="() => (showLiabilityModal = true)"
         :on-edit="(it) => openEdit(it, 'liability')"
       />
@@ -2252,7 +2414,7 @@ watch(
         title="Nuevo pasivo"
         :categories="liabilityCategories"
         v-bind="itemFormProps"
-        :assets="store.assets"
+        :assets="activeAssets"
         :show-financed-asset="true"
         :on-submit="submitLiabilityWithExpenseReview"
         :on-cancel="() => (showLiabilityModal = false)"
@@ -2304,6 +2466,14 @@ watch(
         </div>
 
         <div class="actions justify-end">
+          <button
+            class="btn"
+            type="button"
+            :disabled="!generatedLiabilityExpenseReview.entries.length"
+            @click="openGeneratedExpenseBulkEdit"
+          >
+            Editar todos los ejercicios
+          </button>
           <button class="btn btn-ghost" type="button" @click="closeGeneratedLiabilityExpenseModal">
             Cerrar
           </button>
@@ -2332,7 +2502,7 @@ watch(
         :categories="editCategories"
         :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
         v-bind="itemFormProps"
-        :assets="editKind === 'liability' ? store.assets : []"
+        :assets="editKind === 'liability' ? activeAssets : []"
         :show-financed-asset="editKind === 'liability'"
         :allow-negative="editKind === 'asset'"
         mode="edit"
@@ -2374,8 +2544,11 @@ watch(
       :time-profile-options="expenseTimeProfileOptions"
       :cashflow-role-options="filteredExpenseCashflowRoleOptions"
       :show-cashflow-role-field="showExpenseCashflowRoleField"
+      :show-event-group-field="!editingSystemGeneratedLiabilityExpense"
+      :show-term-end-year-field="!editingSystemGeneratedLiabilityExpense"
       name-placeholder="Concepto (ej: Alimentacion, Hipoteca)"
       :amount-placeholder="expenseAmountInputPlaceholder"
+      :notes-placeholder="expenseBulkEditHint"
       @patch="patchAnnualExpenseForm"
       @close="closeExpenseModal"
       @submit="submitAnnualExpense"

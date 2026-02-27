@@ -34,11 +34,13 @@ type Props = {
   totalBase?: string;
   ownerships?: Ownership[];
   ownershipFilterValue?: number | 'all' | 'unassigned' | null;
+  showArchived?: boolean;
   onUpdate: (
     id: number,
     payload: NetWorthWritePayload & { ownership_id?: number | null },
   ) => Promise<void>;
   onArchive: (id: number) => Promise<void>;
+  onDelete?: (id: number) => Promise<void>;
   onAdd?: () => void;
   addLabel?: string;
   onEdit?: (item: Item) => void;
@@ -262,7 +264,8 @@ function categoryClass(category: string) {
 }
 
 const filteredItems = computed(() => {
-  const list = Array.isArray(props.items) ? props.items : [];
+  const rawList = Array.isArray(props.items) ? props.items : [];
+  const list = props.showArchived ? rawList : rawList.filter((it) => it.is_active !== false);
   if (ownershipFilter.value === 'all') return list;
   if (ownershipFilter.value === 'unassigned') {
     return list.filter((it) => it.ownership_ref == null);
@@ -581,6 +584,15 @@ function toggleCategory(key: string) {
   expandedCats.value = next;
 }
 
+async function handleDelete(id: number) {
+  if (!props.onDelete) return;
+  const label = isLiabilitiesList.value ? 'pasivo' : 'activo';
+  if (!confirm(`Eliminar este ${label} de forma permanente? Esta accion no se puede deshacer.`)) {
+    return;
+  }
+  await props.onDelete(id);
+}
+
 watch(
   () => [draft.value.currency, draft.value.category],
   () => {
@@ -744,6 +756,7 @@ async function saveEdit(id: number) {
                   :share-percent="it._sharePercent"
                   @edit="onEdit ? onEdit(editTarget(it)) : startEdit(editTarget(it))"
                   @archive="onArchive(it.id)"
+                  @delete="handleDelete(it.id)"
                 />
 
                 <EditableItemRow
