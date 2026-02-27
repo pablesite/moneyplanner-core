@@ -14,6 +14,7 @@ from core.services import adjust_for_inflation as _core_adjust_for_inflation, co
 
 from .services_assets import (
     create_asset_for_user as _create_asset_for_user,
+    get_amount_base_value as _asset_get_amount_base_value,
     validate_asset_payload as _validate_asset_payload,
 )
 from .services_liquidity import (
@@ -86,6 +87,7 @@ validate_snapshot_payload = _validate_snapshot_payload
 build_liquidity_monthly_summary = _build_liquidity_monthly_summary
 build_net_worth_summary = _build_net_worth_summary
 serialize_net_worth_summary = _serialize_net_worth_summary
+get_amount_base_value = _asset_get_amount_base_value
 
 
 def get_financed_asset_queryset_for_user(*, user):
@@ -112,19 +114,6 @@ def _get_active_positions(*, user):
     assets_qs = Asset.objects.filter(user=user, is_active=True)
     liabilities_qs = Liability.objects.filter(user=user, is_active=True)
     return assets_qs, liabilities_qs
-
-
-def get_amount_base_value(
-    *, amount, currency: str, base_currency: str | None, as_of_date: date | None = None
-):
-    # Keep wrapper in facade so tests patching `net_worth.services.convert_currency` still work.
-    if not base_currency:
-        return None
-    try:
-        ref_date = as_of_date or timezone.localdate()
-        return str(convert_currency(amount, currency, base_currency, date=ref_date))
-    except Exception:
-        return None
 
 
 def calculate_totals(

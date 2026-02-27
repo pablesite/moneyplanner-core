@@ -258,7 +258,7 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(value, Decimal("10.00"))
 
-    @patch("net_worth.services.convert_currency", return_value=Decimal("90.50"))
+    @patch("net_worth.services_assets.convert_currency", return_value=Decimal("90.50"))
     def test_get_amount_base_value_success(self, _convert_mock):
         value = get_amount_base_value(
             amount=Decimal("100.00"),
@@ -268,7 +268,7 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(value, "90.50")
 
-    @patch("net_worth.services.convert_currency", side_effect=Exception("fx error"))
+    @patch("net_worth.services_assets.convert_currency", side_effect=Exception("fx error"))
     def test_get_amount_base_value_returns_none_on_conversion_error(self, _convert_mock):
         value = get_amount_base_value(
             amount=Decimal("100.00"),
