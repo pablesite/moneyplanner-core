@@ -26,8 +26,8 @@ class UserSettingsAPIView(APIView):
         return Response(data)
 
     def put(self, request):
-        get_or_create_user_settings(user=request.user)
-        serializer = UserSettingsSerializer(data=request.data)
+        settings_obj = get_or_create_user_settings(user=request.user)
+        serializer = UserSettingsSerializer(settings_obj, data=request.data)
         serializer.is_valid(raise_exception=True)
         updated = update_user_settings(user=request.user, validated_data=serializer.validated_data)
         return Response(UserSettingsSerializer(updated).data, status=status.HTTP_200_OK)

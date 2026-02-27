@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from config.view_mixins import UserScopedQuerySetMixin
 from .models import FamilyMember, Ownership, OwnershipLink
 from .serializers import (
     FamilyMemberSerializer,
@@ -18,12 +19,6 @@ from .services import (
     list_ownership_links_for_user,
     sync_ownership_link_from_payload,
 )
-
-
-class UserScopedQuerySetMixin:
-    def get_queryset(self):
-        qs = super().get_queryset()
-        return qs.filter(user=self.request.user)
 
 
 class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):

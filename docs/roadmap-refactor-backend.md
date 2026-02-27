@@ -26,6 +26,11 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 6. 2026-02-27: `budget/tests.py` migrado a paquete `backend/budget/tests/`
    separado por dominio (`test_api_entries.py`, `test_api_checkins.py`,
    `test_serializers.py`, `test_services.py`) sin cambios funcionales.
+7. 2026-02-27: `UserScopedQuerySetMixin` consolidado en
+   `backend/config/view_mixins.py` y reutilizado por `memberships` y `net_worth`.
+8. 2026-02-27: `accounts.UserSettingsAPIView.put` alineado a update con
+   serializer de instancia, con test API de regresion para mantener el mismo
+   registro `UserSettings` en el `PUT`.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)

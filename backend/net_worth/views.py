@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from config.view_mixins import UserScopedQuerySetMixin
 from .api import raise_api_validation_error
 from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
 from .serializers import (
@@ -30,12 +31,6 @@ from .services_snapshots import (
     import_snapshots_bulk_for_user,
 )
 from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
-
-
-class UserScopedQuerySetMixin:
-    def get_queryset(self):
-        qs = super().get_queryset()
-        return qs.filter(user=self.request.user)
 
 
 class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
