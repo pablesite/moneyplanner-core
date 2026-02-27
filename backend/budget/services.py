@@ -241,7 +241,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "has_executed_data": any(item["checkins_confirmed"] > 0 for item in months_payload),
+        "has_executed_data": months_with_checkins > 0,
     }
 
 
@@ -274,7 +274,9 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         )
     )
     checkins_by_key = {
-        (item.annual_income_entry_id, item.month): item for item in checkins if 1 <= item.month <= 12
+        (item.annual_income_entry_id, item.month): item
+        for item in checkins
+        if 1 <= item.month <= 12
     }
 
     planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}
@@ -338,5 +340,5 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "has_executed_data": any(item["checkins_confirmed"] > 0 for item in months_payload),
+        "has_executed_data": months_with_checkins > 0,
     }

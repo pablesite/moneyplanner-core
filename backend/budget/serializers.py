@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from typing import cast
 
 from .models import (
     AnnualExpenseEntry,
@@ -56,68 +57,68 @@ def expense_type_from_time_profile(time_profile: str) -> str:
 
 def default_income_time_profile_from_income_type(income_type: str) -> str:
     return (
-        AnnualIncomeEntry.TimeProfile.ONE_OFF
+        cast(str, AnnualIncomeEntry.TimeProfile.ONE_OFF)
         if income_type == AnnualIncomeEntry.IncomeType.ONE_OFF
-        else AnnualIncomeEntry.TimeProfile.STRUCTURAL_RECURRENT
+        else cast(str, AnnualIncomeEntry.TimeProfile.STRUCTURAL_RECURRENT)
     )
 
 
 def default_expense_time_profile_from_expense_type(expense_type: str) -> str:
     return (
-        AnnualExpenseEntry.TimeProfile.ONE_OFF
+        cast(str, AnnualExpenseEntry.TimeProfile.ONE_OFF)
         if expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
-        else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+        else cast(str, AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT)
     )
 
 
 def default_income_cashflow_role_from_category(category: str) -> str:
     normalized = (category or "").strip()
     if normalized == AnnualIncomeEntry.Category.CAPITAL_GAINS:
-        return AnnualIncomeEntry.CashflowRole.ASSET_SALE
+        return cast(str, AnnualIncomeEntry.CashflowRole.ASSET_SALE)
     if normalized in {
         AnnualIncomeEntry.Category.TRANSFERS_SUPPORT,
         AnnualIncomeEntry.Category.PUBLIC_BENEFITS,
     }:
-        return AnnualIncomeEntry.CashflowRole.TRANSFER
+        return cast(str, AnnualIncomeEntry.CashflowRole.TRANSFER)
     if normalized == AnnualIncomeEntry.Category.OTHER_INCOME:
-        return AnnualIncomeEntry.CashflowRole.OTHER
-    return AnnualIncomeEntry.CashflowRole.OPERATING
+        return cast(str, AnnualIncomeEntry.CashflowRole.OTHER)
+    return cast(str, AnnualIncomeEntry.CashflowRole.OPERATING)
 
 
 def default_expense_cashflow_role_from_category(category: str, subcategory: str) -> str:
     normalized_category = (category or "").strip()
     normalized_subcategory = (subcategory or "").strip()
     if normalized_category == AnnualExpenseEntry.Category.SAVINGS_ALLOCATION:
-        return AnnualExpenseEntry.CashflowRole.SAVINGS
+        return cast(str, AnnualExpenseEntry.CashflowRole.SAVINGS)
     if normalized_category == AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS:
-        return AnnualExpenseEntry.CashflowRole.INVESTMENT
+        return cast(str, AnnualExpenseEntry.CashflowRole.INVESTMENT)
     if normalized_category in {
         AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
         AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
     }:
         return (
-            AnnualExpenseEntry.CashflowRole.TAX_FEE
+            cast(str, AnnualExpenseEntry.CashflowRole.TAX_FEE)
             if normalized_subcategory in {"real_estate_fees_taxes"}
-            else AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
+            else cast(str, AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE)
         )
-    return AnnualExpenseEntry.CashflowRole.OPERATING
+    return cast(str, AnnualExpenseEntry.CashflowRole.OPERATING)
 
 
-EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES = {
-    AnnualExpenseEntry.CashflowRole.OPERATING,
-    AnnualExpenseEntry.CashflowRole.SAVINGS,
-    AnnualExpenseEntry.CashflowRole.INVESTMENT,
-    AnnualExpenseEntry.CashflowRole.TAX_FEE,
-    AnnualExpenseEntry.CashflowRole.OTHER,
+EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES: set[str] = {
+    cast(str, AnnualExpenseEntry.CashflowRole.OPERATING),
+    cast(str, AnnualExpenseEntry.CashflowRole.SAVINGS),
+    cast(str, AnnualExpenseEntry.CashflowRole.INVESTMENT),
+    cast(str, AnnualExpenseEntry.CashflowRole.TAX_FEE),
+    cast(str, AnnualExpenseEntry.CashflowRole.OTHER),
 }
 
-EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES = {
-    AnnualExpenseEntry.CashflowRole.SAVINGS,
-    AnnualExpenseEntry.CashflowRole.INVESTMENT,
-    AnnualExpenseEntry.CashflowRole.TAX_FEE,
-    AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
-    AnnualExpenseEntry.CashflowRole.TRANSFER,
-    AnnualExpenseEntry.CashflowRole.OTHER,
+EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES: set[str] = {
+    cast(str, AnnualExpenseEntry.CashflowRole.SAVINGS),
+    cast(str, AnnualExpenseEntry.CashflowRole.INVESTMENT),
+    cast(str, AnnualExpenseEntry.CashflowRole.TAX_FEE),
+    cast(str, AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE),
+    cast(str, AnnualExpenseEntry.CashflowRole.TRANSFER),
+    cast(str, AnnualExpenseEntry.CashflowRole.OTHER),
 }
 
 
@@ -125,17 +126,17 @@ def normalize_expense_cashflow_role_for_time_profile(
     *, time_profile: str, cashflow_role: str
 ) -> str:
     if time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
-        return AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+        return cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
     if time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
         return (
             cashflow_role
             if cashflow_role in EXPENSE_ONE_OFF_ALLOWED_CASHFLOW_ROLES
-            else AnnualExpenseEntry.CashflowRole.OTHER
+            else cast(str, AnnualExpenseEntry.CashflowRole.OTHER)
         )
     return (
         cashflow_role
         if cashflow_role in EXPENSE_STRUCTURAL_ALLOWED_CASHFLOW_ROLES
-        else AnnualExpenseEntry.CashflowRole.OPERATING
+        else cast(str, AnnualExpenseEntry.CashflowRole.OPERATING)
     )
 
 
@@ -399,25 +400,35 @@ class AnnualIncomeMonthlyCheckinSerializer(AnnualEntryValidationMixin, serialize
     def validate(self, attrs):
         request = self.context.get("request")
         user = getattr(request, "user", None)
-        entry = attrs.get("annual_income_entry") or getattr(self.instance, "annual_income_entry", None)
+        entry = attrs.get("annual_income_entry") or getattr(
+            self.instance, "annual_income_entry", None
+        )
         status_value = attrs.get("status") or getattr(self.instance, "status", None)
         executed_amount = attrs.get("executed_amount", serializers.empty)
         fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
 
         if entry is None:
-            raise serializers.ValidationError({"annual_income_entry_id": "Entrada de ingreso requerida."})
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "Entrada de ingreso requerida."}
+            )
         if user is not None and entry.user_id != user.id:
             raise serializers.ValidationError(
-                {"annual_income_entry_id": "La entrada de ingreso no pertenece al usuario autenticado."}
+                {
+                    "annual_income_entry_id": "La entrada de ingreso no pertenece al usuario autenticado."
+                }
             )
         if fiscal_year is not None and entry.fiscal_year != fiscal_year:
             raise serializers.ValidationError(
-                {"fiscal_year": "El ejercicio del check-in debe coincidir con el ejercicio del ingreso anual."}
+                {
+                    "fiscal_year": "El ejercicio del check-in debe coincidir con el ejercicio del ingreso anual."
+                }
             )
         # v1: one-off incomes are excluded from monthly summary until target_month exists in AnnualIncomeEntry.
         if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
             raise serializers.ValidationError(
-                {"annual_income_entry_id": "Los ingresos puntuales aun no soportan check-in mensual (falta mes objetivo)."}
+                {
+                    "annual_income_entry_id": "Los ingresos puntuales aun no soportan check-in mensual (falta mes objetivo)."
+                }
             )
         if status_value == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
             attrs["executed_amount"] = None

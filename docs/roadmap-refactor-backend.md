@@ -9,6 +9,25 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 3. Las fases 1-5 quedan desglosadas en pasos de implementacion, entregables y criterios de salida.
 4. El trabajo debe ejecutarse en PRs pequenos, con validacion en Docker en cada fase.
 
+## Avance de ejecucion
+1. 2026-02-27: `budget/views.py` refactorizado para reducir duplicacion en:
+   - parseo de query params enteros (`year`, `month`, ids),
+   - logica de `confirmed_at` en checkins de income/expense.
+2. 2026-02-27: helpers extraidos a modulos dedicados:
+   - `backend/budget/query_params.py`
+   - `backend/budget/checkins.py`
+3. 2026-02-27: `AnnualEntrySummaryMixin` agregado en `backend/budget/views.py`
+   para consolidar `totals` y `monthly-summary` de income/expense.
+4. 2026-02-27: deuda de tipado resuelta en `budget`:
+   - `mypy budget` en verde tras ajustes minimos en `backend/budget/serializers.py`
+     y `backend/budget/services.py`.
+5. 2026-02-27: deuda de tipado resuelta en `net_worth/services_liabilities.py`;
+   `mypy .` del backend Core vuelve a verde.
+6. 2026-02-27: `budget/tests.py` migrado a paquete `backend/budget/tests/`
+   separado por dominio (`test_api_entries.py`, `test_api_checkins.py`,
+   `test_serializers.py`, `test_services.py`) sin cambios funcionales.
+2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
+
 ## Principios de trabajo (obligatorios)
 1. Refactor por fases pequenas.
 2. Sin cambios de comportamiento no intencionales.
