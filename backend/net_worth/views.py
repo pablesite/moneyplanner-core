@@ -1,7 +1,6 @@
 from django.core.exceptions import ValidationError
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -28,8 +27,8 @@ from .services_liquidity import (
 )
 from .services_snapshots import (
     create_or_update_snapshot_from_current,
-    import_snapshots_bulk_for_user,
 )
+from .services_snapshot_api import import_snapshots_bulk_from_request
 from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
 
 
@@ -113,23 +112,13 @@ class NetWorthSnapshotViewSet(
 
     @action(detail=False, methods=["post"], url_path="import-bulk")
     def import_bulk(self, request):
-        if not isinstance(request.data, list):
-            raise DRFValidationError({"detail": "Expected a JSON array of snapshots."})
-
-        serializer = NetWorthSnapshotSerializer(
-            data=request.data, many=True, context={"request": request}
+        result = import_snapshots_bulk_from_request(
+            user=request.user,
+            request_data=request.data,
+            request=request,
         )
-        serializer.is_valid(raise_exception=True)
-
-        result = import_snapshots_bulk_for_user(user=request.user, rows=serializer.validated_data)
-
         return Response(
-            {
-                "ok": result["ok"],
-                "created": result["created"],
-                "updated": result["updated"],
-                "snapshots": NetWorthSnapshotSerializer(result["snapshots"], many=True).data,
-            },
+            result,
             status=status.HTTP_200_OK,
         )
 
