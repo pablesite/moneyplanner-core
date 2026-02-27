@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import cast
 
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -358,25 +359,25 @@ def get_effective_liability_amount(
 def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str, str]:
     from budget.models import AnnualExpenseEntry
 
-    temporary_commitment_role = AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+    temporary_commitment_role = cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
         return {
-            "category": AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            "category": cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES),
             "subcategory": "financial_commitments",
             "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.REAL_ESTATE:
         return {
-            "category": AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+            "category": cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
             "subcategory": "property_purchase",
             "cashflow_role": temporary_commitment_role,
         }
 
     if financed_asset.category == Asset.Category.VEHICLE:
         return {
-            "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
             "subcategory": "vehicle_purchase",
             "cashflow_role": temporary_commitment_role,
         }
@@ -389,7 +390,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
             Asset.Subcategory.JEWELRY: "jewelry_collectibles",
         }
         return {
-            "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
             "subcategory": furnishings_map.get(financed_asset.subcategory, "other_tangible_assets"),
             "cashflow_role": temporary_commitment_role,
         }
@@ -405,7 +406,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
             Asset.Subcategory.ROBOADVISOR: "roboadvisor",
         }
         return {
-            "category": AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            "category": cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
             "subcategory": investments_map.get(
                 financed_asset.subcategory, "other_financial_investments"
             ),
@@ -414,13 +415,13 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
 
     if financed_asset.category == Asset.Category.CASH:
         return {
-            "category": AnnualExpenseEntry.Category.SAVINGS_ALLOCATION,
+            "category": cast(str, AnnualExpenseEntry.Category.SAVINGS_ALLOCATION),
             "subcategory": "cash_reserve",
             "cashflow_role": temporary_commitment_role,
         }
 
     return {
-        "category": AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+        "category": cast(str, AnnualExpenseEntry.Category.TANGIBLE_ASSETS),
         "subcategory": "other_tangible_assets",
         "cashflow_role": temporary_commitment_role,
     }
