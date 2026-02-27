@@ -42,6 +42,9 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 12. 2026-02-27: `backend/net_worth/tests.py` migrado a paquete
     `backend/net_worth/tests/` (`test_net_worth.py`) manteniendo cobertura y
     discovery de Django sin cambios funcionales.
+13. 2026-02-27: `accounts/link-token` deja de usar respuesta manual y pasa por
+    excepcion DRF (`feature_disabled`) con handler canonico en
+    `backend/config/exceptions.py`.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)
