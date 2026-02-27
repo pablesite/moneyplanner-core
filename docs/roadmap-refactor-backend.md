@@ -45,6 +45,9 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 13. 2026-02-27: `accounts/link-token` deja de usar respuesta manual y pasa por
     excepcion DRF (`feature_disabled`) con handler canonico en
     `backend/config/exceptions.py`.
+14. 2026-02-27: orquestacion de `snapshots/import-bulk` extraida desde
+    `backend/net_worth/views.py` a `backend/net_worth/services_snapshot_api.py`
+    para adelgazar views sin cambios de contrato API.
 2. Se mantuvo el contrato API y se validaron tests del modulo `budget`.
 
 ## Principios de trabajo (obligatorios)
