@@ -1654,6 +1654,7 @@ async function upsertExpenseCheckin(
 
 function shortLiquiditySubcategoryLabel(subcategory: string): string {
   if (subcategory === 'bank_account') return 'Cuenta bancaria';
+  if (subcategory === 'short_term_deposit') return 'Deposito corto plazo';
   if (subcategory === 'wallet') return 'Monedero';
   if (subcategory === 'crypto_spot_earn') return 'Spot/Earn';
   return 'Liquidez';

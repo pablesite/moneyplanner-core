@@ -93,12 +93,16 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-    async createAsset(payload: OwnershipAwarePayload) {
+    async createAsset(
+      payload: OwnershipAwarePayload & { estimated_average_balance_for_interest?: string | null },
+    ) {
       this.loading = true;
       this.error = null;
+      let createdAsset: Asset | null = null;
       try {
         const { ownership_id = null, ...corePayload } = payload;
         const res = await coreNetWorthApi.createAsset(corePayload);
+        createdAsset = res?.data ?? null;
         if (res?.data?.id) {
           await premiumOwnershipApi.syncOwnershipLink({
             target_type: 'asset',
@@ -107,8 +111,18 @@ export const useNetWorthStore = defineStore('netWorth', {
           });
         }
         await this.refreshAll();
+        return createdAsset;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
+        if (createdAsset) {
+          try {
+            await this.refreshAll();
+          } catch {
+            // keep original error; activo ya fue creado en core
+          }
+          return createdAsset;
+        }
+        return null;
       } finally {
         this.loading = false;
       }

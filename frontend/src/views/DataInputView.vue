@@ -62,7 +62,6 @@ const {
   showLiabilityModal,
   showEditModal,
   editKind,
-  submitAsset,
   openEdit,
   closeEdit,
   editTitle,
@@ -70,6 +69,11 @@ const {
   editInitial,
   submitEdit,
 } = useNetWorthViewState();
+
+type AssetFormSubmitPayload = NetWorthWritePayload & {
+  ownership_id?: number | null;
+  estimated_average_balance_for_interest?: string;
+};
 
 const { itemFormProps, itemListProps } = useNetWorthViewExtensions(store);
 
@@ -1166,6 +1170,102 @@ async function submitLiabilityWithExpenseReview(
     showGeneratedLiabilityExpenseModal.value = true;
   } catch (e: unknown) {
     annualExpenseError.value = `Pasivo creado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
+  }
+}
+
+function parseLooseDecimal(raw: unknown): number | null {
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(',', '.');
+  if (!normalized) return null;
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function roundToCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isRemuneratedLiquidityAsset(payload: AssetFormSubmitPayload): boolean {
+  const category = String(payload.category ?? '').trim();
+  const tae = parseLooseDecimal(payload.annual_interest_tae);
+  return category === 'cash' && tae != null && tae > 0;
+}
+
+function normalizeAmountForMatch(raw: unknown): string {
+  const value = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(',', '.');
+  return value;
+}
+
+function findLikelyCreatedAsset(
+  payload: AssetFormSubmitPayload,
+  previousAssetIds: Set<number>,
+): { id: number; name: string } | null {
+  const targetName = String(payload.name ?? '').trim();
+  const targetCategory = String(payload.category ?? '').trim();
+  const targetSubcategory = String(payload.subcategory ?? '').trim();
+  const targetCurrency = String(payload.currency ?? '').trim().toUpperCase();
+  const targetStartDate = String(payload.start_date ?? '').trim();
+  const targetAmount = normalizeAmountForMatch(payload.amount);
+
+  const candidates = store.assets
+    .filter((asset) => !previousAssetIds.has(asset.id))
+    .filter((asset) => String(asset.name ?? '').trim() === targetName)
+    .filter((asset) => String(asset.category ?? '').trim() === targetCategory)
+    .filter((asset) => String(asset.subcategory ?? '').trim() === targetSubcategory)
+    .filter((asset) => String(asset.currency ?? '').trim().toUpperCase() === targetCurrency)
+    .filter((asset) => String(asset.start_date ?? '').trim() === targetStartDate)
+    .filter((asset) => normalizeAmountForMatch(asset.amount) === targetAmount)
+    .sort((a, b) => b.id - a.id);
+
+  const picked = candidates[0];
+  return picked ? { id: picked.id, name: picked.name } : null;
+}
+
+async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
+  const { estimated_average_balance_for_interest } = payload;
+  const previousAssetIds = new Set(store.assets.map((asset) => asset.id));
+  const createdAsset = await store.createAsset(payload);
+  const createdOrMatchedAsset =
+    createdAsset ?? findLikelyCreatedAsset(payload, previousAssetIds);
+  if (!createdOrMatchedAsset) return;
+
+  showAssetModal.value = false;
+
+  if (!isRemuneratedLiquidityAsset(payload)) return;
+  const averageBalance = parseLooseDecimal(estimated_average_balance_for_interest);
+  const tae = parseLooseDecimal(payload.annual_interest_tae);
+  const currency = String(payload.currency ?? '').trim().toUpperCase() || 'EUR';
+  const assetName = String(createdOrMatchedAsset.name ?? '').trim() || 'Activo remunerado';
+  if (averageBalance == null || averageBalance <= 0 || tae == null || tae <= 0) return;
+
+  const estimatedAnnualInterest = roundToCents((averageBalance * tae) / 100);
+  if (!(estimatedAnnualInterest > 0)) return;
+
+  const result = await addIncomeEntry(
+    {
+      name: `Intereses estimados - ${assetName}`,
+      category: 'passive_income',
+      subcategory: 'interest_income',
+      owner: '',
+      incomeType: 'recurrent',
+      timeProfile: 'structural_recurrent',
+      cashflowRole: 'operating',
+      eventGroup: '',
+      termEndYear: null,
+      amountAnnual: estimatedAnnualInterest.toFixed(2),
+      fiscalYear: fiscalYear.value,
+      currency,
+      notes: `Generado automaticamente desde activo de liquidez remunerado (${assetName}).`,
+    },
+    fiscalYear.value,
+  );
+  if (!result.ok) {
+    annualIncomeError.value = `Activo creado, pero no se pudo generar el ingreso anual estimado: ${result.error}`;
   }
 }
 

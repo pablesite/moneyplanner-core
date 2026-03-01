@@ -11,6 +11,7 @@ from .models import ASSET_SUBCATEGORY_MAP, Asset
 
 ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
     Asset.Subcategory.BANK_ACCOUNT,
+    Asset.Subcategory.SHORT_TERM_DEPOSIT,
     Asset.Subcategory.CRYPTO_SPOT_EARN,
     Asset.Subcategory.OTHER,
 }
@@ -49,7 +50,8 @@ def validate_asset_payload(
         raise DRFValidationError(
             {
                 "annual_interest_tae": (
-                    "Requerido para liquidez en cuenta bancaria, spot/earn cripto y otros."
+                    "Requerido para liquidez en cuenta bancaria, depositos a corto plazo, "
+                    "spot/earn cripto y otros."
                 )
             }
         )
