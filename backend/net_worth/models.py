@@ -15,6 +15,7 @@ class Asset(models.Model):
 
     class Subcategory(models.TextChoices):
         BANK_ACCOUNT = "bank_account", "Cuenta bancaria"
+        SHORT_TERM_DEPOSIT = "short_term_deposit", "Deposito a corto plazo"
         WALLET = "wallet", "Monedero"
         CRYPTO_SPOT_EARN = "crypto_spot_earn", "Spot/Earn Cripto"
 
@@ -99,7 +100,18 @@ class Asset(models.Model):
         validators=[MinValueValidator(0)],
         help_text=(
             "TAE anual en porcentaje. Se usa para liquidez remunerada "
-            "(cuentas bancarias y spot/earn cripto)."
+            "(cuentas bancarias, depositos a corto plazo y spot/earn cripto)."
+        ),
+    )
+    estimated_average_balance_for_interest = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Saldo/importe anual medio previsto para estimar intereses en activos "
+            "de liquidez remunerados."
         ),
     )
     amount = models.DecimalField(
@@ -130,6 +142,7 @@ class Asset(models.Model):
 ASSET_SUBCATEGORY_MAP = {
     Asset.Category.CASH: {
         Asset.Subcategory.BANK_ACCOUNT,
+        Asset.Subcategory.SHORT_TERM_DEPOSIT,
         Asset.Subcategory.WALLET,
         Asset.Subcategory.CRYPTO_SPOT_EARN,
         Asset.Subcategory.OTHER,

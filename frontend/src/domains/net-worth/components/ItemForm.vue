@@ -2,7 +2,10 @@
 import { computed, reactive, ref, watch } from 'vue';
 import type { NetWorthWritePayload, Ownership } from '@/domains/net-worth/models';
 
-type ItemFormPayload = NetWorthWritePayload & { ownership_id?: number | null };
+type ItemFormPayload = NetWorthWritePayload & {
+  ownership_id?: number | null;
+  estimated_average_balance_for_interest?: string;
+};
 
 type Props = {
   title: string;
@@ -22,6 +25,7 @@ type Props = {
     subcategory?: string;
     amount: string;
     annual_interest_tae?: string | null;
+    estimated_average_balance_for_interest?: string | null;
     monthly_payment_amount?: string | null;
     start_date: string;
     expected_end_date?: string | null;
@@ -128,7 +132,12 @@ const decimalsByCurrency: Record<string, number> = {
   BTC: 8,
   ETH: 8,
 };
-const ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = ['bank_account', 'crypto_spot_earn', 'other'];
+const ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = [
+  'bank_account',
+  'short_term_deposit',
+  'crypto_spot_earn',
+  'other',
+];
 const LIABILITY_PAYMENT_FREQUENCIES = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'quarterly', label: 'Trimestral' },
@@ -154,6 +163,7 @@ const form = reactive({
   subcategory: '',
   amount: '',
   annual_interest_tae: props.showFinancedAsset ? '0' : '',
+  estimated_average_balance_for_interest: '',
   monthly_payment_amount: '',
   start_date: todayIsoDate(),
   expected_end_date: '',
@@ -204,6 +214,12 @@ const showAnnualInterestInput = computed(
 const showAssetAnnualInterestInput = computed(
   () => isAssetForm.value && showAnnualInterestInput.value,
 );
+const showEstimatedAverageBalanceForInterestInput = computed(() => {
+  if (!showAssetAnnualInterestInput.value) return false;
+  const taeRaw = String(form.annual_interest_tae ?? '').trim().replace(',', '.');
+  const taeValue = Number(taeRaw);
+  return Number.isFinite(taeValue) && taeValue > 0;
+});
 const showMonthlyPaymentInput = computed(() => false);
 const isCreditCardLiability = computed(
   () => isLiabilityForm.value && String(form.category ?? '').trim() === 'credit_card',
@@ -217,7 +233,9 @@ const showLiabilityTaeOnlyField = computed(
 const showMortgageFeeFields = computed(
   () => isLiabilityForm.value && form.category === 'mortgage',
 );
-const showAssetAmortizationFields = computed(() => isAssetForm.value);
+const showAssetAmortizationFields = computed(
+  () => isAssetForm.value && String(form.category ?? '').trim() === 'furnishings',
+);
 const requiresAssetAmortizationInputs = computed(
   () => showAssetAmortizationFields.value && form.amortization_method !== 'none',
 );
@@ -381,6 +399,17 @@ const annualInterestError = computed(() => {
   if (!Number.isFinite(n) || n < 0) return 'TAE invalida';
   return '';
 });
+const estimatedAverageBalanceForInterestError = computed(() => {
+  if (!showEstimatedAverageBalanceForInterestInput.value) return '';
+  const { value, error } = sanitizeAmount(form.estimated_average_balance_for_interest, 0);
+  if (error) return error;
+  if (!value) return 'Indica el importe anual medio previsto para estimar intereses.';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 'El importe anual medio previsto debe ser mayor que 0.';
+  }
+  return '';
+});
 const monthlyPaymentError = computed(() => {
   if (!showMonthlyPaymentInput.value) return '';
   const raw = String(form.monthly_payment_amount ?? '').trim();
@@ -496,6 +525,7 @@ async function submit() {
   if (!form.name || !form.category || !form.currency || !form.amount || !form.start_date) return;
   if (props.subcategories && !form.subcategory) return;
   if (annualInterestError.value) return;
+  if (estimatedAverageBalanceForInterestError.value) return;
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
   if (liabilityDatesError.value) return;
@@ -513,6 +543,11 @@ async function submit() {
     annual_interest_tae: showAnnualInterestInput.value
       ? String(form.annual_interest_tae).trim().replace(',', '.')
       : undefined,
+    estimated_average_balance_for_interest:
+      showEstimatedAverageBalanceForInterestInput.value &&
+      String(form.estimated_average_balance_for_interest ?? '').trim()
+        ? sanitizeAmount(form.estimated_average_balance_for_interest, 0).value
+        : undefined,
     monthly_payment_amount:
       showMonthlyPaymentInput.value && String(form.monthly_payment_amount ?? '').trim()
         ? sanitizeAmount(form.monthly_payment_amount, maxDecimals.value).value
@@ -574,6 +609,7 @@ async function submit() {
   form.subcategory = '';
   form.amount = '';
   form.annual_interest_tae = props.showFinancedAsset ? '0' : '';
+  form.estimated_average_balance_for_interest = '';
   form.monthly_payment_amount = '';
   form.start_date = todayIsoDate();
   form.expected_end_date = '';
@@ -605,6 +641,9 @@ watch(
     form.subcategory = initial.subcategory ?? '';
     form.amount = initial.amount ?? '';
     form.annual_interest_tae = initial.annual_interest_tae ?? (props.showFinancedAsset ? '0' : '');
+    form.estimated_average_balance_for_interest = String(
+      sanitizeAmount(initial.estimated_average_balance_for_interest ?? '', 0).value ?? '',
+    );
     form.monthly_payment_amount = initial.monthly_payment_amount ?? '';
     form.start_date = initial.start_date ?? todayIsoDate();
     form.expected_end_date = initial.expected_end_date ?? '';
@@ -751,17 +790,17 @@ watch(
 <template>
   <div>
     <div class="ui-item-form-grid">
-      <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': isLiabilityForm }]">
+      <label
+        :class="[
+          'ui-item-form-field',
+          { 'ui-item-form-field-span-2': isLiabilityForm || !props.subcategories },
+        ]"
+      >
         <span class="ui-item-form-label">Categoría</span>
         <select v-model="form.category" :class="['select ui-data-field', { 'ui-select-placeholder': !form.category }]">
           <option value="" disabled>Selecciona categoría</option>
           <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
-      </label>
-
-      <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': !isLiabilityForm }]">
-        <span class="ui-item-form-label">Nombre</span>
-        <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
       </label>
 
       <label v-if="props.subcategories" class="ui-item-form-field">
@@ -770,6 +809,11 @@ watch(
           <option value="" disabled>Selecciona subcategoría</option>
           <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>
+      </label>
+
+      <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': isLiabilityForm }]">
+        <span class="ui-item-form-label">Nombre</span>
+        <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
       </label>
 
       <label class="ui-item-form-field">
@@ -793,6 +837,15 @@ watch(
       <label v-if="showAssetAnnualInterestInput" class="ui-item-form-field">
         <span class="ui-item-form-label">TAE anual (%)</span>
         <input v-model="form.annual_interest_tae" inputmode="decimal" placeholder="TAE anual (%)" class="input ui-data-field" />
+      </label>
+      <label v-if="showEstimatedAverageBalanceForInterestInput" class="ui-item-form-field">
+        <span class="ui-item-form-label">Importe anual medio previsto (€)</span>
+        <input
+          v-model="form.estimated_average_balance_for_interest"
+          inputmode="numeric"
+          placeholder="Saldo medio anual previsto (€)"
+          class="input ui-data-field"
+        />
       </label>
       <label v-if="showLiabilityTaeOnlyField" class="ui-item-form-field">
         <span class="ui-item-form-label">TAE anual (%)</span>
@@ -882,6 +935,12 @@ watch(
       <div class="ui-item-form-feedback ui-item-form-field-span-2">
         <div v-if="amountError" class="ui-form-help ui-form-help-error">{{ amountError }}</div>
         <div v-if="annualInterestError" class="ui-form-help ui-form-help-error">{{ annualInterestError }}</div>
+        <div
+          v-if="estimatedAverageBalanceForInterestError"
+          class="ui-form-help ui-form-help-error"
+        >
+          {{ estimatedAverageBalanceForInterestError }}
+        </div>
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
@@ -891,7 +950,19 @@ watch(
       <div class="ui-item-form-footer ui-item-form-field-span-2">
         <div class="ui-form-actions ui-item-form-actions">
           <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">Cancelar</button>
-          <button class="btn btn-primary ui-form-action-btn" :disabled="!!amountError || !!annualInterestError || !!monthlyPaymentError || !!assetAmortizationError || !!liabilityDatesError || !!liabilityScheduleError" @click="submit">
+          <button
+            class="btn btn-primary ui-form-action-btn"
+            :disabled="
+              !!amountError ||
+              !!annualInterestError ||
+              !!estimatedAverageBalanceForInterestError ||
+              !!monthlyPaymentError ||
+              !!assetAmortizationError ||
+              !!liabilityDatesError ||
+              !!liabilityScheduleError
+            "
+            @click="submit"
+          >
             {{ isEdit ? 'Guardar' : 'Crear' }}
           </button>
         </div>

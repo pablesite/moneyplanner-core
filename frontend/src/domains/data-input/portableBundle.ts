@@ -160,6 +160,7 @@ export function normalizeImportedAssetTae(asset: PortableAssetRecord): string | 
   const requiresTae =
     category === 'cash' &&
     (subcategory === 'bank_account' ||
+      subcategory === 'short_term_deposit' ||
       subcategory === 'crypto_spot_earn' ||
       subcategory === 'other');
 

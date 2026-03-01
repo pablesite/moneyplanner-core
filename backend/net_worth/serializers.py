@@ -41,6 +41,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "amortization_method",
             "amortization_term_years",
             "annual_interest_tae",
+            "estimated_average_balance_for_interest",
             "amount",
             "amount_base",
             "is_active",

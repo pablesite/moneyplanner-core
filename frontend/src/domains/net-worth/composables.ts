@@ -28,6 +28,7 @@ const assetCategories = [
 
 const assetSubcategories = [
   { category: 'cash', value: 'bank_account', label: 'Cuenta bancaria' },
+  { category: 'cash', value: 'short_term_deposit', label: 'Deposito a corto plazo' },
   { category: 'cash', value: 'wallet', label: 'Monedero' },
   { category: 'cash', value: 'crypto_spot_earn', label: 'Spot/Earn Cripto' },
   { category: 'cash', value: 'other', label: 'Otros' },
@@ -198,6 +199,8 @@ export function useNetWorthViewState() {
       subcategory: item.subcategory ?? '',
       amount: formatEditAmount(item.amount, item.currency ?? 'EUR'),
       annual_interest_tae: item.annual_interest_tae ?? '',
+      estimated_average_balance_for_interest:
+        item.estimated_average_balance_for_interest ?? '',
       monthly_payment_amount: item.monthly_payment_amount ?? '',
       start_date: item.start_date ?? '',
       expected_end_date: item.expected_end_date ?? '',
