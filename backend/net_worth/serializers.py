@@ -42,6 +42,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "amortization_term_years",
             "annual_interest_tae",
             "estimated_average_balance_for_interest",
+            "deposit_term_months",
             "amount",
             "amount_base",
             "is_active",
@@ -61,6 +62,14 @@ class AssetSerializer(serializers.ModelSerializer):
         annual_interest_tae = attrs.get(
             "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
         )
+        deposit_term_months = attrs.get(
+            "deposit_term_months", getattr(self.instance, "deposit_term_months", None)
+        )
+        if not (
+            category == Asset.Category.CASH and subcategory == Asset.Subcategory.SHORT_TERM_DEPOSIT
+        ):
+            deposit_term_months = None
+            attrs["deposit_term_months"] = None
         amortization_method = attrs.get(
             "amortization_method", getattr(self.instance, "amortization_method", None)
         )
@@ -79,6 +88,7 @@ class AssetSerializer(serializers.ModelSerializer):
             amortization_method=amortization_method,
             amortization_term_years=amortization_term_years,
             initial_purchase_value=initial_purchase_value,
+            deposit_term_months=deposit_term_months,
         )
         return attrs
 

@@ -55,6 +55,7 @@ export type PortableAssetRecord = {
   amortization_method?: string;
   amortization_term_years?: number | null;
   annual_interest_tae?: string | null;
+  deposit_term_months?: number | null;
   amount: string;
   is_active: boolean;
   notes?: string;
@@ -304,6 +305,8 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
     amortization_term_years:
       raw.amortization_term_years == null ? null : Number(raw.amortization_term_years),
     annual_interest_tae: raw.annual_interest_tae == null ? null : String(raw.annual_interest_tae),
+    deposit_term_months:
+      raw.deposit_term_months == null ? null : Number(raw.deposit_term_months),
     amount: String(raw.amount ?? '0'),
     is_active: raw.is_active ?? true,
     notes: raw.notes == null ? '' : String(raw.notes),

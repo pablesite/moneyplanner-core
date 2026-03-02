@@ -27,6 +27,7 @@ def validate_asset_payload(
     amortization_method,
     amortization_term_years,
     initial_purchase_value,
+    deposit_term_months=None,
 ) -> None:
     if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -54,6 +55,24 @@ def validate_asset_payload(
                     "spot/earn cripto y otros."
                 )
             }
+        )
+
+    if (
+        category == Asset.Category.CASH
+        and subcategory == Asset.Subcategory.SHORT_TERM_DEPOSIT
+        and deposit_term_months is None
+    ):
+        raise DRFValidationError(
+            {"deposit_term_months": ("Requerido para depositos a corto plazo (1-12 meses).")}
+        )
+
+    if deposit_term_months is not None and (
+        not isinstance(deposit_term_months, int)
+        or deposit_term_months < 1
+        or deposit_term_months > 12
+    ):
+        raise DRFValidationError(
+            {"deposit_term_months": ("La duracion del deposito debe estar entre 1 y 12 meses.")}
         )
 
     if amortization_method and amortization_method != Asset.AmortizationMethod.NONE:

@@ -140,6 +140,34 @@ class NetWorthServicesTests(TestCase):
                 initial_purchase_value=None,
             )
 
+    def test_validate_asset_payload_requires_deposit_term_for_short_term_deposit(self):
+        with self.assertRaises(DRFValidationError):
+            validate_asset_payload(
+                tracking_mode=Asset.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+                annual_interest_tae=Decimal("2.50"),
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
+                deposit_term_months=None,
+            )
+
+    def test_validate_asset_payload_rejects_invalid_deposit_term_range(self):
+        with self.assertRaises(DRFValidationError):
+            validate_asset_payload(
+                tracking_mode=Asset.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+                annual_interest_tae=Decimal("2.50"),
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=None,
+                deposit_term_months=13,
+            )
+
     def test_validate_asset_payload_requires_initial_value_and_term_for_amortization(self):
         with self.assertRaises(DRFValidationError):
             validate_asset_payload(
@@ -555,6 +583,22 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("annual_interest_tae", response.data["error"]["details"])
 
+    def test_asset_create_rejects_missing_duration_for_short_term_deposit(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Deposito sin plazo",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.SHORT_TERM_DEPOSIT,
+                "currency": "EUR",
+                "annual_interest_tae": "2.50",
+                "amount": "1000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("deposit_term_months", response.data["error"]["details"])
+
     def test_liability_create_rejects_accounting_without_account(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
@@ -633,6 +677,24 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(liability_res.data["start_date"], "2021-06-15")
+
+    def test_asset_create_accepts_short_term_deposit_duration(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Deposito 6 meses",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.SHORT_TERM_DEPOSIT,
+                "currency": "EUR",
+                "start_date": "2026-02-01",
+                "annual_interest_tae": "3.00",
+                "deposit_term_months": 6,
+                "amount": "10000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["deposit_term_months"], 6)
 
     def test_asset_create_accepts_initial_purchase_and_amortization_fields(self):
         response = self.client.post(
@@ -1570,6 +1632,22 @@ class NetWorthSerializerUnitTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         asset = serializer.save()
         self.assertEqual(asset.user_id, self.user.id)
+
+    def test_asset_serializer_requires_short_term_deposit_duration(self):
+        serializer = AssetSerializer(
+            data={
+                "name": "Deposito corto",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.SHORT_TERM_DEPOSIT,
+                "tracking_mode": Asset.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "annual_interest_tae": "2.10",
+                "amount": "100.00",
+            },
+            context={"request": self.request, "base_currency": "EUR"},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("deposit_term_months", serializer.errors)
 
     def test_snapshot_serializer_validate_and_create(self):
         serializer = NetWorthSnapshotSerializer(

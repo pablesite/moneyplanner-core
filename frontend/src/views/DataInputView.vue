@@ -73,6 +73,7 @@ const {
 type AssetFormSubmitPayload = NetWorthWritePayload & {
   ownership_id?: number | null;
   estimated_average_balance_for_interest?: string;
+  deposit_term_months?: number | null;
 };
 
 const { itemFormProps, itemListProps } = useNetWorthViewExtensions(store);
@@ -618,6 +619,19 @@ function allocatedFractionForNetWorthOwner(
   const split = (ownership.splits ?? []).find((row) => row.member?.id === selectedOwner);
   if (!split) return 0;
   return normalizeOwnershipSharePercent(split.percent) / 100;
+}
+
+function annualOwnerLabelFromOwnershipId(ownershipId: number | null | undefined): string {
+  if (ownershipId == null) return '';
+  const ownership = ownershipById.value.get(ownershipId);
+  if (!ownership) return '';
+  if (ownership.kind === 'individual') {
+    return ownership.member?.name?.trim() ?? '';
+  }
+  if (ownership.kind === 'shared') {
+    return sharedOwnershipLabel(ownership.splits ?? []);
+  }
+  return '';
 }
 
 function filteredNetWorthTotalBase(
@@ -1187,10 +1201,42 @@ function roundToCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+const INTEREST_WITHHOLDING_RATE = 0.19;
+
+function applyInterestWithholding(grossInterest: number): number {
+  return roundToCents(grossInterest * (1 - INTEREST_WITHHOLDING_RATE));
+}
+
 function isRemuneratedLiquidityAsset(payload: AssetFormSubmitPayload): boolean {
   const category = String(payload.category ?? '').trim();
   const tae = parseLooseDecimal(payload.annual_interest_tae);
   return category === 'cash' && tae != null && tae > 0;
+}
+
+function estimateRemuneratedLiquidityInterest(payload: AssetFormSubmitPayload): number | null {
+  const category = String(payload.category ?? '').trim();
+  const subcategory = String(payload.subcategory ?? '').trim();
+  const tae = parseLooseDecimal(payload.annual_interest_tae);
+  if (tae == null || tae <= 0) return null;
+
+  if (category === 'cash' && subcategory === 'short_term_deposit') {
+    const principalAmount = parseLooseDecimal(payload.amount);
+    const depositTermMonths = Number(payload.deposit_term_months ?? 0);
+    if (
+      principalAmount == null ||
+      principalAmount <= 0 ||
+      !Number.isInteger(depositTermMonths) ||
+      depositTermMonths < 1 ||
+      depositTermMonths > 12
+    ) {
+      return null;
+    }
+    return roundToCents((principalAmount * tae * depositTermMonths) / 1200);
+  }
+
+  const averageBalance = parseLooseDecimal(payload.estimated_average_balance_for_interest);
+  if (averageBalance == null || averageBalance <= 0) return null;
+  return roundToCents((averageBalance * tae) / 100);
 }
 
 function normalizeAmountForMatch(raw: unknown): string {
@@ -1227,7 +1273,6 @@ function findLikelyCreatedAsset(
 }
 
 async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
-  const { estimated_average_balance_for_interest } = payload;
   const previousAssetIds = new Set(store.assets.map((asset) => asset.id));
   const createdAsset = await store.createAsset(payload);
   const createdOrMatchedAsset =
@@ -1237,30 +1282,32 @@ async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
   showAssetModal.value = false;
 
   if (!isRemuneratedLiquidityAsset(payload)) return;
-  const averageBalance = parseLooseDecimal(estimated_average_balance_for_interest);
-  const tae = parseLooseDecimal(payload.annual_interest_tae);
+  const estimatedAnnualInterestGross = estimateRemuneratedLiquidityInterest(payload);
   const currency = String(payload.currency ?? '').trim().toUpperCase() || 'EUR';
   const assetName = String(createdOrMatchedAsset.name ?? '').trim() || 'Activo remunerado';
-  if (averageBalance == null || averageBalance <= 0 || tae == null || tae <= 0) return;
-
-  const estimatedAnnualInterest = roundToCents((averageBalance * tae) / 100);
-  if (!(estimatedAnnualInterest > 0)) return;
+  if (estimatedAnnualInterestGross == null || estimatedAnnualInterestGross <= 0) return;
+  const estimatedAnnualInterestNet = applyInterestWithholding(estimatedAnnualInterestGross);
+  if (!(estimatedAnnualInterestNet > 0)) return;
+  const estimatedWithholdingAmount = roundToCents(
+    estimatedAnnualInterestGross - estimatedAnnualInterestNet,
+  );
+  const ownerLabel = annualOwnerLabelFromOwnershipId(payload.ownership_id);
 
   const result = await addIncomeEntry(
     {
       name: `Intereses estimados - ${assetName}`,
       category: 'passive_income',
       subcategory: 'interest_income',
-      owner: '',
+      owner: ownerLabel,
       incomeType: 'recurrent',
       timeProfile: 'structural_recurrent',
       cashflowRole: 'operating',
       eventGroup: '',
       termEndYear: null,
-      amountAnnual: estimatedAnnualInterest.toFixed(2),
+      amountAnnual: estimatedAnnualInterestNet.toFixed(2),
       fiscalYear: fiscalYear.value,
       currency,
-      notes: `Generado automaticamente desde activo de liquidez remunerado (${assetName}).`,
+      notes: `Generado automaticamente desde activo de liquidez remunerado (${assetName}). Interes bruto estimado: ${estimatedAnnualInterestGross.toFixed(2)} ${currency}. Retencion estimada (19%): ${estimatedWithholdingAmount.toFixed(2)} ${currency}. Interes neto estimado: ${estimatedAnnualInterestNet.toFixed(2)} ${currency}.`,
     },
     fiscalYear.value,
   );

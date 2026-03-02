@@ -75,6 +75,47 @@ describe('ItemForm (core)', () => {
     expect(wrapper.text()).toContain('Importe');
   });
 
+  it('requires deposit duration for short-term deposits', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'cash', label: 'Liquidez' }],
+        subcategories: [{ category: 'cash', value: 'short_term_deposit', label: 'Deposito a corto plazo' }],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Deposito Facto');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('cash');
+    await selects[1]!.setValue('short_term_deposit');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('10000');
+    await wrapper.find('input[placeholder="TAE anual (%)"]').setValue('3');
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('duracion del deposito');
+
+    const depositTermSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Selecciona duración'))!;
+    await depositTermSelect.setValue('6');
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'cash',
+        subcategory: 'short_term_deposit',
+        deposit_term_months: 6,
+      }),
+    );
+  });
+
   it('does not require schedule fields for credit card liabilities', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {
