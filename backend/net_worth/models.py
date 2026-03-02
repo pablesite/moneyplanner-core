@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -112,6 +113,15 @@ class Asset(models.Model):
         help_text=(
             "Saldo/importe anual medio previsto para estimar intereses en activos "
             "de liquidez remunerados."
+        ),
+    )
+    deposit_term_months = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text=(
+            "Duracion del deposito a corto plazo en meses (1-12). "
+            "Solo aplica a subcategoria short_term_deposit."
         ),
     )
     amount = models.DecimalField(

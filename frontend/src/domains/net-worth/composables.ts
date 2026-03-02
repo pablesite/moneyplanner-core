@@ -201,6 +201,7 @@ export function useNetWorthViewState() {
       annual_interest_tae: item.annual_interest_tae ?? '',
       estimated_average_balance_for_interest:
         item.estimated_average_balance_for_interest ?? '',
+      deposit_term_months: item.deposit_term_months ?? '',
       monthly_payment_amount: item.monthly_payment_amount ?? '',
       start_date: item.start_date ?? '',
       expected_end_date: item.expected_end_date ?? '',

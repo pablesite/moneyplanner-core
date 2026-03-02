@@ -94,7 +94,10 @@ export const useNetWorthStore = defineStore('netWorth', {
     },
 
     async createAsset(
-      payload: OwnershipAwarePayload & { estimated_average_balance_for_interest?: string | null },
+      payload: OwnershipAwarePayload & {
+        estimated_average_balance_for_interest?: string | null;
+        deposit_term_months?: number | null;
+      },
     ) {
       this.loading = true;
       this.error = null;

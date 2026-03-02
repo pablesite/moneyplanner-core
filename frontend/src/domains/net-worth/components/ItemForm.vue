@@ -5,6 +5,7 @@ import type { NetWorthWritePayload, Ownership } from '@/domains/net-worth/models
 type ItemFormPayload = NetWorthWritePayload & {
   ownership_id?: number | null;
   estimated_average_balance_for_interest?: string;
+  deposit_term_months?: number;
 };
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
     amount: string;
     annual_interest_tae?: string | null;
     estimated_average_balance_for_interest?: string | null;
+    deposit_term_months?: number | string | null;
     monthly_payment_amount?: string | null;
     start_date: string;
     expected_end_date?: string | null;
@@ -138,6 +140,7 @@ const ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = [
   'crypto_spot_earn',
   'other',
 ];
+const DEPOSIT_TERM_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => index + 1);
 const LIABILITY_PAYMENT_FREQUENCIES = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'quarterly', label: 'Trimestral' },
@@ -164,6 +167,7 @@ const form = reactive({
   amount: '',
   annual_interest_tae: props.showFinancedAsset ? '0' : '',
   estimated_average_balance_for_interest: '',
+  deposit_term_months: '',
   monthly_payment_amount: '',
   start_date: todayIsoDate(),
   expected_end_date: '',
@@ -214,12 +218,17 @@ const showAnnualInterestInput = computed(
 const showAssetAnnualInterestInput = computed(
   () => isAssetForm.value && showAnnualInterestInput.value,
 );
+const isShortTermDepositAsset = computed(
+  () => isAssetForm.value && form.category === 'cash' && form.subcategory === 'short_term_deposit',
+);
 const showEstimatedAverageBalanceForInterestInput = computed(() => {
   if (!showAssetAnnualInterestInput.value) return false;
+  if (isShortTermDepositAsset.value) return false;
   const taeRaw = String(form.annual_interest_tae ?? '').trim().replace(',', '.');
   const taeValue = Number(taeRaw);
   return Number.isFinite(taeValue) && taeValue > 0;
 });
+const showDepositTermMonthsInput = computed(() => isShortTermDepositAsset.value);
 const showMonthlyPaymentInput = computed(() => false);
 const isCreditCardLiability = computed(
   () => isLiabilityForm.value && String(form.category ?? '').trim() === 'credit_card',
@@ -410,6 +419,16 @@ const estimatedAverageBalanceForInterestError = computed(() => {
   }
   return '';
 });
+const depositTermMonthsError = computed(() => {
+  if (!showDepositTermMonthsInput.value) return '';
+  const raw = String(form.deposit_term_months ?? '').trim();
+  if (!raw) return 'Indica la duracion del deposito (1-12 meses).';
+  const months = Number(raw);
+  if (!Number.isInteger(months) || months < 1 || months > 12) {
+    return 'La duracion del deposito debe estar entre 1 y 12 meses.';
+  }
+  return '';
+});
 const monthlyPaymentError = computed(() => {
   if (!showMonthlyPaymentInput.value) return '';
   const raw = String(form.monthly_payment_amount ?? '').trim();
@@ -526,6 +545,7 @@ async function submit() {
   if (props.subcategories && !form.subcategory) return;
   if (annualInterestError.value) return;
   if (estimatedAverageBalanceForInterestError.value) return;
+  if (depositTermMonthsError.value) return;
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
   if (liabilityDatesError.value) return;
@@ -547,6 +567,10 @@ async function submit() {
       showEstimatedAverageBalanceForInterestInput.value &&
       String(form.estimated_average_balance_for_interest ?? '').trim()
         ? sanitizeAmount(form.estimated_average_balance_for_interest, 0).value
+        : undefined,
+    deposit_term_months:
+      showDepositTermMonthsInput.value && String(form.deposit_term_months ?? '').trim()
+        ? Number(String(form.deposit_term_months).trim())
         : undefined,
     monthly_payment_amount:
       showMonthlyPaymentInput.value && String(form.monthly_payment_amount ?? '').trim()
@@ -610,6 +634,7 @@ async function submit() {
   form.amount = '';
   form.annual_interest_tae = props.showFinancedAsset ? '0' : '';
   form.estimated_average_balance_for_interest = '';
+  form.deposit_term_months = '';
   form.monthly_payment_amount = '';
   form.start_date = todayIsoDate();
   form.expected_end_date = '';
@@ -644,6 +669,8 @@ watch(
     form.estimated_average_balance_for_interest = String(
       sanitizeAmount(initial.estimated_average_balance_for_interest ?? '', 0).value ?? '',
     );
+    form.deposit_term_months =
+      initial.deposit_term_months == null ? '' : String(initial.deposit_term_months);
     form.monthly_payment_amount = initial.monthly_payment_amount ?? '';
     form.start_date = initial.start_date ?? todayIsoDate();
     form.expected_end_date = initial.expected_end_date ?? '';
@@ -696,6 +723,15 @@ watch(
       form.early_repayment_fee_percent = '';
       form.novation_subrogation_fee_amount = '';
       form.linked_products_monthly_cost = '';
+    }
+  },
+);
+
+watch(
+  [() => form.category, () => form.subcategory],
+  () => {
+    if (!showDepositTermMonthsInput.value) {
+      form.deposit_term_months = '';
     }
   },
 );
@@ -847,6 +883,22 @@ watch(
           class="input ui-data-field"
         />
       </label>
+      <label v-if="showDepositTermMonthsInput" class="ui-item-form-field">
+        <span class="ui-item-form-label">Duración del depósito (meses)</span>
+        <select
+          v-model="form.deposit_term_months"
+          :class="['select ui-data-field', { 'ui-select-placeholder': !String(form.deposit_term_months ?? '').trim() }]"
+        >
+          <option value="" disabled>Selecciona duración</option>
+          <option
+            v-for="month in DEPOSIT_TERM_MONTH_OPTIONS"
+            :key="month"
+            :value="String(month)"
+          >
+            {{ month }}
+          </option>
+        </select>
+      </label>
       <label v-if="showLiabilityTaeOnlyField" class="ui-item-form-field">
         <span class="ui-item-form-label">TAE anual (%)</span>
         <input v-model="form.annual_interest_tae" inputmode="decimal" placeholder="TAE anual (%)" class="input ui-data-field" />
@@ -941,6 +993,9 @@ watch(
         >
           {{ estimatedAverageBalanceForInterestError }}
         </div>
+        <div v-if="depositTermMonthsError" class="ui-form-help ui-form-help-error">
+          {{ depositTermMonthsError }}
+        </div>
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
@@ -956,6 +1011,7 @@ watch(
               !!amountError ||
               !!annualInterestError ||
               !!estimatedAverageBalanceForInterestError ||
+              !!depositTermMonthsError ||
               !!monthlyPaymentError ||
               !!assetAmortizationError ||
               !!liabilityDatesError ||

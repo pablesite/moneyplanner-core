@@ -13,6 +13,7 @@ export type Asset = {
   amount: string;
   annual_interest_tae?: string | null;
   estimated_average_balance_for_interest?: string | null;
+  deposit_term_months?: number | null;
   monthly_payment_amount?: string | null;
   estimated_monthly_payment_amount?: string | null;
   estimated_outstanding_amount?: string | null;
