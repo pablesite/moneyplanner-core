@@ -10,6 +10,17 @@ vi.mock('@/domains/aux-data', () => ({
   useAuxDataPage: () => mockUseAuxDataPage(),
 }));
 
+vi.mock('@/domains/people', () => ({
+  FamilyMemberManager: {
+    name: 'FamilyMemberManager',
+    template: '<div data-test="FamilyMemberManager" />',
+  },
+  OwnershipManager: {
+    name: 'OwnershipManager',
+    template: '<div data-test="OwnershipManager" />',
+  },
+}));
+
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
     loading: ref(false),
@@ -43,7 +54,7 @@ describe('AuxDataView', () => {
     expect(wrapper.text()).toContain('Settings');
     expect(wrapper.text()).toContain('Datos IPC');
     expect(wrapper.text()).toContain('Tasas de conversion');
-    expect(wrapper.text()).toContain('No hay indices IPC todavia.');
+    expect(wrapper.text()).not.toContain('No hay indices IPC todavia.');
     expect(wrapper.text()).not.toContain('No hay FX rates todavia.');
   });
 
@@ -52,10 +63,10 @@ describe('AuxDataView', () => {
     const wrapper = mount(AuxDataView);
 
     const toggles = wrapper.findAll('.ui-settings-toggle');
-    await toggles[0]!.trigger('click');
-    expect(wrapper.text()).not.toContain('No hay indices IPC todavia.');
-
     await toggles[1]!.trigger('click');
+    expect(wrapper.text()).toContain('No hay indices IPC todavia.');
+
+    await toggles[2]!.trigger('click');
     expect(wrapper.text()).toContain('No hay FX rates todavia.');
   });
 

@@ -127,8 +127,8 @@ describe('NetWorthView', () => {
 
     expect(wrapper.text()).toContain('Patrimonio');
     expect(wrapper.text()).toContain('Patrimonio neto');
-    expect(wrapper.text()).toContain('Riesgo patrimonial');
-    expect(wrapper.text()).toContain('Score de balance');
+    expect(wrapper.text()).toContain('Capital propio sobre activos');
+    expect(wrapper.text()).toContain('Ratio deuda / activos');
     expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('No hay snapshots');
   });

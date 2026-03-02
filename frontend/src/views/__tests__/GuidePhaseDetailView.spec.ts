@@ -39,18 +39,15 @@ vi.mock('vue-router', () => ({
   }),
 }));
 
-vi.mock('@/stores/netWorth', () => ({
+vi.mock('@/domains/net-worth', () => ({
   useNetWorthStore: () => mockNetWorthStore,
 }));
 
-vi.mock('@/domains/data-input/annualIncomeStore', () => ({
+vi.mock('@/domains/data-input', () => ({
   useAnnualIncomeStore: () => ({
     entries: mockAnnualIncomeEntries,
     loadAll: mockAnnualIncomeLoadAll,
   }),
-}));
-
-vi.mock('@/domains/data-input/annualExpenseStore', () => ({
   useAnnualExpenseStore: () => ({
     entries: mockAnnualExpenseEntries,
     loadAll: mockAnnualExpenseLoadAll,
