@@ -33,6 +33,7 @@ from ..services import (
     estimate_liability_monthly_payment_simple,
     estimate_liability_outstanding_amount_simple,
     get_base_currency_for_user,
+    get_effective_asset_amount,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
     get_amount_base_value,
@@ -179,6 +180,20 @@ class NetWorthServicesTests(TestCase):
                 amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
                 amortization_term_years=None,
                 initial_purchase_value=None,
+            )
+
+    def test_validate_asset_payload_requires_home_parameters_for_auto_valuation(self):
+        with self.assertRaises(DRFValidationError):
+            validate_asset_payload(
+                tracking_mode=Asset.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Asset.Category.REAL_ESTATE,
+                subcategory=Asset.Subcategory.PRIMARY_HOME,
+                annual_interest_tae=None,
+                amortization_method=Asset.AmortizationMethod.NONE,
+                amortization_term_years=None,
+                initial_purchase_value=Decimal("100000.00"),
+                valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
             )
 
     def test_validate_liability_payload_rejects_end_date_before_start_date(self):
@@ -460,6 +475,49 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(totals.total_liabilities, Decimal("7000.00000000"))
 
+    def test_get_effective_asset_amount_for_primary_home_auto_valuation(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            initial_purchase_value=Decimal("100.00"),
+            valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
+            land_value_share_percent=Decimal("30.00"),
+            land_annual_appreciation_percent=Decimal("24.000"),
+            building_annual_depreciation_percent=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 1))
+        self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("108.0473"))
+
+    def test_calculate_totals_uses_effective_asset_amount_for_auto_home_valuation(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            initial_purchase_value=Decimal("100.00"),
+            valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
+            land_value_share_percent=Decimal("30.00"),
+            land_annual_appreciation_percent=Decimal("24.000"),
+            building_annual_depreciation_percent=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        totals = calculate_totals(
+            assets_qs=Asset.objects.filter(user=self.user, is_active=True),
+            liabilities_qs=Liability.objects.filter(user=self.user, is_active=True),
+            base_currency="EUR",
+            as_of_date=date(2026, 1, 1),
+        )
+        self.assertEqual(totals.total_assets.quantize(Decimal("0.01")), Decimal("108.05"))
+
     def test_get_base_currency_and_inflation_base_period(self):
         base = get_base_currency_for_user(user=self.user)
         self.assertEqual(base, "EUR")
@@ -716,6 +774,28 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.data["initial_purchase_value"], "1800.00000000")
         self.assertEqual(response.data["amortization_method"], "straight_line")
         self.assertEqual(response.data["amortization_term_years"], 4)
+
+    def test_asset_create_primary_home_auto_valuation(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Casa",
+                "category": Asset.Category.REAL_ESTATE,
+                "subcategory": Asset.Subcategory.PRIMARY_HOME,
+                "currency": "EUR",
+                "start_date": "2025-01-01",
+                "amount": "100000.00",
+                "valuation_model": Asset.ValuationModel.REAL_ESTATE_AUTO,
+                "land_value_share_percent": "30.00",
+                "land_annual_appreciation_percent": "4.000",
+                "building_annual_depreciation_percent": "1.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["valuation_model"], Asset.ValuationModel.REAL_ESTATE_AUTO)
+        self.assertEqual(response.data["initial_purchase_value"], "100000.00000000")
+        self.assertIn("effective_amount", response.data)
 
     def test_liability_create_rejects_expected_end_date_before_start_date(self):
         response = self.client.post(

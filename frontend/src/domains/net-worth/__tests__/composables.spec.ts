@@ -131,12 +131,22 @@ describe('useNetWorthViewState (core)', () => {
     expect(state.byCategoryAssets.value).toEqual([10, 0]);
     expect(state.byCategoryLiabilities.value).toEqual([0, 5]);
 
-    const asset = makeItem({ financed_asset_ref: 33 });
+    const asset = makeItem({
+      financed_asset_ref: 33,
+      valuation_model: 'real_estate_auto',
+      land_value_share_percent: '42.3',
+      land_annual_appreciation_percent: '3',
+      building_annual_depreciation_percent: '1',
+    });
     state.openEdit(asset, 'asset');
     expect(state.showEditModal.value).toBe(true);
     expect(state.editTitle.value).toBe('Editar activo');
     expect(state.editInitial.value?.amount).toBe('1000.5');
     expect(state.editInitial.value?.financed_asset_id).toBe(33);
+    expect(state.editInitial.value?.valuation_model).toBe('real_estate_auto');
+    expect(state.editInitial.value?.land_value_share_percent).toBe('42.3');
+    expect(state.editInitial.value?.land_annual_appreciation_percent).toBe('3');
+    expect(state.editInitial.value?.building_annual_depreciation_percent).toBe('1');
     await state.submitEdit({ name: 'edited', financed_asset_id: 99 });
     expect(store.updateAsset).toHaveBeenCalledWith(1, { name: 'edited' });
     expect(state.showEditModal.value).toBe(false);

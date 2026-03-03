@@ -10,6 +10,10 @@ export type Asset = {
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;
+  valuation_model?: string;
+  land_value_share_percent?: string | null;
+  land_annual_appreciation_percent?: string | null;
+  building_annual_depreciation_percent?: string | null;
   amount: string;
   annual_interest_tae?: string | null;
   estimated_average_balance_for_interest?: string | null;

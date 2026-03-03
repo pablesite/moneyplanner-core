@@ -571,7 +571,7 @@ function editTarget(it: Item) {
 
 function displayAmount(it: Item) {
   const base = it._displayAmount ?? it.amount;
-  if (isLiabilitiesList.value && !it._displayAmount && it.effective_amount) {
+  if (!it._displayAmount && it.effective_amount) {
     return it.effective_amount;
   }
   return base;
