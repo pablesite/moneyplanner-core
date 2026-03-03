@@ -5,6 +5,7 @@ from rest_framework import serializers
 from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
 from .services_assets import (
     create_asset_for_user,
+    get_effective_asset_amount,
     get_amount_base_value,
     validate_asset_payload,
 )
@@ -25,6 +26,7 @@ class EmptySerializer(serializers.Serializer):
 
 class AssetSerializer(serializers.ModelSerializer):
     amount_base = serializers.SerializerMethodField()
+    effective_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -40,10 +42,15 @@ class AssetSerializer(serializers.ModelSerializer):
             "initial_purchase_value",
             "amortization_method",
             "amortization_term_years",
+            "valuation_model",
+            "land_value_share_percent",
+            "land_annual_appreciation_percent",
+            "building_annual_depreciation_percent",
             "annual_interest_tae",
             "estimated_average_balance_for_interest",
             "deposit_term_months",
             "amount",
+            "effective_amount",
             "amount_base",
             "is_active",
             "notes",
@@ -79,6 +86,28 @@ class AssetSerializer(serializers.ModelSerializer):
         initial_purchase_value = attrs.get(
             "initial_purchase_value", getattr(self.instance, "initial_purchase_value", None)
         )
+        valuation_model = attrs.get(
+            "valuation_model", getattr(self.instance, "valuation_model", None)
+        )
+        land_value_share_percent = attrs.get(
+            "land_value_share_percent", getattr(self.instance, "land_value_share_percent", None)
+        )
+        land_annual_appreciation_percent = attrs.get(
+            "land_annual_appreciation_percent",
+            getattr(self.instance, "land_annual_appreciation_percent", None),
+        )
+        building_annual_depreciation_percent = attrs.get(
+            "building_annual_depreciation_percent",
+            getattr(self.instance, "building_annual_depreciation_percent", None),
+        )
+        if valuation_model == Asset.ValuationModel.REAL_ESTATE_AUTO:
+            if initial_purchase_value is None and attrs.get("amount") is not None:
+                initial_purchase_value = attrs["amount"]
+                attrs["initial_purchase_value"] = attrs["amount"]
+        else:
+            attrs["land_value_share_percent"] = None
+            attrs["land_annual_appreciation_percent"] = None
+            attrs["building_annual_depreciation_percent"] = None
         validate_asset_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -88,16 +117,24 @@ class AssetSerializer(serializers.ModelSerializer):
             amortization_method=amortization_method,
             amortization_term_years=amortization_term_years,
             initial_purchase_value=initial_purchase_value,
+            valuation_model=valuation_model,
+            land_value_share_percent=land_value_share_percent,
+            land_annual_appreciation_percent=land_annual_appreciation_percent,
+            building_annual_depreciation_percent=building_annual_depreciation_percent,
             deposit_term_months=deposit_term_months,
         )
         return attrs
 
     def get_amount_base(self, obj):
+        effective_amount = get_effective_asset_amount(asset=obj)
         return get_amount_base_value(
-            amount=obj.amount,
+            amount=effective_amount,
             currency=obj.currency,
             base_currency=self.context.get("base_currency"),
         )
+
+    def get_effective_amount(self, obj):
+        return str(get_effective_asset_amount(asset=obj))
 
     def create(self, validated_data):
         request = self.context["request"]

@@ -51,6 +51,10 @@ class Asset(models.Model):
         STRAIGHT_LINE = "straight_line", "Lineal"
         MANUAL = "manual", "Manual"
 
+    class ValuationModel(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        REAL_ESTATE_AUTO = "real_estate_auto", "Vivienda automatica"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets"
     )
@@ -92,6 +96,42 @@ class Asset(models.Model):
         null=True,
         blank=True,
         help_text="Vida util/plazo de amortizacion estimado en anos (si aplica).",
+    )
+    valuation_model = models.CharField(
+        max_length=24,
+        choices=ValuationModel.choices,
+        default=ValuationModel.MANUAL,
+        help_text=(
+            "Modelo de valoracion del activo. En vivienda habitual puede usarse "
+            "valoracion automatica por suelo + construccion."
+        ),
+    )
+    land_value_share_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text=(
+            "Porcentaje del valor inicial atribuible al suelo para valoracion automatica "
+            "de vivienda."
+        ),
+    )
+    land_annual_appreciation_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(-100), MaxValueValidator(200)],
+        help_text="Revalorizacion anual del suelo en porcentaje.",
+    )
+    building_annual_depreciation_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Depreciacion anual de la construccion en porcentaje.",
     )
     annual_interest_tae = models.DecimalField(
         max_digits=5,

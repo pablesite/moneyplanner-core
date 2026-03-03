@@ -14,6 +14,7 @@ from core.services import adjust_for_inflation as _core_adjust_for_inflation, co
 
 from .services_assets import (
     create_asset_for_user as _create_asset_for_user,
+    get_effective_asset_amount as _asset_get_effective_asset_amount,
     get_amount_base_value as _asset_get_amount_base_value,
     validate_asset_payload as _validate_asset_payload,
 )
@@ -92,6 +93,7 @@ build_liquidity_monthly_summary = _build_liquidity_monthly_summary
 build_net_worth_summary = _build_net_worth_summary
 serialize_net_worth_summary = _serialize_net_worth_summary
 get_amount_base_value = _asset_get_amount_base_value
+get_effective_asset_amount = _asset_get_effective_asset_amount
 
 
 def get_financed_asset_queryset_for_user(*, user):
@@ -133,7 +135,8 @@ def calculate_totals(
     liabilities_by_category: dict[str, Decimal] = {}
 
     for asset in assets_qs:
-        converted = convert_currency(asset.amount, asset.currency, base_currency, date=as_of_date)
+        effective_amount = get_effective_asset_amount(asset=asset, as_of_date=as_of_date)
+        converted = convert_currency(effective_amount, asset.currency, base_currency, date=as_of_date)
         total_assets += converted
 
         assets_by_category.setdefault(asset.category, Decimal("0"))

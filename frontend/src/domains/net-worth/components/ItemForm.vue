@@ -42,6 +42,10 @@ type Props = {
     initial_purchase_value?: string | null;
     amortization_method?: string;
     amortization_term_years?: number | string | null;
+    valuation_model?: string;
+    land_value_share_percent?: string | null;
+    land_annual_appreciation_percent?: string | null;
+    building_annual_depreciation_percent?: string | null;
     notes: string;
     currency: string;
     tracking_mode: string;
@@ -159,6 +163,31 @@ const ASSET_AMORTIZATION_METHODS = [
   { value: 'straight_line', label: 'Lineal' },
   { value: 'manual', label: 'Manual' },
 ];
+const PRIMARY_HOME_VALUATION_MODE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'real_estate_auto', label: 'Automatica (suelo + construccion)' },
+];
+const PRIMARY_HOME_VALUATION_PROFILES = [
+  {
+    value: 'conservative',
+    label: 'Conservador',
+    landAnnualAppreciationPercent: '5.5',
+    buildingAnnualDepreciationPercent: '0.4',
+  },
+  {
+    value: 'balanced',
+    label: 'Equilibrado',
+    landAnnualAppreciationPercent: '6.8',
+    buildingAnnualDepreciationPercent: '0.3',
+  },
+  {
+    value: 'dynamic',
+    label: 'Dinamico',
+    landAnnualAppreciationPercent: '8',
+    buildingAnnualDepreciationPercent: '0.2',
+  },
+];
+const PRIMARY_HOME_CUSTOM_PROFILE_VALUE = 'custom';
 
 const form = reactive({
   name: '',
@@ -182,6 +211,10 @@ const form = reactive({
   initial_purchase_value: '',
   amortization_method: 'none',
   amortization_term_years: '',
+  valuation_model: 'manual',
+  land_value_share_percent: '30',
+  land_annual_appreciation_percent: '3',
+  building_annual_depreciation_percent: '1',
   notes: '',
   currency: '',
   tracking_mode: 'manual',
@@ -245,6 +278,15 @@ const showMortgageFeeFields = computed(
 const showAssetAmortizationFields = computed(
   () => isAssetForm.value && String(form.category ?? '').trim() === 'furnishings',
 );
+const showPrimaryHomeValuationFields = computed(
+  () =>
+    isAssetForm.value &&
+    String(form.category ?? '').trim() === 'real_estate' &&
+    String(form.subcategory ?? '').trim() === 'primary_home',
+);
+const showPrimaryHomeAutoValuationFields = computed(
+  () => showPrimaryHomeValuationFields.value && form.valuation_model === 'real_estate_auto',
+);
 const requiresAssetAmortizationInputs = computed(
   () => showAssetAmortizationFields.value && form.amortization_method !== 'none',
 );
@@ -288,6 +330,10 @@ const subcategoriesForCategory = computed(() => {
 });
 
 const maxDecimals = computed(() => decimalsByCurrency[form.currency] ?? 2);
+const estimatedAverageBalanceCurrencyLabel = computed(() => {
+  const currency = String(form.currency ?? '').trim();
+  return currency || 'EUR';
+});
 const normalizedDefaultCurrency = computed(() =>
   String(props.defaultCurrency ?? '')
     .trim()
@@ -296,7 +342,9 @@ const normalizedDefaultCurrency = computed(() =>
 const activeLiabilityFieldGroup = ref<'term' | 'end' | null>(null);
 const financedAssetManuallySelected = ref(false);
 const financedAssetAutoMatched = ref(false);
+const primaryHomeValuationProfile = ref<string>(PRIMARY_HOME_CUSTOM_PROFILE_VALUE);
 let syncingScheduleFields = false;
+let syncingPrimaryHomeProfile = false;
 
 watch(
   () => form.category,
@@ -393,6 +441,56 @@ function sanitizeAmount(raw: unknown, decimals: number) {
 
   return { value: signedValue, error: '' };
 }
+function sanitizePercent(raw: unknown) {
+  const normalized = String(raw ?? '').trim().replace(',', '.');
+  if (!normalized) return { value: '', error: '' };
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return { value: '', error: 'Porcentaje invalido' };
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return { value: '', error: 'Porcentaje invalido' };
+  return { value: normalized, error: '' };
+}
+function normalizePercentWithMaxDecimals(
+  raw: unknown,
+  maxDecimals: number,
+  preserveTrailingSeparator = false,
+  outputSeparator: 'dot' | 'comma' = 'dot',
+): string {
+  const rawString = String(raw ?? '').trim();
+  const normalized = rawString
+    .replace(',', '.')
+    .replace(/[^\d.-]/g, '');
+  if (!normalized) return '';
+  const dots = normalized.match(/\./g) || [];
+  if (dots.length > 1) return normalized;
+  if (preserveTrailingSeparator && /[.,]$/.test(rawString) && dots.length === 1) {
+    const [intPart = ''] = normalized.split('.');
+    return outputSeparator === 'comma' ? `${intPart},` : `${intPart}.`;
+  }
+  const [intPart = '', decPart = ''] = normalized.split('.');
+  const limitedDec = decPart.slice(0, Math.max(0, maxDecimals));
+  const out = limitedDec ? `${intPart}.${limitedDec}` : intPart;
+  return outputSeparator === 'comma' ? out.replace('.', ',') : out;
+}
+function applyPrimaryHomeValuationProfile(profileValue: string): void {
+  const profile = PRIMARY_HOME_VALUATION_PROFILES.find((p) => p.value === profileValue);
+  if (!profile) return;
+  syncingPrimaryHomeProfile = true;
+  form.land_annual_appreciation_percent = profile.landAnnualAppreciationPercent;
+  form.building_annual_depreciation_percent = profile.buildingAnnualDepreciationPercent;
+  syncingPrimaryHomeProfile = false;
+}
+function detectPrimaryHomeValuationProfile(): string {
+  const landGrowth = String(form.land_annual_appreciation_percent ?? '').trim().replace(',', '.');
+  const buildingDep = String(form.building_annual_depreciation_percent ?? '')
+    .trim()
+    .replace(',', '.');
+  const profile = PRIMARY_HOME_VALUATION_PROFILES.find(
+    (p) =>
+      p.landAnnualAppreciationPercent === landGrowth &&
+      p.buildingAnnualDepreciationPercent === buildingDep,
+  );
+  return profile?.value ?? PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+}
 
 const amountError = computed(() => {
   const { error } = sanitizeAmount(form.amount, maxDecimals.value);
@@ -446,6 +544,30 @@ const assetAmortizationError = computed(() => {
   if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortizacion invalido';
   const normalizedPurchase = sanitizeAmount(purchase, maxDecimals.value);
   if (!normalizedPurchase.value || normalizedPurchase.error) return 'Valor de compra invalido';
+  return '';
+});
+const primaryHomeValuationError = computed(() => {
+  if (!showPrimaryHomeAutoValuationFields.value) return '';
+  const purchase = sanitizeAmount(form.amount, maxDecimals.value);
+  if (!purchase.value || purchase.error) return 'Valor de compra invalido';
+
+  const landShare = sanitizePercent(form.land_value_share_percent);
+  const landGrowth = sanitizePercent(form.land_annual_appreciation_percent);
+  const buildingDep = sanitizePercent(form.building_annual_depreciation_percent);
+  if (landShare.error || landGrowth.error || buildingDep.error) return 'Parametros de vivienda invalidos';
+
+  const landShareN = Number(landShare.value);
+  const landGrowthN = Number(landGrowth.value);
+  const buildingDepN = Number(buildingDep.value);
+  if (landShare.value === '' || landShareN < 0 || landShareN > 100) {
+    return 'El porcentaje de suelo debe estar entre 0 y 100';
+  }
+  if (landGrowth.value === '' || landGrowthN < -100 || landGrowthN > 200) {
+    return 'La revalorizacion del suelo debe estar entre -100 y 200';
+  }
+  if (buildingDep.value === '' || buildingDepN < 0 || buildingDepN > 100) {
+    return 'La depreciacion de construccion debe estar entre 0 y 100';
+  }
   return '';
 });
 const liabilityDatesError = computed(() => {
@@ -548,6 +670,7 @@ async function submit() {
   if (depositTermMonthsError.value) return;
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
+  if (primaryHomeValuationError.value) return;
   if (liabilityDatesError.value) return;
   if (liabilityScheduleError.value) return;
 
@@ -615,6 +738,21 @@ async function submit() {
       requiresAssetAmortizationInputs.value && String(form.amortization_term_years ?? '').trim()
         ? Number(String(form.amortization_term_years).trim())
         : undefined,
+    valuation_model: showPrimaryHomeValuationFields.value ? form.valuation_model : undefined,
+    land_value_share_percent:
+      showPrimaryHomeAutoValuationFields.value && String(form.land_value_share_percent ?? '').trim()
+        ? normalizePercentWithMaxDecimals(form.land_value_share_percent, 1)
+        : undefined,
+    land_annual_appreciation_percent:
+      showPrimaryHomeAutoValuationFields.value &&
+      String(form.land_annual_appreciation_percent ?? '').trim()
+        ? normalizePercentWithMaxDecimals(form.land_annual_appreciation_percent, 1)
+        : undefined,
+    building_annual_depreciation_percent:
+      showPrimaryHomeAutoValuationFields.value &&
+      String(form.building_annual_depreciation_percent ?? '').trim()
+        ? String(form.building_annual_depreciation_percent).trim().replace(',', '.')
+        : undefined,
     notes: form.notes,
     currency: form.currency,
     tracking_mode: form.tracking_mode,
@@ -649,6 +787,11 @@ async function submit() {
   form.initial_purchase_value = '';
   form.amortization_method = 'none';
   form.amortization_term_years = '';
+  form.valuation_model = 'manual';
+  form.land_value_share_percent = '30';
+  form.land_annual_appreciation_percent = '3';
+  form.building_annual_depreciation_percent = '1';
+  primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
   form.notes = '';
   form.currency = normalizedDefaultCurrency.value || '';
   form.ownership_id = null;
@@ -686,6 +829,22 @@ watch(
     form.amortization_method = initial.amortization_method ?? 'none';
     form.amortization_term_years =
       initial.amortization_term_years == null ? '' : String(initial.amortization_term_years);
+    form.valuation_model = initial.valuation_model ?? 'manual';
+    form.land_value_share_percent = normalizePercentWithMaxDecimals(
+      initial.land_value_share_percent ?? '30',
+      1,
+      false,
+      'comma',
+    );
+    form.land_annual_appreciation_percent = normalizePercentWithMaxDecimals(
+      initial.land_annual_appreciation_percent ?? '3',
+      1,
+      false,
+      'comma',
+    );
+    form.building_annual_depreciation_percent =
+      initial.building_annual_depreciation_percent ?? '1';
+    primaryHomeValuationProfile.value = detectPrimaryHomeValuationProfile();
     form.notes = initial.notes ?? '';
     form.currency = initial.currency ?? '';
     form.tracking_mode = initial.tracking_mode ?? 'manual';
@@ -733,7 +892,63 @@ watch(
     if (!showDepositTermMonthsInput.value) {
       form.deposit_term_months = '';
     }
+    if (!showPrimaryHomeValuationFields.value) {
+      form.valuation_model = 'manual';
+      form.land_value_share_percent = '30';
+      form.land_annual_appreciation_percent = '3';
+      form.building_annual_depreciation_percent = '1';
+      primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+    }
   },
+);
+watch(
+  () => form.valuation_model,
+  (model) => {
+    if (model !== 'real_estate_auto') {
+      primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+      return;
+    }
+    if (primaryHomeValuationProfile.value !== PRIMARY_HOME_CUSTOM_PROFILE_VALUE) {
+      applyPrimaryHomeValuationProfile(primaryHomeValuationProfile.value);
+      return;
+    }
+    primaryHomeValuationProfile.value = detectPrimaryHomeValuationProfile();
+  },
+);
+watch(
+  () => primaryHomeValuationProfile.value,
+  (profile) => {
+    if (!showPrimaryHomeAutoValuationFields.value) return;
+    if (profile === PRIMARY_HOME_CUSTOM_PROFILE_VALUE) return;
+    applyPrimaryHomeValuationProfile(profile);
+  },
+);
+watch(
+  [
+    () => form.land_value_share_percent,
+    () => form.land_annual_appreciation_percent,
+    () => form.building_annual_depreciation_percent,
+  ],
+  () => {
+    if (syncingPrimaryHomeProfile || !showPrimaryHomeAutoValuationFields.value) return;
+    primaryHomeValuationProfile.value = detectPrimaryHomeValuationProfile();
+  },
+);
+watch(
+  () => form.land_value_share_percent,
+  (value) => {
+    const normalized = normalizePercentWithMaxDecimals(value, 1, true, 'comma');
+    if (String(value ?? '') !== normalized) form.land_value_share_percent = normalized;
+  },
+  { immediate: true },
+);
+watch(
+  () => form.land_annual_appreciation_percent,
+  (value) => {
+    const normalized = normalizePercentWithMaxDecimals(value, 1, true, 'comma');
+    if (String(value ?? '') !== normalized) form.land_annual_appreciation_percent = normalized;
+  },
+  { immediate: true },
 );
 
 watch(
@@ -869,17 +1084,58 @@ watch(
           <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
       </label>
+      <div v-if="showPrimaryHomeValuationFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <div class="ui-item-form-section-head">
+          <div class="ui-item-form-section-title">Valoracion vivienda habitual</div>
+        </div>
+        <div class="ui-item-form-inline-grid">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Modelo</span>
+            <select v-model="form.valuation_model" class="select ui-data-field">
+              <option v-for="opt in PRIMARY_HOME_VALUATION_MODE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </label>
+          <label v-if="showPrimaryHomeAutoValuationFields" class="ui-item-form-field">
+            <span class="ui-item-form-label">Perfil</span>
+            <select v-model="primaryHomeValuationProfile" class="select ui-data-field">
+              <option v-for="profile in PRIMARY_HOME_VALUATION_PROFILES" :key="profile.value" :value="profile.value">
+                {{ profile.label }}
+              </option>
+              <option :value="PRIMARY_HOME_CUSTOM_PROFILE_VALUE">Personalizado</option>
+            </select>
+          </label>
+        </div>
+        <div v-if="showPrimaryHomeAutoValuationFields" class="ui-item-form-inline-grid ui-item-form-inline-grid-3 mt-2">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Suelo sobre compra (%)</span>
+            <input v-model="form.land_value_share_percent" inputmode="decimal" placeholder="Ej: 30" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Revalorizacion suelo anual (%)</span>
+            <input v-model="form.land_annual_appreciation_percent" inputmode="decimal" placeholder="Ej: 3" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Depreciacion construccion anual (%)</span>
+            <input v-model="form.building_annual_depreciation_percent" inputmode="decimal" placeholder="Ej: 1" class="input ui-data-field" />
+          </label>
+        </div>
+        <div v-if="showPrimaryHomeAutoValuationFields" class="ui-form-help">
+          El perfil autocompleta tasas y no modifica el porcentaje de suelo.
+        </div>
+      </div>
 
       <label v-if="showAssetAnnualInterestInput" class="ui-item-form-field">
         <span class="ui-item-form-label">TAE anual (%)</span>
         <input v-model="form.annual_interest_tae" inputmode="decimal" placeholder="TAE anual (%)" class="input ui-data-field" />
       </label>
       <label v-if="showEstimatedAverageBalanceForInterestInput" class="ui-item-form-field">
-        <span class="ui-item-form-label">Importe anual medio previsto (€)</span>
+        <span class="ui-item-form-label">
+          Importe anual medio previsto ({{ estimatedAverageBalanceCurrencyLabel }})
+        </span>
         <input
           v-model="form.estimated_average_balance_for_interest"
           inputmode="numeric"
-          placeholder="Saldo medio anual previsto (€)"
+          :placeholder="`Saldo medio anual previsto (${estimatedAverageBalanceCurrencyLabel})`"
           class="input ui-data-field"
         />
       </label>
@@ -998,6 +1254,7 @@ watch(
         </div>
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
+        <div v-if="primaryHomeValuationError" class="ui-form-help ui-form-help-error">{{ primaryHomeValuationError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
         <div v-if="liabilityScheduleError" class="ui-form-help ui-form-help-error">{{ liabilityScheduleError }}</div>
       </div>
@@ -1014,6 +1271,7 @@ watch(
               !!depositTermMonthsError ||
               !!monthlyPaymentError ||
               !!assetAmortizationError ||
+              !!primaryHomeValuationError ||
               !!liabilityDatesError ||
               !!liabilityScheduleError
             "
@@ -1026,4 +1284,17 @@ watch(
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (min-width: 768px) {
+  .ui-item-form-inline-grid.ui-item-form-inline-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ui-item-form-inline-grid.ui-item-form-inline-grid-3 .ui-item-form-label {
+    min-height: 2.4em;
+    line-height: 1.2;
+    display: block;
+  }
+}
+</style>
 
