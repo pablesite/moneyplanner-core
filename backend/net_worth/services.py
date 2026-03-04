@@ -117,7 +117,7 @@ def get_inflation_base_period(*, region: str) -> date:
 
 
 def _get_active_positions(*, user):
-    assets_qs = Asset.objects.filter(user=user, is_active=True)
+    assets_qs = Asset.objects.filter(user=user, is_active=True).prefetch_related("improvements")
     liabilities_qs = Liability.objects.filter(user=user, is_active=True)
     return assets_qs, liabilities_qs
 

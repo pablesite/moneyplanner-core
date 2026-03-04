@@ -189,6 +189,79 @@ class Asset(models.Model):
         return f"{self.user_id} - {self.name} ({self.amount} {self.currency})"
 
 
+class AssetImprovement(models.Model):
+    class AmortizationMethod(models.TextChoices):
+        NONE = "none", "Sin amortizacion"
+        STRAIGHT_LINE = "straight_line", "Lineal"
+        MANUAL = "manual", "Manual"
+
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="improvements",
+    )
+    name = models.CharField(max_length=120)
+    reform_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha en la que la reforma/obra entra en servicio.",
+    )
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Importe total de la reforma en la moneda del activo.",
+    )
+    amortization_method = models.CharField(
+        max_length=24,
+        choices=AmortizationMethod.choices,
+        default=AmortizationMethod.NONE,
+        help_text="Metodo de amortizacion de la reforma.",
+    )
+    amortization_term_years = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Plazo de amortizacion de la reforma en anos (si aplica).",
+    )
+    annual_interest_tae = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="TAE anual asociada a la financiacion de la reforma (opcional).",
+    )
+    capitalize_interest = models.BooleanField(
+        default=False,
+        help_text=(
+            "Si true, la TAE se capitaliza sobre el valor de la reforma para calculo "
+            "de valor efectivo."
+        ),
+    )
+    manual_current_value = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Valor actual manual de la reforma. Requerido cuando "
+            "amortization_method=manual."
+        ),
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["asset", "reform_date"]),
+        ]
+        ordering = ["-reform_date", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.asset_id} - {self.name} ({self.amount})"
+
+
 ASSET_SUBCATEGORY_MAP = {
     Asset.Category.CASH: {
         Asset.Subcategory.BANK_ACCOUNT,

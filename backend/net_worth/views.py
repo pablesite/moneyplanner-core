@@ -37,7 +37,7 @@ from .services_summaries import build_net_worth_summary, serialize_net_worth_sum
 class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = AssetSerializer
-    queryset = Asset.objects.all()
+    queryset = Asset.objects.prefetch_related("improvements").all()
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
