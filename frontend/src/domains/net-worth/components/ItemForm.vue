@@ -1,6 +1,10 @@
 ﻿<script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import type { NetWorthWritePayload, Ownership } from '@/domains/net-worth/models';
+import type {
+  AssetImprovement,
+  NetWorthWritePayload,
+  Ownership,
+} from '@/domains/net-worth/models';
 
 type ItemFormPayload = NetWorthWritePayload & {
   ownership_id?: number | null;
@@ -46,6 +50,7 @@ type Props = {
     land_value_share_percent?: string | null;
     land_annual_appreciation_percent?: string | null;
     building_annual_depreciation_percent?: string | null;
+    improvements?: AssetImprovement[] | null;
     notes: string;
     currency: string;
     tracking_mode: string;
@@ -53,6 +58,19 @@ type Props = {
     ownership_id: number | null;
     financed_asset_id: number | null;
   }>;
+};
+
+type PrimaryHomeImprovementDraft = {
+  id?: number;
+  name: string;
+  reform_date: string;
+  amount: string;
+  amortization_method: 'none' | 'straight_line' | 'manual';
+  amortization_term_years: string;
+  annual_interest_tae: string;
+  capitalize_interest: boolean;
+  manual_current_value: string;
+  notes: string;
 };
 
 const props = defineProps<Props>();
@@ -188,6 +206,25 @@ const PRIMARY_HOME_VALUATION_PROFILES = [
   },
 ];
 const PRIMARY_HOME_CUSTOM_PROFILE_VALUE = 'custom';
+const PRIMARY_HOME_IMPROVEMENT_AMORTIZATION_OPTIONS = [
+  { value: 'none', label: 'Sin amortizacion' },
+  { value: 'straight_line', label: 'Lineal' },
+  { value: 'manual', label: 'Manual' },
+] as const;
+
+function buildEmptyPrimaryHomeImprovement(): PrimaryHomeImprovementDraft {
+  return {
+    name: '',
+    reform_date: todayIsoDate(),
+    amount: '',
+    amortization_method: 'none',
+    amortization_term_years: '10',
+    annual_interest_tae: '',
+    capitalize_interest: false,
+    manual_current_value: '',
+    notes: '',
+  };
+}
 
 const form = reactive({
   name: '',
@@ -343,6 +380,8 @@ const activeLiabilityFieldGroup = ref<'term' | 'end' | null>(null);
 const financedAssetManuallySelected = ref(false);
 const financedAssetAutoMatched = ref(false);
 const primaryHomeValuationProfile = ref<string>(PRIMARY_HOME_CUSTOM_PROFILE_VALUE);
+const primaryHomeImprovements = ref<PrimaryHomeImprovementDraft[]>([]);
+const expandedPrimaryHomeImprovementIndex = ref<number | null>(null);
 let syncingScheduleFields = false;
 let syncingPrimaryHomeProfile = false;
 
@@ -441,6 +480,17 @@ function sanitizeAmount(raw: unknown, decimals: number) {
 
   return { value: signedValue, error: '' };
 }
+
+function formatAmountForEdit(raw: unknown, currency: string): string {
+  const max = decimalsByCurrency[currency] ?? 2;
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return '';
+  return n.toFixed(max).replace(/\.?0+$/, '');
+}
 function sanitizePercent(raw: unknown) {
   const normalized = String(raw ?? '').trim().replace(',', '.');
   if (!normalized) return { value: '', error: '' };
@@ -480,17 +530,139 @@ function applyPrimaryHomeValuationProfile(profileValue: string): void {
   syncingPrimaryHomeProfile = false;
 }
 function detectPrimaryHomeValuationProfile(): string {
-  const landGrowth = String(form.land_annual_appreciation_percent ?? '').trim().replace(',', '.');
-  const buildingDep = String(form.building_annual_depreciation_percent ?? '')
-    .trim()
-    .replace(',', '.');
+  const toComparableNumber = (raw: unknown): number | null => {
+    const normalized = String(raw ?? '').trim().replace(',', '.');
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const landGrowth = toComparableNumber(form.land_annual_appreciation_percent);
+  const buildingDep = toComparableNumber(form.building_annual_depreciation_percent);
+  if (landGrowth == null || buildingDep == null) return PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
   const profile = PRIMARY_HOME_VALUATION_PROFILES.find(
     (p) =>
-      p.landAnnualAppreciationPercent === landGrowth &&
-      p.buildingAnnualDepreciationPercent === buildingDep,
+      Number(p.landAnnualAppreciationPercent) === landGrowth &&
+      Number(p.buildingAnnualDepreciationPercent) === buildingDep,
   );
   return profile?.value ?? PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
 }
+
+function addPrimaryHomeImprovement(): void {
+  primaryHomeImprovements.value.push(buildEmptyPrimaryHomeImprovement());
+  expandedPrimaryHomeImprovementIndex.value = primaryHomeImprovements.value.length - 1;
+}
+
+function removePrimaryHomeImprovement(index: number): void {
+  if (index < 0 || index >= primaryHomeImprovements.value.length) return;
+  primaryHomeImprovements.value.splice(index, 1);
+  if (!primaryHomeImprovements.value.length) {
+    expandedPrimaryHomeImprovementIndex.value = null;
+    return;
+  }
+  if (expandedPrimaryHomeImprovementIndex.value == null) return;
+  if (expandedPrimaryHomeImprovementIndex.value > index) {
+    expandedPrimaryHomeImprovementIndex.value -= 1;
+    return;
+  }
+  if (expandedPrimaryHomeImprovementIndex.value === index) {
+    expandedPrimaryHomeImprovementIndex.value = Math.min(
+      index,
+      primaryHomeImprovements.value.length - 1,
+    );
+  }
+}
+
+function canCapitalizeImprovementInterest(improvement: PrimaryHomeImprovementDraft): boolean {
+  const interestRaw = String(improvement.annual_interest_tae ?? '')
+    .trim()
+    .replace(',', '.');
+  if (!interestRaw) return false;
+  const interest = Number(interestRaw);
+  return Number.isFinite(interest) && interest > 0;
+}
+
+function improvementRemoveLabel(improvement: PrimaryHomeImprovementDraft): string {
+  return improvement.id ? 'Eliminar reforma' : 'Descartar reforma';
+}
+
+function formatImprovementSummaryDate(raw: string): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return 'Sin fecha';
+  const parsed = parseIsoDate(value);
+  if (!parsed) return value;
+  return `${String(parsed.day).padStart(2, '0')}/${String(parsed.month).padStart(2, '0')}/${parsed.year}`;
+}
+
+function currencySymbol(currency: string): string {
+  const code = String(currency ?? '').trim().toUpperCase();
+  if (code === 'EUR') return '€';
+  if (code === 'USD') return '$';
+  if (code === 'GBP') return '£';
+  if (code === 'JPY') return '¥';
+  return code || '';
+}
+
+function formatImprovementSummaryAmount(raw: string, currency: string): string {
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
+  const parsed = Number(normalized);
+  const amountText = Number.isFinite(parsed)
+    ? new Intl.NumberFormat('es-ES', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(parsed)
+    : raw || '0';
+  const symbol = currencySymbol(currency);
+  return symbol ? `${amountText} ${symbol}` : amountText;
+}
+
+function isImprovementExpanded(index: number): boolean {
+  return expandedPrimaryHomeImprovementIndex.value === index;
+}
+
+function toggleImprovementExpanded(index: number): void {
+  if (expandedPrimaryHomeImprovementIndex.value === index) {
+    expandedPrimaryHomeImprovementIndex.value = null;
+    return;
+  }
+  expandedPrimaryHomeImprovementIndex.value = index;
+}
+
+const primaryHomeImprovementsError = computed(() => {
+  if (!showPrimaryHomeAutoValuationFields.value) return '';
+  for (let i = 0; i < primaryHomeImprovements.value.length; i += 1) {
+    const item = primaryHomeImprovements.value[i]!;
+    const label = `Reforma ${i + 1}`;
+    if (!String(item.name ?? '').trim()) return `${label}: el nombre es obligatorio`;
+    if (!String(item.reform_date ?? '').trim()) return `${label}: la fecha es obligatoria`;
+
+    const amountSanitized = sanitizeAmount(item.amount, maxDecimals.value);
+    if (!amountSanitized.value || amountSanitized.error) return `${label}: importe invalido`;
+
+    if (item.amortization_method === 'straight_line') {
+      const years = Number(String(item.amortization_term_years ?? '').trim());
+      if (!Number.isInteger(years) || years <= 0) return `${label}: plazo de amortizacion invalido`;
+    }
+    if (item.amortization_method === 'manual') {
+      const manualSanitized = sanitizeAmount(item.manual_current_value, maxDecimals.value);
+      if (!manualSanitized.value || manualSanitized.error) {
+        return `${label}: valor actual manual invalido`;
+      }
+    }
+    if (item.capitalize_interest) {
+      const interestRaw = String(item.annual_interest_tae ?? '')
+        .trim()
+        .replace(',', '.');
+      const interest = Number(interestRaw);
+      if (!interestRaw || !Number.isFinite(interest) || interest < 0) {
+        return `${label}: TAE invalida`;
+      }
+    }
+  }
+  return '';
+});
 
 const amountError = computed(() => {
   const { error } = sanitizeAmount(form.amount, maxDecimals.value);
@@ -671,6 +843,7 @@ async function submit() {
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
   if (primaryHomeValuationError.value) return;
+  if (primaryHomeImprovementsError.value) return;
   if (liabilityDatesError.value) return;
   if (liabilityScheduleError.value) return;
 
@@ -753,6 +926,30 @@ async function submit() {
       String(form.building_annual_depreciation_percent ?? '').trim()
         ? String(form.building_annual_depreciation_percent).trim().replace(',', '.')
         : undefined,
+    improvements: showPrimaryHomeAutoValuationFields.value
+      ? primaryHomeImprovements.value.map((item) => ({
+          id: item.id,
+          name: String(item.name ?? '').trim(),
+          reform_date: String(item.reform_date ?? '').trim(),
+          amount: sanitizeAmount(item.amount, maxDecimals.value).value,
+          amortization_method: item.amortization_method,
+          amortization_term_years:
+            item.amortization_method === 'straight_line' &&
+            String(item.amortization_term_years ?? '').trim()
+              ? Number(String(item.amortization_term_years).trim())
+              : null,
+          annual_interest_tae: String(item.annual_interest_tae ?? '').trim()
+            ? String(item.annual_interest_tae).trim().replace(',', '.')
+            : null,
+          capitalize_interest: !!item.capitalize_interest,
+          manual_current_value:
+            item.amortization_method === 'manual' &&
+            String(item.manual_current_value ?? '').trim()
+              ? sanitizeAmount(item.manual_current_value, maxDecimals.value).value
+              : null,
+          notes: String(item.notes ?? '').trim(),
+        }))
+      : undefined,
     notes: form.notes,
     currency: form.currency,
     tracking_mode: form.tracking_mode,
@@ -792,6 +989,8 @@ async function submit() {
   form.land_annual_appreciation_percent = '3';
   form.building_annual_depreciation_percent = '1';
   primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+  primaryHomeImprovements.value = [];
+  expandedPrimaryHomeImprovementIndex.value = null;
   form.notes = '';
   form.currency = normalizedDefaultCurrency.value || '';
   form.ownership_id = null;
@@ -845,6 +1044,27 @@ watch(
     form.building_annual_depreciation_percent =
       initial.building_annual_depreciation_percent ?? '1';
     primaryHomeValuationProfile.value = detectPrimaryHomeValuationProfile();
+    primaryHomeImprovements.value = Array.isArray(initial.improvements)
+      ? initial.improvements.map((row) => ({
+          id: row.id,
+          name: row.name ?? '',
+          reform_date: row.reform_date ?? todayIsoDate(),
+          amount: formatAmountForEdit(row.amount ?? '', initial.currency ?? 'EUR'),
+          amortization_method: row.amortization_method ?? 'none',
+          amortization_term_years:
+            row.amortization_term_years == null ? '' : String(row.amortization_term_years),
+          annual_interest_tae: row.annual_interest_tae ?? '',
+          capitalize_interest: !!row.capitalize_interest,
+          manual_current_value: formatAmountForEdit(
+            row.manual_current_value ?? '',
+            initial.currency ?? 'EUR',
+          ),
+          notes: row.notes ?? '',
+        }))
+      : [];
+    expandedPrimaryHomeImprovementIndex.value = primaryHomeImprovements.value.length
+      ? primaryHomeImprovements.value.length - 1
+      : null;
     form.notes = initial.notes ?? '';
     form.currency = initial.currency ?? '';
     form.tracking_mode = initial.tracking_mode ?? 'manual';
@@ -855,6 +1075,25 @@ watch(
     financedAssetAutoMatched.value = false;
   },
   { immediate: true, deep: true },
+);
+
+watch(
+  () =>
+    primaryHomeImprovements.value.map((item) => ({
+      amortization_method: item.amortization_method,
+      annual_interest_tae: item.annual_interest_tae,
+    })),
+  () => {
+    for (const item of primaryHomeImprovements.value) {
+      if (item.amortization_method === 'straight_line' && !String(item.amortization_term_years ?? '').trim()) {
+        item.amortization_term_years = '10';
+      }
+      if (!canCapitalizeImprovementInterest(item) && item.capitalize_interest) {
+        item.capitalize_interest = false;
+      }
+    }
+  },
+  { deep: true },
 );
 
 watch(
@@ -898,6 +1137,8 @@ watch(
       form.land_annual_appreciation_percent = '3';
       form.building_annual_depreciation_percent = '1';
       primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+      primaryHomeImprovements.value = [];
+      expandedPrimaryHomeImprovementIndex.value = null;
     }
   },
 );
@@ -906,6 +1147,8 @@ watch(
   (model) => {
     if (model !== 'real_estate_auto') {
       primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+      primaryHomeImprovements.value = [];
+      expandedPrimaryHomeImprovementIndex.value = null;
       return;
     }
     if (primaryHomeValuationProfile.value !== PRIMARY_HOME_CUSTOM_PROFILE_VALUE) {
@@ -1122,6 +1365,115 @@ watch(
         <div v-if="showPrimaryHomeAutoValuationFields" class="ui-form-help">
           El perfil autocompleta tasas y no modifica el porcentaje de suelo.
         </div>
+        <div v-if="showPrimaryHomeAutoValuationFields" class="ui-item-form-subsection mt-2">
+          <div class="ui-item-form-section-head">
+            <div>
+              <div class="ui-item-form-section-title">Reformas capitalizables</div>
+              <div class="ui-item-form-section-subtitle">
+                Cada reforma suma valor a la vivienda y puede amortizarse.
+              </div>
+            </div>
+            <div class="ui-item-form-section-actions">
+              <button type="button" class="btn ui-item-form-mini-btn" @click="addPrimaryHomeImprovement">
+                Anadir reforma
+              </button>
+            </div>
+          </div>
+          <div v-if="!primaryHomeImprovements.length" class="ui-form-help">
+            Sin reformas registradas.
+          </div>
+          <div
+            v-for="(improvement, index) in primaryHomeImprovements"
+            :key="improvement.id ?? `new-${index}`"
+            class="ui-item-form-improvement-card"
+          >
+            <div class="ui-item-form-improvement-head">
+              <div class="ui-item-form-improvement-meta">
+                <div class="ui-item-form-section-title">{{ improvement.name || `Reforma ${index + 1}` }}</div>
+                <span class="subtle">
+                  {{ formatImprovementSummaryDate(improvement.reform_date) }} ·
+                  {{ formatImprovementSummaryAmount(improvement.amount, form.currency) }}
+                </span>
+              </div>
+              <div class="ui-item-form-improvement-actions">
+                <button
+                  type="button"
+                  class="btn ui-item-form-mini-btn"
+                  @click="removePrimaryHomeImprovement(index)"
+                >
+                  {{ improvementRemoveLabel(improvement) }}
+                </button>
+                <button
+                  type="button"
+                  class="icon-btn nw-cat-toggle"
+                  :aria-label="isImprovementExpanded(index) ? 'Compactar reforma' : 'Expandir reforma'"
+                  :title="isImprovementExpanded(index) ? 'Compactar reforma' : 'Expandir reforma'"
+                  @click="toggleImprovementExpanded(index)"
+                >
+                  <span v-if="isImprovementExpanded(index)" class="icon" aria-hidden="true">&#9662;</span>
+                  <span v-else class="icon" aria-hidden="true">&#9656;</span>
+                </button>
+              </div>
+            </div>
+            <div v-if="isImprovementExpanded(index)">
+              <div class="ui-item-form-inline-grid mt-2">
+                <label class="ui-item-form-field">
+                  <span class="ui-item-form-label">Nombre reforma</span>
+                  <input v-model="improvement.name" placeholder="Ej: Reforma cocina" class="input ui-data-field" />
+                </label>
+                <label class="ui-item-form-field">
+                  <span class="ui-item-form-label">Fecha</span>
+                  <input v-model="improvement.reform_date" type="date" class="input ui-data-field" />
+                </label>
+                <label class="ui-item-form-field">
+                  <span class="ui-item-form-label">
+                    Importe{{ currencySymbol(form.currency) ? ` (${currencySymbol(form.currency)})` : '' }}
+                  </span>
+                  <input v-model="improvement.amount" inputmode="decimal" placeholder="Ej: 12000" class="input ui-data-field" />
+                </label>
+                <label class="ui-item-form-field">
+                  <span class="ui-item-form-label">Amortizacion</span>
+                  <select v-model="improvement.amortization_method" class="select ui-data-field">
+                    <option
+                      v-for="opt in PRIMARY_HOME_IMPROVEMENT_AMORTIZATION_OPTIONS"
+                      :key="opt.value"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                </label>
+                <label v-if="improvement.amortization_method === 'straight_line'" class="ui-item-form-field">
+                  <span class="ui-item-form-label">Plazo amortizacion (anos)</span>
+                  <input v-model="improvement.amortization_term_years" inputmode="numeric" placeholder="Ej: 10" class="input ui-data-field" />
+                </label>
+                <label v-if="improvement.amortization_method === 'manual'" class="ui-item-form-field">
+                  <span class="ui-item-form-label">Valor actual manual</span>
+                  <input v-model="improvement.manual_current_value" inputmode="decimal" placeholder="Ej: 8500" class="input ui-data-field" />
+                </label>
+                <label class="ui-item-form-field">
+                  <span class="ui-item-form-label">TAE financiacion (%)</span>
+                  <input v-model="improvement.annual_interest_tae" inputmode="decimal" placeholder="Opcional" class="input ui-data-field" />
+                </label>
+              </div>
+              <label class="checkbox-row mt-1">
+                <input
+                  v-model="improvement.capitalize_interest"
+                  type="checkbox"
+                  :disabled="!canCapitalizeImprovementInterest(improvement)"
+                />
+                <span>Capitalizar TAE en valor de reforma</span>
+              </label>
+              <div v-if="!canCapitalizeImprovementInterest(improvement)" class="ui-form-help">
+                Disponible solo cuando la TAE de financiacion es mayor que 0.
+              </div>
+              <label class="ui-item-form-field mt-1">
+                <span class="ui-item-form-label">Notas</span>
+                <textarea v-model="improvement.notes" rows="2" class="textarea" placeholder="Notas de la reforma"></textarea>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       <label v-if="showAssetAnnualInterestInput" class="ui-item-form-field">
@@ -1237,7 +1589,7 @@ watch(
 
       <label class="ui-item-form-field ui-item-form-field-span-2">
         <span class="ui-item-form-label">Notas</span>
-        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea ui-data-field"></textarea>
+        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
       </label>
 
       <div class="ui-item-form-feedback ui-item-form-field-span-2">
@@ -1255,6 +1607,7 @@ watch(
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
         <div v-if="primaryHomeValuationError" class="ui-form-help ui-form-help-error">{{ primaryHomeValuationError }}</div>
+        <div v-if="primaryHomeImprovementsError" class="ui-form-help ui-form-help-error">{{ primaryHomeImprovementsError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
         <div v-if="liabilityScheduleError" class="ui-form-help ui-form-help-error">{{ liabilityScheduleError }}</div>
       </div>
@@ -1272,6 +1625,7 @@ watch(
               !!monthlyPaymentError ||
               !!assetAmortizationError ||
               !!primaryHomeValuationError ||
+              !!primaryHomeImprovementsError ||
               !!liabilityDatesError ||
               !!liabilityScheduleError
             "
@@ -1286,6 +1640,48 @@ watch(
 </template>
 
 <style scoped>
+.ui-item-form-subsection {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.ui-item-form-improvement-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.ui-item-form-improvement-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ui-item-form-improvement-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ui-item-form-improvement-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ui-item-form-section-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ui-item-form-mini-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 @media (min-width: 768px) {
   .ui-item-form-inline-grid.ui-item-form-inline-grid-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1297,4 +1693,3 @@ watch(
   }
 }
 </style>
-

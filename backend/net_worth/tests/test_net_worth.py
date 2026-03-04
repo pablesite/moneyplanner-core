@@ -15,7 +15,7 @@ from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
 from memberships.models import FamilyMember, Ownership, OwnershipSplit
-from ..models import Asset, Liability, LiquidityMonthlyCheckin
+from ..models import Asset, AssetImprovement, Liability, LiquidityMonthlyCheckin
 from ..serializers import (
     AssetSerializer,
     EmptySerializer,
@@ -494,6 +494,42 @@ class NetWorthServicesTests(TestCase):
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 1))
         self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("108.0473"))
 
+    def test_get_effective_asset_amount_for_auto_home_valuation_includes_improvements(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            initial_purchase_value=Decimal("100.00"),
+            valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
+            land_value_share_percent=Decimal("30.00"),
+            land_annual_appreciation_percent=Decimal("24.000"),
+            building_annual_depreciation_percent=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        AssetImprovement.objects.create(
+            asset=asset,
+            name="Reforma cocina",
+            reform_date=date(2025, 1, 1),
+            amount=Decimal("12.00"),
+            amortization_method=AssetImprovement.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=3,
+        )
+        AssetImprovement.objects.create(
+            asset=asset,
+            name="Aislamiento termico",
+            reform_date=date(2025, 7, 1),
+            amount=Decimal("6.00"),
+            amortization_method=AssetImprovement.AmortizationMethod.NONE,
+            annual_interest_tae=Decimal("12.00"),
+            capitalize_interest=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 1))
+        self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("122.4164"))
+
     def test_calculate_totals_uses_effective_asset_amount_for_auto_home_valuation(self):
         Asset.objects.create(
             user=self.user,
@@ -796,6 +832,97 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.data["valuation_model"], Asset.ValuationModel.REAL_ESTATE_AUTO)
         self.assertEqual(response.data["initial_purchase_value"], "100000.00000000")
         self.assertIn("effective_amount", response.data)
+
+    def test_asset_create_primary_home_auto_valuation_with_improvements(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Casa reformada",
+                "category": Asset.Category.REAL_ESTATE,
+                "subcategory": Asset.Subcategory.PRIMARY_HOME,
+                "currency": "EUR",
+                "start_date": "2025-01-01",
+                "amount": "100000.00",
+                "valuation_model": Asset.ValuationModel.REAL_ESTATE_AUTO,
+                "land_value_share_percent": "30.00",
+                "land_annual_appreciation_percent": "4.000",
+                "building_annual_depreciation_percent": "1.00",
+                "improvements": [
+                    {
+                        "name": "Reforma cocina",
+                        "reform_date": "2025-06-01",
+                        "amount": "15000.00",
+                        "amortization_method": "straight_line",
+                        "amortization_term_years": 15,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(len(response.data["improvements"]), 1)
+        self.assertEqual(response.data["improvements"][0]["name"], "Reforma cocina")
+
+    def test_asset_update_syncs_improvements_list(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            amount=Decimal("100000.00"),
+            valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
+            land_value_share_percent=Decimal("30.00"),
+            land_annual_appreciation_percent=Decimal("4.000"),
+            building_annual_depreciation_percent=Decimal("1.00"),
+            initial_purchase_value=Decimal("100000.00"),
+            is_active=True,
+        )
+        kept = AssetImprovement.objects.create(
+            asset=asset,
+            name="Suelo radiante",
+            reform_date=date(2025, 5, 1),
+            amount=Decimal("9000.00"),
+            amortization_method=AssetImprovement.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=20,
+        )
+        deleted = AssetImprovement.objects.create(
+            asset=asset,
+            name="Pintura inicial",
+            reform_date=date(2025, 4, 1),
+            amount=Decimal("1000.00"),
+            amortization_method=AssetImprovement.AmortizationMethod.NONE,
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/assets/{asset.id}/",
+            {
+                "improvements": [
+                    {
+                        "id": kept.id,
+                        "name": "Suelo radiante premium",
+                        "reform_date": "2025-05-01",
+                        "amount": "9500.00",
+                        "amortization_method": "straight_line",
+                        "amortization_term_years": 20,
+                    },
+                    {
+                        "name": "Aerotermia",
+                        "reform_date": "2026-01-10",
+                        "amount": "12000.00",
+                        "amortization_method": "none",
+                    },
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(len(response.data["improvements"]), 2)
+        kept.refresh_from_db()
+        self.assertEqual(kept.name, "Suelo radiante premium")
+        self.assertEqual(kept.amount, Decimal("9500.00"))
+        self.assertFalse(AssetImprovement.objects.filter(id=deleted.id).exists())
 
     def test_liability_create_rejects_expected_end_date_before_start_date(self):
         response = self.client.post(

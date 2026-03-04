@@ -2,11 +2,18 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
+from .models import (
+    Asset,
+    AssetImprovement,
+    Liability,
+    LiquidityMonthlyCheckin,
+    NetWorthSnapshot,
+)
 from .services_assets import (
     create_asset_for_user,
     get_effective_asset_amount,
     get_amount_base_value,
+    validate_asset_improvement_payload,
     validate_asset_payload,
 )
 from .services_liabilities import (
@@ -24,9 +31,62 @@ class EmptySerializer(serializers.Serializer):
     pass
 
 
+class AssetImprovementSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = AssetImprovement
+        fields = [
+            "id",
+            "name",
+            "reform_date",
+            "amount",
+            "amortization_method",
+            "amortization_term_years",
+            "annual_interest_tae",
+            "capitalize_interest",
+            "manual_current_value",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def validate(self, attrs):
+        amortization_method = attrs.get(
+            "amortization_method",
+            getattr(self.instance, "amortization_method", AssetImprovement.AmortizationMethod.NONE),
+        )
+        amortization_term_years = attrs.get(
+            "amortization_term_years",
+            getattr(self.instance, "amortization_term_years", None),
+        )
+        capitalize_interest = attrs.get(
+            "capitalize_interest",
+            getattr(self.instance, "capitalize_interest", False),
+        )
+        annual_interest_tae = attrs.get(
+            "annual_interest_tae",
+            getattr(self.instance, "annual_interest_tae", None),
+        )
+        manual_current_value = attrs.get(
+            "manual_current_value",
+            getattr(self.instance, "manual_current_value", None),
+        )
+        validate_asset_improvement_payload(
+            amortization_method=amortization_method,
+            amortization_term_years=amortization_term_years,
+            capitalize_interest=capitalize_interest,
+            annual_interest_tae=annual_interest_tae,
+            manual_current_value=manual_current_value,
+        )
+        return attrs
+
+
 class AssetSerializer(serializers.ModelSerializer):
     amount_base = serializers.SerializerMethodField()
     effective_amount = serializers.SerializerMethodField()
+    improvements = AssetImprovementSerializer(many=True, required=False)
 
     class Meta:
         model = Asset
@@ -46,6 +106,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "land_value_share_percent",
             "land_annual_appreciation_percent",
             "building_annual_depreciation_percent",
+            "improvements",
             "annual_interest_tae",
             "estimated_average_balance_for_interest",
             "deposit_term_months",
@@ -108,6 +169,16 @@ class AssetSerializer(serializers.ModelSerializer):
             attrs["land_value_share_percent"] = None
             attrs["land_annual_appreciation_percent"] = None
             attrs["building_annual_depreciation_percent"] = None
+            if attrs.get("improvements"):
+                raise serializers.ValidationError(
+                    {
+                        "improvements": (
+                            "Solo disponibles para vivienda habitual con valoracion automatica."
+                        )
+                    }
+                )
+            if "improvements" not in attrs and self.instance is not None:
+                attrs["improvements"] = []
         validate_asset_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -138,7 +209,56 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context["request"]
-        return create_asset_for_user(user=request.user, validated_data=validated_data)
+        improvements_data = validated_data.pop("improvements", [])
+        asset = create_asset_for_user(user=request.user, validated_data=validated_data)
+        self._sync_improvements(asset=asset, improvements_data=improvements_data)
+        return asset
+
+    def update(self, instance, validated_data):
+        improvements_data = validated_data.pop("improvements", None)
+        asset = super().update(instance, validated_data)
+        if improvements_data is not None:
+            self._sync_improvements(asset=asset, improvements_data=improvements_data)
+        return asset
+
+    def _sync_improvements(self, *, asset: Asset, improvements_data: list[dict]) -> None:
+        if (
+            asset.category != Asset.Category.REAL_ESTATE
+            or asset.subcategory != Asset.Subcategory.PRIMARY_HOME
+            or asset.valuation_model != Asset.ValuationModel.REAL_ESTATE_AUTO
+        ):
+            if improvements_data:
+                raise serializers.ValidationError(
+                    {
+                        "improvements": (
+                            "Solo disponibles para vivienda habitual con valoracion automatica."
+                        )
+                    }
+                )
+            asset.improvements.all().delete()
+            return
+
+        existing_by_id = {row.id: row for row in asset.improvements.all()}
+        seen_ids: set[int] = set()
+
+        for row in improvements_data:
+            improvement_id = row.pop("id", None)
+            if improvement_id is None:
+                AssetImprovement.objects.create(asset=asset, **row)
+                continue
+            current = existing_by_id.get(improvement_id)
+            if current is None:
+                raise serializers.ValidationError(
+                    {"improvements": f"Reforma id={improvement_id} no encontrada en este activo."}
+                )
+            seen_ids.add(improvement_id)
+            for key, value in row.items():
+                setattr(current, key, value)
+            current.save()
+
+        for improvement_id, current in existing_by_id.items():
+            if improvement_id not in seen_ids:
+                current.delete()
 
 
 class NetWorthSnapshotSerializer(serializers.ModelSerializer):

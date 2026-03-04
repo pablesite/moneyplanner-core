@@ -220,6 +220,7 @@ export function useNetWorthViewState() {
       land_value_share_percent: item.land_value_share_percent ?? '',
       land_annual_appreciation_percent: item.land_annual_appreciation_percent ?? '',
       building_annual_depreciation_percent: item.building_annual_depreciation_percent ?? '',
+      improvements: item.improvements ?? [],
       notes: item.notes ?? '',
       currency: item.currency ?? '',
       tracking_mode: item.tracking_mode ?? 'manual',

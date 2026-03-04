@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from core.services import convert_currency
 
-from .models import ASSET_SUBCATEGORY_MAP, Asset
+from .models import ASSET_SUBCATEGORY_MAP, Asset, AssetImprovement
 
 ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
     Asset.Subcategory.BANK_ACCOUNT,
@@ -132,6 +132,45 @@ def create_asset_for_user(*, user, validated_data: dict) -> Asset:
     return Asset.objects.create(user=user, **validated_data)
 
 
+def validate_asset_improvement_payload(
+    *,
+    amortization_method: str | None,
+    amortization_term_years,
+    capitalize_interest: bool,
+    annual_interest_tae,
+    manual_current_value,
+) -> None:
+    if amortization_method == AssetImprovement.AmortizationMethod.STRAIGHT_LINE:
+        if amortization_term_years is None:
+            raise DRFValidationError(
+                {"amortization_term_years": "Requerido si la reforma amortiza en lineal."}
+            )
+    else:
+        if amortization_term_years is not None:
+            raise DRFValidationError(
+                {
+                    "amortization_term_years": (
+                        "Solo aplica cuando amortization_method=straight_line."
+                    )
+                }
+            )
+
+    if amortization_method == AssetImprovement.AmortizationMethod.MANUAL:
+        if manual_current_value is None:
+            raise DRFValidationError(
+                {"manual_current_value": "Requerido si amortization_method=manual."}
+            )
+    elif manual_current_value is not None:
+        raise DRFValidationError(
+            {"manual_current_value": "Solo aplica cuando amortization_method=manual."}
+        )
+
+    if capitalize_interest and annual_interest_tae is None:
+        raise DRFValidationError(
+            {"annual_interest_tae": "Requerido si capitalize_interest=true."}
+        )
+
+
 def _whole_months_elapsed(*, start: date, end: date) -> int:
     if end <= start:
         return 0
@@ -178,7 +217,46 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
     building_amount = building_initial * (building_decay_factor**months)
     if building_amount < 0:
         building_amount = Decimal("0")
-    return land_amount + building_amount
+
+    improvements_total = Decimal("0")
+    for improvement in asset.improvements.all():
+        improvements_total += get_effective_asset_improvement_amount(
+            improvement=improvement,
+            as_of_date=ref_date,
+        )
+    return land_amount + building_amount + improvements_total
+
+
+def get_effective_asset_improvement_amount(
+    *, improvement: AssetImprovement, as_of_date: date | None = None
+) -> Decimal:
+    ref_date = as_of_date or timezone.localdate()
+    if ref_date < improvement.reform_date:
+        return Decimal("0")
+
+    months = _whole_months_elapsed(start=improvement.reform_date, end=ref_date)
+    amount = improvement.amount
+
+    if improvement.capitalize_interest and improvement.annual_interest_tae is not None:
+        monthly_rate = improvement.annual_interest_tae / Decimal("1200")
+        amount = amount * ((Decimal("1") + monthly_rate) ** months)
+
+    if improvement.amortization_method == AssetImprovement.AmortizationMethod.STRAIGHT_LINE:
+        term_years = improvement.amortization_term_years or 0
+        if term_years <= 0:
+            return amount
+        life_months = term_years * 12
+        remaining_ratio = Decimal("1") - (
+            Decimal(str(months)) / Decimal(str(life_months))
+        )
+        if remaining_ratio < 0:
+            remaining_ratio = Decimal("0")
+        return amount * remaining_ratio
+
+    if improvement.amortization_method == AssetImprovement.AmortizationMethod.MANUAL:
+        return improvement.manual_current_value or amount
+
+    return amount
 
 
 def get_amount_base_value(
