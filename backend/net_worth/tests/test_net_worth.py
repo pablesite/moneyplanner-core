@@ -182,6 +182,46 @@ class NetWorthServicesTests(TestCase):
                 initial_purchase_value=None,
             )
 
+    def test_validate_asset_payload_accepts_amount_as_fallback_purchase_value_for_amortization(
+        self,
+    ):
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            accounting_account_id=None,
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.TECHNOLOGY,
+            annual_interest_tae=None,
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=4,
+            initial_purchase_value=None,
+            amount=Decimal("1800.00"),
+        )
+
+    def test_validate_asset_payload_allows_missing_term_for_vehicle_profile(self):
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            accounting_account_id=None,
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.VEHICLES,
+            annual_interest_tae=None,
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=None,
+            initial_purchase_value=Decimal("15000.00"),
+        )
+
+    def test_validate_asset_payload_allows_manual_without_term(self):
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            accounting_account_id=None,
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+            annual_interest_tae=None,
+            amortization_method=Asset.AmortizationMethod.MANUAL,
+            amortization_term_years=None,
+            initial_purchase_value=None,
+            amount=Decimal("5000.00"),
+        )
+
     def test_validate_asset_payload_requires_home_parameters_for_auto_valuation(self):
         with self.assertRaises(DRFValidationError):
             validate_asset_payload(
@@ -493,6 +533,121 @@ class NetWorthServicesTests(TestCase):
         )
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 1))
         self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("108.0473"))
+
+    def test_get_effective_asset_amount_applies_straight_line_amortization(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cama",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("10000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=10,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
+        self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("0.0000"))
+
+    def test_get_effective_asset_amount_applies_ipc_growth_for_furnishings(self):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Sofa",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("10000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=20,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("6000.00"))
+
+    def test_get_effective_asset_amount_applies_residual_floor_for_vehicles_and_sports(self):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2056, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        vehicle = Asset.objects.create(
+            user=self.user,
+            name="Coche",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.VEHICLES,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("10000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=40,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+        bike = Asset.objects.create(
+            user=self.user,
+            name="Bici carretera",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.SPORTS_EQUIPMENT,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("10000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=40,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+
+        vehicle_effective = get_effective_asset_amount(asset=vehicle, as_of_date=date(2056, 2, 1))
+        bike_effective = get_effective_asset_amount(asset=bike, as_of_date=date(2056, 2, 1))
+
+        self.assertEqual(vehicle_effective.quantize(Decimal("0.01")), Decimal("1800.00"))
+        self.assertEqual(bike_effective.quantize(Decimal("0.01")), Decimal("2400.00"))
+
+    def test_get_effective_asset_amount_uses_amount_as_purchase_base_for_furnishings(self):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Sofa legacy",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("20000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=20,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("6000.00"))
 
     def test_get_effective_asset_amount_for_auto_home_valuation_includes_improvements(self):
         asset = Asset.objects.create(
@@ -810,6 +965,112 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.data["initial_purchase_value"], "1800.00000000")
         self.assertEqual(response.data["amortization_method"], "straight_line")
         self.assertEqual(response.data["amortization_term_years"], 4)
+
+    def test_asset_create_uses_amount_as_initial_purchase_when_amortization_is_defined(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Monitor",
+                "category": Asset.Category.FURNISHINGS,
+                "subcategory": Asset.Subcategory.TECHNOLOGY,
+                "currency": "EUR",
+                "start_date": "2024-03-01",
+                "amortization_method": Asset.AmortizationMethod.STRAIGHT_LINE,
+                "amortization_term_years": 4,
+                "amount": "900.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["initial_purchase_value"], "900.00000000")
+        self.assertEqual(response.data["amortization_method"], "straight_line")
+        self.assertEqual(response.data["amortization_term_years"], 4)
+
+    def test_asset_create_returns_amortized_effective_amount_for_straight_line_assets(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cama",
+                "category": Asset.Category.FURNISHINGS,
+                "subcategory": Asset.Subcategory.HOME_FURNISHINGS,
+                "currency": "EUR",
+                "start_date": "2016-02-01",
+                "amortization_method": Asset.AmortizationMethod.STRAIGHT_LINE,
+                "amortization_term_years": 10,
+                "amount": "10000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Decimal(response.data["effective_amount"]), Decimal("0"))
+
+    @patch("net_worth.services_assets.timezone.localdate", return_value=date(2026, 2, 1))
+    def test_asset_create_returns_ipc_adjusted_effective_amount_for_furnishings(
+        self, _mock_localdate
+    ):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Sofa",
+                "category": Asset.Category.FURNISHINGS,
+                "subcategory": Asset.Subcategory.HOME_FURNISHINGS,
+                "currency": "EUR",
+                "start_date": "2016-02-01",
+                "amortization_method": Asset.AmortizationMethod.STRAIGHT_LINE,
+                "amortization_term_years": 20,
+                "amount": "10000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(
+            Decimal(response.data["effective_amount"]).quantize(Decimal("0.01")),
+            Decimal("6000.00"),
+        )
+
+    @patch("net_worth.services_assets.timezone.localdate", return_value=date(2056, 2, 1))
+    def test_asset_create_returns_residual_floor_effective_amount_for_vehicle(
+        self, _mock_localdate
+    ):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2056, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Coche",
+                "category": Asset.Category.FURNISHINGS,
+                "subcategory": Asset.Subcategory.VEHICLES,
+                "currency": "EUR",
+                "start_date": "2016-02-01",
+                "amortization_method": Asset.AmortizationMethod.STRAIGHT_LINE,
+                "amount": "10000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(
+            Decimal(response.data["effective_amount"]).quantize(Decimal("0.01")),
+            Decimal("1800.00"),
+        )
+        self.assertEqual(response.data["amortization_term_years"], 20)
 
     def test_asset_create_primary_home_auto_valuation(self):
         response = self.client.post(

@@ -87,6 +87,160 @@ describe('ItemForm (saas)', () => {
     expect(wrapper.text()).toContain('Importe inv');
   });
 
+  it('shows required field message and blocks submit when name is missing', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'technology', label: 'Tecnologia' }],
+        onSubmit,
+      },
+    });
+
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('technology');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('10000');
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Nombre obligatorio');
+  });
+
+  it('allows straight-line amortization without initial purchase value when amount is provided', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'technology', label: 'Tecnologia' }],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Portatil');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('technology');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('1800');
+
+    const amortizationMethodSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Sin amortizacion') && s.text().includes('Lineal'))!;
+    await amortizationMethodSelect.setValue('straight_line');
+    await wrapper.find('input[placeholder="Ej: 10"]').setValue('4');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.amount).toBe('1800');
+    expect(payload.amortization_method).toBe('straight_line');
+    expect(payload.amortization_term_years).toBe(4);
+    expect(payload.initial_purchase_value).toBeUndefined();
+  });
+
+  it('shows degressive residual hint for sports equipment furnishings', async () => {
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' }],
+        onSubmit: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Bici');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('sports_equipment');
+
+    expect(wrapper.text()).toContain('decreciente + residual por subcategoria');
+    expect(wrapper.text()).toContain('suelo residual del 20%');
+  });
+
+  it('does not render initial purchase value field for furnishings amortization', async () => {
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'vehicles', label: 'Vehiculos' }],
+        onSubmit: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Coche');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('vehicles');
+
+    expect(wrapper.text()).not.toContain('Valor compra inicial');
+  });
+
+  it('forces non-amortized method for jewelry furnishings', async () => {
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'jewelry', label: 'Joyeria' }],
+        onSubmit: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Anillo');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('jewelry');
+
+    const amortizationMethodSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Sin amortizacion (joyeria)'))!;
+    expect(amortizationMethodSelect.text()).not.toContain('Lineal');
+    expect(amortizationMethodSelect.text()).not.toContain('Manual');
+    expect(wrapper.text()).toContain("En 'Joyeria' no se aplica amortizacion automatica.");
+  });
+
+  it('submits sports equipment without manual term years', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'furnishings', label: 'Mobiliario' }],
+        subcategories: [{ category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' }],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Bici');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('furnishings');
+    await selects[1]!.setValue('sports_equipment');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('1800');
+
+    const amortizationMethodSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('decreciente + residual por subcategoria'))!;
+    await amortizationMethodSelect.setValue('straight_line');
+
+    expect(wrapper.text()).not.toContain('Plazo de amortizacion (anos) obligatorio');
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.amortization_method).toBe('straight_line');
+    expect(payload.amortization_term_years).toBeUndefined();
+  });
+
   it('requires deposit duration for short-term deposits', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {
