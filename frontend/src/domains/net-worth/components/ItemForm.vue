@@ -179,7 +179,6 @@ const LIABILITY_CATEGORY_DEFAULTS: Record<
 const ASSET_AMORTIZATION_METHODS = [
   { value: 'none', label: 'Sin amortizacion' },
   { value: 'straight_line', label: 'Lineal' },
-  { value: 'manual', label: 'Manual' },
 ];
 const PRIMARY_HOME_VALUATION_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
@@ -315,6 +314,9 @@ const showMortgageFeeFields = computed(
 const showAssetAmortizationFields = computed(
   () => isAssetForm.value && String(form.category ?? '').trim() === 'furnishings',
 );
+const isJewelryFurnishings = computed(
+  () => showAssetAmortizationFields.value && String(form.subcategory ?? '').trim() === 'jewelry',
+);
 const showPrimaryHomeValuationFields = computed(
   () =>
     isAssetForm.value &&
@@ -325,7 +327,49 @@ const showPrimaryHomeAutoValuationFields = computed(
   () => showPrimaryHomeValuationFields.value && form.valuation_model === 'real_estate_auto',
 );
 const requiresAssetAmortizationInputs = computed(
-  () => showAssetAmortizationFields.value && form.amortization_method !== 'none',
+  () =>
+    showAssetAmortizationFields.value &&
+    String(form.amortization_method ?? '').trim() === 'straight_line',
+);
+const useDegressiveResidualProfileForFurnishings = computed(() => {
+  if (!showAssetAmortizationFields.value) return false;
+  const subcategory = String(form.subcategory ?? '').trim();
+  return subcategory === 'vehicles' || subcategory === 'sports_equipment';
+});
+const assetAmortizationMethodOptions = computed(() => {
+  if (isJewelryFurnishings.value) {
+    return [{ value: 'none', label: 'Sin amortizacion (joyeria)' }];
+  }
+  if (!useDegressiveResidualProfileForFurnishings.value) return ASSET_AMORTIZATION_METHODS;
+  return ASSET_AMORTIZATION_METHODS.map((option) =>
+    option.value === 'straight_line'
+      ? { ...option, label: 'Lineal (decreciente + residual por subcategoria)' }
+      : option,
+  );
+});
+const assetAmortizationModelHint = computed(() => {
+  if (isJewelryFurnishings.value) {
+    return "En 'Joyeria' no se aplica amortizacion automatica.";
+  }
+  if (!useDegressiveResidualProfileForFurnishings.value) return '';
+  const subcategory = String(form.subcategory ?? '').trim();
+  if (subcategory === 'vehicles') {
+    return "En 'Vehiculos', este metodo aplica curva decreciente con suelo residual del 15%.";
+  }
+  if (subcategory === 'sports_equipment') {
+    return "En 'Equipamiento deportivo', este metodo aplica curva decreciente con suelo residual del 20%.";
+  }
+  return '';
+});
+const defaultDegressiveTermYearsForFurnishings = computed(() => {
+  if (!useDegressiveResidualProfileForFurnishings.value) return null;
+  const subcategory = String(form.subcategory ?? '').trim();
+  if (subcategory === 'vehicles') return 20;
+  if (subcategory === 'sports_equipment') return 15;
+  return null;
+});
+const requiresAssetAmortizationTermInput = computed(
+  () => requiresAssetAmortizationInputs.value && !useDegressiveResidualProfileForFurnishings.value,
 );
 const financedAssetSuggestion = computed(() => {
   if (!showFinancedAsset.value) return null;
@@ -391,6 +435,20 @@ watch(
     if (!props.subcategories) return;
     const valid = subcategoriesForCategory.value.some((s) => s.value === form.subcategory);
     if (!valid) form.subcategory = '';
+  },
+);
+watch(
+  () => form.subcategory,
+  () => {
+    if (showAssetAmortizationFields.value) {
+      const valid = new Set(assetAmortizationMethodOptions.value.map((opt) => opt.value));
+      if (!valid.has(String(form.amortization_method ?? '').trim())) {
+        form.amortization_method = 'none';
+      }
+    }
+    if (!isJewelryFurnishings.value) return;
+    form.amortization_method = 'none';
+    form.amortization_term_years = '';
   },
 );
 
@@ -706,15 +764,28 @@ const monthlyPaymentError = computed(() => {
   const { error } = sanitizeAmount(raw, maxDecimals.value);
   return error;
 });
+const requiredFieldsError = computed(() => {
+  if (!String(form.name ?? '').trim()) return 'Nombre obligatorio';
+  if (!String(form.category ?? '').trim()) return 'Categoria obligatoria';
+  if (props.subcategories && !String(form.subcategory ?? '').trim()) {
+    return 'Subcategoria obligatoria';
+  }
+  if (!String(form.start_date ?? '').trim()) return 'Fecha inicio obligatoria';
+  if (!String(form.amount ?? '').trim()) return 'Importe obligatorio';
+  if (!String(form.currency ?? '').trim()) return 'Moneda obligatoria';
+  return '';
+});
 const assetAmortizationError = computed(() => {
   if (!requiresAssetAmortizationInputs.value) return '';
-  const purchase = String(form.initial_purchase_value ?? '').trim();
-  if (!purchase) return 'Valor de compra inicial obligatorio si hay amortizacion';
-  const term = String(form.amortization_term_years ?? '').trim();
-  if (!term) return 'Plazo de amortizacion (anos) obligatorio';
-  const years = Number(term);
-  if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortizacion invalido';
-  const normalizedPurchase = sanitizeAmount(purchase, maxDecimals.value);
+  const amount = String(form.amount ?? '').trim();
+  if (!amount) return 'Importe obligatorio para modelar amortizacion';
+  if (requiresAssetAmortizationTermInput.value) {
+    const term = String(form.amortization_term_years ?? '').trim();
+    if (!term) return 'Plazo de amortizacion (anos) obligatorio';
+    const years = Number(term);
+    if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortizacion invalido';
+  }
+  const normalizedPurchase = sanitizeAmount(amount, maxDecimals.value);
   if (!normalizedPurchase.value || normalizedPurchase.error) return 'Valor de compra invalido';
   return '';
 });
@@ -835,8 +906,7 @@ const liabilityTermFieldHint = computed(() => {
 });
 
 async function submit() {
-  if (!form.name || !form.category || !form.currency || !form.amount || !form.start_date) return;
-  if (props.subcategories && !form.subcategory) return;
+  if (requiredFieldsError.value) return;
   if (annualInterestError.value) return;
   if (estimatedAverageBalanceForInterestError.value) return;
   if (depositTermMonthsError.value) return;
@@ -902,13 +972,9 @@ async function submit() {
       showMortgageFeeFields.value && String(form.linked_products_monthly_cost ?? '').trim()
         ? sanitizeAmount(form.linked_products_monthly_cost, maxDecimals.value).value
         : undefined,
-    initial_purchase_value:
-      showAssetAmortizationFields.value && String(form.initial_purchase_value ?? '').trim()
-        ? sanitizeAmount(form.initial_purchase_value, maxDecimals.value).value
-        : undefined,
     amortization_method: showAssetAmortizationFields.value ? form.amortization_method : undefined,
     amortization_term_years:
-      requiresAssetAmortizationInputs.value && String(form.amortization_term_years ?? '').trim()
+      requiresAssetAmortizationTermInput.value && String(form.amortization_term_years ?? '').trim()
         ? Number(String(form.amortization_term_years).trim())
         : undefined,
     valuation_model: showPrimaryHomeValuationFields.value ? form.valuation_model : undefined,
@@ -1566,9 +1632,13 @@ watch(
       <div v-if="showAssetAmortizationFields" class="ui-item-form-section ui-item-form-field-span-2">
         <div class="ui-item-form-section-head"><div class="ui-item-form-section-title">Amortización del activo</div></div>
         <div class="ui-item-form-inline-grid">
-          <label class="ui-item-form-field"><span class="ui-item-form-label">Método</span><select v-model="form.amortization_method" class="select ui-data-field"><option v-for="opt in ASSET_AMORTIZATION_METHODS" :key="opt.value" :value="opt.value">{{ opt.label }}</option></select></label>
-          <label class="ui-item-form-field"><span class="ui-item-form-label">Valor compra inicial</span><input v-model="form.initial_purchase_value" inputmode="decimal" placeholder="Opcional" class="input ui-data-field" /></label>
-          <label v-if="requiresAssetAmortizationInputs" class="ui-item-form-field"><span class="ui-item-form-label">Plazo (años)</span><input v-model="form.amortization_term_years" inputmode="numeric" placeholder="Ej: 10" class="input ui-data-field" /></label>
+          <label class="ui-item-form-field"><span class="ui-item-form-label">Método</span><select v-model="form.amortization_method" class="select ui-data-field"><option v-for="opt in assetAmortizationMethodOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option></select></label>
+          <label v-if="requiresAssetAmortizationTermInput" class="ui-item-form-field"><span class="ui-item-form-label">Plazo (años)</span><input v-model="form.amortization_term_years" inputmode="numeric" placeholder="Ej: 10" class="input ui-data-field" /></label>
+        </div>
+        <div class="ui-form-help">Se usa el Importe como valor de compra inicial del activo.</div>
+        <div v-if="assetAmortizationModelHint" class="ui-form-help">{{ assetAmortizationModelHint }}</div>
+        <div v-if="defaultDegressiveTermYearsForFurnishings != null" class="ui-form-help">
+          Plazo configurado automaticamente para esta subcategoria: {{ defaultDegressiveTermYearsForFurnishings }} años.
         </div>
       </div>
 
@@ -1589,7 +1659,7 @@ watch(
 
       <label class="ui-item-form-field ui-item-form-field-span-2">
         <span class="ui-item-form-label">Notas</span>
-        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea"></textarea>
+        <textarea v-model="form.notes" placeholder="Notas" rows="2" class="textarea ui-data-field"></textarea>
       </label>
 
       <div class="ui-item-form-feedback ui-item-form-field-span-2">
@@ -1604,6 +1674,7 @@ watch(
         <div v-if="depositTermMonthsError" class="ui-form-help ui-form-help-error">
           {{ depositTermMonthsError }}
         </div>
+        <div v-if="requiredFieldsError" class="ui-form-help ui-form-help-error">{{ requiredFieldsError }}</div>
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
         <div v-if="primaryHomeValuationError" class="ui-form-help ui-form-help-error">{{ primaryHomeValuationError }}</div>
@@ -1618,6 +1689,7 @@ watch(
           <button
             class="btn btn-primary ui-form-action-btn"
             :disabled="
+              !!requiredFieldsError ||
               !!amountError ||
               !!annualInterestError ||
               !!estimatedAverageBalanceForInterestError ||

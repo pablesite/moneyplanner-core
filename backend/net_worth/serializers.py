@@ -11,6 +11,7 @@ from .models import (
 )
 from .services_assets import (
     create_asset_for_user,
+    get_default_amortization_term_years,
     get_effective_asset_amount,
     get_amount_base_value,
     validate_asset_improvement_payload,
@@ -144,6 +145,16 @@ class AssetSerializer(serializers.ModelSerializer):
         amortization_term_years = attrs.get(
             "amortization_term_years", getattr(self.instance, "amortization_term_years", None)
         )
+        if amortization_term_years is None:
+            default_term_years = get_default_amortization_term_years(
+                category=category,
+                subcategory=subcategory,
+                amortization_method=amortization_method,
+            )
+            if default_term_years is not None:
+                amortization_term_years = default_term_years
+                attrs["amortization_term_years"] = default_term_years
+        amount = attrs.get("amount", getattr(self.instance, "amount", None))
         initial_purchase_value = attrs.get(
             "initial_purchase_value", getattr(self.instance, "initial_purchase_value", None)
         )
@@ -161,6 +172,15 @@ class AssetSerializer(serializers.ModelSerializer):
             "building_annual_depreciation_percent",
             getattr(self.instance, "building_annual_depreciation_percent", None),
         )
+        if (
+            amortization_method
+            and amortization_method != Asset.AmortizationMethod.NONE
+            and initial_purchase_value is None
+            and amount is not None
+        ):
+            initial_purchase_value = amount
+            attrs["initial_purchase_value"] = amount
+
         if valuation_model == Asset.ValuationModel.REAL_ESTATE_AUTO:
             if initial_purchase_value is None and attrs.get("amount") is not None:
                 initial_purchase_value = attrs["amount"]
@@ -188,6 +208,7 @@ class AssetSerializer(serializers.ModelSerializer):
             amortization_method=amortization_method,
             amortization_term_years=amortization_term_years,
             initial_purchase_value=initial_purchase_value,
+            amount=amount,
             valuation_model=valuation_model,
             land_value_share_percent=land_value_share_percent,
             land_annual_appreciation_percent=land_annual_appreciation_percent,
