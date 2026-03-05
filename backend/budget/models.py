@@ -111,6 +111,13 @@ class AnnualExpenseEntry(models.Model):
         blank=True,
         related_name="generated_annual_expense_entries",
     )
+    source_asset = models.ForeignKey(
+        "net_worth.Asset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="generated_annual_expense_entries",
+    )
     is_system_generated = models.BooleanField(default=False)
     name = models.CharField(max_length=140)
     category = models.CharField(max_length=32, choices=Category.choices)
@@ -149,6 +156,7 @@ class AnnualExpenseEntry(models.Model):
             models.Index(fields=["user", "category"]),
             models.Index(fields=["user", "subcategory"]),
             models.Index(fields=["source_liability"], name="budget_ae_src_liab_idx"),
+            models.Index(fields=["source_asset"], name="budget_ae_src_asset_idx"),
         ]
 
     def __str__(self) -> str:

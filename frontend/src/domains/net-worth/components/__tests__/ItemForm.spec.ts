@@ -593,4 +593,165 @@ describe('ItemForm (saas)', () => {
       }),
     );
   });
+
+  it('maps non-habitual real estate usage to rental subcategory on submit', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'real_estate', label: 'Inmuebles' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+          { category: 'real_estate', value: 'second_home', label: 'Vivienda no habitual' },
+          { category: 'real_estate', value: 'rental', label: 'Vivienda no habitual (alquiler)' },
+        ],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Apartamento playa');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('real_estate');
+    await selects[1]!.setValue('second_home');
+    const usageSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Propio') && s.text().includes('Alquiler'))!;
+    await usageSelect.setValue('rental');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('120000');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'real_estate',
+        subcategory: 'rental',
+      }),
+    );
+  });
+
+  it('allows auto valuation fields for non-habitual real estate', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'real_estate', label: 'Inmuebles' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+          { category: 'real_estate', value: 'second_home', label: 'Vivienda no habitual' },
+          { category: 'real_estate', value: 'rental', label: 'Vivienda no habitual (alquiler)' },
+        ],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Atico');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('real_estate');
+    await selects[1]!.setValue('second_home');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('200000');
+
+    const modelSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+    await modelSelect.setValue('real_estate_auto');
+    await wrapper.find('input[placeholder="Ej: 30"]').setValue('40');
+    await wrapper.find('input[placeholder="Ej: 3"]').setValue('5');
+    await wrapper.find('input[placeholder="Ej: 1"]').setValue('1.1');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'real_estate',
+        subcategory: 'second_home',
+        valuation_model: 'real_estate_auto',
+        land_value_share_percent: '40',
+        land_annual_appreciation_percent: '5',
+        building_annual_depreciation_percent: '1.1',
+      }),
+    );
+  });
+
+  it('defaults auto valuation profile to dynamic values', async () => {
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'real_estate', label: 'Inmuebles' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+          { category: 'real_estate', value: 'second_home', label: 'Vivienda no habitual' },
+        ],
+        onSubmit: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Piso');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('real_estate');
+    await selects[1]!.setValue('second_home');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('180000');
+
+    const modelSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+    await modelSelect.setValue('real_estate_auto');
+
+    const profileSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Dinamico') && s.text().includes('Personalizado'))!;
+    expect((profileSelect.element as HTMLSelectElement).value).toBe('dynamic');
+    expect((wrapper.find('input[placeholder="Ej: 3"]').element as HTMLInputElement).value).toBe('8');
+    expect((wrapper.find('input[placeholder="Ej: 1"]').element as HTMLInputElement).value).toBe('0.2');
+  });
+
+  it('submits periodic contribution fields for investment assets', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'investments', label: 'Inversiones' }],
+        subcategories: [{ category: 'investments', value: 'funds', label: 'Fondos' }],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Reserva vivienda');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('investments');
+    await selects[1]!.setValue('funds');
+    const modeSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'))!;
+    await modeSelect.setValue('periodic_contribution');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('5000');
+    await wrapper.find('input[placeholder="Ej: 500"]').setValue('300');
+
+    const dateInputs = wrapper.findAll('input[type="date"]');
+    await dateInputs[0]!.setValue('2026-01-15');
+    await dateInputs[1]!.setValue('2027-12-15');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'investments',
+        investment_contribution_mode: 'periodic_contribution',
+        expected_end_date: '2027-12-15',
+        monthly_contribution_amount: '300',
+        amount: '5000',
+        initial_purchase_value: '5000',
+      }),
+    );
+  });
 });

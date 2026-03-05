@@ -45,8 +45,8 @@ const assetSubcategories = [
   { category: 'investments', value: 'other', label: 'Otros' },
 
   { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
-  { category: 'real_estate', value: 'second_home', label: 'Segunda vivienda' },
-  { category: 'real_estate', value: 'rental', label: 'Rentas' },
+  { category: 'real_estate', value: 'second_home', label: 'Vivienda no habitual' },
+  { category: 'real_estate', value: 'rental', label: 'Vivienda no habitual (alquiler)' },
   { category: 'real_estate', value: 'other', label: 'Otros' },
 
   { category: 'furnishings', value: 'vehicles', label: 'Vehículos' },
@@ -205,6 +205,8 @@ export function useNetWorthViewState() {
       monthly_payment_amount: item.monthly_payment_amount ?? '',
       start_date: item.start_date ?? '',
       expected_end_date: item.expected_end_date ?? '',
+      investment_contribution_mode: item.investment_contribution_mode ?? 'one_time',
+      monthly_contribution_amount: item.monthly_contribution_amount ?? '',
       term_months: item.term_months ?? '',
       rate_type: item.rate_type ?? 'fixed',
       payment_frequency: item.payment_frequency ?? 'monthly',

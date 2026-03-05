@@ -14,8 +14,10 @@ from core.services import adjust_for_inflation as _core_adjust_for_inflation, co
 
 from .services_assets import (
     create_asset_for_user as _create_asset_for_user,
+    delete_generated_budget_commitments_for_asset as _asset_delete_generated_budget_commitments_for_asset,
     get_effective_asset_amount as _asset_get_effective_asset_amount,
     get_amount_base_value as _asset_get_amount_base_value,
+    sync_generated_budget_commitments_for_asset as _asset_sync_generated_budget_commitments_for_asset,
     validate_asset_payload as _validate_asset_payload,
 )
 from .services_liquidity import (
@@ -83,6 +85,8 @@ sync_generated_budget_commitments_for_liability = (
 delete_generated_budget_commitments_for_liability = (
     _liab_delete_generated_budget_commitments_for_liability
 )
+sync_generated_budget_commitments_for_asset = _asset_sync_generated_budget_commitments_for_asset
+delete_generated_budget_commitments_for_asset = _asset_delete_generated_budget_commitments_for_asset
 create_asset_for_user = _create_asset_for_user
 create_liability_for_user = _create_liability_for_user
 create_or_update_snapshot_from_current = _create_or_update_snapshot_from_current

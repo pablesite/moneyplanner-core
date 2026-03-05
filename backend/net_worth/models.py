@@ -55,6 +55,10 @@ class Asset(models.Model):
         MANUAL = "manual", "Manual"
         REAL_ESTATE_AUTO = "real_estate_auto", "Vivienda automatica"
 
+    class InvestmentContributionMode(models.TextChoices):
+        ONE_TIME = "one_time", "Aportacion unica"
+        PERIODIC_CONTRIBUTION = "periodic_contribution", "Aportacion periodica"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets"
     )
@@ -74,6 +78,14 @@ class Asset(models.Model):
     start_date = models.DateField(
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del activo.",
+    )
+    expected_end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Fecha fin prevista para aportaciones periodicas en inversiones. "
+            "Solo aplica cuando investment_contribution_mode=periodic_contribution."
+        ),
     )
     initial_purchase_value = models.DecimalField(
         max_digits=20,
@@ -97,12 +109,32 @@ class Asset(models.Model):
         blank=True,
         help_text="Vida util/plazo de amortizacion estimado en anos (si aplica).",
     )
+    investment_contribution_mode = models.CharField(
+        max_length=32,
+        choices=InvestmentContributionMode.choices,
+        default=InvestmentContributionMode.ONE_TIME,
+        help_text=(
+            "Modo de aportacion para inversiones: unica o periodica. "
+            "Solo aplica a category=investments."
+        ),
+    )
+    monthly_contribution_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Cuota mensual prevista para inversiones periodicas. "
+            "Solo aplica a investment_contribution_mode=periodic_contribution."
+        ),
+    )
     valuation_model = models.CharField(
         max_length=24,
         choices=ValuationModel.choices,
         default=ValuationModel.MANUAL,
         help_text=(
-            "Modelo de valoracion del activo. En vivienda habitual puede usarse "
+            "Modelo de valoracion del activo. En inmuebles residenciales puede usarse "
             "valoracion automatica por suelo + construccion."
         ),
     )

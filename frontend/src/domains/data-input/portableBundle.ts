@@ -51,6 +51,9 @@ export type PortableAssetRecord = {
   accounting_account_id: number | null;
   currency: string;
   start_date?: string;
+  expected_end_date?: string | null;
+  investment_contribution_mode?: 'one_time' | 'periodic_contribution';
+  monthly_contribution_amount?: string | null;
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;
@@ -299,6 +302,13 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
       raw.accounting_account_id == null ? null : Number(raw.accounting_account_id),
     currency: String(raw.currency ?? 'EUR').toUpperCase(),
     start_date: raw.start_date ? String(raw.start_date) : undefined,
+    expected_end_date: raw.expected_end_date ? String(raw.expected_end_date) : undefined,
+    investment_contribution_mode:
+      raw.investment_contribution_mode == null
+        ? 'one_time'
+        : (String(raw.investment_contribution_mode) as 'one_time' | 'periodic_contribution'),
+    monthly_contribution_amount:
+      raw.monthly_contribution_amount == null ? null : String(raw.monthly_contribution_amount),
     initial_purchase_value:
       raw.initial_purchase_value == null ? null : String(raw.initial_purchase_value),
     amortization_method: raw.amortization_method == null ? 'none' : String(raw.amortization_method),

@@ -73,10 +73,13 @@ class AnnualExpenseEntryViewSet(AnnualEntrySummaryMixin, viewsets.ModelViewSet):
         source_liability_id = parse_optional_int_query_param(
             self.request.query_params, "source_liability_id"
         )
+        source_asset_id = parse_optional_int_query_param(self.request.query_params, "source_asset_id")
         if fiscal_year is not None:
             queryset = queryset.filter(fiscal_year=fiscal_year)
         if source_liability_id is not None:
             queryset = queryset.filter(source_liability_id=source_liability_id)
+        if source_asset_id is not None:
+            queryset = queryset.filter(source_asset_id=source_asset_id)
         return queryset.order_by("-created_at")
 
     def perform_create(self, serializer):
