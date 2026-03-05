@@ -35,6 +35,8 @@ type Props = {
     monthly_payment_amount?: string | null;
     start_date: string;
     expected_end_date?: string | null;
+    investment_contribution_mode?: 'one_time' | 'periodic_contribution';
+    monthly_contribution_amount?: string | null;
     term_months?: number | string | null;
     rate_type?: string;
     payment_frequency?: string;
@@ -43,7 +45,6 @@ type Props = {
     early_repayment_fee_percent?: string | null;
     novation_subrogation_fee_amount?: string | null;
     linked_products_monthly_cost?: string | null;
-    initial_purchase_value?: string | null;
     amortization_method?: string;
     amortization_term_years?: number | string | null;
     valuation_model?: string;
@@ -167,6 +168,10 @@ const LIABILITY_PAYMENT_FREQUENCIES = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'quarterly', label: 'Trimestral' },
 ];
+const INVESTMENT_CONTRIBUTION_MODE_OPTIONS = [
+  { value: 'one_time', label: 'Aportacion unica' },
+  { value: 'periodic_contribution', label: 'Aportacion periodica' },
+];
 const LIABILITY_CATEGORY_DEFAULTS: Record<
   string,
   { paymentFrequency?: 'monthly' | 'quarterly'; preferredAssetCategories?: string[] }
@@ -180,6 +185,10 @@ const ASSET_AMORTIZATION_METHODS = [
   { value: 'none', label: 'Sin amortizacion' },
   { value: 'straight_line', label: 'Lineal' },
 ];
+const REAL_ESTATE_USAGE_OPTIONS = [
+  { value: 'self_use', label: 'Propio' },
+  { value: 'rental', label: 'Alquiler' },
+] as const;
 const PRIMARY_HOME_VALUATION_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
   { value: 'real_estate_auto', label: 'Automatica (suelo + construccion)' },
@@ -205,6 +214,7 @@ const PRIMARY_HOME_VALUATION_PROFILES = [
   },
 ];
 const PRIMARY_HOME_CUSTOM_PROFILE_VALUE = 'custom';
+const PRIMARY_HOME_DEFAULT_PROFILE_VALUE = 'dynamic';
 const PRIMARY_HOME_IMPROVEMENT_AMORTIZATION_OPTIONS = [
   { value: 'none', label: 'Sin amortizacion' },
   { value: 'straight_line', label: 'Lineal' },
@@ -236,6 +246,8 @@ const form = reactive({
   monthly_payment_amount: '',
   start_date: todayIsoDate(),
   expected_end_date: '',
+  investment_contribution_mode: 'one_time',
+  monthly_contribution_amount: '',
   term_months: '',
   rate_type: 'fixed',
   payment_frequency: 'monthly',
@@ -244,7 +256,6 @@ const form = reactive({
   early_repayment_fee_percent: '',
   novation_subrogation_fee_amount: '',
   linked_products_monthly_cost: '',
-  initial_purchase_value: '',
   amortization_method: 'none',
   amortization_term_years: '',
   valuation_model: 'manual',
@@ -297,6 +308,14 @@ const showEstimatedAverageBalanceForInterestInput = computed(() => {
   const taeValue = Number(taeRaw);
   return Number.isFinite(taeValue) && taeValue > 0;
 });
+const showInvestmentContributionModeField = computed(
+  () => isAssetForm.value && String(form.category ?? '').trim() === 'investments',
+);
+const showInvestmentPeriodicFields = computed(
+  () =>
+    showInvestmentContributionModeField.value &&
+    String(form.investment_contribution_mode ?? '').trim() === 'periodic_contribution',
+);
 const showDepositTermMonthsInput = computed(() => isShortTermDepositAsset.value);
 const showMonthlyPaymentInput = computed(() => false);
 const isCreditCardLiability = computed(
@@ -321,7 +340,7 @@ const showPrimaryHomeValuationFields = computed(
   () =>
     isAssetForm.value &&
     String(form.category ?? '').trim() === 'real_estate' &&
-    String(form.subcategory ?? '').trim() === 'primary_home',
+    ['primary_home', 'second_home', 'rental'].includes(String(form.subcategory ?? '').trim()),
 );
 const showPrimaryHomeAutoValuationFields = computed(
   () => showPrimaryHomeValuationFields.value && form.valuation_model === 'real_estate_auto',
@@ -407,8 +426,16 @@ const financedAssetSuggestionHelp = computed(() => {
 });
 const subcategoriesForCategory = computed(() => {
   if (!props.subcategories || !form.category) return [];
-  return props.subcategories.filter((s) => s.category === form.category);
+  const options = props.subcategories.filter((s) => s.category === form.category);
+  if (form.category !== 'real_estate') return options;
+  return options.filter((option) => option.value !== 'rental');
 });
+const showRealEstateUsageField = computed(
+  () =>
+    isAssetForm.value &&
+    String(form.category ?? '').trim() === 'real_estate' &&
+    String(form.subcategory ?? '').trim() === 'second_home',
+);
 
 const maxDecimals = computed(() => decimalsByCurrency[form.currency] ?? 2);
 const estimatedAverageBalanceCurrencyLabel = computed(() => {
@@ -423,7 +450,8 @@ const normalizedDefaultCurrency = computed(() =>
 const activeLiabilityFieldGroup = ref<'term' | 'end' | null>(null);
 const financedAssetManuallySelected = ref(false);
 const financedAssetAutoMatched = ref(false);
-const primaryHomeValuationProfile = ref<string>(PRIMARY_HOME_CUSTOM_PROFILE_VALUE);
+const primaryHomeValuationProfile = ref<string>(PRIMARY_HOME_DEFAULT_PROFILE_VALUE);
+const realEstateUsage = ref<'self_use' | 'rental'>('self_use');
 const primaryHomeImprovements = ref<PrimaryHomeImprovementDraft[]>([]);
 const expandedPrimaryHomeImprovementIndex = ref<number | null>(null);
 let syncingScheduleFields = false;
@@ -440,6 +468,9 @@ watch(
 watch(
   () => form.subcategory,
   () => {
+    if (!showRealEstateUsageField.value) {
+      realEstateUsage.value = 'self_use';
+    }
     if (showAssetAmortizationFields.value) {
       const valid = new Set(assetAmortizationMethodOptions.value.map((opt) => opt.value));
       if (!valid.has(String(form.amortization_method ?? '').trim())) {
@@ -548,6 +579,22 @@ function formatAmountForEdit(raw: unknown, currency: string): string {
   const n = Number(normalized);
   if (!Number.isFinite(n)) return '';
   return n.toFixed(max).replace(/\.?0+$/, '');
+}
+function formatAmountFixedForEdit(raw: unknown, decimals = 2): string {
+  const normalized = String(raw ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/,/g, '.');
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return '';
+  return n.toFixed(decimals);
+}
+function formatMonthlyContributionField(): void {
+  const sanitized = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
+  if (sanitized.error || !sanitized.value) return;
+  const n = Number(sanitized.value);
+  if (!Number.isFinite(n)) return;
+  form.monthly_contribution_amount = n.toFixed(2);
 }
 function sanitizePercent(raw: unknown) {
   const normalized = String(raw ?? '').trim().replace(',', '.');
@@ -764,6 +811,30 @@ const monthlyPaymentError = computed(() => {
   const { error } = sanitizeAmount(raw, maxDecimals.value);
   return error;
 });
+const investmentContributionError = computed(() => {
+  if (!showInvestmentPeriodicFields.value) return '';
+  if (!String(form.expected_end_date ?? '').trim()) {
+    return 'Fecha fin estimada obligatoria para aportacion periodica.';
+  }
+  if (
+    String(form.start_date ?? '').trim() &&
+    String(form.expected_end_date ?? '').trim() &&
+    String(form.expected_end_date).trim() < String(form.start_date).trim()
+  ) {
+    return 'Fecha fin estimada debe ser >= fecha inicio.';
+  }
+  const monthly = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
+  if (monthly.error) return monthly.error;
+  if (!monthly.value || Number(monthly.value) <= 0) {
+    return 'Cuota mensual obligatoria y mayor que 0.';
+  }
+  const initialAmount = sanitizeAmount(form.amount, maxDecimals.value);
+  if (initialAmount.error) return initialAmount.error;
+  if (!initialAmount.value || Number(initialAmount.value) < 0) {
+    return 'Importe inicial obligatorio para aportacion periodica.';
+  }
+  return '';
+});
 const requiredFieldsError = computed(() => {
   if (!String(form.name ?? '').trim()) return 'Nombre obligatorio';
   if (!String(form.category ?? '').trim()) return 'Categoria obligatoria';
@@ -912,6 +983,7 @@ async function submit() {
   if (depositTermMonthsError.value) return;
   if (monthlyPaymentError.value) return;
   if (assetAmortizationError.value) return;
+  if (investmentContributionError.value) return;
   if (primaryHomeValuationError.value) return;
   if (primaryHomeImprovementsError.value) return;
   if (liabilityDatesError.value) return;
@@ -923,7 +995,10 @@ async function submit() {
   const payload: ItemFormPayload = {
     name: form.name,
     category: form.category,
-    subcategory: form.subcategory || undefined,
+    subcategory:
+      form.subcategory === 'second_home' && realEstateUsage.value === 'rental'
+        ? 'rental'
+        : form.subcategory || undefined,
     amount: normalizedAmount, // normalized dot-decimal string
     start_date: form.start_date,
     annual_interest_tae: showAnnualInterestInput.value
@@ -943,9 +1018,20 @@ async function submit() {
         ? sanitizeAmount(form.monthly_payment_amount, maxDecimals.value).value
         : undefined,
     expected_end_date:
-      showLiabilityAdvancedFields.value && String(form.expected_end_date ?? '').trim()
+      (showLiabilityAdvancedFields.value || showInvestmentPeriodicFields.value) &&
+      String(form.expected_end_date ?? '').trim()
         ? String(form.expected_end_date).trim()
         : undefined,
+    investment_contribution_mode: showInvestmentContributionModeField.value
+      ? String(form.investment_contribution_mode ?? '').trim() === 'periodic_contribution'
+        ? 'periodic_contribution'
+        : 'one_time'
+      : undefined,
+    monthly_contribution_amount:
+      showInvestmentPeriodicFields.value && String(form.monthly_contribution_amount ?? '').trim()
+        ? sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value).value
+        : undefined,
+    initial_purchase_value: showInvestmentPeriodicFields.value ? normalizedAmount : undefined,
     term_months:
       showLiabilityAdvancedFields.value && String(form.term_months ?? '').trim()
         ? Number(String(form.term_months).trim())
@@ -1032,6 +1118,7 @@ async function submit() {
   form.name = '';
   form.category = '';
   form.subcategory = '';
+  realEstateUsage.value = 'self_use';
   form.amount = '';
   form.annual_interest_tae = props.showFinancedAsset ? '0' : '';
   form.estimated_average_balance_for_interest = '';
@@ -1039,6 +1126,8 @@ async function submit() {
   form.monthly_payment_amount = '';
   form.start_date = todayIsoDate();
   form.expected_end_date = '';
+  form.investment_contribution_mode = 'one_time';
+  form.monthly_contribution_amount = '';
   form.term_months = '';
   form.rate_type = 'fixed';
   form.payment_frequency = 'monthly';
@@ -1047,14 +1136,13 @@ async function submit() {
   form.early_repayment_fee_percent = '';
   form.novation_subrogation_fee_amount = '';
   form.linked_products_monthly_cost = '';
-  form.initial_purchase_value = '';
   form.amortization_method = 'none';
   form.amortization_term_years = '';
   form.valuation_model = 'manual';
   form.land_value_share_percent = '30';
   form.land_annual_appreciation_percent = '3';
   form.building_annual_depreciation_percent = '1';
-  primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+  primaryHomeValuationProfile.value = PRIMARY_HOME_DEFAULT_PROFILE_VALUE;
   primaryHomeImprovements.value = [];
   expandedPrimaryHomeImprovementIndex.value = null;
   form.notes = '';
@@ -1071,7 +1159,16 @@ watch(
     if (!initial) return;
     form.name = initial.name ?? '';
     form.category = initial.category ?? '';
-    form.subcategory = initial.subcategory ?? '';
+    if (
+      String(initial.category ?? '').trim() === 'real_estate' &&
+      String(initial.subcategory ?? '').trim() === 'rental'
+    ) {
+      form.subcategory = 'second_home';
+      realEstateUsage.value = 'rental';
+    } else {
+      form.subcategory = initial.subcategory ?? '';
+      realEstateUsage.value = 'self_use';
+    }
     form.amount = initial.amount ?? '';
     form.annual_interest_tae = initial.annual_interest_tae ?? (props.showFinancedAsset ? '0' : '');
     form.estimated_average_balance_for_interest = String(
@@ -1082,6 +1179,11 @@ watch(
     form.monthly_payment_amount = initial.monthly_payment_amount ?? '';
     form.start_date = initial.start_date ?? todayIsoDate();
     form.expected_end_date = initial.expected_end_date ?? '';
+    form.investment_contribution_mode = initial.investment_contribution_mode ?? 'one_time';
+    form.monthly_contribution_amount = formatAmountFixedForEdit(
+      initial.monthly_contribution_amount ?? '',
+      2,
+    );
     form.term_months = initial.term_months == null ? '' : String(initial.term_months);
     form.rate_type = props.showFinancedAsset ? 'fixed' : (initial.rate_type ?? 'fixed');
     form.payment_frequency = initial.payment_frequency ?? 'monthly';
@@ -1090,7 +1192,6 @@ watch(
     form.early_repayment_fee_percent = initial.early_repayment_fee_percent ?? '';
     form.novation_subrogation_fee_amount = initial.novation_subrogation_fee_amount ?? '';
     form.linked_products_monthly_cost = initial.linked_products_monthly_cost ?? '';
-    form.initial_purchase_value = initial.initial_purchase_value ?? '';
     form.amortization_method = initial.amortization_method ?? 'none';
     form.amortization_term_years =
       initial.amortization_term_years == null ? '' : String(initial.amortization_term_years);
@@ -1202,7 +1303,7 @@ watch(
       form.land_value_share_percent = '30';
       form.land_annual_appreciation_percent = '3';
       form.building_annual_depreciation_percent = '1';
-      primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+      primaryHomeValuationProfile.value = PRIMARY_HOME_DEFAULT_PROFILE_VALUE;
       primaryHomeImprovements.value = [];
       expandedPrimaryHomeImprovementIndex.value = null;
     }
@@ -1212,7 +1313,7 @@ watch(
   () => form.valuation_model,
   (model) => {
     if (model !== 'real_estate_auto') {
-      primaryHomeValuationProfile.value = PRIMARY_HOME_CUSTOM_PROFILE_VALUE;
+      primaryHomeValuationProfile.value = PRIMARY_HOME_DEFAULT_PROFILE_VALUE;
       primaryHomeImprovements.value = [];
       expandedPrimaryHomeImprovementIndex.value = null;
       return;
@@ -1370,6 +1471,24 @@ watch(
           <option v-for="s in subcategoriesForCategory" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>
       </label>
+      <label v-if="showRealEstateUsageField" class="ui-item-form-field">
+        <span class="ui-item-form-label">Uso</span>
+        <select v-model="realEstateUsage" class="select ui-data-field">
+          <option v-for="opt in REAL_ESTATE_USAGE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </label>
+      <label v-if="showInvestmentContributionModeField" class="ui-item-form-field">
+        <span class="ui-item-form-label">Modo inversion</span>
+        <select v-model="form.investment_contribution_mode" class="select ui-data-field">
+          <option
+            v-for="mode in INVESTMENT_CONTRIBUTION_MODE_OPTIONS"
+            :key="mode.value"
+            :value="mode.value"
+          >
+            {{ mode.label }}
+          </option>
+        </select>
+      </label>
 
       <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': isLiabilityForm }]">
         <span class="ui-item-form-label">Nombre</span>
@@ -1381,9 +1500,27 @@ watch(
         <input v-model="form.start_date" type="date" class="input ui-data-field" />
       </label>
 
+      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Fecha fin estimada</span>
+        <input v-model="form.expected_end_date" type="date" class="input ui-data-field" />
+      </label>
+
       <label class="ui-item-form-field">
-        <span class="ui-item-form-label">{{ isLiabilityForm ? 'Principal / saldo actual' : 'Importe' }}</span>
+        <span class="ui-item-form-label">
+          {{ isLiabilityForm ? 'Principal / saldo actual' : showInvestmentPeriodicFields ? 'Importe inicial' : 'Importe' }}
+        </span>
         <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input ui-data-field" />
+      </label>
+
+      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Cuota mensual</span>
+        <input
+          v-model="form.monthly_contribution_amount"
+          inputmode="decimal"
+          placeholder="Ej: 500"
+          class="input ui-data-field"
+          @blur="formatMonthlyContributionField"
+        />
       </label>
 
       <label class="ui-item-form-field">
@@ -1395,7 +1532,7 @@ watch(
       </label>
       <div v-if="showPrimaryHomeValuationFields" class="ui-item-form-section ui-item-form-field-span-2">
         <div class="ui-item-form-section-head">
-          <div class="ui-item-form-section-title">Valoracion vivienda habitual</div>
+          <div class="ui-item-form-section-title">Valoracion de inmueble residencial</div>
         </div>
         <div class="ui-item-form-inline-grid">
           <label class="ui-item-form-field">
@@ -1677,6 +1814,9 @@ watch(
         <div v-if="requiredFieldsError" class="ui-form-help ui-form-help-error">{{ requiredFieldsError }}</div>
         <div v-if="monthlyPaymentError" class="ui-form-help ui-form-help-error">{{ monthlyPaymentError }}</div>
         <div v-if="assetAmortizationError" class="ui-form-help ui-form-help-error">{{ assetAmortizationError }}</div>
+        <div v-if="investmentContributionError" class="ui-form-help ui-form-help-error">
+          {{ investmentContributionError }}
+        </div>
         <div v-if="primaryHomeValuationError" class="ui-form-help ui-form-help-error">{{ primaryHomeValuationError }}</div>
         <div v-if="primaryHomeImprovementsError" class="ui-form-help ui-form-help-error">{{ primaryHomeImprovementsError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
@@ -1696,6 +1836,7 @@ watch(
               !!depositTermMonthsError ||
               !!monthlyPaymentError ||
               !!assetAmortizationError ||
+              !!investmentContributionError ||
               !!primaryHomeValuationError ||
               !!primaryHomeImprovementsError ||
               !!liabilityDatesError ||

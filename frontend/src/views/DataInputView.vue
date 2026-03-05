@@ -1280,6 +1280,7 @@ async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
   if (!createdOrMatchedAsset) return;
 
   showAssetModal.value = false;
+  await loadAnnualExpense(fiscalYear.value);
 
   if (!isRemuneratedLiquidityAsset(payload)) return;
   const estimatedAnnualInterestGross = estimateRemuneratedLiquidityInterest(payload);
@@ -1314,6 +1315,19 @@ async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
   if (!result.ok) {
     annualIncomeError.value = `Activo creado, pero no se pudo generar el ingreso anual estimado: ${result.error}`;
   }
+}
+
+async function updateAssetAndReloadExpenses(
+  id: number,
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  await store.updateAsset(id, payload);
+  await loadAnnualExpense(fiscalYear.value);
+}
+
+async function deleteAssetAndReloadExpenses(id: number): Promise<void> {
+  await store.deleteAsset(id);
+  await loadAnnualExpense(fiscalYear.value);
 }
 
 async function deleteLiabilityAndReloadExpenses(id: number): Promise<void> {
@@ -1759,6 +1773,10 @@ async function importPortableAssets(
       accounting_account_id: asset.accounting_account_id,
       currency: asset.currency,
       start_date: asset.start_date,
+      expected_end_date: normalizeOptionalText(asset.expected_end_date),
+      investment_contribution_mode:
+        normalizeOptionalText(asset.investment_contribution_mode) ?? 'one_time',
+      monthly_contribution_amount: normalizeOptionalText(asset.monthly_contribution_amount),
       initial_purchase_value: normalizeOptionalText(asset.initial_purchase_value),
       amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
       amortization_term_years: asset.amortization_term_years ?? null,
@@ -2516,9 +2534,9 @@ watch(
         :subcategory-totals-base="store.summary?.assets_by_subcategory ?? {}"
         :total-base="store.summary?.total_assets ?? '0'"
         v-bind="itemListProps"
-        :on-update="store.updateAsset"
+        :on-update="updateAssetAndReloadExpenses"
         :on-archive="store.archiveAsset"
-        :on-delete="store.deleteAsset"
+        :on-delete="deleteAssetAndReloadExpenses"
         :on-add="() => (showAssetModal = true)"
         :on-edit="(it) => openEdit(it, 'asset')"
       />

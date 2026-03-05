@@ -206,6 +206,7 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         fields = [
             "id",
             "source_liability_id",
+            "source_asset_id",
             "is_system_generated",
             "name",
             "category",
@@ -228,6 +229,7 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         read_only_fields = [
             "id",
             "source_liability_id",
+            "source_asset_id",
             "is_system_generated",
             "created_at",
             "updated_at",
@@ -257,7 +259,10 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         if (
             self.instance is not None
             and self.instance.is_system_generated
-            and self.instance.source_liability_id is not None
+            and (
+                self.instance.source_liability_id is not None
+                or getattr(self.instance, "source_asset_id", None) is not None
+            )
         ):
             attrs["event_group"] = self.instance.event_group
             attrs["term_end_year"] = self.instance.term_end_year

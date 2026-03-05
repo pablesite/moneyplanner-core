@@ -22,6 +22,8 @@ export type Asset = {
   accounting_account_id: number | null;
   currency: string;
   start_date?: string;
+  investment_contribution_mode?: 'one_time' | 'periodic_contribution';
+  monthly_contribution_amount?: string | null;
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;

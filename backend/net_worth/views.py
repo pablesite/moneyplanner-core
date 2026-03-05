@@ -17,10 +17,12 @@ from .serializers import (
     NetWorthSnapshotSerializer,
 )
 from .services import (
+    delete_generated_budget_commitments_for_asset,
     delete_generated_budget_commitments_for_liability,
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     get_liquidity_asset_queryset_for_user,
+    sync_generated_budget_commitments_for_asset,
     sync_generated_budget_commitments_for_liability,
 )
 from .services_liquidity import (
@@ -43,6 +45,19 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         ctx = super().get_serializer_context()
         ctx["base_currency"] = get_base_currency_for_user(user=self.request.user)
         return ctx
+
+    def perform_create(self, serializer):
+        asset = serializer.save()
+        sync_generated_budget_commitments_for_asset(asset=asset)
+
+    def perform_update(self, serializer):
+        asset = serializer.save()
+        sync_generated_budget_commitments_for_asset(asset=asset)
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            delete_generated_budget_commitments_for_asset(asset=instance)
+            instance.delete()
 
 
 class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):

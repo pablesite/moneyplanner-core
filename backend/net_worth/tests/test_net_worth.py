@@ -685,6 +685,25 @@ class NetWorthServicesTests(TestCase):
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 1))
         self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("122.4164"))
 
+    def test_get_effective_asset_amount_accumulates_periodic_investment_contributions(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Reserva Atrio",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.OTHER,
+            currency="EUR",
+            start_date=date(2025, 3, 5),
+            expected_end_date=date(2027, 3, 5),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            monthly_contribution_amount=Decimal("1374.00"),
+            amount=Decimal("8800.00"),
+            initial_purchase_value=Decimal("8800.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 5))
+        # 13 cuotas (de 2025-03 a 2026-03 inclusive) + importe inicial.
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("26662.00"))
+
     def test_calculate_totals_uses_effective_asset_amount_for_auto_home_valuation(self):
         Asset.objects.create(
             user=self.user,
@@ -1124,6 +1143,37 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(len(response.data["improvements"]), 1)
         self.assertEqual(response.data["improvements"][0]["name"], "Reforma cocina")
 
+    def test_asset_create_second_home_auto_valuation_with_improvements(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Atico",
+                "category": Asset.Category.REAL_ESTATE,
+                "subcategory": Asset.Subcategory.SECOND_HOME,
+                "currency": "EUR",
+                "start_date": "2020-01-01",
+                "amount": "100000.00",
+                "valuation_model": Asset.ValuationModel.REAL_ESTATE_AUTO,
+                "land_value_share_percent": "40.00",
+                "land_annual_appreciation_percent": "8.000",
+                "building_annual_depreciation_percent": "0.20",
+                "improvements": [
+                    {
+                        "name": "Reforma integral",
+                        "reform_date": "2021-06-01",
+                        "amount": "15000.00",
+                        "amortization_method": "straight_line",
+                        "amortization_term_years": 15,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["valuation_model"], Asset.ValuationModel.REAL_ESTATE_AUTO)
+        self.assertEqual(len(response.data["improvements"]), 1)
+        self.assertEqual(response.data["improvements"][0]["name"], "Reforma integral")
+
     def test_asset_update_syncs_improvements_list(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -1184,6 +1234,92 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(kept.name, "Suelo radiante premium")
         self.assertEqual(kept.amount, Decimal("9500.00"))
         self.assertFalse(AssetImprovement.objects.filter(id=deleted.id).exists())
+
+    def test_periodic_investment_asset_generates_real_estate_purchase_commitments(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Fondo entrada vivienda",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "5000.00",
+                "initial_purchase_value": "5000.00",
+                "investment_contribution_mode": "periodic_contribution",
+                "expected_end_date": "2027-12-15",
+                "monthly_contribution_amount": "300.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        asset_id = response.data["id"]
+
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_asset_id=asset_id,
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertEqual(list(generated.values_list("fiscal_year", flat=True)), [2026, 2027])
+        row_2026 = generated.get(fiscal_year=2026)
+        self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
+        self.assertEqual(row_2026.subcategory, "property_purchase")
+        self.assertEqual(row_2026.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
+        self.assertEqual(
+            row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+        )
+        self.assertEqual(row_2026.amount_annual, Decimal("3600.00"))
+
+    def test_periodic_investment_asset_requires_end_date_and_monthly_contribution(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Reserva ATRIO",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "1000.00",
+                "initial_purchase_value": "1000.00",
+                "investment_contribution_mode": "periodic_contribution",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("expected_end_date", response.data["error"]["details"])
+
+    def test_periodic_investment_asset_delete_removes_generated_commitments(self):
+        create_response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Reserva vivienda",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "5000.00",
+                "initial_purchase_value": "5000.00",
+                "investment_contribution_mode": "periodic_contribution",
+                "expected_end_date": "2027-12-15",
+                "monthly_contribution_amount": "300.00",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
+        asset_id = create_response.data["id"]
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user, source_asset_id=asset_id, is_system_generated=True
+            ).exists()
+        )
+
+        delete_response = self.client.delete(f"/api/net-worth/assets/{asset_id}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user, source_asset_id=asset_id, is_system_generated=True
+            ).exists()
+        )
 
     def test_liability_create_rejects_expected_end_date_before_start_date(self):
         response = self.client.post(

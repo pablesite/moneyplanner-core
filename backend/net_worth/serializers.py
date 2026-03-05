@@ -10,6 +10,7 @@ from .models import (
     NetWorthSnapshot,
 )
 from .services_assets import (
+    RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES,
     create_asset_for_user,
     get_default_amortization_term_years,
     get_effective_asset_amount,
@@ -100,7 +101,10 @@ class AssetSerializer(serializers.ModelSerializer):
             "accounting_account_id",
             "currency",
             "start_date",
+            "expected_end_date",
             "initial_purchase_value",
+            "investment_contribution_mode",
+            "monthly_contribution_amount",
             "amortization_method",
             "amortization_term_years",
             "valuation_model",
@@ -158,6 +162,21 @@ class AssetSerializer(serializers.ModelSerializer):
         initial_purchase_value = attrs.get(
             "initial_purchase_value", getattr(self.instance, "initial_purchase_value", None)
         )
+        investment_contribution_mode = attrs.get(
+            "investment_contribution_mode",
+            getattr(
+                self.instance,
+                "investment_contribution_mode",
+                Asset.InvestmentContributionMode.ONE_TIME,
+            ),
+        )
+        expected_end_date = attrs.get(
+            "expected_end_date", getattr(self.instance, "expected_end_date", None)
+        )
+        monthly_contribution_amount = attrs.get(
+            "monthly_contribution_amount",
+            getattr(self.instance, "monthly_contribution_amount", None),
+        )
         valuation_model = attrs.get(
             "valuation_model", getattr(self.instance, "valuation_model", None)
         )
@@ -193,12 +212,30 @@ class AssetSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "improvements": (
-                            "Solo disponibles para vivienda habitual con valoracion automatica."
+                            "Solo disponibles para inmuebles residenciales con valoracion automatica."
                         )
                     }
                 )
             if "improvements" not in attrs and self.instance is not None:
                 attrs["improvements"] = []
+
+        if category != Asset.Category.INVESTMENTS:
+            investment_contribution_mode = Asset.InvestmentContributionMode.ONE_TIME
+            expected_end_date = None
+            monthly_contribution_amount = None
+            attrs["investment_contribution_mode"] = investment_contribution_mode
+            attrs["expected_end_date"] = None
+            attrs["monthly_contribution_amount"] = None
+        elif investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
+            expected_end_date = None
+            monthly_contribution_amount = None
+            attrs["expected_end_date"] = None
+            attrs["monthly_contribution_amount"] = None
+        elif initial_purchase_value is None and amount is not None:
+            # En aportacion periodica de inversiones, usamos el importe como valor inicial.
+            initial_purchase_value = amount
+            attrs["initial_purchase_value"] = amount
+
         validate_asset_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -209,11 +246,15 @@ class AssetSerializer(serializers.ModelSerializer):
             amortization_term_years=amortization_term_years,
             initial_purchase_value=initial_purchase_value,
             amount=amount,
+            start_date=attrs.get("start_date", getattr(self.instance, "start_date", None)),
             valuation_model=valuation_model,
             land_value_share_percent=land_value_share_percent,
             land_annual_appreciation_percent=land_annual_appreciation_percent,
             building_annual_depreciation_percent=building_annual_depreciation_percent,
             deposit_term_months=deposit_term_months,
+            investment_contribution_mode=investment_contribution_mode,
+            expected_end_date=expected_end_date,
+            monthly_contribution_amount=monthly_contribution_amount,
         )
         return attrs
 
@@ -245,14 +286,14 @@ class AssetSerializer(serializers.ModelSerializer):
     def _sync_improvements(self, *, asset: Asset, improvements_data: list[dict]) -> None:
         if (
             asset.category != Asset.Category.REAL_ESTATE
-            or asset.subcategory != Asset.Subcategory.PRIMARY_HOME
+            or asset.subcategory not in RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES
             or asset.valuation_model != Asset.ValuationModel.REAL_ESTATE_AUTO
         ):
             if improvements_data:
                 raise serializers.ValidationError(
                     {
                         "improvements": (
-                            "Solo disponibles para vivienda habitual con valoracion automatica."
+                            "Solo disponibles para inmuebles residenciales con valoracion automatica."
                         )
                     }
                 )
