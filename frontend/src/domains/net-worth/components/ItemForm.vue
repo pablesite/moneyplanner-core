@@ -36,6 +36,7 @@ type Props = {
     start_date: string;
     expected_end_date?: string | null;
     investment_contribution_mode?: 'one_time' | 'periodic_contribution';
+    investment_contribution_frequency?: 'monthly' | 'weekly';
     monthly_contribution_amount?: string | null;
     term_months?: number | string | null;
     rate_type?: string;
@@ -172,6 +173,10 @@ const INVESTMENT_CONTRIBUTION_MODE_OPTIONS = [
   { value: 'one_time', label: 'Aportacion unica' },
   { value: 'periodic_contribution', label: 'Aportacion periodica' },
 ];
+const INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS = [
+  { value: 'monthly', label: 'Mensual' },
+  { value: 'weekly', label: 'Semanal' },
+];
 const LIABILITY_CATEGORY_DEFAULTS: Record<
   string,
   { paymentFrequency?: 'monthly' | 'quarterly'; preferredAssetCategories?: string[] }
@@ -247,6 +252,7 @@ const form = reactive({
   start_date: todayIsoDate(),
   expected_end_date: '',
   investment_contribution_mode: 'one_time',
+  investment_contribution_frequency: 'monthly',
   monthly_contribution_amount: '',
   term_months: '',
   rate_type: 'fixed',
@@ -315,6 +321,9 @@ const showInvestmentPeriodicFields = computed(
   () =>
     showInvestmentContributionModeField.value &&
     String(form.investment_contribution_mode ?? '').trim() === 'periodic_contribution',
+);
+const isInvestmentPeriodicIndefinite = computed(
+  () => showInvestmentPeriodicFields.value && !String(form.expected_end_date ?? '').trim(),
 );
 const showDepositTermMonthsInput = computed(() => isShortTermDepositAsset.value);
 const showMonthlyPaymentInput = computed(() => false);
@@ -813,9 +822,6 @@ const monthlyPaymentError = computed(() => {
 });
 const investmentContributionError = computed(() => {
   if (!showInvestmentPeriodicFields.value) return '';
-  if (!String(form.expected_end_date ?? '').trim()) {
-    return 'Fecha fin estimada obligatoria para aportacion periodica.';
-  }
   if (
     String(form.start_date ?? '').trim() &&
     String(form.expected_end_date ?? '').trim() &&
@@ -826,7 +832,7 @@ const investmentContributionError = computed(() => {
   const monthly = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
   if (monthly.error) return monthly.error;
   if (!monthly.value || Number(monthly.value) <= 0) {
-    return 'Cuota mensual obligatoria y mayor que 0.';
+    return 'Cuota periodica obligatoria y mayor que 0.';
   }
   const initialAmount = sanitizeAmount(form.amount, maxDecimals.value);
   if (initialAmount.error) return initialAmount.error;
@@ -1027,6 +1033,11 @@ async function submit() {
         ? 'periodic_contribution'
         : 'one_time'
       : undefined,
+    investment_contribution_frequency: showInvestmentPeriodicFields.value
+      ? String(form.investment_contribution_frequency ?? '').trim() === 'weekly'
+        ? 'weekly'
+        : 'monthly'
+      : undefined,
     monthly_contribution_amount:
       showInvestmentPeriodicFields.value && String(form.monthly_contribution_amount ?? '').trim()
         ? sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value).value
@@ -1127,6 +1138,7 @@ async function submit() {
   form.start_date = todayIsoDate();
   form.expected_end_date = '';
   form.investment_contribution_mode = 'one_time';
+  form.investment_contribution_frequency = 'monthly';
   form.monthly_contribution_amount = '';
   form.term_months = '';
   form.rate_type = 'fixed';
@@ -1180,6 +1192,8 @@ watch(
     form.start_date = initial.start_date ?? todayIsoDate();
     form.expected_end_date = initial.expected_end_date ?? '';
     form.investment_contribution_mode = initial.investment_contribution_mode ?? 'one_time';
+    form.investment_contribution_frequency =
+      initial.investment_contribution_frequency ?? 'monthly';
     form.monthly_contribution_amount = formatAmountFixedForEdit(
       initial.monthly_contribution_amount ?? '',
       2,
@@ -1503,6 +1517,20 @@ watch(
       <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
         <span class="ui-item-form-label">Fecha fin estimada</span>
         <input v-model="form.expected_end_date" type="date" class="input ui-data-field" />
+        <div class="subtle mt-1">Si la dejas vacía se considera una aportación indefinida.</div>
+      </label>
+
+      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Frecuencia cuota</span>
+        <select v-model="form.investment_contribution_frequency" class="select ui-data-field">
+          <option
+            v-for="frequency in INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS"
+            :key="frequency.value"
+            :value="frequency.value"
+          >
+            {{ frequency.label }}
+          </option>
+        </select>
       </label>
 
       <label class="ui-item-form-field">
@@ -1513,7 +1541,9 @@ watch(
       </label>
 
       <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
-        <span class="ui-item-form-label">Cuota mensual</span>
+        <span class="ui-item-form-label">
+          {{ form.investment_contribution_frequency === 'weekly' ? 'Cuota semanal' : 'Cuota mensual' }}
+        </span>
         <input
           v-model="form.monthly_contribution_amount"
           inputmode="decimal"
@@ -1521,6 +1551,9 @@ watch(
           class="input ui-data-field"
           @blur="formatMonthlyContributionField"
         />
+        <div v-if="isInvestmentPeriodicIndefinite" class="subtle mt-1">
+          Sin fecha fin: se proyecta automáticamente hasta el año siguiente.
+        </div>
       </label>
 
       <label class="ui-item-form-field">

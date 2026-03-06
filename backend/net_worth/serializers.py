@@ -104,6 +104,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "expected_end_date",
             "initial_purchase_value",
             "investment_contribution_mode",
+            "investment_contribution_frequency",
             "monthly_contribution_amount",
             "amortization_method",
             "amortization_term_years",
@@ -170,6 +171,14 @@ class AssetSerializer(serializers.ModelSerializer):
                 Asset.InvestmentContributionMode.ONE_TIME,
             ),
         )
+        investment_contribution_frequency = attrs.get(
+            "investment_contribution_frequency",
+            getattr(
+                self.instance,
+                "investment_contribution_frequency",
+                Asset.InvestmentContributionFrequency.MONTHLY,
+            ),
+        )
         expected_end_date = attrs.get(
             "expected_end_date", getattr(self.instance, "expected_end_date", None)
         )
@@ -222,14 +231,18 @@ class AssetSerializer(serializers.ModelSerializer):
 
         if category != Asset.Category.INVESTMENTS:
             investment_contribution_mode = Asset.InvestmentContributionMode.ONE_TIME
+            investment_contribution_frequency = Asset.InvestmentContributionFrequency.MONTHLY
             expected_end_date = None
             monthly_contribution_amount = None
             attrs["investment_contribution_mode"] = investment_contribution_mode
+            attrs["investment_contribution_frequency"] = investment_contribution_frequency
             attrs["expected_end_date"] = None
             attrs["monthly_contribution_amount"] = None
         elif investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
+            investment_contribution_frequency = Asset.InvestmentContributionFrequency.MONTHLY
             expected_end_date = None
             monthly_contribution_amount = None
+            attrs["investment_contribution_frequency"] = investment_contribution_frequency
             attrs["expected_end_date"] = None
             attrs["monthly_contribution_amount"] = None
         elif initial_purchase_value is None and amount is not None:
@@ -254,6 +267,7 @@ class AssetSerializer(serializers.ModelSerializer):
             building_annual_depreciation_percent=building_annual_depreciation_percent,
             deposit_term_months=deposit_term_months,
             investment_contribution_mode=investment_contribution_mode,
+            investment_contribution_frequency=investment_contribution_frequency,
             expected_end_date=expected_end_date,
             monthly_contribution_amount=monthly_contribution_amount,
         )
