@@ -132,7 +132,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "MoneyPlanner Core API",
     "DESCRIPTION": "API del core de MoneyPlanner.",
-    "VERSION": "0.2.5",
+    "VERSION": "0.2.6",
 }
 
 SIMPLE_JWT = {
