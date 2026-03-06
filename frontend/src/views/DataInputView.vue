@@ -110,9 +110,11 @@ const hydratingAnnualIncomeForm = ref(false);
 const hydratingAnnualExpenseForm = ref(false);
 const expandedIncomeCats = ref<Set<string>>(new Set());
 const expandedExpenseCats = ref<Set<string>>(new Set());
+const globalOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
 const assetOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
 const liabilityOwnershipFilter = ref<number | 'all' | 'unassigned'>('all');
-const showArchivedNetWorth = ref(false);
+type VisibilityFilterMode = 'active' | 'archived' | 'all';
+const visibilityFilterMode = ref<VisibilityFilterMode>('active');
 const generatedLiabilityExpenseReview = ref<{
   liabilityId: number;
   liabilityName: string;
@@ -362,9 +364,15 @@ const annualOwnerFilterOptions = computed(() =>
     .filter((option) => option.key.startsWith('individual:'))
     .sort((a, b) => a.label.localeCompare(b.label)),
 );
+const globalOwnershipFilterOptions = computed(() =>
+  annualOwnerFilterOptions.value
+    .map((option) => {
+      const id = Number(option.key.replace('individual:', ''));
+      return Number.isInteger(id) ? { id, label: option.label } : null;
+    })
+    .filter((option): option is { id: number; label: string } => option != null),
+);
 const showOwnerField = computed(() => ownerOptions.value.length > 1);
-const annualIncomeOwnerFilter = ref<string>('all');
-const annualExpenseOwnerFilter = ref<string>('all');
 const fiscalYear = ref(2026);
 const fiscalYearOptions = computed(() => {
   const current = new Date().getFullYear();
@@ -439,11 +447,33 @@ function filterAnnualEntriesByOwner<T extends { owner: string; amountAnnual: num
     .filter((entry): entry is T => entry != null && entry.amountAnnual > 0);
 }
 
+function isVisibleByFilterMode(isActive: boolean | undefined): boolean {
+  if (visibilityFilterMode.value === 'all') return true;
+  if (visibilityFilterMode.value === 'archived') return isActive === false;
+  return isActive !== false;
+}
+
+const annualIncomeEntriesByVisibility = computed(() =>
+  annualIncomeEntries.value.filter((entry) => isVisibleByFilterMode(entry.isActive)),
+);
+const annualExpenseEntriesByVisibility = computed(() =>
+  annualExpenseEntries.value.filter((entry) => isVisibleByFilterMode(entry.isActive)),
+);
+
+const annualOwnerFilterValue = computed(() => {
+  if (globalOwnershipFilter.value === 'all') return 'all';
+  if (globalOwnershipFilter.value === 'unassigned') return 'unassigned';
+  const member = globalOwnershipFilterOptions.value.find(
+    (option) => option.id === globalOwnershipFilter.value,
+  );
+  return member?.label ?? 'all';
+});
+
 const filteredAnnualIncomeEntries = computed(() =>
-  filterAnnualEntriesByOwner(annualIncomeEntries.value, annualIncomeOwnerFilter.value),
+  filterAnnualEntriesByOwner(annualIncomeEntriesByVisibility.value, annualOwnerFilterValue.value),
 );
 const filteredAnnualExpenseEntries = computed(() =>
-  filterAnnualEntriesByOwner(annualExpenseEntries.value, annualExpenseOwnerFilter.value),
+  filterAnnualEntriesByOwner(annualExpenseEntriesByVisibility.value, annualOwnerFilterValue.value),
 );
 
 const filteredAnnualIncomeTotal = computed(() =>
@@ -459,11 +489,23 @@ const activeAssets = computed(() => store.assets.filter((item) => item.is_active
 const activeLiabilities = computed(() =>
   store.liabilities.filter((item) => item.is_active !== false),
 );
+const archivedAssets = computed(() => store.assets.filter((item) => item.is_active === false));
+const archivedLiabilities = computed(() =>
+  store.liabilities.filter((item) => item.is_active === false),
+);
 const visibleAssets = computed(() =>
-  showArchivedNetWorth.value ? store.assets : activeAssets.value,
+  visibilityFilterMode.value === 'all'
+    ? store.assets
+    : visibilityFilterMode.value === 'archived'
+      ? archivedAssets.value
+      : activeAssets.value,
 );
 const visibleLiabilities = computed(() =>
-  showArchivedNetWorth.value ? store.liabilities : activeLiabilities.value,
+  visibilityFilterMode.value === 'all'
+    ? store.liabilities
+    : visibilityFilterMode.value === 'archived'
+      ? archivedLiabilities.value
+      : activeLiabilities.value,
 );
 const annualIncomeCount = computed(() => annualIncomeEntries.value.length);
 const annualExpenseCount = computed(() => annualExpenseEntries.value.length);
@@ -547,24 +589,21 @@ watch(
   { immediate: true },
 );
 watch(
-  [annualOwnerFilterOptions, annualIncomeEntries],
-  ([options]) => {
-    const filter = annualIncomeOwnerFilter.value;
+  globalOwnershipFilterOptions,
+  (options) => {
+    const filter = globalOwnershipFilter.value;
     if (filter === 'all' || filter === 'unassigned') return;
-    if (!options.some((option) => option.value === filter)) {
-      annualIncomeOwnerFilter.value = 'all';
+    if (!options.some((option) => option.id === filter)) {
+      globalOwnershipFilter.value = 'all';
     }
   },
   { immediate: true },
 );
 watch(
-  [annualOwnerFilterOptions, annualExpenseEntries],
-  ([options]) => {
-    const filter = annualExpenseOwnerFilter.value;
-    if (filter === 'all' || filter === 'unassigned') return;
-    if (!options.some((option) => option.value === filter)) {
-      annualExpenseOwnerFilter.value = 'all';
-    }
+  globalOwnershipFilter,
+  (value) => {
+    assetOwnershipFilter.value = value;
+    liabilityOwnershipFilter.value = value;
   },
   { immediate: true },
 );
@@ -2158,6 +2197,32 @@ watch(
                   {{ year }}
                 </option>
               </select>
+              <select
+                id="visibility-filter-mode"
+                v-model="visibilityFilterMode"
+                class="select nw-select-sm ui-flow-air-year-select"
+                aria-label="Filtro de visibilidad"
+              >
+                <option value="active">Solo activos</option>
+                <option value="archived">Solo archivados</option>
+                <option value="all">Todos</option>
+              </select>
+              <select
+                id="ownership-filter-mode"
+                v-model="globalOwnershipFilter"
+                class="select nw-select-sm ui-flow-air-year-select"
+                aria-label="Filtro de ownership"
+              >
+                <option value="all">Todos los miembros</option>
+                <option value="unassigned">Sin asignar</option>
+                <option
+                  v-for="option in globalOwnershipFilterOptions"
+                  :key="`global-owner-${option.id}`"
+                  :value="option.id"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
             </div>
           </div>
           <div class="nw-list-header-right ui-flow-air-right">
@@ -2173,17 +2238,6 @@ watch(
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Ingresos anuales</h2>
-            <select v-model="annualIncomeOwnerFilter" class="select nw-select-sm">
-              <option value="all">Todos los miembros</option>
-              <option value="unassigned">Sin asignar</option>
-              <option
-                v-for="option in annualOwnerFilterOptions"
-                :key="option.key"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -2334,17 +2388,6 @@ watch(
         <div class="nw-list-header">
           <div class="nw-list-header-left">
             <h2 class="card-header-title mt-0">Gastos anuales</h2>
-            <select v-model="annualExpenseOwnerFilter" class="select nw-select-sm">
-              <option value="all">Todos los miembros</option>
-              <option value="unassigned">Sin asignar</option>
-              <option
-                v-for="option in annualOwnerFilterOptions"
-                :key="option.key"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -2514,19 +2557,13 @@ watch(
       </div>
     </section>
 
-    <div class="mb-2 text-sm text-white/80">
-      <label class="checkbox-row">
-        <input v-model="showArchivedNetWorth" type="checkbox" />
-        Ver archivados
-      </label>
-    </div>
-
     <div class="grid-2">
       <ItemList
         v-model:ownership-filter-value="assetOwnershipFilter"
         title="Activos"
         :items="visibleAssets"
-        :show-archived="showArchivedNetWorth"
+        :show-archived="visibilityFilterMode !== 'active'"
+        :show-ownership-filter="false"
         :categories="assetCategories"
         :subcategories="assetSubcategories"
         :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
@@ -2545,7 +2582,8 @@ watch(
         v-model:ownership-filter-value="liabilityOwnershipFilter"
         title="Pasivos"
         :items="visibleLiabilities"
-        :show-archived="showArchivedNetWorth"
+        :show-archived="visibilityFilterMode !== 'active'"
+        :show-ownership-filter="false"
         :categories="liabilityCategories"
         :base-currency="store.baseCurrency ?? store.summary?.base_currency ?? 'EUR'"
         :category-totals-base="store.summary?.liabilities_by_category ?? {}"

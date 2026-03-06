@@ -28,6 +28,7 @@ export type AnnualIncomeEntry = {
   fiscalYear: number;
   currency: string;
   notes: string;
+  isActive?: boolean;
   createdAt: string;
 };
 
@@ -64,6 +65,7 @@ type AnnualIncomeApiItem = {
   fiscal_year: number;
   currency: string;
   notes: string;
+  is_active?: boolean;
   created_at: string;
 };
 
@@ -90,6 +92,7 @@ function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
     fiscalYear: Number(item.fiscal_year),
     currency: item.currency,
     notes: item.notes || '',
+    isActive: item.is_active !== false,
     createdAt: item.created_at,
   };
 }

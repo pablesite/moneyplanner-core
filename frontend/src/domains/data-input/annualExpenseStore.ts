@@ -37,6 +37,7 @@ export type AnnualExpenseEntry = {
   fiscalYear: number;
   currency: string;
   notes: string;
+  isActive?: boolean;
   createdAt: string;
 };
 
@@ -77,6 +78,7 @@ type AnnualExpenseApiItem = {
   fiscal_year: number;
   currency: string;
   notes: string;
+  is_active?: boolean;
   created_at: string;
 };
 
@@ -106,6 +108,7 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
     fiscalYear: Number(item.fiscal_year),
     currency: item.currency,
     notes: item.notes || '',
+    isActive: item.is_active !== false,
     createdAt: item.created_at,
   };
 }
