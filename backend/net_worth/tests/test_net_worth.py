@@ -1354,6 +1354,73 @@ class NetWorthApiTests(APITestCase):
             ).exists()
         )
 
+    def test_periodic_investment_generated_commitments_owner_name_follows_ownership_link(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Reserva vivienda ownership",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "5000.00",
+                "initial_purchase_value": "5000.00",
+                "investment_contribution_mode": "periodic_contribution",
+                "expected_end_date": "2027-12-15",
+                "monthly_contribution_amount": "300.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        asset_id = response.data["id"]
+
+        generated_before = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_asset_id=asset_id,
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertTrue(generated_before.exists())
+        self.assertEqual(generated_before.first().owner_name, "")
+
+        ana = FamilyMember.objects.create(
+            user=self.user,
+            name="Ana",
+            role=FamilyMember.Role.ADULT,
+            is_active=True,
+        )
+        pablo = FamilyMember.objects.create(
+            user=self.user,
+            name="Pablo",
+            role=FamilyMember.Role.ADULT,
+            is_active=True,
+        )
+        shared = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED, member=None)
+        OwnershipSplit.objects.create(ownership=shared, member=ana, percent=Decimal("50.00"))
+        OwnershipSplit.objects.create(ownership=shared, member=pablo, percent=Decimal("50.00"))
+
+        sync_response = self.client.post(
+            "/api/ownership-links/sync/",
+            {
+                "target_type": "asset",
+                "target_id": asset_id,
+                "ownership_id": shared.id,
+            },
+            format="json",
+        )
+        self.assertEqual(sync_response.status_code, status.HTTP_200_OK, sync_response.data)
+
+        generated_after = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_asset_id=asset_id,
+            is_system_generated=True,
+        )
+        self.assertTrue(generated_after.exists())
+        for row in generated_after:
+            self.assertIn("Compartido", row.owner_name)
+            self.assertIn("Ana", row.owner_name)
+            self.assertIn("Pablo", row.owner_name)
+            self.assertIn("50%", row.owner_name)
+
     def test_liability_create_rejects_expected_end_date_before_start_date(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
