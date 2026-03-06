@@ -59,6 +59,10 @@ class Asset(models.Model):
         ONE_TIME = "one_time", "Aportacion unica"
         PERIODIC_CONTRIBUTION = "periodic_contribution", "Aportacion periodica"
 
+    class InvestmentContributionFrequency(models.TextChoices):
+        MONTHLY = "monthly", "Mensual"
+        WEEKLY = "weekly", "Semanal"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="assets"
     )
@@ -116,6 +120,15 @@ class Asset(models.Model):
         help_text=(
             "Modo de aportacion para inversiones: unica o periodica. "
             "Solo aplica a category=investments."
+        ),
+    )
+    investment_contribution_frequency = models.CharField(
+        max_length=16,
+        choices=InvestmentContributionFrequency.choices,
+        default=InvestmentContributionFrequency.MONTHLY,
+        help_text=(
+            "Frecuencia de la aportacion periodica en inversiones: mensual o semanal. "
+            "Solo aplica a investment_contribution_mode=periodic_contribution."
         ),
     )
     monthly_contribution_amount = models.DecimalField(

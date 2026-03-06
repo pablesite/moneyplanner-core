@@ -50,6 +50,18 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
     Asset.Subcategory.RENTAL,
 }
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
+INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
+    Asset.Subcategory.DEPOSITS: "deposits_fixed_income",
+    Asset.Subcategory.FUNDS: "index_funds_etf",
+    Asset.Subcategory.ETFS: "index_funds_etf",
+    Asset.Subcategory.PENSION_PLANS: "pension_plan",
+    Asset.Subcategory.STOCKS: "stocks_dividends",
+    Asset.Subcategory.CRYPTOCURRENCIES: "crypto",
+    Asset.Subcategory.REAL_ESTATE_CROWD: "crowdfunding_real_estate",
+    Asset.Subcategory.CROWDLENDING: "crowdlending_p2p",
+    Asset.Subcategory.ROBOADVISOR: "roboadvisor",
+    Asset.Subcategory.OTHER: "other_financial_investments",
+}
 
 
 def validate_asset_payload(
@@ -70,6 +82,7 @@ def validate_asset_payload(
     building_annual_depreciation_percent=None,
     deposit_term_months=None,
     investment_contribution_mode: str | None = None,
+    investment_contribution_frequency: str | None = None,
     expected_end_date: date | None = None,
     monthly_contribution_amount=None,
 ) -> None:
@@ -127,19 +140,27 @@ def validate_asset_payload(
         == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
     )
     if is_periodic_investment:
-        if expected_end_date is None:
-            raise DRFValidationError(
-                {"expected_end_date": ("Requerido para aportacion periodica en inversiones.")}
-            )
-        if start_date and expected_end_date < start_date:
+        if expected_end_date is not None and start_date and expected_end_date < start_date:
             raise DRFValidationError(
                 {"expected_end_date": ("Debe ser igual o posterior a start_date.")}
+            )
+        if investment_contribution_frequency not in (
+            Asset.InvestmentContributionFrequency.MONTHLY,
+            Asset.InvestmentContributionFrequency.WEEKLY,
+            None,
+        ):
+            raise DRFValidationError(
+                {
+                    "investment_contribution_frequency": (
+                        "Frecuencia invalida. Usa mensual o semanal."
+                    )
+                }
             )
         if monthly_contribution_amount is None or Decimal(str(monthly_contribution_amount)) <= 0:
             raise DRFValidationError(
                 {
                     "monthly_contribution_amount": (
-                        "La cuota mensual debe ser mayor que 0 en aportacion periodica."
+                        "La cuota periodica debe ser mayor que 0 en aportacion periodica."
                     )
                 }
             )
@@ -338,8 +359,9 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
     ):
         accrued_contributions = sum(
             installment
-            for due_date, installment in _build_investment_contribution_schedule(asset=asset)
-            if due_date <= ref_date
+            for _, installment in _build_investment_contribution_schedule(
+                asset=asset, as_of_date=ref_date
+            )
         )
         return Decimal(asset.amount) + Decimal(accrued_contributions)
 
@@ -520,6 +542,20 @@ def _get_generated_asset_owner_name(*, asset: Asset) -> str:
     return ""
 
 
+def _get_generated_asset_expense_profile(*, asset: Asset) -> tuple[str, str]:
+    from budget.models import AnnualExpenseEntry
+
+    if asset.category == Asset.Category.INVESTMENTS:
+        return (
+            AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY.get(
+                asset.subcategory, "other_financial_investments"
+            ),
+        )
+
+    return (AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS, "property_purchase")
+
+
 def _last_day_of_month(year: int, month: int) -> int:
     if month == 12:
         next_month = date(year + 1, 1, 1)
@@ -536,30 +572,55 @@ def _add_months_preserve_day(value: date, months: int) -> date:
     return date(year, month, day)
 
 
-def _build_investment_contribution_schedule(*, asset: Asset) -> list[tuple[date, Decimal]]:
+def _build_investment_contribution_schedule(
+    *,
+    asset: Asset,
+    as_of_date: date | None = None,
+    horizon_end_date: date | None = None,
+) -> list[tuple[date, Decimal]]:
     if (
         asset.category != Asset.Category.INVESTMENTS
         or asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
-        or asset.expected_end_date is None
         or asset.monthly_contribution_amount is None
         or asset.monthly_contribution_amount <= 0
-        or asset.expected_end_date < asset.start_date
     ):
         return []
 
+    schedule_end = asset.expected_end_date
+    bounded_end = horizon_end_date or as_of_date
+    if schedule_end is None:
+        schedule_end = bounded_end or timezone.localdate()
+    elif bounded_end is not None:
+        schedule_end = min(schedule_end, bounded_end)
+    if schedule_end < asset.start_date:
+        return []
+
+    frequency = (
+        asset.investment_contribution_frequency
+        or Asset.InvestmentContributionFrequency.MONTHLY
+    )
     schedule: list[tuple[date, Decimal]] = []
     due_date = asset.start_date
     installment = Decimal(asset.monthly_contribution_amount)
-    while due_date <= asset.expected_end_date:
+    while due_date <= schedule_end:
         schedule.append((due_date, installment))
-        due_date = _add_months_preserve_day(due_date, 1)
+        if frequency == Asset.InvestmentContributionFrequency.WEEKLY:
+            due_date += timedelta(days=7)
+        else:
+            due_date = _add_months_preserve_day(due_date, 1)
     return schedule
 
 
 def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
     from budget.models import AnnualExpenseEntry
 
-    schedule = _build_investment_contribution_schedule(asset=asset) if asset.is_active else []
+    schedule = []
+    if asset.is_active:
+        horizon_year = timezone.localdate().year + 1
+        schedule = _build_investment_contribution_schedule(
+            asset=asset,
+            horizon_end_date=date(horizon_year, 12, 31),
+        )
     event_group = f"{SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX}{asset.id}"
 
     if not schedule:
@@ -575,15 +636,21 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
         totals_by_year[due_date.year] += installment
 
     owner_name = _get_generated_asset_owner_name(asset=asset)
-    final_due_year = schedule[-1][0].year
+    expense_category, expense_subcategory = _get_generated_asset_expense_profile(asset=asset)
+    final_due_year = schedule[-1][0].year if asset.expected_end_date is not None else None
     for year, annual_total in totals_by_year.items():
+        time_profile = (
+            AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
+            if final_due_year is not None
+            else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+        )
         generated_defaults = {
             "name": f"Aportacion inversion: {asset.name}",
-            "category": AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
-            "subcategory": "property_purchase",
+            "category": expense_category,
+            "subcategory": expense_subcategory,
             "owner_name": owner_name,
             "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
-            "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            "time_profile": time_profile,
             "cashflow_role": AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
             "event_group": event_group,
             "term_end_year": final_due_year,

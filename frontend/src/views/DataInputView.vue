@@ -507,10 +507,21 @@ const visibleLiabilities = computed(() =>
       ? archivedLiabilities.value
       : activeLiabilities.value,
 );
-const annualIncomeCount = computed(() => annualIncomeEntries.value.length);
-const annualExpenseCount = computed(() => annualExpenseEntries.value.length);
-const assetsCount = computed(() => activeAssets.value.length);
-const liabilitiesCount = computed(() => activeLiabilities.value.length);
+const visibleAssetsByOwner = computed(() =>
+  visibleAssets.value.filter(
+    (item) => allocatedFractionForNetWorthOwner(item.ownership_ref, assetOwnershipFilter.value) > 0,
+  ),
+);
+const visibleLiabilitiesByOwner = computed(() =>
+  visibleLiabilities.value.filter(
+    (item) =>
+      allocatedFractionForNetWorthOwner(item.ownership_ref, liabilityOwnershipFilter.value) > 0,
+  ),
+);
+const annualIncomeCount = computed(() => filteredAnnualIncomeEntries.value.length);
+const annualExpenseCount = computed(() => filteredAnnualExpenseEntries.value.length);
+const assetsCount = computed(() => visibleAssetsByOwner.value.length);
+const liabilitiesCount = computed(() => visibleLiabilitiesByOwner.value.length);
 const hasIncomeData = computed(() => annualIncomeCount.value > 0);
 const hasExpenseData = computed(() => annualExpenseCount.value > 0);
 const hasAssetData = computed(() => assetsCount.value > 0);
@@ -1815,6 +1826,8 @@ async function importPortableAssets(
       expected_end_date: normalizeOptionalText(asset.expected_end_date),
       investment_contribution_mode:
         normalizeOptionalText(asset.investment_contribution_mode) ?? 'one_time',
+      investment_contribution_frequency:
+        normalizeOptionalText(asset.investment_contribution_frequency) ?? 'monthly',
       monthly_contribution_amount: normalizeOptionalText(asset.monthly_contribution_amount),
       initial_purchase_value: normalizeOptionalText(asset.initial_purchase_value),
       amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
@@ -2088,8 +2101,8 @@ watch(
         {{ dataInputSummary }}
       </p>
       <p class="subtle m-0">
-        Gestiona aqui la base financiera anual: ingresos, activos y pasivos con interes para el
-        analisis de patrimonio.
+        Gestiona aqui la base financiera anual: ingresos, gastos, activos y pasivos para el
+        analisis patrimonial.
       </p>
       <div class="actions m-0">
         <button

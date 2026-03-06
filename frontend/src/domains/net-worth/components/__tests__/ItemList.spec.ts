@@ -89,4 +89,59 @@ describe('ItemList (core)', () => {
     );
     expect(wrapper.findAll('[data-test="edit"]')).toHaveLength(1);
   });
+
+  it('applies ownership share over effective_amount when present', () => {
+    const amountRowStub = {
+      props: ['formattedAmount'],
+      template: '<div data-test="amount">{{ formattedAmount }}</div>',
+    };
+    const wrapper = mount(ItemList, {
+      props: {
+        title: 'Activos',
+        ownershipFilterValue: 1,
+        items: [
+          {
+            id: 10,
+            name: 'Palmito',
+            category: 'real_estate',
+            subcategory: 'primary_home',
+            amount: '91000.00',
+            effective_amount: '145905.37',
+            currency: 'EUR',
+            notes: '',
+            is_active: true,
+            tracking_mode: 'manual',
+            accounting_account_id: null,
+            ownership_ref: 22,
+          },
+        ],
+        categories: [{ value: 'real_estate', label: 'Inmuebles' }],
+        subcategories: [
+          { value: 'primary_home', label: 'Vivienda habitual', category: 'real_estate' },
+        ],
+        ownerships: [
+          {
+            id: 22,
+            kind: 'shared',
+            member: null,
+            splits: [
+              { member: { id: 1, name: 'Ana', role: 'adult' }, percent: '50.00' },
+              { member: { id: 2, name: 'Pablo', role: 'adult' }, percent: '50.00' },
+            ],
+            notes: '',
+          },
+        ],
+        onUpdate: vi.fn().mockResolvedValue(undefined),
+        onArchive: vi.fn().mockResolvedValue(undefined),
+      },
+      global: {
+        stubs: {
+          ...stubs,
+          ItemDisplayRow: amountRowStub,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('72.952,69');
+  });
 });

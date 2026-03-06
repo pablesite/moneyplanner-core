@@ -704,6 +704,25 @@ class NetWorthServicesTests(TestCase):
         # 13 cuotas (de 2025-03 a 2026-03 inclusive) + importe inicial.
         self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("26662.00"))
 
+    def test_get_effective_asset_amount_accumulates_weekly_periodic_contributions(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF semanal",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            investment_contribution_frequency=Asset.InvestmentContributionFrequency.WEEKLY,
+            monthly_contribution_amount=Decimal("100.00"),
+            amount=Decimal("1000.00"),
+            initial_purchase_value=Decimal("1000.00"),
+            is_active=True,
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 29))
+        # Cuotas semanales en: 01, 08, 15, 22 y 29 de enero.
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("1500.00"))
+
     def test_calculate_totals_uses_effective_asset_amount_for_auto_home_valuation(self):
         Asset.objects.create(
             user=self.user,
@@ -1268,7 +1287,7 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(asset.amount, Decimal("91000.00"))
         self.assertEqual(asset.initial_purchase_value, Decimal("91000.00"))
 
-    def test_periodic_investment_asset_generates_real_estate_purchase_commitments(self):
+    def test_periodic_investment_asset_generates_financial_investment_commitments(self):
         response = self.client.post(
             "/api/net-worth/assets/",
             {
@@ -1295,15 +1314,15 @@ class NetWorthApiTests(APITestCase):
         ).order_by("fiscal_year")
         self.assertEqual(list(generated.values_list("fiscal_year", flat=True)), [2026, 2027])
         row_2026 = generated.get(fiscal_year=2026)
-        self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
-        self.assertEqual(row_2026.subcategory, "property_purchase")
+        self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS)
+        self.assertEqual(row_2026.subcategory, "index_funds_etf")
         self.assertEqual(row_2026.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
         self.assertEqual(
             row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
         )
         self.assertEqual(row_2026.amount_annual, Decimal("3600.00"))
 
-    def test_periodic_investment_asset_requires_end_date_and_monthly_contribution(self):
+    def test_periodic_investment_asset_requires_monthly_contribution_only(self):
         response = self.client.post(
             "/api/net-worth/assets/",
             {
@@ -1319,7 +1338,40 @@ class NetWorthApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-        self.assertIn("expected_end_date", response.data["error"]["details"])
+        self.assertIn("monthly_contribution_amount", response.data["error"]["details"])
+
+    def test_periodic_investment_asset_supports_indefinite_end_date(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "ETF indefinido",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.ETFS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "1000.00",
+                "initial_purchase_value": "1000.00",
+                "investment_contribution_mode": "periodic_contribution",
+                "investment_contribution_frequency": "weekly",
+                "monthly_contribution_amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        asset_id = response.data["id"]
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_asset_id=asset_id,
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertEqual(list(generated.values_list("fiscal_year", flat=True)), [2026, 2027])
+        first_row = generated.first()
+        self.assertIsNotNone(first_row)
+        assert first_row is not None
+        self.assertEqual(
+            first_row.time_profile, AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+        )
+        self.assertIsNone(first_row.term_end_year)
 
     def test_periodic_investment_asset_delete_removes_generated_commitments(self):
         create_response = self.client.post(
@@ -1416,6 +1468,8 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertTrue(generated_after.exists())
         for row in generated_after:
+            self.assertEqual(row.category, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS)
+            self.assertEqual(row.subcategory, "index_funds_etf")
             self.assertIn("Compartido", row.owner_name)
             self.assertIn("Ana", row.owner_name)
             self.assertIn("Pablo", row.owner_name)

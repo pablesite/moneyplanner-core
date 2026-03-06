@@ -749,8 +749,52 @@ describe('ItemForm (saas)', () => {
         investment_contribution_mode: 'periodic_contribution',
         expected_end_date: '2027-12-15',
         monthly_contribution_amount: '300',
+        investment_contribution_frequency: 'monthly',
         amount: '5000',
         initial_purchase_value: '5000',
+      }),
+    );
+  });
+
+  it('allows indefinite periodic investment with weekly contribution', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nuevo activo',
+        categories: [{ value: 'investments', label: 'Inversiones' }],
+        subcategories: [{ category: 'investments', value: 'etfs', label: 'ETFs' }],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('ETF Physical Gold');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('investments');
+    await selects[1]!.setValue('etfs');
+    const modeSelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'))!;
+    await modeSelect.setValue('periodic_contribution');
+    const frequencySelect = wrapper
+      .findAll('select')
+      .find((s) => s.text().includes('Mensual') && s.text().includes('Semanal'))!;
+    await frequencySelect.setValue('weekly');
+    const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
+    await currencySelect.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('1645.99');
+    await wrapper.find('input[placeholder="Ej: 500"]').setValue('137.4');
+    const dateInputs = wrapper.findAll('input[type="date"]');
+    await dateInputs[0]!.setValue('2026-03-06');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        investment_contribution_mode: 'periodic_contribution',
+        investment_contribution_frequency: 'weekly',
+        expected_end_date: undefined,
+        monthly_contribution_amount: '137.4',
       }),
     );
   });

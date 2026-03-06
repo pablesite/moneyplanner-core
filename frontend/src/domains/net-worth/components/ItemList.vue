@@ -286,7 +286,11 @@ const filteredItems = computed(() => {
       if (split) pct = Number(normalizeAmountInput(split.percent));
     }
     if (!pct || pct <= 0) continue;
-    const displayAmount = toNumberAmount(it.amount) * (pct / 100);
+    const sourceAmount =
+      it.effective_amount != null && String(it.effective_amount).trim() !== ''
+        ? toNumberAmount(String(it.effective_amount))
+        : toNumberAmount(String(it.amount));
+    const displayAmount = sourceAmount * (pct / 100);
     out.push({
       ...it,
       _displayAmount: displayAmount,

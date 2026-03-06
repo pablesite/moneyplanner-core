@@ -206,6 +206,7 @@ export function useNetWorthViewState() {
       start_date: item.start_date ?? '',
       expected_end_date: item.expected_end_date ?? '',
       investment_contribution_mode: item.investment_contribution_mode ?? 'one_time',
+      investment_contribution_frequency: item.investment_contribution_frequency ?? 'monthly',
       monthly_contribution_amount: item.monthly_contribution_amount ?? '',
       term_months: item.term_months ?? '',
       rate_type: item.rate_type ?? 'fixed',
