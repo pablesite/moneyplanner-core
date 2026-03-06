@@ -201,7 +201,8 @@ class AssetSerializer(serializers.ModelSerializer):
             attrs["initial_purchase_value"] = amount
 
         if valuation_model == Asset.ValuationModel.REAL_ESTATE_AUTO:
-            if initial_purchase_value is None and attrs.get("amount") is not None:
+            # Keep the backend purchase value in sync with the single "importe" field exposed in UI.
+            if attrs.get("amount") is not None:
                 initial_purchase_value = attrs["amount"]
                 attrs["initial_purchase_value"] = attrs["amount"]
         else:

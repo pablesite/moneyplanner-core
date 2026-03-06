@@ -1235,6 +1235,39 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(kept.amount, Decimal("9500.00"))
         self.assertFalse(AssetImprovement.objects.filter(id=deleted.id).exists())
 
+    def test_asset_update_primary_home_auto_valuation_syncs_initial_purchase_value_from_amount(
+        self,
+    ):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            amount=Decimal("100000.00"),
+            valuation_model=Asset.ValuationModel.REAL_ESTATE_AUTO,
+            land_value_share_percent=Decimal("30.00"),
+            land_annual_appreciation_percent=Decimal("4.000"),
+            building_annual_depreciation_percent=Decimal("1.00"),
+            initial_purchase_value=Decimal("100000.00"),
+            is_active=True,
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/assets/{asset.id}/",
+            {"amount": "91000.00"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["amount"], "91000.00000000")
+        self.assertEqual(response.data["initial_purchase_value"], "91000.00000000")
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.amount, Decimal("91000.00"))
+        self.assertEqual(asset.initial_purchase_value, Decimal("91000.00"))
+
     def test_periodic_investment_asset_generates_real_estate_purchase_commitments(self):
         response = self.client.post(
             "/api/net-worth/assets/",
