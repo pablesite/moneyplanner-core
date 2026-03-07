@@ -105,7 +105,10 @@ class AssetSerializer(serializers.ModelSerializer):
             "initial_purchase_value",
             "investment_contribution_mode",
             "investment_contribution_frequency",
+            "investment_contribution_currency",
             "monthly_contribution_amount",
+            "market_value_override",
+            "market_value_override_date",
             "amortization_method",
             "amortization_term_years",
             "valuation_model",
@@ -179,12 +182,23 @@ class AssetSerializer(serializers.ModelSerializer):
                 Asset.InvestmentContributionFrequency.MONTHLY,
             ),
         )
+        investment_contribution_currency = attrs.get(
+            "investment_contribution_currency",
+            getattr(self.instance, "investment_contribution_currency", None),
+        )
         expected_end_date = attrs.get(
             "expected_end_date", getattr(self.instance, "expected_end_date", None)
         )
         monthly_contribution_amount = attrs.get(
             "monthly_contribution_amount",
             getattr(self.instance, "monthly_contribution_amount", None),
+        )
+        market_value_override = attrs.get(
+            "market_value_override", getattr(self.instance, "market_value_override", None)
+        )
+        market_value_override_date = attrs.get(
+            "market_value_override_date",
+            getattr(self.instance, "market_value_override_date", None),
         )
         valuation_model = attrs.get(
             "valuation_model", getattr(self.instance, "valuation_model", None)
@@ -232,23 +246,39 @@ class AssetSerializer(serializers.ModelSerializer):
         if category != Asset.Category.INVESTMENTS:
             investment_contribution_mode = Asset.InvestmentContributionMode.ONE_TIME
             investment_contribution_frequency = Asset.InvestmentContributionFrequency.MONTHLY
+            investment_contribution_currency = None
             expected_end_date = None
             monthly_contribution_amount = None
+            market_value_override = None
+            market_value_override_date = None
             attrs["investment_contribution_mode"] = investment_contribution_mode
             attrs["investment_contribution_frequency"] = investment_contribution_frequency
+            attrs["investment_contribution_currency"] = None
             attrs["expected_end_date"] = None
             attrs["monthly_contribution_amount"] = None
+            attrs["market_value_override"] = None
+            attrs["market_value_override_date"] = None
         elif investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
             investment_contribution_frequency = Asset.InvestmentContributionFrequency.MONTHLY
+            investment_contribution_currency = None
             expected_end_date = None
             monthly_contribution_amount = None
             attrs["investment_contribution_frequency"] = investment_contribution_frequency
+            attrs["investment_contribution_currency"] = None
             attrs["expected_end_date"] = None
             attrs["monthly_contribution_amount"] = None
         elif initial_purchase_value is None and amount is not None:
             # En aportacion periodica de inversiones, usamos el importe como valor inicial.
             initial_purchase_value = amount
             attrs["initial_purchase_value"] = amount
+        if (
+            investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+            and not str(investment_contribution_currency or "").strip()
+        ):
+            investment_contribution_currency = attrs.get(
+                "currency", getattr(self.instance, "currency", None)
+            )
+            attrs["investment_contribution_currency"] = investment_contribution_currency
 
         validate_asset_payload(
             tracking_mode=tracking_mode,
@@ -268,8 +298,11 @@ class AssetSerializer(serializers.ModelSerializer):
             deposit_term_months=deposit_term_months,
             investment_contribution_mode=investment_contribution_mode,
             investment_contribution_frequency=investment_contribution_frequency,
+            investment_contribution_currency=investment_contribution_currency,
             expected_end_date=expected_end_date,
             monthly_contribution_amount=monthly_contribution_amount,
+            market_value_override=market_value_override,
+            market_value_override_date=market_value_override_date,
         )
         return attrs
 

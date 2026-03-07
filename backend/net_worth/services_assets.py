@@ -52,8 +52,8 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     Asset.Subcategory.DEPOSITS: "deposits_fixed_income",
-    Asset.Subcategory.FUNDS: "index_funds_etf",
-    Asset.Subcategory.ETFS: "index_funds_etf",
+    Asset.Subcategory.FUNDS: "index_funds",
+    Asset.Subcategory.ETFS: "etf_indexed",
     Asset.Subcategory.PENSION_PLANS: "pension_plan",
     Asset.Subcategory.STOCKS: "stocks_dividends",
     Asset.Subcategory.CRYPTOCURRENCIES: "crypto",
@@ -62,6 +62,78 @@ INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     Asset.Subcategory.ROBOADVISOR: "roboadvisor",
     Asset.Subcategory.OTHER: "other_financial_investments",
 }
+
+
+def _validate_periodic_investment_payload(
+    *,
+    start_date: date | None,
+    expected_end_date: date | None,
+    investment_contribution_frequency: str | None,
+    investment_contribution_currency: str | None,
+    monthly_contribution_amount,
+    purchase_value,
+) -> None:
+    if expected_end_date is not None and start_date and expected_end_date < start_date:
+        raise DRFValidationError({"expected_end_date": ("Debe ser igual o posterior a start_date.")})
+    if investment_contribution_frequency not in (
+        Asset.InvestmentContributionFrequency.MONTHLY,
+        Asset.InvestmentContributionFrequency.WEEKLY,
+        None,
+    ):
+        raise DRFValidationError(
+            {
+                "investment_contribution_frequency": (
+                    "Frecuencia invalida. Usa mensual o semanal."
+                )
+            }
+        )
+    if monthly_contribution_amount is None or Decimal(str(monthly_contribution_amount)) <= 0:
+        raise DRFValidationError(
+            {
+                "monthly_contribution_amount": (
+                    "La cuota periodica debe ser mayor que 0 en aportacion periodica."
+                )
+            }
+        )
+    contribution_currency = str(investment_contribution_currency or "").strip().upper()
+    if contribution_currency and (
+        len(contribution_currency) != 3 or not contribution_currency.isalpha()
+    ):
+        raise DRFValidationError(
+            {
+                "investment_contribution_currency": (
+                    "Moneda de cuota invalida (usa codigo ISO de 3 letras, ej: USD)."
+                )
+            }
+        )
+    if purchase_value is None:
+        raise DRFValidationError({"amount": ("Requerido para aportacion periodica en inversiones.")})
+
+
+def _validate_market_value_override_payload(
+    *,
+    category,
+    market_value_override,
+    market_value_override_date: date | None,
+) -> None:
+    if category != Asset.Category.INVESTMENTS:
+        if market_value_override is not None or market_value_override_date is not None:
+            raise DRFValidationError(
+                {
+                    "market_value_override": (
+                        "Solo aplica a activos de inversiones."
+                    )
+                }
+            )
+        return
+    if market_value_override is not None and market_value_override_date is None:
+        raise DRFValidationError(
+            {"market_value_override_date": ("Requerida si se informa valor de mercado manual.")}
+        )
+    if market_value_override is None and market_value_override_date is not None:
+        raise DRFValidationError(
+            {"market_value_override": ("Requerido si se informa fecha de valoracion manual.")}
+        )
 
 
 def validate_asset_payload(
@@ -83,8 +155,11 @@ def validate_asset_payload(
     deposit_term_months=None,
     investment_contribution_mode: str | None = None,
     investment_contribution_frequency: str | None = None,
+    investment_contribution_currency: str | None = None,
     expected_end_date: date | None = None,
     monthly_contribution_amount=None,
+    market_value_override=None,
+    market_value_override_date: date | None = None,
 ) -> None:
     if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -140,32 +215,20 @@ def validate_asset_payload(
         == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
     )
     if is_periodic_investment:
-        if expected_end_date is not None and start_date and expected_end_date < start_date:
-            raise DRFValidationError(
-                {"expected_end_date": ("Debe ser igual o posterior a start_date.")}
-            )
-        if investment_contribution_frequency not in (
-            Asset.InvestmentContributionFrequency.MONTHLY,
-            Asset.InvestmentContributionFrequency.WEEKLY,
-            None,
-        ):
-            raise DRFValidationError(
-                {
-                    "investment_contribution_frequency": (
-                        "Frecuencia invalida. Usa mensual o semanal."
-                    )
-                }
-            )
-        if monthly_contribution_amount is None or Decimal(str(monthly_contribution_amount)) <= 0:
-            raise DRFValidationError(
-                {
-                    "monthly_contribution_amount": (
-                        "La cuota periodica debe ser mayor que 0 en aportacion periodica."
-                    )
-                }
-            )
-        if purchase_value is None:
-            raise DRFValidationError({"amount": ("Requerido para aportacion periodica en inversiones.")})
+        _validate_periodic_investment_payload(
+            start_date=start_date,
+            expected_end_date=expected_end_date,
+            investment_contribution_frequency=investment_contribution_frequency,
+            investment_contribution_currency=investment_contribution_currency,
+            monthly_contribution_amount=monthly_contribution_amount,
+            purchase_value=purchase_value,
+        )
+
+    _validate_market_value_override_payload(
+        category=category,
+        market_value_override=market_value_override,
+        market_value_override_date=market_value_override_date,
+    )
 
     if amortization_method == Asset.AmortizationMethod.STRAIGHT_LINE:
         if purchase_value is None:
@@ -353,9 +416,19 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
     ref_date = as_of_date or timezone.localdate()
     if (
         asset.category == Asset.Category.INVESTMENTS
+        and asset.market_value_override is not None
+    ):
+        return Decimal(asset.market_value_override)
+
+    if (
+        asset.category == Asset.Category.INVESTMENTS
         and asset.investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
         and asset.monthly_contribution_amount is not None
         and asset.monthly_contribution_amount > 0
+        and (
+            not str(asset.investment_contribution_currency or "").strip()
+            or str(asset.investment_contribution_currency).strip().upper() == str(asset.currency).strip().upper()
+        )
     ):
         accrued_contributions = sum(
             installment
@@ -644,6 +717,10 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             if final_due_year is not None
             else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
         )
+        contribution_currency = (
+            str(asset.investment_contribution_currency or "").strip().upper()
+            or str(asset.currency).strip().upper()
+        )
         generated_defaults = {
             "name": f"Aportacion inversion: {asset.name}",
             "category": expense_category,
@@ -655,37 +732,49 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             "event_group": event_group,
             "term_end_year": final_due_year,
             "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
-            "currency": asset.currency,
+            "currency": contribution_currency,
             "notes": "Generado automaticamente desde activo de inversion periodica (editable).",
             "is_active": True,
         }
-        row, created = AnnualExpenseEntry.objects.get_or_create(
+        row = AnnualExpenseEntry.objects.filter(
             user=asset.user,
             source_asset=asset,
             is_system_generated=True,
             fiscal_year=year,
-            defaults=generated_defaults,
-        )
+        ).first()
+        created = False
+        if row is None:
+            # Backward-compat: recover legacy rows linked only by event_group.
+            row = AnnualExpenseEntry.objects.filter(
+                user=asset.user,
+                source_asset__isnull=True,
+                is_system_generated=True,
+                fiscal_year=year,
+                event_group=event_group,
+            ).first()
+            if row is not None:
+                row.source_asset = asset
+                row.save(update_fields=["source_asset"])
+            else:
+                row = AnnualExpenseEntry.objects.create(
+                    user=asset.user,
+                    source_asset=asset,
+                    is_system_generated=True,
+                    fiscal_year=year,
+                    **generated_defaults,
+                )
+                created = True
         if created:
             continue
 
-        customization_marker_fields = (
-            "name",
-            "category",
-            "subcategory",
-            "expense_type",
-            "time_profile",
-            "cashflow_role",
-            "notes",
-        )
-        is_customized = any(
-            getattr(row, field_name) != generated_defaults[field_name]
-            for field_name in customization_marker_fields
-        )
-
-        system_owned_fields = ["owner_name", "term_end_year", "currency", "event_group", "is_active"]
-        if not is_customized:
-            system_owned_fields.append("amount_annual")
+        system_owned_fields = [
+            "owner_name",
+            "term_end_year",
+            "currency",
+            "event_group",
+            "is_active",
+            "amount_annual",
+        ]
         update_fields: list[str] = []
         for field_name in system_owned_fields:
             expected = generated_defaults[field_name]
@@ -697,9 +786,10 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
 
     AnnualExpenseEntry.objects.filter(
         user=asset.user,
-        source_asset=asset,
         is_system_generated=True,
-    ).exclude(fiscal_year__in=list(totals_by_year.keys())).delete()
+    ).filter(Q(source_asset=asset) | Q(event_group=event_group)).exclude(
+        fiscal_year__in=list(totals_by_year.keys())
+    ).delete()
 
 
 def delete_generated_budget_commitments_for_asset(*, asset: Asset) -> None:

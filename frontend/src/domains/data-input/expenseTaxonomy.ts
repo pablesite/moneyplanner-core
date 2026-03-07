@@ -30,10 +30,16 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
     label: 'Otros destinos de ahorro',
   },
 
-  { category: 'financial_investments', value: 'index_funds_etf', label: 'Fondos indexados / ETF' },
+  { category: 'financial_investments', value: 'index_funds', label: 'Fondos indexados' },
+  { category: 'financial_investments', value: 'etf_indexed', label: 'ETF indexados' },
   { category: 'financial_investments', value: 'pension_plan', label: 'Plan de pensiones' },
   { category: 'financial_investments', value: 'stocks_dividends', label: 'Acciones / dividendos' },
   { category: 'financial_investments', value: 'crypto', label: 'Criptomonedas' },
+  {
+    category: 'financial_investments',
+    value: 'crowdfunding_real_estate',
+    label: 'Crowdfunding inmobiliario',
+  },
   { category: 'financial_investments', value: 'crowdlending_p2p', label: 'Crowdlending / P2P' },
   { category: 'financial_investments', value: 'roboadvisor', label: 'Roboadvisor' },
   {

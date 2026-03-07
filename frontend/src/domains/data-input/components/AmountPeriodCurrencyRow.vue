@@ -21,11 +21,6 @@ const emit = defineEmits<{
   'update:period': [value: AmountInputPeriod];
   'update:currency': [value: string];
 }>();
-
-function togglePeriod(): void {
-  if (props.periodDisabled) return;
-  emit('update:period', props.period === 'annual' ? 'monthly' : 'annual');
-}
 </script>
 
 <template>
@@ -37,34 +32,20 @@ function togglePeriod(): void {
       :placeholder="placeholder"
       @input="emit('update:amountValue', String(($event.target as HTMLInputElement).value ?? ''))"
     />
-    <div class="ui-amount-period-toggle-wrap">
-      <button
-        type="button"
-        class="ui-amount-period-toggle"
-        :class="{
-          'ui-amount-period-toggle-on': period === 'monthly',
-          'ui-amount-period-toggle-off': period !== 'monthly',
-        }"
-        :disabled="periodDisabled"
-        aria-label="Cambiar periodicidad mensual/anual"
-        @click="togglePeriod"
-      >
-        <span
-          class="ui-amount-period-toggle-thumb"
-          :class="{
-            'ui-amount-period-toggle-thumb-on': period === 'monthly',
-            'ui-amount-period-toggle-thumb-off': period !== 'monthly',
-          }"
-        />
-      </button>
-      <span class="subtle ui-amount-period-toggle-label">
-        <span :class="{ 'ui-amount-period-toggle-label-active': period === 'annual' }">Anual</span>
-        /
-        <span :class="{ 'ui-amount-period-toggle-label-active': period === 'monthly' }">
-          Mensual
-        </span>
-      </span>
-    </div>
+    <select
+      :value="period"
+      class="select ui-data-field"
+      :disabled="periodDisabled"
+      @change="
+        emit(
+          'update:period',
+          String(($event.target as HTMLSelectElement).value ?? 'annual') as AmountInputPeriod,
+        )
+      "
+    >
+      <option value="annual">Anual</option>
+      <option value="monthly">Mensual</option>
+    </select>
     <select
       :value="currency"
       class="select ui-data-field"
