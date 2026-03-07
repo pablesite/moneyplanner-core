@@ -24,7 +24,10 @@ export type Asset = {
   start_date?: string;
   investment_contribution_mode?: 'one_time' | 'periodic_contribution';
   investment_contribution_frequency?: 'monthly' | 'weekly';
+  investment_contribution_currency?: string | null;
   monthly_contribution_amount?: string | null;
+  market_value_override?: string | null;
+  market_value_override_date?: string | null;
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;

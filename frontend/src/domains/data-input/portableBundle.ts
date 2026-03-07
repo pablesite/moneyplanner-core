@@ -54,7 +54,10 @@ export type PortableAssetRecord = {
   expected_end_date?: string | null;
   investment_contribution_mode?: 'one_time' | 'periodic_contribution';
   investment_contribution_frequency?: 'monthly' | 'weekly';
+  investment_contribution_currency?: string | null;
   monthly_contribution_amount?: string | null;
+  market_value_override?: string | null;
+  market_value_override_date?: string | null;
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;
@@ -312,8 +315,16 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
       raw.investment_contribution_frequency == null
         ? 'monthly'
         : (String(raw.investment_contribution_frequency) as 'monthly' | 'weekly'),
+    investment_contribution_currency:
+      raw.investment_contribution_currency == null
+        ? null
+        : String(raw.investment_contribution_currency).toUpperCase(),
     monthly_contribution_amount:
       raw.monthly_contribution_amount == null ? null : String(raw.monthly_contribution_amount),
+    market_value_override:
+      raw.market_value_override == null ? null : String(raw.market_value_override),
+    market_value_override_date:
+      raw.market_value_override_date == null ? null : String(raw.market_value_override_date),
     initial_purchase_value:
       raw.initial_purchase_value == null ? null : String(raw.initial_purchase_value),
     amortization_method: raw.amortization_method == null ? 'none' : String(raw.amortization_method),

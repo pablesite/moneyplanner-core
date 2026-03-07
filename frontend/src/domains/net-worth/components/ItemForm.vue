@@ -37,7 +37,10 @@ type Props = {
     expected_end_date?: string | null;
     investment_contribution_mode?: 'one_time' | 'periodic_contribution';
     investment_contribution_frequency?: 'monthly' | 'weekly';
+    investment_contribution_currency?: string | null;
     monthly_contribution_amount?: string | null;
+    market_value_override?: string | null;
+    market_value_override_date?: string | null;
     term_months?: number | string | null;
     rate_type?: string;
     payment_frequency?: string;
@@ -253,7 +256,10 @@ const form = reactive({
   expected_end_date: '',
   investment_contribution_mode: 'one_time',
   investment_contribution_frequency: 'monthly',
+  investment_contribution_currency: '',
   monthly_contribution_amount: '',
+  market_value_override: '',
+  market_value_override_date: '',
   term_months: '',
   rate_type: 'fixed',
   payment_frequency: 'monthly',
@@ -315,6 +321,9 @@ const showEstimatedAverageBalanceForInterestInput = computed(() => {
   return Number.isFinite(taeValue) && taeValue > 0;
 });
 const showInvestmentContributionModeField = computed(
+  () => isAssetForm.value && String(form.category ?? '').trim() === 'investments',
+);
+const showInvestmentMarketValueFields = computed(
   () => isAssetForm.value && String(form.category ?? '').trim() === 'investments',
 );
 const showInvestmentPeriodicFields = computed(
@@ -997,6 +1006,7 @@ async function submit() {
 
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
+  const hasMarketValueOverride = !!String(form.market_value_override ?? '').trim();
 
   const payload: ItemFormPayload = {
     name: form.name,
@@ -1038,11 +1048,24 @@ async function submit() {
         ? 'weekly'
         : 'monthly'
       : undefined,
+    investment_contribution_currency: showInvestmentPeriodicFields.value
+      ? String(form.investment_contribution_currency ?? '').trim() || undefined
+      : undefined,
     monthly_contribution_amount:
       showInvestmentPeriodicFields.value && String(form.monthly_contribution_amount ?? '').trim()
         ? sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value).value
         : undefined,
     initial_purchase_value: showInvestmentPeriodicFields.value ? normalizedAmount : undefined,
+    market_value_override: showInvestmentMarketValueFields.value
+      ? hasMarketValueOverride
+        ? sanitizeAmount(form.market_value_override, maxDecimals.value).value
+        : null
+      : undefined,
+    market_value_override_date: showInvestmentMarketValueFields.value
+      ? hasMarketValueOverride
+        ? String(form.market_value_override_date ?? '').trim() || null
+        : null
+      : undefined,
     term_months:
       showLiabilityAdvancedFields.value && String(form.term_months ?? '').trim()
         ? Number(String(form.term_months).trim())
@@ -1139,7 +1162,10 @@ async function submit() {
   form.expected_end_date = '';
   form.investment_contribution_mode = 'one_time';
   form.investment_contribution_frequency = 'monthly';
+  form.investment_contribution_currency = '';
   form.monthly_contribution_amount = '';
+  form.market_value_override = '';
+  form.market_value_override_date = '';
   form.term_months = '';
   form.rate_type = 'fixed';
   form.payment_frequency = 'monthly';
@@ -1194,10 +1220,16 @@ watch(
     form.investment_contribution_mode = initial.investment_contribution_mode ?? 'one_time';
     form.investment_contribution_frequency =
       initial.investment_contribution_frequency ?? 'monthly';
+    form.investment_contribution_currency = initial.investment_contribution_currency ?? '';
     form.monthly_contribution_amount = formatAmountFixedForEdit(
       initial.monthly_contribution_amount ?? '',
       2,
     );
+    form.market_value_override = formatAmountForEdit(
+      initial.market_value_override ?? '',
+      initial.currency ?? 'EUR',
+    );
+    form.market_value_override_date = initial.market_value_override_date ?? '';
     form.term_months = initial.term_months == null ? '' : String(initial.term_months);
     form.rate_type = props.showFinancedAsset ? 'fixed' : (initial.rate_type ?? 'fixed');
     form.payment_frequency = initial.payment_frequency ?? 'monthly';
@@ -1287,6 +1319,14 @@ watch(
   },
   { immediate: true },
 );
+watch(
+  () => form.currency,
+  (currency) => {
+    if (!showInvestmentPeriodicFields.value) return;
+    if (String(form.investment_contribution_currency ?? '').trim()) return;
+    form.investment_contribution_currency = String(currency ?? '').trim() || 'EUR';
+  },
+);
 
 watch(
   () => form.category,
@@ -1309,6 +1349,17 @@ watch(
 watch(
   [() => form.category, () => form.subcategory],
   () => {
+    if (!showInvestmentPeriodicFields.value) {
+      form.investment_contribution_currency = '';
+    } else if (!String(form.investment_contribution_currency ?? '').trim()) {
+      form.investment_contribution_currency = String(form.currency ?? '').trim() || 'EUR';
+    }
+    if (!showInvestmentMarketValueFields.value) {
+      form.market_value_override = '';
+      form.market_value_override_date = '';
+    } else if (!String(form.market_value_override_date ?? '').trim()) {
+      form.market_value_override_date = todayIsoDate();
+    }
     if (!showDepositTermMonthsInput.value) {
       form.deposit_term_months = '';
     }
@@ -1509,60 +1560,101 @@ watch(
         <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
       </label>
 
-      <label class="ui-item-form-field">
+      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
         <span class="ui-item-form-label">{{ isLiabilityForm ? 'Fecha inicio préstamo' : 'Fecha inicio' }}</span>
         <input v-model="form.start_date" type="date" class="input ui-data-field" />
       </label>
 
-      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
-        <span class="ui-item-form-label">Fecha fin estimada</span>
-        <input v-model="form.expected_end_date" type="date" class="input ui-data-field" />
-        <div class="subtle mt-1">Si la dejas vacía se considera una aportación indefinida.</div>
-      </label>
-
-      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
-        <span class="ui-item-form-label">Frecuencia cuota</span>
-        <select v-model="form.investment_contribution_frequency" class="select ui-data-field">
-          <option
-            v-for="frequency in INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS"
-            :key="frequency.value"
-            :value="frequency.value"
-          >
-            {{ frequency.label }}
-          </option>
-        </select>
-      </label>
-
-      <label class="ui-item-form-field">
-        <span class="ui-item-form-label">
-          {{ isLiabilityForm ? 'Principal / saldo actual' : showInvestmentPeriodicFields ? 'Importe inicial' : 'Importe' }}
-        </span>
+      <div v-if="showInvestmentPeriodicFields" class="ui-item-form-inline-grid ui-item-form-inline-grid-3 ui-item-form-field-span-2">
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Fecha inicio</span>
+          <input v-model="form.start_date" type="date" class="input ui-data-field" />
+        </label>
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Importe inicial</span>
+          <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input ui-data-field" />
+        </label>
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Moneda</span>
+          <select v-model="form.currency" :class="['select ui-data-field', { 'ui-select-placeholder': !form.currency }]">
+            <option value="" disabled>Selecciona moneda</option>
+            <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
+        </label>
+      </div>
+      <label v-else class="ui-item-form-field">
+        <span class="ui-item-form-label">{{ isLiabilityForm ? 'Principal / saldo actual' : 'Importe' }}</span>
         <input v-model="form.amount" inputmode="decimal" placeholder="Importe" class="input ui-data-field" />
       </label>
-
-      <label v-if="showInvestmentPeriodicFields" class="ui-item-form-field">
-        <span class="ui-item-form-label">
-          {{ form.investment_contribution_frequency === 'weekly' ? 'Cuota semanal' : 'Cuota mensual' }}
-        </span>
-        <input
-          v-model="form.monthly_contribution_amount"
-          inputmode="decimal"
-          placeholder="Ej: 500"
-          class="input ui-data-field"
-          @blur="formatMonthlyContributionField"
-        />
-        <div v-if="isInvestmentPeriodicIndefinite" class="subtle mt-1">
-          Sin fecha fin: se proyecta automáticamente hasta el año siguiente.
-        </div>
-      </label>
-
-      <label class="ui-item-form-field">
+      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
         <span class="ui-item-form-label">Moneda</span>
         <select v-model="form.currency" :class="['select ui-data-field', { 'ui-select-placeholder': !form.currency }]">
           <option value="" disabled>Selecciona moneda</option>
           <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
       </label>
+      <div v-if="showInvestmentPeriodicFields" class="ui-item-form-inline-grid ui-item-form-inline-grid-4 ui-item-form-field-span-2">
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Frecuencia cuota</span>
+          <select v-model="form.investment_contribution_frequency" class="select ui-data-field">
+            <option
+              v-for="frequency in INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS"
+              :key="frequency.value"
+              :value="frequency.value"
+            >
+              {{ frequency.label }}
+            </option>
+          </select>
+        </label>
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">
+            {{ form.investment_contribution_frequency === 'weekly' ? 'Cuota semanal' : 'Cuota mensual' }}
+          </span>
+          <input
+            v-model="form.monthly_contribution_amount"
+            inputmode="decimal"
+            placeholder="Ej: 500"
+            class="input ui-data-field"
+            @blur="formatMonthlyContributionField"
+          />
+        </label>
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Moneda cuota</span>
+          <select
+            v-model="form.investment_contribution_currency"
+            :class="['select ui-data-field', { 'ui-select-placeholder': !form.investment_contribution_currency }]"
+          >
+            <option value="" disabled>Selecciona moneda cuota</option>
+            <option v-for="c in currencies" :key="`contrib-${c.value}`" :value="c.value">{{ c.label }}</option>
+          </select>
+        </label>
+        <label class="ui-item-form-field">
+          <span class="ui-item-form-label">Fecha fin estimada</span>
+          <input v-model="form.expected_end_date" type="date" class="input ui-data-field" />
+        </label>
+      </div>
+      <div v-if="showInvestmentPeriodicFields" class="subtle ui-item-form-note ui-item-form-note-row ui-item-form-field-span-2">
+        Vacía = aportación indefinida.
+      </div>
+      <label v-if="showInvestmentMarketValueFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Valor real actual</span>
+        <input
+          v-model="form.market_value_override"
+          inputmode="decimal"
+          placeholder="Opcional"
+          class="input ui-data-field"
+        />
+      </label>
+      <label v-if="showInvestmentMarketValueFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Fecha valoración</span>
+        <input v-model="form.market_value_override_date" type="date" class="input ui-data-field" />
+      </label>
+      <div
+        v-if="showInvestmentPeriodicFields && isInvestmentPeriodicIndefinite"
+        class="subtle ui-item-form-note ui-item-form-note-row ui-item-form-field-span-2"
+      >
+        Sin fin: proyección hasta el año siguiente.
+      </div>
       <div v-if="showPrimaryHomeValuationFields" class="ui-item-form-section ui-item-form-field-span-2">
         <div class="ui-item-form-section-head">
           <div class="ui-item-form-section-title">Valoracion de inmueble residencial</div>
@@ -1928,11 +2020,32 @@ watch(
   font-size: 0.85rem;
 }
 
+.ui-item-form-grid .ui-data-field {
+  min-height: 42px;
+}
+
+.ui-item-form-note {
+  font-size: 0.7rem;
+  line-height: 1.15;
+}
+
+.ui-item-form-note-row {
+  margin-top: -0.1rem;
+}
+
 @media (min-width: 768px) {
   .ui-item-form-inline-grid.ui-item-form-inline-grid-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .ui-item-form-inline-grid.ui-item-form-inline-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .ui-item-form-inline-grid.ui-item-form-inline-grid-3 .ui-item-form-label {
+    min-height: 2.4em;
+    line-height: 1.2;
+    display: block;
+  }
+  .ui-item-form-inline-grid.ui-item-form-inline-grid-4 .ui-item-form-label {
     min-height: 2.4em;
     line-height: 1.2;
     display: block;

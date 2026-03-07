@@ -24,11 +24,12 @@ FURNISHINGS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
 }
 
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
-    cast(str, Asset.Subcategory.FUNDS): "index_funds_etf",
-    cast(str, Asset.Subcategory.ETFS): "index_funds_etf",
+    cast(str, Asset.Subcategory.FUNDS): "index_funds",
+    cast(str, Asset.Subcategory.ETFS): "etf_indexed",
     cast(str, Asset.Subcategory.PENSION_PLANS): "pension_plan",
     cast(str, Asset.Subcategory.STOCKS): "stocks_dividends",
     cast(str, Asset.Subcategory.CRYPTOCURRENCIES): "crypto",
+    cast(str, Asset.Subcategory.REAL_ESTATE_CROWD): "crowdfunding_real_estate",
     cast(str, Asset.Subcategory.CROWDLENDING): "crowdlending_p2p",
     cast(str, Asset.Subcategory.ROBOADVISOR): "roboadvisor",
 }

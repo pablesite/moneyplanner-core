@@ -73,7 +73,10 @@ EXPENSE_TAXONOMY: dict[str, set[str]] = {
         "other_savings_allocation",
     },
     "financial_investments": {
+        "index_funds",
+        "etf_indexed",
         "index_funds_etf",
+        "crowdfunding_real_estate",
         "pension_plan",
         "stocks_dividends",
         "crypto",

@@ -131,6 +131,15 @@ class Asset(models.Model):
             "Solo aplica a investment_contribution_mode=periodic_contribution."
         ),
     )
+    investment_contribution_currency = models.CharField(
+        max_length=3,
+        null=True,
+        blank=True,
+        help_text=(
+            "Moneda de la cuota periodica en inversiones. "
+            "Si no se indica, se asume la moneda del activo."
+        ),
+    )
     monthly_contribution_amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,
@@ -141,6 +150,22 @@ class Asset(models.Model):
             "Cuota mensual prevista para inversiones periodicas. "
             "Solo aplica a investment_contribution_mode=periodic_contribution."
         ),
+    )
+    market_value_override = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Valor de mercado manual del activo (marca a mercado). "
+            "Si se informa en inversiones, prevalece sobre el valor calculado por aportaciones."
+        ),
+    )
+    market_value_override_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Fecha de la ultima valoracion manual del activo (as-of).",
     )
     valuation_model = models.CharField(
         max_length=24,

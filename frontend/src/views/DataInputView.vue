@@ -1828,7 +1828,12 @@ async function importPortableAssets(
         normalizeOptionalText(asset.investment_contribution_mode) ?? 'one_time',
       investment_contribution_frequency:
         normalizeOptionalText(asset.investment_contribution_frequency) ?? 'monthly',
+      investment_contribution_currency: normalizeOptionalText(
+        asset.investment_contribution_currency,
+      ),
       monthly_contribution_amount: normalizeOptionalText(asset.monthly_contribution_amount),
+      market_value_override: normalizeOptionalText(asset.market_value_override),
+      market_value_override_date: normalizeOptionalText(asset.market_value_override_date),
       initial_purchase_value: normalizeOptionalText(asset.initial_purchase_value),
       amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
       amortization_term_years: asset.amortization_term_years ?? null,
