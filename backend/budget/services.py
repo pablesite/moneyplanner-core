@@ -140,9 +140,25 @@ def _round_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
-def planned_expense_monthly_distribution(entry: AnnualExpenseEntry) -> dict[int, Decimal]:
+def expense_entry_applies_to_fiscal_year(*, entry: AnnualExpenseEntry, fiscal_year: int) -> bool:
+    if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
+        return entry.fiscal_year == fiscal_year
+    if entry.fiscal_year > fiscal_year:
+        return False
+    if entry.time_profile != AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
+        return True
+    if entry.term_end_year is None:
+        return False
+    return fiscal_year <= entry.term_end_year
+
+
+def planned_expense_monthly_distribution(
+    *, entry: AnnualExpenseEntry, fiscal_year: int
+) -> dict[int, Decimal]:
     amount = Decimal(entry.amount_annual or 0)
     if amount <= 0:
+        return {}
+    if not expense_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
         return {}
     if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
         if not entry.target_month:
@@ -150,22 +166,30 @@ def planned_expense_monthly_distribution(entry: AnnualExpenseEntry) -> dict[int,
         return {int(entry.target_month): _round_money(amount)}
 
     base = _round_money(amount / Decimal("12"))
-    distribution = {month: base for month in range(1, 13)}
+    end_month = 12
+    if (
+        entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
+        and entry.term_end_year == fiscal_year
+    ):
+        end_month = entry.term_end_month or 12
+    distribution = {month: base for month in range(1, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)
     if delta:
-        distribution[12] = _round_money(distribution[12] + delta)
+        distribution[end_month] = _round_money(distribution[end_month] + delta)
     return distribution
 
 
 def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
     entries = list(
-        AnnualExpenseEntry.objects.filter(user=user, fiscal_year=fiscal_year, is_active=True)
+        AnnualExpenseEntry.objects.filter(user=user, is_active=True)
         .only(
             "id",
             "fiscal_year",
             "time_profile",
             "target_month",
+            "term_end_month",
+            "term_end_year",
             "amount_annual",
         )
         .order_by("id")
@@ -189,7 +213,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
 
     for entry in entries:
-        distribution = planned_expense_monthly_distribution(entry)
+        distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
@@ -248,27 +272,58 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     }
 
 
-def planned_income_monthly_distribution(entry: AnnualIncomeEntry) -> dict[int, Decimal]:
+def income_entry_applies_to_fiscal_year(*, entry: AnnualIncomeEntry, fiscal_year: int) -> bool:
+    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
+        return entry.fiscal_year == fiscal_year
+    if entry.fiscal_year > fiscal_year:
+        return False
+    if entry.time_profile != AnnualIncomeEntry.TimeProfile.TERM_RECURRENT:
+        return True
+    if entry.term_end_year is None:
+        return False
+    return fiscal_year <= entry.term_end_year
+
+
+def planned_income_monthly_distribution(
+    *, entry: AnnualIncomeEntry, fiscal_year: int
+) -> dict[int, Decimal]:
     amount = Decimal(entry.amount_annual or 0)
     if amount <= 0:
         return {}
-    # v1: one-off incomes don't have target_month yet in AnnualIncomeEntry.
-    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
+    if not income_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
         return {}
+    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
+        if not entry.target_month:
+            return {}
+        return {int(entry.target_month): _round_money(amount)}
 
     base = _round_money(amount / Decimal("12"))
-    distribution = {month: base for month in range(1, 13)}
+    end_month = 12
+    if (
+        entry.time_profile == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
+        and entry.term_end_year == fiscal_year
+    ):
+        end_month = entry.term_end_month or 12
+    distribution = {month: base for month in range(1, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)
     if delta:
-        distribution[12] = _round_money(distribution[12] + delta)
+        distribution[end_month] = _round_money(distribution[end_month] + delta)
     return distribution
 
 
 def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
     entries = list(
-        AnnualIncomeEntry.objects.filter(user=user, fiscal_year=fiscal_year, is_active=True)
-        .only("id", "fiscal_year", "time_profile", "amount_annual")
+        AnnualIncomeEntry.objects.filter(user=user, is_active=True)
+        .only(
+            "id",
+            "fiscal_year",
+            "time_profile",
+            "target_month",
+            "term_end_month",
+            "term_end_year",
+            "amount_annual",
+        )
         .order_by("id")
     )
     checkins = list(
@@ -289,7 +344,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
 
     for entry in entries:
-        distribution = planned_income_monthly_distribution(entry)
+        distribution = planned_income_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1

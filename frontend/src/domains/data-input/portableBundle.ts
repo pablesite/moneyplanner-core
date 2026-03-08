@@ -8,7 +8,10 @@ export type PortableAnnualIncomeRecord = {
   time_profile?: 'structural_recurrent' | 'term_recurrent' | 'one_off';
   cashflow_role?: 'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
   event_group?: string;
+  target_month?: number | null;
+  term_end_month?: number | null;
   term_end_year?: number | null;
+  amount_input_period?: 'annual' | 'monthly';
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -34,7 +37,9 @@ export type PortableAnnualExpenseRecord = {
     | 'transfer'
     | 'other';
   event_group?: string;
+  term_end_month?: number | null;
   term_end_year?: number | null;
+  amount_input_period?: 'annual' | 'monthly';
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -264,7 +269,10 @@ export function toPortableAnnualIncomeRecord(
     time_profile: entry.time_profile,
     cashflow_role: entry.cashflow_role,
     event_group: String(entry.event_group ?? ''),
+    target_month: entry.target_month ?? null,
+    term_end_month: entry.term_end_month ?? null,
     term_end_year: entry.term_end_year ?? null,
+    amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
     amount_annual: String(entry.amount_annual ?? '0'),
     fiscal_year: Number(entry.fiscal_year ?? 0),
     currency: String(entry.currency ?? 'EUR').toUpperCase(),
@@ -286,7 +294,9 @@ export function toPortableAnnualExpenseRecord(
     time_profile: entry.time_profile,
     cashflow_role: entry.cashflow_role,
     event_group: String(entry.event_group ?? ''),
+    term_end_month: entry.term_end_month ?? null,
     term_end_year: entry.term_end_year ?? null,
+    amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
     amount_annual: String(entry.amount_annual ?? '0'),
     fiscal_year: Number(entry.fiscal_year ?? 0),
     currency: String(entry.currency ?? 'EUR').toUpperCase(),

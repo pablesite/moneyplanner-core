@@ -2754,7 +2754,7 @@ watch(
                 "
                 :title="
                   section.id === 'income' && 'planned' in point
-                    ? `Previsto ${point.label}: ${formatMoney(point.planned)} EUR`
+                    ? `Previsto ${point.label}: ${formatMoney(Number(point.planned))} EUR`
                     : undefined
                 "
               />
@@ -2771,7 +2771,7 @@ watch(
                 "
                 :title="
                   section.id === 'income' && 'executed' in point
-                    ? `Ejecutado ${point.label}: ${formatMoney(point.executed)} EUR`
+                    ? `Ejecutado ${point.label}: ${formatMoney(Number(point.executed))} EUR`
                     : undefined
                 "
               />
