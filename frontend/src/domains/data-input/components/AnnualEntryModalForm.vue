@@ -20,6 +20,7 @@ type AnnualEntryModalFormModel = {
   cashflowRole: string;
   eventGroup: string;
   targetMonth: string;
+  termEndMonth: string;
   termEndYear: string;
   amountInputPeriod: 'annual' | 'monthly';
   amountAnnual: string;
@@ -47,8 +48,11 @@ const props = withDefaults(
     amountPlaceholder: string;
     eventGroupPlaceholder?: string;
     termEndYearPlaceholder?: string;
+    termEndMonthPlaceholder?: string;
     notesPlaceholder?: string;
     currencyOptions?: string[];
+    eventGroupOptions?: ReadonlyArray<string>;
+    eventGroupDatalistId?: string;
   }>(),
   {
     loading: false,
@@ -59,8 +63,11 @@ const props = withDefaults(
     ownerOptions: () => [],
     eventGroupPlaceholder: 'Grupo de evento (opcional, ej: vivienda_2026)',
     termEndYearPlaceholder: 'Ano fin compromiso (ej: 2027)',
+    termEndMonthPlaceholder: 'Mes fin (1-12)',
     notesPlaceholder: 'Notas (opcional)',
     currencyOptions: () => ['EUR', 'USD'],
+    eventGroupOptions: () => [],
+    eventGroupDatalistId: 'annual-entry-event-groups',
   },
 );
 
@@ -151,11 +158,20 @@ const emit = defineEmits<{
         v-if="showEventGroupField"
         :value="form.eventGroup"
         class="input ui-data-field"
+        :list="eventGroupOptions.length ? eventGroupDatalistId : undefined"
         :placeholder="eventGroupPlaceholder"
         @input="
           emit('patch', { eventGroup: String(($event.target as HTMLInputElement).value ?? '') })
         "
       />
+      <datalist
+        v-if="showEventGroupField && eventGroupOptions.length"
+        :id="eventGroupDatalistId"
+      >
+        <option v-for="eventGroup in eventGroupOptions" :key="eventGroup" :value="eventGroup">
+          {{ eventGroup }}
+        </option>
+      </datalist>
 
       <input
         v-if="form.timeProfile === 'one_off'"
@@ -165,6 +181,17 @@ const emit = defineEmits<{
         placeholder="Mes objetivo (1-12)"
         @input="
           emit('patch', { targetMonth: String(($event.target as HTMLInputElement).value ?? '') })
+        "
+      />
+
+      <input
+        v-if="showTermEndYearField && form.timeProfile === 'term_recurrent'"
+        :value="form.termEndMonth"
+        class="input ui-data-field"
+        inputmode="numeric"
+        :placeholder="termEndMonthPlaceholder"
+        @input="
+          emit('patch', { termEndMonth: String(($event.target as HTMLInputElement).value ?? '') })
         "
       />
 
@@ -186,6 +213,7 @@ const emit = defineEmits<{
         :currency="form.currency"
         :placeholder="amountPlaceholder"
         :period-disabled="form.timeProfile === 'one_off'"
+        :hide-period-toggle="form.timeProfile === 'one_off'"
         :currency-options="currencyOptions"
         @update:amount-value="emit('patch', { amountAnnual: $event })"
         @update:period="emit('patch', { amountInputPeriod: $event })"
@@ -194,7 +222,7 @@ const emit = defineEmits<{
 
       <textarea
         :value="form.notes"
-        class="textarea ui-data-field md:col-span-2"
+        class="textarea ui-data-field ui-notes-field md:col-span-2"
         rows="2"
         :placeholder="notesPlaceholder"
         @input="

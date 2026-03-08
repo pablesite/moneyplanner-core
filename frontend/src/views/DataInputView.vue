@@ -130,7 +130,9 @@ const generatedLiabilityExpenseReview = ref<{
     timeProfile: string;
     eventGroup: string;
     targetMonth: number | null;
+    termEndMonth: number | null;
     termEndYear: number | null;
+    amountInputPeriod: 'annual' | 'monthly';
     amountAnnual: number;
     currency: string;
     notes: string;
@@ -147,6 +149,7 @@ const annualIncomeForm = reactive({
   cashflowRole: 'operating' as AnnualIncomeCashflowRole,
   eventGroup: '',
   targetMonth: '',
+  termEndMonth: '',
   termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
@@ -163,6 +166,7 @@ const annualExpenseForm = reactive({
   cashflowRole: 'operating' as AnnualExpenseCashflowRole,
   eventGroup: '',
   targetMonth: '',
+  termEndMonth: '',
   termEndYear: '',
   amountInputPeriod: 'annual' as 'annual' | 'monthly',
   amountAnnual: '',
@@ -179,6 +183,7 @@ type AnnualModalPatch = Partial<{
   cashflowRole: string;
   eventGroup: string;
   targetMonth: string;
+  termEndMonth: string;
   termEndYear: string;
   amountInputPeriod: 'annual' | 'monthly';
   amountAnnual: string;
@@ -201,14 +206,31 @@ const annualSubcategoryOptions = computed(() =>
 const annualExpenseSubcategoryOptions = computed(() =>
   expenseSubcategories.filter((row) => row.category === annualExpenseForm.category),
 );
+const annualEventGroupOptions = computed(() => {
+  const groups = new Set<string>();
+  for (const entry of annualIncomeEntries.value) {
+    const group = String(entry.eventGroup ?? '').trim();
+    if (group) groups.add(group);
+  }
+  for (const entry of annualExpenseEntries.value) {
+    const group = String(entry.eventGroup ?? '').trim();
+    if (group) groups.add(group);
+  }
+  return Array.from(groups).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+});
 type OwnerOption = { key: string; value: string; label: string };
 type SelectOption = { value: string; label: string };
 
-const incomeTimeProfileOptions: SelectOption[] = [
-  { value: 'structural_recurrent', label: 'Recurrente estructural (base)' },
-  { value: 'term_recurrent', label: 'Recurrente temporal (con fin)' },
-  { value: 'one_off', label: 'Puntual / extraordinario' },
-];
+const incomeTimeProfileOptions = computed<SelectOption[]>(() => {
+  if (annualIncomeForm.category === 'capital_gains') {
+    return [{ value: 'one_off', label: 'Puntual / extraordinario' }];
+  }
+  return [
+    { value: 'structural_recurrent', label: 'Recurrente estructural (base)' },
+    { value: 'term_recurrent', label: 'Recurrente temporal (con fin)' },
+    { value: 'one_off', label: 'Puntual / extraordinario' },
+  ];
+});
 
 const incomeCashflowRoleOptions: SelectOption[] = [
   { value: 'operating', label: 'Naturaleza: Operativo' },
@@ -447,6 +469,25 @@ function filterAnnualEntriesByOwner<T extends { owner: string; amountAnnual: num
     .filter((entry): entry is T => entry != null && entry.amountAnnual > 0);
 }
 
+function roundToMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function effectiveAnnualAmountForSelectedYear(
+  entry: {
+    amountAnnual: number;
+    timeProfile: IncomeTimeProfile | ExpenseTimeProfile;
+    termEndYear: number | null;
+    termEndMonth: number | null;
+  },
+  selectedYear: number,
+): number {
+  if (entry.timeProfile !== 'term_recurrent') return entry.amountAnnual;
+  if (entry.termEndYear == null || entry.termEndYear !== selectedYear) return entry.amountAnnual;
+  const months = Math.min(12, Math.max(1, Number(entry.termEndMonth ?? 12)));
+  return roundToMoney((entry.amountAnnual * months) / 12);
+}
+
 function isVisibleByFilterMode(isActive: boolean | undefined): boolean {
   if (visibilityFilterMode.value === 'all') return true;
   if (visibilityFilterMode.value === 'archived') return isActive === false;
@@ -454,10 +495,20 @@ function isVisibleByFilterMode(isActive: boolean | undefined): boolean {
 }
 
 const annualIncomeEntriesByVisibility = computed(() =>
-  annualIncomeEntries.value.filter((entry) => isVisibleByFilterMode(entry.isActive)),
+  annualIncomeEntries.value
+    .filter((entry) => isVisibleByFilterMode(entry.isActive))
+    .map((entry) => ({
+      ...entry,
+      amountAnnual: effectiveAnnualAmountForSelectedYear(entry, fiscalYear.value),
+    })),
 );
 const annualExpenseEntriesByVisibility = computed(() =>
-  annualExpenseEntries.value.filter((entry) => isVisibleByFilterMode(entry.isActive)),
+  annualExpenseEntries.value
+    .filter((entry) => isVisibleByFilterMode(entry.isActive))
+    .map((entry) => ({
+      ...entry,
+      amountAnnual: effectiveAnnualAmountForSelectedYear(entry, fiscalYear.value),
+    })),
 );
 
 const annualOwnerFilterValue = computed(() => {
@@ -769,13 +820,6 @@ function timeProfileLabel(type: IncomeTimeProfile | ExpenseTimeProfile): string 
   if (type === 'term_recurrent') return 'Recurrente temporal';
   return 'Puntual';
 }
-function incomeCashflowRoleLabel(role: AnnualIncomeCashflowRole): string {
-  if (role === 'operating') return 'Operativo';
-  if (role === 'transfer') return 'Transferencia';
-  if (role === 'asset_sale') return 'Venta de activo';
-  if (role === 'tax_adjustment') return 'Ajuste fiscal';
-  return 'Otro';
-}
 function expenseCashflowRoleLabel(role: AnnualExpenseCashflowRole): string {
   if (role === 'operating') return 'Operativo';
   if (role === 'temporary_commitment') return 'Compromiso temporal';
@@ -785,6 +829,20 @@ function expenseCashflowRoleLabel(role: AnnualExpenseCashflowRole): string {
   if (role === 'tax_fee') return 'Impuestos/gastos';
   if (role === 'transfer') return 'Transferencia';
   return 'Otro';
+}
+
+function formatTermEndLabel(termEndYear: number | null, termEndMonth: number | null): string | null {
+  if (termEndYear == null) return null;
+  if (termEndMonth == null) return `Fin ${termEndYear}`;
+  return `Fin ${String(termEndMonth).padStart(2, '0')}/${termEndYear}`;
+}
+
+function amountInputValueFromAnnual(
+  annualAmount: number,
+  period: 'annual' | 'monthly',
+): string {
+  if (period === 'monthly') return String(Math.round((annualAmount / 12) * 100) / 100);
+  return String(annualAmount);
 }
 
 function shouldHideExpenseCashflowRoleLabel(params: {
@@ -987,6 +1045,7 @@ function resetIncomeForm(): void {
   annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
   annualIncomeForm.eventGroup = '';
   annualIncomeForm.targetMonth = '';
+  annualIncomeForm.termEndMonth = '';
   annualIncomeForm.termEndYear = '';
   annualIncomeForm.amountInputPeriod = 'annual';
   annualIncomeForm.amountAnnual = '';
@@ -1007,6 +1066,7 @@ function resetExpenseForm(): void {
   );
   annualExpenseForm.eventGroup = '';
   annualExpenseForm.targetMonth = '';
+  annualExpenseForm.termEndMonth = '';
   annualExpenseForm.termEndYear = '';
   annualExpenseForm.amountInputPeriod = 'annual';
   annualExpenseForm.amountAnnual = '';
@@ -1024,14 +1084,21 @@ function openIncomeModal(entry?: AnnualIncomeEntry): void {
     annualIncomeForm.name = entry.name;
     annualIncomeForm.owner = entry.owner || '';
     annualIncomeForm.isRecurrent = entry.incomeType === 'recurrent';
-    annualIncomeForm.timeProfile = entry.timeProfile;
+    annualIncomeForm.timeProfile =
+      entry.category === 'capital_gains' ? 'one_off' : entry.timeProfile;
     annualIncomeForm.cashflowRole = entry.cashflowRole;
     annualIncomeForm.eventGroup = entry.eventGroup || '';
-    annualIncomeForm.targetMonth = '';
+    annualIncomeForm.targetMonth =
+      entry.targetMonth == null ? '' : String(Number(entry.targetMonth));
+    annualIncomeForm.termEndMonth =
+      entry.termEndMonth == null ? '' : String(Number(entry.termEndMonth));
     annualIncomeForm.termEndYear =
       entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
-    annualIncomeForm.amountInputPeriod = 'annual';
-    annualIncomeForm.amountAnnual = String(entry.amountAnnual);
+    annualIncomeForm.amountInputPeriod = entry.amountInputPeriod ?? 'annual';
+    annualIncomeForm.amountAnnual = amountInputValueFromAnnual(
+      entry.amountAnnual,
+      annualIncomeForm.amountInputPeriod,
+    );
     annualIncomeForm.currency = entry.currency;
     annualIncomeForm.notes = entry.notes || '';
   } else {
@@ -1058,10 +1125,15 @@ function openExpenseModal(entry?: AnnualExpenseEntry): void {
     annualExpenseForm.eventGroup = entry.eventGroup || '';
     annualExpenseForm.targetMonth =
       entry.targetMonth == null ? '' : String(Number(entry.targetMonth));
+    annualExpenseForm.termEndMonth =
+      entry.termEndMonth == null ? '' : String(Number(entry.termEndMonth));
     annualExpenseForm.termEndYear =
       entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
-    annualExpenseForm.amountInputPeriod = 'annual';
-    annualExpenseForm.amountAnnual = String(entry.amountAnnual);
+    annualExpenseForm.amountInputPeriod = entry.amountInputPeriod ?? 'annual';
+    annualExpenseForm.amountAnnual = amountInputValueFromAnnual(
+      entry.amountAnnual,
+      annualExpenseForm.amountInputPeriod,
+    );
     annualExpenseForm.currency = entry.currency;
     annualExpenseForm.notes = entry.notes || '';
     normalizeExpenseCashflowRoleForCurrentTimeProfile();
@@ -1151,7 +1223,9 @@ function setGeneratedLiabilityExpenseReview(
       timeProfile: entry.timeProfile,
       eventGroup: entry.eventGroup,
       targetMonth: entry.targetMonth,
+      termEndMonth: entry.termEndMonth,
       termEndYear: entry.termEndYear,
+      amountInputPeriod: entry.amountInputPeriod,
       amountAnnual: entry.amountAnnual,
       currency: entry.currency,
       notes: entry.notes,
@@ -1195,10 +1269,15 @@ function openGeneratedExpenseBulkEdit(): void {
   annualExpenseForm.eventGroup = first.eventGroup || '';
   annualExpenseForm.targetMonth =
     first.targetMonth == null ? '' : String(Number(first.targetMonth));
+  annualExpenseForm.termEndMonth =
+    first.termEndMonth == null ? '' : String(Number(first.termEndMonth));
   annualExpenseForm.termEndYear =
     first.termEndYear == null ? '' : String(Number(first.termEndYear));
-  annualExpenseForm.amountInputPeriod = 'annual';
-  annualExpenseForm.amountAnnual = String(first.amountAnnual);
+  annualExpenseForm.amountInputPeriod = first.amountInputPeriod ?? 'annual';
+  annualExpenseForm.amountAnnual = amountInputValueFromAnnual(
+    first.amountAnnual,
+    annualExpenseForm.amountInputPeriod,
+  );
   annualExpenseForm.currency = first.currency;
   annualExpenseForm.notes = first.notes || '';
   normalizeExpenseCashflowRoleForCurrentTimeProfile();
@@ -1354,6 +1433,7 @@ async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
       timeProfile: 'structural_recurrent',
       cashflowRole: 'operating',
       eventGroup: '',
+      termEndMonth: null,
       termEndYear: null,
       amountAnnual: estimatedAnnualInterestNet.toFixed(2),
       fiscalYear: fiscalYear.value,
@@ -1410,6 +1490,7 @@ watch(
   () => annualIncomeForm.timeProfile,
   (timeProfile) => {
     annualIncomeForm.isRecurrent = timeProfile !== 'one_off';
+    if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndMonth = '';
     if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndYear = '';
     if (timeProfile !== 'one_off') annualIncomeForm.targetMonth = '';
   },
@@ -1418,6 +1499,7 @@ watch(
   () => annualExpenseForm.timeProfile,
   (timeProfile) => {
     annualExpenseForm.isRecurrent = timeProfile !== 'one_off';
+    if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndMonth = '';
     if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndYear = '';
     if (timeProfile !== 'one_off') annualExpenseForm.targetMonth = '';
     normalizeExpenseCashflowRoleForCurrentTimeProfile();
@@ -1425,6 +1507,9 @@ watch(
 );
 watch([() => annualIncomeForm.category], () => {
   if (hydratingAnnualIncomeForm.value) return;
+  if (annualIncomeForm.category === 'capital_gains') {
+    annualIncomeForm.timeProfile = 'one_off';
+  }
   annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
 });
 watch([() => annualExpenseForm.category, () => annualExpenseForm.subcategory], () => {
@@ -1444,20 +1529,30 @@ async function submitAnnualIncome(): Promise<void> {
       : rawAmount
     : annualIncomeForm.amountAnnual;
 
-  const draft = {
-    name: annualIncomeForm.name,
-    category: annualIncomeForm.category,
-    subcategory: annualIncomeForm.subcategory,
-    owner: annualIncomeForm.owner,
-    incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
-    timeProfile: annualIncomeForm.timeProfile,
-    cashflowRole: annualIncomeForm.cashflowRole,
-    eventGroup: annualIncomeForm.eventGroup,
-    termEndYear:
-      annualIncomeForm.timeProfile === 'term_recurrent' &&
-      String(annualIncomeForm.termEndYear).trim()
+    const draft = {
+      name: annualIncomeForm.name,
+      category: annualIncomeForm.category,
+      subcategory: annualIncomeForm.subcategory,
+      owner: annualIncomeForm.owner,
+      incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
+      timeProfile: annualIncomeForm.timeProfile,
+      cashflowRole: defaultIncomeCashflowRole(annualIncomeForm.category),
+      eventGroup: annualIncomeForm.eventGroup,
+      targetMonth:
+        annualIncomeForm.timeProfile === 'one_off' && String(annualIncomeForm.targetMonth).trim()
+          ? Number(annualIncomeForm.targetMonth)
+          : null,
+      termEndMonth:
+        annualIncomeForm.timeProfile === 'term_recurrent' &&
+        String(annualIncomeForm.termEndMonth).trim()
+          ? Number(annualIncomeForm.termEndMonth)
+          : null,
+      termEndYear:
+        annualIncomeForm.timeProfile === 'term_recurrent' &&
+        String(annualIncomeForm.termEndYear).trim()
         ? Number(annualIncomeForm.termEndYear)
         : null,
+      amountInputPeriod: annualIncomeForm.amountInputPeriod,
     amountAnnual: String(normalizedAmount),
     fiscalYear: fiscalYear.value,
     currency: annualIncomeForm.currency,
@@ -1509,6 +1604,12 @@ async function submitAnnualExpense(): Promise<void> {
       String(annualExpenseForm.termEndYear).trim()
         ? Number(annualExpenseForm.termEndYear)
         : null,
+    termEndMonth:
+      annualExpenseForm.timeProfile === 'term_recurrent' &&
+      String(annualExpenseForm.termEndMonth).trim()
+        ? Number(annualExpenseForm.termEndMonth)
+        : null,
+    amountInputPeriod: annualExpenseForm.amountInputPeriod,
     amountAnnual: String(normalizedAmount),
     fiscalYear: fiscalYear.value,
     currency: annualExpenseForm.currency,
@@ -1531,7 +1632,9 @@ async function submitAnnualExpense(): Promise<void> {
           cashflow_role: draft.cashflowRole,
           event_group: draft.eventGroup,
           target_month: draft.targetMonth,
+          term_end_month: draft.termEndMonth,
           term_end_year: draft.termEndYear,
+          amount_input_period: draft.amountInputPeriod,
           notes: draft.notes,
         });
       }
@@ -1913,7 +2016,10 @@ async function importPortableAnnualIncomeEntries(
       time_profile: entry.time_profile,
       cashflow_role: entry.cashflow_role,
       event_group: String(entry.event_group ?? ''),
+      target_month: entry.target_month ?? null,
+      term_end_month: entry.term_end_month ?? null,
       term_end_year: entry.term_end_year ?? null,
+      amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
       amount_annual: String(entry.amount_annual),
       fiscal_year: Number(entry.fiscal_year),
       currency: (entry.currency || 'EUR').toUpperCase(),
@@ -1938,7 +2044,9 @@ async function importPortableAnnualExpenseEntries(
       time_profile: entry.time_profile,
       cashflow_role: entry.cashflow_role,
       event_group: String(entry.event_group ?? ''),
+      term_end_month: entry.term_end_month ?? null,
       term_end_year: entry.term_end_year ?? null,
+      amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
       amount_annual: String(entry.amount_annual),
       fiscal_year: Number(entry.fiscal_year),
       currency: (entry.currency || 'EUR').toUpperCase(),
@@ -2361,8 +2469,7 @@ watch(
                           <span v-if="entry.owner" class="badge">{{ entry.owner }}</span>
                         </div>
                         <div class="nw-item-submeta">
-                          {{ timeProfileLabel(entry.timeProfile) }} .
-                          {{ incomeCashflowRoleLabel(entry.cashflowRole) }}
+                          {{ timeProfileLabel(entry.timeProfile) }}
                           <template v-if="entry.eventGroup">
                             . Evento {{ entry.eventGroup }}</template
                           >
@@ -2516,8 +2623,9 @@ watch(
                           <template v-if="entry.eventGroup">
                             . Evento {{ entry.eventGroup }}</template
                           >
-                          <template v-if="entry.termEndYear != null">
-                            . Fin {{ entry.termEndYear }}</template
+                          <template v-if="formatTermEndLabel(entry.termEndYear, entry.termEndMonth)">
+                            .
+                            {{ formatTermEndLabel(entry.termEndYear, entry.termEndMonth) }}</template
                           >
                         </div>
                       </div>
@@ -2745,6 +2853,9 @@ watch(
       :owner-options="ownerOptions"
       :time-profile-options="incomeTimeProfileOptions"
       :cashflow-role-options="incomeCashflowRoleOptions"
+      :show-cashflow-role-field="false"
+      :event-group-options="annualEventGroupOptions"
+      event-group-datalist-id="income-event-groups"
       name-placeholder="Concepto (ej: CTN, Regalos Pablo)"
       :amount-placeholder="incomeAmountInputPlaceholder"
       @patch="patchAnnualIncomeForm"
@@ -2767,6 +2878,8 @@ watch(
       :show-cashflow-role-field="showExpenseCashflowRoleField"
       :show-event-group-field="!editingSystemGeneratedLiabilityExpense"
       :show-term-end-year-field="!editingSystemGeneratedLiabilityExpense"
+      :event-group-options="annualEventGroupOptions"
+      event-group-datalist-id="expense-event-groups"
       name-placeholder="Concepto (ej: Alimentacion, Hipoteca)"
       :amount-placeholder="expenseAmountInputPlaceholder"
       :notes-placeholder="expenseBulkEditHint"

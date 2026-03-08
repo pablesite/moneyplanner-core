@@ -1,0 +1,85 @@
+.ui-amount-period-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto 120px;
+}
+
+.ui-amount-period-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+
+.ui-amount-period-toggle {
+  position: relative;
+  display: inline-flex;
+  height: 34px;
+  width: 58px;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.ui-amount-period-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ui-amount-period-toggle-on {
+  border-color: rgba(94, 234, 212, 0.6);
+  background: rgba(45, 212, 191, 0.2);
+}
+
+.ui-amount-period-toggle-off {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ui-amount-period-toggle-thumb {
+  display: inline-block;
+  height: 24px;
+  width: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  transition: transform 120ms ease;
+}
+
+.ui-amount-period-toggle-thumb-on {
+  transform: translateX(28px);
+}
+
+.ui-amount-period-toggle-thumb-off {
+  transform: translateX(4px);
+}
+
+.ui-amount-period-toggle-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ui-amount-period-toggle-label-active {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ui-notes-field {
+  min-height: 72px;
+  height: auto;
+  resize: none;
+}
+
+@media (max-width: 768px) {
+  .ui-amount-period-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-amount-period-toggle-wrap {
+    justify-self: start;
+  }
+}

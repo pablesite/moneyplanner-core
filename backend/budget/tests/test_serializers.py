@@ -82,6 +82,22 @@ class BudgetSerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("term_end_year", serializer.errors)
 
+    def test_income_serializer_requires_target_month_for_one_off(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Venta puntual",
+                "category": "capital_gains",
+                "subcategory": "sale_real_estate",
+                "income_type": "one_off",
+                "time_profile": "one_off",
+                "amount_annual": "8000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("target_month", serializer.errors)
+
     def test_expense_serializer_accepts_temporary_commitment_fields(self):
         serializer = AnnualExpenseEntrySerializer(
             data={

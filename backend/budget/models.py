@@ -4,6 +4,10 @@ from django.utils import timezone
 
 
 class AnnualIncomeEntry(models.Model):
+    class AmountInputPeriod(models.TextChoices):
+        ANNUAL = "annual", "Anual"
+        MONTHLY = "monthly", "Mensual"
+
     class Category(models.TextChoices):
         SALARY = "salary", "Salarios y trabajo"
         BUSINESS = "business", "Actividad profesional/negocio"
@@ -46,7 +50,12 @@ class AnnualIncomeEntry(models.Model):
         max_length=24, choices=CashflowRole.choices, default=CashflowRole.OPERATING
     )
     event_group = models.CharField(max_length=64, blank=True, default="")
+    target_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    term_end_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    amount_input_period = models.CharField(
+        max_length=8, choices=AmountInputPeriod.choices, default=AmountInputPeriod.ANNUAL
+    )
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
     fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
     currency = models.CharField(max_length=3, default="EUR")
@@ -75,6 +84,10 @@ class AnnualIncomeEntry(models.Model):
 
 
 class AnnualExpenseEntry(models.Model):
+    class AmountInputPeriod(models.TextChoices):
+        ANNUAL = "annual", "Anual"
+        MONTHLY = "monthly", "Mensual"
+
     class Category(models.TextChoices):
         SAVINGS_ALLOCATION = "savings_allocation", "Ahorro"
         FINANCIAL_INVESTMENTS = "financial_investments", "Inversion financiera"
@@ -134,7 +147,11 @@ class AnnualExpenseEntry(models.Model):
     )
     event_group = models.CharField(max_length=64, blank=True, default="")
     target_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    term_end_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    amount_input_period = models.CharField(
+        max_length=8, choices=AmountInputPeriod.choices, default=AmountInputPeriod.ANNUAL
+    )
     amount_annual = models.DecimalField(max_digits=14, decimal_places=2)
     fiscal_year = models.PositiveSmallIntegerField(default=timezone.now().year)
     currency = models.CharField(max_length=3, default="EUR")

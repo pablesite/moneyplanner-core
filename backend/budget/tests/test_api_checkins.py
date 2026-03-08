@@ -39,6 +39,7 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
             subcategory="bonus_commission",
             income_type="one_off",
             time_profile="one_off",
+            target_month=5,
             amount_annual=Decimal("3000.00"),
             fiscal_year=2026,
             currency="EUR",
@@ -70,24 +71,40 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
             {
                 "annual_income_entry_id": one_off.id,
                 "fiscal_year": 2026,
-                "month": 5,
+                "month": 4,
                 "status": "confirmed",
                 "executed_amount": "3000.00",
             },
             format="json",
         )
         self.assertEqual(invalid_one_off.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("annual_income_entry_id", invalid_one_off.data["error"]["details"])
+        self.assertIn("month", invalid_one_off.data["error"]["details"])
+
+        valid_one_off = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": one_off.id,
+                "fiscal_year": 2026,
+                "month": 5,
+                "status": "confirmed",
+                "executed_amount": "3000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(valid_one_off.status_code, status.HTTP_201_CREATED, valid_one_off.data)
 
         summary_res = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
         self.assertEqual(summary_res.status_code, status.HTTP_200_OK)
-        self.assertEqual(summary_res.data["planned_total"], "24000.00")
-        self.assertEqual(summary_res.data["executed_total"], "2100.00")
+        self.assertEqual(summary_res.data["planned_total"], "27000.00")
+        self.assertEqual(summary_res.data["executed_total"], "5100.00")
         self.assertEqual(summary_res.data["pending_total"], "22000.00")
         months = {row["month"]: row for row in summary_res.data["months"]}
         self.assertEqual(months[2]["planned"], "2000.00")
         self.assertEqual(months[2]["executed"], "2100.00")
         self.assertEqual(months[2]["pending"], "0.00")
+        self.assertEqual(months[5]["planned"], "5000.00")
+        self.assertEqual(months[5]["executed"], "3000.00")
+        self.assertEqual(months[5]["pending"], "2000.00")
         self.assertEqual(months[1]["planned"], "2000.00")
         self.assertEqual(months[1]["pending"], "2000.00")
         self.assertTrue(summary_res.data["has_executed_data"])

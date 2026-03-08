@@ -11,5 +11,6 @@ import { router } from './router';
 import App from './App.vue';
 import './styles/app.css';
 import './styles/guide-home.css';
+import './styles/data-input.css';
 
 createApp(App).use(createPinia()).use(router).mount('#app');

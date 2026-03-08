@@ -32,7 +32,9 @@ export type AnnualExpenseEntry = {
   cashflowRole: AnnualExpenseCashflowRole;
   eventGroup: string;
   targetMonth: number | null;
+  termEndMonth: number | null;
   termEndYear: number | null;
+  amountInputPeriod: 'annual' | 'monthly';
   amountAnnual: number;
   fiscalYear: number;
   currency: string;
@@ -51,7 +53,9 @@ export type AnnualExpenseDraft = {
   cashflowRole?: AnnualExpenseCashflowRole;
   eventGroup?: string;
   targetMonth?: number | null;
+  termEndMonth?: number | null;
   termEndYear?: number | null;
+  amountInputPeriod?: 'annual' | 'monthly';
   amountAnnual: string;
   fiscalYear: number;
   currency: string;
@@ -73,7 +77,9 @@ type AnnualExpenseApiItem = {
   cashflow_role?: AnnualExpenseCashflowRole;
   event_group?: string;
   target_month?: number | null;
+  term_end_month?: number | null;
   term_end_year?: number | null;
+  amount_input_period?: 'annual' | 'monthly';
   amount_annual: string;
   fiscal_year: number;
   currency: string;
@@ -103,7 +109,9 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
     cashflowRole: item.cashflow_role ?? 'operating',
     eventGroup: item.event_group ?? '',
     targetMonth: item.target_month == null ? null : Number(item.target_month),
+    termEndMonth: item.term_end_month == null ? null : Number(item.term_end_month),
     termEndYear: item.term_end_year == null ? null : Number(item.term_end_year),
+    amountInputPeriod: item.amount_input_period === 'monthly' ? 'monthly' : 'annual',
     amountAnnual: Number(item.amount_annual),
     fiscalYear: Number(item.fiscal_year),
     currency: item.currency,
@@ -169,7 +177,9 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
         target_month: draft.targetMonth ?? null,
+        term_end_month: draft.termEndMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
+        amount_input_period: draft.amountInputPeriod === 'monthly' ? 'monthly' : 'annual',
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),
@@ -220,7 +230,9 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
         target_month: draft.targetMonth ?? null,
+        term_end_month: draft.termEndMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
+        amount_input_period: draft.amountInputPeriod === 'monthly' ? 'monthly' : 'annual',
         amount_annual: amount.toFixed(2),
         fiscal_year: draft.fiscalYear,
         currency: (draft.currency || 'EUR').toUpperCase(),
