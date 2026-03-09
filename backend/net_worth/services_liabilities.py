@@ -45,6 +45,9 @@ def validate_liability_payload(
     expected_end_date,
     payment_frequency: str | None = None,
     term_months=None,
+    cancellation_forecast_enabled: bool | None = None,
+    cancellation_date=None,
+    cancellation_fee_amount=None,
 ) -> None:
     if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -64,6 +67,38 @@ def validate_liability_payload(
 
     if start_date and expected_end_date and expected_end_date < start_date:
         raise DRFValidationError({"expected_end_date": "Debe ser igual o posterior a start_date."})
+
+    if cancellation_forecast_enabled:
+        if category != Liability.Category.MORTGAGE:
+            raise DRFValidationError(
+                {
+                    "cancellation_forecast_enabled": (
+                        "La prevision de cancelacion anticipada solo aplica a hipotecas."
+                    )
+                }
+            )
+        if cancellation_date is None:
+            raise DRFValidationError(
+                {"cancellation_date": "Requerida si cancellation_forecast_enabled=true."}
+            )
+        if start_date and cancellation_date < start_date:
+            raise DRFValidationError(
+                {"cancellation_date": "Debe ser igual o posterior a start_date."}
+            )
+    elif cancellation_date is not None:
+        raise DRFValidationError(
+            {"cancellation_date": "Solo se permite si cancellation_forecast_enabled=true."}
+        )
+
+    if cancellation_fee_amount not in (None, ""):
+        try:
+            fee_amount = Decimal(cancellation_fee_amount)
+        except (InvalidOperation, TypeError):
+            raise DRFValidationError(
+                {"cancellation_fee_amount": "Importe de comision de cancelacion invalido."}
+            ) from None
+        if fee_amount < 0:
+            raise DRFValidationError({"cancellation_fee_amount": "Debe ser mayor o igual que 0."})
 
     if payment_frequency == Liability.PaymentFrequency.QUARTERLY and term_months not in (None, ""):
         try:
@@ -309,6 +344,12 @@ def estimate_liability_outstanding_amount_simple(
     if not schedule:
         return None
     ref_date = as_of_date or timezone.localdate()
+    if (
+        liability.cancellation_forecast_enabled
+        and liability.cancellation_date is not None
+        and ref_date >= liability.cancellation_date
+    ):
+        return Decimal("0.00000000")
     paid_installments = sum(1 for due_date, _amount in schedule if due_date <= ref_date)
 
     principal = liability.principal_amount or liability.amount
@@ -531,15 +572,27 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
     if not liability.is_active:
         return
 
-    schedule = build_liability_installment_schedule_simple(liability=liability)
-    if not schedule:
+    full_schedule = build_liability_installment_schedule_simple(liability=liability)
+    schedule = full_schedule
+    cancellation_date = None
+    if liability.cancellation_forecast_enabled and liability.cancellation_date is not None:
+        cancellation_date = liability.cancellation_date
+        schedule = [
+            (due_date, amount) for due_date, amount in full_schedule if due_date < cancellation_date
+        ]
+    if not full_schedule:
         return
 
+    keep_ids: set[int] = set()
     totals_by_year: dict[int, Decimal] = {}
-    final_due_year = schedule[-1][0].year
-    for due_date, installment in schedule:
-        totals_by_year.setdefault(due_date.year, Decimal("0"))
-        totals_by_year[due_date.year] += installment
+    final_due_year = None
+    final_due_month = None
+    if schedule:
+        final_due_year = schedule[-1][0].year
+        final_due_month = schedule[-1][0].month
+        for due_date, installment in schedule:
+            totals_by_year.setdefault(due_date.year, Decimal("0"))
+            totals_by_year[due_date.year] += installment
 
     expense_profile = get_generated_liability_expense_profile(liability=liability)
     owner_name = _get_generated_liability_owner_name(liability=liability)
@@ -555,6 +608,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             "cashflow_role": expense_profile["cashflow_role"],
             "event_group": f"liability_{liability.id}",
             "term_end_year": final_due_year,
+            "term_end_month": final_due_month,
             "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
             "currency": liability.currency,
             "notes": "Generado automaticamente desde pasivo (editable).",
@@ -565,8 +619,10 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             source_liability=liability,
             is_system_generated=True,
             fiscal_year=year,
+            event_group=f"liability_{liability.id}",
             defaults=generated_defaults,
         )
+        keep_ids.add(row.id)
         if created:
             continue
 
@@ -584,7 +640,14 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             for field_name in customization_marker_fields
         )
 
-        system_owned_fields = ["owner_name", "term_end_year", "currency", "event_group", "is_active"]
+        system_owned_fields = [
+            "owner_name",
+            "term_end_year",
+            "term_end_month",
+            "currency",
+            "event_group",
+            "is_active",
+        ]
         if not is_customized:
             system_owned_fields.append("amount_annual")
         update_fields: list[str] = []
@@ -596,11 +659,128 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
         if update_fields:
             row.save(update_fields=update_fields)
 
-    AnnualExpenseEntry.objects.filter(
+    if cancellation_date is not None and cancellation_date >= liability.start_date:
+        remaining_principal = estimate_liability_outstanding_amount_simple(
+            liability=liability, as_of_date=cancellation_date - timedelta(days=1)
+        )
+        if remaining_principal is not None and remaining_principal > 0:
+            principal_defaults = {
+                "name": f"Cancelacion anticipada principal: {liability.name}",
+                "category": expense_profile["category"],
+                "subcategory": expense_profile["subcategory"],
+                "owner_name": owner_name,
+                "expense_type": AnnualExpenseEntry.ExpenseType.ONE_OFF,
+                "time_profile": AnnualExpenseEntry.TimeProfile.ONE_OFF,
+                "cashflow_role": expense_profile["cashflow_role"],
+                "event_group": f"liability_{liability.id}_cancellation_principal",
+                "target_month": cancellation_date.month,
+                "term_end_year": None,
+                "term_end_month": None,
+                "amount_annual": remaining_principal.quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                ),
+                "currency": liability.currency,
+                "notes": "Generado automaticamente: cancelacion anticipada (principal).",
+                "is_active": True,
+            }
+            principal_row, principal_created = AnnualExpenseEntry.objects.get_or_create(
+                user=liability.user,
+                source_liability=liability,
+                is_system_generated=True,
+                fiscal_year=cancellation_date.year,
+                event_group=f"liability_{liability.id}_cancellation_principal",
+                defaults=principal_defaults,
+            )
+            keep_ids.add(principal_row.id)
+            if not principal_created:
+                principal_row.owner_name = principal_defaults["owner_name"]
+                principal_row.target_month = principal_defaults["target_month"]
+                principal_row.term_end_year = None
+                principal_row.term_end_month = None
+                principal_row.currency = principal_defaults["currency"]
+                principal_row.is_active = True
+                principal_row.amount_annual = principal_defaults["amount_annual"]
+                principal_row.save(
+                    update_fields=[
+                        "owner_name",
+                        "target_month",
+                        "term_end_year",
+                        "term_end_month",
+                        "currency",
+                        "is_active",
+                        "amount_annual",
+                    ]
+                )
+
+            cancellation_fee_amount = liability.cancellation_fee_amount
+            if cancellation_fee_amount in (
+                None,
+                "",
+            ) and liability.early_repayment_fee_percent not in (
+                None,
+                "",
+            ):
+                fee_percent = Decimal(liability.early_repayment_fee_percent)
+                cancellation_fee_amount = (
+                    remaining_principal * fee_percent / Decimal("100")
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if cancellation_fee_amount not in (None, "") and Decimal(cancellation_fee_amount) > 0:
+                fee_defaults = {
+                    "name": f"Cancelacion anticipada comision: {liability.name}",
+                    "category": cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
+                    "subcategory": "real_estate_fees_taxes",
+                    "owner_name": owner_name,
+                    "expense_type": AnnualExpenseEntry.ExpenseType.ONE_OFF,
+                    "time_profile": AnnualExpenseEntry.TimeProfile.ONE_OFF,
+                    "cashflow_role": cast(str, AnnualExpenseEntry.CashflowRole.TAX_FEE),
+                    "event_group": f"liability_{liability.id}_cancellation_fee",
+                    "target_month": cancellation_date.month,
+                    "term_end_year": None,
+                    "term_end_month": None,
+                    "amount_annual": Decimal(cancellation_fee_amount).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    ),
+                    "currency": liability.currency,
+                    "notes": "Generado automaticamente: cancelacion anticipada (comision).",
+                    "is_active": True,
+                }
+                fee_row, fee_created = AnnualExpenseEntry.objects.get_or_create(
+                    user=liability.user,
+                    source_liability=liability,
+                    is_system_generated=True,
+                    fiscal_year=cancellation_date.year,
+                    event_group=f"liability_{liability.id}_cancellation_fee",
+                    defaults=fee_defaults,
+                )
+                keep_ids.add(fee_row.id)
+                if not fee_created:
+                    fee_row.owner_name = fee_defaults["owner_name"]
+                    fee_row.target_month = fee_defaults["target_month"]
+                    fee_row.term_end_year = None
+                    fee_row.term_end_month = None
+                    fee_row.currency = fee_defaults["currency"]
+                    fee_row.is_active = True
+                    fee_row.amount_annual = fee_defaults["amount_annual"]
+                    fee_row.save(
+                        update_fields=[
+                            "owner_name",
+                            "target_month",
+                            "term_end_year",
+                            "term_end_month",
+                            "currency",
+                            "is_active",
+                            "amount_annual",
+                        ]
+                    )
+
+    stale_qs = AnnualExpenseEntry.objects.filter(
         user=liability.user,
         source_liability=liability,
         is_system_generated=True,
-    ).exclude(fiscal_year__in=list(totals_by_year.keys())).delete()
+    )
+    if keep_ids:
+        stale_qs = stale_qs.exclude(id__in=keep_ids)
+    stale_qs.delete()
 
 
 def delete_generated_budget_commitments_for_liability(*, liability: Liability) -> None:

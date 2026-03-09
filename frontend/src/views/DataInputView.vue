@@ -61,6 +61,7 @@ const {
   showAssetModal,
   showLiabilityModal,
   showEditModal,
+  editItem,
   editKind,
   openEdit,
   closeEdit,
@@ -138,6 +139,7 @@ const generatedLiabilityExpenseReview = ref<{
     notes: string;
   }[];
 } | null>(null);
+const generatedLiabilityExpenseReviewChangeMessage = ref<string | null>(null);
 
 const annualIncomeForm = reactive({
   category: 'salary' as IncomeCategoryKey,
@@ -1233,9 +1235,48 @@ function setGeneratedLiabilityExpenseReview(
   };
 }
 
+function summarizeGeneratedLiabilityExpenseChanges(
+  beforeEntries: AnnualExpenseEntry[],
+  afterEntries: AnnualExpenseEntry[],
+): string | null {
+  const toYearTotals = (rows: AnnualExpenseEntry[]) => {
+    const totals = new Map<number, number>();
+    for (const row of rows) {
+      totals.set(row.fiscalYear, (totals.get(row.fiscalYear) ?? 0) + Number(row.amountAnnual ?? 0));
+    }
+    return totals;
+  };
+  const beforeTotals = toYearTotals(beforeEntries);
+  const afterTotals = toYearTotals(afterEntries);
+  const years = Array.from(new Set([...beforeTotals.keys(), ...afterTotals.keys()])).sort(
+    (a, b) => a - b,
+  );
+  const changedYears: number[] = [];
+  for (const year of years) {
+    const before = beforeTotals.get(year) ?? 0;
+    const after = afterTotals.get(year) ?? 0;
+    if (Math.abs(before - after) > 0.009) changedYears.push(year);
+  }
+  const addedYears = years.filter((year) => (beforeTotals.get(year) ?? 0) <= 0 && (afterTotals.get(year) ?? 0) > 0);
+  const removedYears = years.filter((year) => (beforeTotals.get(year) ?? 0) > 0 && (afterTotals.get(year) ?? 0) <= 0);
+  if (!changedYears.length && !addedYears.length && !removedYears.length) return null;
+  const chunks: string[] = [];
+  if (changedYears.length) {
+    chunks.push(`Importes actualizados en: ${changedYears.join(', ')}`);
+  }
+  if (addedYears.length) {
+    chunks.push(`Nuevas anualidades: ${addedYears.join(', ')}`);
+  }
+  if (removedYears.length) {
+    chunks.push(`Anualidades eliminadas: ${removedYears.join(', ')}`);
+  }
+  return chunks.join(' | ');
+}
+
 function closeGeneratedLiabilityExpenseModal(): void {
   showGeneratedLiabilityExpenseModal.value = false;
   generatedLiabilityExpenseReview.value = null;
+  generatedLiabilityExpenseReviewChangeMessage.value = null;
 }
 
 function openGeneratedExpenseReviewEntryFromVisibleYear(): void {
@@ -1305,6 +1346,7 @@ async function submitLiabilityWithExpenseReview(
 
     if (!systemGeneratedEntries.length) return;
 
+    generatedLiabilityExpenseReviewChangeMessage.value = null;
     setGeneratedLiabilityExpenseReview(
       createdLiability.id,
       createdLiability.name,
@@ -1314,6 +1356,42 @@ async function submitLiabilityWithExpenseReview(
   } catch (e: unknown) {
     annualExpenseError.value = `Pasivo creado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
   }
+}
+
+async function updateLiabilityAndShowExpenseReview(
+  id: number,
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  const beforeEntries = await listBySourceLiability(id);
+  await store.updateLiability(id, payload);
+  await loadAnnualExpense(fiscalYear.value);
+  const refreshedEntries = await listBySourceLiability(id);
+  const systemGeneratedEntries = refreshedEntries
+    .filter((entry) => entry.isSystemGenerated && entry.sourceLiabilityId === id)
+    .sort((a, b) => a.fiscalYear - b.fiscalYear);
+  if (!systemGeneratedEntries.length) return;
+
+  const liabilityName = store.liabilities.find((item) => item.id === id)?.name ?? 'Pasivo';
+  generatedLiabilityExpenseReviewChangeMessage.value = summarizeGeneratedLiabilityExpenseChanges(
+    beforeEntries.filter((entry) => entry.isSystemGenerated && entry.sourceLiabilityId === id),
+    systemGeneratedEntries,
+  );
+  setGeneratedLiabilityExpenseReview(id, liabilityName, systemGeneratedEntries);
+  showGeneratedLiabilityExpenseModal.value = true;
+}
+
+async function submitEditWithExpenseReview(
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  const current = editItem.value;
+  if (!current || !editKind.value) return;
+  if (editKind.value === 'asset') {
+    await submitEdit(payload);
+    await loadAnnualExpense(fiscalYear.value);
+    return;
+  }
+  await updateLiabilityAndShowExpenseReview(current.id, payload);
+  closeEdit();
 }
 
 function parseLooseDecimal(raw: unknown): number | null {
@@ -1941,6 +2019,8 @@ async function importPortableAssets(
       amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
       amortization_term_years: asset.amortization_term_years ?? null,
       annual_interest_tae: normalizeImportedAssetTae(asset),
+      deposit_term_months:
+        asset.deposit_term_months == null ? null : Number(asset.deposit_term_months),
       amount: String(asset.amount),
       is_active: asset.is_active ?? true,
       notes: asset.notes ?? '',
@@ -2716,7 +2796,7 @@ watch(
         :total-base="store.summary?.total_liabilities ?? '0'"
         v-bind="itemListProps"
         :assets="activeAssets"
-        :on-update="store.updateLiability"
+        :on-update="updateLiabilityAndShowExpenseReview"
         :on-archive="store.archiveLiability"
         :on-delete="deleteLiabilityAndReloadExpenses"
         :on-add="() => (showLiabilityModal = true)"
@@ -2756,6 +2836,12 @@ watch(
       @close="closeGeneratedLiabilityExpenseModal"
     >
       <div v-if="generatedLiabilityExpenseReview" class="grid gap-3">
+        <div
+          v-if="generatedLiabilityExpenseReviewChangeMessage"
+          class="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white/90"
+        >
+          {{ generatedLiabilityExpenseReviewChangeMessage }}
+        </div>
         <div class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90">
           Se han generado gastos recurrentes en {{ generatedLiabilityExpenseReview.entries.length }}
           anualidades para este pasivo. Revisalos y confirma que la
@@ -2836,7 +2922,7 @@ watch(
         :allow-negative="editKind === 'asset'"
         mode="edit"
         :initial="editInitial"
-        :on-submit="submitEdit"
+        :on-submit="submitEditWithExpenseReview"
         :on-cancel="closeEdit"
       />
     </BaseModal>

@@ -314,8 +314,7 @@ class AssetImprovement(models.Model):
         blank=True,
         validators=[MinValueValidator(0)],
         help_text=(
-            "Valor actual manual de la reforma. Requerido cuando "
-            "amortization_method=manual."
+            "Valor actual manual de la reforma. Requerido cuando amortization_method=manual."
         ),
     )
     notes = models.TextField(blank=True, default="")
@@ -510,6 +509,29 @@ class Liability(models.Model):
         help_text=(
             "Coste mensual de productos vinculados (seguros, etc.) si se desea registrar "
             "como metadata del pasivo."
+        ),
+    )
+    cancellation_forecast_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Si true, modela una cancelacion anticipada prevista del pasivo y ajusta "
+            "la generacion de compromisos en presupuesto."
+        ),
+    )
+    cancellation_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Fecha prevista de cancelacion anticipada (si aplica).",
+    )
+    cancellation_fee_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Comision de cancelacion anticipada (importe fijo). Si no se informa, "
+            "puede estimarse usando early_repayment_fee_percent."
         ),
     )
 

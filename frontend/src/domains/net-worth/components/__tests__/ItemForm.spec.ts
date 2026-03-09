@@ -594,6 +594,51 @@ describe('ItemForm (saas)', () => {
     );
   });
 
+  it('submits mortgage cancellation forecast fields', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(ItemForm, {
+      props: {
+        title: 'Nueva hipoteca',
+        categories: [{ value: 'mortgage', label: 'Hipoteca' }],
+        showFinancedAsset: true,
+        ownerships: [],
+        onSubmit,
+      },
+    });
+
+    await wrapper.find('input[placeholder="Nombre"]').setValue('Hipoteca casa');
+    const selects = wrapper.findAll('select');
+    await selects[0]!.setValue('mortgage');
+    await selects[1]!.setValue('EUR');
+    await wrapper.find('input[placeholder="Importe"]').setValue('120000');
+    await wrapper.find('input[placeholder="Ej: 24"]').setValue('360');
+    await wrapper.find('input[placeholder="0"]').setValue('2.5');
+
+    const cancellationToggle = wrapper
+      .findAll('input[type="checkbox"]')
+      .find((input) => input.element.closest('label')?.textContent?.includes('prevision de cancelacion'))!;
+    await cancellationToggle.setValue(true);
+
+    const dateInputs = wrapper.findAll('input[type="date"]');
+    await dateInputs[2]!.setValue('2027-06-15');
+    const cancellationDetails = wrapper
+      .findAll('details')
+      .find((details) => details.find('summary').text().includes('Prevision de cancelacion'))!;
+    await cancellationDetails.find('input[placeholder="Opcional"]').setValue('450');
+
+    await wrapper.find('button.btn-primary').trigger('click');
+    await flushPromises();
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'mortgage',
+        cancellation_forecast_enabled: true,
+        cancellation_date: '2027-06-15',
+        cancellation_fee_amount: '450',
+      }),
+    );
+  });
+
   it('maps non-habitual real estate usage to rental subcategory on submit', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {

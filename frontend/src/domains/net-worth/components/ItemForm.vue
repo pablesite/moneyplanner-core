@@ -49,6 +49,9 @@ type Props = {
     early_repayment_fee_percent?: string | null;
     novation_subrogation_fee_amount?: string | null;
     linked_products_monthly_cost?: string | null;
+    cancellation_forecast_enabled?: boolean;
+    cancellation_date?: string | null;
+    cancellation_fee_amount?: string | null;
     amortization_method?: string;
     amortization_term_years?: number | string | null;
     valuation_model?: string;
@@ -268,6 +271,9 @@ const form = reactive({
   early_repayment_fee_percent: '',
   novation_subrogation_fee_amount: '',
   linked_products_monthly_cost: '',
+  cancellation_forecast_enabled: false,
+  cancellation_date: '',
+  cancellation_fee_amount: '',
   amortization_method: 'none',
   amortization_term_years: '',
   valuation_model: 'manual',
@@ -346,6 +352,9 @@ const showLiabilityTaeOnlyField = computed(
   () => isLiabilityForm.value && !showLiabilityAdvancedFields.value,
 );
 const showMortgageFeeFields = computed(
+  () => isLiabilityForm.value && form.category === 'mortgage',
+);
+const showMortgageCancellationForecastFields = computed(
   () => isLiabilityForm.value && form.category === 'mortgage',
 );
 const showAssetAmortizationFields = computed(
@@ -934,6 +943,20 @@ const liabilityScheduleError = computed(() => {
   }
   return '';
 });
+const cancellationForecastError = computed(() => {
+  if (!showMortgageCancellationForecastFields.value) return '';
+  if (!form.cancellation_forecast_enabled) return '';
+  const cancellationDate = String(form.cancellation_date ?? '').trim();
+  if (!cancellationDate) return 'Indica la fecha prevista de cancelacion.';
+  if (String(form.start_date ?? '').trim() && cancellationDate < String(form.start_date).trim()) {
+    return 'Fecha de cancelacion debe ser >= fecha inicio.';
+  }
+  const feeSanitized = sanitizeAmount(form.cancellation_fee_amount, maxDecimals.value);
+  if (String(form.cancellation_fee_amount ?? '').trim() && (feeSanitized.error || !feeSanitized.value)) {
+    return feeSanitized.error || 'Comision de cancelacion invalida.';
+  }
+  return '';
+});
 const estimatedMonthlyPaymentPreview = computed(() => {
   if (!showLiabilityAdvancedFields.value) return null;
   const paymentFrequency = String(form.payment_frequency ?? '').trim();
@@ -1003,6 +1026,7 @@ async function submit() {
   if (primaryHomeImprovementsError.value) return;
   if (liabilityDatesError.value) return;
   if (liabilityScheduleError.value) return;
+  if (cancellationForecastError.value) return;
 
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
@@ -1092,6 +1116,21 @@ async function submit() {
       showMortgageFeeFields.value && String(form.linked_products_monthly_cost ?? '').trim()
         ? sanitizeAmount(form.linked_products_monthly_cost, maxDecimals.value).value
         : undefined,
+    cancellation_forecast_enabled: showMortgageCancellationForecastFields.value
+      ? !!form.cancellation_forecast_enabled
+      : undefined,
+    cancellation_date:
+      showMortgageCancellationForecastFields.value &&
+      form.cancellation_forecast_enabled &&
+      String(form.cancellation_date ?? '').trim()
+        ? String(form.cancellation_date).trim()
+        : null,
+    cancellation_fee_amount:
+      showMortgageCancellationForecastFields.value &&
+      form.cancellation_forecast_enabled &&
+      String(form.cancellation_fee_amount ?? '').trim()
+        ? sanitizeAmount(form.cancellation_fee_amount, maxDecimals.value).value
+        : null,
     amortization_method: showAssetAmortizationFields.value ? form.amortization_method : undefined,
     amortization_term_years:
       requiresAssetAmortizationTermInput.value && String(form.amortization_term_years ?? '').trim()
@@ -1174,6 +1213,9 @@ async function submit() {
   form.early_repayment_fee_percent = '';
   form.novation_subrogation_fee_amount = '';
   form.linked_products_monthly_cost = '';
+  form.cancellation_forecast_enabled = false;
+  form.cancellation_date = '';
+  form.cancellation_fee_amount = '';
   form.amortization_method = 'none';
   form.amortization_term_years = '';
   form.valuation_model = 'manual';
@@ -1238,6 +1280,9 @@ watch(
     form.early_repayment_fee_percent = initial.early_repayment_fee_percent ?? '';
     form.novation_subrogation_fee_amount = initial.novation_subrogation_fee_amount ?? '';
     form.linked_products_monthly_cost = initial.linked_products_monthly_cost ?? '';
+    form.cancellation_forecast_enabled = !!initial.cancellation_forecast_enabled;
+    form.cancellation_date = initial.cancellation_date ?? '';
+    form.cancellation_fee_amount = initial.cancellation_fee_amount ?? '';
     form.amortization_method = initial.amortization_method ?? 'none';
     form.amortization_term_years =
       initial.amortization_term_years == null ? '' : String(initial.amortization_term_years);
@@ -1342,6 +1387,21 @@ watch(
       form.early_repayment_fee_percent = '';
       form.novation_subrogation_fee_amount = '';
       form.linked_products_monthly_cost = '';
+      form.cancellation_forecast_enabled = false;
+      form.cancellation_date = '';
+      form.cancellation_fee_amount = '';
+    }
+  },
+);
+
+watch(
+  () => form.cancellation_forecast_enabled,
+  (enabled) => {
+    if (!enabled) {
+      form.cancellation_date = '';
+      form.cancellation_fee_amount = '';
+    } else if (!String(form.cancellation_date ?? '').trim()) {
+      form.cancellation_date = String(form.start_date ?? '').trim() || todayIsoDate();
     }
   },
 );
@@ -1891,6 +1951,29 @@ watch(
         </div>
       </details>
 
+      <details v-if="showMortgageCancellationForecastFields" class="ui-item-form-section ui-item-form-field-span-2">
+        <summary class="ui-item-form-details-summary">Prevision de cancelacion</summary>
+        <div class="mt-2">
+          <label class="checkbox-row">
+            <input v-model="form.cancellation_forecast_enabled" type="checkbox" />
+            <span>Activar prevision de cancelacion anticipada</span>
+          </label>
+        </div>
+        <div v-if="form.cancellation_forecast_enabled" class="ui-item-form-inline-grid mt-2">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Fecha cancelacion</span>
+            <input v-model="form.cancellation_date" type="date" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Comision cancelacion (importe)</span>
+            <input v-model="form.cancellation_fee_amount" inputmode="decimal" placeholder="Opcional" class="input ui-data-field" />
+          </label>
+        </div>
+        <div v-if="form.cancellation_forecast_enabled" class="ui-form-help">
+          Si no indicas importe, se estimara con "Amortizacion anticipada (%)" sobre el saldo pendiente.
+        </div>
+      </details>
+
       <div v-if="showAssetAmortizationFields" class="ui-item-form-section ui-item-form-field-span-2">
         <div class="ui-item-form-section-head"><div class="ui-item-form-section-title">Amortización del activo</div></div>
         <div class="ui-item-form-inline-grid">
@@ -1946,6 +2029,7 @@ watch(
         <div v-if="primaryHomeImprovementsError" class="ui-form-help ui-form-help-error">{{ primaryHomeImprovementsError }}</div>
         <div v-if="liabilityDatesError" class="ui-form-help ui-form-help-error">{{ liabilityDatesError }}</div>
         <div v-if="liabilityScheduleError" class="ui-form-help ui-form-help-error">{{ liabilityScheduleError }}</div>
+        <div v-if="cancellationForecastError" class="ui-form-help ui-form-help-error">{{ cancellationForecastError }}</div>
       </div>
 
       <div class="ui-item-form-footer ui-item-form-field-span-2">
@@ -1965,7 +2049,8 @@ watch(
               !!primaryHomeValuationError ||
               !!primaryHomeImprovementsError ||
               !!liabilityDatesError ||
-              !!liabilityScheduleError
+              !!liabilityScheduleError ||
+              !!cancellationForecastError
             "
             @click="submit"
           >
