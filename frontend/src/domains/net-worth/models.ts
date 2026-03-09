@@ -54,6 +54,9 @@ export type Asset = {
   early_repayment_fee_percent?: string | null;
   novation_subrogation_fee_amount?: string | null;
   linked_products_monthly_cost?: string | null;
+  cancellation_forecast_enabled?: boolean;
+  cancellation_date?: string | null;
+  cancellation_fee_amount?: string | null;
   amount_base?: string;
   is_active: boolean;
   notes: string;

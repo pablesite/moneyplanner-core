@@ -453,6 +453,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "early_repayment_fee_percent",
             "novation_subrogation_fee_amount",
             "linked_products_monthly_cost",
+            "cancellation_forecast_enabled",
+            "cancellation_date",
+            "cancellation_fee_amount",
             "amount_base",
             "is_active",
             "is_asset_backed",
@@ -488,6 +491,30 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "payment_frequency", getattr(self.instance, "payment_frequency", None)
         )
         term_months = attrs.get("term_months", getattr(self.instance, "term_months", None))
+        cancellation_forecast_enabled = attrs.get(
+            "cancellation_forecast_enabled",
+            getattr(self.instance, "cancellation_forecast_enabled", False),
+        )
+        cancellation_date = attrs.get(
+            "cancellation_date", getattr(self.instance, "cancellation_date", None)
+        )
+        cancellation_fee_amount = attrs.get(
+            "cancellation_fee_amount", getattr(self.instance, "cancellation_fee_amount", None)
+        )
+
+        if category != Liability.Category.MORTGAGE:
+            cancellation_forecast_enabled = False
+            cancellation_date = None
+            cancellation_fee_amount = None
+            attrs["cancellation_forecast_enabled"] = False
+            attrs["cancellation_date"] = None
+            attrs["cancellation_fee_amount"] = None
+        elif not cancellation_forecast_enabled:
+            cancellation_date = None
+            cancellation_fee_amount = None
+            attrs["cancellation_date"] = None
+            attrs["cancellation_fee_amount"] = None
+
         validate_liability_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -497,6 +524,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
             expected_end_date=expected_end_date,
             payment_frequency=payment_frequency,
             term_months=term_months,
+            cancellation_forecast_enabled=cancellation_forecast_enabled,
+            cancellation_date=cancellation_date,
+            cancellation_fee_amount=cancellation_fee_amount,
         )
 
         financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))

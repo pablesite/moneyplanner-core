@@ -260,6 +260,32 @@ class NetWorthServicesTests(TestCase):
                 term_months=10,
             )
 
+    def test_validate_liability_payload_requires_cancellation_date_when_forecast_enabled(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.MORTGAGE,
+                annual_interest_tae=Decimal("2.50"),
+                start_date=date(2026, 2, 1),
+                expected_end_date=None,
+                cancellation_forecast_enabled=True,
+                cancellation_date=None,
+            )
+
+    def test_validate_liability_payload_rejects_cancellation_forecast_for_non_mortgage(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.PERSONAL_LOAN,
+                annual_interest_tae=Decimal("5.00"),
+                start_date=date(2026, 2, 1),
+                expected_end_date=None,
+                cancellation_forecast_enabled=True,
+                cancellation_date=date(2027, 1, 1),
+            )
+
     def test_infer_liability_is_asset_backed(self):
         self.assertTrue(infer_liability_is_asset_backed(financed_asset=object()))
         self.assertFalse(infer_liability_is_asset_backed(financed_asset=None))
@@ -723,7 +749,9 @@ class NetWorthServicesTests(TestCase):
         # Cuotas semanales en: 01, 08, 15, 22 y 29 de enero.
         self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("1500.00"))
 
-    def test_get_effective_asset_amount_does_not_accumulate_when_contribution_currency_differs(self):
+    def test_get_effective_asset_amount_does_not_accumulate_when_contribution_currency_differs(
+        self,
+    ):
         asset = Asset.objects.create(
             user=self.user,
             name="BTC con cuota USD",
@@ -1491,9 +1519,7 @@ class NetWorthApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(
-            create_response.status_code, status.HTTP_201_CREATED, create_response.data
-        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED, create_response.data)
         asset_id = create_response.data["id"]
 
         row = AnnualExpenseEntry.objects.get(
@@ -1778,6 +1804,89 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row.subcategory, "mortgage_principal")
         self.assertEqual(row.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
         self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+
+    def test_mortgage_with_cancellation_forecast_truncates_recurrent_and_generates_one_offs(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca cancelacion prevista",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "120000.00",
+                "principal_amount": "120000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "early_repayment_fee_percent": "0.50",
+                "cancellation_forecast_enabled": True,
+                "cancellation_date": "2027-06-15",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        liability_id = response.data["id"]
+
+        generated = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+        )
+        recurrent = generated.filter(event_group=f"liability_{liability_id}").order_by(
+            "fiscal_year"
+        )
+        self.assertTrue(recurrent.exists())
+        # La deuda se cancela en 2027-06, por lo que no deben existir compromisos recurrentes en 2028+.
+        self.assertEqual(set(recurrent.values_list("fiscal_year", flat=True)), {2026, 2027})
+
+        principal_row = generated.get(
+            event_group=f"liability_{liability_id}_cancellation_principal"
+        )
+        self.assertEqual(principal_row.expense_type, AnnualExpenseEntry.ExpenseType.ONE_OFF)
+        self.assertEqual(principal_row.time_profile, AnnualExpenseEntry.TimeProfile.ONE_OFF)
+        self.assertEqual(principal_row.target_month, 6)
+        self.assertGreater(principal_row.amount_annual, Decimal("0.00"))
+
+        fee_row = generated.get(event_group=f"liability_{liability_id}_cancellation_fee")
+        self.assertEqual(fee_row.expense_type, AnnualExpenseEntry.ExpenseType.ONE_OFF)
+        self.assertEqual(fee_row.time_profile, AnnualExpenseEntry.TimeProfile.ONE_OFF)
+        self.assertEqual(fee_row.target_month, 6)
+        self.assertGreater(fee_row.amount_annual, Decimal("0.00"))
+
+    def test_mortgage_with_cancellation_fee_amount_uses_fixed_fee(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca cancelacion con comision fija",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "120000.00",
+                "principal_amount": "120000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "early_repayment_fee_percent": "0.50",
+                "cancellation_forecast_enabled": True,
+                "cancellation_date": "2027-06-15",
+                "cancellation_fee_amount": "321.99",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        fee_row = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_liability_id=response.data["id"],
+            is_system_generated=True,
+            event_group=f"liability_{response.data['id']}_cancellation_fee",
+        )
+        self.assertEqual(fee_row.amount_annual, Decimal("321.99"))
 
     def test_liability_generated_expense_owner_name_follows_ownership_link(self):
         response = self.client.post(
