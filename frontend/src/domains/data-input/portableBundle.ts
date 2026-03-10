@@ -145,6 +145,7 @@ export type PortableDataBundle = {
   schema_version: 1;
   exported_at: string;
   source_app: 'core' | 'saas';
+  exported_app_version?: string;
   settings?: PortableSettingsRecord;
   data: {
     annual_income: PortableAnnualIncomeRecord[];
@@ -157,6 +158,11 @@ export type PortableDataBundle = {
 };
 
 export type ImportMode = 'append' | 'replace';
+export type ImportCompatibility =
+  | 'compatible'
+  | 'legacy_replace_blocked'
+  | 'newer_than_app'
+  | 'unknown';
 
 export function normalizeOptionalText(raw: unknown): string | null {
   if (raw == null) return null;
@@ -218,7 +224,57 @@ function formatImportYearSummary(
   return `${label}: ${segments.join(' | ')}`;
 }
 
-export function buildImportPreviewMessage(bundle: PortableDataBundle, mode: ImportMode): string {
+export function buildImportPreviewMessage(
+  bundle: PortableDataBundle,
+  mode: ImportMode,
+  currentAppVersion?: string | null,
+): string {
+  return buildImportPreviewMessageWithVersion(bundle, mode, currentAppVersion);
+}
+
+function parseVersion(version: string): number[] {
+  return version
+    .split('.')
+    .map((part) => Number(part.trim()))
+    .map((part) => (Number.isFinite(part) ? part : 0));
+}
+
+export function comparePortableVersions(left: string, right: string): number {
+  const leftParts = parseVersion(left);
+  const rightParts = parseVersion(right);
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftValue = leftParts[index] ?? 0;
+    const rightValue = rightParts[index] ?? 0;
+    if (leftValue < rightValue) return -1;
+    if (leftValue > rightValue) return 1;
+  }
+  return 0;
+}
+
+export function evaluateImportCompatibility(
+  bundle: PortableDataBundle,
+  mode: ImportMode,
+  currentAppVersion?: string | null,
+): ImportCompatibility {
+  const exportedVersion = normalizeOptionalText(bundle.exported_app_version);
+  if (mode === 'replace' && exportedVersion == null) {
+    return 'legacy_replace_blocked';
+  }
+  if (exportedVersion == null || !currentAppVersion) {
+    return 'unknown';
+  }
+  if (comparePortableVersions(exportedVersion, currentAppVersion) > 0) {
+    return 'newer_than_app';
+  }
+  return 'compatible';
+}
+
+export function buildImportPreviewMessageWithVersion(
+  bundle: PortableDataBundle,
+  mode: ImportMode,
+  currentAppVersion?: string | null,
+): string {
   const snapshots = bundle.data.snapshots ?? [];
   const sortedDates = snapshots.map((s) => s.snapshot_date).sort();
   const snapshotRange =
@@ -226,10 +282,15 @@ export function buildImportPreviewMessage(bundle: PortableDataBundle, mode: Impo
       ? `${sortedDates[0]} .. ${sortedDates[sortedDates.length - 1]}`
       : 'sin snapshots';
   const hasPremium = Boolean(bundle.premium);
+  const exportedVersion = normalizeOptionalText(bundle.exported_app_version);
+  const compatibility = evaluateImportCompatibility(bundle, mode, currentAppVersion);
   const lines = [
     mode === 'replace'
       ? 'Se reemplazaran los datos actuales por el archivo:'
       : 'Se importaran datos (modo aditivo):',
+    `- Origen: ${bundle.source_app}`,
+    `- Version exportada: ${exportedVersion ?? 'legacy/sin version'}`,
+    `- Version actual: ${currentAppVersion ?? 'no disponible'}`,
     `- Ingresos: ${bundle.data.annual_income.length}`,
     `- Gastos: ${bundle.data.annual_expense.length}`,
     `- Activos: ${bundle.data.assets.length}`,
@@ -246,6 +307,13 @@ export function buildImportPreviewMessage(bundle: PortableDataBundle, mode: Impo
     mode === 'replace'
       ? 'Se borraran primero los datos actuales de estos bloques (incluidos snapshots).'
       : 'La importacion anade registros y actualiza settings/snapshots/relaciones importados.',
+    compatibility === 'legacy_replace_blocked'
+      ? 'Aviso: este archivo no incluye version exportada. El backend bloqueara `replace` por seguridad.'
+      : compatibility === 'newer_than_app'
+        ? 'Aviso: el archivo viene de una version mas nueva. El backend bloqueara `replace` para evitar perdida de datos.'
+        : compatibility === 'unknown'
+          ? 'Aviso: no se pudo determinar toda la compatibilidad antes de importar.'
+          : 'Compatibilidad preliminar: OK.',
     'Continuar?',
   ];
   return lines.join('\n');
@@ -478,6 +546,8 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
     schema_version: 1,
     exported_at: String(parsed.exported_at ?? ''),
     source_app: sourceApp,
+    exported_app_version:
+      parsed.exported_app_version == null ? undefined : String(parsed.exported_app_version),
     settings:
       parsed.settings && typeof parsed.settings === 'object'
         ? { base_currency: String((parsed.settings as PortableSettingsRecord).base_currency ?? '') }

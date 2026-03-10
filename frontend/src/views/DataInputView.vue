@@ -30,9 +30,6 @@ import {
   buildImportPreviewMessage,
   buildPortableFilename,
   type ImportMode,
-  normalizeImportedAssetTae,
-  normalizeImportedLiabilityTae,
-  normalizeOptionalText,
   parsePortableDataBundle,
   type PortableAnnualExpenseRecord,
   type PortableAnnualIncomeRecord,
@@ -42,7 +39,6 @@ import {
   type PortableLiabilityRecord,
   type PortableOwnershipLinkRecord,
   type PortableOwnershipRecord,
-  type PortablePremiumData,
   type PortableSettingsRecord,
   type PortableSnapshotRecord,
   toPortableAnnualExpenseRecord,
@@ -833,6 +829,14 @@ function expenseCashflowRoleLabel(role: AnnualExpenseCashflowRole): string {
   return 'Otro';
 }
 
+function eventGroupLabel(eventGroup: string): string {
+  const principalCancellation = /^liability_(\d+)_cancellation_principal$/;
+  const feeCancellation = /^liability_(\d+)_cancellation_fee$/;
+  if (principalCancellation.test(eventGroup)) return 'Cancelacion anticipada principal';
+  if (feeCancellation.test(eventGroup)) return 'Cancelacion anticipada comision';
+  return eventGroup;
+}
+
 function formatTermEndLabel(termEndYear: number | null, termEndMonth: number | null): string | null {
   if (termEndYear == null) return null;
   if (termEndMonth == null) return `Fin ${termEndYear}`;
@@ -852,7 +856,9 @@ function shouldHideExpenseCashflowRoleLabel(params: {
   cashflowRole: AnnualExpenseCashflowRole;
 }): boolean {
   return (
-    params.timeProfile === 'term_recurrent' && params.cashflowRole === 'temporary_commitment'
+    (params.timeProfile === 'term_recurrent' &&
+      params.cashflowRole === 'temporary_commitment') ||
+    (params.timeProfile === 'one_off' && params.cashflowRole === 'temporary_commitment')
   );
 }
 
@@ -1770,7 +1776,31 @@ const dataTransferToastMessage = ref<string | null>(null);
 const dataTransferToastKind = ref<'success' | 'error'>('success');
 const importFileInputRef = ref<HTMLInputElement | null>(null);
 const pendingImportMode = ref<ImportMode>('append');
+const portableDataAppVersion = ref<string | null>(null);
 let dataTransferToastTimer: number | null = null;
+
+type PortableDataMeta = { app_version: string };
+type PortableImportResponse = {
+  ok: boolean;
+  mode: ImportMode;
+  meta: {
+    schema_version: number;
+    source_app: 'core' | 'saas';
+    exported_at: string;
+    exported_app_version?: string;
+    imported_into_app_version: string;
+  };
+  counts: {
+    annual_income: number;
+    annual_expense: number;
+    assets: number;
+    liabilities: number;
+    snapshots: number;
+    family_members: number;
+    ownerships: number;
+    ownership_links: number;
+  };
+};
 
 const dataTransferUiBusy = computed(
   () =>
@@ -1809,11 +1839,19 @@ function triggerImportDialog(mode: ImportMode = 'append'): void {
   importFileInputRef.value?.click();
 }
 
+async function ensurePortableDataAppVersion(): Promise<string> {
+  if (portableDataAppVersion.value) return portableDataAppVersion.value;
+  const response = await coreApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
+  portableDataAppVersion.value = response.data.app_version;
+  return portableDataAppVersion.value;
+}
+
 async function exportDataBundle(): Promise<void> {
   clearDataTransferFeedback();
   dataTransferBusyLabel.value = 'Exportando datos...';
   dataTransferBusy.value = true;
   try {
+    const appVersion = await ensurePortableDataAppVersion();
     const [
       incomeRes,
       expenseRes,
@@ -1840,6 +1878,7 @@ async function exportDataBundle(): Promise<void> {
       schema_version: 1,
       exported_at: new Date().toISOString(),
       source_app: 'core',
+      exported_app_version: appVersion,
       settings: settingsRes.data ?? undefined,
       data: {
         annual_income: (incomeRes.data ?? []).map(toPortableAnnualIncomeRecord),
@@ -1874,306 +1913,12 @@ async function exportDataBundle(): Promise<void> {
   }
 }
 
-async function clearExistingCoreDataForReplace(): Promise<void> {
-  const [incomeRes, expenseRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
-    coreApi.get<{ id: number }[]>('/api/budget/annual-income/'),
-    coreApi.get<{ id: number }[]>('/api/budget/annual-expense/'),
-    coreApi.get<{ id: number }[]>('/api/net-worth/assets/'),
-    coreApi.get<{ id: number }[]>('/api/net-worth/liabilities/'),
-    coreApi.get<{ id: number }[]>('/api/net-worth/snapshots/'),
-  ]);
-
-  for (const item of [...(liabilitiesRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await coreApi.delete(`/api/net-worth/liabilities/${item.id}/`);
-  }
-  for (const item of [...(assetsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await coreApi.delete(`/api/net-worth/assets/${item.id}/`);
-  }
-  for (const item of [...(incomeRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await coreApi.delete(`/api/budget/annual-income/${item.id}/`);
-  }
-  for (const item of [...(expenseRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await coreApi.delete(`/api/budget/annual-expense/${item.id}/`);
-  }
-  for (const item of [...(snapshotsRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await coreApi.delete(`/api/net-worth/snapshots/${item.id}/`);
-  }
-}
-
-async function clearExistingPremiumDataForReplace(): Promise<void> {
-  const [linksRes, ownershipsRes, membersRes] = await Promise.all([
-    api.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
-    api.get<PortableOwnershipRecord[]>('/api/ownerships/'),
-    api.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
-  ]);
-
-  for (const link of linksRes.data ?? []) {
-    await api.post('/api/ownership-links/sync/', {
-      target_type: link.target_type,
-      target_id: link.target_id,
-      ownership_id: null,
-    });
-  }
-
-  for (const ownership of [...(ownershipsRes.data ?? [])]
-    .filter((row) => row.kind === 'shared')
-    .sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/ownerships/${ownership.id}/`);
-  }
-
-  for (const member of [...(membersRes.data ?? [])].sort((a, b) => b.id - a.id)) {
-    await api.delete(`/api/family-members/${member.id}/`);
-  }
-}
-
-async function importPremiumPeopleData(
-  premium: PortablePremiumData | undefined,
-): Promise<Map<number, number>> {
-  const ownershipIdMap = new Map<number, number>();
-  if (!premium) return ownershipIdMap;
-
-  const memberIdMap = new Map<number, number>();
-  const sortedMembers = [...premium.family_members].sort((a, b) => a.id - b.id);
-  for (const member of sortedMembers) {
-    const res = await api.post<{ id: number }>('/api/family-members/', {
-      name: member.name,
-      role: member.role,
-      is_active: member.is_active ?? true,
-    });
-    if (typeof res.data?.id === 'number') memberIdMap.set(member.id, res.data.id);
-  }
-
-  const currentOwnershipsRes = await api.get<PortableOwnershipRecord[]>('/api/ownerships/');
-  const currentOwnerships = currentOwnershipsRes.data ?? [];
-  const exportedIndividuals = premium.ownerships.filter(
-    (ownership) => ownership.kind === 'individual' && ownership.member,
-  );
-  for (const ownership of exportedIndividuals) {
-    const oldMemberId = ownership.member?.id;
-    if (oldMemberId == null) continue;
-    const newMemberId = memberIdMap.get(oldMemberId);
-    if (newMemberId == null) continue;
-    const mapped = currentOwnerships.find(
-      (candidate) => candidate.kind === 'individual' && candidate.member?.id === newMemberId,
-    );
-    if (mapped) ownershipIdMap.set(ownership.id, mapped.id);
-  }
-
-  const exportedShared = premium.ownerships
-    .filter((ownership) => ownership.kind === 'shared')
-    .sort((a, b) => a.id - b.id);
-  for (const ownership of exportedShared) {
-    const splits = ownership.splits
-      .map((split) => {
-        const memberId = memberIdMap.get(split.member.id);
-        if (memberId == null) return null;
-        return { member_id: memberId, percent: String(split.percent) };
-      })
-      .filter((split): split is { member_id: number; percent: string } => split != null);
-    if (!splits.length) continue;
-    const res = await api.post<{ id: number }>('/api/ownerships/', {
-      kind: 'shared',
-      member: null,
-      splits,
-    });
-    if (typeof res.data?.id === 'number') ownershipIdMap.set(ownership.id, res.data.id);
-  }
-
-  return ownershipIdMap;
-}
-
 function setDataImportBusyState(importMode: 'append' | 'replace') {
   dataTransferBusyLabel.value =
     importMode === 'replace'
       ? 'Reemplazando datos... Esto puede tardar unos segundos.'
       : 'Importando datos...';
   dataTransferBusy.value = true;
-}
-
-async function importPortableAssets(
-  assets: PortableAssetRecord[],
-): Promise<{ sortedAssets: PortableAssetRecord[]; assetIdMap: Map<number, number> }> {
-  const assetIdMap = new Map<number, number>();
-  const sortedAssets = [...assets].sort((a, b) => a.id - b.id);
-  for (const asset of sortedAssets) {
-    const assetPayload = {
-      name: asset.name,
-      category: asset.category,
-      subcategory: asset.subcategory,
-      tracking_mode: asset.tracking_mode,
-      accounting_account_id: asset.accounting_account_id,
-      currency: asset.currency,
-      start_date: asset.start_date,
-      expected_end_date: normalizeOptionalText(asset.expected_end_date),
-      investment_contribution_mode:
-        normalizeOptionalText(asset.investment_contribution_mode) ?? 'one_time',
-      investment_contribution_frequency:
-        normalizeOptionalText(asset.investment_contribution_frequency) ?? 'monthly',
-      investment_contribution_currency: normalizeOptionalText(
-        asset.investment_contribution_currency,
-      ),
-      monthly_contribution_amount: normalizeOptionalText(asset.monthly_contribution_amount),
-      market_value_override: normalizeOptionalText(asset.market_value_override),
-      market_value_override_date: normalizeOptionalText(asset.market_value_override_date),
-      initial_purchase_value: normalizeOptionalText(asset.initial_purchase_value),
-      amortization_method: normalizeOptionalText(asset.amortization_method) ?? 'none',
-      amortization_term_years: asset.amortization_term_years ?? null,
-      annual_interest_tae: normalizeImportedAssetTae(asset),
-      deposit_term_months:
-        asset.deposit_term_months == null ? null : Number(asset.deposit_term_months),
-      amount: String(asset.amount),
-      is_active: asset.is_active ?? true,
-      notes: asset.notes ?? '',
-    };
-    let res;
-    try {
-      res = await coreApi.post<{ id: number }>('/api/net-worth/assets/', assetPayload);
-    } catch (e: unknown) {
-      // Compatibilidad con backends core que aun no exponen/aceptan `notes` en AssetSerializer.
-      const message = toApiErrorMessage(e).toLowerCase();
-      if (!message.includes('notes')) throw e;
-      const { notes: _ignoredNotes, ...assetPayloadWithoutNotes } = assetPayload;
-      res = await coreApi.post<{ id: number }>('/api/net-worth/assets/', assetPayloadWithoutNotes);
-    }
-    if (typeof res.data?.id === 'number') assetIdMap.set(asset.id, res.data.id);
-  }
-  return { sortedAssets, assetIdMap };
-}
-
-async function importPortableLiabilities(
-  liabilities: PortableLiabilityRecord[],
-  assetIdMap: Map<number, number>,
-): Promise<{ sortedLiabilities: PortableLiabilityRecord[]; liabilityIdMap: Map<number, number> }> {
-  const liabilityIdMap = new Map<number, number>();
-  const sortedLiabilities = [...liabilities].sort((a, b) => a.id - b.id);
-  for (const liability of sortedLiabilities) {
-    const financedAssetId =
-      liability.financed_asset_ref != null
-        ? (assetIdMap.get(liability.financed_asset_ref) ?? null)
-        : null;
-    const liabilityPayload = {
-      name: liability.name,
-      category: liability.category,
-      tracking_mode: liability.tracking_mode,
-      accounting_account_id: liability.accounting_account_id,
-      currency: liability.currency,
-      start_date: liability.start_date,
-      expected_end_date: normalizeOptionalText(liability.expected_end_date),
-      term_months: liability.term_months ?? null,
-      rate_type: normalizeOptionalText(liability.rate_type) ?? 'fixed',
-      payment_frequency: normalizeOptionalText(liability.payment_frequency) ?? 'monthly',
-      amortization_system: normalizeOptionalText(liability.amortization_system),
-      annual_interest_tae: normalizeImportedLiabilityTae(liability),
-      principal_amount: normalizeOptionalText(liability.principal_amount),
-      opening_fees_amount: normalizeOptionalText(liability.opening_fees_amount),
-      early_repayment_fee_percent: normalizeOptionalText(liability.early_repayment_fee_percent),
-      novation_subrogation_fee_amount: normalizeOptionalText(
-        liability.novation_subrogation_fee_amount,
-      ),
-      linked_products_monthly_cost: normalizeOptionalText(liability.linked_products_monthly_cost),
-      amount: String(liability.amount),
-      is_active: liability.is_active ?? true,
-      notes: liability.notes ?? '',
-      financed_asset_id: financedAssetId,
-    };
-    const res = await coreApi.post<{ id: number }>('/api/net-worth/liabilities/', liabilityPayload);
-    if (typeof res.data?.id === 'number') liabilityIdMap.set(liability.id, res.data.id);
-  }
-  return { sortedLiabilities, liabilityIdMap };
-}
-
-async function importPortableAnnualIncomeEntries(
-  annualIncome: PortableAnnualIncomeRecord[],
-): Promise<PortableAnnualIncomeRecord[]> {
-  const sortedIncome = [...annualIncome].sort((a, b) => a.id - b.id);
-  for (const entry of sortedIncome) {
-    await coreApi.post('/api/budget/annual-income/', {
-      name: entry.name,
-      category: entry.category,
-      subcategory: entry.subcategory,
-      owner_name: String(entry.owner_name ?? '').trim(),
-      income_type: entry.income_type,
-      time_profile: entry.time_profile,
-      cashflow_role: entry.cashflow_role,
-      event_group: String(entry.event_group ?? ''),
-      target_month: entry.target_month ?? null,
-      term_end_month: entry.term_end_month ?? null,
-      term_end_year: entry.term_end_year ?? null,
-      amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
-      amount_annual: String(entry.amount_annual),
-      fiscal_year: Number(entry.fiscal_year),
-      currency: (entry.currency || 'EUR').toUpperCase(),
-      notes: entry.notes ?? '',
-      is_active: entry.is_active ?? true,
-    });
-  }
-  return sortedIncome;
-}
-
-async function importPortableAnnualExpenseEntries(
-  annualExpense: PortableAnnualExpenseRecord[],
-): Promise<PortableAnnualExpenseRecord[]> {
-  const sortedExpense = [...annualExpense].sort((a, b) => a.id - b.id);
-  for (const entry of sortedExpense) {
-    await coreApi.post('/api/budget/annual-expense/', {
-      name: entry.name,
-      category: entry.category,
-      subcategory: entry.subcategory,
-      owner_name: String(entry.owner_name ?? '').trim(),
-      expense_type: entry.expense_type,
-      time_profile: entry.time_profile,
-      cashflow_role: entry.cashflow_role,
-      event_group: String(entry.event_group ?? ''),
-      term_end_month: entry.term_end_month ?? null,
-      term_end_year: entry.term_end_year ?? null,
-      amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
-      amount_annual: String(entry.amount_annual),
-      fiscal_year: Number(entry.fiscal_year),
-      currency: (entry.currency || 'EUR').toUpperCase(),
-      notes: entry.notes ?? '',
-      is_active: entry.is_active ?? true,
-    });
-  }
-  return sortedExpense;
-}
-
-async function importPortableSettingsAndSnapshots(bundle: PortableDataBundle): Promise<void> {
-  if (bundle.settings?.base_currency) {
-    await coreApi.put('/api/auth/settings/', { base_currency: bundle.settings.base_currency });
-  }
-  if (!Array.isArray(bundle.data.snapshots) || !bundle.data.snapshots.length) return;
-  await coreApi.post(
-    '/api/net-worth/snapshots/import-bulk/',
-    bundle.data.snapshots.map((snapshot) => ({
-      snapshot_date: snapshot.snapshot_date,
-      base_currency: snapshot.base_currency,
-      total_assets: snapshot.total_assets,
-      total_liabilities: snapshot.total_liabilities,
-      net_worth: snapshot.net_worth,
-    })),
-  );
-}
-
-async function importPremiumOwnershipLinks(
-  premium: PortablePremiumData | undefined,
-  ownershipIdMap: Map<number, number>,
-  assetIdMap: Map<number, number>,
-  liabilityIdMap: Map<number, number>,
-): Promise<void> {
-  if (!premium) return;
-  for (const link of premium.ownership_links) {
-    const mappedTargetId =
-      link.target_type === 'asset'
-        ? (assetIdMap.get(link.target_id) ?? null)
-        : (liabilityIdMap.get(link.target_id) ?? null);
-    const mappedOwnershipId = ownershipIdMap.get(link.ownership_id) ?? null;
-    if (mappedTargetId == null || mappedOwnershipId == null) continue;
-    await api.post('/api/ownership-links/sync/', {
-      target_type: link.target_type,
-      target_id: mappedTargetId,
-      ownership_id: mappedOwnershipId,
-    });
-  }
 }
 
 async function refreshImportedDataViews(): Promise<void> {
@@ -2186,27 +1931,13 @@ async function refreshImportedDataViews(): Promise<void> {
 
 function buildImportCompletionStatus(params: {
   importMode: 'append' | 'replace';
-  bundle: PortableDataBundle;
-  sortedIncomeCount: number;
-  sortedExpenseCount: number;
-  sortedAssetsCount: number;
-  sortedLiabilitiesCount: number;
+  response: PortableImportResponse;
 }): string {
-  const {
-    importMode,
-    bundle,
-    sortedIncomeCount,
-    sortedExpenseCount,
-    sortedAssetsCount,
-    sortedLiabilitiesCount,
-  } = params;
-  const peopleSummary = bundle.premium
-    ? `, ${bundle.premium.family_members.length} miembros, ${bundle.premium.ownerships.length} titularidades y ${bundle.premium.ownership_links.length} enlaces de titularidad`
-    : '';
-  const snapshotsSummary = `, ${bundle.data.snapshots?.length ?? 0} snapshots`;
+  const { importMode, response } = params;
+  const counts = response.counts;
   return importMode === 'replace'
-    ? `Reemplazo completado: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos y ${sortedLiabilitiesCount} pasivos${snapshotsSummary}${peopleSummary}.`
-    : `Importacion completada: ${sortedIncomeCount} ingresos, ${sortedExpenseCount} gastos, ${sortedAssetsCount} activos y ${sortedLiabilitiesCount} pasivos${snapshotsSummary}${peopleSummary}.`;
+    ? `Reemplazo completado: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.snapshots} snapshots, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`
+    : `Importacion completada: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.snapshots} snapshots, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`;
 }
 
 async function importDataFromFile(event: Event): Promise<void> {
@@ -2217,42 +1948,25 @@ async function importDataFromFile(event: Event): Promise<void> {
   clearDataTransferFeedback();
 
   try {
+    const appVersion = await ensurePortableDataAppVersion();
     const content = await file.text();
     const bundle = parsePortableDataBundle(content);
     const importMode = pendingImportMode.value;
-    const hasPremiumPayload = Boolean(bundle.premium);
 
-    const proceed = window.confirm(buildImportPreviewMessage(bundle, importMode));
+    const proceed = window.confirm(buildImportPreviewMessage(bundle, importMode, appVersion));
     if (!proceed) return;
 
     setDataImportBusyState(importMode);
 
-    if (importMode === 'replace') {
-      await clearExistingCoreDataForReplace();
-      if (hasPremiumPayload) {
-        await clearExistingPremiumDataForReplace();
-      }
-    }
-
-    const ownershipIdMap = await importPremiumPeopleData(bundle.premium);
-    const { sortedAssets, assetIdMap } = await importPortableAssets(bundle.data.assets);
-    const { sortedLiabilities, liabilityIdMap } = await importPortableLiabilities(
-      bundle.data.liabilities,
-      assetIdMap,
-    );
-    const sortedIncome = await importPortableAnnualIncomeEntries(bundle.data.annual_income);
-    const sortedExpense = await importPortableAnnualExpenseEntries(bundle.data.annual_expense);
-    await importPortableSettingsAndSnapshots(bundle);
-    await importPremiumOwnershipLinks(bundle.premium, ownershipIdMap, assetIdMap, liabilityIdMap);
+    const response = await coreApi.post<PortableImportResponse>('/api/core/portable-data/import/', {
+      mode: importMode,
+      bundle,
+    });
     await refreshImportedDataViews();
 
     dataTransferStatus.value = buildImportCompletionStatus({
       importMode,
-      bundle,
-      sortedIncomeCount: sortedIncome.length,
-      sortedExpenseCount: sortedExpense.length,
-      sortedAssetsCount: sortedAssets.length,
-      sortedLiabilitiesCount: sortedLiabilities.length,
+      response: response.data,
     });
   } catch (e: unknown) {
     dataTransferError.value = `No se pudo importar: ${toApiErrorMessage(e)}`;
@@ -2551,7 +2265,7 @@ watch(
                         <div class="nw-item-submeta">
                           {{ timeProfileLabel(entry.timeProfile) }}
                           <template v-if="entry.eventGroup">
-                            . Evento {{ entry.eventGroup }}</template
+                            . Evento {{ eventGroupLabel(entry.eventGroup) }}</template
                           >
                         </div>
                       </div>
@@ -2699,9 +2413,18 @@ watch(
                         </div>
                         <div class="nw-item-submeta">
                           {{ timeProfileLabel(entry.timeProfile) }} .
-                          {{ expenseCashflowRoleLabel(entry.cashflowRole) }}
+                          <template
+                            v-if="
+                              !shouldHideExpenseCashflowRoleLabel({
+                                timeProfile: entry.timeProfile,
+                                cashflowRole: entry.cashflowRole,
+                              })
+                            "
+                          >
+                            {{ expenseCashflowRoleLabel(entry.cashflowRole) }}
+                          </template>
                           <template v-if="entry.eventGroup">
-                            . Evento {{ entry.eventGroup }}</template
+                            . Evento {{ eventGroupLabel(entry.eventGroup) }}</template
                           >
                           <template v-if="formatTermEndLabel(entry.termEndYear, entry.termEndMonth)">
                             .

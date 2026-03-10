@@ -8,7 +8,11 @@ from django.test.utils import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from accounts.models import UserSettings
+from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from memberships.models import FamilyMember, Ownership, OwnershipLink
 from .models import FxRate, InflationIndex
+from net_worth.models import Asset, Liability
 from .services import (
     _get_inflation_index,
     _normalize_month_start,
@@ -217,6 +221,243 @@ class CoreServicesTests(TestCase):
 
         with self.assertRaises(ValidationError):
             adjust_for_inflation(Decimal("10"), date=date(2026, 2, 1), region="ES")
+
+
+class PortableDataImportAPITests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="portable_user",
+            password="pass1234",
+        )
+        self.client.force_authenticate(self.user)
+
+    def _build_bundle(self, **overrides):
+        bundle = {
+            "schema_version": 1,
+            "exported_at": "2026-03-10T10:00:00.000Z",
+            "source_app": "core",
+            "exported_app_version": "0.18.15",
+            "settings": {"base_currency": "USD"},
+            "data": {
+                "annual_income": [
+                    {
+                        "id": 10,
+                        "name": "Nomina",
+                        "category": "salary",
+                        "subcategory": "employee_salary",
+                        "owner_name": "Pablo",
+                        "income_type": "recurrent",
+                        "time_profile": "structural_recurrent",
+                        "cashflow_role": "operating",
+                        "event_group": "",
+                        "target_month": None,
+                        "term_end_month": None,
+                        "term_end_year": None,
+                        "amount_input_period": "annual",
+                        "amount_annual": "30000.00",
+                        "fiscal_year": 2026,
+                        "currency": "EUR",
+                        "notes": "",
+                        "is_active": True,
+                    }
+                ],
+                "annual_expense": [
+                    {
+                        "id": 11,
+                        "name": "Vivienda",
+                        "category": "consumption_expenses",
+                        "subcategory": "housing_home",
+                        "owner_name": "Pablo",
+                        "expense_type": "recurrent",
+                        "time_profile": "structural_recurrent",
+                        "cashflow_role": "operating",
+                        "event_group": "",
+                        "target_month": None,
+                        "term_end_month": None,
+                        "term_end_year": None,
+                        "amount_input_period": "annual",
+                        "amount_annual": "12000.00",
+                        "fiscal_year": 2026,
+                        "currency": "EUR",
+                        "notes": "",
+                        "is_active": True,
+                    }
+                ],
+                "assets": [
+                    {
+                        "id": 20,
+                        "name": "Cuenta",
+                        "category": "cash",
+                        "subcategory": "bank_account",
+                        "tracking_mode": "manual",
+                        "accounting_account_id": None,
+                        "currency": "EUR",
+                        "start_date": "2026-01-01",
+                        "amount": "1000.00",
+                        "annual_interest_tae": "0.50",
+                        "is_active": True,
+                        "notes": "",
+                    }
+                ],
+                "liabilities": [
+                    {
+                        "id": 30,
+                        "name": "Hipoteca",
+                        "category": "mortgage",
+                        "tracking_mode": "manual",
+                        "accounting_account_id": None,
+                        "currency": "EUR",
+                        "start_date": "2026-01-01",
+                        "expected_end_date": "2036-01-01",
+                        "term_months": 120,
+                        "rate_type": "fixed",
+                        "payment_frequency": "monthly",
+                        "amortization_system": "french",
+                        "annual_interest_tae": "1.50",
+                        "principal_amount": "80000.00",
+                        "amount": "80000.00",
+                        "is_active": True,
+                        "notes": "",
+                        "financed_asset_ref": 20,
+                    }
+                ],
+                "snapshots": [
+                    {
+                        "id": 40,
+                        "snapshot_date": "2026-03-01",
+                        "base_currency": "USD",
+                        "total_assets": "1000.00",
+                        "total_liabilities": "80000.00",
+                        "net_worth": "-79000.00",
+                    }
+                ],
+            },
+            "premium": {
+                "family_members": [
+                    {"id": 50, "name": "Pablo", "role": "adult", "is_active": True}
+                ],
+                "ownerships": [
+                    {
+                        "id": 60,
+                        "kind": "individual",
+                        "member": {"id": 50, "name": "Pablo", "role": "adult"},
+                        "splits": [],
+                    }
+                ],
+                "ownership_links": [
+                    {"target_type": "asset", "target_id": 20, "ownership_id": 60}
+                ],
+            },
+        }
+        bundle.update(overrides)
+        return bundle
+
+    def test_portable_data_meta_returns_current_version(self):
+        response = self.client.get("/api/core/portable-data/meta/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["app_version"], "0.18.16")
+
+    def test_portable_import_append_creates_all_blocks(self):
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": self._build_bundle()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(response.data["ok"])
+        self.assertEqual(response.data["counts"]["assets"], 1)
+        self.assertEqual(response.data["counts"]["ownership_links"], 1)
+        self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Liability.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(AnnualIncomeEntry.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(AnnualExpenseEntry.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(UserSettings.objects.get(user=self.user).base_currency, "USD")
+
+    def test_portable_import_replace_is_atomic_on_validation_error(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta previa",
+            category="cash",
+            subcategory="bank_account",
+            currency="EUR",
+            annual_interest_tae=Decimal("0.10"),
+            amount=Decimal("10.00"),
+            is_active=True,
+        )
+        invalid_bundle = self._build_bundle()
+        invalid_bundle["data"]["assets"][0]["category"] = "invalid_category"
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "replace", "bundle": invalid_bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
+        self.assertTrue(
+            Asset.objects.filter(user=self.user, name="Cuenta previa").exists()
+        )
+
+    def test_portable_import_replace_rejects_newer_bundle_version(self):
+        bundle = self._build_bundle(exported_app_version="0.18.17")
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "replace", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        details = response.data["error"]["details"]["bundle"]["exported_app_version"]
+        self.assertIn("version mas nueva", details)
+
+    def test_portable_import_replace_rejects_legacy_bundle_without_version(self):
+        bundle = self._build_bundle()
+        bundle.pop("exported_app_version")
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "replace", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        details = response.data["error"]["details"]["bundle"]["exported_app_version"]
+        self.assertIn("solo admite bundles con version", details)
+
+    def test_portable_import_replace_recreates_existing_data(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta previa",
+            category="cash",
+            subcategory="bank_account",
+            currency="EUR",
+            annual_interest_tae=Decimal("0.10"),
+            amount=Decimal("10.00"),
+            is_active=True,
+        )
+        member = FamilyMember.objects.create(user=self.user, name="Viejo", role="adult")
+        ownership = Ownership.objects.create(user=self.user, kind="individual", member=member)
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=ownership,
+            target_type="asset",
+            target_id=999,
+        )
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "replace", "bundle": self._build_bundle()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
+        self.assertFalse(
+            Asset.objects.filter(user=self.user, name="Cuenta previa").exists()
+        )
+        self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
 
 
 class CoreApiTests(APITestCase):
