@@ -402,6 +402,18 @@ class Liability(models.Model):
         AMERICAN = "american", "Americano"
         MANUAL = "manual", "Manual"
 
+    class ExpenseSubcategoryOverride(models.TextChoices):
+        HOUSING_HOME = "housing_home", "Vivienda y hogar"
+        LIVING_EXPENSES = "living_expenses", "Alimentacion"
+        FAMILY_CHILDCARE = "family_childcare", "Familia y bebe"
+        TRANSPORT_MOBILITY = "transport_mobility", "Transporte y movilidad"
+        HEALTH_WELLBEING = "health_wellbeing", "Salud y bienestar"
+        EDUCATION_GROWTH = "education_growth", "Formacion y desarrollo"
+        LEISURE_LIFESTYLE = "leisure_lifestyle", "Ocio y estilo de vida"
+        GIFTS_DONATIONS = "gifts_donations", "Regalos y donaciones"
+        FINANCIAL_COMMITMENTS = "financial_commitments", "Compromisos financieros"
+        OTHER_CONSUMPTION_EXPENSES = "other_consumption_expenses", "Otros gastos de consumo"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liabilities"
     )
@@ -440,6 +452,16 @@ class Liability(models.Model):
         choices=PaymentFrequency.choices,
         default=PaymentFrequency.MONTHLY,
         help_text="Frecuencia de pago prevista.",
+    )
+    expense_subcategory_override = models.CharField(
+        max_length=64,
+        choices=ExpenseSubcategoryOverride.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Subcategoria tematica opcional para la salida presupuestaria generada desde este "
+            "pasivo cuando no financia un activo concreto."
+        ),
     )
     amortization_system = models.CharField(
         max_length=16,

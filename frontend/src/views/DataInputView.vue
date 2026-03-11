@@ -201,8 +201,21 @@ function patchAnnualExpenseForm(patch: AnnualModalPatch): void {
 const annualSubcategoryOptions = computed(() =>
   incomeSubcategories.filter((row) => row.category === annualIncomeForm.category),
 );
+const LEGACY_SAVINGS_SUBCATEGORIES = new Set(['short_term_savings', 'long_term_savings']);
+
+function normalizeExpenseSubcategoryForUi(category: string, subcategory: string): string {
+  if (category === 'savings_allocation' && LEGACY_SAVINGS_SUBCATEGORIES.has(subcategory)) {
+    return 'other_savings_allocation';
+  }
+  return subcategory;
+}
+
 const annualExpenseSubcategoryOptions = computed(() =>
-  expenseSubcategories.filter((row) => row.category === annualExpenseForm.category),
+  expenseSubcategories.filter(
+    (row) =>
+      row.category === annualExpenseForm.category &&
+      !(row.category === 'savings_allocation' && LEGACY_SAVINGS_SUBCATEGORIES.has(row.value)),
+  ),
 );
 const annualEventGroupOptions = computed(() => {
   const groups = new Set<string>();
@@ -239,9 +252,9 @@ const incomeCashflowRoleOptions: SelectOption[] = [
 ];
 
 const expenseTimeProfileOptions: SelectOption[] = [
-  { value: 'structural_recurrent', label: 'Estilo de vida' },
-  { value: 'term_recurrent', label: 'Cuotas/Compromisos' },
-  { value: 'one_off', label: 'Puntual/Extraordinario' },
+  { value: 'structural_recurrent', label: 'Gasto recurrente' },
+  { value: 'term_recurrent', label: 'Cuotas o compromisos temporales' },
+  { value: 'one_off', label: 'Gasto puntual o extraordinario' },
 ];
 
 const expenseCashflowRoleOptions: SelectOption[] = [
@@ -810,6 +823,7 @@ function expenseCategoryLabel(key: string): string {
   return expenseCategories.find((category) => category.value === key)?.label ?? key;
 }
 function expenseSubcategoryLabel(key: string): string {
+  if (LEGACY_SAVINGS_SUBCATEGORIES.has(key)) return 'Ahorro general';
   return expenseSubcategories.find((subcategory) => subcategory.value === key)?.label ?? key;
 }
 
@@ -1124,7 +1138,10 @@ function openExpenseModal(entry?: AnnualExpenseEntry): void {
   if (entry) {
     editingExpenseId.value = entry.id;
     annualExpenseForm.category = entry.category;
-    annualExpenseForm.subcategory = entry.subcategory;
+    annualExpenseForm.subcategory = normalizeExpenseSubcategoryForUi(
+      entry.category,
+      entry.subcategory,
+    );
     annualExpenseForm.name = entry.name;
     annualExpenseForm.owner = entry.owner || '';
     annualExpenseForm.isRecurrent = entry.expenseType === 'recurrent';
@@ -1182,14 +1199,14 @@ const expenseAmountInputPlaceholder = computed(() =>
 );
 const expenseModalTitle = computed(() =>
   editingExpenseId.value === null
-    ? 'Nuevo gasto anual'
+    ? 'Nueva salida anual'
     : bulkEditingGeneratedLiabilityId.value != null
-      ? 'Editar gasto generado (todos los ejercicios)'
-      : 'Editar gasto anual',
+      ? 'Editar salida generada (todos los ejercicios)'
+      : 'Editar salida anual',
 );
 const expenseSubmitLabel = computed(() =>
   editingExpenseId.value === null
-    ? 'Guardar gasto'
+    ? 'Guardar salida'
     : bulkEditingGeneratedLiabilityId.value != null
       ? 'Aplicar a todos'
       : 'Guardar cambios',
@@ -1307,7 +1324,10 @@ function openGeneratedExpenseBulkEdit(): void {
   bulkEditingGeneratedLiabilityId.value = review.liabilityId;
   bulkEditingGeneratedExpenseIds.value = review.entries.map((entry) => entry.id);
   annualExpenseForm.category = first.category as ExpenseCategoryKey;
-  annualExpenseForm.subcategory = first.subcategory;
+  annualExpenseForm.subcategory = normalizeExpenseSubcategoryForUi(
+    first.category,
+    first.subcategory,
+  );
   annualExpenseForm.name = first.name;
   annualExpenseForm.owner = first.owner || '';
   annualExpenseForm.isRecurrent = first.expenseType === 'recurrent';
@@ -2157,7 +2177,7 @@ watch(
       <article class="card ui-pro-panel">
         <div class="nw-list-header">
           <div class="nw-list-header-left">
-            <h2 class="card-header-title mt-0">Ingresos anuales</h2>
+            <h2 class="card-header-title mt-0">Entradas anuales</h2>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -2306,7 +2326,7 @@ watch(
       <article class="card ui-pro-panel">
         <div class="nw-list-header">
           <div class="nw-list-header-left">
-            <h2 class="card-header-title mt-0">Gastos anuales</h2>
+            <h2 class="card-header-title mt-0">Salidas anuales</h2>
           </div>
           <div class="nw-list-header-right">
             <div class="nw-list-total-inline">
@@ -2315,7 +2335,7 @@ watch(
             <button
               class="btn btn-primary btn-sm nw-list-add-icon-only"
               type="button"
-              aria-label="Anadir gasto"
+              aria-label="Anadir salida"
               :disabled="annualExpenseLoading"
               @click="() => openExpenseModal()"
             >
@@ -2330,13 +2350,13 @@ watch(
         <div v-else-if="annualExpenseApiError" class="alert mt-3">{{ annualExpenseApiError }}</div>
 
         <div v-if="!annualExpenseEntries.length && !annualExpenseLoading" class="subtle mt-3">
-          No hay gastos anuales todavia.
+          No hay salidas anuales todavia.
         </div>
         <div
           v-else-if="!filteredAnnualExpenseEntries.length && !annualExpenseLoading"
           class="subtle mt-3"
         >
-          No hay gastos con este filtro.
+          No hay salidas con este filtro.
         </div>
 
         <div v-else class="mt-3 grid gap-4">
@@ -2462,7 +2482,7 @@ watch(
         </div>
 
         <div v-if="annualExpenseLoading" class="ui-status-line mt-2">
-          Cargando gastos anuales...
+          Cargando salidas anuales...
         </div>
       </article>
     </div>
@@ -2683,6 +2703,7 @@ watch(
       :show-owner-field="showOwnerField"
       :owner-options="ownerOptions"
       :time-profile-options="expenseTimeProfileOptions"
+      time-profile-field-label="Tipo de salida"
       :cashflow-role-options="filteredExpenseCashflowRoleOptions"
       :show-cashflow-role-field="showExpenseCashflowRoleField"
       :show-event-group-field="!editingSystemGeneratedLiabilityExpense"

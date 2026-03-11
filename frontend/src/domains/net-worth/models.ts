@@ -49,6 +49,7 @@ export type Asset = {
   principal_amount?: string | null;
   rate_type?: string;
   payment_frequency?: string;
+  expense_subcategory_override?: string | null;
   amortization_system?: string | null;
   opening_fees_amount?: string | null;
   early_repayment_fee_percent?: string | null;

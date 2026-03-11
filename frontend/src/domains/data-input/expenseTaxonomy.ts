@@ -16,18 +16,16 @@ export const expenseCategories: { value: ExpenseCategoryKey; label: string }[] =
   { value: 'financial_investments', label: 'Inversion financiera' },
   { value: 'real_estate_assets', label: 'Activos inmobiliarios' },
   { value: 'tangible_assets', label: 'Activos mobiliarios' },
-  { value: 'consumption_expenses', label: 'Gastos' },
+  { value: 'consumption_expenses', label: 'Gastos de consumo' },
 ];
 
 export const expenseSubcategories: ExpenseSubcategory[] = [
   { category: 'savings_allocation', value: 'emergency_fund', label: 'Fondo de emergencia' },
   { category: 'savings_allocation', value: 'cash_reserve', label: 'Reserva de liquidez' },
-  { category: 'savings_allocation', value: 'short_term_savings', label: 'Ahorro corto plazo' },
-  { category: 'savings_allocation', value: 'long_term_savings', label: 'Ahorro largo plazo' },
   {
     category: 'savings_allocation',
     value: 'other_savings_allocation',
-    label: 'Otros destinos de ahorro',
+    label: 'Ahorro general',
   },
 
   { category: 'financial_investments', value: 'index_funds', label: 'Fondos indexados' },

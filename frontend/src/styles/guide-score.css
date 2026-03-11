@@ -1,0 +1,89 @@
+.ui-guide-health-score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  line-height: 1;
+}
+
+.ui-guide-health-score-text {
+  white-space: nowrap;
+}
+
+.ui-guide-health-score-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.ui-guide-health-solid {
+  background: rgba(74, 222, 128, 0.16);
+  color: rgba(134, 239, 172, 0.95);
+}
+
+.ui-guide-health-medium {
+  background: rgba(163, 230, 53, 0.18);
+  color: rgba(190, 242, 100, 0.95);
+}
+
+.ui-guide-health-watch {
+  background: rgba(250, 204, 21, 0.16);
+  color: rgba(253, 224, 71, 0.95);
+}
+
+.ui-guide-health-risk {
+  background: rgba(251, 113, 133, 0.16);
+  color: rgba(251, 113, 133, 0.95);
+}
+
+.ui-score-meter-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-guide-meter-row-kpi {
+  margin-top: 4px;
+}
+
+.ui-score-grade-label {
+  min-width: 16px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.ui-score-grade-label-lg {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.ui-score-meter-track {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ui-guide-score-kpi-track {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ui-score-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.ui-score-grade-badge {
+  font-weight: 700;
+}

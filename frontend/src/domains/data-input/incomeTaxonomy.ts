@@ -18,7 +18,7 @@ export const incomeCategories: { value: IncomeCategoryKey; label: string }[] = [
   { value: 'business', label: 'Actividad profesional/negocio' },
   { value: 'passive_income', label: 'Ingresos pasivos' },
   { value: 'capital_gains', label: 'Ganancias de capital' },
-  { value: 'transfers_support', label: 'Transferencias y apoyo recibido' },
+  { value: 'transfers_support', label: 'Transferencias recibidas' },
   { value: 'public_benefits', label: 'Prestaciones y ayudas' },
   { value: 'other_income', label: 'Otros ingresos' },
 ];

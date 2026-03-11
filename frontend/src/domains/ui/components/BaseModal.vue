@@ -23,7 +23,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <div
       v-if="open"
       class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-4 sm:p-5"
-      @click.self="emit('close')"
     >
       <div
         class="flex max-h-[calc(100vh-2rem)] w-full max-w-[720px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#121212fa] shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
