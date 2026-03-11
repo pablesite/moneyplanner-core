@@ -85,6 +85,9 @@ api.interceptors.response.use(
       }
 
       notifyPending(newToken);
+      original.headers = original.headers || {};
+      original.headers.Authorization = `Bearer ${newToken}`;
+      return api(original);
     }
 
     return new Promise((resolve, reject) => {
