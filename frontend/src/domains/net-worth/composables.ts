@@ -214,6 +214,7 @@ export function useNetWorthViewState() {
       term_months: item.term_months ?? '',
       rate_type: item.rate_type ?? 'fixed',
       payment_frequency: item.payment_frequency ?? 'monthly',
+      expense_subcategory_override: item.expense_subcategory_override ?? '',
       amortization_system: item.amortization_system ?? '',
       opening_fees_amount: item.opening_fees_amount ?? '',
       early_repayment_fee_percent: item.early_repayment_fee_percent ?? '',

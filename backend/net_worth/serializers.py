@@ -443,6 +443,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "principal_amount",
             "rate_type",
             "payment_frequency",
+            "expense_subcategory_override",
             "amortization_system",
             "annual_interest_tae",
             "estimated_monthly_payment_amount",
@@ -501,6 +502,11 @@ class LiabilitySerializer(serializers.ModelSerializer):
         cancellation_fee_amount = attrs.get(
             "cancellation_fee_amount", getattr(self.instance, "cancellation_fee_amount", None)
         )
+        financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))
+        expense_subcategory_override = attrs.get(
+            "expense_subcategory_override",
+            getattr(self.instance, "expense_subcategory_override", None),
+        )
 
         if category != Liability.Category.MORTGAGE:
             cancellation_forecast_enabled = False
@@ -515,6 +521,10 @@ class LiabilitySerializer(serializers.ModelSerializer):
             attrs["cancellation_date"] = None
             attrs["cancellation_fee_amount"] = None
 
+        if financed_asset is not None or category == Liability.Category.MORTGAGE:
+            expense_subcategory_override = None
+            attrs["expense_subcategory_override"] = None
+
         validate_liability_payload(
             tracking_mode=tracking_mode,
             accounting_account_id=accounting_account_id,
@@ -527,9 +537,10 @@ class LiabilitySerializer(serializers.ModelSerializer):
             cancellation_forecast_enabled=cancellation_forecast_enabled,
             cancellation_date=cancellation_date,
             cancellation_fee_amount=cancellation_fee_amount,
+            expense_subcategory_override=expense_subcategory_override,
+            financed_asset=financed_asset,
         )
 
-        financed_asset = attrs.get("financed_asset", getattr(self.instance, "financed_asset", None))
         attrs["is_asset_backed"] = infer_liability_is_asset_backed(financed_asset=financed_asset)
         return attrs
 

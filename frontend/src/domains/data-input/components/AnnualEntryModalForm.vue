@@ -40,6 +40,7 @@ const props = withDefaults(
     showOwnerField?: boolean;
     ownerOptions?: ReadonlyArray<OwnerOption>;
     timeProfileOptions: ReadonlyArray<SelectOption>;
+    timeProfileFieldLabel?: string;
     cashflowRoleOptions: ReadonlyArray<SelectOption>;
     showCashflowRoleField?: boolean;
     showEventGroupField?: boolean;
@@ -61,6 +62,7 @@ const props = withDefaults(
     showEventGroupField: true,
     showTermEndYearField: true,
     ownerOptions: () => [],
+    timeProfileFieldLabel: '',
     eventGroupPlaceholder: 'Grupo de evento (opcional, ej: vivienda_2026)',
     termEndYearPlaceholder: 'Ano fin compromiso (ej: 2027)',
     termEndMonthPlaceholder: 'Mes fin (1-12)',
@@ -129,17 +131,20 @@ const emit = defineEmits<{
         </option>
       </select>
 
-      <select
-        :value="form.timeProfile"
-        class="select ui-data-field"
-        @change="
-          emit('patch', { timeProfile: String(($event.target as HTMLSelectElement).value ?? '') })
-        "
-      >
-        <option v-for="option in timeProfileOptions" :key="option.value" :value="option.value">
-          {{ option.label }}
-        </option>
-      </select>
+      <label class="ui-item-form-field">
+        <span v-if="timeProfileFieldLabel" class="ui-item-form-label">{{ timeProfileFieldLabel }}</span>
+        <select
+          :value="form.timeProfile"
+          class="select ui-data-field"
+          @change="
+            emit('patch', { timeProfile: String(($event.target as HTMLSelectElement).value ?? '') })
+          "
+        >
+          <option v-for="option in timeProfileOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
 
       <select
         v-if="showCashflowRoleField"

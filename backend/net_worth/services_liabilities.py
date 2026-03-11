@@ -16,6 +16,19 @@ LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.CREDIT_CARD,
 }
 
+UNBACKED_LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS = {
+    cast(str, Liability.ExpenseSubcategoryOverride.HOUSING_HOME),
+    cast(str, Liability.ExpenseSubcategoryOverride.LIVING_EXPENSES),
+    cast(str, Liability.ExpenseSubcategoryOverride.FAMILY_CHILDCARE),
+    cast(str, Liability.ExpenseSubcategoryOverride.TRANSPORT_MOBILITY),
+    cast(str, Liability.ExpenseSubcategoryOverride.HEALTH_WELLBEING),
+    cast(str, Liability.ExpenseSubcategoryOverride.EDUCATION_GROWTH),
+    cast(str, Liability.ExpenseSubcategoryOverride.LEISURE_LIFESTYLE),
+    cast(str, Liability.ExpenseSubcategoryOverride.GIFTS_DONATIONS),
+    cast(str, Liability.ExpenseSubcategoryOverride.FINANCIAL_COMMITMENTS),
+    cast(str, Liability.ExpenseSubcategoryOverride.OTHER_CONSUMPTION_EXPENSES),
+}
+
 FURNISHINGS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     cast(str, Asset.Subcategory.VEHICLES): "vehicle_purchase",
     cast(str, Asset.Subcategory.HOME_FURNISHINGS): "home_furniture_appliances",
@@ -48,6 +61,8 @@ def validate_liability_payload(
     cancellation_forecast_enabled: bool | None = None,
     cancellation_date=None,
     cancellation_fee_amount=None,
+    expense_subcategory_override: str | None = None,
+    financed_asset=None,
 ) -> None:
     if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -108,6 +123,32 @@ def validate_liability_payload(
         if term is not None and term > 0 and term % 3 != 0:
             raise DRFValidationError(
                 {"term_months": "Para frecuencia trimestral, term_months debe ser multiplo de 3."}
+            )
+
+    if expense_subcategory_override not in (None, ""):
+        if financed_asset is not None:
+            raise DRFValidationError(
+                {
+                    "expense_subcategory_override": (
+                        "Solo aplica a pasivos sin activo financiado asociado."
+                    )
+                }
+            )
+        if category == Liability.Category.MORTGAGE:
+            raise DRFValidationError(
+                {
+                    "expense_subcategory_override": (
+                        "No aplica a hipotecas, que generan amortizacion principal."
+                    )
+                }
+            )
+        if expense_subcategory_override not in UNBACKED_LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS:
+            raise DRFValidationError(
+                {
+                    "expense_subcategory_override": (
+                        "Subcategoria invalida para el destino de la salida generada."
+                    )
+                }
             )
 
 
@@ -426,12 +467,15 @@ def _build_expense_profile(
     }
 
 
-def _get_unbacked_liability_expense_profile(*, temporary_commitment_role: str) -> dict[str, str]:
+def _get_unbacked_liability_expense_profile(
+    *, liability: Liability, temporary_commitment_role: str
+) -> dict[str, str]:
     from budget.models import AnnualExpenseEntry
 
     return _build_expense_profile(
         category=cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES),
-        subcategory="financial_commitments",
+        subcategory=str(liability.expense_subcategory_override or "").strip()
+        or "financial_commitments",
         cashflow_role=temporary_commitment_role,
     )
 
@@ -478,6 +522,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
         return _get_unbacked_liability_expense_profile(
+            liability=liability,
             temporary_commitment_role=temporary_commitment_role
         )
 

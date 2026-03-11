@@ -1730,6 +1730,36 @@ class NetWorthApiTests(APITestCase):
         # 9 cuotas (ene-sep 2026) de 1375.44 -> 12378.96
         self.assertEqual(row_2026.amount_annual, Decimal("12378.96"))
 
+    def test_unbacked_liability_can_override_generated_expense_subcategory(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "FIV IVI",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "0.00",
+                "amount": "9000.00",
+                "principal_amount": "9000.00",
+                "term_months": 12,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "expense_subcategory_override": "family_childcare",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        row = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            source_liability_id=response.data["id"],
+            is_system_generated=True,
+        ).first()
+        self.assertIsNotNone(row)
+        self.assertEqual(row.category, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES)
+        self.assertEqual(row.subcategory, "family_childcare")
+
     def test_liability_create_with_financed_real_estate_generates_temporary_commitment_expense(
         self,
     ):
@@ -1772,6 +1802,39 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row.category, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS)
         self.assertEqual(row.subcategory, "property_purchase")
         self.assertEqual(row.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+
+    def test_financed_liability_clears_expense_subcategory_override(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Entrada casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("100000.00"),
+            is_active=True,
+        )
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo entrada vivienda",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "0.00",
+                "amount": "12000.00",
+                "principal_amount": "12000.00",
+                "term_months": 12,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "financed_asset_id": asset.id,
+                "expense_subcategory_override": "family_childcare",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIsNone(response.data["expense_subcategory_override"])
 
     def test_mortgage_liability_generates_mortgage_principal_temporary_recurrent_expense(self):
         response = self.client.post(

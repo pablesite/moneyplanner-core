@@ -44,6 +44,7 @@ type Props = {
     term_months?: number | string | null;
     rate_type?: string;
     payment_frequency?: string;
+    expense_subcategory_override?: string | null;
     amortization_system?: string | null;
     opening_fees_amount?: string | null;
     early_repayment_fee_percent?: string | null;
@@ -175,6 +176,18 @@ const LIABILITY_PAYMENT_FREQUENCIES = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'quarterly', label: 'Trimestral' },
 ];
+const LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS = [
+  { value: 'housing_home', label: 'Vivienda y hogar' },
+  { value: 'living_expenses', label: 'Alimentacion' },
+  { value: 'family_childcare', label: 'Familia y bebe' },
+  { value: 'transport_mobility', label: 'Transporte y movilidad' },
+  { value: 'health_wellbeing', label: 'Salud y bienestar' },
+  { value: 'education_growth', label: 'Formacion y desarrollo' },
+  { value: 'leisure_lifestyle', label: 'Ocio y estilo de vida' },
+  { value: 'gifts_donations', label: 'Regalos y donaciones' },
+  { value: 'financial_commitments', label: 'Compromisos financieros' },
+  { value: 'other_consumption_expenses', label: 'Otros gastos de consumo' },
+];
 const INVESTMENT_CONTRIBUTION_MODE_OPTIONS = [
   { value: 'one_time', label: 'Aportacion unica' },
   { value: 'periodic_contribution', label: 'Aportacion periodica' },
@@ -274,6 +287,7 @@ const form = reactive({
   cancellation_forecast_enabled: false,
   cancellation_date: '',
   cancellation_fee_amount: '',
+  expense_subcategory_override: '',
   amortization_method: 'none',
   amortization_term_years: '',
   valuation_model: 'manual',
@@ -347,6 +361,9 @@ const isCreditCardLiability = computed(
 );
 const showLiabilityAdvancedFields = computed(
   () => isLiabilityForm.value && !isCreditCardLiability.value,
+);
+const showLiabilityExpenseSubcategoryField = computed(
+  () => isLiabilityForm.value && form.category !== 'mortgage' && form.financed_asset_id == null,
 );
 const showLiabilityTaeOnlyField = computed(
   () => isLiabilityForm.value && !showLiabilityAdvancedFields.value,
@@ -1031,6 +1048,9 @@ async function submit() {
   const { value: normalizedAmount, error } = sanitizeAmount(form.amount, maxDecimals.value);
   if (!normalizedAmount || error) return;
   const hasMarketValueOverride = !!String(form.market_value_override ?? '').trim();
+  const effectiveMarketValueOverrideDate = hasMarketValueOverride
+    ? String(form.market_value_override_date ?? '').trim() || todayIsoDate()
+    : null;
 
   const payload: ItemFormPayload = {
     name: form.name,
@@ -1087,7 +1107,7 @@ async function submit() {
       : undefined,
     market_value_override_date: showInvestmentMarketValueFields.value
       ? hasMarketValueOverride
-        ? String(form.market_value_override_date ?? '').trim() || null
+        ? effectiveMarketValueOverrideDate
         : null
       : undefined,
     term_months:
@@ -1096,6 +1116,9 @@ async function submit() {
         : undefined,
     rate_type: showLiabilityAdvancedFields.value ? 'fixed' : undefined,
     payment_frequency: showLiabilityAdvancedFields.value ? form.payment_frequency : undefined,
+    expense_subcategory_override: showLiabilityExpenseSubcategoryField.value
+      ? String(form.expense_subcategory_override ?? '').trim() || undefined
+      : undefined,
     amortization_system:
       showLiabilityAdvancedFields.value && String(form.amortization_system ?? '').trim()
         ? String(form.amortization_system).trim()
@@ -1216,6 +1239,7 @@ async function submit() {
   form.cancellation_forecast_enabled = false;
   form.cancellation_date = '';
   form.cancellation_fee_amount = '';
+  form.expense_subcategory_override = 'financial_commitments';
   form.amortization_method = 'none';
   form.amortization_term_years = '';
   form.valuation_model = 'manual';
@@ -1275,6 +1299,8 @@ watch(
     form.term_months = initial.term_months == null ? '' : String(initial.term_months);
     form.rate_type = props.showFinancedAsset ? 'fixed' : (initial.rate_type ?? 'fixed');
     form.payment_frequency = initial.payment_frequency ?? 'monthly';
+    form.expense_subcategory_override =
+      initial.expense_subcategory_override ?? 'financial_commitments';
     form.amortization_system = initial.amortization_system ?? '';
     form.opening_fees_amount = initial.opening_fees_amount ?? '';
     form.early_repayment_fee_percent = initial.early_repayment_fee_percent ?? '';
@@ -1391,6 +1417,11 @@ watch(
       form.cancellation_date = '';
       form.cancellation_fee_amount = '';
     }
+    if (category === 'mortgage') {
+      form.expense_subcategory_override = '';
+    } else if (!String(form.expense_subcategory_override ?? '').trim()) {
+      form.expense_subcategory_override = 'financial_commitments';
+    }
   },
 );
 
@@ -1431,6 +1462,11 @@ watch(
       primaryHomeValuationProfile.value = PRIMARY_HOME_DEFAULT_PROFILE_VALUE;
       primaryHomeImprovements.value = [];
       expandedPrimaryHomeImprovementIndex.value = null;
+    }
+    if (!showLiabilityExpenseSubcategoryField.value) {
+      form.expense_subcategory_override = '';
+    } else if (!String(form.expense_subcategory_override ?? '').trim()) {
+      form.expense_subcategory_override = 'financial_commitments';
     }
   },
 );
@@ -1651,6 +1687,18 @@ watch(
         <select v-model="form.currency" :class="['select ui-data-field', { 'ui-select-placeholder': !form.currency }]">
           <option value="" disabled>Selecciona moneda</option>
           <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
+        </select>
+      </label>
+      <label v-if="showLiabilityExpenseSubcategoryField" class="ui-item-form-field">
+        <span class="ui-item-form-label">Destino de la salida</span>
+        <select
+          v-model="form.expense_subcategory_override"
+          :class="['select ui-data-field', { 'ui-select-placeholder': !form.expense_subcategory_override }]"
+        >
+          <option value="" disabled>Selecciona destino</option>
+          <option v-for="option in LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </label>
       <div v-if="showInvestmentPeriodicFields" class="ui-item-form-inline-grid ui-item-form-inline-grid-4 ui-item-form-field-span-2">
