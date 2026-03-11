@@ -234,16 +234,24 @@ def _build_liability_payload(
         "financed_asset_id": financed_asset_id,
     }
 def _prepare_income_payload(entry: dict[str, Any]) -> dict[str, Any]:
+    inferred_time_profile = entry.get("time_profile") or (
+        AnnualIncomeEntry.TimeProfile.ONE_OFF
+        if entry.get("income_type") == AnnualIncomeEntry.IncomeType.ONE_OFF
+        else AnnualIncomeEntry.TimeProfile.STRUCTURAL_RECURRENT
+    )
+    target_month = entry.get("target_month")
+    if inferred_time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF and target_month in (None, ""):
+        target_month = 12
     return {
         "name": str(entry.get("name", "")),
         "category": str(entry.get("category", "")),
         "subcategory": str(entry.get("subcategory", "")),
         "owner_name": str(entry.get("owner_name", "")).strip(),
         "income_type": entry.get("income_type", "recurrent"),
-        "time_profile": entry.get("time_profile"),
+        "time_profile": inferred_time_profile,
         "cashflow_role": entry.get("cashflow_role"),
         "event_group": str(entry.get("event_group", "")),
-        "target_month": entry.get("target_month"),
+        "target_month": target_month,
         "term_end_month": entry.get("term_end_month"),
         "term_end_year": entry.get("term_end_year"),
         "amount_input_period": (
@@ -258,16 +266,27 @@ def _prepare_income_payload(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _prepare_expense_payload(entry: dict[str, Any]) -> dict[str, Any]:
+    inferred_time_profile = entry.get("time_profile") or (
+        AnnualExpenseEntry.TimeProfile.ONE_OFF
+        if entry.get("expense_type") == AnnualExpenseEntry.ExpenseType.ONE_OFF
+        else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+    )
+    target_month = entry.get("target_month")
+    if inferred_time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF and target_month in (
+        None,
+        "",
+    ):
+        target_month = 12
     return {
         "name": str(entry.get("name", "")),
         "category": str(entry.get("category", "")),
         "subcategory": str(entry.get("subcategory", "")),
         "owner_name": str(entry.get("owner_name", "")).strip(),
         "expense_type": entry.get("expense_type", "recurrent"),
-        "time_profile": entry.get("time_profile"),
+        "time_profile": inferred_time_profile,
         "cashflow_role": entry.get("cashflow_role"),
         "event_group": str(entry.get("event_group", "")),
-        "target_month": entry.get("target_month"),
+        "target_month": target_month,
         "term_end_month": entry.get("term_end_month"),
         "term_end_year": entry.get("term_end_year"),
         "amount_input_period": (
