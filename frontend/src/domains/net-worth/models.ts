@@ -99,6 +99,105 @@ export type Summary = {
   liabilities_by_category_real: Record<string, string> | null;
 };
 
+export type TimelineRow = {
+  date: string;
+  total_assets: string;
+  total_liabilities: string;
+  net_worth: string;
+  asset_positions: number;
+  liability_positions: number;
+};
+
+export type TimelineFilters = {
+  asset_category: string | null;
+  liability_category: string | null;
+};
+
+export type NetWorthTimeline = {
+  group_by: 'month';
+  start_date: string;
+  end_date: string;
+  base_currency: string;
+  filters: TimelineFilters;
+  rows: TimelineRow[];
+};
+
+export type PositionTimelineRow = {
+  date: string;
+  value: string;
+  value_base: string;
+};
+
+export type PositionTimeline = {
+  group_by: 'month';
+  position_type: 'asset' | 'liability';
+  position_id: number;
+  currency: string;
+  base_currency: string;
+  rows: PositionTimelineRow[];
+};
+
+export type AssetValuation = {
+  id: number;
+  asset_ref: number;
+  asset_detail?: { id: number; name: string; category: string; subcategory: string } | null;
+  valuation_date: string;
+  value: string;
+  source: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type LiabilityValuation = {
+  id: number;
+  liability_ref: number;
+  liability_detail?: { id: number; name: string; category: string } | null;
+  valuation_date: string;
+  value: string;
+  source: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type InvestmentAssetEvent = {
+  id: number;
+  asset_ref: number;
+  asset_detail?: { id: number; name: string; category: string; subcategory: string } | null;
+  event_date: string;
+  event_type: string;
+  amount: string;
+  is_reinvested?: boolean;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type LiquidityAssetEvent = {
+  id: number;
+  asset_ref: number;
+  asset_detail?: { id: number; name: string; category: string; subcategory: string } | null;
+  event_date: string;
+  event_type: string;
+  amount: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type LiabilityEvent = {
+  id: number;
+  liability_ref: number;
+  liability_detail?: { id: number; name: string; category: string } | null;
+  event_date: string;
+  event_type: string;
+  amount: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type Ownership = {
   id: number;
   kind: 'individual' | 'shared';

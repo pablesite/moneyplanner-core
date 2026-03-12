@@ -2,10 +2,18 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from accounts.models import UserSettings
+from core.market_data import ensure_market_history_safe
+
 from .models import (
     Asset,
     AssetImprovement,
+    AssetValuation,
+    InvestmentAssetEvent,
     Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
     LiquidityMonthlyCheckin,
     NetWorthSnapshot,
 )
@@ -16,6 +24,8 @@ from .services_assets import (
     get_effective_asset_amount,
     get_amount_base_value,
     validate_asset_improvement_payload,
+    validate_investment_asset_event_payload,
+    validate_liquidity_asset_event_payload,
     validate_asset_payload,
 )
 from .services_liabilities import (
@@ -24,6 +34,7 @@ from .services_liabilities import (
     estimate_liability_outstanding_amount_simple,
     get_effective_liability_amount,
     infer_liability_is_asset_backed,
+    validate_liability_event_payload,
     validate_liability_payload,
 )
 from .services_snapshots import create_snapshot_for_user, validate_snapshot_payload
@@ -321,12 +332,14 @@ class AssetSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         improvements_data = validated_data.pop("improvements", [])
         asset = create_asset_for_user(user=request.user, validated_data=validated_data)
+        self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
 
     def update(self, instance, validated_data):
         improvements_data = validated_data.pop("improvements", None)
         asset = super().update(instance, validated_data)
+        self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         if improvements_data is not None:
             self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
@@ -369,6 +382,14 @@ class AssetSerializer(serializers.ModelSerializer):
         for improvement_id, current in existing_by_id.items():
             if improvement_id not in seen_ids:
                 current.delete()
+
+    def _ensure_position_fx_history(self, user, currency: str, start_date) -> None:
+        settings, _ = UserSettings.objects.get_or_create(user=user)
+        ensure_market_history_safe(
+            from_currency=currency,
+            to_currency=settings.base_currency,
+            start_date=start_date,
+        )
 
 
 class NetWorthSnapshotSerializer(serializers.ModelSerializer):
@@ -578,7 +599,22 @@ class LiabilitySerializer(serializers.ModelSerializer):
             and validated_data.get("amount") is not None
         ):
             validated_data["principal_amount"] = validated_data["amount"]
-        return create_liability_for_user(user=request.user, validated_data=validated_data)
+        liability = create_liability_for_user(user=request.user, validated_data=validated_data)
+        self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
+        return liability
+
+    def update(self, instance, validated_data):
+        liability = super().update(instance, validated_data)
+        self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
+        return liability
+
+    def _ensure_position_fx_history(self, user, currency: str, start_date) -> None:
+        settings, _ = UserSettings.objects.get_or_create(user=user)
+        ensure_market_history_safe(
+            from_currency=currency,
+            to_currency=settings.base_currency,
+            start_date=start_date,
+        )
 
 
 class LiquidityMonthlyCheckinSerializer(serializers.ModelSerializer):
@@ -638,3 +674,240 @@ class LiquidityMonthlyCheckinSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         validated_data["confirmed_at"] = timezone.now()
         return super().update(instance, validated_data)
+
+
+class AssetValuationSerializer(serializers.ModelSerializer):
+    asset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects.none(),
+        source="asset",
+        write_only=True,
+    )
+    asset_ref = serializers.IntegerField(source="asset_id", read_only=True)
+    asset_detail = AssetMiniSerializer(source="asset", read_only=True)
+
+    class Meta:
+        model = AssetValuation
+        fields = [
+            "id",
+            "asset_id",
+            "asset_ref",
+            "asset_detail",
+            "valuation_date",
+            "value",
+            "source",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        asset_queryset = self.context.get("asset_queryset")
+        if asset_queryset is not None:
+            self.fields["asset_id"].queryset = asset_queryset
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        return super().create(validated_data)
+
+
+class InvestmentAssetEventSerializer(serializers.ModelSerializer):
+    asset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects.none(),
+        source="asset",
+        write_only=True,
+    )
+    asset_ref = serializers.IntegerField(source="asset_id", read_only=True)
+    asset_detail = AssetMiniSerializer(source="asset", read_only=True)
+
+    class Meta:
+        model = InvestmentAssetEvent
+        fields = [
+            "id",
+            "asset_id",
+            "asset_ref",
+            "asset_detail",
+            "event_date",
+            "event_type",
+            "amount",
+            "is_reinvested",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        asset_queryset = self.context.get("investment_asset_queryset")
+        if asset_queryset is not None:
+            self.fields["asset_id"].queryset = asset_queryset
+
+    def validate(self, attrs):
+        asset = attrs.get("asset", getattr(self.instance, "asset", None))
+        event_type = attrs.get("event_type", getattr(self.instance, "event_type", None))
+        amount = attrs.get("amount", getattr(self.instance, "amount", None))
+        is_reinvested = attrs.get(
+            "is_reinvested",
+            getattr(self.instance, "is_reinvested", True),
+        )
+        validate_investment_asset_event_payload(
+            asset=asset,
+            event_date=attrs.get("event_date", getattr(self.instance, "event_date", None)),
+            event_type=event_type,
+            amount=amount,
+            is_reinvested=is_reinvested,
+        )
+        if event_type != InvestmentAssetEvent.EventType.PASSIVE_INCOME:
+            attrs["is_reinvested"] = True
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        return super().create(validated_data)
+
+
+class LiquidityAssetEventSerializer(serializers.ModelSerializer):
+    asset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Asset.objects.none(),
+        source="asset",
+        write_only=True,
+    )
+    asset_ref = serializers.IntegerField(source="asset_id", read_only=True)
+    asset_detail = AssetMiniSerializer(source="asset", read_only=True)
+
+    class Meta:
+        model = LiquidityAssetEvent
+        fields = [
+            "id",
+            "asset_id",
+            "asset_ref",
+            "asset_detail",
+            "event_date",
+            "event_type",
+            "amount",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        asset_queryset = self.context.get("liquidity_event_asset_queryset")
+        if asset_queryset is not None:
+            self.fields["asset_id"].queryset = asset_queryset
+
+    def validate(self, attrs):
+        validate_liquidity_asset_event_payload(
+            asset=attrs.get("asset", getattr(self.instance, "asset", None)),
+            event_date=attrs.get("event_date", getattr(self.instance, "event_date", None)),
+            event_type=attrs.get("event_type", getattr(self.instance, "event_type", None)),
+            amount=attrs.get("amount", getattr(self.instance, "amount", None)),
+        )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        return super().create(validated_data)
+
+
+class LiabilityEventSerializer(serializers.ModelSerializer):
+    liability_id = serializers.PrimaryKeyRelatedField(
+        queryset=Liability.objects.none(),
+        source="liability",
+        write_only=True,
+    )
+    liability_ref = serializers.IntegerField(source="liability_id", read_only=True)
+    liability_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LiabilityEvent
+        fields = [
+            "id",
+            "liability_id",
+            "liability_ref",
+            "liability_detail",
+            "event_date",
+            "event_type",
+            "amount",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        liability_queryset = self.context.get("liability_event_queryset")
+        if liability_queryset is not None:
+            self.fields["liability_id"].queryset = liability_queryset
+
+    def get_liability_detail(self, obj):
+        return {
+            "id": obj.liability_id,
+            "name": obj.liability.name,
+            "category": obj.liability.category,
+        }
+
+    def validate(self, attrs):
+        validate_liability_event_payload(
+            liability=attrs.get("liability", getattr(self.instance, "liability", None)),
+            event_date=attrs.get("event_date", getattr(self.instance, "event_date", None)),
+            event_type=attrs.get("event_type", getattr(self.instance, "event_type", None)),
+            amount=attrs.get("amount", getattr(self.instance, "amount", None)),
+        )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        return super().create(validated_data)
+
+
+class LiabilityValuationSerializer(serializers.ModelSerializer):
+    liability_id = serializers.PrimaryKeyRelatedField(
+        queryset=Liability.objects.none(),
+        source="liability",
+        write_only=True,
+    )
+    liability_ref = serializers.IntegerField(source="liability_id", read_only=True)
+    liability_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LiabilityValuation
+        fields = [
+            "id",
+            "liability_id",
+            "liability_ref",
+            "liability_detail",
+            "valuation_date",
+            "value",
+            "source",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        liability_queryset = self.context.get("liability_queryset")
+        if liability_queryset is not None:
+            self.fields["liability_id"].queryset = liability_queryset
+
+    def get_liability_detail(self, obj):
+        return {
+            "id": obj.liability_id,
+            "name": obj.liability.name,
+            "category": obj.liability.category,
+        }
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["user"] = request.user
+        return super().create(validated_data)

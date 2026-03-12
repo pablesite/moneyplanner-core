@@ -5,9 +5,16 @@ import { buildByCategoryChart } from '@/domains/net-worth/charts';
 import { attachOwnershipRef, buildOwnershipMaps } from '@/domains/net-worth/ownership';
 import type {
   Asset,
+  AssetValuation,
+  InvestmentAssetEvent,
   Liability,
+  LiabilityEvent,
+  LiabilityValuation,
+  LiquidityAssetEvent,
+  NetWorthTimeline,
   NetWorthWritePayload,
   Ownership,
+  PositionTimeline,
   Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
@@ -27,6 +34,18 @@ export const useNetWorthStore = defineStore('netWorth', {
     assets: [] as Asset[],
     liabilities: [] as Liability[],
     snapshots: [] as Snapshot[],
+    timeline: null as NetWorthTimeline | null,
+    timelineLoading: false as boolean,
+    timelineCategoryFilter: null as string | null,
+    timelineCategoryFilterType: 'asset' as 'asset' | 'liability',
+    positionTimeline: null as PositionTimeline | null,
+    positionTimelineLoading: false as boolean,
+    positionActivityLoading: false as boolean,
+    assetValuations: [] as AssetValuation[],
+    liabilityValuations: [] as LiabilityValuation[],
+    investmentEvents: [] as InvestmentAssetEvent[],
+    liquidityEvents: [] as LiquidityAssetEvent[],
+    liabilityEvents: [] as LiabilityEvent[],
 
     ownerships: [] as Ownership[],
   }),
@@ -61,10 +80,96 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
         this.snapshots = snapshotsRes.data;
         this.ownerships = ownershipsRes.data;
+        await this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
+      }
+    },
+
+    async fetchTimeline(
+      category: string | null = null,
+      categoryType: 'asset' | 'liability' = 'asset',
+    ) {
+      this.timelineLoading = true;
+      this.timelineCategoryFilter = category;
+      this.timelineCategoryFilterType = categoryType;
+      try {
+        const timelineRes = await coreNetWorthApi.getTimeline({
+          asset_category: categoryType === 'asset' ? category : null,
+          liability_category: categoryType === 'liability' ? category : null,
+        });
+        this.timeline = timelineRes.data;
+      } catch (e: unknown) {
+        this.error = toApiErrorMessage(e);
+      } finally {
+        this.timelineLoading = false;
+      }
+    },
+
+    async fetchPositionTimeline(positionType: 'asset' | 'liability', id: number) {
+      this.positionTimelineLoading = true;
+      try {
+        const timelineRes =
+          positionType === 'asset'
+            ? await coreNetWorthApi.getAssetTimeline(id)
+            : await coreNetWorthApi.getLiabilityTimeline(id);
+        this.positionTimeline = timelineRes.data;
+      } catch (e: unknown) {
+        this.error = toApiErrorMessage(e);
+      } finally {
+        this.positionTimelineLoading = false;
+      }
+    },
+
+    async fetchPositionActivity(
+      positionType: 'asset' | 'liability',
+      id: number,
+      category?: string | null,
+    ) {
+      this.positionActivityLoading = true;
+      try {
+        if (positionType === 'asset') {
+          const requests: Promise<unknown>[] = [coreNetWorthApi.getAssetValuations()];
+          const shouldLoadInvestment = category === 'investments';
+          const shouldLoadLiquidity = category === 'cash';
+          if (shouldLoadInvestment) requests.push(coreNetWorthApi.getInvestmentEvents());
+          if (shouldLoadLiquidity) requests.push(coreNetWorthApi.getLiquidityEvents());
+
+          const [valuationsRes, maybeInvestmentRes, maybeLiquidityRes] =
+            await Promise.all(requests);
+          const valuations = (valuationsRes as { data: AssetValuation[] }).data;
+          this.assetValuations = valuations.filter((row) => row.asset_ref === id);
+          this.investmentEvents = shouldLoadInvestment
+            ? (maybeInvestmentRes as { data: InvestmentAssetEvent[] }).data.filter(
+                (row) => row.asset_ref === id,
+              )
+            : [];
+          this.liquidityEvents = shouldLoadLiquidity
+            ? (
+                (shouldLoadInvestment ? maybeLiquidityRes : maybeInvestmentRes) as {
+                  data: LiquidityAssetEvent[];
+                }
+              ).data.filter((row) => row.asset_ref === id)
+            : [];
+          this.liabilityValuations = [];
+          this.liabilityEvents = [];
+        } else {
+          const [valuationsRes, eventsRes] = await Promise.all([
+            coreNetWorthApi.getLiabilityValuations(),
+            coreNetWorthApi.getLiabilityEvents(),
+          ]);
+          this.liabilityValuations = valuationsRes.data.filter((row) => row.liability_ref === id);
+          this.liabilityEvents = eventsRes.data.filter((row) => row.liability_ref === id);
+          this.assetValuations = [];
+          this.investmentEvents = [];
+          this.liquidityEvents = [];
+        }
+      } catch (e: unknown) {
+        this.error = toApiErrorMessage(e);
+      } finally {
+        this.positionActivityLoading = false;
       }
     },
 

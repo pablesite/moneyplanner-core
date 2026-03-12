@@ -851,16 +851,16 @@ function eventGroupLabel(eventGroup: string): string {
   return eventGroup;
 }
 
-function formatTermEndLabel(termEndYear: number | null, termEndMonth: number | null): string | null {
+function formatTermEndLabel(
+  termEndYear: number | null,
+  termEndMonth: number | null,
+): string | null {
   if (termEndYear == null) return null;
   if (termEndMonth == null) return `Fin ${termEndYear}`;
   return `Fin ${String(termEndMonth).padStart(2, '0')}/${termEndYear}`;
 }
 
-function amountInputValueFromAnnual(
-  annualAmount: number,
-  period: 'annual' | 'monthly',
-): string {
+function amountInputValueFromAnnual(annualAmount: number, period: 'annual' | 'monthly'): string {
   if (period === 'monthly') return String(Math.round((annualAmount / 12) * 100) / 100);
   return String(annualAmount);
 }
@@ -870,8 +870,7 @@ function shouldHideExpenseCashflowRoleLabel(params: {
   cashflowRole: AnnualExpenseCashflowRole;
 }): boolean {
   return (
-    (params.timeProfile === 'term_recurrent' &&
-      params.cashflowRole === 'temporary_commitment') ||
+    (params.timeProfile === 'term_recurrent' && params.cashflowRole === 'temporary_commitment') ||
     (params.timeProfile === 'one_off' && params.cashflowRole === 'temporary_commitment')
   );
 }
@@ -1280,8 +1279,12 @@ function summarizeGeneratedLiabilityExpenseChanges(
     const after = afterTotals.get(year) ?? 0;
     if (Math.abs(before - after) > 0.009) changedYears.push(year);
   }
-  const addedYears = years.filter((year) => (beforeTotals.get(year) ?? 0) <= 0 && (afterTotals.get(year) ?? 0) > 0);
-  const removedYears = years.filter((year) => (beforeTotals.get(year) ?? 0) > 0 && (afterTotals.get(year) ?? 0) <= 0);
+  const addedYears = years.filter(
+    (year) => (beforeTotals.get(year) ?? 0) <= 0 && (afterTotals.get(year) ?? 0) > 0,
+  );
+  const removedYears = years.filter(
+    (year) => (beforeTotals.get(year) ?? 0) > 0 && (afterTotals.get(year) ?? 0) <= 0,
+  );
   if (!changedYears.length && !addedYears.length && !removedYears.length) return null;
   const chunks: string[] = [];
   if (changedYears.length) {
@@ -1487,7 +1490,9 @@ function findLikelyCreatedAsset(
   const targetName = String(payload.name ?? '').trim();
   const targetCategory = String(payload.category ?? '').trim();
   const targetSubcategory = String(payload.subcategory ?? '').trim();
-  const targetCurrency = String(payload.currency ?? '').trim().toUpperCase();
+  const targetCurrency = String(payload.currency ?? '')
+    .trim()
+    .toUpperCase();
   const targetStartDate = String(payload.start_date ?? '').trim();
   const targetAmount = normalizeAmountForMatch(payload.amount);
 
@@ -1496,7 +1501,12 @@ function findLikelyCreatedAsset(
     .filter((asset) => String(asset.name ?? '').trim() === targetName)
     .filter((asset) => String(asset.category ?? '').trim() === targetCategory)
     .filter((asset) => String(asset.subcategory ?? '').trim() === targetSubcategory)
-    .filter((asset) => String(asset.currency ?? '').trim().toUpperCase() === targetCurrency)
+    .filter(
+      (asset) =>
+        String(asset.currency ?? '')
+          .trim()
+          .toUpperCase() === targetCurrency,
+    )
     .filter((asset) => String(asset.start_date ?? '').trim() === targetStartDate)
     .filter((asset) => normalizeAmountForMatch(asset.amount) === targetAmount)
     .sort((a, b) => b.id - a.id);
@@ -1508,8 +1518,7 @@ function findLikelyCreatedAsset(
 async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
   const previousAssetIds = new Set(store.assets.map((asset) => asset.id));
   const createdAsset = await store.createAsset(payload);
-  const createdOrMatchedAsset =
-    createdAsset ?? findLikelyCreatedAsset(payload, previousAssetIds);
+  const createdOrMatchedAsset = createdAsset ?? findLikelyCreatedAsset(payload, previousAssetIds);
   if (!createdOrMatchedAsset) return;
 
   showAssetModal.value = false;
@@ -1517,7 +1526,10 @@ async function submitAsset(payload: AssetFormSubmitPayload): Promise<void> {
 
   if (!isRemuneratedLiquidityAsset(payload)) return;
   const estimatedAnnualInterestGross = estimateRemuneratedLiquidityInterest(payload);
-  const currency = String(payload.currency ?? '').trim().toUpperCase() || 'EUR';
+  const currency =
+    String(payload.currency ?? '')
+      .trim()
+      .toUpperCase() || 'EUR';
   const assetName = String(createdOrMatchedAsset.name ?? '').trim() || 'Activo remunerado';
   if (estimatedAnnualInterestGross == null || estimatedAnnualInterestGross <= 0) return;
   const estimatedAnnualInterestNet = applyInterestWithholding(estimatedAnnualInterestGross);
@@ -1633,30 +1645,30 @@ async function submitAnnualIncome(): Promise<void> {
       : rawAmount
     : annualIncomeForm.amountAnnual;
 
-    const draft = {
-      name: annualIncomeForm.name,
-      category: annualIncomeForm.category,
-      subcategory: annualIncomeForm.subcategory,
-      owner: annualIncomeForm.owner,
-      incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
-      timeProfile: annualIncomeForm.timeProfile,
-      cashflowRole: defaultIncomeCashflowRole(annualIncomeForm.category),
-      eventGroup: annualIncomeForm.eventGroup,
-      targetMonth:
-        annualIncomeForm.timeProfile === 'one_off' && String(annualIncomeForm.targetMonth).trim()
-          ? Number(annualIncomeForm.targetMonth)
-          : null,
-      termEndMonth:
-        annualIncomeForm.timeProfile === 'term_recurrent' &&
-        String(annualIncomeForm.termEndMonth).trim()
-          ? Number(annualIncomeForm.termEndMonth)
-          : null,
-      termEndYear:
-        annualIncomeForm.timeProfile === 'term_recurrent' &&
-        String(annualIncomeForm.termEndYear).trim()
+  const draft = {
+    name: annualIncomeForm.name,
+    category: annualIncomeForm.category,
+    subcategory: annualIncomeForm.subcategory,
+    owner: annualIncomeForm.owner,
+    incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as 'recurrent' | 'one_off',
+    timeProfile: annualIncomeForm.timeProfile,
+    cashflowRole: defaultIncomeCashflowRole(annualIncomeForm.category),
+    eventGroup: annualIncomeForm.eventGroup,
+    targetMonth:
+      annualIncomeForm.timeProfile === 'one_off' && String(annualIncomeForm.targetMonth).trim()
+        ? Number(annualIncomeForm.targetMonth)
+        : null,
+    termEndMonth:
+      annualIncomeForm.timeProfile === 'term_recurrent' &&
+      String(annualIncomeForm.termEndMonth).trim()
+        ? Number(annualIncomeForm.termEndMonth)
+        : null,
+    termEndYear:
+      annualIncomeForm.timeProfile === 'term_recurrent' &&
+      String(annualIncomeForm.termEndYear).trim()
         ? Number(annualIncomeForm.termEndYear)
         : null,
-      amountInputPeriod: annualIncomeForm.amountInputPeriod,
+    amountInputPeriod: annualIncomeForm.amountInputPeriod,
     amountAnnual: String(normalizedAmount),
     fiscalYear: fiscalYear.value,
     currency: annualIncomeForm.currency,
@@ -1744,7 +1756,9 @@ async function submitAnnualExpense(): Promise<void> {
       }
 
       await loadAnnualExpense(fiscalYear.value);
-      if (generatedLiabilityExpenseReview.value?.liabilityId === bulkEditingGeneratedLiabilityId.value) {
+      if (
+        generatedLiabilityExpenseReview.value?.liabilityId === bulkEditingGeneratedLiabilityId.value
+      ) {
         const refreshedEntries = await listBySourceLiability(
           generatedLiabilityExpenseReview.value.liabilityId,
         );
@@ -2028,8 +2042,8 @@ watch(
         {{ dataInputSummary }}
       </p>
       <p class="subtle m-0">
-        Gestiona aqui la base financiera anual: ingresos, gastos, activos y pasivos para el
-        analisis patrimonial.
+        Gestiona aqui la base financiera anual: ingresos, gastos, activos y pasivos para el analisis
+        patrimonial.
       </p>
       <div class="actions m-0">
         <button
@@ -2446,9 +2460,13 @@ watch(
                           <template v-if="entry.eventGroup">
                             . Evento {{ eventGroupLabel(entry.eventGroup) }}</template
                           >
-                          <template v-if="formatTermEndLabel(entry.termEndYear, entry.termEndMonth)">
+                          <template
+                            v-if="formatTermEndLabel(entry.termEndYear, entry.termEndMonth)"
+                          >
                             .
-                            {{ formatTermEndLabel(entry.termEndYear, entry.termEndMonth) }}</template
+                            {{
+                              formatTermEndLabel(entry.termEndYear, entry.termEndMonth)
+                            }}</template
                           >
                         </div>
                       </div>
@@ -2585,10 +2603,12 @@ watch(
         >
           {{ generatedLiabilityExpenseReviewChangeMessage }}
         </div>
-        <div class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90">
+        <div
+          class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90"
+        >
           Se han generado gastos recurrentes en {{ generatedLiabilityExpenseReview.entries.length }}
-          anualidades para este pasivo. Revisalos y confirma que la
-          clasificacion (categoria/subcategoria/naturaleza) es correcta.
+          anualidades para este pasivo. Revisalos y confirma que la clasificacion
+          (categoria/subcategoria/naturaleza) es correcta.
         </div>
 
         <div class="grid gap-2">
@@ -2604,7 +2624,8 @@ watch(
               </div>
             </div>
             <div class="mt-1 text-xs text-white/70">
-              {{ expenseCategoryLabel(entry.category) }} / {{ expenseSubcategoryLabel(entry.subcategory) }}
+              {{ expenseCategoryLabel(entry.category) }} /
+              {{ expenseSubcategoryLabel(entry.subcategory) }}
               <template
                 v-if="
                   !shouldHideExpenseCashflowRoleLabel({

@@ -7,32 +7,106 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0023_asset_building_annual_depreciation_percent_and_more'),
+        ("net_worth", "0023_asset_building_annual_depreciation_percent_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AssetImprovement',
+            name="AssetImprovement",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=120)),
-                ('reform_date', models.DateField(default=django.utils.timezone.localdate, help_text='Fecha en la que la reforma/obra entra en servicio.')),
-                ('amount', models.DecimalField(decimal_places=8, help_text='Importe total de la reforma en la moneda del activo.', max_digits=20, validators=[django.core.validators.MinValueValidator(0)])),
-                ('amortization_method', models.CharField(choices=[('none', 'Sin amortizacion'), ('straight_line', 'Lineal'), ('manual', 'Manual')], default='none', help_text='Metodo de amortizacion de la reforma.', max_length=24)),
-                ('amortization_term_years', models.PositiveIntegerField(blank=True, help_text='Plazo de amortizacion de la reforma en anos (si aplica).', null=True)),
-                ('annual_interest_tae', models.DecimalField(blank=True, decimal_places=2, help_text='TAE anual asociada a la financiacion de la reforma (opcional).', max_digits=5, null=True, validators=[django.core.validators.MinValueValidator(0)])),
-                ('capitalize_interest', models.BooleanField(default=False, help_text='Si true, la TAE se capitaliza sobre el valor de la reforma para calculo de valor efectivo.')),
-                ('manual_current_value', models.DecimalField(blank=True, decimal_places=8, help_text='Valor actual manual de la reforma. Requerido cuando amortization_method=manual.', max_digits=20, null=True, validators=[django.core.validators.MinValueValidator(0)])),
-                ('notes', models.TextField(blank=True, default='')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('asset', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='improvements', to='net_worth.asset')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=120)),
+                (
+                    "reform_date",
+                    models.DateField(
+                        default=django.utils.timezone.localdate,
+                        help_text="Fecha en la que la reforma/obra entra en servicio.",
+                    ),
+                ),
+                (
+                    "amount",
+                    models.DecimalField(
+                        decimal_places=8,
+                        help_text="Importe total de la reforma en la moneda del activo.",
+                        max_digits=20,
+                        validators=[django.core.validators.MinValueValidator(0)],
+                    ),
+                ),
+                (
+                    "amortization_method",
+                    models.CharField(
+                        choices=[
+                            ("none", "Sin amortizacion"),
+                            ("straight_line", "Lineal"),
+                            ("manual", "Manual"),
+                        ],
+                        default="none",
+                        help_text="Metodo de amortizacion de la reforma.",
+                        max_length=24,
+                    ),
+                ),
+                (
+                    "amortization_term_years",
+                    models.PositiveIntegerField(
+                        blank=True,
+                        help_text="Plazo de amortizacion de la reforma en anos (si aplica).",
+                        null=True,
+                    ),
+                ),
+                (
+                    "annual_interest_tae",
+                    models.DecimalField(
+                        blank=True,
+                        decimal_places=2,
+                        help_text="TAE anual asociada a la financiacion de la reforma (opcional).",
+                        max_digits=5,
+                        null=True,
+                        validators=[django.core.validators.MinValueValidator(0)],
+                    ),
+                ),
+                (
+                    "capitalize_interest",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Si true, la TAE se capitaliza sobre el valor de la reforma para calculo de valor efectivo.",
+                    ),
+                ),
+                (
+                    "manual_current_value",
+                    models.DecimalField(
+                        blank=True,
+                        decimal_places=8,
+                        help_text="Valor actual manual de la reforma. Requerido cuando amortization_method=manual.",
+                        max_digits=20,
+                        null=True,
+                        validators=[django.core.validators.MinValueValidator(0)],
+                    ),
+                ),
+                ("notes", models.TextField(blank=True, default="")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "asset",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="improvements",
+                        to="net_worth.asset",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-reform_date', '-id'],
-                'indexes': [models.Index(fields=['asset', 'reform_date'], name='net_worth_a_asset_i_50004c_idx')],
+                "ordering": ["-reform_date", "-id"],
+                "indexes": [
+                    models.Index(
+                        fields=["asset", "reform_date"], name="net_worth_a_asset_i_50004c_idx"
+                    )
+                ],
             },
         ),
     ]

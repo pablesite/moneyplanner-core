@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0027_asset_market_value_override_and_more'),
+        ("net_worth", "0027_asset_market_value_override_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='investment_contribution_currency',
-            field=models.CharField(blank=True, help_text='Moneda de la cuota periodica en inversiones. Si no se indica, se asume la moneda del activo.', max_length=3, null=True),
+            model_name="asset",
+            name="investment_contribution_currency",
+            field=models.CharField(
+                blank=True,
+                help_text="Moneda de la cuota periodica en inversiones. Si no se indica, se asume la moneda del activo.",
+                max_length=3,
+                null=True,
+            ),
         ),
     ]

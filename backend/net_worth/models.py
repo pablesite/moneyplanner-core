@@ -661,3 +661,267 @@ class LiquidityMonthlyCheckin(models.Model):
             f"LiquidityMonthlyCheckin(user={self.user_id}, asset={self.asset_id}, "
             f"{self.fiscal_year}-{self.month}, real={self.closing_balance_real})"
         )
+
+
+class AssetValuation(models.Model):
+    class Source(models.TextChoices):
+        MANUAL_CHECKPOINT = "manual_checkpoint", "Checkpoint manual"
+        IMPORTED = "imported", "Importado"
+        SYSTEM = "system", "Sistema"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="asset_valuations",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="valuations",
+    )
+    valuation_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha de valoracion manual del activo (as-of).",
+    )
+    value = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Valor observado/manual del activo en su moneda.",
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=Source.choices,
+        default=Source.MANUAL_CHECKPOINT,
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "valuation_date"], name="nw_asset_val_user_date_idx"),
+            models.Index(fields=["asset", "valuation_date"], name="nw_asset_val_asset_date_idx"),
+        ]
+        ordering = ["-valuation_date", "-updated_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "asset", "valuation_date"],
+                name="unique_asset_valuation_user_asset_date",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"AssetValuation(user={self.user_id}, asset={self.asset_id}, "
+            f"date={self.valuation_date}, value={self.value})"
+        )
+
+
+class InvestmentAssetEvent(models.Model):
+    class EventType(models.TextChoices):
+        CONTRIBUTION = "contribution", "Aportacion"
+        WITHDRAWAL = "withdrawal", "Retirada"
+        FEE = "fee", "Comision"
+        PASSIVE_INCOME = "passive_income", "Rendimiento"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="investment_asset_events",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="investment_events",
+    )
+    event_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha efectiva del evento de inversion.",
+    )
+    event_type = models.CharField(
+        max_length=24,
+        choices=EventType.choices,
+    )
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Importe positivo del evento en la moneda del activo.",
+    )
+    is_reinvested = models.BooleanField(
+        default=True,
+        help_text="Solo aplica a passive_income. Si false, no incrementa el valor del activo.",
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "event_date"], name="nw_inv_evt_user_date_idx"),
+            models.Index(fields=["asset", "event_date"], name="nw_inv_evt_asset_date_idx"),
+        ]
+        ordering = ["-event_date", "-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return (
+            f"InvestmentAssetEvent(user={self.user_id}, asset={self.asset_id}, "
+            f"date={self.event_date}, type={self.event_type}, amount={self.amount})"
+        )
+
+
+class LiquidityAssetEvent(models.Model):
+    class EventType(models.TextChoices):
+        INFLOW = "inflow", "Entrada"
+        OUTFLOW = "outflow", "Salida"
+        FEE = "fee", "Comision"
+        INTEREST = "interest", "Interes"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="liquidity_asset_events",
+    )
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="liquidity_events",
+    )
+    event_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha efectiva del movimiento de liquidez.",
+    )
+    event_type = models.CharField(
+        max_length=16,
+        choices=EventType.choices,
+    )
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Importe positivo del movimiento en la moneda del activo.",
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "event_date"], name="nw_liq_evt_user_date_idx"),
+            models.Index(fields=["asset", "event_date"], name="nw_liq_evt_asset_date_idx"),
+        ]
+        ordering = ["-event_date", "-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return (
+            f"LiquidityAssetEvent(user={self.user_id}, asset={self.asset_id}, "
+            f"date={self.event_date}, type={self.event_type}, amount={self.amount})"
+        )
+
+
+class LiabilityEvent(models.Model):
+    class EventType(models.TextChoices):
+        CHARGE = "charge", "Cargo"
+        PAYMENT = "payment", "Pago"
+        FEE = "fee", "Comision"
+        INTEREST = "interest", "Interes"
+        ADJUSTMENT = "adjustment", "Ajuste"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="liability_events",
+    )
+    liability = models.ForeignKey(
+        Liability,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    event_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha efectiva del movimiento del pasivo.",
+    )
+    event_type = models.CharField(
+        max_length=16,
+        choices=EventType.choices,
+    )
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Importe positivo del movimiento en la moneda del pasivo.",
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "event_date"], name="nw_liab_evt_user_date_idx"),
+            models.Index(fields=["liability", "event_date"], name="nw_liab_evt_liab_date_idx"),
+        ]
+        ordering = ["-event_date", "-updated_at", "-id"]
+
+    def __str__(self) -> str:
+        return (
+            f"LiabilityEvent(user={self.user_id}, liability={self.liability_id}, "
+            f"date={self.event_date}, type={self.event_type}, amount={self.amount})"
+        )
+
+
+class LiabilityValuation(models.Model):
+    class Source(models.TextChoices):
+        MANUAL_CHECKPOINT = "manual_checkpoint", "Checkpoint manual"
+        IMPORTED = "imported", "Importado"
+        SYSTEM = "system", "Sistema"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="liability_valuations",
+    )
+    liability = models.ForeignKey(
+        Liability,
+        on_delete=models.CASCADE,
+        related_name="valuations",
+    )
+    valuation_date = models.DateField(
+        default=timezone.localdate,
+        help_text="Fecha de valoracion manual del pasivo (as-of).",
+    )
+    value = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(0)],
+        help_text="Saldo/valor observado del pasivo en su moneda.",
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=Source.choices,
+        default=Source.MANUAL_CHECKPOINT,
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "valuation_date"], name="nw_liability_val_user_date_idx"),
+            models.Index(
+                fields=["liability", "valuation_date"], name="nw_liability_val_liab_date_idx"
+            ),
+        ]
+        ordering = ["-valuation_date", "-updated_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "liability", "valuation_date"],
+                name="unique_liability_valuation_user_liability_date",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"LiabilityValuation(user={self.user_id}, liability={self.liability_id}, "
+            f"date={self.valuation_date}, value={self.value})"
+        )

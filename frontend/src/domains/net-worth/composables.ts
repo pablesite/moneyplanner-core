@@ -199,8 +199,7 @@ export function useNetWorthViewState() {
       subcategory: item.subcategory ?? '',
       amount: formatEditAmount(item.amount, item.currency ?? 'EUR'),
       annual_interest_tae: item.annual_interest_tae ?? '',
-      estimated_average_balance_for_interest:
-        item.estimated_average_balance_for_interest ?? '',
+      estimated_average_balance_for_interest: item.estimated_average_balance_for_interest ?? '',
       deposit_term_months: item.deposit_term_months ?? '',
       monthly_payment_amount: item.monthly_payment_amount ?? '',
       start_date: item.start_date ?? '',
@@ -311,6 +310,7 @@ export function useNetWorthViewState() {
   const byCategoryLabels = computed(() =>
     byCategoryFiltered.value.map((r) => categoryLabelMap.value.get(r.key) ?? r.key),
   );
+  const byCategoryKeys = computed(() => byCategoryFiltered.value.map((r) => r.key));
   const byCategoryAssets = computed(() => byCategoryFiltered.value.map((r) => r.a));
   const byCategoryLiabilities = computed(() => byCategoryFiltered.value.map((r) => r.l));
   const byCategoryUnit = computed(() => byCategoryChart.value.unit);
@@ -367,6 +367,7 @@ export function useNetWorthViewState() {
     summaryAssets,
     summaryLiabilities,
     summaryNetWorth,
+    byCategoryKeys,
     byCategoryLabels,
     byCategoryAssets,
     byCategoryLiabilities,

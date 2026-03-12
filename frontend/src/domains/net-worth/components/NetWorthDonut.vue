@@ -20,12 +20,16 @@ type Props = {
   unit: string;
   assetBackedLiabilities?: string | number | null | undefined;
   unbackedLiabilities?: string | number | null | undefined;
+  categoryKeys?: string[] | null | undefined;
   categoryLabels?: string[] | null | undefined;
   categoryAssets?: number[] | null | undefined;
   categoryLiabilities?: number[] | null | undefined;
 };
 
 const props = defineProps<Props>();
+const emit = defineEmits<{
+  (e: 'select-category', payload: { key: string; type: 'asset' | 'liability' }): void;
+}>();
 
 function normalizeNumberInput(raw: unknown) {
   return String(raw ?? '')
@@ -73,18 +77,21 @@ const equitySlice = computed(() =>
   Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0),
 );
 
-type CategoryShare = { label: string; value: number; share: number };
+type CategoryShare = { key: string; label: string; value: number; share: number };
 
 function buildCategoryShares(
+  keys: string[] | null | undefined,
   labels: string[] | null | undefined,
   values: number[] | null | undefined,
   total: number,
 ) {
-  if (!labels?.length || !values?.length || total <= 0) return [] as CategoryShare[];
+  if (!keys?.length || !labels?.length || !values?.length || total <= 0)
+    return [] as CategoryShare[];
   return labels
     .map((label, index) => {
       const value = Math.max(0, values[index] ?? 0);
       return {
+        key: keys[index] ?? label,
         label,
         value,
         share: total > 0 ? value / total : 0,
@@ -96,10 +103,15 @@ function buildCategoryShares(
 }
 
 const assetComposition = computed(() =>
-  buildCategoryShares(props.categoryLabels, props.categoryAssets, assets.value),
+  buildCategoryShares(props.categoryKeys, props.categoryLabels, props.categoryAssets, assets.value),
 );
 const liabilityComposition = computed(() =>
-  buildCategoryShares(props.categoryLabels, props.categoryLiabilities, liabilities.value),
+  buildCategoryShares(
+    props.categoryKeys,
+    props.categoryLabels,
+    props.categoryLiabilities,
+    liabilities.value,
+  ),
 );
 
 const data = computed<ChartData<'doughnut'>>(() => ({
@@ -185,10 +197,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
         <div class="nw-donut-comp-block">
           <div class="nw-donut-comp-title">Composicion de activos</div>
           <div v-if="assetComposition.length" class="nw-donut-comp-list">
-            <div
+            <button
               v-for="row in assetComposition"
-              :key="`asset-${row.label}`"
+              :key="`asset-${row.key}`"
               class="nw-donut-comp-row"
+              type="button"
+              @click="emit('select-category', { key: row.key, type: 'asset' })"
             >
               <div class="nw-donut-comp-head">
                 <span>{{ row.label }}</span>
@@ -200,7 +214,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                   :style="{ width: `${row.share * 100}%` }"
                 ></span>
               </div>
-            </div>
+            </button>
           </div>
           <div v-else class="nw-donut-comp-empty">Sin datos de activos por categoria.</div>
         </div>
@@ -208,10 +222,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
         <div class="nw-donut-comp-block">
           <div class="nw-donut-comp-title">Composicion de pasivos</div>
           <div v-if="liabilityComposition.length" class="nw-donut-comp-list">
-            <div
+            <button
               v-for="row in liabilityComposition"
-              :key="`liability-${row.label}`"
+              :key="`liability-${row.key}`"
               class="nw-donut-comp-row"
+              type="button"
+              @click="emit('select-category', { key: row.key, type: 'liability' })"
             >
               <div class="nw-donut-comp-head">
                 <span>{{ row.label }}</span>
@@ -223,7 +239,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                   :style="{ width: `${row.share * 100}%` }"
                 ></span>
               </div>
-            </div>
+            </button>
           </div>
           <div v-else class="nw-donut-comp-empty">Sin datos de pasivos por categoria.</div>
         </div>
@@ -231,3 +247,15 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     </div>
   </div>
 </template>
+
+<style scoped>
+.nw-donut-comp-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+</style>

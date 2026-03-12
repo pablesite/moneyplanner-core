@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0025_asset_expected_end_date_and_more'),
+        ("net_worth", "0025_asset_expected_end_date_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='investment_contribution_frequency',
-            field=models.CharField(choices=[('monthly', 'Mensual'), ('weekly', 'Semanal')], default='monthly', help_text='Frecuencia de la aportacion periodica en inversiones: mensual o semanal. Solo aplica a investment_contribution_mode=periodic_contribution.', max_length=16),
+            model_name="asset",
+            name="investment_contribution_frequency",
+            field=models.CharField(
+                choices=[("monthly", "Mensual"), ("weekly", "Semanal")],
+                default="monthly",
+                help_text="Frecuencia de la aportacion periodica en inversiones: mensual o semanal. Solo aplica a investment_contribution_mode=periodic_contribution.",
+                max_length=16,
+            ),
         ),
     ]

@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from .models import Asset, Liability
+from .models import Asset, Liability, LiabilityEvent, LiabilityValuation
 
 LIABILITY_CATEGORIES_REQUIRING_TAE = {
     Liability.Category.MORTGAGE,
@@ -451,10 +451,77 @@ def estimate_liability_outstanding_amount_simple(
 def get_effective_liability_amount(
     *, liability: Liability, as_of_date: date | None = None
 ) -> Decimal:
+    ref_date = as_of_date or timezone.localdate()
+    valuation = (
+        LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)
+        .order_by("-valuation_date", "-updated_at", "-id")
+        .first()
+    )
+    if valuation is not None:
+        return Decimal(valuation.value) + get_liability_events_delta(
+            liability=liability,
+            from_date=valuation.valuation_date,
+            as_of_date=ref_date,
+        )
+    if liability.category == Liability.Category.CREDIT_CARD:
+        return Decimal(liability.amount) + get_liability_events_delta(
+            liability=liability,
+            as_of_date=ref_date,
+        )
     estimated = estimate_liability_outstanding_amount_simple(
-        liability=liability, as_of_date=as_of_date
+        liability=liability, as_of_date=ref_date
     )
     return estimated if estimated is not None else liability.amount
+
+
+def validate_liability_event_payload(
+    *,
+    liability: Liability | None,
+    event_date: date | None = None,
+    event_type: str | None,
+    amount,
+) -> None:
+    if liability is None:
+        raise DRFValidationError({"liability_id": "Requerido."})
+    if event_type not in {
+        LiabilityEvent.EventType.CHARGE,
+        LiabilityEvent.EventType.PAYMENT,
+        LiabilityEvent.EventType.FEE,
+        LiabilityEvent.EventType.INTEREST,
+        LiabilityEvent.EventType.ADJUSTMENT,
+    }:
+        raise DRFValidationError({"event_type": "Tipo de movimiento invalido."})
+    if amount is None or Decimal(str(amount)) <= 0:
+        raise DRFValidationError({"amount": "Debe ser mayor que 0."})
+    if event_date is not None and event_date < liability.start_date:
+        raise DRFValidationError(
+            {"event_date": "Debe ser igual o posterior a start_date del pasivo."}
+        )
+
+
+def get_liability_events_delta(
+    *,
+    liability: Liability,
+    from_date: date | None = None,
+    as_of_date: date | None = None,
+) -> Decimal:
+    ref_date = as_of_date or timezone.localdate()
+    delta = Decimal("0")
+    events = LiabilityEvent.objects.filter(liability=liability, event_date__lte=ref_date)
+    if from_date is not None:
+        events = events.filter(event_date__gt=from_date)
+    for event in events:
+        amount = Decimal(event.amount)
+        if event.event_type in (
+            LiabilityEvent.EventType.CHARGE,
+            LiabilityEvent.EventType.FEE,
+            LiabilityEvent.EventType.INTEREST,
+            LiabilityEvent.EventType.ADJUSTMENT,
+        ):
+            delta += amount
+        else:
+            delta -= amount
+    return delta
 
 
 def _build_expense_profile(
@@ -522,8 +589,7 @@ def get_generated_liability_expense_profile(*, liability: Liability) -> dict[str
     financed_asset = getattr(liability, "financed_asset", None)
     if financed_asset is None:
         return _get_unbacked_liability_expense_profile(
-            liability=liability,
-            temporary_commitment_role=temporary_commitment_role
+            liability=liability, temporary_commitment_role=temporary_commitment_role
         )
 
     if financed_asset.category == Asset.Category.REAL_ESTATE:
