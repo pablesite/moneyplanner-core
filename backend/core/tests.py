@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
@@ -23,6 +24,7 @@ from .services import (
     validate_fx_currency_pair,
     validate_inflation_period_start,
 )
+from .market_data import ensure_market_history, sync_market_history
 
 
 class CoreServicesTests(TestCase):
@@ -222,6 +224,89 @@ class CoreServicesTests(TestCase):
         with self.assertRaises(ValidationError):
             adjust_for_inflation(Decimal("10"), date=date(2026, 2, 1), region="ES")
 
+    @patch(
+        "core.market_data._fetch_json",
+        return_value={
+            "amount": 1.0,
+            "base": "USD",
+            "rates": {
+                "2025-03-03": {"EUR": 0.92},
+                "2025-03-04": {"EUR": 0.93},
+            },
+        },
+    )
+    def test_sync_market_history_imports_fiat_rows(self, _fetch_json_mock):
+        inserted = sync_market_history(
+            from_currency="USD",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+            end_date=date(2025, 3, 4),
+        )
+
+        self.assertEqual(inserted, 2)
+        self.assertEqual(
+            FxRate.objects.get(
+                from_currency="USD",
+                to_currency="EUR",
+                rate_date=date(2025, 3, 3),
+            ).rate,
+            Decimal("0.92"),
+        )
+
+    @patch(
+        "core.market_data._fetch_json",
+        return_value={
+            "prices": [
+                [1740960000000, 82000.0],
+                [1741000000000, 82500.5],
+                [1741046400000, 83010.25],
+            ]
+        },
+    )
+    def test_sync_market_history_imports_crypto_rows_grouped_by_day(self, _fetch_json_mock):
+        inserted = sync_market_history(
+            from_currency="BTC",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+            end_date=date(2025, 3, 4),
+        )
+
+        self.assertEqual(inserted, 2)
+        self.assertEqual(
+            FxRate.objects.get(
+                from_currency="BTC",
+                to_currency="EUR",
+                rate_date=date(2025, 3, 3),
+            ).rate,
+            Decimal("82500.5"),
+        )
+
+    @patch("core.market_data.sync_market_history", return_value=31)
+    def test_ensure_market_history_backfills_only_when_earliest_row_is_missing(
+        self, sync_market_history_mock
+    ):
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.90"),
+            rate_date=date(2025, 5, 1),
+        )
+
+        inserted = ensure_market_history(
+            from_currency="USD",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+            end_date=date(2025, 6, 1),
+        )
+
+        self.assertEqual(inserted, 31)
+        sync_market_history_mock.assert_called_once_with(
+            from_currency="USD",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+            end_date=date(2025, 4, 30),
+        )
+
 
 class PortableDataImportAPITests(APITestCase):
     def setUp(self):
@@ -333,9 +418,7 @@ class PortableDataImportAPITests(APITestCase):
                 ],
             },
             "premium": {
-                "family_members": [
-                    {"id": 50, "name": "Pablo", "role": "adult", "is_active": True}
-                ],
+                "family_members": [{"id": 50, "name": "Pablo", "role": "adult", "is_active": True}],
                 "ownerships": [
                     {
                         "id": 60,
@@ -344,9 +427,7 @@ class PortableDataImportAPITests(APITestCase):
                         "splits": [],
                     }
                 ],
-                "ownership_links": [
-                    {"target_type": "asset", "target_id": 20, "ownership_id": 60}
-                ],
+                "ownership_links": [{"target_type": "asset", "target_id": 20, "ownership_id": 60}],
             },
         }
         bundle.update(overrides)
@@ -397,9 +478,7 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
-        self.assertTrue(
-            Asset.objects.filter(user=self.user, name="Cuenta previa").exists()
-        )
+        self.assertTrue(Asset.objects.filter(user=self.user, name="Cuenta previa").exists())
 
     def test_portable_import_replace_rejects_newer_bundle_version(self):
         bundle = self._build_bundle(exported_app_version="0.18.17")
@@ -453,9 +532,7 @@ class PortableDataImportAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
-        self.assertFalse(
-            Asset.objects.filter(user=self.user, name="Cuenta previa").exists()
-        )
+        self.assertFalse(Asset.objects.filter(user=self.user, name="Cuenta previa").exists())
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
         self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
 

@@ -28,6 +28,7 @@ def _build_liquidity_monthly_summary_impl(
     month: int,
     get_base_currency_for_user_fn,
     get_liquidity_asset_queryset_for_user_fn,
+    get_effective_asset_amount_fn,
     last_day_of_month_fn,
     serialize_money_fn,
 ) -> dict[str, object]:
@@ -57,7 +58,11 @@ def _build_liquidity_monthly_summary_impl(
         planned_native = Decimal(asset.amount or 0)
         checkin = checkins.get(asset.id)
         executed_native = checkin.closing_balance_real if checkin is not None else None
-        effective_native = executed_native if executed_native is not None else planned_native
+        effective_native = (
+            executed_native
+            if executed_native is not None
+            else get_effective_asset_amount_fn(asset=asset, as_of_date=summary_date)
+        )
 
         planned_base = convert_currency(
             planned_native, asset.currency, base_currency, date=summary_date
@@ -144,6 +149,7 @@ def build_liquidity_monthly_summary(*, user, fiscal_year: int, month: int) -> di
         month=month,
         get_base_currency_for_user_fn=services_facade.get_base_currency_for_user,
         get_liquidity_asset_queryset_for_user_fn=services_facade.get_liquidity_asset_queryset_for_user,
+        get_effective_asset_amount_fn=services_facade.get_effective_asset_amount,
         last_day_of_month_fn=services_facade._last_day_of_month,
         serialize_money_fn=services_facade._serialize_money,
     )

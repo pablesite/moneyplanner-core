@@ -5,30 +5,64 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0022_alter_asset_annual_interest_tae_and_more'),
+        ("net_worth", "0022_alter_asset_annual_interest_tae_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='building_annual_depreciation_percent',
-            field=models.DecimalField(blank=True, decimal_places=2, help_text='Depreciacion anual de la construccion en porcentaje.', max_digits=5, null=True, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)]),
+            model_name="asset",
+            name="building_annual_depreciation_percent",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="Depreciacion anual de la construccion en porcentaje.",
+                max_digits=5,
+                null=True,
+                validators=[
+                    django.core.validators.MinValueValidator(0),
+                    django.core.validators.MaxValueValidator(100),
+                ],
+            ),
         ),
         migrations.AddField(
-            model_name='asset',
-            name='land_annual_appreciation_percent',
-            field=models.DecimalField(blank=True, decimal_places=3, help_text='Revalorizacion anual del suelo en porcentaje.', max_digits=6, null=True, validators=[django.core.validators.MinValueValidator(-100), django.core.validators.MaxValueValidator(200)]),
+            model_name="asset",
+            name="land_annual_appreciation_percent",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=3,
+                help_text="Revalorizacion anual del suelo en porcentaje.",
+                max_digits=6,
+                null=True,
+                validators=[
+                    django.core.validators.MinValueValidator(-100),
+                    django.core.validators.MaxValueValidator(200),
+                ],
+            ),
         ),
         migrations.AddField(
-            model_name='asset',
-            name='land_value_share_percent',
-            field=models.DecimalField(blank=True, decimal_places=2, help_text='Porcentaje del valor inicial atribuible al suelo para valoracion automatica de vivienda.', max_digits=5, null=True, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)]),
+            model_name="asset",
+            name="land_value_share_percent",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="Porcentaje del valor inicial atribuible al suelo para valoracion automatica de vivienda.",
+                max_digits=5,
+                null=True,
+                validators=[
+                    django.core.validators.MinValueValidator(0),
+                    django.core.validators.MaxValueValidator(100),
+                ],
+            ),
         ),
         migrations.AddField(
-            model_name='asset',
-            name='valuation_model',
-            field=models.CharField(choices=[('manual', 'Manual'), ('real_estate_auto', 'Vivienda automatica')], default='manual', help_text='Modelo de valoracion del activo. En vivienda habitual puede usarse valoracion automatica por suelo + construccion.', max_length=24),
+            model_name="asset",
+            name="valuation_model",
+            field=models.CharField(
+                choices=[("manual", "Manual"), ("real_estate_auto", "Vivienda automatica")],
+                default="manual",
+                help_text="Modelo de valoracion del activo. En vivienda habitual puede usarse valoracion automatica por suelo + construccion.",
+                max_length=24,
+            ),
         ),
     ]

@@ -53,7 +53,20 @@ function makeState(overrides: Record<string, unknown> = {}) {
     assets: [],
     liabilities: [],
     snapshots: [],
+    timeline: { rows: [], base_currency: 'EUR' },
+    timelineLoading: false,
+    positionTimeline: { rows: [], base_currency: 'EUR', position_type: 'asset', position_id: 1 },
+    positionTimelineLoading: false,
+    positionActivityLoading: false,
+    assetValuations: [],
+    liabilityValuations: [],
+    investmentEvents: [],
+    liquidityEvents: [],
+    liabilityEvents: [],
     refreshAll: vi.fn(),
+    fetchTimeline: vi.fn(),
+    fetchPositionTimeline: vi.fn(),
+    fetchPositionActivity: vi.fn(),
     createTodaySnapshot: vi.fn(),
     updateBaseCurrency: vi.fn(),
     updateAsset: vi.fn(),
@@ -92,6 +105,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     summaryAssets: ref('1000'),
     summaryLiabilities: ref('250'),
     summaryNetWorth: ref('750'),
+    byCategoryKeys: ref(['cash']),
     byCategoryLabels: ref(['Liquidez']),
     byCategoryAssets: ref([1000]),
     byCategoryLiabilities: ref([250]),
@@ -127,6 +141,9 @@ describe('NetWorthView', () => {
 
     expect(wrapper.text()).toContain('Patrimonio');
     expect(wrapper.text()).toContain('Patrimonio neto');
+    expect(wrapper.text()).toContain('Evolucion temporal');
+    expect(wrapper.text()).toContain('Detalle por posicion');
+    expect(wrapper.text()).toContain('Elige una posicion para inspeccionar su curva temporal');
     expect(wrapper.text()).toContain('Capital propio sobre activos');
     expect(wrapper.text()).toContain('Ratio deuda / activos');
     expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
@@ -172,5 +189,106 @@ describe('NetWorthView', () => {
     expect(state.store.refreshAll).toHaveBeenCalled();
     expect(state.store.createTodaySnapshot).toHaveBeenCalled();
     expect(state.confirmDeleteSnapshot).toHaveBeenCalledWith(5);
+  });
+
+  it('requests timeline when changing the category filter', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        timeline: {
+          base_currency: 'EUR',
+          rows: [
+            {
+              date: '2026-03-31',
+              net_worth: '750',
+              total_assets: '1000',
+              total_liabilities: '250',
+            },
+          ],
+        },
+        fetchTimeline: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('button.ui-nw-timeline-filter').trigger('click');
+    expect(state.store.fetchTimeline).toHaveBeenCalledWith(null, 'asset');
+  });
+
+  it('requests liability timeline when selecting a liability category filter', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        timeline: {
+          base_currency: 'EUR',
+          rows: [
+            {
+              date: '2026-02-28',
+              net_worth: '750',
+              total_assets: '1000',
+              total_liabilities: '250',
+            },
+          ],
+        },
+        fetchTimeline: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+    const liabilityFilter = wrapper
+      .findAll('button.ui-nw-timeline-filter')
+      .find((button) => button.text().includes('Pasivos'));
+
+    expect(liabilityFilter).toBeTruthy();
+    await liabilityFilter!.trigger('click');
+    expect(state.store.fetchTimeline).toHaveBeenCalledWith('mortgage', 'liability');
+  });
+
+  it('fetches per-position timeline when selecting an asset', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta nomina',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        liabilities: [],
+        fetchPositionTimeline: vi.fn(),
+        fetchPositionActivity: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('button.ui-nw-position-button').trigger('click');
+    expect(state.store.fetchPositionTimeline).toHaveBeenCalledWith('asset', 11);
+    expect(state.store.fetchPositionActivity).toHaveBeenCalledWith('asset', 11, 'cash');
   });
 });

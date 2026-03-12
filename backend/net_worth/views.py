@@ -8,11 +8,26 @@ from rest_framework.views import APIView
 
 from config.view_mixins import UserScopedQuerySetMixin
 from .api import raise_api_validation_error
-from .models import Asset, Liability, LiquidityMonthlyCheckin, NetWorthSnapshot
+from .models import (
+    Asset,
+    AssetValuation,
+    InvestmentAssetEvent,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
+    NetWorthSnapshot,
+)
 from .serializers import (
     AssetSerializer,
+    AssetValuationSerializer,
     EmptySerializer,
+    InvestmentAssetEventSerializer,
     LiabilitySerializer,
+    LiabilityEventSerializer,
+    LiabilityValuationSerializer,
+    LiquidityAssetEventSerializer,
     LiquidityMonthlyCheckinSerializer,
     NetWorthSnapshotSerializer,
 )
@@ -34,6 +49,12 @@ from .services_snapshots import (
 )
 from .services_snapshot_api import import_snapshots_bulk_from_request
 from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
+from .services_timelines import (
+    build_asset_timeline,
+    build_liability_timeline,
+    build_net_worth_timeline,
+    parse_timeline_query_params,
+)
 
 
 class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
@@ -58,6 +79,16 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         with transaction.atomic():
             delete_generated_budget_commitments_for_asset(asset=instance)
             instance.delete()
+
+    @action(detail=True, methods=["get"], url_path="timeline")
+    def timeline(self, request, pk=None):
+        asset = self.get_object()
+        params = parse_timeline_query_params(query_params=request.query_params)
+        try:
+            timeline = build_asset_timeline(asset=asset, end_date=params["end_date"])
+        except ValidationError as exc:
+            raise_api_validation_error(exc)
+        return Response(timeline)
 
 
 class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
@@ -86,6 +117,19 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
             delete_generated_budget_commitments_for_liability(liability=instance)
             instance.delete()
 
+    @action(detail=True, methods=["get"], url_path="timeline")
+    def timeline(self, request, pk=None):
+        liability = self.get_object()
+        params = parse_timeline_query_params(query_params=request.query_params)
+        try:
+            timeline = build_liability_timeline(
+                liability=liability,
+                end_date=params["end_date"],
+            )
+        except ValidationError as exc:
+            raise_api_validation_error(exc)
+        return Response(timeline)
+
 
 class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -101,6 +145,71 @@ class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelView
 
     def perform_update(self, serializer):
         serializer.save()
+
+
+class AssetValuationViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = AssetValuationSerializer
+    queryset = AssetValuation.objects.select_related("asset").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["asset_queryset"] = Asset.objects.filter(user=self.request.user, is_active=True)
+        return ctx
+
+
+class InvestmentAssetEventViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = InvestmentAssetEventSerializer
+    queryset = InvestmentAssetEvent.objects.select_related("asset").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["investment_asset_queryset"] = Asset.objects.filter(
+            user=self.request.user,
+            is_active=True,
+            category=Asset.Category.INVESTMENTS,
+        )
+        return ctx
+
+
+class LiquidityAssetEventViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = LiquidityAssetEventSerializer
+    queryset = LiquidityAssetEvent.objects.select_related("asset").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["liquidity_event_asset_queryset"] = Asset.objects.filter(
+            user=self.request.user,
+            is_active=True,
+            category=Asset.Category.CASH,
+        )
+        return ctx
+
+
+class LiabilityEventViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = LiabilityEventSerializer
+    queryset = LiabilityEvent.objects.select_related("liability").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["liability_event_queryset"] = Liability.objects.filter(
+            user=self.request.user, is_active=True
+        )
+        return ctx
+
+
+class LiabilityValuationViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = LiabilityValuationSerializer
+    queryset = LiabilityValuation.objects.select_related("liability").all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["liability_queryset"] = Liability.objects.filter(user=self.request.user, is_active=True)
+        return ctx
 
 
 class NetWorthSnapshotViewSet(
@@ -174,3 +283,21 @@ class LiquidityMonthlySummaryAPIView(APIView):
         except ValidationError as exc:
             raise_api_validation_error(exc)
         return Response(summary)
+
+
+class NetWorthTimelineAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        params = parse_timeline_query_params(query_params=request.query_params)
+        try:
+            timeline = build_net_worth_timeline(
+                user=request.user,
+                start_date=params["start_date"],
+                end_date=params["end_date"],
+                asset_category=params["asset_category"],
+                liability_category=params["liability_category"],
+            )
+        except ValidationError as exc:
+            raise_api_validation_error(exc)
+        return Response(timeline)

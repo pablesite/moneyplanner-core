@@ -5,20 +5,53 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0021_asset_deposit_term_months'),
+        ("net_worth", "0021_asset_deposit_term_months"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='asset',
-            name='annual_interest_tae',
-            field=models.DecimalField(blank=True, decimal_places=2, help_text='TAE anual en porcentaje. Se usa para liquidez remunerada (cuentas bancarias, depositos a corto plazo y spot/earn cripto).', max_digits=5, null=True, validators=[django.core.validators.MinValueValidator(0)]),
+            model_name="asset",
+            name="annual_interest_tae",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="TAE anual en porcentaje. Se usa para liquidez remunerada (cuentas bancarias, depositos a corto plazo y spot/earn cripto).",
+                max_digits=5,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(0)],
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='subcategory',
-            field=models.CharField(choices=[('bank_account', 'Cuenta bancaria'), ('short_term_deposit', 'Deposito a corto plazo'), ('wallet', 'Monedero'), ('crypto_spot_earn', 'Spot/Earn Cripto'), ('deposits', 'Depositos'), ('funds', 'Fondos'), ('etfs', 'ETFs'), ('roboadvisor', 'Roboadvisor'), ('stocks', 'Stocks'), ('pension_plans', 'Planes de pensiones'), ('cryptocurrencies', 'Criptomonedas'), ('real_estate_crowd', 'Crowdfunding Inmobiliario'), ('crowdlending', 'Crowdlending'), ('primary_home', 'Vivienda habitual'), ('second_home', 'Segunda vivienda'), ('rental', 'Rentas'), ('vehicles', 'Vehiculos'), ('technology', 'Tecnologia'), ('home_furnishings', 'Muebles vivienda'), ('sports_equipment', 'Equipamiento deportivo'), ('jewelry', 'Joyeria'), ('other', 'Otros')], default='other', max_length=48),
+            model_name="asset",
+            name="subcategory",
+            field=models.CharField(
+                choices=[
+                    ("bank_account", "Cuenta bancaria"),
+                    ("short_term_deposit", "Deposito a corto plazo"),
+                    ("wallet", "Monedero"),
+                    ("crypto_spot_earn", "Spot/Earn Cripto"),
+                    ("deposits", "Depositos"),
+                    ("funds", "Fondos"),
+                    ("etfs", "ETFs"),
+                    ("roboadvisor", "Roboadvisor"),
+                    ("stocks", "Stocks"),
+                    ("pension_plans", "Planes de pensiones"),
+                    ("cryptocurrencies", "Criptomonedas"),
+                    ("real_estate_crowd", "Crowdfunding Inmobiliario"),
+                    ("crowdlending", "Crowdlending"),
+                    ("primary_home", "Vivienda habitual"),
+                    ("second_home", "Segunda vivienda"),
+                    ("rental", "Rentas"),
+                    ("vehicles", "Vehiculos"),
+                    ("technology", "Tecnologia"),
+                    ("home_furnishings", "Muebles vivienda"),
+                    ("sports_equipment", "Equipamiento deportivo"),
+                    ("jewelry", "Joyeria"),
+                    ("other", "Otros"),
+                ],
+                default="other",
+                max_length=48,
+            ),
         ),
     ]

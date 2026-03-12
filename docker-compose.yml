@@ -37,6 +37,29 @@ services:
       python manage.py runserver 0.0.0.0:8000
       "
 
+  fx_sync:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: core_fx_sync
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      sh -c "
+      while true; do
+        if [ \"$${FX_SYNC_ENABLED:-1}\" = \"1\" ]; then
+          python manage.py sync_fx_rates --for-active-positions --quote-currency $${FX_SYNC_QUOTE_CURRENCY:-EUR} || true;
+        fi;
+        sleep $${FX_SYNC_INTERVAL_SECONDS:-86400};
+      done
+      "
+
   frontend:
     build:
       context: ./frontend

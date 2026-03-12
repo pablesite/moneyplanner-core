@@ -15,11 +15,26 @@ from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
 from memberships.models import FamilyMember, Ownership, OwnershipSplit
-from ..models import Asset, AssetImprovement, Liability, LiquidityMonthlyCheckin
+from ..models import (
+    Asset,
+    AssetImprovement,
+    AssetValuation,
+    InvestmentAssetEvent,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
+)
 from ..serializers import (
     AssetSerializer,
+    AssetValuationSerializer,
     EmptySerializer,
+    InvestmentAssetEventSerializer,
     LiabilitySerializer,
+    LiabilityEventSerializer,
+    LiabilityValuationSerializer,
+    LiquidityAssetEventSerializer,
     NetWorthSnapshotSerializer,
 )
 from ..services import (
@@ -34,6 +49,10 @@ from ..services import (
     estimate_liability_outstanding_amount_simple,
     get_base_currency_for_user,
     get_effective_asset_amount,
+    get_effective_liability_amount,
+    get_investment_asset_events_delta,
+    get_liability_events_delta,
+    get_liquidity_asset_events_delta,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
     get_amount_base_value,
@@ -42,6 +61,11 @@ from ..services import (
     validate_asset_payload,
     validate_liability_payload,
     validate_snapshot_payload,
+)
+from ..services_timelines import (
+    build_asset_timeline,
+    build_liability_timeline,
+    build_net_worth_timeline,
 )
 from ..views import NetWorthSnapshotViewSet
 
@@ -770,6 +794,368 @@ class NetWorthServicesTests(TestCase):
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 1))
         self.assertEqual(effective, Decimal("0.03725777"))
 
+    def test_get_effective_asset_amount_uses_latest_asset_valuation_checkpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        AssetValuation.objects.create(
+            user=self.user,
+            asset=asset,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("1125.00"),
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("1125.00"),
+        )
+
+    def test_get_effective_asset_amount_investment_applies_events_after_manual_checkpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo indexado",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        AssetValuation.objects.create(
+            user=self.user,
+            asset=asset,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("1200.00"),
+        )
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 3, 10),
+            event_type=InvestmentAssetEvent.EventType.CONTRIBUTION,
+            amount=Decimal("100.00"),
+        )
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 3, 20),
+            event_type=InvestmentAssetEvent.EventType.FEE,
+            amount=Decimal("10.00"),
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("1290.00"),
+        )
+
+    def test_get_investment_asset_events_delta_skips_non_reinvested_passive_income(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Dividendos",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.STOCKS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 2, 1),
+            event_type=InvestmentAssetEvent.EventType.PASSIVE_INCOME,
+            amount=Decimal("20.00"),
+            is_reinvested=False,
+        )
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 2, 2),
+            event_type=InvestmentAssetEvent.EventType.PASSIVE_INCOME,
+            amount=Decimal("15.00"),
+            is_reinvested=True,
+        )
+
+        self.assertEqual(
+            get_investment_asset_events_delta(asset=asset, as_of_date=date(2026, 2, 28)),
+            Decimal("15.00"),
+        )
+
+    def test_get_effective_asset_amount_uses_liquidity_checkin_as_monthly_checkpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta nomina",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=asset,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("1420.00"),
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("1420.00"),
+        )
+
+    def test_get_effective_asset_amount_cash_applies_liquidity_events_after_checkin(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta operativa",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=asset,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("1200.00"),
+        )
+        LiquidityAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 3, 10),
+            event_type=LiquidityAssetEvent.EventType.OUTFLOW,
+            amount=Decimal("50.00"),
+        )
+        LiquidityAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 3, 20),
+            event_type=LiquidityAssetEvent.EventType.INTEREST,
+            amount=Decimal("2.00"),
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("1152.00"),
+        )
+
+    def test_get_liquidity_asset_events_delta_applies_signs(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta ahorro",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        LiquidityAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 2, 1),
+            event_type=LiquidityAssetEvent.EventType.INFLOW,
+            amount=Decimal("100.00"),
+        )
+        LiquidityAssetEvent.objects.create(
+            user=self.user,
+            asset=asset,
+            event_date=date(2026, 2, 2),
+            event_type=LiquidityAssetEvent.EventType.FEE,
+            amount=Decimal("5.00"),
+        )
+
+        self.assertEqual(
+            get_liquidity_asset_events_delta(asset=asset, as_of_date=date(2026, 2, 28)),
+            Decimal("95.00"),
+        )
+
+    def test_get_effective_liability_amount_uses_latest_liability_valuation_checkpoint(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            annual_interest_tae=Decimal("5.00"),
+            amount=Decimal("9000.00"),
+            principal_amount=Decimal("10000.00"),
+            term_months=24,
+            rate_type=Liability.RateType.FIXED,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+            is_active=True,
+        )
+        LiabilityValuation.objects.create(
+            user=self.user,
+            liability=liability,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("8765.00"),
+        )
+
+        self.assertEqual(
+            get_effective_liability_amount(liability=liability, as_of_date=date(2026, 3, 31)),
+            Decimal("8765.00"),
+        )
+
+    def test_get_effective_liability_amount_credit_card_applies_events(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Visa",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            annual_interest_tae=Decimal("18.00"),
+            amount=Decimal("500.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        LiabilityEvent.objects.create(
+            user=self.user,
+            liability=liability,
+            event_date=date(2026, 2, 1),
+            event_type=LiabilityEvent.EventType.CHARGE,
+            amount=Decimal("100.00"),
+        )
+        LiabilityEvent.objects.create(
+            user=self.user,
+            liability=liability,
+            event_date=date(2026, 2, 10),
+            event_type=LiabilityEvent.EventType.PAYMENT,
+            amount=Decimal("40.00"),
+        )
+        LiabilityEvent.objects.create(
+            user=self.user,
+            liability=liability,
+            event_date=date(2026, 2, 28),
+            event_type=LiabilityEvent.EventType.INTEREST,
+            amount=Decimal("5.00"),
+        )
+
+        self.assertEqual(
+            get_effective_liability_amount(liability=liability, as_of_date=date(2026, 2, 28)),
+            Decimal("565.00"),
+        )
+
+    def test_get_liability_events_delta_applies_signs(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Mastercard",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            annual_interest_tae=Decimal("18.00"),
+            amount=Decimal("300.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        LiabilityEvent.objects.create(
+            user=self.user,
+            liability=liability,
+            event_date=date(2026, 2, 1),
+            event_type=LiabilityEvent.EventType.CHARGE,
+            amount=Decimal("80.00"),
+        )
+        LiabilityEvent.objects.create(
+            user=self.user,
+            liability=liability,
+            event_date=date(2026, 2, 2),
+            event_type=LiabilityEvent.EventType.PAYMENT,
+            amount=Decimal("25.00"),
+        )
+
+        self.assertEqual(
+            get_liability_events_delta(liability=liability, as_of_date=date(2026, 2, 28)),
+            Decimal("55.00"),
+        )
+
+    def test_build_asset_and_liability_timeline_return_monthly_rows(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 10),
+            is_active=True,
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            amount=Decimal("400.00"),
+            start_date=date(2026, 1, 5),
+            is_active=True,
+        )
+        AssetValuation.objects.create(
+            user=self.user,
+            asset=asset,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("1100.00"),
+        )
+        LiabilityValuation.objects.create(
+            user=self.user,
+            liability=liability,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("350.00"),
+        )
+
+        asset_timeline = build_asset_timeline(asset=asset, end_date=date(2026, 3, 31))
+        liability_timeline = build_liability_timeline(
+            liability=liability, end_date=date(2026, 3, 31)
+        )
+
+        self.assertEqual(
+            [row["date"] for row in asset_timeline["rows"]],
+            ["2026-01-31", "2026-02-28", "2026-03-31"],
+        )
+        self.assertEqual(asset_timeline["rows"][-1]["value"], "1100.00")
+        self.assertEqual(liability_timeline["rows"][-1]["value"], "350.00")
+
+    def test_build_net_worth_timeline_filters_by_category(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        timeline = build_net_worth_timeline(
+            user=self.user,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 2, 28),
+            asset_category=Asset.Category.INVESTMENTS,
+        )
+
+        self.assertEqual(len(timeline["rows"]), 2)
+        self.assertEqual(timeline["rows"][0]["total_assets"], "1000.00")
+
     def test_calculate_totals_uses_effective_asset_amount_for_auto_home_valuation(self):
         Asset.objects.create(
             user=self.user,
@@ -1011,6 +1397,52 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(liability_res.data["start_date"], "2021-06-15")
+
+    @patch("net_worth.serializers.ensure_market_history_safe")
+    def test_asset_create_backfills_fx_history_for_foreign_currency(self, backfill_mock):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cuenta USD",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "currency": "USD",
+                "start_date": "2025-03-03",
+                "annual_interest_tae": "0.00",
+                "amount": "1000.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        backfill_mock.assert_called_once_with(
+            from_currency="USD",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+        )
+
+    @patch("net_worth.serializers.ensure_market_history_safe")
+    def test_liability_create_backfills_fx_history_for_foreign_currency(self, backfill_mock):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Tarjeta USD",
+                "category": Liability.Category.CREDIT_CARD,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "USD",
+                "start_date": "2025-03-03",
+                "annual_interest_tae": "18.00",
+                "amount": "300.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        backfill_mock.assert_called_once_with(
+            from_currency="USD",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+        )
 
     def test_asset_create_accepts_short_term_deposit_duration(self):
         response = self.client.post(
@@ -2675,6 +3107,244 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(snapshots_res.status_code, status.HTTP_200_OK, snapshots_res.data)
         self.assertEqual([row["id"] for row in snapshots_res.data], [own_snapshot.id])
 
+    def test_asset_valuation_create_and_asset_timeline_endpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 15),
+            is_active=True,
+        )
+
+        create_res = self.client.post(
+            "/api/net-worth/asset-valuations/",
+            {
+                "asset_id": asset.id,
+                "valuation_date": "2026-02-28",
+                "value": "1150.00",
+                "source": "manual_checkpoint",
+                "note": "Cierre mensual",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["asset_ref"], asset.id)
+
+        timeline_res = self.client.get(
+            f"/api/net-worth/assets/{asset.id}/timeline/?end_date=2026-03-31"
+        )
+        self.assertEqual(timeline_res.status_code, status.HTTP_200_OK, timeline_res.data)
+        self.assertEqual(timeline_res.data["rows"][-1]["value"], "1150.00")
+
+    def test_investment_event_create_and_asset_timeline_endpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo global",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        create_res = self.client.post(
+            "/api/net-worth/investment-events/",
+            {
+                "asset_id": asset.id,
+                "event_date": "2026-02-15",
+                "event_type": "contribution",
+                "amount": "200.00",
+                "note": "Aportacion extra",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["asset_ref"], asset.id)
+
+        timeline_res = self.client.get(
+            f"/api/net-worth/assets/{asset.id}/timeline/?end_date=2026-02-28"
+        )
+        self.assertEqual(timeline_res.status_code, status.HTTP_200_OK, timeline_res.data)
+        self.assertEqual(timeline_res.data["rows"][-1]["value"], "1200.00")
+
+    def test_investment_event_create_rejects_non_investment_asset(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            "/api/net-worth/investment-events/",
+            {
+                "asset_id": asset.id,
+                "event_date": "2026-02-15",
+                "event_type": "contribution",
+                "amount": "200.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("asset_id", response.data["error"]["details"])
+
+    def test_liquidity_event_create_and_asset_timeline_endpoint(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta corriente",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        create_res = self.client.post(
+            "/api/net-worth/liquidity-events/",
+            {
+                "asset_id": asset.id,
+                "event_date": "2026-02-15",
+                "event_type": "outflow",
+                "amount": "120.00",
+                "note": "Recibo",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["asset_ref"], asset.id)
+
+        timeline_res = self.client.get(
+            f"/api/net-worth/assets/{asset.id}/timeline/?end_date=2026-02-28"
+        )
+        self.assertEqual(timeline_res.status_code, status.HTTP_200_OK, timeline_res.data)
+        self.assertEqual(timeline_res.data["rows"][-1]["value"], "880.00")
+
+    def test_liquidity_event_create_rejects_non_cash_asset(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            is_active=True,
+        )
+
+        response = self.client.post(
+            "/api/net-worth/liquidity-events/",
+            {
+                "asset_id": asset.id,
+                "event_date": "2026-02-15",
+                "event_type": "inflow",
+                "amount": "200.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("asset_id", response.data["error"]["details"])
+
+    def test_liability_event_create_and_liability_timeline_endpoint(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Visa",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            annual_interest_tae=Decimal("18.00"),
+            amount=Decimal("500.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        create_res = self.client.post(
+            "/api/net-worth/liability-events/",
+            {
+                "liability_id": liability.id,
+                "event_date": "2026-02-15",
+                "event_type": "charge",
+                "amount": "120.00",
+                "note": "Compra",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["liability_ref"], liability.id)
+
+        timeline_res = self.client.get(
+            f"/api/net-worth/liabilities/{liability.id}/timeline/?end_date=2026-02-28"
+        )
+        self.assertEqual(timeline_res.status_code, status.HTTP_200_OK, timeline_res.data)
+        self.assertEqual(timeline_res.data["rows"][-1]["value"], "620.00")
+
+    def test_liability_valuation_create_and_liability_timeline_endpoint(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            start_date=date(2026, 1, 10),
+            is_active=True,
+        )
+
+        create_res = self.client.post(
+            "/api/net-worth/liability-valuations/",
+            {
+                "liability_id": liability.id,
+                "valuation_date": "2026-02-28",
+                "value": "420.00",
+                "source": "manual_checkpoint",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        self.assertEqual(create_res.data["liability_ref"], liability.id)
+
+        timeline_res = self.client.get(
+            f"/api/net-worth/liabilities/{liability.id}/timeline/?end_date=2026-03-31"
+        )
+        self.assertEqual(timeline_res.status_code, status.HTTP_200_OK, timeline_res.data)
+        self.assertEqual(timeline_res.data["rows"][-1]["value"], "420.00")
+
+    def test_net_worth_timeline_endpoint_filters_asset_category(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        response = self.client.get(
+            "/api/net-worth/timeline/?start_date=2026-01-01&end_date=2026-02-28&asset_category=investments"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(len(response.data["rows"]), 2)
+        self.assertEqual(response.data["rows"][0]["total_assets"], "1000.00")
+
     @patch(
         "net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x")
     )
@@ -2807,6 +3477,141 @@ class NetWorthSerializerUnitTests(TestCase):
             },
         )
         self.assertIsNotNone(serializer.data["estimated_monthly_payment_amount"])
+
+    def test_asset_valuation_serializer_create(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        serializer = AssetValuationSerializer(
+            data={
+                "asset_id": asset.id,
+                "valuation_date": "2026-02-28",
+                "value": "1100.00",
+                "source": "manual_checkpoint",
+            },
+            context={
+                "request": self.request,
+                "asset_queryset": Asset.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        valuation = serializer.save()
+        self.assertEqual(valuation.user_id, self.user.id)
+
+    def test_investment_asset_event_serializer_create(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        serializer = InvestmentAssetEventSerializer(
+            data={
+                "asset_id": asset.id,
+                "event_date": "2026-02-28",
+                "event_type": "passive_income",
+                "amount": "25.00",
+                "is_reinvested": False,
+            },
+            context={
+                "request": self.request,
+                "investment_asset_queryset": Asset.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        event = serializer.save()
+        self.assertEqual(event.user_id, self.user.id)
+
+    def test_liquidity_asset_event_serializer_create(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        serializer = LiquidityAssetEventSerializer(
+            data={
+                "asset_id": asset.id,
+                "event_date": "2026-02-28",
+                "event_type": "interest",
+                "amount": "5.00",
+            },
+            context={
+                "request": self.request,
+                "liquidity_event_asset_queryset": Asset.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        event = serializer.save()
+        self.assertEqual(event.user_id, self.user.id)
+
+    def test_liability_event_serializer_create(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Visa",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            annual_interest_tae=Decimal("18.00"),
+            amount=Decimal("500.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        serializer = LiabilityEventSerializer(
+            data={
+                "liability_id": liability.id,
+                "event_date": "2026-02-28",
+                "event_type": "payment",
+                "amount": "50.00",
+            },
+            context={
+                "request": self.request,
+                "liability_event_queryset": Liability.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        event = serializer.save()
+        self.assertEqual(event.user_id, self.user.id)
+
+    def test_liability_valuation_serializer_create(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            amount=Decimal("500.00"),
+            is_active=True,
+        )
+        serializer = LiabilityValuationSerializer(
+            data={
+                "liability_id": liability.id,
+                "valuation_date": "2026-02-28",
+                "value": "450.00",
+                "source": "manual_checkpoint",
+            },
+            context={
+                "request": self.request,
+                "liability_queryset": Liability.objects.filter(user=self.user),
+            },
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        valuation = serializer.save()
+        self.assertEqual(valuation.user_id, self.user.id)
 
     def test_snapshot_viewset_serializer_class_switch(self):
         view = NetWorthSnapshotViewSet()

@@ -8,6 +8,14 @@ const mocks = vi.hoisted(() => ({
     getAssets: vi.fn(),
     getLiabilities: vi.fn(),
     getSnapshots: vi.fn(),
+    getTimeline: vi.fn(),
+    getAssetTimeline: vi.fn(),
+    getLiabilityTimeline: vi.fn(),
+    getAssetValuations: vi.fn(),
+    getLiabilityValuations: vi.fn(),
+    getInvestmentEvents: vi.fn(),
+    getLiquidityEvents: vi.fn(),
+    getLiabilityEvents: vi.fn(),
     createSnapshotFromCurrent: vi.fn(),
     deleteSnapshot: vi.fn(),
     createAsset: vi.fn(),
@@ -54,6 +62,9 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [{ id: 1 }] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [{ id: 2 }] });
     mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [{ id: 3 }] });
+    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({
+      data: { rows: [], base_currency: 'EUR' },
+    });
     const store = useNetWorthStore();
 
     await store.refreshAll();
@@ -62,6 +73,7 @@ describe('net worth store (core)', () => {
     expect(store.assets).toEqual([{ id: 1, ownership_ref: null }]);
     expect(store.liabilities).toEqual([{ id: 2, ownership_ref: null }]);
     expect(store.snapshots).toEqual([{ id: 3 }]);
+    expect(store.timeline).toEqual({ rows: [], base_currency: 'EUR' });
     expect(store.loading).toBe(false);
   });
 
@@ -94,6 +106,7 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [] });
+    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({ data: { rows: [] } });
     const store = useNetWorthStore();
 
     await store.createAsset({ name: 'Cash' });
@@ -125,6 +138,7 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [] });
+    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({ data: { rows: [] } });
     const store = useNetWorthStore();
 
     await store.deleteSnapshot(5);
@@ -151,6 +165,86 @@ describe('net worth store (core)', () => {
     await store.updateBaseCurrency('EUR');
     expect(mocks.coreNetWorthApi.updateSettings).toHaveBeenCalledWith({ base_currency: 'EUR' });
     expect(store.baseCurrency).toBe('EUR');
+  });
+
+  it('fetches timeline with category filter', async () => {
+    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({
+      data: {
+        rows: [{ date: '2026-01-31', net_worth: '100.00' }],
+        base_currency: 'EUR',
+        filters: { asset_category: 'investments', liability_category: null },
+      },
+    });
+    const store = useNetWorthStore();
+
+    await store.fetchTimeline('investments');
+
+    expect(mocks.coreNetWorthApi.getTimeline).toHaveBeenCalledWith({
+      asset_category: 'investments',
+      liability_category: null,
+    });
+    expect(store.timelineCategoryFilter).toBe('investments');
+    expect(store.timelineCategoryFilterType).toBe('asset');
+    expect(store.timeline?.filters.asset_category).toBe('investments');
+    expect(store.timelineLoading).toBe(false);
+  });
+
+  it('fetches position timeline for assets and liabilities', async () => {
+    mocks.coreNetWorthApi.getAssetTimeline.mockResolvedValue({
+      data: {
+        position_type: 'asset',
+        position_id: 4,
+        rows: [{ date: '2026-03-31', value: '100' }],
+      },
+    });
+    mocks.coreNetWorthApi.getLiabilityTimeline.mockResolvedValue({
+      data: {
+        position_type: 'liability',
+        position_id: 7,
+        rows: [{ date: '2026-03-31', value: '50' }],
+      },
+    });
+    const store = useNetWorthStore();
+
+    await store.fetchPositionTimeline('asset', 4);
+    expect(mocks.coreNetWorthApi.getAssetTimeline).toHaveBeenCalledWith(4);
+    expect(store.positionTimeline?.position_id).toBe(4);
+
+    await store.fetchPositionTimeline('liability', 7);
+    expect(mocks.coreNetWorthApi.getLiabilityTimeline).toHaveBeenCalledWith(7);
+    expect(store.positionTimeline?.position_type).toBe('liability');
+    expect(store.positionTimelineLoading).toBe(false);
+  });
+
+  it('fetches position activity for asset and liability modes', async () => {
+    mocks.coreNetWorthApi.getAssetValuations.mockResolvedValue({
+      data: [{ id: 1, asset_ref: 4, value: '100', valuation_date: '2026-03-31', source: 'manual' }],
+    });
+    mocks.coreNetWorthApi.getInvestmentEvents.mockResolvedValue({
+      data: [
+        { id: 2, asset_ref: 4, amount: '20', event_date: '2026-03-15', event_type: 'contribution' },
+      ],
+    });
+    mocks.coreNetWorthApi.getLiabilityValuations.mockResolvedValue({
+      data: [
+        { id: 3, liability_ref: 7, value: '50', valuation_date: '2026-03-31', source: 'manual' },
+      ],
+    });
+    mocks.coreNetWorthApi.getLiabilityEvents.mockResolvedValue({
+      data: [
+        { id: 4, liability_ref: 7, amount: '10', event_date: '2026-03-18', event_type: 'payment' },
+      ],
+    });
+    const store = useNetWorthStore();
+
+    await store.fetchPositionActivity('asset', 4, 'investments');
+    expect(store.assetValuations).toHaveLength(1);
+    expect(store.investmentEvents).toHaveLength(1);
+
+    await store.fetchPositionActivity('liability', 7);
+    expect(store.liabilityValuations).toHaveLength(1);
+    expect(store.liabilityEvents).toHaveLength(1);
+    expect(store.positionActivityLoading).toBe(false);
   });
 
   it('maps settings and update errors', async () => {

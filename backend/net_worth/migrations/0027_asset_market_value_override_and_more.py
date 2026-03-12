@@ -5,20 +5,30 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0026_asset_investment_contribution_frequency'),
+        ("net_worth", "0026_asset_investment_contribution_frequency"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='market_value_override',
-            field=models.DecimalField(blank=True, decimal_places=8, help_text='Valor de mercado manual del activo (marca a mercado). Si se informa en inversiones, prevalece sobre el valor calculado por aportaciones.', max_digits=20, null=True, validators=[django.core.validators.MinValueValidator(0)]),
+            model_name="asset",
+            name="market_value_override",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=8,
+                help_text="Valor de mercado manual del activo (marca a mercado). Si se informa en inversiones, prevalece sobre el valor calculado por aportaciones.",
+                max_digits=20,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(0)],
+            ),
         ),
         migrations.AddField(
-            model_name='asset',
-            name='market_value_override_date',
-            field=models.DateField(blank=True, help_text='Fecha de la ultima valoracion manual del activo (as-of).', null=True),
+            model_name="asset",
+            name="market_value_override_date",
+            field=models.DateField(
+                blank=True,
+                help_text="Fecha de la ultima valoracion manual del activo (as-of).",
+                null=True,
+            ),
         ),
     ]

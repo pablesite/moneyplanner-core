@@ -12,7 +12,15 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from core.models import InflationIndex
 from core.services import convert_currency
 
-from .models import ASSET_SUBCATEGORY_MAP, Asset, AssetImprovement
+from .models import (
+    ASSET_SUBCATEGORY_MAP,
+    Asset,
+    AssetImprovement,
+    AssetValuation,
+    InvestmentAssetEvent,
+    LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
+)
 
 ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
     Asset.Subcategory.BANK_ACCOUNT,
@@ -74,18 +82,16 @@ def _validate_periodic_investment_payload(
     purchase_value,
 ) -> None:
     if expected_end_date is not None and start_date and expected_end_date < start_date:
-        raise DRFValidationError({"expected_end_date": ("Debe ser igual o posterior a start_date.")})
+        raise DRFValidationError(
+            {"expected_end_date": ("Debe ser igual o posterior a start_date.")}
+        )
     if investment_contribution_frequency not in (
         Asset.InvestmentContributionFrequency.MONTHLY,
         Asset.InvestmentContributionFrequency.WEEKLY,
         None,
     ):
         raise DRFValidationError(
-            {
-                "investment_contribution_frequency": (
-                    "Frecuencia invalida. Usa mensual o semanal."
-                )
-            }
+            {"investment_contribution_frequency": ("Frecuencia invalida. Usa mensual o semanal.")}
         )
     if monthly_contribution_amount is None or Decimal(str(monthly_contribution_amount)) <= 0:
         raise DRFValidationError(
@@ -107,7 +113,9 @@ def _validate_periodic_investment_payload(
             }
         )
     if purchase_value is None:
-        raise DRFValidationError({"amount": ("Requerido para aportacion periodica en inversiones.")})
+        raise DRFValidationError(
+            {"amount": ("Requerido para aportacion periodica en inversiones.")}
+        )
 
 
 def _validate_market_value_override_payload(
@@ -119,11 +127,7 @@ def _validate_market_value_override_payload(
     if category != Asset.Category.INVESTMENTS:
         if market_value_override is not None or market_value_override_date is not None:
             raise DRFValidationError(
-                {
-                    "market_value_override": (
-                        "Solo aplica a activos de inversiones."
-                    )
-                }
+                {"market_value_override": ("Solo aplica a activos de inversiones.")}
             )
         return
     if market_value_override is not None and market_value_override_date is None:
@@ -211,8 +215,7 @@ def validate_asset_payload(
 
     is_periodic_investment = (
         category == Asset.Category.INVESTMENTS
-        and investment_contribution_mode
-        == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+        and investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
     )
     if is_periodic_investment:
         _validate_periodic_investment_payload(
@@ -414,20 +417,25 @@ def _get_degressive_remaining_ratio(
 
 def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
-    if (
-        asset.category == Asset.Category.INVESTMENTS
-        and asset.market_value_override is not None
-    ):
-        return Decimal(asset.market_value_override)
+    if asset.category == Asset.Category.INVESTMENTS:
+        return _get_effective_investment_asset_amount(asset=asset, as_of_date=ref_date)
+    if asset.category == Asset.Category.CASH:
+        return _get_effective_cash_asset_amount(asset=asset, as_of_date=ref_date)
+
+    manual_override = _get_latest_asset_manual_value(asset=asset, as_of_date=ref_date)
+    if manual_override is not None:
+        return manual_override
 
     if (
         asset.category == Asset.Category.INVESTMENTS
-        and asset.investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+        and asset.investment_contribution_mode
+        == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
         and asset.monthly_contribution_amount is not None
         and asset.monthly_contribution_amount > 0
         and (
             not str(asset.investment_contribution_currency or "").strip()
-            or str(asset.investment_contribution_currency).strip().upper() == str(asset.currency).strip().upper()
+            or str(asset.investment_contribution_currency).strip().upper()
+            == str(asset.currency).strip().upper()
         )
     ):
         accrued_contributions = sum(
@@ -526,6 +534,260 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
             as_of_date=ref_date,
         )
     return land_amount + building_amount + improvements_total
+
+
+def _get_effective_investment_asset_amount(*, asset: Asset, as_of_date: date) -> Decimal:
+    anchor_date = None
+    anchor_value = Decimal(asset.amount)
+
+    latest_manual = (
+        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+        .order_by("-valuation_date", "-updated_at", "-id")
+        .first()
+    )
+    latest_market_override = (
+        asset.market_value_override
+        if asset.market_value_override is not None
+        and asset.market_value_override_date is not None
+        and asset.market_value_override_date <= as_of_date
+        else None
+    )
+    latest_manual_date = latest_manual.valuation_date if latest_manual is not None else None
+    latest_market_override_date = (
+        asset.market_value_override_date if latest_market_override is not None else None
+    )
+    if latest_manual is not None and (
+        latest_market_override_date is None or latest_manual_date >= latest_market_override_date
+    ):
+        anchor_date = latest_manual.valuation_date
+        anchor_value = Decimal(latest_manual.value)
+    elif latest_market_override is not None:
+        return Decimal(latest_market_override)
+
+    event_delta = get_investment_asset_events_delta(
+        asset=asset,
+        from_date=anchor_date,
+        as_of_date=as_of_date,
+    )
+    scheduled_delta = _get_periodic_investment_delta_since_anchor(
+        asset=asset,
+        anchor_date=anchor_date,
+        as_of_date=as_of_date,
+    )
+    return anchor_value + event_delta + scheduled_delta
+
+
+def _get_effective_cash_asset_amount(*, asset: Asset, as_of_date: date) -> Decimal:
+    anchor_date = None
+    anchor_value = Decimal(asset.amount)
+
+    latest_manual = (
+        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+        .order_by("-valuation_date", "-updated_at", "-id")
+        .first()
+    )
+    latest_checkin = _get_latest_liquidity_checkin(asset=asset, as_of_date=as_of_date)
+    latest_manual_date = latest_manual.valuation_date if latest_manual is not None else None
+    latest_checkin_date = _get_liquidity_checkin_effective_date(latest_checkin)
+
+    if latest_manual is not None and (
+        latest_checkin_date is None or latest_manual_date >= latest_checkin_date
+    ):
+        anchor_date = latest_manual.valuation_date
+        anchor_value = Decimal(latest_manual.value)
+    elif latest_checkin is not None:
+        anchor_date = latest_checkin_date
+        anchor_value = Decimal(latest_checkin.closing_balance_real)
+
+    delta = get_liquidity_asset_events_delta(
+        asset=asset,
+        from_date=anchor_date,
+        as_of_date=as_of_date,
+    )
+    return anchor_value + delta
+
+
+def _get_latest_asset_manual_value(*, asset: Asset, as_of_date: date) -> Decimal | None:
+    valuation = (
+        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+        .order_by("-valuation_date", "-updated_at", "-id")
+        .first()
+    )
+    valuation_date = valuation.valuation_date if valuation is not None else None
+
+    liquidity_checkin = None
+    checkin_date = None
+    if asset.category == Asset.Category.CASH:
+        liquidity_checkin = _get_latest_liquidity_checkin(asset=asset, as_of_date=as_of_date)
+        checkin_date = _get_liquidity_checkin_effective_date(liquidity_checkin)
+
+    if valuation is not None and (checkin_date is None or valuation_date >= checkin_date):
+        return Decimal(valuation.value)
+    if liquidity_checkin is not None:
+        return Decimal(liquidity_checkin.closing_balance_real)
+    return None
+
+
+def validate_investment_asset_event_payload(
+    *,
+    asset: Asset | None,
+    event_date: date | None = None,
+    event_type: str | None,
+    amount,
+    is_reinvested: bool | None,
+) -> None:
+    if asset is None:
+        raise DRFValidationError({"asset_id": "Requerido."})
+    if asset.category != Asset.Category.INVESTMENTS:
+        raise DRFValidationError(
+            {"asset_id": "Solo se permiten eventos en activos de inversiones."}
+        )
+    if event_type not in {
+        InvestmentAssetEvent.EventType.CONTRIBUTION,
+        InvestmentAssetEvent.EventType.WITHDRAWAL,
+        InvestmentAssetEvent.EventType.FEE,
+        InvestmentAssetEvent.EventType.PASSIVE_INCOME,
+    }:
+        raise DRFValidationError({"event_type": "Tipo de evento invalido."})
+    if amount is None or Decimal(str(amount)) <= 0:
+        raise DRFValidationError({"amount": "Debe ser mayor que 0."})
+    if event_date is not None and event_date < asset.start_date:
+        raise DRFValidationError(
+            {"event_date": "Debe ser igual o posterior a start_date del activo."}
+        )
+    if event_type != InvestmentAssetEvent.EventType.PASSIVE_INCOME and is_reinvested is False:
+        raise DRFValidationError(
+            {
+                "is_reinvested": "Solo aplica a passive_income cuando se desea extraer el rendimiento."
+            }
+        )
+
+
+def validate_liquidity_asset_event_payload(
+    *,
+    asset: Asset | None,
+    event_date: date | None = None,
+    event_type: str | None,
+    amount,
+) -> None:
+    if asset is None:
+        raise DRFValidationError({"asset_id": "Requerido."})
+    if asset.category != Asset.Category.CASH:
+        raise DRFValidationError(
+            {"asset_id": "Solo se permiten movimientos en activos de liquidez."}
+        )
+    if event_type not in {
+        LiquidityAssetEvent.EventType.INFLOW,
+        LiquidityAssetEvent.EventType.OUTFLOW,
+        LiquidityAssetEvent.EventType.FEE,
+        LiquidityAssetEvent.EventType.INTEREST,
+    }:
+        raise DRFValidationError({"event_type": "Tipo de movimiento invalido."})
+    if amount is None or Decimal(str(amount)) <= 0:
+        raise DRFValidationError({"amount": "Debe ser mayor que 0."})
+    if event_date is not None and event_date < asset.start_date:
+        raise DRFValidationError(
+            {"event_date": "Debe ser igual o posterior a start_date del activo."}
+        )
+
+
+def get_investment_asset_events_delta(
+    *,
+    asset: Asset,
+    from_date: date | None = None,
+    as_of_date: date | None = None,
+) -> Decimal:
+    ref_date = as_of_date or timezone.localdate()
+    delta = Decimal("0")
+    events = InvestmentAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
+    if from_date is not None:
+        events = events.filter(event_date__gt=from_date)
+    for event in events:
+        amount = Decimal(event.amount)
+        if event.event_type == InvestmentAssetEvent.EventType.CONTRIBUTION:
+            delta += amount
+        elif event.event_type in (
+            InvestmentAssetEvent.EventType.WITHDRAWAL,
+            InvestmentAssetEvent.EventType.FEE,
+        ):
+            delta -= amount
+        elif (
+            event.event_type == InvestmentAssetEvent.EventType.PASSIVE_INCOME
+            and event.is_reinvested
+        ):
+            delta += amount
+    return delta
+
+
+def get_liquidity_asset_events_delta(
+    *,
+    asset: Asset,
+    from_date: date | None = None,
+    as_of_date: date | None = None,
+) -> Decimal:
+    ref_date = as_of_date or timezone.localdate()
+    delta = Decimal("0")
+    events = LiquidityAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
+    if from_date is not None:
+        events = events.filter(event_date__gt=from_date)
+    for event in events:
+        amount = Decimal(event.amount)
+        if event.event_type in (
+            LiquidityAssetEvent.EventType.INFLOW,
+            LiquidityAssetEvent.EventType.INTEREST,
+        ):
+            delta += amount
+        else:
+            delta -= amount
+    return delta
+
+
+def _get_periodic_investment_delta_since_anchor(
+    *,
+    asset: Asset,
+    anchor_date: date | None,
+    as_of_date: date,
+) -> Decimal:
+    if (
+        asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+        or asset.monthly_contribution_amount is None
+        or asset.monthly_contribution_amount <= 0
+        or (
+            str(asset.investment_contribution_currency or "").strip()
+            and str(asset.investment_contribution_currency).strip().upper()
+            != str(asset.currency).strip().upper()
+        )
+    ):
+        return Decimal("0")
+    return sum(
+        installment
+        for due_date, installment in _build_investment_contribution_schedule(
+            asset=asset, as_of_date=as_of_date
+        )
+        if anchor_date is None or due_date > anchor_date
+    )
+
+
+def _get_latest_liquidity_checkin(
+    *, asset: Asset, as_of_date: date
+) -> LiquidityMonthlyCheckin | None:
+    candidate = None
+    for row in LiquidityMonthlyCheckin.objects.filter(asset=asset).order_by(
+        "-fiscal_year", "-month", "-updated_at", "-id"
+    ):
+        effective_date = _get_liquidity_checkin_effective_date(row)
+        if effective_date is not None and effective_date <= as_of_date:
+            candidate = row
+            break
+    return candidate
+
+
+def _get_liquidity_checkin_effective_date(checkin: LiquidityMonthlyCheckin | None) -> date | None:
+    if checkin is None:
+        return None
+    return date(
+        checkin.fiscal_year, checkin.month, _last_day_of_month(checkin.fiscal_year, checkin.month)
+    )
 
 
 def get_effective_asset_improvement_amount(
@@ -653,7 +915,8 @@ def _build_investment_contribution_schedule(
 ) -> list[tuple[date, Decimal]]:
     if (
         asset.category != Asset.Category.INVESTMENTS
-        or asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+        or asset.investment_contribution_mode
+        != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
         or asset.monthly_contribution_amount is None
         or asset.monthly_contribution_amount <= 0
     ):
@@ -669,8 +932,7 @@ def _build_investment_contribution_schedule(
         return []
 
     frequency = (
-        asset.investment_contribution_frequency
-        or Asset.InvestmentContributionFrequency.MONTHLY
+        asset.investment_contribution_frequency or Asset.InvestmentContributionFrequency.MONTHLY
     )
     schedule: list[tuple[date, Decimal]] = []
     due_date = asset.start_date

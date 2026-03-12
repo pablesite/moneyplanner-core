@@ -26,6 +26,14 @@ describe('net worth api (core)', () => {
     await coreNetWorthApi.getAssets();
     await coreNetWorthApi.getLiabilities();
     await coreNetWorthApi.getSnapshots();
+    await coreNetWorthApi.getTimeline({ asset_category: 'investments' });
+    await coreNetWorthApi.getAssetTimeline(8);
+    await coreNetWorthApi.getLiabilityTimeline(9);
+    await coreNetWorthApi.getAssetValuations();
+    await coreNetWorthApi.getLiabilityValuations();
+    await coreNetWorthApi.getInvestmentEvents();
+    await coreNetWorthApi.getLiquidityEvents();
+    await coreNetWorthApi.getLiabilityEvents();
     await coreNetWorthApi.createSnapshotFromCurrent();
     await coreNetWorthApi.deleteSnapshot(3);
     await coreNetWorthApi.createAsset({ name: 'Cash' });
@@ -41,6 +49,16 @@ describe('net worth api (core)', () => {
     expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/assets/');
     expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/liabilities/');
     expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/snapshots/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/timeline/', {
+      params: { asset_category: 'investments' },
+    });
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/assets/8/timeline/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/liabilities/9/timeline/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/asset-valuations/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/liability-valuations/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/investment-events/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/liquidity-events/');
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/liability-events/');
     expect(mocks.api.post).toHaveBeenCalledWith('/api/net-worth/snapshots/from-current/');
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/net-worth/snapshots/3/');
     expect(mocks.api.post).toHaveBeenCalledWith('/api/net-worth/assets/', { name: 'Cash' });

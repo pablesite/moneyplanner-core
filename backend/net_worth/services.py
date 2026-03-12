@@ -16,8 +16,12 @@ from .services_assets import (
     create_asset_for_user as _create_asset_for_user,
     delete_generated_budget_commitments_for_asset as _asset_delete_generated_budget_commitments_for_asset,
     get_effective_asset_amount as _asset_get_effective_asset_amount,
+    get_investment_asset_events_delta as _asset_get_investment_asset_events_delta,
+    get_liquidity_asset_events_delta as _asset_get_liquidity_asset_events_delta,
     get_amount_base_value as _asset_get_amount_base_value,
     sync_generated_budget_commitments_for_asset as _asset_sync_generated_budget_commitments_for_asset,
+    validate_investment_asset_event_payload as _validate_investment_asset_event_payload,
+    validate_liquidity_asset_event_payload as _validate_liquidity_asset_event_payload,
     validate_asset_payload as _validate_asset_payload,
 )
 from .services_liquidity import (
@@ -31,10 +35,12 @@ from .services_liabilities import (
     estimate_liability_monthly_payment_simple as _liab_estimate_liability_monthly_payment_simple,
     estimate_liability_outstanding_amount_simple as _liab_estimate_liability_outstanding_amount_simple,
     get_effective_liability_amount as _liab_get_effective_liability_amount,
+    get_liability_events_delta as _liab_get_liability_events_delta,
     get_generated_liability_expense_profile as _liab_get_generated_liability_expense_profile,
     get_liability_first_payment_date as _liab_get_liability_first_payment_date,
     infer_liability_is_asset_backed as _liab_infer_liability_is_asset_backed,
     sync_generated_budget_commitments_for_liability as _liab_sync_generated_budget_commitments_for_liability,
+    validate_liability_event_payload as _liab_validate_liability_event_payload,
     validate_liability_payload as _liab_validate_liability_payload,
     create_liability_for_user as _create_liability_for_user,
 )
@@ -78,7 +84,9 @@ get_liability_first_payment_date = _liab_get_liability_first_payment_date
 build_liability_installment_schedule_simple = _liab_build_liability_installment_schedule_simple
 estimate_liability_outstanding_amount_simple = _liab_estimate_liability_outstanding_amount_simple
 get_effective_liability_amount = _liab_get_effective_liability_amount
+get_liability_events_delta = _liab_get_liability_events_delta
 get_generated_liability_expense_profile = _liab_get_generated_liability_expense_profile
+validate_liability_event_payload = _liab_validate_liability_event_payload
 sync_generated_budget_commitments_for_liability = (
     _liab_sync_generated_budget_commitments_for_liability
 )
@@ -98,6 +106,10 @@ build_net_worth_summary = _build_net_worth_summary
 serialize_net_worth_summary = _serialize_net_worth_summary
 get_amount_base_value = _asset_get_amount_base_value
 get_effective_asset_amount = _asset_get_effective_asset_amount
+get_investment_asset_events_delta = _asset_get_investment_asset_events_delta
+get_liquidity_asset_events_delta = _asset_get_liquidity_asset_events_delta
+validate_investment_asset_event_payload = _validate_investment_asset_event_payload
+validate_liquidity_asset_event_payload = _validate_liquidity_asset_event_payload
 
 
 def get_financed_asset_queryset_for_user(*, user):
@@ -140,7 +152,9 @@ def calculate_totals(
 
     for asset in assets_qs:
         effective_amount = get_effective_asset_amount(asset=asset, as_of_date=as_of_date)
-        converted = convert_currency(effective_amount, asset.currency, base_currency, date=as_of_date)
+        converted = convert_currency(
+            effective_amount, asset.currency, base_currency, date=as_of_date
+        )
         total_assets += converted
 
         assets_by_category.setdefault(asset.category, Decimal("0"))
