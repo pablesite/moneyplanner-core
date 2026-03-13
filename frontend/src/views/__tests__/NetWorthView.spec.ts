@@ -171,6 +171,42 @@ describe('NetWorthView', () => {
     expect(wrapper.text()).toContain('No hay snapshots');
   });
 
+  it('uses the current summary totals in the general timeline highlight instead of the projected month-end row', () => {
+    const state = makeState({
+      summaryAssets: ref('1000'),
+      summaryLiabilities: ref('250'),
+      summaryNetWorth: ref('750'),
+      store: {
+        ...makeState().store,
+        timeline: {
+          base_currency: 'EUR',
+          rows: [
+            {
+              date: '2026-03-31',
+              net_worth: '900',
+              total_assets: '1150',
+              total_liabilities: '250',
+            },
+          ],
+        },
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    expect(wrapper.text()).toContain('Ultimo patrimonio neto');
+    expect(wrapper.text()).toContain('750,00 EUR');
+    expect(wrapper.text()).toContain('Actual | Activos 1.000 | Pasivos 250');
+    expect(wrapper.text()).not.toContain('900,00 EUR');
+    expect(wrapper.text()).not.toContain('Activos 1.150');
+  });
+
   it('wires header actions and snapshot deletion callback', async () => {
     const state = makeState({
       store: {

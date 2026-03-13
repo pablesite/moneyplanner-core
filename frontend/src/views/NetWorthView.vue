@@ -129,6 +129,12 @@ const latestTimelinePoint = computed(
   () => timelineRows.value[timelineRows.value.length - 1] ?? null,
 );
 
+const currentSummaryTimelinePoint = computed<DisplayedTimelinePoint>(() => ({
+  date: 'current',
+  label: 'Actual',
+  value: netWorthValue.value,
+}));
+
 const categoryLabelMap = computed(() => {
   const entries = new Map<string, string>();
   assetCategories.forEach((category) => entries.set(`asset:${category.value}`, category.label));
@@ -323,7 +329,12 @@ const displayedTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
 });
 
 const displayedTimelineLatestPoint = computed(
-  () => displayedTimelineRows.value[displayedTimelineRows.value.length - 1] ?? null,
+  () => {
+    if (!selectedPosition.value && !selectedTimelineCategory.value) {
+      return currentSummaryTimelinePoint.value;
+    }
+    return displayedTimelineRows.value[displayedTimelineRows.value.length - 1] ?? null;
+  },
 );
 
 const displayedTimelineLoading = computed(() =>
@@ -367,10 +378,8 @@ const displayedTimelineSummaryMeta = computed(() => {
     return `${point.label} | ${selectedPosition.value.subtitle}`;
   }
   if (!selectedTimelineCategory.value) {
-    const aggregatePoint = latestTimelinePoint.value;
-    if (!aggregatePoint) return point.label;
-    return `${point.label} | Activos ${formatNumber(aggregatePoint.assets, 0)} | Pasivos ${formatNumber(
-      aggregatePoint.liabilities,
+    return `${point.label} | Activos ${formatNumber(assetsValue.value, 0)} | Pasivos ${formatNumber(
+      liabilitiesValue.value,
       0,
     )}`;
   }
