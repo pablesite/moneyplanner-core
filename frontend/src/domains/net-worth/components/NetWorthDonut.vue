@@ -24,6 +24,8 @@ type Props = {
   categoryLabels?: string[] | null | undefined;
   categoryAssets?: number[] | null | undefined;
   categoryLiabilities?: number[] | null | undefined;
+  selectedCategoryKey?: string | null | undefined;
+  selectedCategoryType?: 'asset' | 'liability' | null | undefined;
 };
 
 const props = defineProps<Props>();
@@ -201,6 +203,10 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
               v-for="row in assetComposition"
               :key="`asset-${row.key}`"
               class="nw-donut-comp-row"
+              :class="{
+                'nw-donut-comp-row-active':
+                  props.selectedCategoryType === 'asset' && props.selectedCategoryKey === row.key,
+              }"
               type="button"
               @click="emit('select-category', { key: row.key, type: 'asset' })"
             >
@@ -226,6 +232,11 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
               v-for="row in liabilityComposition"
               :key="`liability-${row.key}`"
               class="nw-donut-comp-row"
+              :class="{
+                'nw-donut-comp-row-active':
+                  props.selectedCategoryType === 'liability' &&
+                  props.selectedCategoryKey === row.key,
+              }"
               type="button"
               @click="emit('select-category', { key: row.key, type: 'liability' })"
             >
@@ -253,9 +264,18 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   width: 100%;
   text-align: left;
   background: transparent;
-  border: 0;
-  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 8px 10px;
   color: inherit;
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.nw-donut-comp-row-active {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.08);
 }
 </style>

@@ -102,26 +102,6 @@ type TimelinePoint = {
   liabilities: number;
 };
 
-type TimelineCategoryOption = {
-  value: string | null;
-  label: string;
-  type: 'asset' | 'liability';
-};
-
-const timelineCategoryOptions = computed<TimelineCategoryOption[]>(() => [
-  { value: null, label: 'Todo patrimonio', type: 'asset' },
-  ...assetCategories.map((category) => ({
-    value: category.value,
-    label: category.label,
-    type: 'asset' as const,
-  })),
-  ...liabilityCategories.map((category) => ({
-    value: category.value,
-    label: `Pasivos · ${category.label}`,
-    type: 'liability' as const,
-  })),
-]);
-
 const timelineRows = computed<TimelinePoint[]>(() =>
   (store.timeline?.rows ?? []).map((row) => ({
     date: row.date,
@@ -145,90 +125,26 @@ function getTimelineMetricValue(row: TimelinePoint): number {
   return row.netWorth;
 }
 
-const timelineSummaryLabel = computed(() => {
-  if (!selectedTimelineCategory.value) return 'Ultimo patrimonio neto';
-  return selectedTimelineCategoryType.value === 'liability'
-    ? 'Ultimo valor del pasivo'
-    : 'Ultimo valor del activo';
-});
-
-const timelineDescription = computed(() => {
-  if (!selectedTimelineCategory.value) {
-    return 'Serie mensual del patrimonio neto calculada desde valoraciones, motores y eventos.';
-  }
-  if (selectedTimelineCategoryType.value === 'liability') {
-    return 'Serie mensual del valor total de la categoria de pasivos seleccionada.';
-  }
-  return 'Serie mensual del valor total de la categoria de activos seleccionada.';
-});
-
-const timelineSummaryMeta = computed(() => {
-  const point = latestTimelinePoint.value;
-  if (!point) return '-';
-  if (timelineMetric.value === 'assets') {
-    return `${point.label} · ${formatNumber(point.assets, 0)} ${store.timeline?.base_currency}`;
-  }
-  if (timelineMetric.value === 'liabilities') {
-    return `${point.label} · ${formatNumber(point.liabilities, 0)} ${store.timeline?.base_currency}`;
-  }
-  return `${point.label} · Activos ${formatNumber(point.assets, 0)} · Pasivos ${formatNumber(
-    point.liabilities,
-    0,
-  )}`;
-});
-
-const timelineSeriesColor = computed(() =>
-  timelineMetric.value === 'liabilities' ? '#ff4d73' : '#4cc3ff',
-);
-
-const timelineRange = computed(() => {
-  const values = timelineRows.value.map((row) => getTimelineMetricValue(row));
-  if (!values.length) return { min: 0, max: 1 };
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (min === max) return { min: min - 1, max: max + 1 };
-  return { min, max };
-});
-
-const timelinePath = computed(() => {
-  const rows = timelineRows.value;
-  if (rows.length < 2) return '';
-  const { min, max } = timelineRange.value;
-  return rows
-    .map((row, index) => {
-      const x = (index / (rows.length - 1)) * 100;
-      const normalized = (getTimelineMetricValue(row) - min) / (max - min);
-      const y = 100 - normalized * 100;
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(' ');
-});
-
 const latestTimelinePoint = computed(
   () => timelineRows.value[timelineRows.value.length - 1] ?? null,
 );
 
-const timelineYAxisLabels = computed(() => {
-  const { min, max } = timelineRange.value;
-  const mid = min + (max - min) / 2;
-  return [max, mid, min].map((value) => formatNumber(value, 0));
+const categoryLabelMap = computed(() => {
+  const entries = new Map<string, string>();
+  assetCategories.forEach((category) => entries.set(`asset:${category.value}`, category.label));
+  liabilityCategories.forEach((category) =>
+    entries.set(`liability:${category.value}`, category.label),
+  );
+  return entries;
 });
 
-const timelineXAxisLabels = computed(() => {
-  const rows = timelineRows.value;
-  if (rows.length <= 6) return rows;
-  const indexes = Array.from(
-    new Set([
-      0,
-      Math.floor(rows.length / 4),
-      Math.floor(rows.length / 2),
-      Math.floor((rows.length * 3) / 4),
-      rows.length - 1,
-    ]),
+const selectedCategoryLabel = computed(() => {
+  if (!selectedTimelineCategory.value) return 'Todo patrimonio';
+  return (
+    categoryLabelMap.value.get(
+      `${selectedTimelineCategoryType.value}:${selectedTimelineCategory.value}`,
+    ) ?? selectedTimelineCategory.value
   );
-  return indexes
-    .map((index) => rows[index])
-    .filter((row): row is TimelinePoint => row !== undefined);
 });
 
 type PositionRow = {
@@ -242,6 +158,12 @@ type PositionRow = {
 };
 
 type PositionTimelinePoint = {
+  date: string;
+  label: string;
+  value: number;
+};
+
+type DisplayedTimelinePoint = {
   date: string;
   label: string;
   value: number;
@@ -329,6 +251,17 @@ const liabilityPositionRows = computed<PositionRow[]>(() =>
     .sort((a, b) => b.value - a.value),
 );
 
+const availablePositionRows = computed<PositionRow[]>(() => {
+  if (!selectedTimelineCategory.value) return [];
+  return selectedTimelineCategoryType.value === 'liability'
+    ? liabilityPositionRows.value
+    : assetPositionRows.value;
+});
+
+const showPositionSelector = computed(
+  () => !!selectedTimelineCategory.value && availablePositionRows.value.length > 0,
+);
+
 const selectedPosition = computed(() => {
   const rows =
     selectedPositionType.value === 'liability'
@@ -372,6 +305,141 @@ const positionTimelinePath = computed(() => {
 
 const latestPositionTimelinePoint = computed(
   () => positionTimelineRows.value[positionTimelineRows.value.length - 1] ?? null,
+);
+
+const displayedTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
+  if (selectedPosition.value) {
+    return positionTimelineRows.value.map((row) => ({
+      date: row.date,
+      label: row.label,
+      value: row.value,
+    }));
+  }
+  return timelineRows.value.map((row) => ({
+    date: row.date,
+    label: row.label,
+    value: getTimelineMetricValue(row),
+  }));
+});
+
+const displayedTimelineLatestPoint = computed(
+  () => displayedTimelineRows.value[displayedTimelineRows.value.length - 1] ?? null,
+);
+
+const displayedTimelineLoading = computed(() =>
+  selectedPosition.value ? store.positionTimelineLoading : store.timelineLoading,
+);
+
+const displayedTimelineCurrency = computed(() => {
+  if (selectedPosition.value) {
+    return store.positionTimeline?.base_currency ?? selectedPosition.value.currency;
+  }
+  return store.timeline?.base_currency ?? store.baseCurrency ?? 'EUR';
+});
+
+const displayedTimelineSummaryLabel = computed(() => {
+  if (selectedPosition.value) {
+    return selectedPosition.value.type === 'liability'
+      ? 'Ultimo valor del pasivo'
+      : 'Ultimo valor del activo';
+  }
+  if (!selectedTimelineCategory.value) return 'Ultimo patrimonio neto';
+  return 'Ultimo valor de la categoria';
+});
+
+const displayedTimelineDescription = computed(() => {
+  if (selectedPosition.value) {
+    return `Serie mensual de ${selectedPosition.value.name}.`;
+  }
+  if (!selectedTimelineCategory.value) {
+    return 'Pulsa en una categoria del bloque superior para filtrar la evolucion temporal.';
+  }
+  if (selectedTimelineCategoryType.value === 'liability') {
+    return `Serie mensual del total de ${selectedCategoryLabel.value} dentro de pasivos.`;
+  }
+  return `Serie mensual del total de ${selectedCategoryLabel.value} dentro de activos.`;
+});
+
+const displayedTimelineSummaryMeta = computed(() => {
+  const point = displayedTimelineLatestPoint.value;
+  if (!point) return '-';
+  if (selectedPosition.value) {
+    return `${point.label} | ${selectedPosition.value.subtitle}`;
+  }
+  if (!selectedTimelineCategory.value) {
+    const aggregatePoint = latestTimelinePoint.value;
+    if (!aggregatePoint) return point.label;
+    return `${point.label} | Activos ${formatNumber(aggregatePoint.assets, 0)} | Pasivos ${formatNumber(
+      aggregatePoint.liabilities,
+      0,
+    )}`;
+  }
+  return `${point.label} | ${selectedCategoryLabel.value}`;
+});
+
+const displayedTimelineSeriesColor = computed(() => {
+  if (selectedPosition.value?.type === 'liability') return '#ff4d73';
+  if (selectedTimelineCategoryType.value === 'liability') return '#ff4d73';
+  if (selectedPosition.value?.type === 'asset') return '#2dd4bf';
+  return '#4cc3ff';
+});
+
+const displayedTimelineRange = computed(() => {
+  const values = displayedTimelineRows.value.map((row) => row.value);
+  if (!values.length) return { min: 0, max: 1 };
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return { min: min - 1, max: max + 1 };
+  return { min, max };
+});
+
+const displayedTimelinePath = computed(() => {
+  const rows = displayedTimelineRows.value;
+  if (rows.length < 2) return '';
+  const { min, max } = displayedTimelineRange.value;
+  return rows
+    .map((row, index) => {
+      const x = (index / (rows.length - 1)) * 100;
+      const normalized = (row.value - min) / (max - min);
+      const y = 100 - normalized * 100;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+});
+
+const displayedTimelineYAxisLabels = computed(() => {
+  const { min, max } = displayedTimelineRange.value;
+  const mid = min + (max - min) / 2;
+  return [max, mid, min].map((value) => formatNumber(value, 0));
+});
+
+const displayedTimelineXAxisLabels = computed(() => {
+  const rows = displayedTimelineRows.value;
+  if (rows.length <= 6) return rows;
+  const indexes = Array.from(
+    new Set([
+      0,
+      Math.floor(rows.length / 4),
+      Math.floor(rows.length / 2),
+      Math.floor((rows.length * 3) / 4),
+      rows.length - 1,
+    ]),
+  );
+  return indexes
+    .map((index) => rows[index])
+    .filter((row): row is DisplayedTimelinePoint => row !== undefined);
+});
+
+const timelineCategoryOptions = computed(() => [] as { value: string | null; label: string; type: 'asset' | 'liability' }[]);
+const timelineDescription = displayedTimelineDescription;
+const timelineSummaryLabel = displayedTimelineSummaryLabel;
+const timelineSummaryMeta = displayedTimelineSummaryMeta;
+const timelineSeriesColor = displayedTimelineSeriesColor;
+const timelinePath = displayedTimelinePath;
+const timelineYAxisLabels = displayedTimelineYAxisLabels;
+const timelineXAxisLabels = displayedTimelineXAxisLabels;
+const legacyTimelineSummaryValue = computed(() =>
+  latestTimelinePoint.value ? getTimelineMetricValue(latestTimelinePoint.value) : 0,
 );
 
 const positionActivityRows = computed<PositionActivityRow[]>(() => {
@@ -432,44 +500,24 @@ const positionActivityRows = computed<PositionActivityRow[]>(() => {
   return [...valuations, ...events].sort((a, b) => b.date.localeCompare(a.date));
 });
 
+function resetPositionSelection(): void {
+  selectedPositionType.value = null;
+  selectedPositionId.value = null;
+  store.positionTimeline = null;
+  store.assetValuations = [];
+  store.liabilityValuations = [];
+  store.investmentEvents = [];
+  store.liquidityEvents = [];
+  store.liabilityEvents = [];
+}
+
 async function applyTimelineCategoryFilter(
   category: string | null,
   categoryType: 'asset' | 'liability' = 'asset',
 ): Promise<void> {
   selectedTimelineCategory.value = category;
   selectedTimelineCategoryType.value = categoryType;
-  if (
-    selectedPositionType.value === 'asset' &&
-    selectedPosition.value &&
-    categoryType === 'asset' &&
-    category &&
-    !assetPositionRows.value.some((row) => row.id === selectedPosition.value?.id)
-  ) {
-    selectedPositionType.value = null;
-    selectedPositionId.value = null;
-    store.positionTimeline = null;
-    store.assetValuations = [];
-    store.liabilityValuations = [];
-    store.investmentEvents = [];
-    store.liquidityEvents = [];
-    store.liabilityEvents = [];
-  }
-  if (
-    selectedPositionType.value === 'liability' &&
-    selectedPosition.value &&
-    categoryType === 'liability' &&
-    category &&
-    !liabilityPositionRows.value.some((row) => row.id === selectedPosition.value?.id)
-  ) {
-    selectedPositionType.value = null;
-    selectedPositionId.value = null;
-    store.positionTimeline = null;
-    store.assetValuations = [];
-    store.liabilityValuations = [];
-    store.investmentEvents = [];
-    store.liquidityEvents = [];
-    store.liabilityEvents = [];
-  }
+  resetPositionSelection();
   await store.fetchTimeline(category, categoryType);
 }
 
@@ -477,6 +525,15 @@ async function applyCompositionCategoryFilter(payload: {
   key: string;
   type: 'asset' | 'liability';
 }): Promise<void> {
+  const isSelectedCategory =
+    selectedTimelineCategory.value === payload.key &&
+    selectedTimelineCategoryType.value === payload.type;
+
+  if (isSelectedCategory) {
+    await applyTimelineCategoryFilter(null, 'asset');
+    return;
+  }
+
   await applyTimelineCategoryFilter(payload.key, payload.type);
 }
 
@@ -487,6 +544,24 @@ async function selectPosition(row: PositionRow): Promise<void> {
     store.fetchPositionTimeline(row.type, row.id),
     store.fetchPositionActivity(row.type, row.id, row.type === 'asset' ? row.category : null),
   ]);
+}
+
+function onPositionSelection(event: Event): void {
+  const target = event.target as HTMLSelectElement | null;
+  const rawValue = target?.value ?? '';
+  if (!rawValue) {
+    resetPositionSelection();
+    return;
+  }
+
+  const selectedId = Number(rawValue);
+  const row = availablePositionRows.value.find((item) => item.id === selectedId);
+  if (!row) {
+    resetPositionSelection();
+    return;
+  }
+
+  void selectPosition(row);
 }
 </script>
 
@@ -616,12 +691,130 @@ async function selectPosition(row: PositionRow): Promise<void> {
           :category-labels="byCategoryLabels"
           :category-assets="byCategoryAssets"
           :category-liabilities="byCategoryLiabilities"
+          :selected-category-key="selectedTimelineCategory"
+          :selected-category-type="selectedTimelineCategoryType"
           @select-category="applyCompositionCategoryFilter"
         />
       </div>
+
+      <div class="ui-nw-inline-analytics">
+        <div class="ui-nw-timeline-head">
+          <div>
+            <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
+            <p class="ui-nw-timeline-copy">{{ displayedTimelineDescription }}</p>
+          </div>
+          <label v-if="showPositionSelector" class="ui-nw-position-select">
+            <span class="ui-nw-position-select-label">
+              {{ selectedTimelineCategoryType === 'liability' ? 'Pasivo' : 'Activo' }}
+            </span>
+            <select
+              class="input ui-nw-position-select-input"
+              :value="selectedPositionId ?? ''"
+              @change="onPositionSelection"
+            >
+              <option value="">Categoria completa</option>
+              <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
+                {{ row.name }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <div v-if="displayedTimelineLoading" class="subtle">Cargando evolucion...</div>
+        <div v-else-if="displayedTimelineRows.length === 0" class="subtle">
+          {{
+            selectedPosition
+              ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
+              : 'Aun no hay datos suficientes para construir la serie temporal.'
+          }}
+        </div>
+        <div v-else class="ui-nw-timeline-body">
+          <div class="ui-nw-timeline-summary">
+            <div class="ui-nw-timeline-summary-label">{{ displayedTimelineSummaryLabel }}</div>
+            <div class="ui-nw-timeline-summary-value">
+              {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
+              {{ displayedTimelineCurrency }}
+            </div>
+            <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
+          </div>
+
+          <div class="ui-nw-timeline-chart-shell">
+            <div class="ui-nw-timeline-chart-layout">
+              <div class="ui-nw-timeline-y-axis" aria-hidden="true">
+                <span v-for="label in displayedTimelineYAxisLabels" :key="label">{{ label }}</span>
+              </div>
+              <div class="ui-nw-timeline-chart-stage">
+                <svg
+                  class="ui-nw-timeline-chart"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-label="Grafico de evolucion patrimonial"
+                >
+                  <path
+                    class="ui-nw-timeline-grid"
+                    d="M 0 20 L 100 20 M 0 50 L 100 50 M 0 80 L 100 80"
+                  />
+                  <path
+                    v-if="displayedTimelinePath"
+                    class="ui-nw-timeline-line"
+                    :d="displayedTimelinePath"
+                    :style="{ stroke: displayedTimelineSeriesColor }"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-nw-timeline-x-axis" aria-hidden="true">
+            <span v-for="row in displayedTimelineXAxisLabels" :key="`axis-${row.date}`">
+              {{ row.label }}
+            </span>
+          </div>
+
+          <div class="ui-nw-timeline-points">
+            <div
+              v-for="row in displayedTimelineRows.slice(-6)"
+              :key="row.date"
+              class="ui-nw-timeline-point"
+            >
+              <span>{{ row.label }}</span>
+              <strong>{{ formatNumber(row.value, 0) }}</strong>
+            </div>
+          </div>
+
+          <div v-if="selectedPosition" class="ui-nw-position-activity">
+            <div class="ui-nw-position-activity-head">
+              <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
+              <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
+            </div>
+            <div v-if="positionActivityRows.length === 0" class="subtle">
+              No hay eventos ni valoraciones manuales registrados para esta posicion.
+            </div>
+            <div v-else class="ui-nw-position-activity-list">
+              <div
+                v-for="row in positionActivityRows"
+                :key="row.id"
+                class="ui-nw-position-activity-row"
+                :class="{
+                  'ui-nw-position-activity-row-valuation': row.kind === 'valuation',
+                }"
+              >
+                <div class="ui-nw-position-activity-main">
+                  <strong>{{ row.date }}</strong>
+                  <span>{{ row.label }} | {{ row.meta }}</span>
+                  <span v-if="row.note">{{ row.note }}</span>
+                </div>
+                <div class="ui-nw-position-activity-amount">
+                  {{ formatNumber(row.amount, 2) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <section class="section card ui-pro-panel ui-nw-timeline-panel">
+    <section v-if="false" class="section card ui-pro-panel ui-nw-timeline-panel">
       <div class="ui-nw-timeline-head">
         <div>
           <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
@@ -653,9 +846,7 @@ async function selectPosition(row: PositionRow): Promise<void> {
         <div class="ui-nw-timeline-summary">
           <div class="ui-nw-timeline-summary-label">{{ timelineSummaryLabel }}</div>
           <div class="ui-nw-timeline-summary-value">
-            {{
-              formatNumber(latestTimelinePoint ? getTimelineMetricValue(latestTimelinePoint) : 0, 2)
-            }}
+            {{ formatNumber(legacyTimelineSummaryValue, 2) }}
             {{ store.timeline?.base_currency }}
           </div>
           <div v-if="false" class="ui-nw-timeline-summary-meta">
@@ -720,7 +911,7 @@ async function selectPosition(row: PositionRow): Promise<void> {
       </div>
     </section>
 
-    <section class="section card ui-pro-panel ui-nw-drilldown-panel">
+    <section v-if="false" class="section card ui-pro-panel ui-nw-drilldown-panel">
       <div class="ui-nw-drilldown-head">
         <div>
           <h2 class="mt-0 text-base">Detalle por posicion</h2>
@@ -812,14 +1003,14 @@ async function selectPosition(row: PositionRow): Promise<void> {
           <div class="ui-nw-position-detail-summary">
             <div class="ui-nw-position-detail-label">
               {{
-                selectedPosition.type === 'asset' ? 'Activo seleccionado' : 'Pasivo seleccionado'
+                selectedPosition?.type === 'asset' ? 'Activo seleccionado' : 'Pasivo seleccionado'
               }}
             </div>
-            <div class="ui-nw-position-detail-title">{{ selectedPosition.name }}</div>
+            <div class="ui-nw-position-detail-title">{{ selectedPosition?.name }}</div>
             <div class="ui-nw-position-detail-meta">
-              {{ selectedPosition.subtitle }} | Ultimo valor
+              {{ selectedPosition?.subtitle }} | Ultimo valor
               {{ formatNumber(latestPositionTimelinePoint?.value ?? 0, 2) }}
-              {{ store.positionTimeline?.base_currency ?? selectedPosition.currency }}
+              {{ store.positionTimeline?.base_currency ?? selectedPosition?.currency }}
             </div>
           </div>
 
@@ -845,7 +1036,7 @@ async function selectPosition(row: PositionRow): Promise<void> {
           <div class="ui-nw-position-detail-points">
             <div
               v-for="row in positionTimelineRows.slice(-6)"
-              :key="`${selectedPosition.type}-${selectedPosition.id}-${row.date}`"
+                :key="`${selectedPosition?.type}-${selectedPosition?.id}-${row.date}`"
               class="ui-nw-position-detail-point"
             >
               <span>{{ row.label }}</span>
@@ -920,6 +1111,14 @@ async function selectPosition(row: PositionRow): Promise<void> {
 <style scoped>
 .ui-nw-balance-panel {
   padding: 14px;
+}
+
+.ui-nw-inline-analytics {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 16px;
 }
 
 .ui-nw-balance-kpi-grid {
@@ -1020,6 +1219,23 @@ async function selectPosition(row: PositionRow): Promise<void> {
 .ui-nw-timeline-copy {
   margin: 0;
   color: var(--muted);
+}
+
+.ui-nw-position-select {
+  display: grid;
+  gap: 6px;
+  min-width: min(320px, 100%);
+}
+
+.ui-nw-position-select-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.ui-nw-position-select-input {
+  min-width: 0;
 }
 
 .ui-nw-timeline-filters {

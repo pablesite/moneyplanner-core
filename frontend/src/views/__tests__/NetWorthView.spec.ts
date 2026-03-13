@@ -19,7 +19,28 @@ vi.mock('@/domains/net-worth', () => ({
   ItemForm: makeStub('ItemForm'),
   ItemList: makeStub('ItemList'),
   NetWorthByCategoryBar: makeStub('NetWorthByCategoryBar'),
-  NetWorthDonut: makeStub('NetWorthDonut'),
+  NetWorthDonut: defineComponent({
+    name: 'NetWorthDonut',
+    emits: ['select-category'],
+    template: `
+      <div data-test="NetWorthDonut">
+        <button
+          data-test="donut-select-asset"
+          type="button"
+          @click="$emit('select-category', { key: 'cash', type: 'asset' })"
+        >
+          asset
+        </button>
+        <button
+          data-test="donut-select-liability"
+          type="button"
+          @click="$emit('select-category', { key: 'mortgage', type: 'liability' })"
+        >
+          liability
+        </button>
+      </div>
+    `,
+  }),
   SettingsPopover: makeStub('SettingsPopover'),
   useNetWorthViewState: () => mockUseNetWorthViewState(),
   useNetWorthViewExtensions: () => mockUseNetWorthViewExtensions(),
@@ -142,8 +163,8 @@ describe('NetWorthView', () => {
     expect(wrapper.text()).toContain('Patrimonio');
     expect(wrapper.text()).toContain('Patrimonio neto');
     expect(wrapper.text()).toContain('Evolucion temporal');
-    expect(wrapper.text()).toContain('Detalle por posicion');
-    expect(wrapper.text()).toContain('Elige una posicion para inspeccionar su curva temporal');
+    expect(wrapper.text()).not.toContain('Detalle por posicion');
+    expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(false);
     expect(wrapper.text()).toContain('Capital propio sobre activos');
     expect(wrapper.text()).toContain('Ratio deuda / activos');
     expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
@@ -191,10 +212,22 @@ describe('NetWorthView', () => {
     expect(state.confirmDeleteSnapshot).toHaveBeenCalledWith(5);
   });
 
-  it('requests timeline when changing the category filter', async () => {
+  it('requests timeline when selecting an asset category from composition', async () => {
     const state = makeState({
       store: {
         ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta nomina',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
         timeline: {
           base_currency: 'EUR',
           rows: [
@@ -218,14 +251,62 @@ describe('NetWorthView', () => {
 
     const wrapper = mount(NetWorthView);
 
-    await wrapper.get('button.ui-nw-timeline-filter').trigger('click');
-    expect(state.store.fetchTimeline).toHaveBeenCalledWith(null, 'asset');
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    expect(state.store.fetchTimeline).toHaveBeenCalledWith('cash', 'asset');
+    expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(true);
   });
 
-  it('requests liability timeline when selecting a liability category filter', async () => {
+  it('returns to the general timeline when clicking the active composition category again', async () => {
     const state = makeState({
       store: {
         ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta nomina',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        fetchTimeline: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+
+    expect(state.store.fetchTimeline).toHaveBeenNthCalledWith(1, 'cash', 'asset');
+    expect(state.store.fetchTimeline).toHaveBeenNthCalledWith(2, null, 'asset');
+    expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(false);
+  });
+
+  it('requests liability timeline when selecting a liability category from composition', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        liabilities: [
+          {
+            id: 21,
+            name: 'Hipoteca casa',
+            category: 'mortgage',
+            amount: '250',
+            amount_base: '250',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
         timeline: {
           base_currency: 'EUR',
           rows: [
@@ -248,16 +329,12 @@ describe('NetWorthView', () => {
     });
 
     const wrapper = mount(NetWorthView);
-    const liabilityFilter = wrapper
-      .findAll('button.ui-nw-timeline-filter')
-      .find((button) => button.text().includes('Pasivos'));
 
-    expect(liabilityFilter).toBeTruthy();
-    await liabilityFilter!.trigger('click');
+    await wrapper.get('[data-test="donut-select-liability"]').trigger('click');
     expect(state.store.fetchTimeline).toHaveBeenCalledWith('mortgage', 'liability');
   });
 
-  it('fetches per-position timeline when selecting an asset', async () => {
+  it('fetches per-position timeline when selecting an asset from the integrated selector', async () => {
     const state = makeState({
       store: {
         ...makeState().store,
@@ -287,7 +364,9 @@ describe('NetWorthView', () => {
 
     const wrapper = mount(NetWorthView);
 
-    await wrapper.get('button.ui-nw-position-button').trigger('click');
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    await wrapper.get('select.ui-nw-position-select-input').setValue('11');
+
     expect(state.store.fetchPositionTimeline).toHaveBeenCalledWith('asset', 11);
     expect(state.store.fetchPositionActivity).toHaveBeenCalledWith('asset', 11, 'cash');
   });
