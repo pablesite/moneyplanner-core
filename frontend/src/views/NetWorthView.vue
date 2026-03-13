@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import {
+  ItemForm,
   NetWorthDonut,
   SettingsPopover,
   coreNetWorthApi,
+  useNetWorthViewExtensions,
   useNetWorthViewState,
 } from '@/domains/net-worth';
+import { BaseModal } from '@/domains/ui';
 
 const {
   store,
@@ -16,10 +19,15 @@ const {
   prettyError,
   canShowReal,
   confirmDeleteSnapshot,
+  showAssetModal,
+  showLiabilityModal,
+  showEditModal,
+  editKind,
   formatMoney,
   unitLabel,
   modeLabel,
   realBaseLabel,
+  assetSubcategories,
   summaryAssets,
   summaryLiabilities,
   summaryNetWorth,
@@ -28,7 +36,17 @@ const {
   byCategoryLiabilities,
   summaryAssetBackedLiabilities,
   summaryUnbackedLiabilities,
+  submitAsset,
+  submitLiability,
+  openEdit,
+  closeEdit,
+  editTitle,
+  editCategories,
+  editInitial,
+  submitEdit,
 } = useNetWorthViewState();
+
+const { itemFormProps } = useNetWorthViewExtensions(store);
 
 type OwnershipFilterValue = 'all' | number;
 
@@ -202,6 +220,8 @@ const selectedTimelineCategory = ref<string | null>(null);
 const selectedTimelineCategoryType = ref<'asset' | 'liability'>('asset');
 const selectedPositionType = ref<'asset' | 'liability' | null>(null);
 const selectedPositionId = ref<number | null>(null);
+const createAssetCategory = ref<string | null>(null);
+const createLiabilityCategory = ref<string | null>(null);
 
 type TimelinePoint = {
   date: string;
@@ -430,6 +450,27 @@ const effectiveCategoryLiabilities = computed(() => {
   );
 });
 
+function buildCategoryCounts(rows: PositionRow[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+  }
+  return counts;
+}
+
+const filteredAssetCategoryCounts = computed(() => buildCategoryCounts(allAssetPositionRows.value));
+const filteredLiabilityCategoryCounts = computed(() =>
+  buildCategoryCounts(allLiabilityPositionRows.value),
+);
+
+const effectiveCategoryAssetCounts = computed(() =>
+  effectiveCategoryKeys.value.map((key) => filteredAssetCategoryCounts.value.get(key) ?? 0),
+);
+
+const effectiveCategoryLiabilityCounts = computed(() =>
+  effectiveCategoryKeys.value.map((key) => filteredLiabilityCategoryCounts.value.get(key) ?? 0),
+);
+
 const filteredAssetsValue = computed(() =>
   allAssetPositionRows.value.reduce((total, row) => total + row.value, 0),
 );
@@ -482,6 +523,71 @@ const availablePositionRows = computed<PositionRow[]>(() => {
   return selectedTimelineCategoryType.value === 'liability'
     ? liabilityPositionRows.value
     : assetPositionRows.value;
+});
+
+const activeAssets = computed(() =>
+  ownershipFilteredAssets.value.map((asset) => ({
+    id: asset.id,
+    name: asset.name,
+    category: asset.category,
+  })),
+);
+
+const categoryWorkspaceRows = computed(() =>
+  selectedTimelineCategoryType.value === 'liability' ? liabilityPositionRows.value : assetPositionRows.value,
+);
+
+const categoryWorkspaceCount = computed(() => categoryWorkspaceRows.value.length);
+const categoryWorkspaceTotal = computed(() =>
+  categoryWorkspaceRows.value.reduce((total, row) => total + row.value, 0),
+);
+
+const showCategoryWorkspace = computed(() => !!selectedTimelineCategory.value);
+
+function ownershipBadge(ownershipRef: number | null | undefined): string | null {
+  if (ownershipRef == null) return null;
+  const ownership = ownershipById.value.get(ownershipRef);
+  if (!ownership) return null;
+  if (ownership.kind === 'individual') return ownership.member?.name?.trim() ?? null;
+  const names = (ownership.splits ?? [])
+    .map((split) => split.member?.name?.trim())
+    .filter((name): name is string => !!name);
+  return names.length ? names.join(' + ') : 'Compartido';
+}
+
+function sourceItemForRow(row: PositionRow) {
+  return row.type === 'asset'
+    ? ownershipFilteredAssets.value.find((item) => item.id === row.id) ?? null
+    : ownershipFilteredLiabilities.value.find((item) => item.id === row.id) ?? null;
+}
+
+function ownershipBadgeForRow(row: PositionRow): string | null {
+  return ownershipBadge(sourceItemForRow(row)?.ownership_ref);
+}
+
+function editRow(row: PositionRow): void {
+  const item = sourceItemForRow(row);
+  if (!item) return;
+  openEdit(item, row.type);
+}
+
+async function archiveRow(row: PositionRow): Promise<void> {
+  if (row.type === 'asset') {
+    await store.archiveAsset(row.id);
+  } else {
+    await store.archiveLiability(row.id);
+  }
+}
+
+const categoryWorkspaceLabel = computed(() => {
+  if (!selectedTimelineCategory.value) return '';
+  const scope = selectedTimelineCategoryType.value === 'liability' ? 'pasivos' : 'activos';
+  return `${selectedCategoryLabel.value} dentro de ${scope}`;
+});
+
+const categoryWorkspaceMeta = computed(() => {
+  if (!selectedTimelineCategory.value) return '';
+  return `${categoryWorkspaceCount.value} posiciones · ${formatNumber(categoryWorkspaceTotal.value, 2)} ${unitLabel()}`;
 });
 
 const showPositionSelector = computed(
@@ -862,6 +968,29 @@ function resetPositionSelection(): void {
   store.liabilityEvents = [];
 }
 
+function openCreateModal(type: 'asset' | 'liability', category: string | null = null): void {
+  resetPositionSelection();
+  if (type === 'asset') {
+    createAssetCategory.value = category;
+    showAssetModal.value = true;
+    return;
+  }
+  createLiabilityCategory.value = category;
+  showLiabilityModal.value = true;
+}
+
+async function submitAssetFromView(payload: Parameters<typeof submitAsset>[0]): Promise<void> {
+  await submitAsset(payload);
+  createAssetCategory.value = null;
+}
+
+async function submitLiabilityFromView(
+  payload: Parameters<typeof submitLiability>[0],
+): Promise<void> {
+  await submitLiability(payload);
+  createLiabilityCategory.value = null;
+}
+
 async function applyTimelineCategoryFilter(
   category: string | null,
   categoryType: 'asset' | 'liability' = 'asset',
@@ -886,6 +1015,18 @@ async function applyCompositionCategoryFilter(payload: {
   }
 
   await applyTimelineCategoryFilter(payload.key, payload.type);
+}
+
+async function handleCompositionAddType(payload: { type: 'asset' | 'liability' }): Promise<void> {
+  openCreateModal(payload.type, null);
+}
+
+async function handleCompositionAddCategory(payload: {
+  key: string;
+  type: 'asset' | 'liability';
+}): Promise<void> {
+  await applyTimelineCategoryFilter(payload.key, payload.type);
+  openCreateModal(payload.type, payload.key);
 }
 
 async function selectPosition(row: PositionRow): Promise<void> {
@@ -914,6 +1055,14 @@ function onPositionSelection(event: Event): void {
 
   void selectPosition(row);
 }
+
+const assetCreateInitial = computed(() =>
+  createAssetCategory.value ? { category: createAssetCategory.value } : undefined,
+);
+
+const liabilityCreateInitial = computed(() =>
+  createLiabilityCategory.value ? { category: createLiabilityCategory.value } : undefined,
+);
 </script>
 
 <template>
@@ -1082,10 +1231,87 @@ function onPositionSelection(event: Event): void {
           :category-labels="effectiveCategoryLabels"
           :category-assets="effectiveCategoryAssets"
           :category-liabilities="effectiveCategoryLiabilities"
+          :category-asset-counts="effectiveCategoryAssetCounts"
+          :category-liability-counts="effectiveCategoryLiabilityCounts"
           :selected-category-key="selectedTimelineCategory"
           :selected-category-type="selectedTimelineCategoryType"
           @select-category="applyCompositionCategoryFilter"
+          @add-type="handleCompositionAddType"
+          @add-category="handleCompositionAddCategory"
         />
+      </div>
+
+      <div v-if="showCategoryWorkspace" class="ui-nw-category-workspace">
+        <div class="ui-nw-category-workspace-head">
+          <div>
+            <div class="ui-nw-category-workspace-kicker">
+              {{ selectedTimelineCategoryType === 'liability' ? 'Pasivos' : 'Activos' }}
+            </div>
+            <h3 class="ui-nw-category-workspace-title">{{ categoryWorkspaceLabel }}</h3>
+            <p class="ui-nw-category-workspace-copy">{{ categoryWorkspaceMeta }}</p>
+          </div>
+          <div class="ui-nw-category-workspace-actions">
+            <button
+              class="btn"
+              type="button"
+              @click="
+                openCreateModal(
+                  selectedTimelineCategoryType,
+                  selectedTimelineCategory,
+                )
+              "
+            >
+              {{ selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="categoryWorkspaceRows.length === 0" class="subtle">
+          No hay posiciones para esta categoria con el filtro actual.
+        </div>
+        <div v-else class="ui-nw-category-workspace-list">
+          <article
+            v-for="row in categoryWorkspaceRows"
+            :key="`${row.type}-${row.id}`"
+            class="ui-nw-category-item"
+            :class="{
+              'ui-nw-category-item-active':
+                selectedPositionType === row.type && selectedPositionId === row.id,
+            }"
+          >
+            <button class="ui-nw-category-item-main" type="button" @click="selectPosition(row)">
+              <div class="ui-nw-category-item-head">
+                <strong>{{ row.name }}</strong>
+                <span>{{ formatNumber(row.value, 2) }} {{ row.currency }}</span>
+              </div>
+              <div class="ui-nw-category-item-meta">
+                <span>{{ row.subtitle }}</span>
+                <span v-if="row.ownershipFraction < 1">
+                  {{ formatPct(row.ownershipFraction, 0) }} titularidad aplicada
+                </span>
+                <span v-if="ownershipBadgeForRow(row)">{{ ownershipBadgeForRow(row) }}</span>
+              </div>
+            </button>
+            <div class="ui-nw-category-item-actions">
+              <button
+                class="icon-btn"
+                type="button"
+                aria-label="Editar"
+                @click="editRow(row)"
+              >
+                <span class="icon" aria-hidden="true">&#9998;</span>
+              </button>
+              <button
+                class="icon-btn"
+                type="button"
+                :aria-label="row.type === 'asset' ? 'Archivar activo' : 'Archivar pasivo'"
+                @click="archiveRow(row)"
+              >
+                <span class="icon" aria-hidden="true">&#128465;</span>
+              </button>
+            </div>
+          </article>
+        </div>
       </div>
 
       <div class="ui-nw-inline-analytics">
@@ -1495,6 +1721,73 @@ function onPositionSelection(event: Event): void {
       <div v-else class="subtle">No hay snapshots todavia.</div>
     </div>
 
+    <BaseModal
+      :open="showAssetModal"
+      title="Nuevo activo"
+      @close="
+        showAssetModal = false;
+        createAssetCategory = null;
+      "
+    >
+      <ItemForm
+        title="Nuevo activo"
+        :categories="assetCategories"
+        :subcategories="assetSubcategories"
+        :initial="assetCreateInitial"
+        v-bind="itemFormProps"
+        :allow-negative="true"
+        :on-submit="submitAssetFromView"
+        :on-cancel="
+          () => {
+            showAssetModal = false;
+            createAssetCategory = null;
+          }
+        "
+      />
+    </BaseModal>
+
+    <BaseModal
+      :open="showLiabilityModal"
+      title="Nuevo pasivo"
+      @close="
+        showLiabilityModal = false;
+        createLiabilityCategory = null;
+      "
+    >
+      <ItemForm
+        title="Nuevo pasivo"
+        :categories="liabilityCategories"
+        :initial="liabilityCreateInitial"
+        v-bind="itemFormProps"
+        :assets="activeAssets"
+        :show-financed-asset="true"
+        :on-submit="submitLiabilityFromView"
+        :on-cancel="
+          () => {
+            showLiabilityModal = false;
+            createLiabilityCategory = null;
+          }
+        "
+      />
+    </BaseModal>
+
+    <BaseModal :open="showEditModal" :title="editTitle" @close="closeEdit">
+      <ItemForm
+        v-if="editInitial"
+        :title="editTitle"
+        :categories="editCategories"
+        :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
+        v-bind="itemFormProps"
+        :assets="editKind === 'liability' ? activeAssets : []"
+        :show-financed-asset="editKind === 'liability'"
+        :allow-negative="editKind === 'asset'"
+        mode="edit"
+        :initial="editInitial"
+        :on-submit="submitEdit"
+        :on-cancel="closeEdit"
+      />
+    </BaseModal>
+
     <div v-if="store.loading" class="ui-status-line">Cargando...</div>
   </div>
 </template>
@@ -1512,17 +1805,107 @@ function onPositionSelection(event: Event): void {
   gap: 16px;
 }
 
-.ui-nw-toolbar {
+.ui-nw-category-workspace {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 14px;
+}
+
+.ui-nw-category-workspace-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ui-nw-category-workspace-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.ui-nw-category-workspace-title {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+}
+
+.ui-nw-category-workspace-copy {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.ui-nw-category-workspace-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-nw-category-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+}
+
+.ui-nw-category-item-active {
+  border-color: rgba(76, 195, 255, 0.35);
+  background: rgba(76, 195, 255, 0.08);
+}
+
+.ui-nw-category-item-main {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-nw-category-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.ui-nw-category-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.ui-nw-category-item-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.ui-nw-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .ui-nw-ownership-select {
   display: grid;
   gap: 6px;
-  min-width: min(260px, 100%);
+  min-width: 176px;
+  max-width: 220px;
+  flex: 0 1 220px;
 }
 
 .ui-nw-ownership-select-label {
@@ -1534,6 +1917,27 @@ function onPositionSelection(event: Event): void {
 
 .ui-nw-ownership-select-input {
   min-height: 42px;
+}
+
+.ui-nw-toolbar :deep(.nw-settings-root) {
+  display: flex;
+  align-items: flex-end;
+}
+
+.ui-nw-toolbar :deep(.nw-settings-icon-only) {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.ui-nw-toolbar :deep(.nw-settings-btn-icon) {
+  width: 18px;
+  height: 18px;
 }
 
 .ui-nw-balance-kpi-grid {
@@ -2058,6 +2462,15 @@ function onPositionSelection(event: Event): void {
   .ui-nw-timeline-y-axis {
     flex-direction: row;
     gap: 0.75rem;
+  }
+
+  .ui-nw-category-item {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-nw-category-item-head {
+    flex-direction: column;
+    gap: 4px;
   }
 }
 </style>

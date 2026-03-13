@@ -24,6 +24,8 @@ type Props = {
   categoryLabels?: string[] | null | undefined;
   categoryAssets?: number[] | null | undefined;
   categoryLiabilities?: number[] | null | undefined;
+  categoryAssetCounts?: number[] | null | undefined;
+  categoryLiabilityCounts?: number[] | null | undefined;
   selectedCategoryKey?: string | null | undefined;
   selectedCategoryType?: 'asset' | 'liability' | null | undefined;
 };
@@ -31,6 +33,8 @@ type Props = {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   (e: 'select-category', payload: { key: string; type: 'asset' | 'liability' }): void;
+  (e: 'add-type', payload: { type: 'asset' | 'liability' }): void;
+  (e: 'add-category', payload: { key: string; type: 'asset' | 'liability' }): void;
 }>();
 
 function normalizeNumberInput(raw: unknown) {
@@ -79,12 +83,13 @@ const equitySlice = computed(() =>
   Math.max(assets.value - backedSlice.value - unbackedSlice.value, 0),
 );
 
-type CategoryShare = { key: string; label: string; value: number; share: number };
+type CategoryShare = { key: string; label: string; value: number; share: number; count: number };
 
 function buildCategoryShares(
   keys: string[] | null | undefined,
   labels: string[] | null | undefined,
   values: number[] | null | undefined,
+  counts: number[] | null | undefined,
   total: number,
 ) {
   if (!keys?.length || !labels?.length || !values?.length || total <= 0)
@@ -97,6 +102,7 @@ function buildCategoryShares(
         label,
         value,
         share: total > 0 ? value / total : 0,
+        count: Math.max(0, counts?.[index] ?? 0),
       };
     })
     .filter((item) => item.value > 0)
@@ -105,13 +111,20 @@ function buildCategoryShares(
 }
 
 const assetComposition = computed(() =>
-  buildCategoryShares(props.categoryKeys, props.categoryLabels, props.categoryAssets, assets.value),
+  buildCategoryShares(
+    props.categoryKeys,
+    props.categoryLabels,
+    props.categoryAssets,
+    props.categoryAssetCounts,
+    assets.value,
+  ),
 );
 const liabilityComposition = computed(() =>
   buildCategoryShares(
     props.categoryKeys,
     props.categoryLabels,
     props.categoryLiabilities,
+    props.categoryLiabilityCounts,
     liabilities.value,
   ),
 );
@@ -197,9 +210,19 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     <div class="nw-donut-side">
       <div class="nw-donut-composition">
         <div class="nw-donut-comp-block">
-          <div class="nw-donut-comp-title">Composicion de activos</div>
-          <div v-if="assetComposition.length" class="nw-donut-comp-list">
+          <div class="nw-donut-comp-block-head">
+            <div class="nw-donut-comp-title">Composicion de activos</div>
             <button
+              class="nw-donut-comp-action"
+              type="button"
+              aria-label="Nuevo activo"
+              @click="emit('add-type', { type: 'asset' })"
+            >
+              +
+            </button>
+          </div>
+          <div v-if="assetComposition.length" class="nw-donut-comp-list">
+            <div
               v-for="row in assetComposition"
               :key="`asset-${row.key}`"
               class="nw-donut-comp-row"
@@ -207,28 +230,54 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                 'nw-donut-comp-row-active':
                   props.selectedCategoryType === 'asset' && props.selectedCategoryKey === row.key,
               }"
-              type="button"
-              @click="emit('select-category', { key: row.key, type: 'asset' })"
             >
-              <div class="nw-donut-comp-head">
-                <span>{{ row.label }}</span>
-                <strong>{{ formatPercent(row.share, 0) }}</strong>
-              </div>
-              <div class="nw-donut-comp-bar">
-                <span
-                  class="nw-donut-comp-fill nw-donut-comp-fill-asset"
-                  :style="{ width: `${row.share * 100}%` }"
-                ></span>
-              </div>
-            </button>
+              <button
+                class="nw-donut-comp-main"
+                type="button"
+                @click="emit('select-category', { key: row.key, type: 'asset' })"
+              >
+                <div class="nw-donut-comp-head">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ formatPercent(row.share, 0) }}</strong>
+                </div>
+                <div class="nw-donut-comp-meta">
+                  <span>{{ formatMoney(row.value, 2) }} {{ props.unit }}</span>
+                  <span>{{ row.count }} posiciones</span>
+                </div>
+                <div class="nw-donut-comp-bar">
+                  <span
+                    class="nw-donut-comp-fill nw-donut-comp-fill-asset"
+                    :style="{ width: `${row.share * 100}%` }"
+                  ></span>
+                </div>
+              </button>
+              <button
+                class="nw-donut-comp-action nw-donut-comp-row-action"
+                type="button"
+                :aria-label="`Nuevo activo en ${row.label}`"
+                @click="emit('add-category', { key: row.key, type: 'asset' })"
+              >
+                +
+              </button>
+            </div>
           </div>
           <div v-else class="nw-donut-comp-empty">Sin datos de activos por categoria.</div>
         </div>
 
         <div class="nw-donut-comp-block">
-          <div class="nw-donut-comp-title">Composicion de pasivos</div>
-          <div v-if="liabilityComposition.length" class="nw-donut-comp-list">
+          <div class="nw-donut-comp-block-head">
+            <div class="nw-donut-comp-title">Composicion de pasivos</div>
             <button
+              class="nw-donut-comp-action"
+              type="button"
+              aria-label="Nuevo pasivo"
+              @click="emit('add-type', { type: 'liability' })"
+            >
+              +
+            </button>
+          </div>
+          <div v-if="liabilityComposition.length" class="nw-donut-comp-list">
+            <div
               v-for="row in liabilityComposition"
               :key="`liability-${row.key}`"
               class="nw-donut-comp-row"
@@ -237,20 +286,36 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                   props.selectedCategoryType === 'liability' &&
                   props.selectedCategoryKey === row.key,
               }"
-              type="button"
-              @click="emit('select-category', { key: row.key, type: 'liability' })"
             >
-              <div class="nw-donut-comp-head">
-                <span>{{ row.label }}</span>
-                <strong>{{ formatPercent(row.share, 0) }}</strong>
-              </div>
-              <div class="nw-donut-comp-bar">
-                <span
-                  class="nw-donut-comp-fill nw-donut-comp-fill-liability"
-                  :style="{ width: `${row.share * 100}%` }"
-                ></span>
-              </div>
-            </button>
+              <button
+                class="nw-donut-comp-main"
+                type="button"
+                @click="emit('select-category', { key: row.key, type: 'liability' })"
+              >
+                <div class="nw-donut-comp-head">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ formatPercent(row.share, 0) }}</strong>
+                </div>
+                <div class="nw-donut-comp-meta">
+                  <span>{{ formatMoney(row.value, 2) }} {{ props.unit }}</span>
+                  <span>{{ row.count }} posiciones</span>
+                </div>
+                <div class="nw-donut-comp-bar">
+                  <span
+                    class="nw-donut-comp-fill nw-donut-comp-fill-liability"
+                    :style="{ width: `${row.share * 100}%` }"
+                  ></span>
+                </div>
+              </button>
+              <button
+                class="nw-donut-comp-action nw-donut-comp-row-action"
+                type="button"
+                :aria-label="`Nuevo pasivo en ${row.label}`"
+                @click="emit('add-category', { key: row.key, type: 'liability' })"
+              >
+                +
+              </button>
+            </div>
           </div>
           <div v-else class="nw-donut-comp-empty">Sin datos de pasivos por categoria.</div>
         </div>
@@ -260,22 +325,105 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 </template>
 
 <style scoped>
+.nw-donut-comp-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nw-donut-comp-title {
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .nw-donut-comp-row {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
   border-radius: 12px;
+  border: 1px solid transparent;
   padding: 8px 10px;
-  color: inherit;
-  cursor: pointer;
   transition:
     border-color 0.16s ease,
     background-color 0.16s ease;
 }
 
+.nw-donut-comp-main {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
 .nw-donut-comp-row-active {
   border-color: rgba(45, 212, 191, 0.35);
   background: rgba(45, 212, 191, 0.08);
+}
+
+.nw-donut-comp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nw-donut-comp-meta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.nw-donut-comp-bar {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.nw-donut-comp-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.nw-donut-comp-fill-asset {
+  background: linear-gradient(90deg, #38bdf8, #4cc3ff);
+}
+
+.nw-donut-comp-fill-liability {
+  background: linear-gradient(90deg, #fb7185, #f43f5e);
+}
+
+.nw-donut-comp-action {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.nw-donut-comp-row-action {
+  align-self: center;
+}
+
+.nw-donut-comp-empty {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.85rem;
 }
 </style>
