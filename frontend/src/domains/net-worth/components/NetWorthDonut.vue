@@ -28,13 +28,14 @@ type Props = {
   categoryLiabilityCounts?: number[] | null | undefined;
   selectedCategoryKey?: string | null | undefined;
   selectedCategoryType?: 'asset' | 'liability' | null | undefined;
+  showChart?: boolean | undefined;
+  showComposition?: boolean | undefined;
 };
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
   (e: 'select-category', payload: { key: string; type: 'asset' | 'liability' }): void;
   (e: 'add-type', payload: { type: 'asset' | 'liability' }): void;
-  (e: 'add-category', payload: { key: string; type: 'asset' | 'liability' }): void;
 }>();
 
 function normalizeNumberInput(raw: unknown) {
@@ -203,12 +204,16 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
 <template>
   <div class="nw-donut-wrap">
-    <div class="nw-donut-chart">
+    <div v-if="props.showChart !== false" class="nw-donut-chart">
       <Doughnut :data="data" :options="options" :plugins="[centerTextPlugin]" />
     </div>
 
-    <div class="nw-donut-side">
-      <div class="nw-donut-composition">
+    <div v-if="props.showComposition !== false || $slots['side-top']" class="nw-donut-side">
+      <div v-if="$slots['side-top']" class="nw-donut-side-top">
+        <slot name="side-top" />
+      </div>
+
+      <div v-if="props.showComposition !== false" class="nw-donut-composition">
         <div class="nw-donut-comp-block">
           <div class="nw-donut-comp-block-head">
             <div class="nw-donut-comp-title">Composicion de activos</div>
@@ -250,14 +255,6 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                     :style="{ width: `${row.share * 100}%` }"
                   ></span>
                 </div>
-              </button>
-              <button
-                class="nw-donut-comp-action nw-donut-comp-row-action"
-                type="button"
-                :aria-label="`Nuevo activo en ${row.label}`"
-                @click="emit('add-category', { key: row.key, type: 'asset' })"
-              >
-                +
               </button>
             </div>
           </div>
@@ -306,14 +303,6 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                     :style="{ width: `${row.share * 100}%` }"
                   ></span>
                 </div>
-              </button>
-              <button
-                class="nw-donut-comp-action nw-donut-comp-row-action"
-                type="button"
-                :aria-label="`Nuevo pasivo en ${row.label}`"
-                @click="emit('add-category', { key: row.key, type: 'liability' })"
-              >
-                +
               </button>
             </div>
           </div>
@@ -418,12 +407,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   line-height: 1;
 }
 
-.nw-donut-comp-row-action {
-  align-self: center;
-}
-
 .nw-donut-comp-empty {
   color: rgba(255, 255, 255, 0.58);
   font-size: 0.85rem;
+}
+
+.nw-donut-side-top {
+  margin-bottom: 16px;
 }
 </style>

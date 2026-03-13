@@ -1021,14 +1021,6 @@ async function handleCompositionAddType(payload: { type: 'asset' | 'liability' }
   openCreateModal(payload.type, null);
 }
 
-async function handleCompositionAddCategory(payload: {
-  key: string;
-  type: 'asset' | 'liability';
-}): Promise<void> {
-  await applyTimelineCategoryFilter(payload.key, payload.type);
-  openCreateModal(payload.type, payload.key);
-}
-
 async function selectPosition(row: PositionRow): Promise<void> {
   selectedPositionType.value = row.type;
   selectedPositionId.value = row.id;
@@ -1152,17 +1144,24 @@ const liabilityCreateInitial = computed(() =>
         </div>
       </div>
 
-      <div class="ui-nw-balance-kpi-grid mt-2">
+      <div class="ui-nw-hero mt-2">
+        <div class="ui-nw-hero-donut">
+          <NetWorthDonut
+            :total-assets="analysis.assets"
+            :total-liabilities="analysis.liabilities"
+            :asset-backed-liabilities="analysis.backedDebt"
+            :unbacked-liabilities="analysis.unbackedDebt"
+            :net-worth="analysis.netWorth"
+            :unit="unitLabel()"
+            :show-composition="false"
+          />
+        </div>
         <article class="ui-nw-balance-kpi ui-nw-balance-kpi-main">
           <div class="ui-nw-kpi-label">Patrimonio neto</div>
           <div class="ui-nw-kpi-value">
             {{ formatNumber(analysis.netWorth, 2) }} {{ unitLabel() }}
           </div>
-          <div class="ui-nw-kpi-sub">
-            Capital propio sobre activos: <strong>{{ formatPct(analysis.equityRatio, 0) }}</strong>
-          </div>
-
-          <div class="ui-nw-kpi-inline-grid">
+          <div class="ui-nw-kpi-inline-grid ui-nw-kpi-inline-grid-compact">
             <div class="ui-nw-kpi-inline">
               <div class="ui-nw-kpi-inline-label">Activos</div>
               <div class="ui-nw-kpi-inline-value">
@@ -1173,40 +1172,6 @@ const liabilityCreateInitial = computed(() =>
               <div class="ui-nw-kpi-inline-label">Pasivos</div>
               <div class="ui-nw-kpi-inline-value">
                 {{ formatNumber(analysis.liabilities, 2) }} {{ unitLabel() }}
-              </div>
-            </div>
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Ratio deuda / activos</div>
-              <div class="ui-nw-kpi-inline-value">{{ formatPct(analysis.debtRatio, 0) }}</div>
-            </div>
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Liquidez</div>
-              <div class="ui-nw-kpi-inline-value">
-                {{ formatNumber(analysis.liquidityAssets, 2) }} {{ unitLabel() }}
-              </div>
-              <div class="ui-nw-kpi-inline-meta">
-                Cobertura: <strong>{{ formatPct(analysis.liquidityToDebtRatio, 0) }}</strong>
-              </div>
-            </div>
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Deuda sin respaldo</div>
-              <div class="ui-nw-kpi-inline-value">
-                {{ formatNumber(analysis.unbackedDebt, 2) }} {{ unitLabel() }}
-              </div>
-              <div class="ui-nw-kpi-inline-meta">
-                {{
-                  formatPct(
-                    analysis.liabilities > 0 ? analysis.unbackedDebt / analysis.liabilities : null,
-                    0,
-                  )
-                }}
-                del pasivo
-              </div>
-            </div>
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Deuda con respaldo</div>
-              <div class="ui-nw-kpi-inline-value">
-                {{ formatNumber(analysis.backedDebt, 2) }} {{ unitLabel() }}
               </div>
             </div>
           </div>
@@ -1235,10 +1200,128 @@ const liabilityCreateInitial = computed(() =>
           :category-liability-counts="effectiveCategoryLiabilityCounts"
           :selected-category-key="selectedTimelineCategory"
           :selected-category-type="selectedTimelineCategoryType"
+          :show-chart="false"
           @select-category="applyCompositionCategoryFilter"
           @add-type="handleCompositionAddType"
-          @add-category="handleCompositionAddCategory"
-        />
+        >
+          <template #side-top>
+            <div class="ui-nw-inline-analytics">
+              <div class="ui-nw-timeline-head">
+                <div>
+                  <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
+                  <p class="ui-nw-timeline-copy">{{ displayedTimelineDescription }}</p>
+                </div>
+                <label v-if="showPositionSelector" class="ui-nw-position-select">
+                  <span class="ui-nw-position-select-label">
+                    {{ selectedTimelineCategoryType === 'liability' ? 'Pasivo' : 'Activo' }}
+                  </span>
+                  <select
+                    class="input ui-nw-position-select-input"
+                    :value="selectedPositionId ?? ''"
+                    @change="onPositionSelection"
+                  >
+                    <option value="">Categoria completa</option>
+                    <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
+                      {{ row.name }}
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <div v-if="displayedTimelineLoading" class="subtle">Cargando evolucion...</div>
+              <div v-else-if="displayedTimelineRows.length === 0" class="subtle">
+                {{
+                  selectedPosition
+                    ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
+                    : 'Aun no hay datos suficientes para construir la serie temporal.'
+                }}
+              </div>
+              <div v-else class="ui-nw-timeline-body">
+                <div class="ui-nw-timeline-summary">
+                  <div class="ui-nw-timeline-summary-label">{{ displayedTimelineSummaryLabel }}</div>
+                  <div class="ui-nw-timeline-summary-value">
+                    {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
+                    {{ displayedTimelineCurrency }}
+                  </div>
+                  <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
+                </div>
+
+                <div class="ui-nw-timeline-chart-shell">
+                  <div class="ui-nw-timeline-chart-layout">
+                    <div class="ui-nw-timeline-y-axis" aria-hidden="true">
+                      <span v-for="label in displayedTimelineYAxisLabels" :key="label">{{ label }}</span>
+                    </div>
+                    <div class="ui-nw-timeline-chart-stage">
+                      <svg
+                        class="ui-nw-timeline-chart"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-label="Grafico de evolucion patrimonial"
+                      >
+                        <path
+                          class="ui-nw-timeline-grid"
+                          d="M 0 20 L 100 20 M 0 50 L 100 50 M 0 80 L 100 80"
+                        />
+                        <path
+                          v-if="displayedTimelinePath"
+                          class="ui-nw-timeline-line"
+                          :d="displayedTimelinePath"
+                          :style="{ stroke: displayedTimelineSeriesColor }"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ui-nw-timeline-x-axis" aria-hidden="true">
+                  <span v-for="row in displayedTimelineXAxisLabels" :key="`axis-${row.date}`">
+                    {{ row.label }}
+                  </span>
+                </div>
+
+                <div class="ui-nw-timeline-points">
+                  <div
+                    v-for="row in displayedTimelineRows.slice(-6)"
+                    :key="row.date"
+                    class="ui-nw-timeline-point"
+                  >
+                    <span>{{ row.label }}</span>
+                    <strong>{{ formatNumber(row.value, 0) }}</strong>
+                  </div>
+                </div>
+
+                <div v-if="selectedPosition" class="ui-nw-position-activity">
+                  <div class="ui-nw-position-activity-head">
+                    <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
+                    <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
+                  </div>
+                  <div v-if="positionActivityRows.length === 0" class="subtle">
+                    No hay eventos ni valoraciones manuales registrados para esta posicion.
+                  </div>
+                  <div v-else class="ui-nw-position-activity-list">
+                    <div
+                      v-for="row in positionActivityRows"
+                      :key="row.id"
+                      class="ui-nw-position-activity-row"
+                      :class="{
+                        'ui-nw-position-activity-row-valuation': row.kind === 'valuation',
+                      }"
+                    >
+                      <div class="ui-nw-position-activity-main">
+                        <strong>{{ row.date }}</strong>
+                        <span>{{ row.label }} | {{ row.meta }}</span>
+                        <span v-if="row.note">{{ row.note }}</span>
+                      </div>
+                      <div class="ui-nw-position-activity-amount">
+                        {{ formatNumber(row.amount, 2) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </NetWorthDonut>
       </div>
 
       <div v-if="showCategoryWorkspace" class="ui-nw-category-workspace">
@@ -1311,122 +1394,6 @@ const liabilityCreateInitial = computed(() =>
               </button>
             </div>
           </article>
-        </div>
-      </div>
-
-      <div class="ui-nw-inline-analytics">
-        <div class="ui-nw-timeline-head">
-          <div>
-            <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
-            <p class="ui-nw-timeline-copy">{{ displayedTimelineDescription }}</p>
-          </div>
-          <label v-if="showPositionSelector" class="ui-nw-position-select">
-            <span class="ui-nw-position-select-label">
-              {{ selectedTimelineCategoryType === 'liability' ? 'Pasivo' : 'Activo' }}
-            </span>
-            <select
-              class="input ui-nw-position-select-input"
-              :value="selectedPositionId ?? ''"
-              @change="onPositionSelection"
-            >
-              <option value="">Categoria completa</option>
-              <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
-                {{ row.name }}
-              </option>
-            </select>
-          </label>
-        </div>
-
-        <div v-if="displayedTimelineLoading" class="subtle">Cargando evolucion...</div>
-        <div v-else-if="displayedTimelineRows.length === 0" class="subtle">
-          {{
-            selectedPosition
-              ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
-              : 'Aun no hay datos suficientes para construir la serie temporal.'
-          }}
-        </div>
-        <div v-else class="ui-nw-timeline-body">
-          <div class="ui-nw-timeline-summary">
-            <div class="ui-nw-timeline-summary-label">{{ displayedTimelineSummaryLabel }}</div>
-            <div class="ui-nw-timeline-summary-value">
-              {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
-              {{ displayedTimelineCurrency }}
-            </div>
-            <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
-          </div>
-
-          <div class="ui-nw-timeline-chart-shell">
-            <div class="ui-nw-timeline-chart-layout">
-              <div class="ui-nw-timeline-y-axis" aria-hidden="true">
-                <span v-for="label in displayedTimelineYAxisLabels" :key="label">{{ label }}</span>
-              </div>
-              <div class="ui-nw-timeline-chart-stage">
-                <svg
-                  class="ui-nw-timeline-chart"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                  aria-label="Grafico de evolucion patrimonial"
-                >
-                  <path
-                    class="ui-nw-timeline-grid"
-                    d="M 0 20 L 100 20 M 0 50 L 100 50 M 0 80 L 100 80"
-                  />
-                  <path
-                    v-if="displayedTimelinePath"
-                    class="ui-nw-timeline-line"
-                    :d="displayedTimelinePath"
-                    :style="{ stroke: displayedTimelineSeriesColor }"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div class="ui-nw-timeline-x-axis" aria-hidden="true">
-            <span v-for="row in displayedTimelineXAxisLabels" :key="`axis-${row.date}`">
-              {{ row.label }}
-            </span>
-          </div>
-
-          <div class="ui-nw-timeline-points">
-            <div
-              v-for="row in displayedTimelineRows.slice(-6)"
-              :key="row.date"
-              class="ui-nw-timeline-point"
-            >
-              <span>{{ row.label }}</span>
-              <strong>{{ formatNumber(row.value, 0) }}</strong>
-            </div>
-          </div>
-
-          <div v-if="selectedPosition" class="ui-nw-position-activity">
-            <div class="ui-nw-position-activity-head">
-              <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
-              <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
-            </div>
-            <div v-if="positionActivityRows.length === 0" class="subtle">
-              No hay eventos ni valoraciones manuales registrados para esta posicion.
-            </div>
-            <div v-else class="ui-nw-position-activity-list">
-              <div
-                v-for="row in positionActivityRows"
-                :key="row.id"
-                class="ui-nw-position-activity-row"
-                :class="{
-                  'ui-nw-position-activity-row-valuation': row.kind === 'valuation',
-                }"
-              >
-                <div class="ui-nw-position-activity-main">
-                  <strong>{{ row.date }}</strong>
-                  <span>{{ row.label }} | {{ row.meta }}</span>
-                  <span v-if="row.note">{{ row.note }}</span>
-                </div>
-                <div class="ui-nw-position-activity-amount">
-                  {{ formatNumber(row.amount, 2) }}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1805,6 +1772,23 @@ const liabilityCreateInitial = computed(() =>
   gap: 16px;
 }
 
+.ui-nw-hero {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.ui-nw-hero-donut {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ui-nw-category-workspace {
   margin-top: 18px;
   padding: 18px;
@@ -1968,6 +1952,11 @@ const liabilityCreateInitial = computed(() =>
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.ui-nw-kpi-inline-grid-compact {
+  max-width: 720px;
+  margin-inline: auto;
 }
 
 .ui-nw-kpi-inline {
@@ -2422,6 +2411,10 @@ const liabilityCreateInitial = computed(() =>
 }
 
 @media (max-width: 1024px) {
+  .ui-nw-hero {
+    grid-template-columns: 1fr;
+  }
+
   .ui-nw-balance-kpi-main {
     grid-column: span 12;
     grid-row: auto;
