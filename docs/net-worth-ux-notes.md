@@ -9,3 +9,4 @@
 - La cabecera de patrimonio incluye un filtro por titularidad junto a ajustes con el mismo patrón visual y funcional del dashboard de presupuesto: filtra por persona y prorratea las titularidades compartidas en modo nominal.
 - La composición de activos y pasivos funciona ahora como panel operativo: muestra importes y contadores por categoría, permite crear desde la propia composición y abre un detalle editable de posiciones sin salir de patrimonio.
 - El donut se muestra ahora en la cabecera principal de patrimonio y el resumen superior queda reducido a neto, activos y pasivos; los ratios de fase se eliminan de esta vista.
+- El bloque principal de patrimonio se ha rehecho como un hero visual: donut destacado a la izquierda, resumen consolidado a la derecha y tarjetas separadas para activos y pasivos, con mejor jerarquía y responsive más limpio.

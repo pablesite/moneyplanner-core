@@ -1156,23 +1156,28 @@ const liabilityCreateInitial = computed(() =>
             :show-composition="false"
           />
         </div>
-        <article class="ui-nw-balance-kpi ui-nw-balance-kpi-main">
-          <div class="ui-nw-kpi-label">Patrimonio neto</div>
-          <div class="ui-nw-kpi-value">
+        <article class="ui-nw-hero-summary">
+          <div class="ui-nw-hero-badge">Balance actual</div>
+          <div class="ui-nw-hero-title">Patrimonio neto</div>
+          <div class="ui-nw-hero-value">
             {{ formatNumber(analysis.netWorth, 2) }} {{ unitLabel() }}
           </div>
-          <div class="ui-nw-kpi-inline-grid ui-nw-kpi-inline-grid-compact">
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Activos</div>
-              <div class="ui-nw-kpi-inline-value">
+          <p class="ui-nw-hero-copy">
+            Vista consolidada del patrimonio disponible con el filtro de titularidad actual.
+          </p>
+
+          <div class="ui-nw-hero-stats">
+            <div class="ui-nw-hero-stat ui-nw-hero-stat-assets">
+              <span class="ui-nw-hero-stat-label">Activos</span>
+              <strong class="ui-nw-hero-stat-value">
                 {{ formatNumber(analysis.assets, 2) }} {{ unitLabel() }}
-              </div>
+              </strong>
             </div>
-            <div class="ui-nw-kpi-inline">
-              <div class="ui-nw-kpi-inline-label">Pasivos</div>
-              <div class="ui-nw-kpi-inline-value">
+            <div class="ui-nw-hero-stat ui-nw-hero-stat-liabilities">
+              <span class="ui-nw-hero-stat-label">Pasivos</span>
+              <strong class="ui-nw-hero-stat-value">
                 {{ formatNumber(analysis.liabilities, 2) }} {{ unitLabel() }}
-              </div>
+              </strong>
             </div>
           </div>
         </article>
@@ -1774,19 +1779,109 @@ const liabilityCreateInitial = computed(() =>
 
 .ui-nw-hero {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 20px;
   align-items: stretch;
 }
 
 .ui-nw-hero-donut {
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 14px;
+  border-radius: 24px;
+  border: 1px solid rgba(92, 192, 255, 0.14);
+  background:
+    radial-gradient(circle at top, rgba(92, 192, 255, 0.12), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  padding: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.ui-nw-hero-summary {
+  border-radius: 24px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  background:
+    linear-gradient(135deg, rgba(6, 28, 39, 0.94), rgba(7, 23, 34, 0.98)),
+    rgba(7, 14, 26, 0.94);
+  padding: 28px 30px;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.ui-nw-hero-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(185, 255, 242, 0.9);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ui-nw-hero-title {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ui-nw-hero-value {
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.05;
+  font-weight: 800;
+  color: #f5fbff;
+}
+
+.ui-nw-hero-copy {
+  margin: 0;
+  max-width: 52ch;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.95rem;
+}
+
+.ui-nw-hero-stats {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ui-nw-hero-stat {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px 18px;
+  display: grid;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ui-nw-hero-stat-assets {
+  border-color: rgba(92, 192, 255, 0.2);
+  background: rgba(92, 192, 255, 0.08);
+}
+
+.ui-nw-hero-stat-liabilities {
+  border-color: rgba(255, 99, 132, 0.18);
+  background: rgba(255, 99, 132, 0.06);
+}
+
+.ui-nw-hero-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.ui-nw-hero-stat-value {
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: #fff;
 }
 
 .ui-nw-category-workspace {
@@ -2415,6 +2510,10 @@ const liabilityCreateInitial = computed(() =>
     grid-template-columns: 1fr;
   }
 
+  .ui-nw-hero-summary {
+    padding: 24px;
+  }
+
   .ui-nw-balance-kpi-main {
     grid-column: span 12;
     grid-row: auto;
@@ -2464,6 +2563,10 @@ const liabilityCreateInitial = computed(() =>
   .ui-nw-category-item-head {
     flex-direction: column;
     gap: 4px;
+  }
+
+  .ui-nw-hero-stats {
+    grid-template-columns: 1fr;
   }
 }
 </style>

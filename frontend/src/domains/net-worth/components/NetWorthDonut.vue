@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useSlots } from 'vue';
 import { Doughnut } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -32,11 +32,18 @@ type Props = {
   showComposition?: boolean | undefined;
 };
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  showChart: true,
+  showComposition: true,
+});
+const slots = useSlots();
 const emit = defineEmits<{
   (e: 'select-category', payload: { key: string; type: 'asset' | 'liability' }): void;
   (e: 'add-type', payload: { type: 'asset' | 'liability' }): void;
 }>();
+
+const hasChart = computed(() => props.showChart !== false);
+const hasSide = computed(() => props.showComposition !== false || !!slots['side-top']);
 
 function normalizeNumberInput(raw: unknown) {
   return String(raw ?? '')
@@ -203,12 +210,18 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 </script>
 
 <template>
-  <div class="nw-donut-wrap">
-    <div v-if="props.showChart !== false" class="nw-donut-chart">
+  <div
+    class="nw-donut-wrap"
+    :class="{
+      'nw-donut-wrap-chart-only': hasChart && !hasSide,
+      'nw-donut-wrap-side-only': !hasChart && hasSide,
+    }"
+  >
+    <div v-if="hasChart" class="nw-donut-chart">
       <Doughnut :data="data" :options="options" :plugins="[centerTextPlugin]" />
     </div>
 
-    <div v-if="props.showComposition !== false || $slots['side-top']" class="nw-donut-side">
+    <div v-if="hasSide" class="nw-donut-side">
       <div v-if="$slots['side-top']" class="nw-donut-side-top">
         <slot name="side-top" />
       </div>
@@ -414,5 +427,33 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
 .nw-donut-side-top {
   margin-bottom: 16px;
+}
+
+.nw-donut-wrap-chart-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.nw-donut-wrap-chart-only .nw-donut-chart {
+  width: min(280px, 100%);
+  height: 280px;
+}
+
+.nw-donut-wrap-chart-only :deep(canvas) {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.nw-donut-wrap-side-only {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .nw-donut-wrap-chart-only .nw-donut-chart {
+    width: min(240px, 100%);
+    height: 240px;
+  }
 }
 </style>
