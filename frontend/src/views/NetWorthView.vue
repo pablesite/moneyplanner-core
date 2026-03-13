@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { NetWorthDonut, SettingsPopover, useNetWorthViewState } from '@/domains/net-worth';
+import { computed, ref, watch } from 'vue';
+import {
+  NetWorthDonut,
+  SettingsPopover,
+  coreNetWorthApi,
+  useNetWorthViewState,
+} from '@/domains/net-worth';
 
 const {
   store,
@@ -19,12 +24,18 @@ const {
   summaryLiabilities,
   summaryNetWorth,
   byCategoryKeys,
-  byCategoryLabels,
   byCategoryAssets,
   byCategoryLiabilities,
   summaryAssetBackedLiabilities,
   summaryUnbackedLiabilities,
 } = useNetWorthViewState();
+
+type OwnershipFilterValue = 'all' | 'unassigned' | number;
+
+type OwnershipOption = {
+  value: OwnershipFilterValue;
+  label: string;
+};
 
 function toNumber(raw: unknown): number {
   const normalized = String(raw ?? '')
@@ -52,11 +63,59 @@ function formatPct(n: number | null, decimals = 0): string {
   }).format(n);
 }
 
-const assetsValue = computed(() => Math.max(0, toNumber(summaryAssets.value)));
-const liabilitiesValue = computed(() => Math.max(0, toNumber(summaryLiabilities.value)));
-const netWorthValue = computed(() => toNumber(summaryNetWorth.value));
-const backedDebtValue = computed(() => Math.max(0, toNumber(summaryAssetBackedLiabilities.value)));
-const unbackedDebtValue = computed(() => Math.max(0, toNumber(summaryUnbackedLiabilities.value)));
+function buildOwnershipLabel(ownership: (typeof store.ownerships)[number]): string {
+  if (ownership.kind === 'individual') {
+    return ownership.member?.name?.trim() || `Titularidad ${ownership.id}`;
+  }
+  const splitNames = (ownership.splits ?? [])
+    .map((split) => split.member?.name?.trim())
+    .filter((name): name is string => !!name);
+  return splitNames.length ? splitNames.join(' + ') : `Titularidad compartida ${ownership.id}`;
+}
+
+const ownershipFilter = ref<OwnershipFilterValue>('all');
+
+const ownershipOptions = computed<OwnershipOption[]>(() => [
+  { value: 'all', label: 'Todo patrimonio' },
+  { value: 'unassigned', label: 'Sin titularidad' },
+  ...store.ownerships.map((ownership) => ({
+    value: ownership.id,
+    label: buildOwnershipLabel(ownership),
+  })),
+]);
+
+const selectedOwnershipFilterLabel = computed(
+  () =>
+    ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
+    'Todo patrimonio',
+);
+const ownershipFilterDisabled = computed(() => valueMode.value !== 'nominal');
+
+watch(ownershipOptions, (options) => {
+  if (ownershipFilter.value === 'all' || ownershipFilter.value === 'unassigned') return;
+  if (!options.some((option) => option.value === ownershipFilter.value)) {
+    ownershipFilter.value = 'all';
+  }
+});
+
+watch(valueMode, (mode) => {
+  if (mode !== 'nominal') ownershipFilter.value = 'all';
+});
+
+watch(ownershipFilter, async () => {
+  resetPositionSelection();
+  if (selectedTimelineCategory.value && !effectiveCategoryKeys.value.includes(selectedTimelineCategory.value)) {
+    selectedTimelineCategory.value = null;
+    selectedTimelineCategoryType.value = 'asset';
+    await store.fetchTimeline(null, 'asset');
+  }
+});
+
+function matchesOwnershipFilter(ownershipRef: number | null | undefined): boolean {
+  if (ownershipFilter.value === 'all') return true;
+  if (ownershipFilter.value === 'unassigned') return ownershipRef == null;
+  return ownershipRef === ownershipFilter.value;
+}
 
 const debtRatioValue = computed(() =>
   assetsValue.value > 0 ? liabilitiesValue.value / assetsValue.value : null,
@@ -66,11 +125,11 @@ const equityRatioValue = computed(() =>
 );
 
 const liquidityAssetsValue = computed(() => {
-  const liquidityCategoryIndex = byCategoryLabels.value.findIndex(
+  const liquidityCategoryIndex = effectiveCategoryLabels.value.findIndex(
     (label) => label.toLowerCase() === 'liquidez',
   );
   if (liquidityCategoryIndex < 0) return 0;
-  return Math.max(0, byCategoryAssets.value[liquidityCategoryIndex] ?? 0);
+  return Math.max(0, effectiveCategoryAssets.value[liquidityCategoryIndex] ?? 0);
 });
 
 const liquidityToDebtRatioValue = computed(() =>
@@ -124,10 +183,6 @@ function getTimelineMetricValue(row: TimelinePoint): number {
   if (timelineMetric.value === 'liabilities') return row.liabilities;
   return row.netWorth;
 }
-
-const latestTimelinePoint = computed(
-  () => timelineRows.value[timelineRows.value.length - 1] ?? null,
-);
 
 const currentSummaryTimelinePoint = computed<DisplayedTimelinePoint>(() => ({
   date: 'current',
@@ -211,14 +266,20 @@ function resolvePositionValue(item: {
   return { value: toNumber(item.amount), currency: item.currency ?? baseCurrency };
 }
 
-const assetPositionRows = computed<PositionRow[]>(() =>
+const ownershipFilteredAssets = computed(() =>
   store.assets
     .filter((asset) => asset.is_active !== false)
-    .filter((asset) =>
-      selectedTimelineCategory.value && selectedTimelineCategoryType.value === 'asset'
-        ? asset.category === selectedTimelineCategory.value
-        : true,
-    )
+    .filter((asset) => matchesOwnershipFilter(asset.ownership_ref)),
+);
+
+const ownershipFilteredLiabilities = computed(() =>
+  store.liabilities
+    .filter((liability) => liability.is_active !== false)
+    .filter((liability) => matchesOwnershipFilter(liability.ownership_ref)),
+);
+
+const allAssetPositionRows = computed<PositionRow[]>(() =>
+  ownershipFilteredAssets.value
     .map((asset) => {
       const resolved = resolvePositionValue(asset);
       return {
@@ -234,14 +295,16 @@ const assetPositionRows = computed<PositionRow[]>(() =>
     .sort((a, b) => b.value - a.value),
 );
 
-const liabilityPositionRows = computed<PositionRow[]>(() =>
-  store.liabilities
-    .filter((liability) => liability.is_active !== false)
-    .filter((liability) =>
-      selectedTimelineCategory.value && selectedTimelineCategoryType.value === 'liability'
-        ? liability.category === selectedTimelineCategory.value
-        : true,
-    )
+const assetPositionRows = computed<PositionRow[]>(() =>
+  allAssetPositionRows.value.filter((asset) =>
+    selectedTimelineCategory.value && selectedTimelineCategoryType.value === 'asset'
+      ? asset.category === selectedTimelineCategory.value
+      : true,
+  ),
+);
+
+const allLiabilityPositionRows = computed<PositionRow[]>(() =>
+  ownershipFilteredLiabilities.value
     .map((liability) => {
       const resolved = resolvePositionValue(liability);
       return {
@@ -255,6 +318,98 @@ const liabilityPositionRows = computed<PositionRow[]>(() =>
       };
     })
     .sort((a, b) => b.value - a.value),
+);
+
+const liabilityPositionRows = computed<PositionRow[]>(() =>
+  allLiabilityPositionRows.value.filter((liability) =>
+    selectedTimelineCategory.value && selectedTimelineCategoryType.value === 'liability'
+      ? liability.category === selectedTimelineCategory.value
+      : true,
+  ),
+);
+
+function buildCategoryTotals(rows: PositionRow[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    totals.set(row.category, (totals.get(row.category) ?? 0) + row.value);
+  }
+  return totals;
+}
+
+const filteredAssetCategoryTotals = computed(() => buildCategoryTotals(allAssetPositionRows.value));
+const filteredLiabilityCategoryTotals = computed(() =>
+  buildCategoryTotals(allLiabilityPositionRows.value),
+);
+
+const effectiveCategoryKeys = computed(() => {
+  if (ownershipFilter.value === 'all') return byCategoryKeys.value;
+  return Array.from(
+    new Set([
+      ...filteredAssetCategoryTotals.value.keys(),
+      ...filteredLiabilityCategoryTotals.value.keys(),
+    ]),
+  );
+});
+
+const effectiveCategoryLabels = computed(() =>
+  effectiveCategoryKeys.value.map((key) => categoryLabelMap.value.get(`asset:${key}`) ?? key),
+);
+
+const effectiveCategoryAssets = computed(() => {
+  if (ownershipFilter.value === 'all') return byCategoryAssets.value;
+  return effectiveCategoryKeys.value.map((key) => filteredAssetCategoryTotals.value.get(key) ?? 0);
+});
+
+const effectiveCategoryLiabilities = computed(() => {
+  if (ownershipFilter.value === 'all') return byCategoryLiabilities.value;
+  return effectiveCategoryKeys.value.map(
+    (key) => filteredLiabilityCategoryTotals.value.get(key) ?? 0,
+  );
+});
+
+const filteredAssetsValue = computed(() =>
+  allAssetPositionRows.value.reduce((total, row) => total + row.value, 0),
+);
+const filteredLiabilitiesValue = computed(() =>
+  allLiabilityPositionRows.value.reduce((total, row) => total + row.value, 0),
+);
+const filteredBackedDebtValue = computed(() =>
+  ownershipFilteredLiabilities.value.reduce((total, liability) => {
+    const resolved = resolvePositionValue(liability);
+    return total + (liability.financed_asset_ref != null ? resolved.value : 0);
+  }, 0),
+);
+const filteredUnbackedDebtValue = computed(() =>
+  ownershipFilteredLiabilities.value.reduce((total, liability) => {
+    const resolved = resolvePositionValue(liability);
+    return total + (liability.financed_asset_ref == null ? resolved.value : 0);
+  }, 0),
+);
+
+const assetsValue = computed(() =>
+  ownershipFilter.value === 'all'
+    ? Math.max(0, toNumber(summaryAssets.value))
+    : Math.max(0, filteredAssetsValue.value),
+);
+const liabilitiesValue = computed(() =>
+  ownershipFilter.value === 'all'
+    ? Math.max(0, toNumber(summaryLiabilities.value))
+    : Math.max(0, filteredLiabilitiesValue.value),
+);
+const netWorthValue = computed(() =>
+  ownershipFilter.value === 'all'
+    ? toNumber(summaryNetWorth.value)
+    : filteredAssetsValue.value - filteredLiabilitiesValue.value,
+);
+const backedDebtValue = computed(() =>
+  ownershipFilter.value === 'all'
+    ? Math.max(0, toNumber(summaryAssetBackedLiabilities.value))
+    : Math.max(0, filteredBackedDebtValue.value),
+);
+const unbackedDebtValue = computed(() =>
+  ownershipFilter.value === 'all'
+    ? Math.max(0, toNumber(summaryUnbackedLiabilities.value))
+    : Math.max(0, filteredUnbackedDebtValue.value),
 );
 
 const availablePositionRows = computed<PositionRow[]>(() => {
@@ -313,6 +468,118 @@ const latestPositionTimelinePoint = computed(
   () => positionTimelineRows.value[positionTimelineRows.value.length - 1] ?? null,
 );
 
+type CachedTimelineRows = {
+  positionType: 'asset' | 'liability';
+  rows: PositionTimelinePoint[];
+};
+
+const ownershipTimelineCache = ref<Record<string, CachedTimelineRows>>({});
+const ownershipTimelineLoading = ref(false);
+
+function positionCacheKey(type: 'asset' | 'liability', id: number): string {
+  return `${type}:${id}`;
+}
+
+const ownershipScopedRows = computed<PositionRow[]>(() => {
+  if (ownershipFilter.value === 'all' || selectedPosition.value) return [];
+  if (selectedTimelineCategory.value) return availablePositionRows.value;
+  return [...allAssetPositionRows.value, ...allLiabilityPositionRows.value];
+});
+
+async function ensureOwnershipTimelineCache(rows: PositionRow[]): Promise<void> {
+  const missingRows = rows.filter(
+    (row) => !ownershipTimelineCache.value[positionCacheKey(row.type, row.id)],
+  );
+  if (!missingRows.length) return;
+
+  ownershipTimelineLoading.value = true;
+  try {
+    const results = await Promise.all(
+      missingRows.map(async (row) => {
+        const response =
+          row.type === 'asset'
+            ? await coreNetWorthApi.getAssetTimeline(row.id)
+            : await coreNetWorthApi.getLiabilityTimeline(row.id);
+        return { row, timeline: response.data };
+      }),
+    );
+
+    ownershipTimelineCache.value = results.reduce<Record<string, CachedTimelineRows>>(
+      (cache, entry) => {
+        cache[positionCacheKey(entry.row.type, entry.row.id)] = {
+          positionType: entry.row.type,
+          rows: (entry.timeline.rows ?? []).map((timelineRow) => ({
+            date: timelineRow.date,
+            label: new Intl.DateTimeFormat('es-ES', { month: 'short', year: '2-digit' }).format(
+              new Date(timelineRow.date),
+            ),
+            value: toNumber(timelineRow.value_base || timelineRow.value),
+          })),
+        };
+        return cache;
+      },
+      { ...ownershipTimelineCache.value },
+    );
+  } catch (error: unknown) {
+    store.error = error instanceof Error ? error.message : 'No se pudo cargar la timeline filtrada';
+  } finally {
+    ownershipTimelineLoading.value = false;
+  }
+}
+
+watch(
+  () => ownershipScopedRows.value.map((row) => positionCacheKey(row.type, row.id)).join('|'),
+  async () => {
+    if (ownershipFilter.value === 'all' || selectedPosition.value) return;
+    await ensureOwnershipTimelineCache(ownershipScopedRows.value);
+  },
+  { immediate: true },
+);
+
+watch(availablePositionRows, (rows) => {
+  if (!selectedPositionId.value || !selectedPositionType.value) return;
+  if (!rows.some((row) => row.id === selectedPositionId.value && row.type === selectedPositionType.value)) {
+    resetPositionSelection();
+  }
+});
+
+const ownershipTimelineRows = computed<TimelinePoint[]>(() => {
+  if (ownershipFilter.value === 'all') return [];
+
+  const byDate = new Map<string, TimelinePoint>();
+  for (const row of ownershipScopedRows.value) {
+    const cached = ownershipTimelineCache.value[positionCacheKey(row.type, row.id)];
+    if (!cached) continue;
+
+    for (const point of cached.rows) {
+      const current = byDate.get(point.date) ?? {
+        date: point.date,
+        label: point.label,
+        netWorth: 0,
+        assets: 0,
+        liabilities: 0,
+      };
+      if (row.type === 'asset') {
+        current.assets += point.value;
+      } else {
+        current.liabilities += point.value;
+      }
+      current.netWorth = current.assets - current.liabilities;
+      byDate.set(point.date, current);
+    }
+  }
+
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+});
+
+const activeTimelineRows = computed(() =>
+  ownershipFilter.value === 'all' ? timelineRows.value : ownershipTimelineRows.value,
+);
+
+const latestTimelinePoint = computed(
+  () => activeTimelineRows.value[activeTimelineRows.value.length - 1] ?? null,
+);
+
 const displayedTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
   if (selectedPosition.value) {
     return positionTimelineRows.value.map((row) => ({
@@ -321,7 +588,7 @@ const displayedTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
       value: row.value,
     }));
   }
-  return timelineRows.value.map((row) => ({
+  return activeTimelineRows.value.map((row) => ({
     date: row.date,
     label: row.label,
     value: getTimelineMetricValue(row),
@@ -338,7 +605,11 @@ const displayedTimelineLatestPoint = computed(
 );
 
 const displayedTimelineLoading = computed(() =>
-  selectedPosition.value ? store.positionTimelineLoading : store.timelineLoading,
+  selectedPosition.value
+    ? store.positionTimelineLoading
+    : ownershipFilter.value === 'all'
+      ? store.timelineLoading
+      : ownershipTimelineLoading.value,
 );
 
 const displayedTimelineCurrency = computed(() => {
@@ -363,12 +634,18 @@ const displayedTimelineDescription = computed(() => {
     return `Serie mensual de ${selectedPosition.value.name}.`;
   }
   if (!selectedTimelineCategory.value) {
-    return 'Pulsa en una categoria del bloque superior para filtrar la evolucion temporal.';
+    return ownershipFilter.value === 'all'
+      ? 'Pulsa en una categoria del bloque superior para filtrar la evolucion temporal.'
+      : `Serie mensual agregada para ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
   }
   if (selectedTimelineCategoryType.value === 'liability') {
-    return `Serie mensual del total de ${selectedCategoryLabel.value} dentro de pasivos.`;
+    return ownershipFilter.value === 'all'
+      ? `Serie mensual del total de ${selectedCategoryLabel.value} dentro de pasivos.`
+      : `Serie mensual de ${selectedCategoryLabel.value} dentro de ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
   }
-  return `Serie mensual del total de ${selectedCategoryLabel.value} dentro de activos.`;
+  return ownershipFilter.value === 'all'
+    ? `Serie mensual del total de ${selectedCategoryLabel.value} dentro de activos.`
+    : `Serie mensual de ${selectedCategoryLabel.value} dentro de ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
 });
 
 const displayedTimelineSummaryMeta = computed(() => {
@@ -601,7 +878,24 @@ function onPositionSelection(event: Event): void {
           </button>
         </div>
 
-        <div class="ui-pro-toolbar">
+        <div class="ui-pro-toolbar ui-nw-toolbar">
+          <label class="ui-nw-ownership-select" data-test="ownership-filter">
+            <span class="ui-nw-ownership-select-label">Titularidad</span>
+            <select
+              v-model="ownershipFilter"
+              class="input ui-nw-ownership-select-input"
+              :disabled="ownershipFilterDisabled"
+              aria-label="Filtrar patrimonio por titularidad"
+            >
+              <option
+                v-for="option in ownershipOptions"
+                :key="String(option.value)"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
           <SettingsPopover
             :loading="store.loading"
             :base-currency="store.baseCurrency ?? 'EUR'"
@@ -690,16 +984,16 @@ function onPositionSelection(event: Event): void {
     <div class="card ui-pro-panel ui-nw-balance-panel section">
       <div class="ui-pro-divider mt-4">
         <NetWorthDonut
-          :total-assets="summaryAssets"
-          :total-liabilities="summaryLiabilities"
-          :asset-backed-liabilities="summaryAssetBackedLiabilities"
-          :unbacked-liabilities="summaryUnbackedLiabilities"
-          :net-worth="summaryNetWorth"
+          :total-assets="analysis.assets"
+          :total-liabilities="analysis.liabilities"
+          :asset-backed-liabilities="analysis.backedDebt"
+          :unbacked-liabilities="analysis.unbackedDebt"
+          :net-worth="analysis.netWorth"
           :unit="unitLabel()"
-          :category-keys="byCategoryKeys"
-          :category-labels="byCategoryLabels"
-          :category-assets="byCategoryAssets"
-          :category-liabilities="byCategoryLiabilities"
+          :category-keys="effectiveCategoryKeys"
+          :category-labels="effectiveCategoryLabels"
+          :category-assets="effectiveCategoryAssets"
+          :category-liabilities="effectiveCategoryLiabilities"
           :selected-category-key="selectedTimelineCategory"
           :selected-category-type="selectedTimelineCategoryType"
           @select-category="applyCompositionCategoryFilter"
@@ -1128,6 +1422,30 @@ function onPositionSelection(event: Event): void {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: grid;
   gap: 16px;
+}
+
+.ui-nw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ui-nw-ownership-select {
+  display: grid;
+  gap: 6px;
+  min-width: min(260px, 100%);
+}
+
+.ui-nw-ownership-select-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.ui-nw-ownership-select-input {
+  min-height: 42px;
 }
 
 .ui-nw-balance-kpi-grid {
