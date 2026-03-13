@@ -95,6 +95,14 @@ describe('useNetWorthViewState (core)', () => {
       baseCurrency: 'EUR',
       summary: {
         ...makeSummary(),
+        assets_by_category_real: {
+          cash: '9',
+          mortgage: '0',
+        },
+        liabilities_by_category_real: {
+          cash: '0',
+          mortgage: '4',
+        },
         liabilities_asset_backed: '100',
         liabilities_unbacked: '50',
         liabilities_asset_backed_real: '80',
@@ -129,8 +137,8 @@ describe('useNetWorthViewState (core)', () => {
     expect(state.summaryUnbackedLiabilities.value).toBe('40');
     expect(state.byCategoryKeys.value).toEqual(['cash', 'mortgage']);
     expect(state.byCategoryLabels.value).toEqual(['Liquidez', 'Hipoteca']);
-    expect(state.byCategoryAssets.value).toEqual([10, 0]);
-    expect(state.byCategoryLiabilities.value).toEqual([0, 5]);
+    expect(state.byCategoryAssets.value).toEqual([9, 0]);
+    expect(state.byCategoryLiabilities.value).toEqual([0, 4]);
 
     const asset = makeItem({
       financed_asset_ref: 33,

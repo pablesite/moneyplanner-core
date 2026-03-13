@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useNetWorthStore } from '@/stores/netWorth';
+import { buildByCategoryChart } from '@/domains/net-worth/charts';
 import type { Asset, Liability, NetWorthWritePayload, Summary } from '@/domains/net-worth/models';
 
 type ByCategoryRow = { key: string; a: number; l: number };
@@ -282,7 +283,18 @@ export function useNetWorthViewState() {
     valueMode.value === 'real' ? store.summary?.net_worth_real : store.summary?.net_worth,
   );
 
-  const byCategoryChart = computed(() => store.byCategoryChart);
+  const byCategoryChart = computed(() =>
+    buildByCategoryChart(
+      valueMode.value === 'real'
+        ? {
+            ...store.summary,
+            assets_by_category: store.summary?.assets_by_category_real ?? {},
+            liabilities_by_category: store.summary?.liabilities_by_category_real ?? {},
+          }
+        : store.summary,
+      store.baseCurrency,
+    ),
+  );
 
   const categoryLabelMap = computed(() => {
     const m = new Map<string, string>();
