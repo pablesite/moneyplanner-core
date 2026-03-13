@@ -6,4 +6,4 @@
 - El selector contextual de posiciones solo se muestra mientras hay una categoría concreta seleccionada.
 - En modo real/IPC, la composición por categorías y los indicadores de liquidez usan también los agregados reales para que los totales coincidan con el resumen superior.
 - En el estado general sin filtros, la tarjeta de "Ultimo patrimonio neto" muestra el resumen actual y no el cierre mensual proyectado de la timeline.
-- La cabecera de patrimonio incluye un filtro por titularidad junto a ajustes; en modo nominal recalcula KPIs, composición y evolución agregando solo las posiciones de esa titularidad.
+- La cabecera de patrimonio incluye un filtro por titularidad junto a ajustes con el mismo patrón visual e interacción del dashboard de presupuesto; en modo nominal recalcula KPIs, composición y evolución agregando solo las posiciones de esa titularidad.

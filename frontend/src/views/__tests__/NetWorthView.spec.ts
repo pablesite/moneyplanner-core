@@ -239,7 +239,7 @@ describe('NetWorthView', () => {
 
     const wrapper = mount(NetWorthView);
 
-    await wrapper.get('select[aria-label="Filtrar patrimonio por titularidad"]').setValue('7');
+    await wrapper.get('[data-test="ownership-filter-option-7"]').trigger('click');
 
     expect(wrapper.text()).toContain('500,00 EUR');
     expect(wrapper.text()).toContain('600,00 EUR');
