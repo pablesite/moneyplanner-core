@@ -7,6 +7,10 @@ import NetWorthView from '../NetWorthView.vue';
 const mockUseNetWorthViewState = vi.fn();
 const mockUseNetWorthViewExtensions = vi.fn();
 const mockPush = vi.fn();
+const mockCoreNetWorthApi = vi.hoisted(() => ({
+  getAssetTimeline: vi.fn(async () => ({ data: { rows: [], base_currency: 'EUR' } })),
+  getLiabilityTimeline: vi.fn(async () => ({ data: { rows: [], base_currency: 'EUR' } })),
+}));
 
 function makeStub(name: string) {
   return defineComponent({
@@ -42,6 +46,7 @@ vi.mock('@/domains/net-worth', () => ({
     `,
   }),
   SettingsPopover: makeStub('SettingsPopover'),
+  coreNetWorthApi: mockCoreNetWorthApi,
   useNetWorthViewState: () => mockUseNetWorthViewState(),
   useNetWorthViewExtensions: () => mockUseNetWorthViewExtensions(),
 }));
@@ -74,6 +79,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     assets: [],
     liabilities: [],
     snapshots: [],
+    ownerships: [],
     timeline: { rows: [], base_currency: 'EUR' },
     timelineLoading: false,
     positionTimeline: { rows: [], base_currency: 'EUR', position_type: 'asset', position_id: 1 },
@@ -142,6 +148,8 @@ describe('NetWorthView', () => {
     mockUseNetWorthViewState.mockReset();
     mockUseNetWorthViewExtensions.mockReset();
     mockPush.mockReset();
+    mockCoreNetWorthApi.getAssetTimeline.mockClear();
+    mockCoreNetWorthApi.getLiabilityTimeline.mockClear();
   });
 
   it('renders key sections and current analytics blocks', () => {
@@ -169,6 +177,73 @@ describe('NetWorthView', () => {
     expect(wrapper.text()).toContain('Ratio deuda / activos');
     expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('No hay snapshots');
+  });
+
+  it('filters current net worth metrics by ownership from the header selector', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        ownerships: [
+          {
+            id: 7,
+            kind: 'individual',
+            member: { id: 3, name: 'Ana', role: 'adult' },
+            splits: [],
+            notes: '',
+          },
+        ],
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta Ana',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '600',
+            amount_base: '600',
+            currency: 'EUR',
+            is_active: true,
+            ownership_ref: 7,
+          },
+          {
+            id: 12,
+            name: 'Cuenta comun',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '400',
+            amount_base: '400',
+            currency: 'EUR',
+            is_active: true,
+            ownership_ref: null,
+          },
+        ],
+        liabilities: [
+          {
+            id: 21,
+            name: 'Tarjeta Ana',
+            category: 'credit_card',
+            amount: '100',
+            amount_base: '100',
+            currency: 'EUR',
+            is_active: true,
+            ownership_ref: 7,
+          },
+        ],
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('select[aria-label="Filtrar patrimonio por titularidad"]').setValue('7');
+
+    expect(wrapper.text()).toContain('500,00 EUR');
+    expect(wrapper.text()).toContain('600,00 EUR');
+    expect(wrapper.text()).toContain('100,00 EUR');
   });
 
   it('uses the current summary totals in the general timeline highlight instead of the projected month-end row', () => {
