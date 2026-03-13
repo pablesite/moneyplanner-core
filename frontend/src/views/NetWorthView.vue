@@ -85,9 +85,13 @@ const ownershipOptions = computed<OwnershipOption[]>(() => [
 ]);
 
 const selectedOwnershipFilterLabel = computed(
-  () =>
-    ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
-    'Todo patrimonio',
+  () => {
+    if (ownershipFilter.value === 'all') return 'Todos';
+    return (
+      ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
+      'Todos'
+    );
+  },
 );
 const ownershipFilterDisabled = computed(() => valueMode.value !== 'nominal');
 
@@ -115,6 +119,17 @@ function matchesOwnershipFilter(ownershipRef: number | null | undefined): boolea
   if (ownershipFilter.value === 'all') return true;
   if (ownershipFilter.value === 'unassigned') return ownershipRef == null;
   return ownershipRef === ownershipFilter.value;
+}
+
+function closePopoverFromClick(event: Event): void {
+  const target = event.currentTarget as HTMLElement | null;
+  const details = target?.closest('details') as HTMLDetailsElement | null;
+  if (details) details.open = false;
+}
+
+function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event): void {
+  ownershipFilter.value = value;
+  closePopoverFromClick(event);
 }
 
 const debtRatioValue = computed(() =>
@@ -881,20 +896,43 @@ function onPositionSelection(event: Event): void {
         <div class="ui-pro-toolbar ui-nw-toolbar">
           <label class="ui-nw-ownership-select" data-test="ownership-filter">
             <span class="ui-nw-ownership-select-label">Titularidad</span>
-            <select
-              v-model="ownershipFilter"
-              class="input ui-nw-ownership-select-input"
-              :disabled="ownershipFilterDisabled"
-              aria-label="Filtrar patrimonio por titularidad"
+            <details
+              class="ui-select-popover"
+              :class="{ 'opacity-60': ownershipFilterDisabled }"
             >
-              <option
-                v-for="option in ownershipOptions"
-                :key="String(option.value)"
-                :value="option.value"
+              <summary
+                class="ui-select-popover-trigger ui-nw-ownership-select-input"
+                :aria-disabled="ownershipFilterDisabled"
+                @click="ownershipFilterDisabled ? $event.preventDefault() : undefined"
               >
-                {{ option.label }}
-              </option>
-            </select>
+                <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
+                <span class="ui-select-popover-caret" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                <button
+                  type="button"
+                  class="ui-select-popover-option"
+                  :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                  data-test="ownership-filter-option-all"
+                  :disabled="ownershipFilterDisabled"
+                  @click="selectOwnershipFilterOption('all', $event)"
+                >
+                  Todos
+                </button>
+                <button
+                  v-for="option in ownershipOptions.filter((item) => item.value !== 'all')"
+                  :key="String(option.value)"
+                  type="button"
+                  class="ui-select-popover-option"
+                  :class="{ 'ui-select-popover-option-active': ownershipFilter === option.value }"
+                  :data-test="`ownership-filter-option-${String(option.value)}`"
+                  :disabled="ownershipFilterDisabled"
+                  @click="selectOwnershipFilterOption(option.value, $event)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </details>
           </label>
           <SettingsPopover
             :loading="store.loading"
