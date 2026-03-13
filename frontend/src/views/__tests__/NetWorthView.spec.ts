@@ -25,30 +25,36 @@ vi.mock('@/domains/net-worth', () => ({
   NetWorthByCategoryBar: makeStub('NetWorthByCategoryBar'),
   NetWorthDonut: defineComponent({
     name: 'NetWorthDonut',
+    props: {
+      showComposition: { type: Boolean, required: false, default: true },
+    },
     emits: ['select-category', 'add-type', 'add-category'],
     template: `
       <div data-test="NetWorthDonut">
-        <button
+        <div data-test="NetWorthDonut-slot"><slot name="side-top" /></div>
+        <template v-if="showComposition">
+          <button
           data-test="donut-select-asset"
           type="button"
           @click="$emit('select-category', { key: 'cash', type: 'asset' })"
         >
           asset
         </button>
-        <button
+          <button
           data-test="donut-select-liability"
           type="button"
           @click="$emit('select-category', { key: 'mortgage', type: 'liability' })"
         >
           liability
         </button>
-        <button
+          <button
           data-test="donut-add-asset"
           type="button"
           @click="$emit('add-type', { type: 'asset' })"
         >
           add-asset
         </button>
+        </template>
       </div>
     `,
   }),
@@ -180,8 +186,9 @@ describe('NetWorthView', () => {
     expect(wrapper.text()).toContain('Evolucion temporal');
     expect(wrapper.text()).not.toContain('Detalle por posicion');
     expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Capital propio sobre activos');
-    expect(wrapper.text()).toContain('Ratio deuda / activos');
+    expect(wrapper.text()).toContain('Activos');
+    expect(wrapper.text()).toContain('Pasivos');
+    expect(wrapper.text()).not.toContain('Ratio deuda / activos');
     expect(wrapper.find('[data-test="NetWorthDonut"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('No hay snapshots');
   });
