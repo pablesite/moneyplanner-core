@@ -30,7 +30,7 @@ const {
   summaryUnbackedLiabilities,
 } = useNetWorthViewState();
 
-type OwnershipFilterValue = 'all' | 'unassigned' | number;
+type OwnershipFilterValue = 'all' | number;
 
 type OwnershipOption = {
   value: OwnershipFilterValue;
@@ -63,26 +63,63 @@ function formatPct(n: number | null, decimals = 0): string {
   }).format(n);
 }
 
-function buildOwnershipLabel(ownership: (typeof store.ownerships)[number]): string {
-  if (ownership.kind === 'individual') {
-    return ownership.member?.name?.trim() || `Titularidad ${ownership.id}`;
-  }
-  const splitNames = (ownership.splits ?? [])
-    .map((split) => split.member?.name?.trim())
-    .filter((name): name is string => !!name);
-  return splitNames.length ? splitNames.join(' + ') : `Titularidad compartida ${ownership.id}`;
-}
-
 const ownershipFilter = ref<OwnershipFilterValue>('all');
 
-const ownershipOptions = computed<OwnershipOption[]>(() => [
-  { value: 'all', label: 'Todo patrimonio' },
-  { value: 'unassigned', label: 'Sin titularidad' },
-  ...store.ownerships.map((ownership) => ({
-    value: ownership.id,
-    label: buildOwnershipLabel(ownership),
-  })),
-]);
+const ownershipById = computed(() => {
+  const map = new Map<number, (typeof store.ownerships)[number]>();
+  for (const ownership of store.ownerships ?? []) {
+    map.set(ownership.id, ownership);
+  }
+  return map;
+});
+
+function normalizeOwnershipSharePercent(raw: unknown): number {
+  const value = toNumber(raw);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value <= 1 ? value * 100 : value;
+}
+
+function allocationFractionForNetWorthOwner(
+  ownershipRef: number | null | undefined,
+  selectedOwner: OwnershipFilterValue,
+): number {
+  if (selectedOwner === 'all') return 1;
+  if (ownershipRef == null) return 0;
+
+  const ownership = ownershipById.value.get(ownershipRef);
+  if (!ownership) return 0;
+
+  if (ownership.kind === 'individual') {
+    return ownership.member?.id === selectedOwner ? 1 : 0;
+  }
+
+  const split = (ownership.splits ?? []).find((row) => row.member?.id === selectedOwner);
+  if (!split) return 0;
+  return normalizeOwnershipSharePercent(split.percent) / 100;
+}
+
+const ownershipOptions = computed<OwnershipOption[]>(() => {
+  const options = new Map<number, OwnershipOption>();
+  for (const ownership of store.ownerships ?? []) {
+    if (ownership.kind === 'individual' && ownership.member?.id && ownership.member.name?.trim()) {
+      options.set(ownership.member.id, {
+        value: ownership.member.id,
+        label: ownership.member.name.trim(),
+      });
+      continue;
+    }
+
+    for (const split of ownership.splits ?? []) {
+      if (!split.member?.id || !split.member.name?.trim()) continue;
+      options.set(split.member.id, {
+        value: split.member.id,
+        label: split.member.name.trim(),
+      });
+    }
+  }
+
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, 'es'));
+});
 
 const selectedOwnershipFilterLabel = computed(
   () => {
@@ -96,7 +133,7 @@ const selectedOwnershipFilterLabel = computed(
 const ownershipFilterDisabled = computed(() => valueMode.value !== 'nominal');
 
 watch(ownershipOptions, (options) => {
-  if (ownershipFilter.value === 'all' || ownershipFilter.value === 'unassigned') return;
+  if (ownershipFilter.value === 'all') return;
   if (!options.some((option) => option.value === ownershipFilter.value)) {
     ownershipFilter.value = 'all';
   }
@@ -116,9 +153,7 @@ watch(ownershipFilter, async () => {
 });
 
 function matchesOwnershipFilter(ownershipRef: number | null | undefined): boolean {
-  if (ownershipFilter.value === 'all') return true;
-  if (ownershipFilter.value === 'unassigned') return ownershipRef == null;
-  return ownershipRef === ownershipFilter.value;
+  return allocationFractionForNetWorthOwner(ownershipRef, ownershipFilter.value) > 0;
 }
 
 function closePopoverFromClick(event: Event): void {
@@ -231,6 +266,7 @@ type PositionRow = {
   subtitle: string;
   value: number;
   currency: string;
+  ownershipFraction: number;
 };
 
 type PositionTimelinePoint = {
@@ -297,16 +333,22 @@ const allAssetPositionRows = computed<PositionRow[]>(() =>
   ownershipFilteredAssets.value
     .map((asset) => {
       const resolved = resolvePositionValue(asset);
+      const ownershipFraction = allocationFractionForNetWorthOwner(
+        asset.ownership_ref,
+        ownershipFilter.value,
+      );
       return {
         id: asset.id,
         type: 'asset' as const,
         category: asset.category,
         name: asset.name,
         subtitle: [asset.category, asset.subcategory].filter(Boolean).join(' / '),
-        value: resolved.value,
+        value: resolved.value * ownershipFraction,
         currency: resolved.currency,
+        ownershipFraction,
       };
     })
+    .filter((asset) => asset.ownershipFraction > 0)
     .sort((a, b) => b.value - a.value),
 );
 
@@ -322,16 +364,22 @@ const allLiabilityPositionRows = computed<PositionRow[]>(() =>
   ownershipFilteredLiabilities.value
     .map((liability) => {
       const resolved = resolvePositionValue(liability);
+      const ownershipFraction = allocationFractionForNetWorthOwner(
+        liability.ownership_ref,
+        ownershipFilter.value,
+      );
       return {
         id: liability.id,
         type: 'liability' as const,
         category: liability.category,
         name: liability.name,
         subtitle: liability.category || 'liability',
-        value: resolved.value,
+        value: resolved.value * ownershipFraction,
         currency: resolved.currency,
+        ownershipFraction,
       };
     })
+    .filter((liability) => liability.ownershipFraction > 0)
     .sort((a, b) => b.value - a.value),
 );
 
@@ -391,13 +439,15 @@ const filteredLiabilitiesValue = computed(() =>
 const filteredBackedDebtValue = computed(() =>
   ownershipFilteredLiabilities.value.reduce((total, liability) => {
     const resolved = resolvePositionValue(liability);
-    return total + (liability.financed_asset_ref != null ? resolved.value : 0);
+    const fraction = allocationFractionForNetWorthOwner(liability.ownership_ref, ownershipFilter.value);
+    return total + (liability.financed_asset_ref != null ? resolved.value * fraction : 0);
   }, 0),
 );
 const filteredUnbackedDebtValue = computed(() =>
   ownershipFilteredLiabilities.value.reduce((total, liability) => {
     const resolved = resolvePositionValue(liability);
-    return total + (liability.financed_asset_ref == null ? resolved.value : 0);
+    const fraction = allocationFractionForNetWorthOwner(liability.ownership_ref, ownershipFilter.value);
+    return total + (liability.financed_asset_ref == null ? resolved.value * fraction : 0);
   }, 0),
 );
 
@@ -452,7 +502,7 @@ const positionTimelineRows = computed<PositionTimelinePoint[]>(() =>
     label: new Intl.DateTimeFormat('es-ES', { month: 'short', year: '2-digit' }).format(
       new Date(row.date),
     ),
-    value: toNumber(row.value_base || row.value),
+    value: toNumber(row.value_base || row.value) * (selectedPosition.value?.ownershipFraction ?? 1),
   })),
 );
 
@@ -575,9 +625,9 @@ const ownershipTimelineRows = computed<TimelinePoint[]>(() => {
         liabilities: 0,
       };
       if (row.type === 'asset') {
-        current.assets += point.value;
+        current.assets += point.value * row.ownershipFraction;
       } else {
-        current.liabilities += point.value;
+        current.liabilities += point.value * row.ownershipFraction;
       }
       current.netWorth = current.assets - current.liabilities;
       byDate.set(point.date, current);
@@ -920,7 +970,7 @@ function onPositionSelection(event: Event): void {
                   Todos
                 </button>
                 <button
-                  v-for="option in ownershipOptions.filter((item) => item.value !== 'all')"
+                  v-for="option in ownershipOptions"
                   :key="String(option.value)"
                   type="button"
                   class="ui-select-popover-option"
