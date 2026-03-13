@@ -7,3 +7,4 @@
 - En modo real/IPC, la composición por categorías y los indicadores de liquidez usan también los agregados reales para que los totales coincidan con el resumen superior.
 - En el estado general sin filtros, la tarjeta de "Ultimo patrimonio neto" muestra el resumen actual y no el cierre mensual proyectado de la timeline.
 - La cabecera de patrimonio incluye un filtro por titularidad junto a ajustes con el mismo patrón visual y funcional del dashboard de presupuesto: filtra por persona y prorratea las titularidades compartidas en modo nominal.
+- La composición de activos y pasivos funciona ahora como panel operativo: muestra importes y contadores por categoría, permite crear desde la propia composición y abre un detalle editable de posiciones sin salir de patrimonio.

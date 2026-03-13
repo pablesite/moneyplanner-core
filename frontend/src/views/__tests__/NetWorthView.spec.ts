@@ -25,7 +25,7 @@ vi.mock('@/domains/net-worth', () => ({
   NetWorthByCategoryBar: makeStub('NetWorthByCategoryBar'),
   NetWorthDonut: defineComponent({
     name: 'NetWorthDonut',
-    emits: ['select-category'],
+    emits: ['select-category', 'add-type', 'add-category'],
     template: `
       <div data-test="NetWorthDonut">
         <button
@@ -41,6 +41,13 @@ vi.mock('@/domains/net-worth', () => ({
           @click="$emit('select-category', { key: 'mortgage', type: 'liability' })"
         >
           liability
+        </button>
+        <button
+          data-test="donut-add-asset"
+          type="button"
+          @click="$emit('add-type', { type: 'asset' })"
+        >
+          add-asset
         </button>
       </div>
     `,
@@ -368,6 +375,27 @@ describe('NetWorthView', () => {
     await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
     expect(state.store.fetchTimeline).toHaveBeenCalledWith('cash', 'asset');
     expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Liquidez dentro de activos');
+    expect(wrapper.text()).toContain('1 posiciones');
+  });
+
+  it('opens the asset modal from composition actions', async () => {
+    const state = makeState({
+      showAssetModal: ref(false),
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-add-asset"]').trigger('click');
+
+    expect(state.showAssetModal.value).toBe(true);
+    expect(wrapper.find('[data-test="ItemForm"]').exists()).toBe(true);
   });
 
   it('returns to the general timeline when clicking the active composition category again', async () => {
