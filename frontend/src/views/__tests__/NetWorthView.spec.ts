@@ -186,9 +186,12 @@ describe('NetWorthView', () => {
         ownerships: [
           {
             id: 7,
-            kind: 'individual',
-            member: { id: 3, name: 'Ana', role: 'adult' },
-            splits: [],
+            kind: 'shared',
+            member: null,
+            splits: [
+              { member: { id: 3, name: 'Ana', role: 'adult' }, percent: '60' },
+              { member: { id: 4, name: 'Lucas', role: 'adult' }, percent: '40' },
+            ],
             notes: '',
           },
         ],
@@ -198,8 +201,8 @@ describe('NetWorthView', () => {
             name: 'Cuenta Ana',
             category: 'cash',
             subcategory: 'bank_account',
-            amount: '600',
-            amount_base: '600',
+            amount: '1000',
+            amount_base: '1000',
             currency: 'EUR',
             is_active: true,
             ownership_ref: 7,
@@ -209,8 +212,8 @@ describe('NetWorthView', () => {
             name: 'Cuenta comun',
             category: 'cash',
             subcategory: 'bank_account',
-            amount: '400',
-            amount_base: '400',
+            amount: '200',
+            amount_base: '200',
             currency: 'EUR',
             is_active: true,
             ownership_ref: null,
@@ -221,8 +224,8 @@ describe('NetWorthView', () => {
             id: 21,
             name: 'Tarjeta Ana',
             category: 'credit_card',
-            amount: '100',
-            amount_base: '100',
+            amount: '500',
+            amount_base: '500',
             currency: 'EUR',
             is_active: true,
             ownership_ref: 7,
@@ -239,11 +242,11 @@ describe('NetWorthView', () => {
 
     const wrapper = mount(NetWorthView);
 
-    await wrapper.get('[data-test="ownership-filter-option-7"]').trigger('click');
+    await wrapper.get('[data-test="ownership-filter-option-3"]').trigger('click');
 
-    expect(wrapper.text()).toContain('500,00 EUR');
+    expect(wrapper.text()).toContain('300,00 EUR');
     expect(wrapper.text()).toContain('600,00 EUR');
-    expect(wrapper.text()).toContain('100,00 EUR');
+    expect(wrapper.text()).toContain('Ana');
   });
 
   it('uses the current summary totals in the general timeline highlight instead of the projected month-end row', () => {
