@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   ItemForm,
   NetWorthDonut,
@@ -139,16 +139,15 @@ const ownershipOptions = computed<OwnershipOption[]>(() => {
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, 'es'));
 });
 
-const selectedOwnershipFilterLabel = computed(
-  () => {
-    if (ownershipFilter.value === 'all') return 'Todos';
-    return (
-      ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
-      'Todos'
-    );
-  },
-);
+const selectedOwnershipFilterLabel = computed(() => {
+  if (ownershipFilter.value === 'all') return 'Todos';
+  return (
+    ownershipOptions.value.find((option) => option.value === ownershipFilter.value)?.label ??
+    'Todos'
+  );
+});
 const ownershipFilterDisabled = computed(() => valueMode.value !== 'nominal');
+const heroUnitLabel = computed(() => (unitLabel() === 'EUR' ? '€' : unitLabel()));
 
 watch(ownershipOptions, (options) => {
   if (ownershipFilter.value === 'all') return;
@@ -163,7 +162,10 @@ watch(valueMode, (mode) => {
 
 watch(ownershipFilter, async () => {
   resetPositionSelection();
-  if (selectedTimelineCategory.value && !effectiveCategoryKeys.value.includes(selectedTimelineCategory.value)) {
+  if (
+    selectedTimelineCategory.value &&
+    !effectiveCategoryKeys.value.includes(selectedTimelineCategory.value)
+  ) {
     selectedTimelineCategory.value = null;
     selectedTimelineCategoryType.value = 'asset';
     await store.fetchTimeline(null, 'asset');
@@ -480,14 +482,20 @@ const filteredLiabilitiesValue = computed(() =>
 const filteredBackedDebtValue = computed(() =>
   ownershipFilteredLiabilities.value.reduce((total, liability) => {
     const resolved = resolvePositionValue(liability);
-    const fraction = allocationFractionForNetWorthOwner(liability.ownership_ref, ownershipFilter.value);
+    const fraction = allocationFractionForNetWorthOwner(
+      liability.ownership_ref,
+      ownershipFilter.value,
+    );
     return total + (liability.financed_asset_ref != null ? resolved.value * fraction : 0);
   }, 0),
 );
 const filteredUnbackedDebtValue = computed(() =>
   ownershipFilteredLiabilities.value.reduce((total, liability) => {
     const resolved = resolvePositionValue(liability);
-    const fraction = allocationFractionForNetWorthOwner(liability.ownership_ref, ownershipFilter.value);
+    const fraction = allocationFractionForNetWorthOwner(
+      liability.ownership_ref,
+      ownershipFilter.value,
+    );
     return total + (liability.financed_asset_ref == null ? resolved.value * fraction : 0);
   }, 0),
 );
@@ -534,7 +542,9 @@ const activeAssets = computed(() =>
 );
 
 const categoryWorkspaceRows = computed(() =>
-  selectedTimelineCategoryType.value === 'liability' ? liabilityPositionRows.value : assetPositionRows.value,
+  selectedTimelineCategoryType.value === 'liability'
+    ? liabilityPositionRows.value
+    : assetPositionRows.value,
 );
 
 const categoryWorkspaceCount = computed(() => categoryWorkspaceRows.value.length);
@@ -557,8 +567,8 @@ function ownershipBadge(ownershipRef: number | null | undefined): string | null 
 
 function sourceItemForRow(row: PositionRow) {
   return row.type === 'asset'
-    ? ownershipFilteredAssets.value.find((item) => item.id === row.id) ?? null
-    : ownershipFilteredLiabilities.value.find((item) => item.id === row.id) ?? null;
+    ? (ownershipFilteredAssets.value.find((item) => item.id === row.id) ?? null)
+    : (ownershipFilteredLiabilities.value.find((item) => item.id === row.id) ?? null);
 }
 
 function ownershipBadgeForRow(row: PositionRow): string | null {
@@ -709,7 +719,11 @@ watch(
 
 watch(availablePositionRows, (rows) => {
   if (!selectedPositionId.value || !selectedPositionType.value) return;
-  if (!rows.some((row) => row.id === selectedPositionId.value && row.type === selectedPositionType.value)) {
+  if (
+    !rows.some(
+      (row) => row.id === selectedPositionId.value && row.type === selectedPositionType.value,
+    )
+  ) {
     resetPositionSelection();
   }
 });
@@ -766,14 +780,65 @@ const displayedTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
   }));
 });
 
-const displayedTimelineLatestPoint = computed(
-  () => {
-    if (!selectedPosition.value && !selectedTimelineCategory.value) {
-      return currentSummaryTimelinePoint.value;
+const cachedDisplayedTimelineRows = ref<DisplayedTimelinePoint[]>([]);
+const cachedDisplayedTimelineSeriesColor = ref('#4cc3ff');
+const timelineColumnRef = ref<HTMLElement | null>(null);
+const timelineSidebarHeight = ref<number | null>(null);
+const isDesktopTimelineLayout = ref(false);
+let timelineColumnResizeObserver: ResizeObserver | null = null;
+
+function syncTimelineLayoutViewport(): void {
+  if (typeof window === 'undefined') return;
+  isDesktopTimelineLayout.value = window.innerWidth > 1024;
+}
+
+function syncTimelineSidebarHeight(): void {
+  if (!isDesktopTimelineLayout.value) {
+    timelineSidebarHeight.value = null;
+    return;
+  }
+
+  const nextHeight = timelineColumnRef.value?.offsetHeight ?? null;
+  timelineSidebarHeight.value = nextHeight && nextHeight > 0 ? nextHeight : null;
+}
+
+const timelineSidebarPanelStyle = computed<Record<string, string> | undefined>(() => {
+  if (!isDesktopTimelineLayout.value || timelineSidebarHeight.value == null) return undefined;
+  const height = `${timelineSidebarHeight.value}px`;
+  return {
+    height,
+    maxHeight: height,
+  };
+});
+
+onMounted(() => {
+  syncTimelineLayoutViewport();
+  void nextTick(syncTimelineSidebarHeight);
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', syncTimelineLayoutViewport);
+    window.addEventListener('resize', syncTimelineSidebarHeight);
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    timelineColumnResizeObserver = new ResizeObserver(() => {
+      syncTimelineSidebarHeight();
+    });
+    if (timelineColumnRef.value) {
+      timelineColumnResizeObserver.observe(timelineColumnRef.value);
     }
-    return displayedTimelineRows.value[displayedTimelineRows.value.length - 1] ?? null;
-  },
-);
+  }
+});
+
+onBeforeUnmount(() => {
+  timelineColumnResizeObserver?.disconnect();
+  timelineColumnResizeObserver = null;
+
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', syncTimelineLayoutViewport);
+    window.removeEventListener('resize', syncTimelineSidebarHeight);
+  }
+});
 
 const displayedTimelineLoading = computed(() =>
   selectedPosition.value
@@ -782,6 +847,54 @@ const displayedTimelineLoading = computed(() =>
       ? store.timelineLoading
       : ownershipTimelineLoading.value,
 );
+
+watch(
+  [displayedTimelineRows, displayedTimelineLoading],
+  ([rows, loading]) => {
+    if (!loading && rows.length > 0) {
+      cachedDisplayedTimelineRows.value = rows;
+      cachedDisplayedTimelineSeriesColor.value = currentTimelineSeriesColor.value;
+    }
+  },
+  { immediate: true },
+);
+
+const visibleTimelineRows = computed<DisplayedTimelinePoint[]>(() => {
+  if (displayedTimelineLoading.value && cachedDisplayedTimelineRows.value.length > 0) {
+    return cachedDisplayedTimelineRows.value;
+  }
+  return displayedTimelineRows.value.length > 0
+    ? displayedTimelineRows.value
+    : cachedDisplayedTimelineRows.value;
+});
+
+watch(
+  [showCategoryWorkspace, displayedTimelineRows, visibleTimelineRows, selectedPosition],
+  async () => {
+    await nextTick();
+    syncTimelineSidebarHeight();
+  },
+  { deep: true },
+);
+
+const displayedTimelineLatestPoint = computed(() => {
+  if (!selectedPosition.value && !selectedTimelineCategory.value) {
+    return currentSummaryTimelinePoint.value;
+  }
+  return visibleTimelineRows.value[visibleTimelineRows.value.length - 1] ?? null;
+});
+
+const displayedTimelineRenderKey = computed(() => {
+  const firstRow = visibleTimelineRows.value[0];
+  const lastRow = visibleTimelineRows.value[visibleTimelineRows.value.length - 1];
+  return [
+    visibleTimelineRows.value.length,
+    firstRow?.date ?? 'no-first-date',
+    firstRow?.value ?? 'no-first-value',
+    lastRow?.date ?? 'no-date',
+    lastRow?.value ?? 'no-value',
+  ].join('|');
+});
 
 const displayedTimelineCurrency = computed(() => {
   if (selectedPosition.value) {
@@ -834,15 +947,22 @@ const displayedTimelineSummaryMeta = computed(() => {
   return `${point.label} | ${selectedCategoryLabel.value}`;
 });
 
-const displayedTimelineSeriesColor = computed(() => {
+const currentTimelineSeriesColor = computed(() => {
   if (selectedPosition.value?.type === 'liability') return '#ff4d73';
   if (selectedTimelineCategoryType.value === 'liability') return '#ff4d73';
   if (selectedPosition.value?.type === 'asset') return '#2dd4bf';
   return '#4cc3ff';
 });
 
+const displayedTimelineSeriesColor = computed(() => {
+  if (displayedTimelineLoading.value && cachedDisplayedTimelineRows.value.length > 0) {
+    return cachedDisplayedTimelineSeriesColor.value;
+  }
+  return currentTimelineSeriesColor.value;
+});
+
 const displayedTimelineRange = computed(() => {
-  const values = displayedTimelineRows.value.map((row) => row.value);
+  const values = visibleTimelineRows.value.map((row) => row.value);
   if (!values.length) return { min: 0, max: 1 };
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -851,7 +971,7 @@ const displayedTimelineRange = computed(() => {
 });
 
 const displayedTimelinePath = computed(() => {
-  const rows = displayedTimelineRows.value;
+  const rows = visibleTimelineRows.value;
   if (rows.length < 2) return '';
   const { min, max } = displayedTimelineRange.value;
   return rows
@@ -871,7 +991,7 @@ const displayedTimelineYAxisLabels = computed(() => {
 });
 
 const displayedTimelineXAxisLabels = computed(() => {
-  const rows = displayedTimelineRows.value;
+  const rows = visibleTimelineRows.value;
   if (rows.length <= 6) return rows;
   const indexes = Array.from(
     new Set([
@@ -887,7 +1007,43 @@ const displayedTimelineXAxisLabels = computed(() => {
     .filter((row): row is DisplayedTimelinePoint => row !== undefined);
 });
 
-const timelineCategoryOptions = computed(() => [] as { value: string | null; label: string; type: 'asset' | 'liability' }[]);
+type TimelineCategoryOption = {
+  value: string | null;
+  label: string;
+  type: 'asset' | 'liability';
+  count: number;
+  total: number;
+};
+
+const timelineAssetCategoryOptions = computed<TimelineCategoryOption[]>(() =>
+  effectiveCategoryKeys.value
+    .map((key, index) => ({
+      value: key,
+      label: categoryLabelMap.value.get(`asset:${key}`) ?? key,
+      type: 'asset' as const,
+      count: effectiveCategoryAssetCounts.value[index] ?? 0,
+      total: effectiveCategoryAssets.value[index] ?? 0,
+    }))
+    .filter((option) => option.count > 0 || option.total > 0),
+);
+
+const timelineLiabilityCategoryOptions = computed<TimelineCategoryOption[]>(() =>
+  effectiveCategoryKeys.value
+    .map((key, index) => ({
+      value: key,
+      label: categoryLabelMap.value.get(`liability:${key}`) ?? key,
+      type: 'liability' as const,
+      count: effectiveCategoryLiabilityCounts.value[index] ?? 0,
+      total: effectiveCategoryLiabilities.value[index] ?? 0,
+    }))
+    .filter((option) => option.count > 0 || option.total > 0),
+);
+
+const timelineCategoryOptions = computed(() => [
+  ...timelineAssetCategoryOptions.value,
+  ...timelineLiabilityCategoryOptions.value,
+]);
+
 const timelineDescription = displayedTimelineDescription;
 const timelineSummaryLabel = displayedTimelineSummaryLabel;
 const timelineSummaryMeta = displayedTimelineSummaryMeta;
@@ -1059,12 +1215,12 @@ const liabilityCreateInitial = computed(() =>
 
 <template>
   <div class="container ui-pro-page relative">
-    <section class="card ui-pro-panel grid gap-2.5 mb-2">
+    <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">
       <p class="ui-pro-kicker">Patrimonio</p>
-      <div class="mt-1 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-2.5">
+      <div class="ui-nw-topbar mt-1">
+        <div class="ui-nw-topbar-actions">
           <button
-            class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
+            class="icon-btn ui-nw-topbar-action disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             :disabled="store.loading"
             aria-label="Refrescar"
@@ -1073,7 +1229,7 @@ const liabilityCreateInitial = computed(() =>
             <span class="icon" aria-hidden="true">&#8635;</span>
           </button>
           <button
-            class="icon-btn disabled:cursor-not-allowed disabled:opacity-50"
+            class="icon-btn ui-nw-topbar-action disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             :disabled="store.loading"
             aria-label="Guardar snapshot"
@@ -1085,46 +1241,6 @@ const liabilityCreateInitial = computed(() =>
         </div>
 
         <div class="ui-pro-toolbar ui-nw-toolbar">
-          <label class="ui-nw-ownership-select" data-test="ownership-filter">
-            <span class="ui-nw-ownership-select-label">Titularidad</span>
-            <details
-              class="ui-select-popover"
-              :class="{ 'opacity-60': ownershipFilterDisabled }"
-            >
-              <summary
-                class="ui-select-popover-trigger ui-nw-ownership-select-input"
-                :aria-disabled="ownershipFilterDisabled"
-                @click="ownershipFilterDisabled ? $event.preventDefault() : undefined"
-              >
-                <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
-                <span class="ui-select-popover-caret" aria-hidden="true">⌄</span>
-              </summary>
-              <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
-                <button
-                  type="button"
-                  class="ui-select-popover-option"
-                  :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
-                  data-test="ownership-filter-option-all"
-                  :disabled="ownershipFilterDisabled"
-                  @click="selectOwnershipFilterOption('all', $event)"
-                >
-                  Todos
-                </button>
-                <button
-                  v-for="option in ownershipOptions"
-                  :key="String(option.value)"
-                  type="button"
-                  class="ui-select-popover-option"
-                  :class="{ 'ui-select-popover-option-active': ownershipFilter === option.value }"
-                  :data-test="`ownership-filter-option-${String(option.value)}`"
-                  :disabled="ownershipFilterDisabled"
-                  @click="selectOwnershipFilterOption(option.value, $event)"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </details>
-          </label>
           <SettingsPopover
             :loading="store.loading"
             :base-currency="store.baseCurrency ?? 'EUR'"
@@ -1145,42 +1261,410 @@ const liabilityCreateInitial = computed(() =>
       </div>
 
       <div class="ui-nw-hero mt-2">
-        <div class="ui-nw-hero-donut">
-          <NetWorthDonut
-            :total-assets="analysis.assets"
-            :total-liabilities="analysis.liabilities"
-            :asset-backed-liabilities="analysis.backedDebt"
-            :unbacked-liabilities="analysis.unbackedDebt"
-            :net-worth="analysis.netWorth"
-            :unit="unitLabel()"
-            :show-composition="false"
-          />
-        </div>
-        <article class="ui-nw-hero-summary">
-          <div class="ui-nw-hero-badge">Balance actual</div>
-          <div class="ui-nw-hero-title">Patrimonio neto</div>
-          <div class="ui-nw-hero-value">
-            {{ formatNumber(analysis.netWorth, 2) }} {{ unitLabel() }}
+        <div class="ui-nw-hero-main">
+          <div class="ui-nw-hero-donut">
+            <div class="ui-nw-hero-donut-frame">
+              <NetWorthDonut
+                :total-assets="analysis.assets"
+                :total-liabilities="analysis.liabilities"
+                :asset-backed-liabilities="analysis.backedDebt"
+                :unbacked-liabilities="analysis.unbackedDebt"
+                :net-worth="analysis.netWorth"
+                :unit="heroUnitLabel"
+                :show-composition="false"
+              />
+            </div>
           </div>
-          <p class="ui-nw-hero-copy">
-            Vista consolidada del patrimonio disponible con el filtro de titularidad actual.
-          </p>
+          <article class="ui-nw-hero-summary">
+            <div class="ui-nw-hero-summary-head">
+              <div class="ui-nw-hero-badge">Balance actual</div>
+              <label class="ui-nw-hero-context" data-test="ownership-filter">
+                <span class="ui-nw-hero-context-label">Titularidad</span>
+                <details
+                  class="ui-select-popover ui-nw-hero-context-popover"
+                  :class="{ 'opacity-60': ownershipFilterDisabled }"
+                >
+                  <summary
+                    class="ui-select-popover-trigger ui-nw-hero-context-trigger"
+                    :aria-disabled="ownershipFilterDisabled"
+                    @click="ownershipFilterDisabled ? $event.preventDefault() : undefined"
+                  >
+                    <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
+                    <span class="ui-select-popover-caret" aria-hidden="true">⌄</span>
+                  </summary>
+                  <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                    <button
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                      data-test="ownership-filter-option-all"
+                      :disabled="ownershipFilterDisabled"
+                      @click="selectOwnershipFilterOption('all', $event)"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      v-for="option in ownershipOptions"
+                      :key="String(option.value)"
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{
+                        'ui-select-popover-option-active': ownershipFilter === option.value,
+                      }"
+                      :data-test="`ownership-filter-option-${String(option.value)}`"
+                      :disabled="ownershipFilterDisabled"
+                      @click="selectOwnershipFilterOption(option.value, $event)"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </details>
+              </label>
+            </div>
+            <div class="ui-nw-hero-summary-body">
+              <div class="ui-nw-hero-primary">
+                <div class="ui-nw-hero-title">Patrimonio neto</div>
+                <div class="ui-nw-hero-value">
+                  {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
+                </div>
+                <div class="ui-nw-hero-metrics">
+                  <div class="ui-nw-hero-metric">
+                    <span class="ui-nw-hero-metric-label">Cobertura liquida</span>
+                    <strong class="ui-nw-hero-metric-value">
+                      {{ formatPct(analysis.liquidityToDebtRatio, 0) }}
+                    </strong>
+                  </div>
+                  <div class="ui-nw-hero-metric">
+                    <span class="ui-nw-hero-metric-label">Capital propio</span>
+                    <strong class="ui-nw-hero-metric-value">
+                      {{ formatPct(analysis.equityRatio, 0) }}
+                    </strong>
+                  </div>
+                </div>
+              </div>
 
-          <div class="ui-nw-hero-stats">
-            <div class="ui-nw-hero-stat ui-nw-hero-stat-assets">
-              <span class="ui-nw-hero-stat-label">Activos</span>
-              <strong class="ui-nw-hero-stat-value">
-                {{ formatNumber(analysis.assets, 2) }} {{ unitLabel() }}
-              </strong>
+              <div class="ui-nw-hero-side">
+                <div class="ui-nw-hero-stats">
+                  <div class="ui-nw-hero-stat ui-nw-hero-stat-assets">
+                    <span class="ui-nw-hero-stat-label">Activos</span>
+                    <strong class="ui-nw-hero-stat-value">
+                      {{ formatNumber(analysis.assets, 2) }} {{ heroUnitLabel }}
+                    </strong>
+                  </div>
+                  <div class="ui-nw-hero-stat ui-nw-hero-stat-liabilities">
+                    <span class="ui-nw-hero-stat-label">Pasivos</span>
+                    <strong class="ui-nw-hero-stat-value">
+                      {{ formatNumber(analysis.liabilities, 2) }} {{ heroUnitLabel }}
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="ui-nw-hero-stat ui-nw-hero-stat-liabilities">
-              <span class="ui-nw-hero-stat-label">Pasivos</span>
-              <strong class="ui-nw-hero-stat-value">
-                {{ formatNumber(analysis.liabilities, 2) }} {{ unitLabel() }}
-              </strong>
+          </article>
+        </div>
+      </div>
+
+      <div class="ui-nw-hero-timeline">
+        <div class="ui-nw-timeline-layout">
+          <div ref="timelineColumnRef" class="ui-nw-timeline-column">
+            <div class="ui-nw-timeline-head">
+              <div>
+                <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
+                <p class="ui-nw-timeline-copy">{{ timelineDescription }}</p>
+              </div>
+            </div>
+
+            <div class="ui-nw-timeline-filter-groups">
+              <button
+                class="ui-nw-timeline-filter"
+                :class="{ 'ui-nw-timeline-filter-active': selectedTimelineCategory === null }"
+                type="button"
+                @click="applyTimelineCategoryFilter(null, 'asset')"
+              >
+                Todo patrimonio
+              </button>
+
+              <div
+                v-if="timelineAssetCategoryOptions.length > 0"
+                class="ui-nw-timeline-filter-group"
+              >
+                <span class="ui-nw-timeline-filter-group-label">Activos</span>
+                <button
+                  v-for="option in timelineAssetCategoryOptions"
+                  :key="`asset-${option.value}`"
+                  class="ui-nw-timeline-filter"
+                  :class="{
+                    'ui-nw-timeline-filter-active':
+                      selectedTimelineCategory === option.value &&
+                      selectedTimelineCategoryType === option.type,
+                  }"
+                  type="button"
+                  @click="applyTimelineCategoryFilter(option.value, option.type)"
+                >
+                  <span>{{ option.label }}</span>
+                  <small>{{ option.count }}</small>
+                </button>
+              </div>
+
+              <div
+                v-if="timelineLiabilityCategoryOptions.length > 0"
+                class="ui-nw-timeline-filter-group"
+              >
+                <span class="ui-nw-timeline-filter-group-label">Pasivos</span>
+                <button
+                  v-for="option in timelineLiabilityCategoryOptions"
+                  :key="`liability-${option.value}`"
+                  class="ui-nw-timeline-filter ui-nw-timeline-filter-liability"
+                  :class="{
+                    'ui-nw-timeline-filter-active':
+                      selectedTimelineCategory === option.value &&
+                      selectedTimelineCategoryType === option.type,
+                  }"
+                  type="button"
+                  @click="applyTimelineCategoryFilter(option.value, option.type)"
+                >
+                  <span>{{ option.label }}</span>
+                  <small>{{ option.count }}</small>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="displayedTimelineLoading && visibleTimelineRows.length === 0" class="subtle">
+              Cargando evolucion...
+            </div>
+            <div v-else-if="visibleTimelineRows.length === 0" class="subtle">
+              {{
+                selectedPosition
+                  ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
+                  : 'Aun no hay datos suficientes para construir la serie temporal.'
+              }}
+            </div>
+            <div v-else class="ui-nw-timeline-main">
+              <div class="ui-nw-timeline-body">
+                <div class="ui-nw-timeline-summary">
+                  <div class="ui-nw-timeline-summary-label">
+                    {{ displayedTimelineSummaryLabel }}
+                  </div>
+                  <div class="ui-nw-timeline-summary-value">
+                    {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
+                    {{ displayedTimelineCurrency }}
+                  </div>
+                  <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
+                </div>
+
+                <div class="ui-nw-timeline-chart-shell">
+                  <div v-if="displayedTimelineLoading" class="ui-nw-timeline-loading-overlay">
+                    <span class="ui-nw-timeline-loading-pill">Actualizando serie...</span>
+                  </div>
+                  <div class="ui-nw-timeline-chart-layout">
+                    <div class="ui-nw-timeline-y-axis" aria-hidden="true">
+                      <span v-for="label in displayedTimelineYAxisLabels" :key="label">{{
+                        label
+                      }}</span>
+                    </div>
+                    <div class="ui-nw-timeline-chart-stage">
+                      <svg
+                        class="ui-nw-timeline-chart"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-label="Grafico de evolucion patrimonial"
+                      >
+                        <path
+                          class="ui-nw-timeline-grid"
+                          d="M 0 20 L 100 20 M 0 50 L 100 50 M 0 80 L 100 80"
+                        />
+                        <path
+                          v-if="displayedTimelinePath"
+                          :key="displayedTimelineRenderKey"
+                          class="ui-nw-timeline-line"
+                          :d="displayedTimelinePath"
+                          :style="{ stroke: displayedTimelineSeriesColor }"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ui-nw-timeline-x-axis" aria-hidden="true">
+                  <span v-for="row in displayedTimelineXAxisLabels" :key="`axis-${row.date}`">
+                    {{ row.label }}
+                  </span>
+                </div>
+
+                <div class="ui-nw-timeline-points">
+                  <div
+                    v-for="row in visibleTimelineRows.slice(-6)"
+                    :key="row.date"
+                    class="ui-nw-timeline-point"
+                  >
+                    <span>{{ row.label }}</span>
+                    <strong>{{ formatNumber(row.value, 0) }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="selectedPosition" class="ui-nw-position-activity">
+                <div class="ui-nw-position-activity-head">
+                  <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
+                  <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
+                </div>
+                <div v-if="positionActivityRows.length === 0" class="subtle">
+                  No hay eventos ni valoraciones manuales registrados para esta posicion.
+                </div>
+                <div v-else class="ui-nw-position-activity-list">
+                  <div
+                    v-for="row in positionActivityRows"
+                    :key="row.id"
+                    class="ui-nw-position-activity-row"
+                    :class="{
+                      'ui-nw-position-activity-row-valuation': row.kind === 'valuation',
+                    }"
+                  >
+                    <div class="ui-nw-position-activity-main">
+                      <strong>{{ row.date }}</strong>
+                      <span>{{ row.label }} | {{ row.meta }}</span>
+                      <span v-if="row.note">{{ row.note }}</span>
+                    </div>
+                    <div class="ui-nw-position-activity-amount">
+                      {{ formatNumber(row.amount, 2) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </article>
+
+          <aside class="ui-nw-timeline-sidebar">
+            <div
+              v-if="!showCategoryWorkspace"
+              class="ui-nw-category-workspace ui-nw-category-workspace-empty"
+              :style="timelineSidebarPanelStyle"
+            >
+              <div class="ui-nw-category-workspace-kicker">Explora sin bajar</div>
+              <h3 class="ui-nw-category-workspace-title">Selecciona una categoria arriba</h3>
+              <p class="ui-nw-category-workspace-copy">
+                El grafico se actualiza en primera plana y aqui veras las posiciones concretas de
+                esa categoria.
+              </p>
+            </div>
+
+            <div
+              v-else
+              class="ui-nw-category-workspace ui-nw-category-workspace-embedded"
+              :style="timelineSidebarPanelStyle"
+            >
+              <div class="ui-nw-category-workspace-head">
+                <div>
+                  <div class="ui-nw-category-workspace-kicker">
+                    {{ selectedTimelineCategoryType === 'liability' ? 'Pasivos' : 'Activos' }}
+                  </div>
+                  <h3 class="ui-nw-category-workspace-title">{{ categoryWorkspaceLabel }}</h3>
+                  <p class="ui-nw-category-workspace-copy">{{ categoryWorkspaceMeta }}</p>
+                </div>
+                <div class="ui-nw-category-workspace-actions">
+                  <button
+                    class="btn"
+                    type="button"
+                    @click="openCreateModal(selectedTimelineCategoryType, selectedTimelineCategory)"
+                  >
+                    {{
+                      selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo'
+                    }}
+                  </button>
+                </div>
+              </div>
+
+              <label v-if="showPositionSelector" class="ui-nw-position-select">
+                <span class="ui-nw-position-select-label">
+                  {{
+                    selectedTimelineCategoryType === 'liability'
+                      ? 'Pasivo concreto'
+                      : 'Activo concreto'
+                  }}
+                </span>
+                <select
+                  class="input ui-nw-position-select-input"
+                  :value="selectedPositionId ?? ''"
+                  @change="onPositionSelection"
+                >
+                  <option value="">Categoria completa</option>
+                  <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
+                    {{ row.name }}
+                  </option>
+                </select>
+              </label>
+
+              <div v-if="selectedPosition" class="ui-nw-category-selection-summary">
+                <div class="ui-nw-category-selection-label">
+                  {{
+                    selectedPosition.type === 'liability'
+                      ? 'Pasivo seleccionado'
+                      : 'Activo seleccionado'
+                  }}
+                </div>
+                <strong class="ui-nw-category-selection-title">{{ selectedPosition.name }}</strong>
+                <div class="ui-nw-category-selection-meta">
+                  {{ selectedPosition.subtitle }} ·
+                  {{
+                    formatNumber(latestPositionTimelinePoint?.value ?? selectedPosition.value, 2)
+                  }}
+                  {{ store.positionTimeline?.base_currency ?? selectedPosition.currency }}
+                </div>
+              </div>
+
+              <div v-if="categoryWorkspaceRows.length === 0" class="subtle">
+                No hay posiciones para esta categoria con el filtro actual.
+              </div>
+              <div v-else class="ui-nw-category-workspace-list">
+                <article
+                  v-for="row in categoryWorkspaceRows"
+                  :key="`${row.type}-${row.id}`"
+                  class="ui-nw-category-item"
+                  :class="{
+                    'ui-nw-category-item-active':
+                      selectedPositionType === row.type && selectedPositionId === row.id,
+                  }"
+                >
+                  <button
+                    class="ui-nw-category-item-main"
+                    type="button"
+                    @click="selectPosition(row)"
+                  >
+                    <div class="ui-nw-category-item-head">
+                      <strong>{{ row.name }}</strong>
+                      <span>{{ formatNumber(row.value, 2) }} {{ row.currency }}</span>
+                    </div>
+                    <div class="ui-nw-category-item-meta">
+                      <span>{{ row.subtitle }}</span>
+                      <span v-if="row.ownershipFraction < 1">
+                        {{ formatPct(row.ownershipFraction, 0) }} titularidad aplicada
+                      </span>
+                      <span v-if="ownershipBadgeForRow(row)">{{ ownershipBadgeForRow(row) }}</span>
+                    </div>
+                  </button>
+                  <div class="ui-nw-category-item-actions">
+                    <button
+                      class="icon-btn"
+                      type="button"
+                      aria-label="Editar"
+                      @click="editRow(row)"
+                    >
+                      <span class="icon" aria-hidden="true">&#9998;</span>
+                    </button>
+                    <button
+                      class="icon-btn"
+                      type="button"
+                      :aria-label="row.type === 'asset' ? 'Archivar activo' : 'Archivar pasivo'"
+                      @click="archiveRow(row)"
+                    >
+                      <span class="icon" aria-hidden="true">&#128465;</span>
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </section>
 
@@ -1208,198 +1692,7 @@ const liabilityCreateInitial = computed(() =>
           :show-chart="false"
           @select-category="applyCompositionCategoryFilter"
           @add-type="handleCompositionAddType"
-        >
-          <template #side-top>
-            <div class="ui-nw-inline-analytics">
-              <div class="ui-nw-timeline-head">
-                <div>
-                  <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
-                  <p class="ui-nw-timeline-copy">{{ displayedTimelineDescription }}</p>
-                </div>
-                <label v-if="showPositionSelector" class="ui-nw-position-select">
-                  <span class="ui-nw-position-select-label">
-                    {{ selectedTimelineCategoryType === 'liability' ? 'Pasivo' : 'Activo' }}
-                  </span>
-                  <select
-                    class="input ui-nw-position-select-input"
-                    :value="selectedPositionId ?? ''"
-                    @change="onPositionSelection"
-                  >
-                    <option value="">Categoria completa</option>
-                    <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
-                      {{ row.name }}
-                    </option>
-                  </select>
-                </label>
-              </div>
-
-              <div v-if="displayedTimelineLoading" class="subtle">Cargando evolucion...</div>
-              <div v-else-if="displayedTimelineRows.length === 0" class="subtle">
-                {{
-                  selectedPosition
-                    ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
-                    : 'Aun no hay datos suficientes para construir la serie temporal.'
-                }}
-              </div>
-              <div v-else class="ui-nw-timeline-body">
-                <div class="ui-nw-timeline-summary">
-                  <div class="ui-nw-timeline-summary-label">{{ displayedTimelineSummaryLabel }}</div>
-                  <div class="ui-nw-timeline-summary-value">
-                    {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
-                    {{ displayedTimelineCurrency }}
-                  </div>
-                  <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
-                </div>
-
-                <div class="ui-nw-timeline-chart-shell">
-                  <div class="ui-nw-timeline-chart-layout">
-                    <div class="ui-nw-timeline-y-axis" aria-hidden="true">
-                      <span v-for="label in displayedTimelineYAxisLabels" :key="label">{{ label }}</span>
-                    </div>
-                    <div class="ui-nw-timeline-chart-stage">
-                      <svg
-                        class="ui-nw-timeline-chart"
-                        viewBox="0 0 100 100"
-                        preserveAspectRatio="none"
-                        aria-label="Grafico de evolucion patrimonial"
-                      >
-                        <path
-                          class="ui-nw-timeline-grid"
-                          d="M 0 20 L 100 20 M 0 50 L 100 50 M 0 80 L 100 80"
-                        />
-                        <path
-                          v-if="displayedTimelinePath"
-                          class="ui-nw-timeline-line"
-                          :d="displayedTimelinePath"
-                          :style="{ stroke: displayedTimelineSeriesColor }"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="ui-nw-timeline-x-axis" aria-hidden="true">
-                  <span v-for="row in displayedTimelineXAxisLabels" :key="`axis-${row.date}`">
-                    {{ row.label }}
-                  </span>
-                </div>
-
-                <div class="ui-nw-timeline-points">
-                  <div
-                    v-for="row in displayedTimelineRows.slice(-6)"
-                    :key="row.date"
-                    class="ui-nw-timeline-point"
-                  >
-                    <span>{{ row.label }}</span>
-                    <strong>{{ formatNumber(row.value, 0) }}</strong>
-                  </div>
-                </div>
-
-                <div v-if="selectedPosition" class="ui-nw-position-activity">
-                  <div class="ui-nw-position-activity-head">
-                    <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
-                    <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
-                  </div>
-                  <div v-if="positionActivityRows.length === 0" class="subtle">
-                    No hay eventos ni valoraciones manuales registrados para esta posicion.
-                  </div>
-                  <div v-else class="ui-nw-position-activity-list">
-                    <div
-                      v-for="row in positionActivityRows"
-                      :key="row.id"
-                      class="ui-nw-position-activity-row"
-                      :class="{
-                        'ui-nw-position-activity-row-valuation': row.kind === 'valuation',
-                      }"
-                    >
-                      <div class="ui-nw-position-activity-main">
-                        <strong>{{ row.date }}</strong>
-                        <span>{{ row.label }} | {{ row.meta }}</span>
-                        <span v-if="row.note">{{ row.note }}</span>
-                      </div>
-                      <div class="ui-nw-position-activity-amount">
-                        {{ formatNumber(row.amount, 2) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-        </NetWorthDonut>
-      </div>
-
-      <div v-if="showCategoryWorkspace" class="ui-nw-category-workspace">
-        <div class="ui-nw-category-workspace-head">
-          <div>
-            <div class="ui-nw-category-workspace-kicker">
-              {{ selectedTimelineCategoryType === 'liability' ? 'Pasivos' : 'Activos' }}
-            </div>
-            <h3 class="ui-nw-category-workspace-title">{{ categoryWorkspaceLabel }}</h3>
-            <p class="ui-nw-category-workspace-copy">{{ categoryWorkspaceMeta }}</p>
-          </div>
-          <div class="ui-nw-category-workspace-actions">
-            <button
-              class="btn"
-              type="button"
-              @click="
-                openCreateModal(
-                  selectedTimelineCategoryType,
-                  selectedTimelineCategory,
-                )
-              "
-            >
-              {{ selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="categoryWorkspaceRows.length === 0" class="subtle">
-          No hay posiciones para esta categoria con el filtro actual.
-        </div>
-        <div v-else class="ui-nw-category-workspace-list">
-          <article
-            v-for="row in categoryWorkspaceRows"
-            :key="`${row.type}-${row.id}`"
-            class="ui-nw-category-item"
-            :class="{
-              'ui-nw-category-item-active':
-                selectedPositionType === row.type && selectedPositionId === row.id,
-            }"
-          >
-            <button class="ui-nw-category-item-main" type="button" @click="selectPosition(row)">
-              <div class="ui-nw-category-item-head">
-                <strong>{{ row.name }}</strong>
-                <span>{{ formatNumber(row.value, 2) }} {{ row.currency }}</span>
-              </div>
-              <div class="ui-nw-category-item-meta">
-                <span>{{ row.subtitle }}</span>
-                <span v-if="row.ownershipFraction < 1">
-                  {{ formatPct(row.ownershipFraction, 0) }} titularidad aplicada
-                </span>
-                <span v-if="ownershipBadgeForRow(row)">{{ ownershipBadgeForRow(row) }}</span>
-              </div>
-            </button>
-            <div class="ui-nw-category-item-actions">
-              <button
-                class="icon-btn"
-                type="button"
-                aria-label="Editar"
-                @click="editRow(row)"
-              >
-                <span class="icon" aria-hidden="true">&#9998;</span>
-              </button>
-              <button
-                class="icon-btn"
-                type="button"
-                :aria-label="row.type === 'asset' ? 'Archivar activo' : 'Archivar pasivo'"
-                @click="archiveRow(row)"
-              >
-                <span class="icon" aria-hidden="true">&#128465;</span>
-              </button>
-            </div>
-          </article>
-        </div>
+        />
       </div>
     </div>
 
@@ -1625,7 +1918,7 @@ const liabilityCreateInitial = computed(() =>
           <div class="ui-nw-position-detail-points">
             <div
               v-for="row in positionTimelineRows.slice(-6)"
-                :key="`${selectedPosition?.type}-${selectedPosition?.id}-${row.date}`"
+              :key="`${selectedPosition?.type}-${selectedPosition?.id}-${row.date}`"
               class="ui-nw-position-detail-point"
             >
               <span>{{ row.label }}</span>
@@ -1765,6 +2058,45 @@ const liabilityCreateInitial = computed(() =>
 </template>
 
 <style scoped>
+.ui-nw-hero-shell {
+  position: relative;
+  overflow: visible;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(76, 195, 255, 0.12), transparent 30%),
+    radial-gradient(circle at right, rgba(45, 212, 191, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(10, 16, 28, 0.96), rgba(7, 12, 22, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 40px rgba(0, 0, 0, 0.22);
+}
+
+.ui-nw-topbar {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ui-nw-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ui-nw-topbar-action {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .ui-nw-balance-panel {
   padding: 14px;
 }
@@ -1777,39 +2109,102 @@ const liabilityCreateInitial = computed(() =>
   gap: 16px;
 }
 
-.ui-nw-hero {
+.ui-nw-hero-timeline {
+  margin-top: 12px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ui-nw-timeline-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9fr);
+  gap: 14px 16px;
+  align-items: stretch;
+}
+
+.ui-nw-timeline-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ui-nw-hero {
+  position: relative;
+  z-index: 1;
+}
+
+.ui-nw-hero-main {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
   align-items: stretch;
 }
 
 .ui-nw-hero-donut {
-  border-radius: 24px;
+  position: relative;
+  min-height: 0;
+}
+
+.ui-nw-hero-donut-frame {
+  height: 184px;
+  border-radius: 20px;
   border: 1px solid rgba(92, 192, 255, 0.14);
   background:
-    radial-gradient(circle at top, rgba(92, 192, 255, 0.12), transparent 62%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
-  padding: 18px;
+    radial-gradient(circle at 50% 0%, rgba(92, 192, 255, 0.18), transparent 54%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -24px 60px rgba(0, 0, 0, 0.16);
 }
 
 .ui-nw-hero-summary {
-  border-radius: 24px;
+  height: 184px;
+  border-radius: 20px;
   border: 1px solid rgba(45, 212, 191, 0.18);
   background:
-    linear-gradient(135deg, rgba(6, 28, 39, 0.94), rgba(7, 23, 34, 0.98)),
-    rgba(7, 14, 26, 0.94);
-  padding: 28px 30px;
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(6, 28, 39, 0.94), rgba(7, 23, 34, 0.98)), rgba(7, 14, 26, 0.94);
+  padding: 14px 18px;
   display: grid;
-  align-content: center;
+  grid-template-rows: auto 1fr;
   gap: 12px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.ui-nw-hero-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-nw-hero-summary-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
+  align-items: start;
+  min-height: 0;
+}
+
+.ui-nw-hero-primary {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ui-nw-hero-side {
+  display: grid;
+  align-content: center;
+  height: 100%;
+  min-width: 0;
 }
 
 .ui-nw-hero-badge {
@@ -1817,47 +2212,86 @@ const liabilityCreateInitial = computed(() =>
   width: fit-content;
   align-items: center;
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: 1px solid rgba(45, 212, 191, 0.22);
   background: rgba(45, 212, 191, 0.08);
   color: rgba(185, 255, 242, 0.9);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+.ui-nw-hero-context {
+  display: grid;
+  gap: 3px;
+  justify-items: stretch;
+  text-align: right;
+  min-width: 220px;
+}
+
+.ui-nw-hero-context-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.ui-nw-hero-context-popover {
+  min-width: 0;
+  width: 100%;
+}
+
+.ui-nw-hero-context-trigger {
+  min-height: 34px;
+  width: 100%;
+  justify-content: space-between;
+  border-radius: 12px;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .ui-nw-hero-title {
-  font-size: 0.95rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: rgba(255, 255, 255, 0.72);
 }
 
 .ui-nw-hero-value {
-  font-size: clamp(2rem, 3vw, 3rem);
-  line-height: 1.05;
+  font-size: clamp(1.55rem, 2.35vw, 2.45rem);
+  line-height: 0.92;
   font-weight: 800;
   color: #f5fbff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ui-nw-hero-copy {
   margin: 0;
-  max-width: 52ch;
+  max-width: 44ch;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .ui-nw-hero-stats {
-  margin-top: 8px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 6px;
+  align-content: start;
+  min-height: 0;
 }
 
 .ui-nw-hero-stat {
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 16px 18px;
+  min-height: 50px;
+  padding: 6px 10px;
   display: grid;
-  gap: 6px;
+  align-content: center;
+  gap: 2px;
   background: rgba(255, 255, 255, 0.03);
 }
 
@@ -1872,26 +2306,72 @@ const liabilityCreateInitial = computed(() =>
 }
 
 .ui-nw-hero-stat-label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.64);
 }
 
 .ui-nw-hero-stat-value {
-  font-size: 1.45rem;
-  line-height: 1.15;
+  font-size: 0.92rem;
+  line-height: 1.12;
   color: #fff;
 }
 
+.ui-nw-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-self: auto;
+}
+
+.ui-nw-hero-metric {
+  display: grid;
+  gap: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.ui-nw-hero-metric-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.ui-nw-hero-metric-value {
+  font-size: 0.84rem;
+  line-height: 1.1;
+  color: rgba(245, 251, 255, 0.96);
+}
+
 .ui-nw-category-workspace {
-  margin-top: 18px;
+  margin-top: 0;
   padding: 18px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   display: grid;
   gap: 14px;
+}
+
+.ui-nw-category-workspace-empty {
+  min-height: 100%;
+  align-content: center;
+  background:
+    radial-gradient(circle at top right, rgba(76, 195, 255, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.ui-nw-category-workspace-embedded {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  align-content: start;
 }
 
 .ui-nw-category-workspace-head {
@@ -1919,9 +2399,41 @@ const liabilityCreateInitial = computed(() =>
   color: rgba(255, 255, 255, 0.68);
 }
 
+.ui-nw-category-selection-summary {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(76, 195, 255, 0.18);
+  background: rgba(76, 195, 255, 0.07);
+}
+
+.ui-nw-category-selection-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.ui-nw-category-selection-title {
+  font-size: 1rem;
+  color: #fff;
+}
+
+.ui-nw-category-selection-meta {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+
 .ui-nw-category-workspace-list {
   display: grid;
+  flex: 1;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .ui-nw-category-item {
@@ -1975,30 +2487,17 @@ const liabilityCreateInitial = computed(() =>
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0;
   flex-wrap: nowrap;
-}
-
-.ui-nw-ownership-select {
-  display: grid;
-  gap: 6px;
-  min-width: 176px;
-  max-width: 220px;
-  flex: 0 1 220px;
-}
-
-.ui-nw-ownership-select-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.ui-nw-ownership-select-input {
-  min-height: 42px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .ui-nw-toolbar :deep(.nw-settings-root) {
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: flex-end;
 }
@@ -2116,7 +2615,7 @@ const liabilityCreateInitial = computed(() =>
 }
 
 .ui-nw-timeline-title {
-  margin-bottom: 0.35rem;
+  margin: 0;
 }
 
 .ui-nw-timeline-copy {
@@ -2147,7 +2646,30 @@ const liabilityCreateInitial = computed(() =>
   flex-wrap: wrap;
 }
 
+.ui-nw-timeline-filter-groups {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.ui-nw-timeline-filter-group {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ui-nw-timeline-filter-group-label {
+  min-width: 58px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.52);
+}
+
 .ui-nw-timeline-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
   color: rgba(255, 255, 255, 0.8);
@@ -2156,10 +2678,37 @@ const liabilityCreateInitial = computed(() =>
   font-size: 0.85rem;
 }
 
+.ui-nw-timeline-filter small {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.58);
+}
+
 .ui-nw-timeline-filter-active {
   border-color: rgba(45, 212, 191, 0.4);
   background: rgba(45, 212, 191, 0.14);
   color: #fff;
+}
+
+.ui-nw-timeline-filter-active small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ui-nw-timeline-filter-liability.ui-nw-timeline-filter-active {
+  border-color: rgba(255, 77, 115, 0.42);
+  background: rgba(255, 77, 115, 0.12);
+}
+
+.ui-nw-timeline-main {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ui-nw-timeline-sidebar {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .ui-nw-timeline-body {
@@ -2197,10 +2746,33 @@ const liabilityCreateInitial = computed(() =>
 }
 
 .ui-nw-timeline-chart-shell {
+  position: relative;
   border-radius: 14px;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-nw-timeline-loading-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ui-nw-timeline-loading-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(76, 195, 255, 0.24);
+  background: rgba(8, 18, 31, 0.82);
+  color: rgba(240, 248, 255, 0.9);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
 .ui-nw-timeline-chart-layout {
@@ -2243,6 +2815,21 @@ const liabilityCreateInitial = computed(() =>
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  animation: ui-nw-timeline-line-draw 260ms ease-out;
+}
+
+@keyframes ui-nw-timeline-line-draw {
+  0% {
+    opacity: 0.18;
+    stroke-dasharray: 140 140;
+    stroke-dashoffset: 140;
+  }
+
+  100% {
+    opacity: 1;
+    stroke-dasharray: 140 140;
+    stroke-dashoffset: 0;
+  }
 }
 
 .ui-nw-timeline-x-axis {
@@ -2506,12 +3093,43 @@ const liabilityCreateInitial = computed(() =>
 }
 
 @media (max-width: 1024px) {
-  .ui-nw-hero {
+  .ui-nw-hero-main {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-nw-hero-summary-body {
     grid-template-columns: 1fr;
   }
 
   .ui-nw-hero-summary {
-    padding: 24px;
+    height: auto;
+    padding: 18px;
+  }
+
+  .ui-nw-hero-value {
+    white-space: normal;
+  }
+
+  .ui-nw-hero-side {
+    grid-template-rows: auto auto;
+  }
+
+  .ui-nw-hero-donut-frame {
+    height: 200px;
+  }
+
+  .ui-nw-hero-timeline {
+    margin-top: 16px;
+  }
+
+  .ui-nw-timeline-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-nw-category-workspace-embedded {
+    position: static;
+    height: auto;
+    overflow: visible;
   }
 
   .ui-nw-balance-kpi-main {
@@ -2529,6 +3147,20 @@ const liabilityCreateInitial = computed(() =>
 }
 
 @media (max-width: 720px) {
+  .ui-nw-topbar {
+    align-items: stretch;
+  }
+
+  .ui-nw-topbar-actions,
+  .ui-nw-toolbar {
+    width: 100%;
+    max-width: none;
+  }
+
+  .ui-nw-toolbar {
+    justify-content: space-between;
+  }
+
   .ui-nw-balance-kpi,
   .ui-nw-balance-kpi-main {
     grid-column: span 12;
@@ -2545,6 +3177,15 @@ const liabilityCreateInitial = computed(() =>
 
   .ui-nw-timeline-summary-value {
     font-size: 24px;
+  }
+
+  .ui-nw-timeline-filter-group {
+    align-items: flex-start;
+  }
+
+  .ui-nw-timeline-filter-group-label {
+    min-width: auto;
+    width: 100%;
   }
 
   .ui-nw-timeline-chart-layout {
@@ -2567,6 +3208,24 @@ const liabilityCreateInitial = computed(() =>
 
   .ui-nw-hero-stats {
     grid-template-columns: 1fr;
+  }
+
+  .ui-nw-hero-summary-head,
+  .ui-nw-hero-context {
+    text-align: left;
+  }
+
+  .ui-nw-hero-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-nw-hero-value {
+    font-size: 1.8rem;
+    white-space: normal;
+  }
+
+  .ui-nw-category-workspace-list {
+    max-height: none;
   }
 }
 </style>
