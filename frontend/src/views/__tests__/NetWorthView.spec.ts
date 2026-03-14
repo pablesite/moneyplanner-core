@@ -23,6 +23,7 @@ vi.mock('@/domains/net-worth', () => ({
   ItemForm: makeStub('ItemForm'),
   ItemList: makeStub('ItemList'),
   NetWorthByCategoryBar: makeStub('NetWorthByCategoryBar'),
+  NetWorthTimelineChart: makeStub('NetWorthTimelineChart'),
   NetWorthDonut: defineComponent({
     name: 'NetWorthDonut',
     props: {
@@ -70,6 +71,7 @@ vi.mock('@/domains/ui', () => ({
     props: {
       open: { type: Boolean, required: true },
       title: { type: String, required: false, default: '' },
+      panelClass: { type: String, required: false, default: '' },
     },
     template: '<div><slot v-if="open" /></div>',
   }),
@@ -183,7 +185,6 @@ describe('NetWorthView', () => {
 
     expect(wrapper.text()).toContain('Patrimonio');
     expect(wrapper.text()).toContain('Patrimonio neto');
-    expect(wrapper.text()).toContain('Evolucion temporal');
     expect(wrapper.text()).not.toContain('Detalle por posicion');
     expect(wrapper.find('select.ui-nw-position-select-input').exists()).toBe(false);
     expect(wrapper.text()).toContain('Activos');
@@ -258,8 +259,8 @@ describe('NetWorthView', () => {
 
     await wrapper.get('[data-test="ownership-filter-option-3"]').trigger('click');
 
-    expect(wrapper.text()).toContain('300,00 EUR');
-    expect(wrapper.text()).toContain('600,00 EUR');
+    expect(wrapper.text()).toContain('300,00 €');
+    expect(wrapper.text()).toContain('600,00 €');
     expect(wrapper.text()).toContain('Ana');
   });
 
@@ -292,11 +293,9 @@ describe('NetWorthView', () => {
 
     const wrapper = mount(NetWorthView);
 
-    expect(wrapper.text()).toContain('Ultimo patrimonio neto');
-    expect(wrapper.text()).toContain('750,00 EUR');
-    expect(wrapper.text()).toContain('Actual | Activos 1.000 | Pasivos 250');
-    expect(wrapper.text()).not.toContain('900,00 EUR');
-    expect(wrapper.text()).not.toContain('Activos 1.150');
+    expect(wrapper.text()).toContain('Expandir');
+    expect(wrapper.text()).toContain('marzo de 2026 - marzo de 2026');
+    expect(wrapper.text()).not.toContain('Ultimo patrimonio neto');
   });
 
   it('wires header actions and snapshot deletion callback', async () => {
@@ -518,5 +517,42 @@ describe('NetWorthView', () => {
 
     expect(state.store.fetchPositionTimeline).toHaveBeenCalledWith('asset', 11);
     expect(state.store.fetchPositionActivity).toHaveBeenCalledWith('asset', 11, 'cash');
+  });
+
+  it('opens the expanded timeline modal and updates the visible range', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        timeline: {
+          base_currency: 'EUR',
+          rows: [
+            { date: '2025-11-30', net_worth: '500', total_assets: '700', total_liabilities: '200' },
+            { date: '2025-12-31', net_worth: '520', total_assets: '720', total_liabilities: '200' },
+            { date: '2026-01-31', net_worth: '540', total_assets: '750', total_liabilities: '210' },
+            { date: '2026-02-28', net_worth: '560', total_assets: '780', total_liabilities: '220' },
+            { date: '2026-03-31', net_worth: '600', total_assets: '830', total_liabilities: '230' },
+          ],
+        },
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('button.ui-nw-timeline-range-button').trigger('click');
+    await wrapper.get('button.ui-nw-timeline-expand-button').trigger('click');
+
+    expect(wrapper.text()).toContain('Inicio');
+    expect(wrapper.text()).toContain('Fin');
+
+    const sliders = wrapper.findAll('input.ui-nw-timeline-slider');
+    await sliders[0]!.setValue('2');
+
+    expect(wrapper.text()).toContain('enero de 2026 - marzo de 2026');
   });
 });

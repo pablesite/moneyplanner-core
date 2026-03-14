@@ -44,6 +44,7 @@ const emit = defineEmits<{
 
 const hasChart = computed(() => props.showChart !== false);
 const hasSide = computed(() => props.showComposition !== false || !!slots['side-top']);
+const displayUnit = computed(() => (props.unit === 'EUR' ? '€' : props.unit));
 
 function normalizeNumberInput(raw: unknown) {
   return String(raw ?? '')
@@ -167,7 +168,7 @@ const options = computed<ChartOptions<'doughnut'>>(() => ({
           const label = ctx.label ?? '';
           const v = typeof ctx.raw === 'number' ? ctx.raw : 0;
           const pct = assets.value > 0 ? ` (${formatPercent(v / assets.value, 0)})` : '';
-          return `${label}: ${formatMoney(v, 2)} ${props.unit}${pct}`;
+          return `${label}: ${formatMoney(v, 2)} ${displayUnit.value}${pct}`;
         },
       },
     },
@@ -202,7 +203,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
     ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.60)';
-    ctx.fillText(props.unit, cx, cy + 26);
+    ctx.fillText(displayUnit.value, cx, cy + 26);
 
     ctx.restore();
   },
@@ -259,7 +260,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                   <strong>{{ formatPercent(row.share, 0) }}</strong>
                 </div>
                 <div class="nw-donut-comp-meta">
-                  <span>{{ formatMoney(row.value, 2) }} {{ props.unit }}</span>
+                  <span>{{ formatMoney(row.value, 2) }} {{ displayUnit }}</span>
                   <span>{{ row.count }} posiciones</span>
                 </div>
                 <div class="nw-donut-comp-bar">
@@ -307,7 +308,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                   <strong>{{ formatPercent(row.share, 0) }}</strong>
                 </div>
                 <div class="nw-donut-comp-meta">
-                  <span>{{ formatMoney(row.value, 2) }} {{ props.unit }}</span>
+                  <span>{{ formatMoney(row.value, 2) }} {{ displayUnit }}</span>
                   <span>{{ row.count }} posiciones</span>
                 </div>
                 <div class="nw-donut-comp-bar">
@@ -454,6 +455,10 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
 .nw-donut-wrap-side-only {
   display: block;
+}
+
+.nw-donut-wrap-side-only .nw-donut-side {
+  height: auto;
 }
 
 @media (max-width: 720px) {
