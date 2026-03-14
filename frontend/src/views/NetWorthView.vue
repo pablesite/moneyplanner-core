@@ -896,13 +896,6 @@ const displayedTimelineRenderKey = computed(() => {
   ].join('|');
 });
 
-const displayedTimelineCurrency = computed(() => {
-  if (selectedPosition.value) {
-    return store.positionTimeline?.base_currency ?? selectedPosition.value.currency;
-  }
-  return store.timeline?.base_currency ?? store.baseCurrency ?? 'EUR';
-});
-
 const displayedTimelineSummaryLabel = computed(() => {
   if (selectedPosition.value) {
     return selectedPosition.value.type === 'liability'
@@ -911,25 +904,6 @@ const displayedTimelineSummaryLabel = computed(() => {
   }
   if (!selectedTimelineCategory.value) return 'Ultimo patrimonio neto';
   return 'Ultimo valor de la categoria';
-});
-
-const displayedTimelineDescription = computed(() => {
-  if (selectedPosition.value) {
-    return `Serie mensual de ${selectedPosition.value.name}.`;
-  }
-  if (!selectedTimelineCategory.value) {
-    return ownershipFilter.value === 'all'
-      ? 'Pulsa en una categoria del bloque superior para filtrar la evolucion temporal.'
-      : `Serie mensual agregada para ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
-  }
-  if (selectedTimelineCategoryType.value === 'liability') {
-    return ownershipFilter.value === 'all'
-      ? `Serie mensual del total de ${selectedCategoryLabel.value} dentro de pasivos.`
-      : `Serie mensual de ${selectedCategoryLabel.value} dentro de ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
-  }
-  return ownershipFilter.value === 'all'
-    ? `Serie mensual del total de ${selectedCategoryLabel.value} dentro de activos.`
-    : `Serie mensual de ${selectedCategoryLabel.value} dentro de ${selectedOwnershipFilterLabel.value.toLowerCase()}.`;
 });
 
 const displayedTimelineSummaryMeta = computed(() => {
@@ -1044,7 +1018,6 @@ const timelineCategoryOptions = computed(() => [
   ...timelineLiabilityCategoryOptions.value,
 ]);
 
-const timelineDescription = displayedTimelineDescription;
 const timelineSummaryLabel = displayedTimelineSummaryLabel;
 const timelineSummaryMeta = displayedTimelineSummaryMeta;
 const timelineSeriesColor = displayedTimelineSeriesColor;
@@ -1155,6 +1128,10 @@ async function applyTimelineCategoryFilter(
   selectedTimelineCategoryType.value = categoryType;
   resetPositionSelection();
   await store.fetchTimeline(category, categoryType);
+}
+
+async function resetTimelineSelection(): Promise<void> {
+  await applyTimelineCategoryFilter(null, 'asset');
 }
 
 async function applyCompositionCategoryFilter(payload: {
@@ -1324,9 +1301,11 @@ const liabilityCreateInitial = computed(() =>
             <div class="ui-nw-hero-summary-body">
               <div class="ui-nw-hero-primary">
                 <div class="ui-nw-hero-title">Patrimonio neto</div>
-                <div class="ui-nw-hero-value">
-                  {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
-                </div>
+                <button class="ui-nw-hero-value-button" type="button" @click="resetTimelineSelection">
+                  <div class="ui-nw-hero-value">
+                    {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
+                  </div>
+                </button>
                 <div class="ui-nw-hero-metrics">
                   <div class="ui-nw-hero-metric">
                     <span class="ui-nw-hero-metric-label">Cobertura liquida</span>
@@ -1367,66 +1346,26 @@ const liabilityCreateInitial = computed(() =>
       <div class="ui-nw-hero-timeline">
         <div class="ui-nw-timeline-layout">
           <div ref="timelineColumnRef" class="ui-nw-timeline-column">
-            <div class="ui-nw-timeline-head">
-              <div>
-                <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
-                <p class="ui-nw-timeline-copy">{{ timelineDescription }}</p>
-              </div>
-            </div>
-
-            <div class="ui-nw-timeline-filter-groups">
-              <button
-                class="ui-nw-timeline-filter"
-                :class="{ 'ui-nw-timeline-filter-active': selectedTimelineCategory === null }"
-                type="button"
-                @click="applyTimelineCategoryFilter(null, 'asset')"
-              >
-                Todo patrimonio
-              </button>
-
-              <div
-                v-if="timelineAssetCategoryOptions.length > 0"
-                class="ui-nw-timeline-filter-group"
-              >
-                <span class="ui-nw-timeline-filter-group-label">Activos</span>
-                <button
-                  v-for="option in timelineAssetCategoryOptions"
-                  :key="`asset-${option.value}`"
-                  class="ui-nw-timeline-filter"
-                  :class="{
-                    'ui-nw-timeline-filter-active':
-                      selectedTimelineCategory === option.value &&
-                      selectedTimelineCategoryType === option.type,
-                  }"
-                  type="button"
-                  @click="applyTimelineCategoryFilter(option.value, option.type)"
-                >
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.count }}</small>
-                </button>
-              </div>
-
-              <div
-                v-if="timelineLiabilityCategoryOptions.length > 0"
-                class="ui-nw-timeline-filter-group"
-              >
-                <span class="ui-nw-timeline-filter-group-label">Pasivos</span>
-                <button
-                  v-for="option in timelineLiabilityCategoryOptions"
-                  :key="`liability-${option.value}`"
-                  class="ui-nw-timeline-filter ui-nw-timeline-filter-liability"
-                  :class="{
-                    'ui-nw-timeline-filter-active':
-                      selectedTimelineCategory === option.value &&
-                      selectedTimelineCategoryType === option.type,
-                  }"
-                  type="button"
-                  @click="applyTimelineCategoryFilter(option.value, option.type)"
-                >
-                  <span>{{ option.label }}</span>
-                  <small>{{ option.count }}</small>
-                </button>
-              </div>
+            <div class="ui-pro-panel ui-nw-balance-panel ui-nw-balance-panel-integrated">
+              <NetWorthDonut
+                :total-assets="analysis.assets"
+                :total-liabilities="analysis.liabilities"
+                :asset-backed-liabilities="analysis.backedDebt"
+                :unbacked-liabilities="analysis.unbackedDebt"
+                :net-worth="analysis.netWorth"
+                :unit="unitLabel()"
+                :category-keys="effectiveCategoryKeys"
+                :category-labels="effectiveCategoryLabels"
+                :category-assets="effectiveCategoryAssets"
+                :category-liabilities="effectiveCategoryLiabilities"
+                :category-asset-counts="effectiveCategoryAssetCounts"
+                :category-liability-counts="effectiveCategoryLiabilityCounts"
+                :selected-category-key="selectedTimelineCategory"
+                :selected-category-type="selectedTimelineCategoryType"
+                :show-chart="false"
+                @select-category="applyCompositionCategoryFilter"
+                @add-type="handleCompositionAddType"
+              />
             </div>
 
             <div v-if="displayedTimelineLoading && visibleTimelineRows.length === 0" class="subtle">
@@ -1441,17 +1380,6 @@ const liabilityCreateInitial = computed(() =>
             </div>
             <div v-else class="ui-nw-timeline-main">
               <div class="ui-nw-timeline-body">
-                <div class="ui-nw-timeline-summary">
-                  <div class="ui-nw-timeline-summary-label">
-                    {{ displayedTimelineSummaryLabel }}
-                  </div>
-                  <div class="ui-nw-timeline-summary-value">
-                    {{ formatNumber(displayedTimelineLatestPoint?.value ?? 0, 2) }}
-                    {{ displayedTimelineCurrency }}
-                  </div>
-                  <div class="ui-nw-timeline-summary-meta">{{ displayedTimelineSummaryMeta }}</div>
-                </div>
-
                 <div class="ui-nw-timeline-chart-shell">
                   <div v-if="displayedTimelineLoading" class="ui-nw-timeline-loading-overlay">
                     <span class="ui-nw-timeline-loading-pill">Actualizando serie...</span>
@@ -1540,7 +1468,6 @@ const liabilityCreateInitial = computed(() =>
               class="ui-nw-category-workspace ui-nw-category-workspace-empty"
               :style="timelineSidebarPanelStyle"
             >
-              <div class="ui-nw-category-workspace-kicker">Explora sin bajar</div>
               <h3 class="ui-nw-category-workspace-title">Selecciona una categoria arriba</h3>
               <p class="ui-nw-category-workspace-copy">
                 El grafico se actualiza en primera plana y aqui veras las posiciones concretas de
@@ -1672,35 +1599,10 @@ const liabilityCreateInitial = computed(() =>
       {{ prettyError() }}
     </div>
 
-    <div class="card ui-pro-panel ui-nw-balance-panel section">
-      <div class="ui-pro-divider mt-4">
-        <NetWorthDonut
-          :total-assets="analysis.assets"
-          :total-liabilities="analysis.liabilities"
-          :asset-backed-liabilities="analysis.backedDebt"
-          :unbacked-liabilities="analysis.unbackedDebt"
-          :net-worth="analysis.netWorth"
-          :unit="unitLabel()"
-          :category-keys="effectiveCategoryKeys"
-          :category-labels="effectiveCategoryLabels"
-          :category-assets="effectiveCategoryAssets"
-          :category-liabilities="effectiveCategoryLiabilities"
-          :category-asset-counts="effectiveCategoryAssetCounts"
-          :category-liability-counts="effectiveCategoryLiabilityCounts"
-          :selected-category-key="selectedTimelineCategory"
-          :selected-category-type="selectedTimelineCategoryType"
-          :show-chart="false"
-          @select-category="applyCompositionCategoryFilter"
-          @add-type="handleCompositionAddType"
-        />
-      </div>
-    </div>
-
     <section v-if="false" class="section card ui-pro-panel ui-nw-timeline-panel">
       <div class="ui-nw-timeline-head">
         <div>
           <h2 class="mt-0 text-base ui-nw-timeline-title">Evolucion temporal</h2>
-          <p class="ui-nw-timeline-copy">{{ timelineDescription }}</p>
         </div>
         <div class="ui-nw-timeline-filters">
           <button
@@ -2101,6 +2003,13 @@ const liabilityCreateInitial = computed(() =>
   padding: 14px;
 }
 
+.ui-nw-balance-panel-integrated {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .ui-nw-inline-analytics {
   margin-top: 16px;
   padding-top: 16px;
@@ -2268,6 +2177,16 @@ const liabilityCreateInitial = computed(() =>
   text-overflow: ellipsis;
 }
 
+.ui-nw-hero-value-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .ui-nw-hero-copy {
   margin: 0;
   max-width: 44ch;
@@ -2357,7 +2276,7 @@ const liabilityCreateInitial = computed(() =>
 
 .ui-nw-category-workspace-empty {
   min-height: 100%;
-  align-content: center;
+  align-content: start;
   background:
     radial-gradient(circle at top right, rgba(76, 195, 255, 0.12), transparent 38%),
     rgba(255, 255, 255, 0.03);

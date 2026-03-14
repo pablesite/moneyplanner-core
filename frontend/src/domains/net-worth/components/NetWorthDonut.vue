@@ -332,6 +332,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 10px;
 }
 
 .nw-donut-comp-title {
@@ -339,6 +340,11 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.8);
+}
+
+.nw-donut-comp-list {
+  display: grid;
+  gap: 8px;
 }
 
 .nw-donut-comp-row {
