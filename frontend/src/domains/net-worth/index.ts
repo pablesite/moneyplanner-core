@@ -14,4 +14,5 @@ export { default as ItemSubgroupHeader } from './components/ItemSubgroupHeader.v
 export { default as NetWorthByCategoryBar } from './components/NetWorthByCategoryBar.vue';
 export { default as NetWorthByMemberBar } from './components/NetWorthByMemberBar.vue';
 export { default as NetWorthDonut } from './components/NetWorthDonut.vue';
+export { default as NetWorthTimelineChart } from './components/NetWorthTimelineChart.vue';
 export { default as SettingsPopover } from './components/SettingsPopover.vue';
