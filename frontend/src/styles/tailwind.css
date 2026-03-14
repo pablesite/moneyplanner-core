@@ -257,6 +257,7 @@
 
   .nw-settings-root {
     @apply relative inline-block;
+    z-index: 40;
   }
 
   .nw-settings-icon-only {
@@ -269,6 +270,7 @@
 
   .nw-settings-panel {
     @apply absolute right-0 top-[calc(100%+10px)] z-[2000] w-[min(360px,92vw)] rounded-[14px] border border-white/10 p-[14px] text-left;
+    isolation: isolate;
     border-color: rgba(45, 212, 191, 0.42);
     background:
       linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(45, 212, 191, 0.02)),
