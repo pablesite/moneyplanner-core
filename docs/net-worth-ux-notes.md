@@ -1,12 +1,50 @@
-# Net worth UX notes
+# Net Worth UX
 
-## 2026-03-13
+## Objective
+Describe the current UX structure and interaction model of the `Patrimonio` view in Core.
 
-- En la vista de patrimonio, volver a pulsar la categoría activa de la composición restablece la serie general del patrimonio neto.
-- El selector contextual de posiciones solo se muestra mientras hay una categoría concreta seleccionada.
-- En modo real/IPC, la composición por categorías y los indicadores de liquidez usan también los agregados reales para que los totales coincidan con el resumen superior.
-- En el estado general sin filtros, la tarjeta de "Ultimo patrimonio neto" muestra el resumen actual y no el cierre mensual proyectado de la timeline.
-- La cabecera de patrimonio incluye un filtro por titularidad junto a ajustes con el mismo patrón visual y funcional del dashboard de presupuesto: filtra por persona y prorratea las titularidades compartidas en modo nominal.
-- La composición de activos y pasivos funciona ahora como panel operativo: muestra importes y contadores por categoría, permite crear desde la propia composición y abre un detalle editable de posiciones sin salir de patrimonio.
-- El donut se muestra ahora en la cabecera principal de patrimonio y el resumen superior queda reducido a neto, activos y pasivos; los ratios de fase se eliminan de esta vista.
-- El bloque principal de patrimonio se ha rehecho como un hero visual: donut destacado a la izquierda, resumen consolidado a la derecha y tarjetas separadas para activos y pasivos, con mejor jerarquía y responsive más limpio.
+## Current layout
+1. The view starts with a hero section that combines:
+   - a prominent donut summary
+   - the main net-worth summary
+   - top-level asset and liability totals
+2. The timeline workspace sits directly below the hero.
+3. Category exploration and position drilldown happen in the same visual workspace as the timeline.
+
+## Hero behavior
+1. The donut is part of the main header, not a secondary block.
+2. The main summary prioritizes:
+   - net worth
+   - liquid coverage
+   - equity ratio
+   - total assets
+   - total liabilities
+3. The header also includes the ownership filter and settings controls.
+
+## Ownership filter
+1. The ownership filter lives in the header beside the main context controls.
+2. In nominal mode it filters by person and prorates shared ownership.
+3. In real/IPC mode the ownership filter is disabled.
+
+## Composition and timeline
+1. Category selection starts from the composition panel.
+2. Clicking the active category again resets the view to the global net-worth series.
+3. When no category is selected, the timeline shows the overall net-worth series.
+4. When a category is selected, the workspace switches to that category context.
+5. In real/IPC mode, composition totals and liquidity indicators use the same real aggregates as the top summary.
+
+## Position drilldown
+1. The contextual position selector only appears when a concrete category is selected.
+2. Position drilldown stays in the same workspace as the timeline instead of forcing navigation away.
+3. The category workspace also exposes direct creation actions for new assets or liabilities in that context.
+4. The selected position can show its own timeline plus events and checkpoints.
+
+## UX principles of the current view
+1. Keep the main financial picture visible at the top.
+2. Let the user move from summary to category to position without losing context.
+3. Treat composition as an operational panel, not just a passive chart.
+4. Preserve a strong desktop hierarchy while keeping the layout clean on mobile.
+
+## Related implementation
+1. `core/frontend/src/views/NetWorthView.vue`
+2. `core/frontend/src/domains/net-worth/components/NetWorthDonut.vue`
