@@ -505,3 +505,98 @@ class AccountingApiTests(APITestCase):
             invalid_response.status_code, status.HTTP_400_BAD_REQUEST, invalid_response.data
         )
         self.assertIn("counterparty_account_id", invalid_response.data["error"]["details"])
+
+    def test_account_balances_endpoint_returns_period_aggregates_for_liquidity_accounts(self):
+        income_plan = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="employee_salary",
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compras",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            amount_annual=Decimal("2400.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        second_cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ahorro",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+        self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "income",
+                "booking_date": "2026-04-01",
+                "value_date": "2026-04-01",
+                "description": "Nomina abril",
+                "amount": "1000.00",
+                "account_id": self.cash_account.id,
+                "annual_income_entry_id": income_plan.id,
+            },
+            format="json",
+        )
+        self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-05",
+                "value_date": "2026-04-05",
+                "description": "Compra abril",
+                "amount": "200.00",
+                "account_id": self.cash_account.id,
+                "annual_expense_entry_id": expense_plan.id,
+            },
+            format="json",
+        )
+        self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-10",
+                "value_date": "2026-04-10",
+                "description": "Mover ahorro",
+                "amount": "300.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": second_cash_account.id,
+            },
+            format="json",
+        )
+
+        response = self.client.get(
+            "/api/accounting/accounts/balances/?year=2026&month=4&account_type=asset"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["totals_by_account_type"]["asset"], "800.00")
+        self.assertEqual(len(response.data["accounts"]), 2)
+
+        first_account = next(
+            row for row in response.data["accounts"] if row["account_id"] == self.cash_account.id
+        )
+        second_account = next(
+            row for row in response.data["accounts"] if row["account_id"] == second_cash_account.id
+        )
+
+        self.assertEqual(first_account["current_balance"], "500.00000000")
+        self.assertEqual(first_account["period_debit_total"], "1000.00")
+        self.assertEqual(first_account["period_credit_total"], "500.00")
+        self.assertEqual(first_account["period_net_change"], "500.00")
+
+        self.assertEqual(second_account["current_balance"], "300.00000000")
+        self.assertEqual(second_account["period_debit_total"], "300.00")
+        self.assertEqual(second_account["period_credit_total"], "0.00")
+        self.assertEqual(second_account["period_net_change"], "300.00")
+
+    def test_account_balances_endpoint_requires_year_when_month_is_present(self):
+        response = self.client.get("/api/accounting/accounts/balances/?month=4")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("year", response.data["error"]["details"])

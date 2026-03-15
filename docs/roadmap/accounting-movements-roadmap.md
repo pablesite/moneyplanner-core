@@ -15,7 +15,7 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - cobertura en `backend/accounting/tests/test_accounting.py`
 2. Fase 2 backend: parcialmente implementada
    - soporte explicito para `income`, `expense` y `transfer` via `POST /api/accounting/transactions/quick-entry/`
-   - saldos actuales disponibles por cuenta via `current_balance`
+   - saldos actuales y agregados por periodo disponibles via `current_balance` y `GET /api/accounting/accounts/balances/`
 3. Pendiente backend para fases posteriores
    - cobertura/fallback de cierre mensual basada en ledger
    - actividad contable contextual en patrimonio

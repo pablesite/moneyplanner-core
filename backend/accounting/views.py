@@ -14,7 +14,11 @@ from .serializers import (
     LedgerTransactionSerializer,
     QuickLedgerTransactionSerializer,
 )
-from .services import build_monthly_accounting_summary
+from .services import (
+    build_account_balances_summary,
+    build_monthly_accounting_summary,
+    validate_balance_summary_filters,
+)
 
 
 class LedgerAccountViewSet(viewsets.ModelViewSet):
@@ -30,6 +34,21 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
         if is_active in {"true", "false"}:
             queryset = queryset.filter(is_active=(is_active == "true"))
         return queryset.order_by("account_type", "name", "id")
+
+    @action(detail=False, methods=["get"], url_path="balances")
+    def balances(self, request):
+        fiscal_year = parse_optional_int_query_param(request.query_params, "year")
+        month = parse_optional_int_query_param(request.query_params, "month")
+        validate_balance_summary_filters(fiscal_year=fiscal_year, month=month)
+        return Response(
+            build_account_balances_summary(
+                user_id=request.user.id,
+                fiscal_year=fiscal_year,
+                month=month,
+                account_type=request.query_params.get("account_type") or None,
+                status=request.query_params.get("status") or None,
+            )
+        )
 
 
 class LedgerTransactionViewSet(viewsets.ModelViewSet):

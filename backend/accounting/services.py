@@ -43,7 +43,13 @@ def get_user_ledger_account(
 
 def get_account_balance(*, account: LedgerAccount) -> Decimal:
     totals = compute_entry_balance_totals(account.entries.all(), account_id=account.id)
-    if account.account_type in {LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.EXPENSE}:
+    return compute_account_balance_from_totals(account_type=account.account_type, totals=totals)
+
+
+def compute_account_balance_from_totals(
+    *, account_type: str, totals: LedgerBalanceTotals
+) -> Decimal:
+    if account_type in {LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.EXPENSE}:
         return totals.debit_total - totals.credit_total
     return totals.credit_total - totals.debit_total
 
@@ -157,11 +163,98 @@ def build_monthly_accounting_summary(*, user_id: int, fiscal_year: int) -> dict:
     return {"fiscal_year": fiscal_year, "months": months}
 
 
+def build_account_balances_summary(
+    *,
+    user_id: int,
+    fiscal_year: int | None = None,
+    month: int | None = None,
+    account_type: str | None = None,
+    status: str | None = None,
+) -> dict:
+    accounts_queryset = LedgerAccount.objects.filter(user_id=user_id)
+    if account_type:
+        accounts_queryset = accounts_queryset.filter(account_type=account_type)
+    accounts = list(accounts_queryset.order_by("account_type", "name", "id"))
+
+    current_entries_queryset = LedgerEntry.objects.filter(
+        transaction__user_id=user_id
+    ).select_related("transaction")
+    if account_type:
+        current_entries_queryset = current_entries_queryset.filter(
+            account__account_type=account_type
+        )
+    if status:
+        current_entries_queryset = current_entries_queryset.filter(transaction__status=status)
+
+    period_entries_queryset = current_entries_queryset
+    if fiscal_year is not None:
+        period_entries_queryset = period_entries_queryset.filter(
+            transaction__booking_date__year=fiscal_year
+        )
+    if month is not None:
+        period_entries_queryset = period_entries_queryset.filter(
+            transaction__booking_date__month=month
+        )
+
+    current_totals_by_account = _group_balance_totals_by_account(list(current_entries_queryset))
+    period_totals_by_account = _group_balance_totals_by_account(list(period_entries_queryset))
+
+    items: list[dict] = []
+    totals_by_type: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for account in accounts:
+        current_totals = current_totals_by_account.get(account.id, LedgerBalanceTotals(ZERO, ZERO))
+        period_totals = period_totals_by_account.get(account.id, LedgerBalanceTotals(ZERO, ZERO))
+        current_balance = compute_account_balance_from_totals(
+            account_type=account.account_type,
+            totals=current_totals,
+        )
+        period_net_change = compute_account_balance_from_totals(
+            account_type=account.account_type,
+            totals=period_totals,
+        )
+        totals_by_type[account.account_type] += current_balance
+        items.append(
+            {
+                "account_id": account.id,
+                "name": account.name,
+                "account_type": account.account_type,
+                "currency": account.currency,
+                "origin": account.origin,
+                "current_balance": str(current_balance),
+                "period_debit_total": serialize_decimal(period_totals.debit_total),
+                "period_credit_total": serialize_decimal(period_totals.credit_total),
+                "period_net_change": serialize_decimal(period_net_change),
+            }
+        )
+
+    return {
+        "filters": {
+            "year": fiscal_year,
+            "month": month,
+            "account_type": account_type,
+            "status": status,
+        },
+        "totals_by_account_type": {
+            key: serialize_decimal(value) for key, value in sorted(totals_by_type.items())
+        },
+        "accounts": items,
+    }
+
+
 def validate_booking_and_value_dates(*, booking_date: date, value_date: date) -> None:
     if value_date < booking_date:
         raise ValidationError(
             {"value_date": "La fecha valor no puede ser anterior a la fecha de contabilizacion."}
         )
+
+
+def validate_balance_summary_filters(*, fiscal_year: int | None, month: int | None) -> None:
+    if month is not None and fiscal_year is None:
+        raise ValidationError(
+            {"year": "Query param 'year' es obligatorio cuando se informa 'month'."}
+        )
+    if month is not None and (month < 1 or month > 12):
+        raise ValidationError({"month": "Query param 'month' invalido."})
 
 
 def validate_liquidity_account(
@@ -328,3 +421,16 @@ def _build_quick_entry_payload(
             "currency": account.currency,
         },
     ]
+
+
+def _group_balance_totals_by_account(entries: list[LedgerEntry]) -> dict[int, LedgerBalanceTotals]:
+    grouped: dict[int, dict[str, Decimal]] = defaultdict(lambda: {"debit": ZERO, "credit": ZERO})
+    for entry in entries:
+        grouped[entry.account_id][entry.side] += entry.amount
+    return {
+        account_id: LedgerBalanceTotals(
+            debit_total=totals["debit"],
+            credit_total=totals["credit"],
+        )
+        for account_id, totals in grouped.items()
+    }
