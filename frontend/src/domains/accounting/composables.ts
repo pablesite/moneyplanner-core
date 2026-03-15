@@ -446,11 +446,18 @@ export function useAccountingPage() {
     successMessage.value = 'Cuenta contable creada.';
   }
 
-  async function archiveAccount(accountId: number, accountName: string) {
+  async function deleteAccount(accountId: number, accountName: string) {
     successMessage.value = null;
-    if (!confirm(`Archivar cuenta "${accountName}"?`)) return;
-    await store.archiveAccount(accountId);
-    successMessage.value = 'Cuenta contable archivada.';
+    if (
+      !confirm(
+        `Eliminar cuenta "${accountName}"?\n\n` +
+          'Esto borrara tambien todos sus asientos y transacciones relacionadas. ' +
+          'La accion es irreversible y puede afectar saldos e historico.',
+      )
+    )
+      return;
+    await store.deleteAccount(accountId);
+    successMessage.value = 'Cuenta contable eliminada.';
   }
 
   async function submitTransaction() {
@@ -565,7 +572,7 @@ export function useAccountingPage() {
     removeEntry,
     reloadPeriod,
     submitAccount,
-    archiveAccount,
+    deleteAccount,
     submitQuickEntry,
     submitTransaction,
   };

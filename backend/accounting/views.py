@@ -1,9 +1,10 @@
 from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.response import Response
 
 from budget.query_params import parse_optional_int_query_param, parse_required_int_query_param
 
@@ -36,6 +37,42 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
         if is_active in {"true", "false"}:
             queryset = queryset.filter(is_active=(is_active == "true"))
         return queryset.order_by("account_type", "name", "id")
+
+    def perform_destroy(self, instance: LedgerAccount) -> None:
+        if instance.origin == LedgerAccount.Origin.SYSTEM:
+            raise ValidationError(
+                {
+                    "detail": (
+                        "No se puede eliminar una cuenta de sistema. "
+                        "Estas cuentas se gestionan automaticamente."
+                    )
+                }
+            )
+        if instance.asset_id is not None:
+            from net_worth.models import Asset
+
+            Asset.objects.filter(
+                id=instance.asset_id,
+                user_id=instance.user_id,
+                accounting_account_id=instance.id,
+            ).update(accounting_account_id=None)
+        if instance.liability_id is not None:
+            from net_worth.models import Liability
+
+            Liability.objects.filter(
+                id=instance.liability_id,
+                user_id=instance.user_id,
+                accounting_account_id=instance.id,
+            ).update(accounting_account_id=None)
+
+        transaction_ids = list(
+            LedgerEntry.objects.filter(account_id=instance.id)
+            .values_list("transaction_id", flat=True)
+            .distinct()
+        )
+        if transaction_ids:
+            LedgerTransaction.objects.filter(user_id=instance.user_id, id__in=transaction_ids).delete()
+        instance.delete()
 
     @action(detail=False, methods=["get"], url_path="balances")
     def balances(self, request):

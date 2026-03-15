@@ -42,7 +42,7 @@ const {
   removeEntry,
   reloadPeriod,
   submitAccount,
-  archiveAccount,
+  deleteAccount,
   submitQuickEntry,
   submitTransaction,
 } = useAccountingPage();
@@ -451,12 +451,12 @@ const accountsByType = computed(() => {
                   <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
                   <button
                     v-if="account.origin === 'user'"
-                    class="btn ui-accounting-account-archive-btn"
+                    class="btn ui-accounting-account-delete-btn"
                     type="button"
                     :disabled="accountCreationLoading"
-                    @click="archiveAccount(account.id, account.name)"
+                    @click="deleteAccount(account.id, account.name)"
                   >
-                    Archivar
+                    Eliminar
                   </button>
                 </div>
               </li>
@@ -783,7 +783,7 @@ const accountsByType = computed(() => {
   gap: 10px;
 }
 
-.ui-accounting-account-archive-btn {
+.ui-accounting-account-delete-btn {
   min-height: 30px;
   padding: 0 10px;
   font-size: 0.74rem;

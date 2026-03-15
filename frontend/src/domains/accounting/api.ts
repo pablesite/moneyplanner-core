@@ -28,6 +28,9 @@ export const coreAccountingApi = {
   createAccount(payload: LedgerAccountWritePayload) {
     return coreApi.post<LedgerAccount>('/api/accounting/accounts/', payload);
   },
+  deleteAccount(id: number) {
+    return coreApi.delete<void>(`/api/accounting/accounts/${id}/`);
+  },
   updateAccount(id: number, payload: Partial<LedgerAccountWritePayload>) {
     return coreApi.patch<LedgerAccount>(`/api/accounting/accounts/${id}/`, payload);
   },
