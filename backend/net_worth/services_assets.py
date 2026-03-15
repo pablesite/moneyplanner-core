@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 from decimal import ROUND_HALF_UP
+from typing import cast
 
 from django.db.models import Q
 
@@ -30,7 +31,7 @@ ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
 }
 
 FURNISHINGS_DEGRESSIVE_PROFILES: dict[str, tuple[tuple[Decimal, ...], Decimal, Decimal, int]] = {
-    Asset.Subcategory.VEHICLES: (
+    cast(str, Asset.Subcategory.VEHICLES): (
         (
             Decimal("0.18"),
             Decimal("0.15"),
@@ -41,7 +42,7 @@ FURNISHINGS_DEGRESSIVE_PROFILES: dict[str, tuple[tuple[Decimal, ...], Decimal, D
         Decimal("0.15"),
         20,
     ),
-    Asset.Subcategory.SPORTS_EQUIPMENT: (
+    cast(str, Asset.Subcategory.SPORTS_EQUIPMENT): (
         (
             Decimal("0.12"),
             Decimal("0.10"),
@@ -59,16 +60,16 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
 }
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
-    Asset.Subcategory.DEPOSITS: "deposits_fixed_income",
-    Asset.Subcategory.FUNDS: "index_funds",
-    Asset.Subcategory.ETFS: "etf_indexed",
-    Asset.Subcategory.PENSION_PLANS: "pension_plan",
-    Asset.Subcategory.STOCKS: "stocks_dividends",
-    Asset.Subcategory.CRYPTOCURRENCIES: "crypto",
-    Asset.Subcategory.REAL_ESTATE_CROWD: "crowdfunding_real_estate",
-    Asset.Subcategory.CROWDLENDING: "crowdlending_p2p",
-    Asset.Subcategory.ROBOADVISOR: "roboadvisor",
-    Asset.Subcategory.OTHER: "other_financial_investments",
+    cast(str, Asset.Subcategory.DEPOSITS): "deposits_fixed_income",
+    cast(str, Asset.Subcategory.FUNDS): "index_funds",
+    cast(str, Asset.Subcategory.ETFS): "etf_indexed",
+    cast(str, Asset.Subcategory.PENSION_PLANS): "pension_plan",
+    cast(str, Asset.Subcategory.STOCKS): "stocks_dividends",
+    cast(str, Asset.Subcategory.CRYPTOCURRENCIES): "crypto",
+    cast(str, Asset.Subcategory.REAL_ESTATE_CROWD): "crowdfunding_real_estate",
+    cast(str, Asset.Subcategory.CROWDLENDING): "crowdlending_p2p",
+    cast(str, Asset.Subcategory.ROBOADVISOR): "roboadvisor",
+    cast(str, Asset.Subcategory.OTHER): "other_financial_investments",
 }
 
 
@@ -359,11 +360,11 @@ def _get_inflation_growth_factor_or_one(*, start: date, end: date) -> Decimal:
     if end <= start:
         return Decimal("1")
     start_index = _get_inflation_index_or_none(
-        region=InflationIndex.Region.ES,
+        region=cast(str, InflationIndex.Region.ES),
         period_month=_month_start(start),
     )
     end_index = _get_inflation_index_or_none(
-        region=InflationIndex.Region.ES,
+        region=cast(str, InflationIndex.Region.ES),
         period_month=_month_start(end),
     )
     if not start_index or not end_index or start_index == 0:
@@ -760,11 +761,14 @@ def _get_periodic_investment_delta_since_anchor(
     ):
         return Decimal("0")
     return sum(
-        installment
-        for due_date, installment in _build_investment_contribution_schedule(
-            asset=asset, as_of_date=as_of_date
-        )
-        if anchor_date is None or due_date > anchor_date
+        (
+            installment
+            for due_date, installment in _build_investment_contribution_schedule(
+                asset=asset, as_of_date=as_of_date
+            )
+            if anchor_date is None or due_date > anchor_date
+        ),
+        start=Decimal("0"),
     )
 
 
@@ -882,13 +886,13 @@ def _get_generated_asset_expense_profile(*, asset: Asset) -> tuple[str, str]:
 
     if asset.category == Asset.Category.INVESTMENTS:
         return (
-            AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
             INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY.get(
                 asset.subcategory, "other_financial_investments"
             ),
         )
 
-    return (AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS, "property_purchase")
+    return (cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS), "property_purchase")
 
 
 def _last_day_of_month(year: int, month: int) -> int:
