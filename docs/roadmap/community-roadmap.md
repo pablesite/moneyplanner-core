@@ -8,10 +8,12 @@ Consolidate a strong open-core base that is useful on its own and easy to improv
 2. Lower-friction data input UX
 3. Quality through tests and validation
 4. Backend refactoring in small maintainable phases
-5. Documentation and contributor onboarding
+5. Accounting and daily-movement rollout in small phases without breaking net worth, budget, or monthly close
+6. Documentation and contributor onboarding
 
 ## Active Roadmaps
 1. Backend refactor roadmap: `backend-refactor-roadmap.md`
+2. Accounting movements roadmap: `accounting-movements-roadmap.md`
 
 ## Product Areas In Evolution
 1. Net worth
