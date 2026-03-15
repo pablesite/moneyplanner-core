@@ -1,4 +1,4 @@
-# Roadmap: refactor profundo del backend (Core) - plan ejecutable
+﻿# Roadmap: refactor profundo del backend (Core) - plan ejecutable
 
 ## Objetivo
 Dejar el backend del Core mas facil de mantener, probar y extender, sin romper el comportamiento funcional actual.
@@ -436,21 +436,21 @@ Ejecutar dentro de contenedores. No usar `docker compose down -v`.
 
 ### Tests minimos Core backend (por fase)
 1. `cd core`
-2. `docker compose exec backend python manage.py test memberships` (cuando exista suite)
+2. `docker compose exec backend python manage.py test memberships`
 3. `docker compose exec backend python manage.py test net_worth`
 4. `docker compose exec backend python manage.py test budget`
 5. `docker compose exec backend python manage.py test accounts`
 6. `docker compose exec backend python manage.py test core`
 
 Nota:
-1. Ajustar servicio si el nombre del contenedor en `core/docker-compose.yml` no es `backend`.
+1. Ajustar servicio si el nombre del contenedor en `docker-compose.yml` no es `backend`.
 2. En PRs pequenos, correr solo el modulo afectado + tests de integracion relacionados.
 
 ## Checklist de PR de refactor (usar en todas las fases)
 1. [ ] Hay test de regresion para el comportamiento que se protege/cambia.
 2. [ ] No cambia el contrato API (o el cambio esta documentado y aprobado).
 3. [ ] La logica de negocio se mueve hacia services, no hacia views.
-4. [ ] El diff evita cambios cosméticos fuera del alcance.
+4. [ ] El diff evita cambios cosmÃ©ticos fuera del alcance.
 5. [ ] Validado con calidad/tests dentro de Docker.
 6. [ ] Docs actualizadas si cambia contrato/capability/flujo.
 7. [ ] Commit con Conventional Commits.

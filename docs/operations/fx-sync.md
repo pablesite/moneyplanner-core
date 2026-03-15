@@ -29,9 +29,9 @@ Al crear o actualizar un activo o un pasivo en divisa distinta de la moneda base
 Si la fuente externa falla, la creacion de la posicion no se bloquea; el backfill queda como mejor esfuerzo y puede reintentarse con el comando anterior.
 
 ## Tarea automatica diaria
-`core/docker-compose.yml` incluye un servicio `fx_sync` que ejecuta una sincronizacion al arrancar y la repite cada 24 horas por defecto.
+`docker-compose.yml` incluye un servicio `fx_sync` que ejecuta una sincronizacion al arrancar y la repite cada 24 horas por defecto.
 
-Variables disponibles en `core/backend/.env`:
+Variables disponibles en `backend/.env`:
 - `FX_SYNC_ENABLED=1`
 - `FX_SYNC_QUOTE_CURRENCY=EUR`
 - `FX_SYNC_INTERVAL_SECONDS=86400`

@@ -46,5 +46,5 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 4. Preserve a strong desktop hierarchy while keeping the layout clean on mobile.
 
 ## Related implementation
-1. `core/frontend/src/views/NetWorthView.vue`
-2. `core/frontend/src/domains/net-worth/components/NetWorthDonut.vue`
+1. `frontend/src/views/NetWorthView.vue`
+2. `frontend/src/domains/net-worth/components/NetWorthDonut.vue`

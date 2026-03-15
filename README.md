@@ -1,18 +1,18 @@
-# MoneyPlanner Core (OSS)
+# MoneyPlanner Core
 
-Base open-core de MoneyPlanner.
+Open-source personal finance app foundation for MoneyPlanner.
 
-## Que es
-1. Un producto autocontenido para gestion financiera personal en local.
-2. La base funcional publica sobre la que evoluciona MoneyPlanner Core.
-3. Un repo pensado para ser util por si mismo y mejorable por la comunidad.
+## What It Is
+1. A self-contained product for personal finance management.
+2. The open-core base that evolves independently from the SaaS layer.
+3. A repository intended to be useful on its own and open to community contributions.
 
-## Que incluye hoy
-1. Patrimonio
-2. Presupuesto y cierre mensual
-3. Introduccion de datos
-4. Guia financiera v1
-5. Familia / titularidad
+## Current Scope
+1. Net worth
+2. Budget and monthly close
+3. Data input
+4. Financial guide v1
+5. Family and ownership
 
 ## Stack
 1. `backend/` Django + DRF
@@ -20,19 +20,17 @@ Base open-core de MoneyPlanner.
 3. PostgreSQL
 4. Docker Compose
 
-## Arranque rapido
+## Quick Start
 1. `docker compose up --build -d`
 2. Frontend: `http://localhost:5173`
 3. Backend: `http://localhost:8000`
 
-## Documentacion
-1. `docs/roadmap-comunidad.md`
-2. `docs/roadmap-refactor-backend.md`
-3. `docs/fx-sync.md`
-4. `CONTRIBUTING.md`
-5. `RELEASING.md`
+## Documentation
+1. `docs/README.md`
+2. `CONTRIBUTING.md`
+3. `RELEASING.md`
 
-## Objetivo del repo publico
-1. Publicar una base util desde ya.
-2. Mejorar calidad, producto y UX con feedback real.
-3. Facilitar contribuciones pequenas, claras y seguras.
+## Goal
+1. Ship a useful open-source base now.
+2. Improve product quality and UX with real feedback.
+3. Make contribution paths small, clear, and safe.
