@@ -3,11 +3,17 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 
 from budget.query_params import parse_optional_int_query_param, parse_required_int_query_param
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
-from .serializers import LedgerAccountSerializer, LedgerEntrySerializer, LedgerTransactionSerializer
+from .serializers import (
+    LedgerAccountSerializer,
+    LedgerEntrySerializer,
+    LedgerTransactionSerializer,
+    QuickLedgerTransactionSerializer,
+)
 from .services import build_monthly_accounting_summary
 
 
@@ -50,6 +56,18 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         fiscal_year = parse_required_int_query_param(request.query_params, "year")
         return Response(
             build_monthly_accounting_summary(user_id=request.user.id, fiscal_year=fiscal_year)
+        )
+
+    @action(detail=False, methods=["post"], url_path="quick-entry")
+    def quick_entry(self, request):
+        serializer = QuickLedgerTransactionSerializer(
+            data=request.data, context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        transaction = serializer.save()
+        return Response(
+            LedgerTransactionSerializer(transaction, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
