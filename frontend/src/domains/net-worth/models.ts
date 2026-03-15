@@ -20,6 +20,7 @@ export type Asset = {
   subcategory: string;
   tracking_mode: string;
   accounting_account_id: number | null;
+  accounting_integration_state?: 'linked' | 'auto_created' | 'needs_review' | null;
   currency: string;
   start_date?: string;
   investment_contribution_mode?: 'one_time' | 'periodic_contribution';

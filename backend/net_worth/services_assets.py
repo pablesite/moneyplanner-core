@@ -5,6 +5,7 @@ from decimal import Decimal
 from decimal import ROUND_HALF_UP
 from typing import cast
 
+from django.db import transaction
 from django.db.models import Q
 
 from django.utils import timezone
@@ -73,6 +74,12 @@ INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
 }
 
 
+class AccountingIntegrationState:
+    LINKED = "linked"
+    AUTO_CREATED = "auto_created"
+    NEEDS_REVIEW = "needs_review"
+
+
 def _get_accounting_asset_account(*, user_id: int, account_id: int | None):
     from accounting.models import LedgerAccount
     from accounting.services import get_user_ledger_account
@@ -82,6 +89,72 @@ def _get_accounting_asset_account(*, user_id: int, account_id: int | None):
         account_id=account_id,
         expected_type=cast(str, LedgerAccount.AccountType.ASSET),
     )
+
+
+@transaction.atomic
+def ensure_asset_accounting_account(*, asset: Asset) -> str | None:
+    if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
+        return None
+
+    from accounting.models import LedgerAccount
+    from accounting.services import normalize_currency_code
+
+    normalized_currency = normalize_currency_code(asset.currency)
+    if len(normalized_currency) != 3:
+        return AccountingIntegrationState.NEEDS_REVIEW
+
+    if asset.accounting_account_id:
+        account = _get_accounting_asset_account(
+            user_id=asset.user_id,
+            account_id=asset.accounting_account_id,
+        )
+        if (
+            account is None
+            or account.currency != normalized_currency
+            or account.asset_id not in (None, asset.id)
+        ):
+            return AccountingIntegrationState.NEEDS_REVIEW
+
+        update_fields: list[str] = []
+        if account.asset_id is None:
+            account.asset_id = asset.id
+            update_fields.append("asset")
+        if not account.is_active:
+            account.is_active = True
+            update_fields.append("is_active")
+        if update_fields:
+            account.save(update_fields=update_fields)
+        return AccountingIntegrationState.LINKED
+
+    existing_accounts = list(
+        LedgerAccount.objects.filter(
+            user_id=asset.user_id,
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency=normalized_currency,
+            asset_id=asset.id,
+        )
+        .order_by("id")
+        .only("id")
+    )
+    if len(existing_accounts) == 1:
+        asset.accounting_account_id = existing_accounts[0].id
+        asset.save(update_fields=["accounting_account_id"])
+        return AccountingIntegrationState.LINKED
+    if len(existing_accounts) > 1:
+        return AccountingIntegrationState.NEEDS_REVIEW
+
+    account = LedgerAccount.objects.create(
+        user=asset.user,
+        name=asset.name[:120] or f"Activo {asset.id}",
+        account_type=LedgerAccount.AccountType.ASSET,
+        currency=normalized_currency,
+        origin=LedgerAccount.Origin.SYSTEM,
+        asset=asset,
+        is_active=True,
+    )
+    asset.accounting_account_id = account.id
+    asset.save(update_fields=["accounting_account_id"])
+    return AccountingIntegrationState.AUTO_CREATED
 
 
 def _validate_accounting_asset_account_link(
@@ -213,16 +286,11 @@ def validate_asset_payload(
     current_asset_id: int | None = None,
     currency: str | None = None,
 ) -> None:
-    if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
-        raise DRFValidationError(
-            {
-                "accounting_account_id": (
-                    "Requerido si tracking_mode=accounting "
-                    "(placeholder hasta que exista contabilidad)."
-                )
-            }
-        )
-    if tracking_mode == Asset.TrackingMode.ACCOUNTING and user_id is not None:
+    if (
+        tracking_mode == Asset.TrackingMode.ACCOUNTING
+        and accounting_account_id is not None
+        and user_id is not None
+    ):
         _validate_accounting_asset_account_link(
             user_id=user_id,
             accounting_account_id=accounting_account_id,
@@ -470,30 +538,49 @@ def _get_degressive_remaining_ratio(
     return remaining
 
 
+def _get_effective_accounting_asset_amount_or_none(
+    *, asset: Asset, as_of_date: date
+) -> Decimal | None:
+    if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
+        return None
+
+    integration_state = ensure_asset_accounting_account(asset=asset)
+    if integration_state == AccountingIntegrationState.NEEDS_REVIEW:
+        return None
+
+    from accounting.models import LedgerTransaction
+    from accounting.services import get_account_balance, has_account_entries
+
+    accounting_account = _get_accounting_asset_account(
+        user_id=asset.user_id,
+        account_id=asset.accounting_account_id,
+    )
+    if (
+        accounting_account is None
+        or accounting_account.currency != asset.currency
+        or not has_account_entries(
+            account=accounting_account,
+            as_of_date=as_of_date,
+            status=cast(str, LedgerTransaction.Status.POSTED),
+        )
+    ):
+        return None
+
+    return get_account_balance(
+        account=accounting_account,
+        as_of_date=as_of_date,
+        status=cast(str, LedgerTransaction.Status.POSTED),
+    )
+
+
 def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
-    if asset.tracking_mode == Asset.TrackingMode.ACCOUNTING:
-        from accounting.models import LedgerTransaction
-        from accounting.services import get_account_balance, has_account_entries
-
-        accounting_account = _get_accounting_asset_account(
-            user_id=asset.user_id,
-            account_id=asset.accounting_account_id,
-        )
-        if (
-            accounting_account is not None
-            and accounting_account.currency == asset.currency
-            and has_account_entries(
-                account=accounting_account,
-                as_of_date=ref_date,
-                status=cast(str, LedgerTransaction.Status.POSTED),
-            )
-        ):
-            return get_account_balance(
-                account=accounting_account,
-                as_of_date=ref_date,
-                status=cast(str, LedgerTransaction.Status.POSTED),
-            )
+    accounting_amount = _get_effective_accounting_asset_amount_or_none(
+        asset=asset,
+        as_of_date=ref_date,
+    )
+    if accounting_amount is not None:
+        return accounting_amount
 
     if asset.category == Asset.Category.INVESTMENTS:
         return _get_effective_investment_asset_amount(asset=asset, as_of_date=ref_date)

@@ -63,6 +63,14 @@ from ..services import (
     validate_liability_payload,
     validate_snapshot_payload,
 )
+from ..services_assets import (
+    AccountingIntegrationState as AssetAccountingIntegrationState,
+    ensure_asset_accounting_account,
+)
+from ..services_liabilities import (
+    AccountingIntegrationState as LiabilityAccountingIntegrationState,
+    ensure_liability_accounting_account,
+)
 from ..services_timelines import (
     build_asset_timeline,
     build_liability_timeline,
@@ -75,18 +83,17 @@ class NetWorthServicesTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="nw_user", password="pass1234")
 
-    def test_validate_asset_payload_rejects_accounting_without_account(self):
-        with self.assertRaises(DRFValidationError):
-            validate_asset_payload(
-                tracking_mode=Asset.TrackingMode.ACCOUNTING,
-                accounting_account_id=None,
-                category=Asset.Category.CASH,
-                subcategory=Asset.Subcategory.BANK_ACCOUNT,
-                annual_interest_tae=Decimal("1.00"),
-                amortization_method=Asset.AmortizationMethod.NONE,
-                amortization_term_years=None,
-                initial_purchase_value=None,
-            )
+    def test_validate_asset_payload_accepts_accounting_without_account(self):
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=None,
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            annual_interest_tae=Decimal("1.00"),
+            amortization_method=Asset.AmortizationMethod.NONE,
+            amortization_term_years=None,
+            initial_purchase_value=None,
+        )
 
     def test_validate_asset_payload_rejects_invalid_subcategory(self):
         with self.assertRaises(DRFValidationError):
@@ -101,16 +108,15 @@ class NetWorthServicesTests(TestCase):
                 initial_purchase_value=None,
             )
 
-    def test_validate_liability_payload_rejects_accounting_without_account(self):
-        with self.assertRaises(DRFValidationError):
-            validate_liability_payload(
-                tracking_mode=Liability.TrackingMode.ACCOUNTING,
-                accounting_account_id=None,
-                category=Liability.Category.MORTGAGE,
-                annual_interest_tae=Decimal("2.50"),
-                start_date=date(2026, 1, 1),
-                expected_end_date=date(2030, 1, 1),
-            )
+    def test_validate_liability_payload_accepts_accounting_without_account(self):
+        validate_liability_payload(
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=None,
+            category=Liability.Category.MORTGAGE,
+            annual_interest_tae=Decimal("2.50"),
+            start_date=date(2026, 1, 1),
+            expected_end_date=date(2030, 1, 1),
+        )
 
     def test_validate_asset_and_liability_payload_accept_valid_values(self):
         validate_asset_payload(
@@ -186,6 +192,100 @@ class NetWorthServicesTests(TestCase):
                 user_id=self.user.id,
                 currency="EUR",
             )
+
+    def test_ensure_asset_accounting_account_auto_creates_and_links_missing_account(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta puente",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=None,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+
+        state = ensure_asset_accounting_account(asset=asset)
+
+        self.assertEqual(state, AssetAccountingIntegrationState.AUTO_CREATED)
+        asset.refresh_from_db()
+        self.assertIsNotNone(asset.accounting_account_id)
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                id=asset.accounting_account_id,
+                user=self.user,
+                account_type=LedgerAccount.AccountType.ASSET,
+                currency="EUR",
+                asset_id=asset.id,
+            ).exists()
+        )
+
+    def test_ensure_asset_accounting_account_marks_needs_review_for_invalid_candidate(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta con enlace roto",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=999_999,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+
+        state = ensure_asset_accounting_account(asset=asset)
+
+        self.assertEqual(state, AssetAccountingIntegrationState.NEEDS_REVIEW)
+
+    def test_ensure_liability_accounting_account_auto_creates_and_links_missing_account(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca auto",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=None,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("2.50"),
+            amount=Decimal("100000.00"),
+            is_active=True,
+        )
+
+        state = ensure_liability_accounting_account(liability=liability)
+
+        self.assertEqual(state, LiabilityAccountingIntegrationState.AUTO_CREATED)
+        liability.refresh_from_db()
+        self.assertIsNotNone(liability.accounting_account_id)
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                id=liability.accounting_account_id,
+                user=self.user,
+                account_type=LedgerAccount.AccountType.LIABILITY,
+                currency="EUR",
+                liability_id=liability.id,
+            ).exists()
+        )
+
+    def test_ensure_liability_accounting_account_marks_needs_review_for_invalid_candidate(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca enlace roto",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=999_998,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("2.50"),
+            amount=Decimal("100000.00"),
+            is_active=True,
+        )
+
+        state = ensure_liability_accounting_account(liability=liability)
+
+        self.assertEqual(state, LiabilityAccountingIntegrationState.NEEDS_REVIEW)
 
     def test_validate_liability_payload_requires_tae_for_financial_debt(self):
         with self.assertRaises(DRFValidationError):
@@ -1573,7 +1673,26 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("deposit_term_months", response.data["error"]["details"])
 
-    def test_liability_create_rejects_accounting_without_account(self):
+    def test_asset_create_auto_links_accounting_without_account(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Cuenta contable",
+                "category": Asset.Category.CASH,
+                "subcategory": Asset.Subcategory.BANK_ACCOUNT,
+                "tracking_mode": Asset.TrackingMode.ACCOUNTING,
+                "currency": "EUR",
+                "annual_interest_tae": "0.00",
+                "amount": "500.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIsNotNone(response.data["accounting_account_id"])
+        self.assertEqual(response.data["accounting_integration_state"], "auto_created")
+
+    def test_liability_create_auto_links_accounting_without_account(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
             {
@@ -1586,7 +1705,9 @@ class NetWorthApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIsNotNone(response.data["accounting_account_id"])
+        self.assertEqual(response.data["accounting_integration_state"], "auto_created")
 
     def test_liability_create_rejects_missing_tae_for_mortgage(self):
         response = self.client.post(

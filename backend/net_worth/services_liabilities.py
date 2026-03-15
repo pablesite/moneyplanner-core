@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import cast
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -48,6 +49,12 @@ INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
 }
 
 
+class AccountingIntegrationState:
+    LINKED = "linked"
+    AUTO_CREATED = "auto_created"
+    NEEDS_REVIEW = "needs_review"
+
+
 def _get_accounting_liability_account(*, user_id: int, account_id: int | None):
     from accounting.models import LedgerAccount
     from accounting.services import get_user_ledger_account
@@ -57,6 +64,72 @@ def _get_accounting_liability_account(*, user_id: int, account_id: int | None):
         account_id=account_id,
         expected_type=cast(str, LedgerAccount.AccountType.LIABILITY),
     )
+
+
+@transaction.atomic
+def ensure_liability_accounting_account(*, liability: Liability) -> str | None:
+    if liability.tracking_mode != Liability.TrackingMode.ACCOUNTING:
+        return None
+
+    from accounting.models import LedgerAccount
+    from accounting.services import normalize_currency_code
+
+    normalized_currency = normalize_currency_code(liability.currency)
+    if len(normalized_currency) != 3:
+        return AccountingIntegrationState.NEEDS_REVIEW
+
+    if liability.accounting_account_id:
+        account = _get_accounting_liability_account(
+            user_id=liability.user_id,
+            account_id=liability.accounting_account_id,
+        )
+        if (
+            account is None
+            or account.currency != normalized_currency
+            or account.liability_id not in (None, liability.id)
+        ):
+            return AccountingIntegrationState.NEEDS_REVIEW
+
+        update_fields: list[str] = []
+        if account.liability_id is None:
+            account.liability_id = liability.id
+            update_fields.append("liability")
+        if not account.is_active:
+            account.is_active = True
+            update_fields.append("is_active")
+        if update_fields:
+            account.save(update_fields=update_fields)
+        return AccountingIntegrationState.LINKED
+
+    existing_accounts = list(
+        LedgerAccount.objects.filter(
+            user_id=liability.user_id,
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency=normalized_currency,
+            liability_id=liability.id,
+        )
+        .order_by("id")
+        .only("id")
+    )
+    if len(existing_accounts) == 1:
+        liability.accounting_account_id = existing_accounts[0].id
+        liability.save(update_fields=["accounting_account_id"])
+        return AccountingIntegrationState.LINKED
+    if len(existing_accounts) > 1:
+        return AccountingIntegrationState.NEEDS_REVIEW
+
+    account = LedgerAccount.objects.create(
+        user=liability.user,
+        name=liability.name[:120] or f"Pasivo {liability.id}",
+        account_type=LedgerAccount.AccountType.LIABILITY,
+        currency=normalized_currency,
+        origin=LedgerAccount.Origin.SYSTEM,
+        liability=liability,
+        is_active=True,
+    )
+    liability.accounting_account_id = account.id
+    liability.save(update_fields=["accounting_account_id"])
+    return AccountingIntegrationState.AUTO_CREATED
 
 
 def _validate_accounting_liability_account_link(
@@ -111,16 +184,11 @@ def validate_liability_payload(
     current_liability_id: int | None = None,
     currency: str | None = None,
 ) -> None:
-    if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
-        raise DRFValidationError(
-            {
-                "accounting_account_id": (
-                    "Requerido si tracking_mode=accounting "
-                    "(placeholder hasta que exista contabilidad)."
-                )
-            }
-        )
-    if tracking_mode == Liability.TrackingMode.ACCOUNTING and user_id is not None:
+    if (
+        tracking_mode == Liability.TrackingMode.ACCOUNTING
+        and accounting_account_id is not None
+        and user_id is not None
+    ):
         _validate_accounting_liability_account_link(
             user_id=user_id,
             accounting_account_id=accounting_account_id,
@@ -507,6 +575,10 @@ def get_effective_liability_amount(
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
+        integration_state = ensure_liability_accounting_account(liability=liability)
+        if integration_state == AccountingIntegrationState.NEEDS_REVIEW:
+            return liability.amount
+
         from accounting.models import LedgerTransaction
         from accounting.services import get_account_balance, has_account_entries
 

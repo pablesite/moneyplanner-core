@@ -18,8 +18,10 @@ from .models import (
     NetWorthSnapshot,
 )
 from .services_assets import (
+    AccountingIntegrationState as AssetAccountingIntegrationState,
     RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES,
     create_asset_for_user,
+    ensure_asset_accounting_account,
     get_default_amortization_term_years,
     get_effective_asset_amount,
     get_amount_base_value,
@@ -29,7 +31,9 @@ from .services_assets import (
     validate_asset_payload,
 )
 from .services_liabilities import (
+    AccountingIntegrationState as LiabilityAccountingIntegrationState,
     create_liability_for_user,
+    ensure_liability_accounting_account,
     estimate_liability_monthly_payment_simple,
     estimate_liability_outstanding_amount_simple,
     get_effective_liability_amount,
@@ -99,6 +103,7 @@ class AssetImprovementSerializer(serializers.ModelSerializer):
 class AssetSerializer(serializers.ModelSerializer):
     amount_base = serializers.SerializerMethodField()
     effective_amount = serializers.SerializerMethodField()
+    accounting_integration_state = serializers.SerializerMethodField()
     improvements = AssetImprovementSerializer(many=True, required=False)
 
     class Meta:
@@ -110,6 +115,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "subcategory",
             "tracking_mode",
             "accounting_account_id",
+            "accounting_integration_state",
             "currency",
             "start_date",
             "expected_end_date",
@@ -143,9 +149,7 @@ class AssetSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context.get("request")
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
-        accounting_account_id = attrs.get(
-            "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
-        )
+        accounting_account_id = attrs.get("accounting_account_id")
         category = attrs.get("category", getattr(self.instance, "category", None))
         subcategory = attrs.get("subcategory", getattr(self.instance, "subcategory", None))
         annual_interest_tae = attrs.get(
@@ -332,10 +336,28 @@ class AssetSerializer(serializers.ModelSerializer):
     def get_effective_amount(self, obj):
         return str(get_effective_asset_amount(asset=obj))
 
+    def get_accounting_integration_state(self, obj):
+        cached_state = getattr(obj, "_accounting_integration_state", None)
+        if cached_state in {
+            AssetAccountingIntegrationState.LINKED,
+            AssetAccountingIntegrationState.AUTO_CREATED,
+            AssetAccountingIntegrationState.NEEDS_REVIEW,
+        }:
+            return cached_state
+        state = ensure_asset_accounting_account(asset=obj)
+        if state in {
+            AssetAccountingIntegrationState.LINKED,
+            AssetAccountingIntegrationState.AUTO_CREATED,
+            AssetAccountingIntegrationState.NEEDS_REVIEW,
+        }:
+            return state
+        return None
+
     def create(self, validated_data):
         request = self.context["request"]
         improvements_data = validated_data.pop("improvements", [])
         asset = create_asset_for_user(user=request.user, validated_data=validated_data)
+        asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
         self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
@@ -343,6 +365,7 @@ class AssetSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         improvements_data = validated_data.pop("improvements", None)
         asset = super().update(instance, validated_data)
+        asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
         self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         if improvements_data is not None:
             self._sync_improvements(asset=asset, improvements_data=improvements_data)
@@ -438,6 +461,7 @@ class AssetMiniSerializer(serializers.ModelSerializer):
 
 class LiabilitySerializer(serializers.ModelSerializer):
     amount_base = serializers.SerializerMethodField()
+    accounting_integration_state = serializers.SerializerMethodField()
 
     financed_asset_id = serializers.PrimaryKeyRelatedField(
         queryset=Asset.objects.none(),
@@ -461,6 +485,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "category",
             "tracking_mode",
             "accounting_account_id",
+            "accounting_integration_state",
             "currency",
             "start_date",
             "expected_end_date",
@@ -503,9 +528,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context.get("request")
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
-        accounting_account_id = attrs.get(
-            "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
-        )
+        accounting_account_id = attrs.get("accounting_account_id")
         category = attrs.get("category", getattr(self.instance, "category", None))
         annual_interest_tae = attrs.get(
             "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
@@ -599,6 +622,23 @@ class LiabilitySerializer(serializers.ModelSerializer):
     def get_effective_amount(self, obj):
         return str(get_effective_liability_amount(liability=obj))
 
+    def get_accounting_integration_state(self, obj):
+        cached_state = getattr(obj, "_accounting_integration_state", None)
+        if cached_state in {
+            LiabilityAccountingIntegrationState.LINKED,
+            LiabilityAccountingIntegrationState.AUTO_CREATED,
+            LiabilityAccountingIntegrationState.NEEDS_REVIEW,
+        }:
+            return cached_state
+        state = ensure_liability_accounting_account(liability=obj)
+        if state in {
+            LiabilityAccountingIntegrationState.LINKED,
+            LiabilityAccountingIntegrationState.AUTO_CREATED,
+            LiabilityAccountingIntegrationState.NEEDS_REVIEW,
+        }:
+            return state
+        return None
+
     def create(self, validated_data):
         request = self.context["request"]
         if (
@@ -608,11 +648,17 @@ class LiabilitySerializer(serializers.ModelSerializer):
         ):
             validated_data["principal_amount"] = validated_data["amount"]
         liability = create_liability_for_user(user=request.user, validated_data=validated_data)
+        liability._accounting_integration_state = ensure_liability_accounting_account(
+            liability=liability
+        )
         self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
         return liability
 
     def update(self, instance, validated_data):
         liability = super().update(instance, validated_data)
+        liability._accounting_integration_state = ensure_liability_accounting_account(
+            liability=liability
+        )
         self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
         return liability
 
