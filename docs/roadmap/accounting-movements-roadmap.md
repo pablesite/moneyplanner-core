@@ -104,7 +104,7 @@ Estado actual:
 2. Frontend en convivencia controlada:
    - `BudgetDashboardView` ya mezcla ledger y fallback legacy para ingresos y gastos
    - las filas cubiertas por ledger se presentan como tal y bloquean la edicion de check-ins legacy para evitar doble fuente operativa
-   - la lectura de liquidez ya puede apoyarse en el contrato backend estabilizado, aunque la UX todavia puede refinar la presentacion de cobertura
+   - la lectura de liquidez ya puede apoyarse en el contrato backend estabilizado y la UX del cierre mensual explicita cobertura `ledger`/`fallback`/`parcial` con bloqueo visible en filas contables
 3. Validacion ejecutada en Docker el 2026-03-15:
    - backend: `ruff check .`, `mypy .`, `python manage.py test accounting --keepdb`, `python manage.py test budget --keepdb`, `python manage.py test net_worth --keepdb`
    - frontend: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts src/views/__tests__/AccountingMovementsView.spec.ts src/domains/accounting/__tests__/store.spec.ts`
