@@ -81,11 +81,11 @@ export const useAccountingStore = defineStore('accounting', {
       }
     },
 
-    async archiveAccount(accountId: number) {
+    async deleteAccount(accountId: number) {
       this.accountCreationLoading = true;
       this.error = null;
       try {
-        await coreAccountingApi.updateAccount(accountId, { is_active: false });
+        await coreAccountingApi.deleteAccount(accountId);
         await this.refreshAll();
       } catch (error: unknown) {
         this.error = toApiErrorMessage(error);

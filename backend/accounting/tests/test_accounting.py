@@ -546,6 +546,85 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("liability_id", response.data["error"]["details"])
 
+    def test_account_delete_allows_unlinked_account_without_entries(self):
+        transient_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Temporal",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            origin=LedgerAccount.Origin.USER,
+        )
+
+        response = self.client.delete(f"/api/accounting/accounts/{transient_account.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(LedgerAccount.objects.filter(id=transient_account.id).exists())
+
+    def test_account_delete_removes_related_transactions_and_entries(self):
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 1),
+            value_date=date(2026, 4, 1),
+            description="Saldo inicial",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+        )
+
+        response = self.client.delete(f"/api/accounting/accounts/{self.cash_account.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(LedgerAccount.objects.filter(id=self.cash_account.id).exists())
+        self.assertEqual(LedgerEntry.objects.filter(transaction=tx).count(), 0)
+        self.assertFalse(LedgerTransaction.objects.filter(id=tx.id).exists())
+
+    def test_account_delete_unlinks_asset_accounting_reference(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Banco enlazado",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        linked_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta enlazada",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+            origin=LedgerAccount.Origin.USER,
+        )
+
+        response = self.client.delete(f"/api/accounting/accounts/{linked_account.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        asset.refresh_from_db()
+        self.assertIsNone(asset.accounting_account_id)
+
+    def test_account_delete_rejects_system_accounts(self):
+        system_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingreso: Nomina",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+        )
+
+        response = self.client.delete(f"/api/accounting/accounts/{system_account.id}/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("detail", response.data["error"]["details"])
+
     def test_quick_entry_income_creates_balanced_transaction_with_system_income_account(self):
         income_plan = AnnualIncomeEntry.objects.create(
             user=self.user,
