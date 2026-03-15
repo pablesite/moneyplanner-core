@@ -76,10 +76,12 @@ This leaves a gap:
    - the net-worth view remains summary-first and position drilldown stays in place
 2. Budget
    - annual budget remains the planning layer
-   - executed monthly figures should consume ledger aggregates when coverage exists
+   - executed monthly figures consume posted ledger aggregates when coverage exists at line level
+   - monthly summaries can mix ledger-backed execution and legacy check-ins in the same month during coexistence
 3. Monthly close
-   - monthly close should progressively use ledger-derived liquidity and execution
+   - monthly close uses ledger-derived liquidity and execution where `tracking_mode=accounting` or budget links provide coverage
    - legacy check-ins remain fallback when coverage is partial or absent
+   - historical closes must respect `as_of_date` instead of reading current live balances
 
 ## Rollout phases
 1. Base module
