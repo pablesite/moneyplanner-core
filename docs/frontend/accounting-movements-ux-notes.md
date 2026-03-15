@@ -40,6 +40,11 @@ Describe the target UX for daily movements in Core and how it should coexist wit
    - one user action
    - clearly separates liability reduction from financing cost
 
+## Current quick-entry coverage (2026-03-15)
+1. `income`, `expense`, `transfer`
+2. `investment_purchase` with liquidity-to-investment counterpart
+3. `debt_payment` with explicit `principal` + `interest` breakdown
+
 ## Integration with current screens
 1. `DataInputView`
    - remains focused on annual planning data and supporting inputs

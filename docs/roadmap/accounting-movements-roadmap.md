@@ -26,8 +26,6 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - frontend: el fallback a check-ins legacy sigue explicito cuando no hay cobertura ledger
    - cobertura reforzada en `backend/accounting/tests/test_accounting.py`, `backend/budget/tests/test_api_checkins.py`, `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
 4. Fases posteriores pendientes
-   - actividad contable contextual mas profunda en patrimonio
-   - compras de inversion y pagos de deuda con breakdown especializado
    - sugerencias historicas derivadas del ledger
 
 ## Principios de trabajo
@@ -126,6 +124,16 @@ Entregables:
    - regresion sobre timeline y detalle de posicion
 4. Documentacion
    - actualizar notas UX si la integracion cambia el workspace
+
+Estado actual:
+1. Backend cerrado:
+   - `POST /api/accounting/transactions/quick-entry/` soporta `investment_purchase` y `debt_payment`
+   - `debt_payment` separa principal e interes/fees en apuntes distintos, validando `amount = principal + interest`
+   - las compras de inversion y pagos de deuda pueden enlazar `Asset`/`Liability` desde el ledger para trazabilidad en patrimonio
+2. Frontend operativo:
+   - `AccountingMovementsView` expone alta rapida para compra de inversion y pago de deuda con campos condicionales de breakdown
+   - la actividad del periodo permite filtrar estos nuevos tipos y mantiene convivencia con `income`/`expense`/`transfer`
+   - `NetWorthView` mantiene actividad contable contextual para posiciones `tracking_mode=accounting` y gap explicito cuando falta cuenta enlazada
 
 Criterios de salida:
 1. Las posiciones `accounting` muestran actividad contextual.

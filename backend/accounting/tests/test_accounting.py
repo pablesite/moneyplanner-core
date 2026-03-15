@@ -559,6 +559,155 @@ class AccountingApiTests(APITestCase):
         )
         self.assertIn("counterparty_account_id", invalid_response.data["error"]["details"])
 
+    def test_quick_entry_investment_purchase_creates_balanced_entries_with_asset_link(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo indexado",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment_purchase",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Compra fondo abril",
+                "amount": "250.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": investment_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(len(response.data["entries"]), 2)
+        debit_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == investment_account.id
+        )
+        self.assertEqual(debit_entry["side"], "debit")
+        self.assertEqual(debit_entry["asset_id"], investment_asset.id)
+
+    def test_quick_entry_debt_payment_creates_principal_and_interest_breakdown(self):
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Intereses prestamo",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="financial_commitments",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("8000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo coche",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        interest_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos financieros",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-18",
+                "value_date": "2026-04-18",
+                "description": "Cuota prestamo abril",
+                "amount": "330.00",
+                "principal_amount": "300.00",
+                "interest_amount": "30.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "interest_account_id": interest_account.id,
+                "annual_expense_entry_id": expense_plan.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(len(response.data["entries"]), 3)
+        principal_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == liability_account.id
+        )
+        interest_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == interest_account.id
+        )
+        self.assertEqual(principal_entry["side"], "debit")
+        self.assertEqual(principal_entry["liability_id"], liability.id)
+        self.assertEqual(interest_entry["side"], "debit")
+        self.assertEqual(interest_entry["annual_expense_entry_id"], expense_plan.id)
+
+    def test_quick_entry_debt_payment_rejects_mismatched_total_breakdown(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo personal",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("2000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo personal",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        interest_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Intereses tarjeta",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-22",
+                "value_date": "2026-04-22",
+                "description": "Cuota invalida",
+                "amount": "250.00",
+                "principal_amount": "200.00",
+                "interest_amount": "30.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "interest_account_id": interest_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("amount", response.data["error"]["details"])
+
     def test_account_balances_endpoint_returns_period_aggregates_for_liquidity_accounts(self):
         income_plan = AnnualIncomeEntry.objects.create(
             user=self.user,

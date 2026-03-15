@@ -27,6 +27,9 @@ const {
   incomeOptions,
   expenseOptions,
   transferCounterpartyOptions,
+  investmentCounterpartyOptions,
+  liabilityCounterpartyOptions,
+  debtInterestOptions,
   quickEntryReady,
   debitTotal,
   creditTotal,
@@ -123,12 +126,11 @@ const accountsByType = computed(() => {
           <p class="ui-accounting-panel-kicker">Alta rapida</p>
           <h2 class="h2">Registrar movimiento diario</h2>
         </div>
-        <span class="ui-accounting-pill">Income / expense / transfer</span>
+        <span class="ui-accounting-pill">Income / expense / transfer / investment / debt</span>
       </div>
 
       <div v-if="!liquidityAccounts.length" class="ui-accounting-inline-note">
-        Necesitas al menos una cuenta de liquidez para registrar ingresos, gastos o transferencias
-        con alta rapida.
+        Necesitas al menos una cuenta de liquidez para registrar movimientos de alta rapida.
       </div>
 
       <form
@@ -204,10 +206,68 @@ const accountsByType = computed(() => {
             </option>
           </select>
 
+          <select
+            v-else-if="quickEntryForm.movement_type === 'investment_purchase'"
+            v-model="quickEntryForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">Cuenta de inversion</option>
+            <option
+              v-for="account in investmentCounterpartyOptions"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ account.name }} / {{ account.currency }}
+            </option>
+          </select>
+
+          <select
+            v-else-if="quickEntryForm.movement_type === 'debt_payment'"
+            v-model="quickEntryForm.liability_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">Cuenta de pasivo</option>
+            <option
+              v-for="account in liabilityCounterpartyOptions"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ account.name }} / {{ account.currency }}
+            </option>
+          </select>
+
           <select v-else v-model="quickEntryForm.annual_expense_entry_id" class="select">
             <option :value="null">Categoria anual opcional</option>
             <option v-for="entry in expenseOptions" :key="entry.id" :value="entry.id">
               {{ entry.name }}
+            </option>
+          </select>
+        </div>
+
+        <div
+          v-if="quickEntryForm.movement_type === 'debt_payment'"
+          class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+        >
+          <input
+            v-model="quickEntryForm.principal_amount"
+            class="input"
+            inputmode="decimal"
+            placeholder="Principal (ej: 300.00)"
+            required
+          />
+          <input
+            v-model="quickEntryForm.interest_amount"
+            class="input"
+            inputmode="decimal"
+            placeholder="Interes (ej: 30.00, 0 si no aplica)"
+            required
+          />
+          <select v-model="quickEntryForm.interest_account_id" class="select">
+            <option :value="null">Cuenta de gasto por intereses (si aplica)</option>
+            <option v-for="account in debtInterestOptions" :key="account.id" :value="account.id">
+              {{ account.name }} / {{ account.currency }}
             </option>
           </select>
         </div>
@@ -224,7 +284,11 @@ const accountsByType = computed(() => {
             {{
               quickEntryForm.movement_type === 'transfer'
                 ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
-                : 'El backend genera la contrapartida contable y enlaza la categoria anual si la indicas.'
+                : quickEntryForm.movement_type === 'investment_purchase'
+                  ? 'La compra registra salida de liquidez y alta en la cuenta de inversion.'
+                  : quickEntryForm.movement_type === 'debt_payment'
+                    ? 'El pago separa principal e intereses; total = principal + interes.'
+                    : 'El backend genera la contrapartida contable y enlaza la categoria anual si la indicas.'
             }}
           </p>
           <button
@@ -237,8 +301,8 @@ const accountsByType = computed(() => {
         </div>
 
         <p v-if="!quickEntryReady && !transactionCreationLoading" class="ui-accounting-inline-note">
-          Completa descripcion, fechas, importe y cuenta de liquidez. Las transferencias tambien
-          necesitan cuenta destino.
+          Completa descripcion, fechas, importe y cuenta de liquidez. Cada tipo puede requerir
+          cuentas y desglose adicionales.
         </p>
       </form>
 
@@ -501,6 +565,8 @@ const accountsByType = computed(() => {
             <option value="income">Solo ingresos</option>
             <option value="expense">Solo gastos</option>
             <option value="transfer">Solo transferencias</option>
+            <option value="investment_purchase">Solo compras de inversion</option>
+            <option value="debt_payment">Solo pagos de deuda</option>
           </select>
         </div>
 
