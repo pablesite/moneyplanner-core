@@ -382,7 +382,7 @@
     @apply min-h-[36px] rounded-[10px] border border-white/15 bg-white/[0.04] pr-9 text-white shadow-none;
     background-image:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='rgba(255,255,255,0.78)' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7.5l5 5 5-5'/%3E%3C/svg%3E"),
-      linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0.02));
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
     background-repeat: no-repeat, no-repeat;
     background-position:
       right 10px center,

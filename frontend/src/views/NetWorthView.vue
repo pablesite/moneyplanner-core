@@ -82,6 +82,10 @@ function formatPct(n: number | null, decimals = 0): string {
   }).format(n);
 }
 
+function displayCurrencyUnit(currency: string | null | undefined): string {
+  return currency === 'EUR' ? '€' : String(currency ?? '').trim();
+}
+
 const ownershipFilter = ref<OwnershipFilterValue>('all');
 
 const ownershipById = computed(() => {
@@ -148,7 +152,7 @@ const selectedOwnershipFilterLabel = computed(() => {
   );
 });
 const ownershipFilterDisabled = computed(() => valueMode.value !== 'nominal');
-const heroUnitLabel = computed(() => (unitLabel() === 'EUR' ? '€' : unitLabel()));
+const heroUnitLabel = computed(() => displayCurrencyUnit(unitLabel()));
 
 watch(ownershipOptions, (options) => {
   if (ownershipFilter.value === 'all') return;
@@ -593,11 +597,13 @@ function editRow(row: PositionRow): void {
   openEdit(item, row.type);
 }
 
-async function archiveRow(row: PositionRow): Promise<void> {
+async function deleteRow(row: PositionRow): Promise<void> {
+  const label = row.type === 'asset' ? 'activo' : 'pasivo';
+  if (!confirm(`Eliminar este ${label}? Esta accion no se puede deshacer.`)) return;
   if (row.type === 'asset') {
-    await store.archiveAsset(row.id);
+    await store.deleteAsset(row.id);
   } else {
-    await store.archiveLiability(row.id);
+    await store.deleteLiability(row.id);
   }
 }
 
@@ -609,7 +615,7 @@ const categoryWorkspaceLabel = computed(() => {
 
 const categoryWorkspaceMeta = computed(() => {
   if (!selectedTimelineCategory.value) return '';
-  return `${categoryWorkspaceCount.value} posiciones · ${formatNumber(categoryWorkspaceTotal.value, 2)} ${unitLabel()}`;
+  return `${categoryWorkspaceCount.value} posiciones - ${formatNumber(categoryWorkspaceTotal.value, 2)} ${heroUnitLabel.value}`;
 });
 
 const showPositionSelector = computed(
@@ -956,10 +962,10 @@ const displayedTimelineSummaryMeta = computed(() => {
     return `${point.label} | ${selectedPosition.value.subtitle}`;
   }
   if (!selectedTimelineCategory.value) {
-    return `${point.label} | Activos ${formatNumber(assetsValue.value, 0)} | Pasivos ${formatNumber(
+    return `${point.label} | Activos ${formatNumber(assetsValue.value, 0)} ${heroUnitLabel.value} | Pasivos ${formatNumber(
       liabilitiesValue.value,
       0,
-    )}`;
+    )} ${heroUnitLabel.value}`;
   }
   return `${point.label} | ${selectedCategoryLabel.value}`;
 });
@@ -1438,7 +1444,7 @@ const liabilityCreateInitial = computed(() =>
                 :asset-backed-liabilities="analysis.backedDebt"
                 :unbacked-liabilities="analysis.unbackedDebt"
                 :net-worth="analysis.netWorth"
-                :unit="unitLabel()"
+                :unit="heroUnitLabel"
                 :category-keys="effectiveCategoryKeys"
                 :category-labels="effectiveCategoryLabels"
                 :category-assets="effectiveCategoryAssets"
@@ -1500,7 +1506,7 @@ const liabilityCreateInitial = computed(() =>
                   </div>
                   <NetWorthTimelineChart
                     :points="timelineChartPoints"
-                    :unit="store.timeline?.base_currency ?? unitLabel()"
+                    :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
                     :series-label="timelineSummaryLabel"
                     :series-color="displayedTimelineSeriesColor"
                   />
@@ -1563,7 +1569,7 @@ const liabilityCreateInitial = computed(() =>
                 </div>
                 <div class="ui-nw-timeline-modal-value">
                   {{ formatNumber(latestTimelineChartPoint?.value ?? 0, 2) }}
-                  {{ store.timeline?.base_currency ?? unitLabel() }}
+                  {{ displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel()) }}
                 </div>
               </div>
 
@@ -1597,7 +1603,7 @@ const liabilityCreateInitial = computed(() =>
 
               <NetWorthTimelineChart
                 :points="timelineChartPoints"
-                :unit="store.timeline?.base_currency ?? unitLabel()"
+                :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
                 :series-label="timelineSummaryLabel"
                 :series-color="displayedTimelineSeriesColor"
                 expanded
@@ -1624,23 +1630,33 @@ const liabilityCreateInitial = computed(() =>
               :style="timelineSidebarPanelStyle"
             >
               <div class="ui-nw-category-workspace-head">
-                <div>
+                <div class="ui-nw-category-workspace-heading">
                   <div class="ui-nw-category-workspace-kicker">
                     {{ selectedTimelineCategoryType === 'liability' ? 'Pasivos' : 'Activos' }}
                   </div>
-                  <h3 class="ui-nw-category-workspace-title">{{ categoryWorkspaceLabel }}</h3>
+                  <div class="ui-nw-category-workspace-title-row">
+                    <h3 class="ui-nw-category-workspace-title">{{ categoryWorkspaceLabel }}</h3>
+                    <button
+                      class="icon-btn ui-nw-category-add-btn"
+                      type="button"
+                      :aria-label="
+                        selectedTimelineCategoryType === 'liability'
+                          ? 'Nuevo pasivo'
+                          : 'Nuevo activo'
+                      "
+                      :title="
+                        selectedTimelineCategoryType === 'liability'
+                          ? 'Nuevo pasivo'
+                          : 'Nuevo activo'
+                      "
+                      @click="
+                        openCreateModal(selectedTimelineCategoryType, selectedTimelineCategory)
+                      "
+                    >
+                      <span class="icon" aria-hidden="true">+</span>
+                    </button>
+                  </div>
                   <p class="ui-nw-category-workspace-copy">{{ categoryWorkspaceMeta }}</p>
-                </div>
-                <div class="ui-nw-category-workspace-actions">
-                  <button
-                    class="btn"
-                    type="button"
-                    @click="openCreateModal(selectedTimelineCategoryType, selectedTimelineCategory)"
-                  >
-                    {{
-                      selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo'
-                    }}
-                  </button>
                 </div>
               </div>
 
@@ -1664,24 +1680,6 @@ const liabilityCreateInitial = computed(() =>
                 </select>
               </label>
 
-              <div v-if="selectedPosition" class="ui-nw-category-selection-summary">
-                <div class="ui-nw-category-selection-label">
-                  {{
-                    selectedPosition.type === 'liability'
-                      ? 'Pasivo seleccionado'
-                      : 'Activo seleccionado'
-                  }}
-                </div>
-                <strong class="ui-nw-category-selection-title">{{ selectedPosition.name }}</strong>
-                <div class="ui-nw-category-selection-meta">
-                  {{ selectedPosition.subtitle }} ·
-                  {{
-                    formatNumber(latestPositionTimelinePoint?.value ?? selectedPosition.value, 2)
-                  }}
-                  {{ store.positionTimeline?.base_currency ?? selectedPosition.currency }}
-                </div>
-              </div>
-
               <div v-if="categoryWorkspaceRows.length === 0" class="subtle">
                 No hay posiciones para esta categoria con el filtro actual.
               </div>
@@ -1700,9 +1698,15 @@ const liabilityCreateInitial = computed(() =>
                     type="button"
                     @click="selectPosition(row)"
                   >
+                    <div class="ui-nw-category-selection-label">
+                      {{ row.type === 'liability' ? 'Pasivo concreto' : 'Activo concreto' }}
+                    </div>
                     <div class="ui-nw-category-item-head">
                       <strong>{{ row.name }}</strong>
-                      <span>{{ formatNumber(row.value, 2) }} {{ row.currency }}</span>
+                      <span
+                        >{{ formatNumber(row.value, 2) }}
+                        {{ displayCurrencyUnit(row.currency) }}</span
+                      >
                     </div>
                     <div class="ui-nw-category-item-meta">
                       <span>{{ row.subtitle }}</span>
@@ -1714,18 +1718,20 @@ const liabilityCreateInitial = computed(() =>
                   </button>
                   <div class="ui-nw-category-item-actions">
                     <button
-                      class="icon-btn"
+                      class="icon-btn ui-nw-category-item-action"
                       type="button"
                       aria-label="Editar"
+                      title="Editar"
                       @click="editRow(row)"
                     >
                       <span class="icon" aria-hidden="true">&#9998;</span>
                     </button>
                     <button
-                      class="icon-btn"
+                      class="icon-btn ui-nw-category-item-action"
                       type="button"
-                      :aria-label="row.type === 'asset' ? 'Archivar activo' : 'Archivar pasivo'"
-                      @click="archiveRow(row)"
+                      :aria-label="row.type === 'asset' ? 'Eliminar activo' : 'Eliminar pasivo'"
+                      title="Eliminar"
+                      @click="deleteRow(row)"
                     >
                       <span class="icon" aria-hidden="true">&#128465;</span>
                     </button>
@@ -2009,10 +2015,12 @@ const liabilityCreateInitial = computed(() =>
       <ul v-if="store.snapshots.length" class="m-0 grid list-none gap-2 pl-0">
         <li v-for="s in store.snapshots" :key="s.id" class="ui-nw-snapshot-row">
           <div class="min-w-0">
-            {{ s.snapshot_date }} - neto: {{ formatMoney(s.net_worth, 2) }} {{ s.base_currency }}
+            {{ s.snapshot_date }} - neto: {{ formatMoney(s.net_worth, 2) }}
+            {{ displayCurrencyUnit(s.base_currency) }}
             <span class="subtle">
-              (activos {{ formatMoney(s.total_assets, 2) }} {{ s.base_currency }}, pasivos
-              {{ formatMoney(s.total_liabilities, 2) }} {{ s.base_currency }})
+              (activos {{ formatMoney(s.total_assets, 2) }}
+              {{ displayCurrencyUnit(s.base_currency) }}, pasivos
+              {{ formatMoney(s.total_liabilities, 2) }} {{ displayCurrencyUnit(s.base_currency) }})
             </span>
           </div>
           <button
@@ -2444,6 +2452,19 @@ const liabilityCreateInitial = computed(() =>
   flex-wrap: wrap;
 }
 
+.ui-nw-category-workspace-heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-nw-category-workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .ui-nw-category-workspace-kicker {
   font-size: 11px;
   text-transform: uppercase;
@@ -2456,18 +2477,20 @@ const liabilityCreateInitial = computed(() =>
   font-size: 1.1rem;
 }
 
+.ui-nw-category-add-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border-color: rgba(45, 212, 191, 0.26);
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(230, 255, 250, 0.96);
+  flex-shrink: 0;
+}
+
 .ui-nw-category-workspace-copy {
   margin: 4px 0 0;
   color: rgba(255, 255, 255, 0.68);
-}
-
-.ui-nw-category-selection-summary {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(76, 195, 255, 0.18);
-  background: rgba(76, 195, 255, 0.07);
 }
 
 .ui-nw-category-selection-label {
@@ -2475,16 +2498,6 @@ const liabilityCreateInitial = computed(() =>
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.58);
-}
-
-.ui-nw-category-selection-title {
-  font-size: 1rem;
-  color: #fff;
-}
-
-.ui-nw-category-selection-meta {
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.68);
 }
 
 .ui-nw-category-workspace-list {
@@ -2501,16 +2514,24 @@ const liabilityCreateInitial = computed(() =>
 .ui-nw-category-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 8px;
+  border: 1px solid rgba(76, 195, 255, 0.18);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 10px 12px;
+  background:
+    radial-gradient(circle at top left, rgba(76, 195, 255, 0.12), transparent 42%),
+    rgba(76, 195, 255, 0.07);
+  padding: 12px;
 }
 
 .ui-nw-category-item-active {
-  border-color: rgba(76, 195, 255, 0.35);
-  background: rgba(76, 195, 255, 0.08);
+  border-color: rgba(76, 195, 255, 0.68);
+  background:
+    linear-gradient(180deg, rgba(18, 53, 73, 0.88), rgba(13, 38, 54, 0.94)),
+    radial-gradient(circle at top left, rgba(76, 195, 255, 0.2), transparent 42%);
+  box-shadow:
+    inset 0 0 0 1px rgba(76, 195, 255, 0.22),
+    0 0 0 1px rgba(76, 195, 255, 0.08),
+    0 12px 28px rgba(2, 15, 26, 0.28);
 }
 
 .ui-nw-category-item-main {
@@ -2525,10 +2546,10 @@ const liabilityCreateInitial = computed(() =>
 }
 
 .ui-nw-category-item-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
 }
 
 .ui-nw-category-item-meta {
@@ -2542,7 +2563,39 @@ const liabilityCreateInitial = computed(() =>
 .ui-nw-category-item-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  align-self: center;
+  gap: 6px;
+}
+
+.ui-nw-category-item-action {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  padding: 0;
+}
+
+.ui-nw-category-item-action .icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ui-nw-category-item-active .ui-nw-category-selection-label {
+  color: rgba(183, 230, 255, 0.92);
+}
+
+.ui-nw-category-item-head strong {
+  min-width: 0;
+}
+
+.ui-nw-category-item-head span {
+  white-space: nowrap;
+  align-self: start;
+}
+
+.ui-nw-category-item-active .ui-nw-category-item-head strong,
+.ui-nw-category-item-active .ui-nw-category-item-head span {
+  color: #f6fbff;
 }
 
 .ui-nw-toolbar {

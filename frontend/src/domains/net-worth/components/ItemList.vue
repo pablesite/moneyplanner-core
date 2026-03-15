@@ -674,7 +674,11 @@ async function saveEdit(id: number) {
     <div class="nw-list-header">
       <div class="nw-list-header-left">
         <h2 class="card-header-title mt-0">{{ title }}</h2>
-        <select v-if="showOwnershipFilter !== false" v-model="ownershipFilter" class="select nw-select-sm">
+        <select
+          v-if="showOwnershipFilter !== false"
+          v-model="ownershipFilter"
+          class="select nw-select-sm"
+        >
           <option value="all">Todos los miembros</option>
           <option value="unassigned">Sin asignar</option>
           <option v-for="m in memberFilterOptions" :key="String(m.id)" :value="m.id">

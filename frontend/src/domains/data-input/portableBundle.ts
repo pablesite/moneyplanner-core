@@ -359,20 +359,44 @@ export function toPortableAnnualExpenseRecord(
     category: String(entry.category ?? ''),
     subcategory: String(entry.subcategory ?? ''),
     owner_name: String(entry.owner_name ?? ''),
-  expense_type: entry.expense_type === 'one_off' ? 'one_off' : 'recurrent',
-  time_profile: entry.time_profile,
-  cashflow_role: entry.cashflow_role,
-  event_group: String(entry.event_group ?? ''),
-  target_month: entry.target_month ?? null,
-  term_end_month: entry.term_end_month ?? null,
-  term_end_year: entry.term_end_year ?? null,
-  amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
+    expense_type: entry.expense_type === 'one_off' ? 'one_off' : 'recurrent',
+    time_profile: entry.time_profile,
+    cashflow_role: entry.cashflow_role,
+    event_group: String(entry.event_group ?? ''),
+    target_month: entry.target_month ?? null,
+    term_end_month: entry.term_end_month ?? null,
+    term_end_year: entry.term_end_year ?? null,
+    amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
     amount_annual: String(entry.amount_annual ?? '0'),
     fiscal_year: Number(entry.fiscal_year ?? 0),
     currency: String(entry.currency ?? 'EUR').toUpperCase(),
     notes: String(entry.notes ?? ''),
     is_active: entry.is_active ?? true,
   };
+}
+
+function toNumberOrNull(raw: unknown): number | null {
+  return raw == null ? null : Number(raw);
+}
+
+function toUpperText(raw: unknown, fallback: string): string {
+  return String(raw ?? fallback).toUpperCase();
+}
+
+function toOptionalText(raw: unknown): string | null {
+  return raw == null ? null : String(raw);
+}
+
+function toOptionalDateText(raw: unknown): string | undefined {
+  return raw ? String(raw) : undefined;
+}
+
+function toAssetContributionMode(raw: unknown): 'one_time' | 'periodic_contribution' {
+  return raw == null ? 'one_time' : (String(raw) as 'one_time' | 'periodic_contribution');
+}
+
+function toAssetContributionFrequency(raw: unknown): 'monthly' | 'weekly' {
+  return raw == null ? 'monthly' : (String(raw) as 'monthly' | 'weekly');
 }
 
 export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): PortableAssetRecord {
@@ -382,37 +406,26 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
     category: String(raw.category ?? ''),
     subcategory: String(raw.subcategory ?? 'other'),
     tracking_mode: String(raw.tracking_mode ?? 'manual'),
-    accounting_account_id:
-      raw.accounting_account_id == null ? null : Number(raw.accounting_account_id),
-    currency: String(raw.currency ?? 'EUR').toUpperCase(),
-    start_date: raw.start_date ? String(raw.start_date) : undefined,
-    expected_end_date: raw.expected_end_date ? String(raw.expected_end_date) : undefined,
-    investment_contribution_mode:
-      raw.investment_contribution_mode == null
-        ? 'one_time'
-        : (String(raw.investment_contribution_mode) as 'one_time' | 'periodic_contribution'),
-    investment_contribution_frequency:
-      raw.investment_contribution_frequency == null
-        ? 'monthly'
-        : (String(raw.investment_contribution_frequency) as 'monthly' | 'weekly'),
+    accounting_account_id: toNumberOrNull(raw.accounting_account_id),
+    currency: toUpperText(raw.currency, 'EUR'),
+    start_date: toOptionalDateText(raw.start_date),
+    expected_end_date: toOptionalDateText(raw.expected_end_date),
+    investment_contribution_mode: toAssetContributionMode(raw.investment_contribution_mode),
+    investment_contribution_frequency: toAssetContributionFrequency(
+      raw.investment_contribution_frequency,
+    ),
     investment_contribution_currency:
       raw.investment_contribution_currency == null
         ? null
-        : String(raw.investment_contribution_currency).toUpperCase(),
-    monthly_contribution_amount:
-      raw.monthly_contribution_amount == null ? null : String(raw.monthly_contribution_amount),
-    market_value_override:
-      raw.market_value_override == null ? null : String(raw.market_value_override),
-    market_value_override_date:
-      raw.market_value_override_date == null ? null : String(raw.market_value_override_date),
-    initial_purchase_value:
-      raw.initial_purchase_value == null ? null : String(raw.initial_purchase_value),
+        : toUpperText(raw.investment_contribution_currency, ''),
+    monthly_contribution_amount: toOptionalText(raw.monthly_contribution_amount),
+    market_value_override: toOptionalText(raw.market_value_override),
+    market_value_override_date: toOptionalText(raw.market_value_override_date),
+    initial_purchase_value: toOptionalText(raw.initial_purchase_value),
     amortization_method: raw.amortization_method == null ? 'none' : String(raw.amortization_method),
-    amortization_term_years:
-      raw.amortization_term_years == null ? null : Number(raw.amortization_term_years),
-    annual_interest_tae: raw.annual_interest_tae == null ? null : String(raw.annual_interest_tae),
-    deposit_term_months:
-      raw.deposit_term_months == null ? null : Number(raw.deposit_term_months),
+    amortization_term_years: toNumberOrNull(raw.amortization_term_years),
+    annual_interest_tae: toOptionalText(raw.annual_interest_tae),
+    deposit_term_months: toNumberOrNull(raw.deposit_term_months),
     amount: String(raw.amount ?? '0'),
     is_active: raw.is_active ?? true,
     notes: raw.notes == null ? '' : String(raw.notes),
@@ -432,30 +445,21 @@ export function toPortableLiabilityRecord(
     name: String(raw.name ?? ''),
     category: String(raw.category ?? ''),
     tracking_mode: String(raw.tracking_mode ?? 'manual'),
-    accounting_account_id:
-      raw.accounting_account_id == null ? null : Number(raw.accounting_account_id),
-    currency: String(raw.currency ?? 'EUR').toUpperCase(),
-    start_date: raw.start_date ? String(raw.start_date) : undefined,
-    expected_end_date: raw.expected_end_date ? String(raw.expected_end_date) : undefined,
-    term_months: raw.term_months == null ? null : Number(raw.term_months),
+    accounting_account_id: toNumberOrNull(raw.accounting_account_id),
+    currency: toUpperText(raw.currency, 'EUR'),
+    start_date: toOptionalDateText(raw.start_date),
+    expected_end_date: toOptionalDateText(raw.expected_end_date),
+    term_months: toNumberOrNull(raw.term_months),
     rate_type: raw.rate_type == null ? 'fixed' : String(raw.rate_type),
     payment_frequency: raw.payment_frequency == null ? 'monthly' : String(raw.payment_frequency),
-    amortization_system:
-      raw.amortization_system == null ? null : String(raw.amortization_system),
-    annual_interest_tae: raw.annual_interest_tae == null ? null : String(raw.annual_interest_tae),
-    monthly_payment_amount:
-      raw.monthly_payment_amount == null ? null : String(raw.monthly_payment_amount),
-    principal_amount: raw.principal_amount == null ? null : String(raw.principal_amount),
-    opening_fees_amount:
-      raw.opening_fees_amount == null ? null : String(raw.opening_fees_amount),
-    early_repayment_fee_percent:
-      raw.early_repayment_fee_percent == null ? null : String(raw.early_repayment_fee_percent),
-    novation_subrogation_fee_amount:
-      raw.novation_subrogation_fee_amount == null
-        ? null
-        : String(raw.novation_subrogation_fee_amount),
-    linked_products_monthly_cost:
-      raw.linked_products_monthly_cost == null ? null : String(raw.linked_products_monthly_cost),
+    amortization_system: toOptionalText(raw.amortization_system),
+    annual_interest_tae: toOptionalText(raw.annual_interest_tae),
+    monthly_payment_amount: toOptionalText(raw.monthly_payment_amount),
+    principal_amount: toOptionalText(raw.principal_amount),
+    opening_fees_amount: toOptionalText(raw.opening_fees_amount),
+    early_repayment_fee_percent: toOptionalText(raw.early_repayment_fee_percent),
+    novation_subrogation_fee_amount: toOptionalText(raw.novation_subrogation_fee_amount),
+    linked_products_monthly_cost: toOptionalText(raw.linked_products_monthly_cost),
     amount: String(raw.amount ?? '0'),
     is_active: raw.is_active ?? true,
     notes: raw.notes == null ? '' : String(raw.notes),

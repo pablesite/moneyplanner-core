@@ -129,9 +129,21 @@ describe('GuidePhaseDetailView (fase 3)', () => {
     mockAnnualIncomeLoadAll.mockReset();
     mockAnnualExpenseLoadAll.mockReset();
     mockNetWorthStore.assets = [
-      { id: 1, is_active: true, category: 'cash', subcategory: 'bank_account', amount_base: '6000' },
+      {
+        id: 1,
+        is_active: true,
+        category: 'cash',
+        subcategory: 'bank_account',
+        amount_base: '6000',
+      },
       { id: 2, is_active: true, category: 'investments', subcategory: 'etfs', amount_base: '4000' },
-      { id: 3, is_active: true, category: 'real_estate', subcategory: 'primary_home', amount_base: '90000' },
+      {
+        id: 3,
+        is_active: true,
+        category: 'real_estate',
+        subcategory: 'primary_home',
+        amount_base: '90000',
+      },
     ];
     mockNetWorthStore.liabilities = [];
     mockNetWorthStore.summary = {

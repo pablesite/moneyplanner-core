@@ -152,7 +152,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'furnishings', label: 'Mobiliario' }],
-        subcategories: [{ category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' }],
+        subcategories: [
+          { category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
       },
     });
@@ -213,7 +215,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'furnishings', label: 'Mobiliario' }],
-        subcategories: [{ category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' }],
+        subcategories: [
+          { category: 'furnishings', value: 'sports_equipment', label: 'Equipamiento deportivo' },
+        ],
         onSubmit,
       },
     });
@@ -247,7 +251,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'cash', label: 'Liquidez' }],
-        subcategories: [{ category: 'cash', value: 'short_term_deposit', label: 'Deposito a corto plazo' }],
+        subcategories: [
+          { category: 'cash', value: 'short_term_deposit', label: 'Deposito a corto plazo' },
+        ],
         onSubmit,
       },
     });
@@ -310,7 +316,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit,
       },
     });
@@ -352,7 +360,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit,
       },
     });
@@ -399,7 +409,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
       },
     });
@@ -426,7 +438,9 @@ describe('ItemForm (saas)', () => {
     const termInput = wrapper.find('input[placeholder="Ej: 10"]');
     expect((termInput.element as HTMLInputElement).value).toBe('10');
 
-    expect(wrapper.text()).toContain('Disponible solo cuando la TAE de financiacion es mayor que 0.');
+    expect(wrapper.text()).toContain(
+      'Disponible solo cuando la TAE de financiacion es mayor que 0.',
+    );
     expect(wrapper.text()).toContain('Descartar reforma');
   });
 
@@ -435,7 +449,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
       },
     });
@@ -476,7 +492,9 @@ describe('ItemForm (saas)', () => {
         title: 'Editar activo',
         mode: 'edit',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
         initial: {
           name: 'Casa',
@@ -507,7 +525,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
       },
     });
@@ -538,7 +558,9 @@ describe('ItemForm (saas)', () => {
       props: {
         title: 'Nuevo activo',
         categories: [{ value: 'real_estate', label: 'Inmuebles' }],
-        subcategories: [{ category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' }],
+        subcategories: [
+          { category: 'real_estate', value: 'primary_home', label: 'Vivienda habitual' },
+        ],
         onSubmit: vi.fn().mockResolvedValue(undefined),
       },
     });
@@ -616,7 +638,9 @@ describe('ItemForm (saas)', () => {
 
     const cancellationToggle = wrapper
       .findAll('input[type="checkbox"]')
-      .find((input) => input.element.closest('label')?.textContent?.includes('prevision de cancelacion'))!;
+      .find((input) =>
+        input.element.closest('label')?.textContent?.includes('prevision de cancelacion'),
+      )!;
     await cancellationToggle.setValue(true);
 
     const dateInputs = wrapper.findAll('input[type="date"]');
@@ -753,8 +777,12 @@ describe('ItemForm (saas)', () => {
       .findAll('select')
       .find((s) => s.text().includes('Dinamico') && s.text().includes('Personalizado'))!;
     expect((profileSelect.element as HTMLSelectElement).value).toBe('dynamic');
-    expect((wrapper.find('input[placeholder="Ej: 3"]').element as HTMLInputElement).value).toBe('8');
-    expect((wrapper.find('input[placeholder="Ej: 1"]').element as HTMLInputElement).value).toBe('0.2');
+    expect((wrapper.find('input[placeholder="Ej: 3"]').element as HTMLInputElement).value).toBe(
+      '8',
+    );
+    expect((wrapper.find('input[placeholder="Ej: 1"]').element as HTMLInputElement).value).toBe(
+      '0.2',
+    );
   });
 
   it('submits periodic contribution fields for investment assets', async () => {
@@ -774,7 +802,9 @@ describe('ItemForm (saas)', () => {
     await selects[1]!.setValue('funds');
     const modeSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'))!;
+      .find(
+        (s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'),
+      )!;
     await modeSelect.setValue('periodic_contribution');
     const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
     await currencySelect.setValue('EUR');
@@ -818,7 +848,9 @@ describe('ItemForm (saas)', () => {
     await selects[1]!.setValue('etfs');
     const modeSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'))!;
+      .find(
+        (s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'),
+      )!;
     await modeSelect.setValue('periodic_contribution');
     const frequencySelect = wrapper
       .findAll('select')

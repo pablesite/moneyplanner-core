@@ -219,7 +219,10 @@ function getByPath(source: Record<string, unknown>, path: string): unknown {
   }, source);
 }
 
-export function hasCapability(path: CapabilityPath, source: AppCapabilities = capabilities): boolean {
+export function hasCapability(
+  path: CapabilityPath,
+  source: AppCapabilities = capabilities,
+): boolean {
   return getByPath(source as unknown as Record<string, unknown>, path) === true;
 }
 
@@ -236,7 +239,9 @@ export function canUseFamilyMode(source: AppCapabilities = capabilities): boolea
 }
 
 export function canUsePeople(source: AppCapabilities = capabilities): boolean {
-  return source.core.familyLogicalModel || source.familyCloud.sharedFamilyViews || source.compat.people;
+  return (
+    source.core.familyLogicalModel || source.familyCloud.sharedFamilyViews || source.compat.people
+  );
 }
 
 export function canUseOwnership(source: AppCapabilities = capabilities): boolean {
