@@ -695,6 +695,61 @@ class NetWorthServicesTests(TestCase):
 
         self.assertEqual(get_effective_asset_amount(asset=asset), Decimal("1250.00"))
 
+    def test_get_effective_asset_amount_respects_as_of_date_for_accounting_tracking(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta contable",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Banco",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("5.00"),
+            is_active=True,
+        )
+        for booking_date, amount in (
+            (date(2026, 2, 10), Decimal("1250.00")),
+            (date(2026, 3, 3), Decimal("300.00")),
+        ):
+            tx = LedgerTransaction.objects.create(
+                user=self.user,
+                booking_date=booking_date,
+                value_date=booking_date,
+                description=f"Movimiento {booking_date.isoformat()}",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=income,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 28)),
+            Decimal("1250.00"),
+        )
+
     def test_get_effective_asset_amount_applies_ipc_growth_for_furnishings(self):
         InflationIndex.objects.create(
             region="ES",
@@ -1190,6 +1245,61 @@ class NetWorthServicesTests(TestCase):
         )
 
         self.assertEqual(get_effective_liability_amount(liability=liability), Decimal("80000.00"))
+
+    def test_get_effective_liability_amount_respects_as_of_date_for_accounting_tracking(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Hipoteca contable",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("2.00"),
+            amount=Decimal("50.00"),
+            is_active=True,
+        )
+        for booking_date, amount in (
+            (date(2026, 2, 10), Decimal("80000.00")),
+            (date(2026, 3, 10), Decimal("500.00")),
+        ):
+            tx = LedgerTransaction.objects.create(
+                user=self.user,
+                booking_date=booking_date,
+                value_date=booking_date,
+                description=f"Movimiento {booking_date.isoformat()}",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=asset_account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        self.assertEqual(
+            get_effective_liability_amount(liability=liability, as_of_date=date(2026, 2, 28)),
+            Decimal("80000.00"),
+        )
 
     def test_get_liability_events_delta_applies_signs(self):
         liability = Liability.objects.create(
@@ -3018,7 +3128,86 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row["planned_closing_balance"], "1500.00")
         self.assertEqual(row["executed_closing_balance"], "1420.50")
         self.assertEqual(row["deviation"], "-79.50")
+        self.assertEqual(row["coverage_source"], "checkin")
         self.assertEqual(row["checkin"]["status"], "adjusted")
+
+    def test_liquidity_monthly_summary_uses_ledger_for_accounting_assets_and_keeps_fallback(self):
+        ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta operativa",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta ledger",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=ledger_account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        fallback_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta fallback",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("800.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 27),
+            value_date=date(2026, 2, 27),
+            description="Cobro fin de mes",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=ledger_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("950.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("950.00"),
+            currency="EUR",
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=fallback_asset,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("780.00"),
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["checkins_confirmed"], 1)
+        self.assertEqual(response.data["coverage_confirmed"], 2)
+        self.assertEqual(response.data["ledger_rows_confirmed"], 1)
+        self.assertEqual(response.data["fallback_rows_confirmed"], 1)
+        self.assertTrue(response.data["has_ledger_data"])
+        rows = {row["asset_name"]: row for row in response.data["rows"]}
+        self.assertEqual(rows["Cuenta ledger"]["executed_closing_balance"], "950.00")
+        self.assertEqual(rows["Cuenta ledger"]["coverage_source"], "ledger")
+        self.assertEqual(rows["Cuenta fallback"]["executed_closing_balance"], "780.00")
+        self.assertEqual(rows["Cuenta fallback"]["coverage_source"], "checkin")
 
     def test_liquidity_checkin_update_does_not_trigger_liability_sync_and_updates_row(self):
         bank = Asset.objects.create(

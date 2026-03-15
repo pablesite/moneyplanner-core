@@ -507,14 +507,27 @@ def get_effective_liability_amount(
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
-        from accounting.services import get_account_balance
+        from accounting.models import LedgerTransaction
+        from accounting.services import get_account_balance, has_account_entries
 
         accounting_account = _get_accounting_liability_account(
             user_id=liability.user_id,
             account_id=liability.accounting_account_id,
         )
-        if accounting_account is not None and accounting_account.currency == liability.currency:
-            return get_account_balance(account=accounting_account)
+        if (
+            accounting_account is not None
+            and accounting_account.currency == liability.currency
+            and has_account_entries(
+                account=accounting_account,
+                as_of_date=ref_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
+            )
+        ):
+            return get_account_balance(
+                account=accounting_account,
+                as_of_date=ref_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
+            )
 
     valuation = (
         LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)

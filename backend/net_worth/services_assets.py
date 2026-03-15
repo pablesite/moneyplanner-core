@@ -473,14 +473,27 @@ def _get_degressive_remaining_ratio(
 def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if asset.tracking_mode == Asset.TrackingMode.ACCOUNTING:
-        from accounting.services import get_account_balance
+        from accounting.models import LedgerTransaction
+        from accounting.services import get_account_balance, has_account_entries
 
         accounting_account = _get_accounting_asset_account(
             user_id=asset.user_id,
             account_id=asset.accounting_account_id,
         )
-        if accounting_account is not None and accounting_account.currency == asset.currency:
-            return get_account_balance(account=accounting_account)
+        if (
+            accounting_account is not None
+            and accounting_account.currency == asset.currency
+            and has_account_entries(
+                account=accounting_account,
+                as_of_date=ref_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
+            )
+        ):
+            return get_account_balance(
+                account=accounting_account,
+                as_of_date=ref_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
+            )
 
     if asset.category == Asset.Category.INVESTMENTS:
         return _get_effective_investment_asset_amount(asset=asset, as_of_date=ref_date)

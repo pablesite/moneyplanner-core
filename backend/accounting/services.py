@@ -41,8 +41,39 @@ def get_user_ledger_account(
     return queryset.first()
 
 
-def get_account_balance(*, account: LedgerAccount) -> Decimal:
-    totals = compute_entry_balance_totals(account.entries.all(), account_id=account.id)
+def get_account_entries(
+    *,
+    account: LedgerAccount,
+    as_of_date: date | None = None,
+    status: str | None = None,
+) -> QuerySet[LedgerEntry]:
+    queryset = account.entries.select_related("transaction")
+    if as_of_date is not None:
+        queryset = queryset.filter(transaction__booking_date__lte=as_of_date)
+    if status is not None:
+        queryset = queryset.filter(transaction__status=status)
+    return queryset
+
+
+def has_account_entries(
+    *,
+    account: LedgerAccount,
+    as_of_date: date | None = None,
+    status: str | None = None,
+) -> bool:
+    return get_account_entries(account=account, as_of_date=as_of_date, status=status).exists()
+
+
+def get_account_balance(
+    *,
+    account: LedgerAccount,
+    as_of_date: date | None = None,
+    status: str | None = None,
+) -> Decimal:
+    totals = compute_entry_balance_totals(
+        get_account_entries(account=account, as_of_date=as_of_date, status=status),
+        account_id=account.id,
+    )
     return compute_account_balance_from_totals(account_type=account.account_type, totals=totals)
 
 

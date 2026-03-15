@@ -19,11 +19,12 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - frontend con alta rapida operativa sobre `quick-entry`, fallback a asiento balanceado manual y filtros locales para la lista cronologica
    - saldos actuales y agregados por periodo visibles en la vista via `current_balance` y `GET /api/accounting/accounts/balances/`
    - cobertura reforzada en `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
-3. Fase 3: iniciada de forma parcial
-   - `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
-   - el fallback a check-ins legacy queda explicito cuando no hay cobertura ledger
-   - cobertura especifica en `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
-   - pendiente extender el enfoque a liquidez y endurecer la logica de cobertura parcial
+3. Fase 3: backend cerrado, frontend en convivencia controlada
+   - backend: los resúmenes mensuales de `budget` ya mezclan ledger publicado y fallback legacy con cobertura parcial estable
+   - backend: la liquidez del cierre mensual ya es ledger-aware para posiciones `tracking_mode=accounting`, respetando `as_of_date`
+   - frontend: `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
+   - frontend: el fallback a check-ins legacy sigue explicito cuando no hay cobertura ledger
+   - cobertura reforzada en `backend/accounting/tests/test_accounting.py`, `backend/budget/tests/test_api_checkins.py`, `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
 4. Fases posteriores pendientes
    - actividad contable contextual mas profunda en patrimonio
    - compras de inversion y pagos de deuda con breakdown especializado
@@ -96,9 +97,13 @@ Entregables:
    - notas de convivencia actualizadas si fuese necesario
 
 Estado actual:
-1. `BudgetDashboardView` ya mezcla ledger y fallback legacy para ingresos y gastos.
-2. Falta hacer ledger-aware la liquidez del cierre mensual.
-3. Falta consolidar la cobertura parcial como comportamiento estable de fase, no solo como primer corte de frontend.
+1. Backend cerrado:
+   - `budget` resume ejecucion mensual usando ledger publicado cuando existe enlace y fallback a check-ins legacy en el resto
+   - `net_worth/liquidity/monthly-summary` ya reconoce cobertura ledger para liquidez `tracking_mode=accounting`
+   - los saldos contables usados por cierre y patrimonio respetan `as_of_date`, evitando leer saldo vivo en cierres historicos
+2. Frontend en convivencia controlada:
+   - `BudgetDashboardView` ya mezcla ledger y fallback legacy para ingresos y gastos
+   - la lectura de liquidez ya puede apoyarse en el contrato backend estabilizado, aunque la UX todavia puede refinar la presentacion de cobertura
 
 Criterios de salida:
 1. El cierre mensual puede operar con cobertura ledger completa o parcial.
