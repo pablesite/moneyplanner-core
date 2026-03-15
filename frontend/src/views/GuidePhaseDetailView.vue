@@ -386,9 +386,7 @@ const debtRows = computed(() =>
       const hasKnownTae = taePct != null && Number.isFinite(taePct) && taePct >= 0;
       const paymentRaw = liability.estimated_monthly_payment_amount;
       const hasMonthlyPaymentInput = hasTextValue(paymentRaw);
-      const monthlyPaymentAmount = hasMonthlyPaymentInput
-        ? Math.max(0, toNumber(paymentRaw))
-        : 0;
+      const monthlyPaymentAmount = hasMonthlyPaymentInput ? Math.max(0, toNumber(paymentRaw)) : 0;
       return {
         amountBase,
         taePct: hasKnownTae ? taePct : null,
@@ -1514,9 +1512,13 @@ function phaseDetailTo(phaseIdParam: number): string {
   return `/guia/fases/${phaseIdParam}`;
 }
 
-watch(phaseId, () => {
-  maybeLoadNetWorthContext();
-}, { immediate: true });
+watch(
+  phaseId,
+  () => {
+    maybeLoadNetWorthContext();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

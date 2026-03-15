@@ -113,8 +113,10 @@ function makeState(overrides: Record<string, unknown> = {}) {
     updateBaseCurrency: vi.fn(),
     updateAsset: vi.fn(),
     archiveAsset: vi.fn(),
+    deleteAsset: vi.fn(),
     updateLiability: vi.fn(),
     archiveLiability: vi.fn(),
+    deleteLiability: vi.fn(),
   };
 
   return {
@@ -517,6 +519,87 @@ describe('NetWorthView', () => {
 
     expect(state.store.fetchPositionTimeline).toHaveBeenCalledWith('asset', 11);
     expect(state.store.fetchPositionActivity).toHaveBeenCalledWith('asset', 11, 'cash');
+  });
+
+  it('removes the redundant selected summary and exposes edit/delete actions in the category workspace', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const state = makeState({
+      openEdit: vi.fn(),
+      store: {
+        ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta nomina',
+            category: 'cash',
+            subcategory: 'bank_account',
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        deleteAsset: vi.fn(),
+        fetchPositionTimeline: vi.fn(),
+        fetchPositionActivity: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    expect(wrapper.text()).not.toContain('Activo seleccionado');
+    expect(wrapper.text()).toContain('Activo concreto');
+    expect(wrapper.text()).toContain('1 posiciones - 1.000,00 €');
+    expect(wrapper.get('button[aria-label="Nuevo activo"]').text()).toContain('+');
+
+    const buttons = wrapper.findAll('.ui-nw-category-item-actions button');
+    expect(buttons).toHaveLength(2);
+
+    await buttons[0]!.trigger('click');
+    expect(state.openEdit).toHaveBeenCalled();
+
+    await buttons[1]!.trigger('click');
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(state.store.deleteAsset).toHaveBeenCalledWith(11);
+
+    confirmSpy.mockRestore();
+  });
+
+  it('renders euro amounts with the symbol in visible net worth sections', () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        snapshots: [
+          {
+            id: 5,
+            snapshot_date: '2026-01-01',
+            net_worth: '750',
+            total_assets: '1000',
+            total_liabilities: '250',
+            base_currency: 'EUR',
+          },
+        ],
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    expect(wrapper.text()).toContain('750,00 €');
+    expect(wrapper.text()).toContain('1.000,00 €');
+    expect(wrapper.text()).not.toContain('750,00 EUR');
   });
 
   it('opens the expanded timeline modal and updates the visible range', async () => {

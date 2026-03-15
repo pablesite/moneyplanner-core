@@ -113,6 +113,89 @@ function formatMoney(v?: string | null, decimals = 2) {
   }).format(n);
 }
 
+function buildEditScheduleFields(item: Asset | Liability) {
+  return {
+    deposit_term_months: item.deposit_term_months ?? '',
+    monthly_payment_amount: item.monthly_payment_amount ?? '',
+    start_date: item.start_date ?? '',
+    expected_end_date: item.expected_end_date ?? '',
+    term_months: item.term_months ?? '',
+    rate_type: item.rate_type ?? 'fixed',
+    payment_frequency: item.payment_frequency ?? 'monthly',
+    expense_subcategory_override: item.expense_subcategory_override ?? '',
+    amortization_system: item.amortization_system ?? '',
+    opening_fees_amount: item.opening_fees_amount ?? '',
+    early_repayment_fee_percent: item.early_repayment_fee_percent ?? '',
+    novation_subrogation_fee_amount: item.novation_subrogation_fee_amount ?? '',
+    linked_products_monthly_cost: item.linked_products_monthly_cost ?? '',
+    cancellation_forecast_enabled: item.cancellation_forecast_enabled ?? false,
+    cancellation_date: item.cancellation_date ?? '',
+    cancellation_fee_amount: item.cancellation_fee_amount ?? '',
+  };
+}
+
+function buildEditInvestmentFields(item: Asset | Liability) {
+  return {
+    investment_contribution_mode: item.investment_contribution_mode ?? 'one_time',
+    investment_contribution_frequency: item.investment_contribution_frequency ?? 'monthly',
+    investment_contribution_currency: item.investment_contribution_currency ?? '',
+    monthly_contribution_amount: item.monthly_contribution_amount ?? '',
+    market_value_override: item.market_value_override ?? '',
+    market_value_override_date: item.market_value_override_date ?? '',
+    initial_purchase_value: item.initial_purchase_value ?? '',
+  };
+}
+
+function buildEditValuationFields(item: Asset | Liability) {
+  return {
+    amortization_method: item.amortization_method ?? 'none',
+    amortization_term_years: item.amortization_term_years ?? '',
+    valuation_model: item.valuation_model ?? 'manual',
+    land_value_share_percent: item.land_value_share_percent ?? '',
+    land_annual_appreciation_percent: item.land_annual_appreciation_percent ?? '',
+    building_annual_depreciation_percent: item.building_annual_depreciation_percent ?? '',
+    improvements: item.improvements ?? [],
+  };
+}
+
+function buildEditInitialPayload(item: Asset | Liability) {
+  return {
+    name: item.name ?? '',
+    category: item.category ?? '',
+    subcategory: item.subcategory ?? '',
+    amount: formatEditAmount(item.amount, item.currency ?? 'EUR'),
+    annual_interest_tae: item.annual_interest_tae ?? '',
+    estimated_average_balance_for_interest: item.estimated_average_balance_for_interest ?? '',
+    ...buildEditScheduleFields(item),
+    ...buildEditInvestmentFields(item),
+    ...buildEditValuationFields(item),
+    notes: item.notes ?? '',
+    currency: item.currency ?? '',
+    tracking_mode: item.tracking_mode ?? 'manual',
+    is_active: item.is_active ?? true,
+    ownership_id: item.ownership_ref ?? null,
+    financed_asset_id: item.financed_asset_ref ?? null,
+  };
+}
+
+function filterByCategoryRows(chart: {
+  keys: string[];
+  assets: number[];
+  liabilities: number[];
+}): ByCategoryRow[] {
+  const out: ByCategoryRow[] = [];
+  for (let i = 0; i < chart.keys.length; i += 1) {
+    const key = chart.keys[i];
+    if (!key) continue;
+    const assetValue = chart.assets[i] ?? 0;
+    const liabilityValue = chart.liabilities[i] ?? 0;
+    if (assetValue !== 0 || liabilityValue !== 0) {
+      out.push({ key, a: assetValue, l: liabilityValue });
+    }
+  }
+  return out;
+}
+
 export function useNetWorthViewState() {
   const store = useNetWorthStore();
   const valueMode = ref<'nominal' | 'real'>('nominal');
@@ -194,50 +277,7 @@ export function useNetWorthViewState() {
   const editInitial = computed(() => {
     const item = editItem.value;
     if (!item) return null;
-    return {
-      name: item.name ?? '',
-      category: item.category ?? '',
-      subcategory: item.subcategory ?? '',
-      amount: formatEditAmount(item.amount, item.currency ?? 'EUR'),
-      annual_interest_tae: item.annual_interest_tae ?? '',
-      estimated_average_balance_for_interest: item.estimated_average_balance_for_interest ?? '',
-      deposit_term_months: item.deposit_term_months ?? '',
-      monthly_payment_amount: item.monthly_payment_amount ?? '',
-      start_date: item.start_date ?? '',
-      expected_end_date: item.expected_end_date ?? '',
-      investment_contribution_mode: item.investment_contribution_mode ?? 'one_time',
-      investment_contribution_frequency: item.investment_contribution_frequency ?? 'monthly',
-      investment_contribution_currency: item.investment_contribution_currency ?? '',
-      monthly_contribution_amount: item.monthly_contribution_amount ?? '',
-      market_value_override: item.market_value_override ?? '',
-      market_value_override_date: item.market_value_override_date ?? '',
-      term_months: item.term_months ?? '',
-      rate_type: item.rate_type ?? 'fixed',
-      payment_frequency: item.payment_frequency ?? 'monthly',
-      expense_subcategory_override: item.expense_subcategory_override ?? '',
-      amortization_system: item.amortization_system ?? '',
-      opening_fees_amount: item.opening_fees_amount ?? '',
-      early_repayment_fee_percent: item.early_repayment_fee_percent ?? '',
-      novation_subrogation_fee_amount: item.novation_subrogation_fee_amount ?? '',
-      linked_products_monthly_cost: item.linked_products_monthly_cost ?? '',
-      cancellation_forecast_enabled: item.cancellation_forecast_enabled ?? false,
-      cancellation_date: item.cancellation_date ?? '',
-      cancellation_fee_amount: item.cancellation_fee_amount ?? '',
-      initial_purchase_value: item.initial_purchase_value ?? '',
-      amortization_method: item.amortization_method ?? 'none',
-      amortization_term_years: item.amortization_term_years ?? '',
-      valuation_model: item.valuation_model ?? 'manual',
-      land_value_share_percent: item.land_value_share_percent ?? '',
-      land_annual_appreciation_percent: item.land_annual_appreciation_percent ?? '',
-      building_annual_depreciation_percent: item.building_annual_depreciation_percent ?? '',
-      improvements: item.improvements ?? [],
-      notes: item.notes ?? '',
-      currency: item.currency ?? '',
-      tracking_mode: item.tracking_mode ?? 'manual',
-      is_active: item.is_active ?? true,
-      ownership_id: item.ownership_ref ?? null,
-      financed_asset_id: item.financed_asset_ref ?? null,
-    };
+    return buildEditInitialPayload(item);
   });
 
   async function submitEdit(payload: NetWorthWritePayload & { ownership_id?: number | null }) {
@@ -304,19 +344,7 @@ export function useNetWorthViewState() {
   });
 
   const byCategoryFiltered = computed<ByCategoryRow[]>(() => {
-    const keys = byCategoryChart.value.keys;
-    const assets = byCategoryChart.value.assets;
-    const liabs = byCategoryChart.value.liabilities;
-
-    const out: ByCategoryRow[] = [];
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      if (!key) continue;
-      if ((assets[i] ?? 0) !== 0 || (liabs[i] ?? 0) !== 0) {
-        out.push({ key, a: assets[i] ?? 0, l: liabs[i] ?? 0 });
-      }
-    }
-    return out;
+    return filterByCategoryRows(byCategoryChart.value);
   });
 
   const byCategoryLabels = computed(() =>

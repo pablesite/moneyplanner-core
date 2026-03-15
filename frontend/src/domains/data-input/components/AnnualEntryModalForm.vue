@@ -132,7 +132,9 @@ const emit = defineEmits<{
       </select>
 
       <label class="ui-item-form-field">
-        <span v-if="timeProfileFieldLabel" class="ui-item-form-label">{{ timeProfileFieldLabel }}</span>
+        <span v-if="timeProfileFieldLabel" class="ui-item-form-label">{{
+          timeProfileFieldLabel
+        }}</span>
         <select
           :value="form.timeProfile"
           class="select ui-data-field"
@@ -169,10 +171,7 @@ const emit = defineEmits<{
           emit('patch', { eventGroup: String(($event.target as HTMLInputElement).value ?? '') })
         "
       />
-      <datalist
-        v-if="showEventGroupField && eventGroupOptions.length"
-        :id="eventGroupDatalistId"
-      >
+      <datalist v-if="showEventGroupField && eventGroupOptions.length" :id="eventGroupDatalistId">
         <option v-for="eventGroup in eventGroupOptions" :key="eventGroup" :value="eventGroup">
           {{ eventGroup }}
         </option>

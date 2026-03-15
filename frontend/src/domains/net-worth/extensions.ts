@@ -14,13 +14,16 @@ export function useNetWorthViewExtensions(store?: unknown): NetWorthViewExtensio
     const baseCurrency =
       store && typeof store === 'object'
         ? (('baseCurrency' in store &&
-            typeof (store as { baseCurrency?: unknown }).baseCurrency === 'string'
+          typeof (store as { baseCurrency?: unknown }).baseCurrency === 'string'
             ? (store as { baseCurrency?: string | null }).baseCurrency
             : null) ??
-          (('summary' in store &&
-            typeof (store as { summary?: { base_currency?: unknown } | null }).summary?.base_currency ===
-              'string')
-            ? String((store as { summary?: { base_currency?: string | null } | null }).summary?.base_currency)
+          ('summary' in store &&
+          typeof (store as { summary?: { base_currency?: unknown } | null }).summary
+            ?.base_currency === 'string'
+            ? String(
+                (store as { summary?: { base_currency?: string | null } | null }).summary
+                  ?.base_currency,
+              )
             : null))
         : null;
     const baseProps = baseCurrency ? { defaultCurrency: baseCurrency } : {};
