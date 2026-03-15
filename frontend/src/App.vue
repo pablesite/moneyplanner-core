@@ -53,6 +53,13 @@ const navItems = computed<NavItem[]>(() => {
       hint: 'Liquidez, ingresos, gastos y residual',
       to: '/cierre-mensual',
     },
+    {
+      id: 'accounting-movements',
+      icon: 'LD',
+      label: 'Movimientos',
+      hint: 'Libro diario y cuentas contables',
+      to: '/movimientos',
+    },
   ];
 
   return baseItems;
