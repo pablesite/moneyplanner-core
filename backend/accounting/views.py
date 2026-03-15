@@ -16,8 +16,10 @@ from .serializers import (
 )
 from .services import (
     build_account_balances_summary,
+    build_budget_derived_suggestions,
     build_monthly_accounting_summary,
     validate_balance_summary_filters,
+    validate_budget_suggestion_filters,
 )
 
 
@@ -75,6 +77,19 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         fiscal_year = parse_required_int_query_param(request.query_params, "year")
         return Response(
             build_monthly_accounting_summary(user_id=request.user.id, fiscal_year=fiscal_year)
+        )
+
+    @action(detail=False, methods=["get"], url_path="budget-suggestions")
+    def budget_suggestions(self, request):
+        fiscal_year = parse_required_int_query_param(request.query_params, "year")
+        lookback_years = parse_optional_int_query_param(request.query_params, "lookback_years") or 2
+        validate_budget_suggestion_filters(lookback_years=lookback_years)
+        return Response(
+            build_budget_derived_suggestions(
+                user_id=request.user.id,
+                fiscal_year=fiscal_year,
+                lookback_years=lookback_years,
+            )
         )
 
     @action(detail=False, methods=["post"], url_path="quick-entry")

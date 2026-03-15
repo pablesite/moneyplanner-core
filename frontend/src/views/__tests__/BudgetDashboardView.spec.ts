@@ -26,6 +26,16 @@ const mockExpenseStore = vi.hoisted(() => ({
 const mockAccountingApi = vi.hoisted(() => ({
   getMonthlySummary: vi.fn(async () => ({ data: { fiscal_year: currentYear, months: [] } })),
   getTransactions: vi.fn(async () => ({ data: [] })),
+  getBudgetSuggestions: vi.fn(async () => ({
+    data: {
+      fiscal_year: currentYear,
+      lookback_years: 2,
+      window_months: 24,
+      income: { series: [], categories: [], subcategories: [] },
+      expense: { series: [], categories: [], subcategories: [] },
+      method_note: '',
+    },
+  })),
 }));
 
 vi.mock('vue-router', () => ({
@@ -146,12 +156,23 @@ describe('BudgetDashboardView', () => {
     mockCoreApiGet.mockReset();
     mockAccountingApi.getMonthlySummary.mockReset();
     mockAccountingApi.getTransactions.mockReset();
+    mockAccountingApi.getBudgetSuggestions.mockReset();
     mockIncomeStore.entries.value = [];
     mockIncomeStore.totalAnnual.value = 0;
     mockExpenseStore.entries.value = [];
     mockExpenseStore.totalAnnual.value = 0;
     mockIncomeStore.loadAll.mockClear();
     mockExpenseStore.loadAll.mockClear();
+    mockAccountingApi.getBudgetSuggestions.mockResolvedValue({
+      data: {
+        fiscal_year: currentYear,
+        lookback_years: 2,
+        window_months: 24,
+        income: { series: [], categories: [], subcategories: [] },
+        expense: { series: [], categories: [], subcategories: [] },
+        method_note: '',
+      },
+    } as never);
   });
 
   it('uses ledger coverage for income rows and disables legacy check-in editing', async () => {

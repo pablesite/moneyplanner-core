@@ -1,5 +1,6 @@
 import { coreApi } from '@/lib/api';
 import type {
+  BudgetDerivedSuggestions,
   LedgerAccount,
   LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
@@ -67,6 +68,14 @@ export const coreAccountingApi = {
     return coreApi.get<MonthlyAccountingSummary>('/api/accounting/transactions/monthly-summary/', {
       params: { year },
     });
+  },
+  getBudgetSuggestions(year: number, lookbackYears = 2) {
+    return coreApi.get<BudgetDerivedSuggestions>(
+      '/api/accounting/transactions/budget-suggestions/',
+      {
+        params: { year, lookback_years: lookbackYears },
+      },
+    );
   },
   getAccountBalances(params?: {
     year?: number;

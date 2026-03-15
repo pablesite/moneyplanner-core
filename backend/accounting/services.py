@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -194,6 +195,40 @@ def build_monthly_accounting_summary(*, user_id: int, fiscal_year: int) -> dict:
     return {"fiscal_year": fiscal_year, "months": months}
 
 
+def build_budget_derived_suggestions(
+    *,
+    user_id: int,
+    fiscal_year: int,
+    lookback_years: int = 2,
+) -> dict:
+    start_year = fiscal_year - lookback_years + 1
+    period_keys = _build_period_keys(start_year=start_year, end_year=fiscal_year)
+
+    income_payload = _build_budget_suggestion_section(
+        user_id=user_id,
+        period_keys=period_keys,
+        fk_name="annual_income_entry",
+        positive_side=cast(str, LedgerEntry.Side.CREDIT),
+    )
+    expense_payload = _build_budget_suggestion_section(
+        user_id=user_id,
+        period_keys=period_keys,
+        fk_name="annual_expense_entry",
+        positive_side=cast(str, LedgerEntry.Side.DEBIT),
+    )
+    return {
+        "fiscal_year": fiscal_year,
+        "lookback_years": lookback_years,
+        "window_months": len(period_keys),
+        "income": income_payload,
+        "expense": expense_payload,
+        "method_note": (
+            "Sugerencia orientativa: promedio mensual del historico "
+            "de la ventana * 12. No reemplaza el criterio del plan anual."
+        ),
+    }
+
+
 def build_account_balances_summary(
     *,
     user_id: int,
@@ -270,6 +305,11 @@ def build_account_balances_summary(
         },
         "accounts": items,
     }
+
+
+def validate_budget_suggestion_filters(*, lookback_years: int) -> None:
+    if lookback_years < 1 or lookback_years > 5:
+        raise ValidationError({"lookback_years": "Query param 'lookback_years' invalido."})
 
 
 def validate_booking_and_value_dates(*, booking_date: date, value_date: date) -> None:
@@ -535,3 +575,115 @@ def _group_balance_totals_by_account(entries: list[LedgerEntry]) -> dict[int, Le
         )
         for account_id, totals in grouped.items()
     }
+
+
+def _build_period_keys(*, start_year: int, end_year: int) -> list[tuple[int, int]]:
+    return [(year, month) for year in range(start_year, end_year + 1) for month in range(1, 13)]
+
+
+def _build_budget_suggestion_section(
+    *,
+    user_id: int,
+    period_keys: list[tuple[int, int]],
+    fk_name: str,
+    positive_side: str,
+) -> dict:
+    start_year = period_keys[0][0]
+    end_year = period_keys[-1][0]
+    queryset = (
+        LedgerEntry.objects.filter(
+            transaction__user_id=user_id,
+            transaction__status=LedgerTransaction.Status.POSTED,
+            transaction__booking_date__year__gte=start_year,
+            transaction__booking_date__year__lte=end_year,
+            **{f"{fk_name}__isnull": False},
+        )
+        .select_related("transaction", fk_name)
+        .only(
+            "side",
+            "amount",
+            "transaction__booking_date",
+            f"{fk_name}__category",
+            f"{fk_name}__subcategory",
+        )
+    )
+
+    total_by_period: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
+    totals_by_category: dict[str, dict[tuple[int, int], Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: ZERO)
+    )
+    totals_by_subcategory: dict[tuple[str, str], dict[tuple[int, int], Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: ZERO)
+    )
+
+    for row in queryset:
+        period_key = (row.transaction.booking_date.year, row.transaction.booking_date.month)
+        if period_key not in period_keys:
+            continue
+        signed_amount = row.amount if row.side == positive_side else -row.amount
+        reference = getattr(row, fk_name)
+        if reference is None:
+            continue
+        category_key = getattr(reference, "category", "")
+        subcategory_key = getattr(reference, "subcategory", "")
+        if not category_key or not subcategory_key:
+            continue
+        total_by_period[period_key] += signed_amount
+        totals_by_category[category_key][period_key] += signed_amount
+        totals_by_subcategory[(category_key, subcategory_key)][period_key] += signed_amount
+
+    return {
+        "series": _serialize_series(period_keys=period_keys, totals_by_period=total_by_period),
+        "categories": _serialize_categorized_suggestions(
+            period_keys=period_keys,
+            totals_by_key=totals_by_category,
+            include_subcategory=False,
+        ),
+        "subcategories": _serialize_categorized_suggestions(
+            period_keys=period_keys,
+            totals_by_key=totals_by_subcategory,
+            include_subcategory=True,
+        ),
+    }
+
+
+def _serialize_series(
+    *, period_keys: list[tuple[int, int]], totals_by_period: dict[tuple[int, int], Decimal]
+) -> list[dict]:
+    return [
+        {
+            "year": year,
+            "month": month,
+            "executed_total": serialize_decimal(totals_by_period.get((year, month), ZERO)),
+        }
+        for year, month in period_keys
+    ]
+
+
+def _serialize_categorized_suggestions(
+    *,
+    period_keys: list[tuple[int, int]],
+    totals_by_key: dict,
+    include_subcategory: bool,
+) -> list[dict]:
+    window_months = Decimal(len(period_keys))
+    rows: list[dict] = []
+    for key, totals_by_period in sorted(totals_by_key.items(), key=lambda item: item[0]):
+        month_points = _serialize_series(period_keys=period_keys, totals_by_period=totals_by_period)
+        total = sum((totals_by_period.get(period_key, ZERO) for period_key in period_keys), ZERO)
+        observed_months = sum(
+            1 for period_key in period_keys if totals_by_period.get(period_key, ZERO) != ZERO
+        )
+        average_monthly = total / window_months if window_months > 0 else ZERO
+        row = {
+            "category": key[0] if include_subcategory else key,
+            "months": month_points,
+            "window_total": serialize_decimal(total),
+            "observed_months": observed_months,
+            "average_monthly": serialize_decimal(average_monthly),
+            "suggested_annual": serialize_decimal(average_monthly * Decimal("12")),
+        }
+        if include_subcategory:
+            row["subcategory"] = key[1]
+        rows.append(row)
+    return rows

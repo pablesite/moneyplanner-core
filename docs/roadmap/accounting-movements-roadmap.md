@@ -25,8 +25,10 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - frontend: `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
    - frontend: el fallback a check-ins legacy sigue explicito cuando no hay cobertura ledger
    - cobertura reforzada en `backend/accounting/tests/test_accounting.py`, `backend/budget/tests/test_api_checkins.py`, `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
-4. Fases posteriores pendientes
-   - sugerencias historicas derivadas del ledger
+4. Fase 5: implementada y cerrada
+   - backend: endpoint `GET /api/accounting/transactions/budget-suggestions/` con series mensuales historicas y sugerencias orientativas anualizadas por categoria/subcategoria
+   - frontend: `BudgetDashboardView` muestra lectura de sugerencias ledger para planificacion sin bloquear la edicion manual del presupuesto
+   - cobertura base en `backend/accounting/tests/test_accounting.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
 
 ## Principios de trabajo
 1. PRs pequenas y reversibles.
@@ -154,6 +156,14 @@ Entregables:
 Criterios de salida:
 1. El historico ledger puede informar presupuesto futuro.
 2. El presupuesto anual sigue siendo editable y sigue siendo la capa de plan.
+
+Estado actual:
+1. Backend cerrado:
+   - `GET /api/accounting/transactions/budget-suggestions/?year=YYYY&lookback_years=N` expone series historicas mensuales para `income` y `expense` por categoria/subcategoria usando solo transacciones `posted`.
+   - la sugerencia anual se calcula como promedio mensual de la ventana historica por 12 meses y se entrega como referencia explicita (`method_note`) no automatica.
+2. Frontend operativo:
+   - `BudgetDashboardView` consume sugerencias historicas del ledger en modo presupuesto y muestra diferencias `plan vs sugerencia` por subcategoria.
+   - la experiencia mantiene el presupuesto anual editable; no hay escritura automatica sobre las lineas del plan.
 
 ## Riesgos principales
 1. Doble fuente de verdad entre ledger y modelos legacy.
