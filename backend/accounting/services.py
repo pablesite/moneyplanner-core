@@ -361,6 +361,10 @@ def create_quick_transaction(
     notes: str = "",
     annual_income_entry=None,
     annual_expense_entry=None,
+    principal_amount: Decimal | None = None,
+    interest_amount: Decimal | None = None,
+    liability_account: LedgerAccount | None = None,
+    interest_account: LedgerAccount | None = None,
 ) -> LedgerTransaction:
     validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
     validate_transaction_entries(
@@ -371,6 +375,10 @@ def create_quick_transaction(
             counterparty_account=counterparty_account,
             annual_income_entry=annual_income_entry,
             annual_expense_entry=annual_expense_entry,
+            principal_amount=principal_amount,
+            interest_amount=interest_amount,
+            liability_account=liability_account,
+            interest_account=interest_account,
         ),
         user_id=user.id,
     )
@@ -391,6 +399,10 @@ def create_quick_transaction(
         counterparty_account=counterparty_account,
         annual_income_entry=annual_income_entry,
         annual_expense_entry=annual_expense_entry,
+        principal_amount=principal_amount,
+        interest_amount=interest_amount,
+        liability_account=liability_account,
+        interest_account=interest_account,
     ):
         LedgerEntry.objects.create(transaction=transaction_row, **entry_data)
     return transaction_row
@@ -404,6 +416,10 @@ def _build_quick_entry_payload(
     counterparty_account: LedgerAccount,
     annual_income_entry=None,
     annual_expense_entry=None,
+    principal_amount: Decimal | None = None,
+    interest_amount: Decimal | None = None,
+    liability_account: LedgerAccount | None = None,
+    interest_account: LedgerAccount | None = None,
 ) -> list[dict]:
     base_amount = Decimal(amount)
     if movement_type == "income":
@@ -438,6 +454,60 @@ def _build_quick_entry_payload(
                 "currency": account.currency,
             },
         ]
+    if movement_type == "investment_purchase":
+        return [
+            {
+                "account": counterparty_account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": base_amount,
+                "currency": counterparty_account.currency,
+                "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+            },
+            {
+                "account": account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+        ]
+    if movement_type == "debt_payment":
+        principal = Decimal(principal_amount or ZERO)
+        interest = Decimal(interest_amount or ZERO)
+        if liability_account is None:
+            raise ValidationError({"liability_account_id": "La cuenta de pasivo es obligatoria."})
+        rows: list[dict] = [
+            {
+                "account": liability_account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": principal,
+                "currency": liability_account.currency,
+                "liability": liability_account.liability
+                if liability_account.liability_id
+                else None,
+            },
+            {
+                "account": account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+        ]
+        if interest > ZERO:
+            if interest_account is None:
+                raise ValidationError(
+                    {"interest_account_id": "La cuenta de intereses es obligatoria."}
+                )
+            rows.insert(
+                1,
+                {
+                    "account": interest_account,
+                    "side": LedgerEntry.Side.DEBIT,
+                    "amount": interest,
+                    "currency": interest_account.currency,
+                    "annual_expense_entry": annual_expense_entry,
+                },
+            )
+        return rows
     return [
         {
             "account": counterparty_account,

@@ -26,7 +26,13 @@ type TransactionFormRow = {
   notes: string;
 };
 
-type ActivityFilter = 'all' | 'income' | 'expense' | 'transfer';
+type ActivityFilter =
+  | 'all'
+  | 'income'
+  | 'expense'
+  | 'transfer'
+  | 'investment_purchase'
+  | 'debt_payment';
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -62,6 +68,10 @@ export function useAccountingPage() {
     amount: '',
     account_id: null as number | null,
     counterparty_account_id: null as number | null,
+    liability_account_id: null as number | null,
+    interest_account_id: null as number | null,
+    principal_amount: '',
+    interest_amount: '',
     annual_income_entry_id: null as number | null,
     annual_expense_entry_id: null as number | null,
     notes: '',
@@ -163,13 +173,41 @@ export function useAccountingPage() {
   const transferCounterpartyOptions = computed(() =>
     liquidityAccounts.value.filter((account) => account.id !== quickEntryForm.account_id),
   );
+  const investmentCounterpartyOptions = computed(() =>
+    accounts.value.filter(
+      (account) =>
+        account.account_type === 'asset' &&
+        account.id !== quickEntryForm.account_id &&
+        account.asset_id != null,
+    ),
+  );
+  const liabilityCounterpartyOptions = computed(() =>
+    accounts.value.filter(
+      (account) => account.account_type === 'liability' && account.liability_id != null,
+    ),
+  );
+  const debtInterestOptions = computed(() =>
+    accounts.value.filter((account) => account.account_type === 'expense'),
+  );
   const quickEntryReady = computed(() => {
     if (!quickEntryForm.description.trim()) return false;
     if (!quickEntryForm.booking_date || !quickEntryForm.value_date) return false;
-    if (toNumber(quickEntryForm.amount) <= 0) return false;
+    const amountValue = toNumber(quickEntryForm.amount);
+    if (amountValue <= 0) return false;
     if (quickEntryForm.account_id == null) return false;
     if (quickEntryForm.movement_type === 'transfer') {
       return quickEntryForm.counterparty_account_id != null;
+    }
+    if (quickEntryForm.movement_type === 'investment_purchase') {
+      return quickEntryForm.counterparty_account_id != null;
+    }
+    if (quickEntryForm.movement_type === 'debt_payment') {
+      const principalValue = toNumber(quickEntryForm.principal_amount);
+      const interestValue = toNumber(quickEntryForm.interest_amount);
+      if (quickEntryForm.liability_account_id == null) return false;
+      if (principalValue <= 0 || interestValue < 0) return false;
+      if (interestValue > 0 && quickEntryForm.interest_account_id == null) return false;
+      return Math.abs(principalValue + interestValue - amountValue) < 0.000001;
     }
     return true;
   });
@@ -177,6 +215,8 @@ export function useAccountingPage() {
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
     { value: 'transfer', label: 'Transferencia' },
+    { value: 'investment_purchase', label: 'Compra inversion' },
+    { value: 'debt_payment', label: 'Pago deuda' },
   ];
 
   watch(
@@ -196,8 +236,14 @@ export function useAccountingPage() {
     () => quickEntryForm.movement_type,
     (movementType) => {
       quickEntryForm.counterparty_account_id = null;
+      quickEntryForm.liability_account_id = null;
+      quickEntryForm.interest_account_id = null;
+      quickEntryForm.principal_amount = '';
+      quickEntryForm.interest_amount = '';
       if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
-      if (movementType !== 'expense') quickEntryForm.annual_expense_entry_id = null;
+      if (movementType !== 'expense' && movementType !== 'debt_payment') {
+        quickEntryForm.annual_expense_entry_id = null;
+      }
     },
   );
 
@@ -309,6 +355,10 @@ export function useAccountingPage() {
     quickEntryForm.amount = '';
     quickEntryForm.account_id = null;
     quickEntryForm.counterparty_account_id = null;
+    quickEntryForm.liability_account_id = null;
+    quickEntryForm.interest_account_id = null;
+    quickEntryForm.principal_amount = '';
+    quickEntryForm.interest_amount = '';
     quickEntryForm.annual_income_entry_id = null;
     quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
@@ -323,11 +373,15 @@ export function useAccountingPage() {
     const hasExpenseLink = transaction.entries.some(
       (entry) => entry.annual_expense_entry_id != null,
     );
+    const hasLiabilityLink = transaction.entries.some((entry) => entry.liability_id != null);
+    if (hasLiabilityLink) return 'debt_payment';
     if (hasExpenseLink) return 'expense';
 
     const assetEntries = transaction.entries.filter(
       (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
     );
+    const hasAssetPositionLink = transaction.entries.some((entry) => entry.asset_id != null);
+    if (hasAssetPositionLink) return 'investment_purchase';
     if (assetEntries.length >= 2) return 'transfer';
 
     return 'other';
@@ -338,6 +392,8 @@ export function useAccountingPage() {
     if (kind === 'income') return 'Ingreso';
     if (kind === 'expense') return 'Gasto';
     if (kind === 'transfer') return 'Transferencia';
+    if (kind === 'investment_purchase') return 'Compra inversion';
+    if (kind === 'debt_payment') return 'Pago deuda';
     return 'Asiento';
   }
 
@@ -433,6 +489,20 @@ export function useAccountingPage() {
       ...(quickEntryForm.movement_type === 'expense'
         ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
         : {}),
+      ...(quickEntryForm.movement_type === 'investment_purchase'
+        ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
+        : {}),
+      ...(quickEntryForm.movement_type === 'debt_payment'
+        ? {
+            liability_account_id: quickEntryForm.liability_account_id,
+            principal_amount: formatDecimalInput(quickEntryForm.principal_amount),
+            interest_amount: formatDecimalInput(quickEntryForm.interest_amount || '0'),
+            annual_expense_entry_id: quickEntryForm.annual_expense_entry_id,
+            ...(toNumber(quickEntryForm.interest_amount) > 0
+              ? { interest_account_id: quickEntryForm.interest_account_id }
+              : {}),
+          }
+        : {}),
     };
     await store.createQuickEntry(payload);
     resetQuickEntryForm();
@@ -473,6 +543,9 @@ export function useAccountingPage() {
     incomeOptions,
     expenseOptions,
     transferCounterpartyOptions,
+    investmentCounterpartyOptions,
+    liabilityCounterpartyOptions,
+    debtInterestOptions,
     quickEntryReady,
     debitTotal,
     creditTotal,

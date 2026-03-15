@@ -3,7 +3,12 @@ export type LedgerAccountOrigin = 'user' | 'system';
 export type LedgerTransactionStatus = 'draft' | 'posted';
 export type LedgerTransactionOrigin = 'manual' | 'import' | 'system';
 export type LedgerEntrySide = 'debit' | 'credit';
-export type QuickLedgerMovementType = 'income' | 'expense' | 'transfer';
+export type QuickLedgerMovementType =
+  | 'income'
+  | 'expense'
+  | 'transfer'
+  | 'investment_purchase'
+  | 'debt_payment';
 
 export type LedgerAccount = {
   id: number;
@@ -125,6 +130,10 @@ export type QuickLedgerTransactionWritePayload = {
   amount: string;
   account_id: number;
   counterparty_account_id?: number | null;
+  liability_account_id?: number | null;
+  interest_account_id?: number | null;
+  principal_amount?: string | null;
+  interest_amount?: string | null;
   annual_income_entry_id?: number | null;
   annual_expense_entry_id?: number | null;
   notes?: string;
