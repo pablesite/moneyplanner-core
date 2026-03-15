@@ -192,6 +192,10 @@ const INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS = [
   { value: 'monthly', label: 'Mensual' },
   { value: 'weekly', label: 'Semanal' },
 ];
+const TRACKING_MODE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'accounting', label: 'Contable (ledger)' },
+];
 const LIABILITY_CATEGORY_DEFAULTS: Record<
   string,
   { paymentFrequency?: 'monthly' | 'quarterly'; preferredAssetCategories?: string[] }
@@ -1810,6 +1814,14 @@ watch(
         >
           <option value="" disabled>Selecciona moneda</option>
           <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
+        </select>
+      </label>
+      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
+        <span class="ui-item-form-label">Tracking mode</span>
+        <select v-model="form.tracking_mode" class="select ui-data-field">
+          <option v-for="option in TRACKING_MODE_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </label>
       <label v-if="showLiabilityExpenseSubcategoryField" class="ui-item-form-field">
