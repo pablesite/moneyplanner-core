@@ -55,7 +55,10 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
                 id=instance.asset_id,
                 user_id=instance.user_id,
                 accounting_account_id=instance.id,
-            ).update(accounting_account_id=None)
+            ).update(
+                accounting_account_id=None,
+                tracking_mode=Asset.TrackingMode.MANUAL,
+            )
         if instance.liability_id is not None:
             from net_worth.models import Liability
 
@@ -63,7 +66,10 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
                 id=instance.liability_id,
                 user_id=instance.user_id,
                 accounting_account_id=instance.id,
-            ).update(accounting_account_id=None)
+            ).update(
+                accounting_account_id=None,
+                tracking_mode=Liability.TrackingMode.MANUAL,
+            )
 
         transaction_ids = list(
             LedgerEntry.objects.filter(account_id=instance.id)
