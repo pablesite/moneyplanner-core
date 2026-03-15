@@ -11,6 +11,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APITestCase
 from rest_framework.test import APIRequestFactory
 
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry
 from core.models import InflationIndex
@@ -140,6 +141,51 @@ class NetWorthServicesTests(TestCase):
             start_date=date(2026, 1, 1),
             expected_end_date=None,
         )
+
+    def test_validate_asset_payload_accepts_owned_accounting_account(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco contable",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+        validate_asset_payload(
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            annual_interest_tae=Decimal("0.00"),
+            amortization_method=Asset.AmortizationMethod.NONE,
+            amortization_term_years=None,
+            initial_purchase_value=None,
+            user_id=self.user.id,
+            currency="EUR",
+        )
+
+    def test_validate_liability_payload_rejects_foreign_accounting_account(self):
+        other_user = get_user_model().objects.create_user(
+            username="nw_other",
+            password="pass1234",
+        )
+        account = LedgerAccount.objects.create(
+            user=other_user,
+            name="Pasivo ajeno",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.ACCOUNTING,
+                accounting_account_id=account.id,
+                category=Liability.Category.MORTGAGE,
+                annual_interest_tae=Decimal("2.50"),
+                start_date=date(2026, 1, 1),
+                expected_end_date=date(2030, 1, 1),
+                user_id=self.user.id,
+                currency="EUR",
+            )
 
     def test_validate_liability_payload_requires_tae_for_financial_debt(self):
         with self.assertRaises(DRFValidationError):
@@ -601,6 +647,54 @@ class NetWorthServicesTests(TestCase):
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
         self.assertEqual(effective.quantize(Decimal("0.0001")), Decimal("0.0000"))
 
+    def test_get_effective_asset_amount_uses_linked_ledger_balance_for_accounting_tracking(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta contable",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Banco",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("5.00"),
+            is_active=True,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Nomina",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1250.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1250.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(get_effective_asset_amount(asset=asset), Decimal("1250.00"))
+
     def test_get_effective_asset_amount_applies_ipc_growth_for_furnishings(self):
         InflationIndex.objects.create(
             region="ES",
@@ -1046,6 +1140,56 @@ class NetWorthServicesTests(TestCase):
             get_effective_liability_amount(liability=liability, as_of_date=date(2026, 2, 28)),
             Decimal("565.00"),
         )
+
+    def test_get_effective_liability_amount_uses_linked_ledger_balance_for_accounting_tracking(
+        self,
+    ):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Hipoteca contable",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("2.00"),
+            amount=Decimal("50.00"),
+            is_active=True,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Disposicion deuda",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=asset_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("80000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("80000.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(get_effective_liability_amount(liability=liability), Decimal("80000.00"))
 
     def test_get_liability_events_delta_applies_signs(self):
         liability = Liability.objects.create(

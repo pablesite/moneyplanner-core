@@ -28,6 +28,18 @@ def serialize_decimal(value: Decimal, *, places: Decimal = TWO_DECIMAL_PLACES) -
     return str(value.quantize(places))
 
 
+def get_user_ledger_account(
+    *, user_id: int, account_id: int | None, expected_type: str | None = None
+) -> LedgerAccount | None:
+    if not account_id:
+        return None
+
+    queryset = LedgerAccount.objects.filter(user_id=user_id, id=account_id)
+    if expected_type is not None:
+        queryset = queryset.filter(account_type=expected_type)
+    return queryset.first()
+
+
 def get_account_balance(*, account: LedgerAccount) -> Decimal:
     totals = compute_entry_balance_totals(account.entries.all(), account_id=account.id)
     if account.account_type in {LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.EXPENSE}:
