@@ -1,10 +1,18 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAccountingStore } from '@/domains/accounting/store';
+import {
+  useAnnualExpenseStore,
+  useAnnualIncomeStore,
+  type AnnualExpenseEntry,
+  type AnnualIncomeEntry,
+} from '@/domains/data-input';
 import type {
   LedgerAccountType,
   LedgerEntrySide,
   LedgerTransactionWritePayload,
+  QuickLedgerMovementType,
+  QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
 
 type TransactionFormRow = {
@@ -27,6 +35,8 @@ function toNumber(raw: string): number {
 
 export function useAccountingPage() {
   const store = useAccountingStore();
+  const incomeStore = useAnnualIncomeStore('core');
+  const expenseStore = useAnnualExpenseStore('core');
   const { loading, accountCreationLoading, transactionCreationLoading, error } = storeToRefs(store);
   const { accounts, transactions, monthlySummary } = storeToRefs(store);
 
@@ -37,6 +47,19 @@ export function useAccountingPage() {
     account_type: 'asset' as LedgerAccountType,
     currency: 'EUR',
     origin: 'user' as const,
+    notes: '',
+  });
+
+  const quickEntryForm = reactive({
+    movement_type: 'expense' as QuickLedgerMovementType,
+    booking_date: new Date().toISOString().slice(0, 10),
+    value_date: new Date().toISOString().slice(0, 10),
+    description: '',
+    amount: '',
+    account_id: null as number | null,
+    counterparty_account_id: null as number | null,
+    annual_income_entry_id: null as number | null,
+    annual_expense_entry_id: null as number | null,
     notes: '',
   });
 
@@ -114,6 +137,37 @@ export function useAccountingPage() {
   const accountMap = computed(
     () => new Map(accounts.value.map((account) => [account.id, account])),
   );
+  const liquidityAccounts = computed(() =>
+    accounts.value.filter((account) => account.account_type === 'asset'),
+  );
+  const incomeOptions = computed<AnnualIncomeEntry[]>(() =>
+    incomeStore.entries.value
+      .filter((entry) => entry.fiscalYear === selectedYear.value)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+  );
+  const expenseOptions = computed<AnnualExpenseEntry[]>(() =>
+    expenseStore.entries.value
+      .filter((entry) => entry.fiscalYear === selectedYear.value)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+  );
+  const transferCounterpartyOptions = computed(() =>
+    liquidityAccounts.value.filter((account) => account.id !== quickEntryForm.account_id),
+  );
+  const quickEntryReady = computed(() => {
+    if (!quickEntryForm.description.trim()) return false;
+    if (!quickEntryForm.booking_date || !quickEntryForm.value_date) return false;
+    if (toNumber(quickEntryForm.amount) <= 0) return false;
+    if (quickEntryForm.account_id == null) return false;
+    if (quickEntryForm.movement_type === 'transfer') {
+      return quickEntryForm.counterparty_account_id != null;
+    }
+    return true;
+  });
+  const quickMovementTypeOptions: { value: QuickLedgerMovementType; label: string }[] = [
+    { value: 'income', label: 'Ingreso' },
+    { value: 'expense', label: 'Gasto' },
+    { value: 'transfer', label: 'Transferencia' },
+  ];
 
   watch(
     () => transactionForm.entries.map((entry) => entry.account_id),
@@ -126,6 +180,15 @@ export function useAccountingPage() {
       });
     },
     { deep: true },
+  );
+
+  watch(
+    () => quickEntryForm.movement_type,
+    (movementType) => {
+      quickEntryForm.counterparty_account_id = null;
+      if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
+      if (movementType !== 'expense') quickEntryForm.annual_expense_entry_id = null;
+    },
   );
 
   const debitTotal = computed(() =>
@@ -189,6 +252,19 @@ export function useAccountingPage() {
     ];
   }
 
+  function resetQuickEntryForm() {
+    quickEntryForm.movement_type = 'expense';
+    quickEntryForm.booking_date = new Date().toISOString().slice(0, 10);
+    quickEntryForm.value_date = quickEntryForm.booking_date;
+    quickEntryForm.description = '';
+    quickEntryForm.amount = '';
+    quickEntryForm.account_id = null;
+    quickEntryForm.counterparty_account_id = null;
+    quickEntryForm.annual_income_entry_id = null;
+    quickEntryForm.annual_expense_entry_id = null;
+    quickEntryForm.notes = '';
+  }
+
   function addEntry(side: LedgerEntrySide) {
     transactionForm.entries.push({
       key: ++rowId,
@@ -207,6 +283,10 @@ export function useAccountingPage() {
 
   async function reloadPeriod() {
     successMessage.value = null;
+    await Promise.all([
+      incomeStore.loadAll(selectedYear.value),
+      expenseStore.loadAll(selectedYear.value),
+    ]);
     await store.setPeriod(selectedYear.value, selectedMonth.value);
   }
 
@@ -245,8 +325,39 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento contable registrado.';
   }
 
+  async function submitQuickEntry() {
+    successMessage.value = null;
+    const payload: QuickLedgerTransactionWritePayload = {
+      movement_type: quickEntryForm.movement_type,
+      booking_date: quickEntryForm.booking_date,
+      value_date: quickEntryForm.value_date,
+      description: quickEntryForm.description.trim(),
+      amount: formatDecimalInput(quickEntryForm.amount),
+      account_id: quickEntryForm.account_id ?? 0,
+      notes: quickEntryForm.notes.trim(),
+      status: 'posted',
+      origin: 'manual',
+      ...(quickEntryForm.movement_type === 'transfer'
+        ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
+        : {}),
+      ...(quickEntryForm.movement_type === 'income'
+        ? { annual_income_entry_id: quickEntryForm.annual_income_entry_id }
+        : {}),
+      ...(quickEntryForm.movement_type === 'expense'
+        ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
+        : {}),
+    };
+    await store.createQuickEntry(payload);
+    resetQuickEntryForm();
+    successMessage.value = 'Movimiento rapido registrado.';
+  }
+
   onMounted(() => {
-    void store.refreshAll();
+    void Promise.all([
+      store.refreshAll(),
+      incomeStore.loadAll(selectedYear.value),
+      expenseStore.loadAll(selectedYear.value),
+    ]);
   });
 
   return {
@@ -263,8 +374,15 @@ export function useAccountingPage() {
     yearOptions,
     monthOptions,
     accountTypeOptions,
+    quickMovementTypeOptions,
     accountForm,
+    quickEntryForm,
     transactionForm,
+    liquidityAccounts,
+    incomeOptions,
+    expenseOptions,
+    transferCounterpartyOptions,
+    quickEntryReady,
     debitTotal,
     creditTotal,
     transactionBalanced,
@@ -273,6 +391,7 @@ export function useAccountingPage() {
     removeEntry,
     reloadPeriod,
     submitAccount,
+    submitQuickEntry,
     submitTransaction,
   };
 }

@@ -6,6 +6,7 @@ import type {
   LedgerTransaction,
   LedgerTransactionWritePayload,
   MonthlyAccountingSummary,
+  QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
 import { toApiErrorMessage } from '@/lib/errors';
 
@@ -76,6 +77,20 @@ export const useAccountingStore = defineStore('accounting', {
       this.error = null;
       try {
         await coreAccountingApi.createTransaction(payload);
+        await this.refreshAll();
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.transactionCreationLoading = false;
+      }
+    },
+
+    async createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
+      this.transactionCreationLoading = true;
+      this.error = null;
+      try {
+        await coreAccountingApi.createQuickEntry(payload);
         await this.refreshAll();
       } catch (error: unknown) {
         this.error = toApiErrorMessage(error);

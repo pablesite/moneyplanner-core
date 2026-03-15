@@ -78,11 +78,28 @@ function makeState(overrides: Record<string, unknown> = {}) {
       { value: 3, label: 'Marzo' },
     ],
     accountTypeOptions: [{ value: 'asset', label: 'Activo' }],
+    quickMovementTypeOptions: [
+      { value: 'income', label: 'Ingreso' },
+      { value: 'expense', label: 'Gasto' },
+      { value: 'transfer', label: 'Transferencia' },
+    ],
     accountForm: {
       name: '',
       account_type: 'asset',
       currency: 'EUR',
       origin: 'user',
+      notes: '',
+    },
+    quickEntryForm: {
+      movement_type: 'expense',
+      booking_date: '2026-03-15',
+      value_date: '2026-03-15',
+      description: 'Compra semanal',
+      amount: '100.00',
+      account_id: 1,
+      counterparty_account_id: null,
+      annual_income_entry_id: null,
+      annual_expense_entry_id: null,
       notes: '',
     },
     transactionForm: {
@@ -113,6 +130,18 @@ function makeState(overrides: Record<string, unknown> = {}) {
     },
     debitTotal: computed(() => 100),
     creditTotal: computed(() => 100),
+    liquidityAccounts: computed(() => [
+      {
+        id: 1,
+        name: 'Cuenta corriente',
+        account_type: 'asset',
+        currency: 'EUR',
+      },
+    ]),
+    incomeOptions: computed(() => [{ id: 11, name: 'Nomina' }]),
+    expenseOptions: computed(() => [{ id: 22, name: 'Supermercado' }]),
+    transferCounterpartyOptions: computed(() => []),
+    quickEntryReady: computed(() => true),
     transactionBalanced: computed(() => true),
     summaryRows: computed(() => [
       {
@@ -129,6 +158,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     removeEntry: vi.fn(),
     reloadPeriod: vi.fn(),
     submitAccount: vi.fn(),
+    submitQuickEntry: vi.fn(),
     submitTransaction: vi.fn(),
     ...overrides,
   };
@@ -146,7 +176,8 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Libro diario operativo');
     expect(wrapper.text()).toContain('Cuenta corriente');
     expect(wrapper.text()).toContain('Nomina marzo');
-    expect(wrapper.text()).toContain('Registrar movimiento balanceado');
+    expect(wrapper.text()).toContain('Registrar movimiento diario');
+    expect(wrapper.text()).toContain('Registrar movimiento rapido');
   });
 
   it('shows empty state and error message when needed', () => {
@@ -174,5 +205,19 @@ describe('AccountingMovementsView', () => {
     await button?.trigger('click');
 
     expect(state.addEntry).toHaveBeenCalledWith('debit');
+  });
+
+  it('submits fast entry from the primary form', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
+    const wrapper = mount(AccountingMovementsView);
+
+    const button = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Registrar movimiento rapido'));
+    await button?.trigger('submit');
+    await wrapper.find('form.ui-accounting-transaction-form').trigger('submit.prevent');
+
+    expect(state.submitQuickEntry).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import {
+  coreAccountingApi,
+  type LedgerEntry,
+  type MonthlyAccountingSummary,
+} from '@/domains/accounting';
 import { coreApi } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import {
@@ -142,6 +147,7 @@ type BudgetSectionModel = {
 
 type BudgetEntryViewMode = 'all' | 'recurrent' | 'one_off';
 type BudgetExecutionTone = 'neutral' | 'good' | 'warn' | 'danger';
+type BudgetExecutionSource = 'ledger' | 'checkin' | 'none';
 type BudgetExecutionPreview = {
   ratio: number;
   widthPct: number;
@@ -214,6 +220,10 @@ const incomeExecutionLoading = ref(false);
 const incomeExecutionBusyEntryId = ref<number | null>(null);
 const incomeExecutionError = ref<string | null>(null);
 const incomeAdjustAmounts = ref<Record<number, string>>({});
+const accountingExecutionLoading = ref(false);
+const accountingExecutionError = ref<string | null>(null);
+const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);
+const accountingPostedEntries = ref<LedgerEntry[]>([]);
 const liquidityMonthlySummary = ref<LiquidityMonthlySummaryResponse | null>(null);
 const liquidityExecutionLoading = ref(false);
 const liquidityExecutionBusyAssetId = ref<number | null>(null);
@@ -485,15 +495,44 @@ const incomeSummaryByMonth = computed(() => {
   return map;
 });
 
+const accountingSummaryByMonth = computed(() => {
+  const map = new Map<number, MonthlyAccountingSummary['months'][number]>();
+  for (const row of accountingMonthlySummary.value?.months ?? []) {
+    map.set(row.month, row);
+  }
+  return map;
+});
+
+const accountingIncomeExecutedByEntryId = computed(() => {
+  const map = new Map<number, number>();
+  for (const entry of accountingPostedEntries.value) {
+    if (entry.annual_income_entry_id == null) continue;
+    map.set(
+      entry.annual_income_entry_id,
+      (map.get(entry.annual_income_entry_id) ?? 0) + toNumberOrZero(entry.amount),
+    );
+  }
+  return map;
+});
+
+const accountingExpenseExecutedByEntryId = computed(() => {
+  const map = new Map<number, number>();
+  for (const entry of accountingPostedEntries.value) {
+    if (entry.annual_expense_entry_id == null) continue;
+    map.set(
+      entry.annual_expense_entry_id,
+      (map.get(entry.annual_expense_entry_id) ?? 0) + toNumberOrZero(entry.amount),
+    );
+  }
+  return map;
+});
+
 const selectedExpenseSummaryMonth = computed(() => {
   return expenseSummaryByMonth.value.get(selectedExecutionMonth.value) ?? null;
 });
 
 const selectedExpenseMonthPlanned = computed(() =>
   toNumberOrZero(selectedExpenseSummaryMonth.value?.planned),
-);
-const selectedExpenseMonthExecuted = computed(() =>
-  toNumberOrZero(selectedExpenseSummaryMonth.value?.executed),
 );
 const selectedExpenseMonthDeviation = computed(
   () => selectedExpenseMonthExecuted.value - selectedExpenseMonthPlanned.value,
@@ -505,12 +544,23 @@ const monthlyIncomeExecutionEntries = computed(() => {
     .map((entry) => {
       const checkin = incomeCheckinsByEntryId.value[entry.id] ?? null;
       const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
+      const ledgerExecuted = accountingIncomeExecutedByEntryId.value.get(entry.id) ?? null;
+      const fallbackExecuted =
+        checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
+      const executionSource: BudgetExecutionSource =
+        ledgerExecuted != null ? 'ledger' : checkin ? 'checkin' : 'none';
       return {
         entry,
         planned,
         checkin,
         executed:
-          checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : null,
+          executionSource === 'ledger'
+            ? ledgerExecuted
+            : executionSource === 'checkin'
+              ? fallbackExecuted
+              : null,
+        ledgerExecuted,
+        executionSource,
       };
     })
     .filter((row) => row.planned > 0)
@@ -521,10 +571,7 @@ const selectedIncomeMonthPlanned = computed(() =>
   monthlyIncomeExecutionEntries.value.reduce((sum, row) => sum + row.planned, 0),
 );
 const selectedIncomeMonthExecuted = computed(() =>
-  monthlyIncomeExecutionEntries.value.reduce(
-    (sum, row) => sum + (row.checkin && row.executed != null ? row.executed : 0),
-    0,
-  ),
+  monthlyIncomeExecutionEntries.value.reduce((sum, row) => sum + (row.executed ?? 0), 0),
 );
 const selectedIncomeMonthDeviation = computed(
   () => selectedIncomeMonthExecuted.value - selectedIncomeMonthPlanned.value,
@@ -532,7 +579,9 @@ const selectedIncomeMonthDeviation = computed(
 const selectedIncomeMonthCompletionRatio = computed(() => {
   const total = monthlyIncomeExecutionEntries.value.length;
   if (!total) return 1;
-  const checked = monthlyIncomeExecutionEntries.value.filter((row) => !!row.checkin).length;
+  const checked = monthlyIncomeExecutionEntries.value.filter(
+    (row) => row.executionSource !== 'none',
+  ).length;
   return checked / total;
 });
 
@@ -593,8 +642,7 @@ const selectedMonthlyCloseCompletionRatio = computed(() => {
       ? (liquidityMonthlySummary.value?.completion_ratio ?? 0)
       : 1,
     selectedIncomeMonthCompletionRatio.value,
-    selectedExpenseSummaryMonth.value?.completion_ratio ??
-      (monthlyExpenseExecutionEntries.value.length ? 0 : 1),
+    monthlyExpenseCoverageSummary.value.ratio,
   ];
   return ratios.reduce((sum, r) => sum + r, 0) / ratios.length;
 });
@@ -617,12 +665,23 @@ const monthlyExpenseExecutionEntries = computed(() => {
     .map((entry) => {
       const checkin = expenseCheckinsByEntryId.value[entry.id] ?? null;
       const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
+      const ledgerExecuted = accountingExpenseExecutedByEntryId.value.get(entry.id) ?? null;
+      const fallbackExecuted =
+        checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
+      const executionSource: BudgetExecutionSource =
+        ledgerExecuted != null ? 'ledger' : checkin ? 'checkin' : 'none';
       return {
         entry,
         planned,
         checkin,
         executed:
-          checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : null,
+          executionSource === 'ledger'
+            ? ledgerExecuted
+            : executionSource === 'checkin'
+              ? fallbackExecuted
+              : null,
+        ledgerExecuted,
+        executionSource,
       };
     })
     .filter((row) => row.planned > 0)
@@ -634,6 +693,10 @@ const monthlyExpenseExecutionEntries = computed(() => {
         a.entry.name.localeCompare(b.entry.name, 'es'),
     );
 });
+
+const selectedExpenseMonthExecuted = computed(() =>
+  monthlyExpenseExecutionEntries.value.reduce((sum, row) => sum + (row.executed ?? 0), 0),
+);
 
 const groupedMonthlyExpenseExecutionEntries = computed(() => {
   type Row = (typeof monthlyExpenseExecutionEntries.value)[number];
@@ -665,9 +728,9 @@ const groupedMonthlyExpenseExecutionEntries = computed(() => {
     }
     group.rows.push(row);
     group.plannedTotal += row.planned;
-    if (row.checkin) {
+    if (row.executionSource !== 'none') {
       group.checkedCount += 1;
-      if (row.checkin.status !== 'skipped' && row.executed != null) {
+      if (row.executed != null) {
         group.executedTotal += row.executed;
       }
     }
@@ -693,6 +756,7 @@ function buildMonthlyResultBreakdown<
     planned: number;
     checkin: { status: 'confirmed' | 'adjusted' | 'skipped' } | null;
     executed: number | null;
+    executionSource: BudgetExecutionSource;
   },
 >(
   rows: TRow[],
@@ -729,14 +793,8 @@ function buildMonthlyResultBreakdown<
     const categoryKey = row.entry.category;
     const subcategoryKey = row.entry.subcategory;
     const planned = Number.isFinite(row.planned) ? row.planned : 0;
-    const executed =
-      row.checkin &&
-      row.checkin.status !== 'skipped' &&
-      row.executed != null &&
-      Number.isFinite(row.executed)
-        ? row.executed
-        : 0;
-    const isChecked = !!row.checkin;
+    const executed = row.executed != null && Number.isFinite(row.executed) ? row.executed : 0;
+    const isChecked = row.executionSource !== 'none';
 
     let group = groups.get(categoryKey);
     if (!group) {
@@ -1078,16 +1136,96 @@ const resultReconciliationCompositionRows = computed(() => {
 });
 
 const executionStatusLabel = computed(() => {
-  if (!expenseMonthlySummary.value) return 'Cargando contabilidad';
-  if (expenseMonthlySummary.value.has_executed_data) return 'Activo (gastos)';
-  return 'Sin check-ins (gastos)';
+  if (accountingExecutionLoading.value) return 'Sincronizando ledger';
+  if (accountingExecutionError.value) return 'Fallback legacy';
+  const monthsWithLedger = Array.from(accountingSummaryByMonth.value.values()).filter(
+    (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
+  ).length;
+  if (monthsWithLedger > 0) return 'Ledger + fallback';
+  if (!expenseMonthlySummary.value) return 'Cargando ejecucion';
+  if (expenseMonthlySummary.value.has_executed_data) return 'Fallback legacy';
+  return 'Sin ejecucion';
 });
 const executionStatusDetail = computed(() => {
-  if (!expenseMonthlySummary.value) {
-    return 'Cargando agregados mensuales de gastos (plan vs ejecutado).';
+  if (accountingExecutionError.value) {
+    return 'No se pudo leer accounting. El cierre mensual sigue usando check-ins legacy como fallback.';
   }
-  return `Gastos: ${expenseMonthlySummary.value.months_with_checkins}/12 meses con check-ins. Ingresos sigue pendiente en 14C.`;
+  const monthsWithLedger = Array.from(accountingSummaryByMonth.value.values()).filter(
+    (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
+  ).length;
+  if (monthsWithLedger > 0) {
+    return `Ledger enlazado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa ledger por linea cuando existe enlace y check-ins legacy solo como fallback.`;
+  }
+  if (!expenseMonthlySummary.value) {
+    return 'Cargando agregados mensuales para ledger y check-ins legacy.';
+  }
+  return `Sin cobertura ledger todavia. Check-ins legacy disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
 });
+
+const monthlyIncomeCoverageSummary = computed(() => {
+  const total = monthlyIncomeExecutionEntries.value.length;
+  const viaLedger = monthlyIncomeExecutionEntries.value.filter(
+    (row) => row.executionSource === 'ledger',
+  ).length;
+  const viaFallback = monthlyIncomeExecutionEntries.value.filter(
+    (row) => row.executionSource === 'checkin',
+  ).length;
+  const pending = total - viaLedger - viaFallback;
+  return {
+    total,
+    viaLedger,
+    viaFallback,
+    pending,
+    ratio: total > 0 ? (viaLedger + viaFallback) / total : 1,
+  };
+});
+
+const monthlyExpenseCoverageSummary = computed(() => {
+  const total = monthlyExpenseExecutionEntries.value.length;
+  const viaLedger = monthlyExpenseExecutionEntries.value.filter(
+    (row) => row.executionSource === 'ledger',
+  ).length;
+  const viaFallback = monthlyExpenseExecutionEntries.value.filter(
+    (row) => row.executionSource === 'checkin',
+  ).length;
+  const pending = total - viaLedger - viaFallback;
+  return {
+    total,
+    viaLedger,
+    viaFallback,
+    pending,
+    ratio: total > 0 ? (viaLedger + viaFallback) / total : 1,
+  };
+});
+
+function isLedgerBackedExecutionRow(row: { executionSource: BudgetExecutionSource }): boolean {
+  return row.executionSource === 'ledger';
+}
+
+async function refreshAccountingExecutionData(): Promise<void> {
+  accountingExecutionLoading.value = true;
+  accountingExecutionError.value = null;
+  try {
+    const [summaryResponse, transactionsResponse] = await Promise.all([
+      coreAccountingApi.getMonthlySummary(fiscalYear.value),
+      coreAccountingApi.getTransactions({
+        year: fiscalYear.value,
+        month: selectedExecutionMonth.value,
+        status: 'posted',
+      }),
+    ]);
+    accountingMonthlySummary.value = summaryResponse.data ?? null;
+    accountingPostedEntries.value = (transactionsResponse.data ?? []).flatMap(
+      (transaction) => transaction.entries,
+    );
+  } catch (e: unknown) {
+    accountingExecutionError.value = toApiErrorMessage(e);
+    accountingMonthlySummary.value = null;
+    accountingPostedEntries.value = [];
+  } finally {
+    accountingExecutionLoading.value = false;
+  }
+}
 
 function formatMoney(value: number, decimals = 2): string {
   return new Intl.NumberFormat('es-ES', {
@@ -1875,6 +2013,7 @@ watch(
   (year) => {
     void Promise.all([
       refreshBudgetData(year),
+      refreshAccountingExecutionData(),
       refreshIncomeExecutionData(),
       refreshExpenseExecutionData(),
       refreshLiquidityExecutionData(),
@@ -1885,6 +2024,7 @@ watch(
 
 watch(selectedExecutionMonth, () => {
   void Promise.all([
+    refreshAccountingExecutionData(),
     loadIncomeCheckinsForSelectedMonth(),
     loadExpenseCheckinsForSelectedMonth(),
     refreshLiquidityExecutionData(),
@@ -2096,6 +2236,10 @@ watch(
             </button>
           </div>
           <h2 v-else class="ui-budget-checkin-title">Check-in mensual de gastos</h2>
+          <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
+            Ledger por linea cuando exista enlace a presupuesto y fallback explicito a check-ins
+            legacy para el resto.
+          </p>
           <p class="ui-budget-checkin-subtitle">
             Cierre mensual rápido de `Gastos` (14C v1). `Ingresos` se integrará después con el mismo
             patrón.
@@ -2141,9 +2285,7 @@ watch(
         </article>
         <article class="ui-budget-checkin-kpi">
           <span>Completitud</span>
-          <strong>{{
-            formatPercent(selectedExpenseSummaryMonth?.completion_ratio ?? null, 0)
-          }}</strong>
+          <strong>{{ formatPercent(monthlyExpenseCoverageSummary.ratio, 0) }}</strong>
         </article>
       </div>
 
@@ -2153,6 +2295,14 @@ watch(
           No hay gastos previstos para este mes con los filtros actuales.
         </div>
         <div v-else class="ui-budget-checkin-groups-box">
+          <div class="ui-budget-execution-note">
+            <strong>Cobertura del mes</strong>
+            <span>
+              {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger ·
+              {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
+              {{ monthlyExpenseCoverageSummary.pending }} pendientes
+            </span>
+          </div>
           <details
             v-for="group in groupedMonthlyExpenseExecutionEntries"
             :key="`expense-checkin-group-${group.categoryKey}`"
@@ -2188,12 +2338,25 @@ watch(
                 class="ui-budget-checkin-row"
               >
                 <div class="ui-budget-checkin-row-main">
+                  <div
+                    v-if="row.executionSource !== 'none'"
+                    class="ui-budget-execution-chip"
+                    :class="{ 'ui-budget-execution-chip-ledger': row.executionSource === 'ledger' }"
+                  >
+                    {{ row.executionSource === 'ledger' ? 'Ledger' : 'Fallback legacy' }}
+                  </div>
                   <div class="ui-budget-checkin-row-title" :title="expenseCheckinRowSummary(row)">
                     {{ expenseCheckinRowSummary(row) }}
                     <span class="ui-budget-checkin-row-planned">
                       (Previsto {{ formatMoney(row.planned) }} €)
                     </span>
                     <template v-if="row.entry.expenseType === 'one_off'"> · Puntual</template>
+                  </div>
+                  <div v-if="row.executionSource === 'ledger'" class="ui-budget-checkin-row-state">
+                    <strong>Ledger</strong>
+                    <template v-if="row.executed != null"
+                      >({{ formatMoney(row.executed) }} EUR)</template
+                    >
                   </div>
                   <div v-if="row.checkin" class="ui-budget-checkin-row-state">
                     <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
@@ -2209,7 +2372,10 @@ watch(
                       <button
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
-                        :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                        :disabled="
+                          isLedgerBackedExecutionRow(row) ||
+                          expenseExecutionBusyEntryId === row.entry.id
+                        "
                         title="Poner importe ejecutado a 0"
                         @click="resetExpenseCheckinDraftValue(row, 'zero')"
                       >
@@ -2218,7 +2384,10 @@ watch(
                       <button
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
-                        :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                        :disabled="
+                          isLedgerBackedExecutionRow(row) ||
+                          expenseExecutionBusyEntryId === row.entry.id
+                        "
                         title="Restaurar importe previsto del mes"
                         @click="resetExpenseCheckinDraftValue(row, 'planned')"
                       >
@@ -2229,6 +2398,7 @@ watch(
                       v-model="expenseAdjustAmounts[row.entry.id]"
                       inputmode="decimal"
                       class="input ui-data-field"
+                      :disabled="isLedgerBackedExecutionRow(row)"
                       placeholder="Importe ejecutado"
                       @focus="ensureExpenseAdjustAmountPrefilled(row)"
                       @blur="onExpenseAdjustAmountBlur(row)"
@@ -2238,8 +2408,11 @@ watch(
                   <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
                     <input
                       type="checkbox"
-                      :checked="!!row.checkin"
-                      :disabled="expenseExecutionBusyEntryId === row.entry.id"
+                      :checked="row.executionSource !== 'none'"
+                      :disabled="
+                        isLedgerBackedExecutionRow(row) ||
+                        expenseExecutionBusyEntryId === row.entry.id
+                      "
                       aria-label="Confirmar check-in del mes"
                       @change="
                         onExpenseCheckinCheckboxToggle(
@@ -2468,6 +2641,10 @@ watch(
             Confirma o ajusta ingresos recurrentes del mes. Los puntuales se integraran cuando
             tengan mes objetivo.
           </p>
+          <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
+            Ledger por linea cuando exista enlace a presupuesto y fallback legacy solo cuando esa
+            cobertura todavia no exista.
+          </p>
         </div>
       </div>
       <div class="ui-budget-checkin-summary-grid">
@@ -2506,6 +2683,14 @@ watch(
           No hay ingresos recurrentes previstos para este mes.
         </div>
         <div v-else class="ui-budget-checkin-groups-box">
+          <div class="ui-budget-execution-note">
+            <strong>Cobertura del mes</strong>
+            <span>
+              {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger ·
+              {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy ·
+              {{ monthlyIncomeCoverageSummary.pending }} pendientes
+            </span>
+          </div>
           <div class="ui-budget-checkin-group">
             <div class="ui-budget-checkin-group-summary">
               <div class="ui-budget-checkin-group-title-wrap">
@@ -2535,10 +2720,23 @@ watch(
                 class="ui-budget-checkin-row"
               >
                 <div class="ui-budget-checkin-row-main">
+                  <div
+                    v-if="row.executionSource !== 'none'"
+                    class="ui-budget-execution-chip"
+                    :class="{ 'ui-budget-execution-chip-ledger': row.executionSource === 'ledger' }"
+                  >
+                    {{ row.executionSource === 'ledger' ? 'Ledger' : 'Fallback legacy' }}
+                  </div>
                   <div class="ui-budget-checkin-row-title" :title="incomeCheckinRowSummary(row)">
                     {{ incomeCheckinRowSummary(row) }}
                     <span class="ui-budget-checkin-row-planned"
                       >(Previsto {{ formatMoney(row.planned) }} €)</span
+                    >
+                  </div>
+                  <div v-if="row.executionSource === 'ledger'" class="ui-budget-checkin-row-state">
+                    <strong>Ledger</strong>
+                    <template v-if="row.executed != null"
+                      >({{ formatMoney(row.executed) }} EUR)</template
                     >
                   </div>
                   <div v-if="row.checkin" class="ui-budget-checkin-row-state">
@@ -2554,7 +2752,10 @@ watch(
                       <button
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
-                        :disabled="incomeExecutionBusyEntryId === row.entry.id"
+                        :disabled="
+                          isLedgerBackedExecutionRow(row) ||
+                          incomeExecutionBusyEntryId === row.entry.id
+                        "
                         @click="resetIncomeCheckinDraftValue(row, 'zero')"
                       >
                         Borrar
@@ -2562,7 +2763,10 @@ watch(
                       <button
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
-                        :disabled="incomeExecutionBusyEntryId === row.entry.id"
+                        :disabled="
+                          isLedgerBackedExecutionRow(row) ||
+                          incomeExecutionBusyEntryId === row.entry.id
+                        "
                         @click="resetIncomeCheckinDraftValue(row, 'planned')"
                       >
                         Previsto
@@ -2572,6 +2776,7 @@ watch(
                       v-model="incomeAdjustAmounts[row.entry.id]"
                       inputmode="decimal"
                       class="input ui-data-field"
+                      :disabled="isLedgerBackedExecutionRow(row)"
                       placeholder="Importe ejecutado"
                       @focus="ensureIncomeAdjustAmountPrefilled(row)"
                       @blur="onIncomeAdjustAmountBlur(row)"
@@ -2581,8 +2786,11 @@ watch(
                   <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
                     <input
                       type="checkbox"
-                      :checked="!!row.checkin"
-                      :disabled="incomeExecutionBusyEntryId === row.entry.id"
+                      :checked="row.executionSource !== 'none'"
+                      :disabled="
+                        isLedgerBackedExecutionRow(row) ||
+                        incomeExecutionBusyEntryId === row.entry.id
+                      "
                       @change="
                         onIncomeCheckinCheckboxToggle(
                           row,
@@ -4000,6 +4208,11 @@ watch(
   padding: 0 8px 8px 28px;
 }
 
+.ui-budget-checkin-subtitle-note {
+  margin-top: 6px;
+  font-size: 0.88rem;
+}
+
 .ui-budget-checkin-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4019,6 +4232,43 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ui-budget-execution-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.ui-budget-execution-note strong {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ui-budget-execution-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ui-budget-execution-chip-ledger {
+  background: rgba(45, 212, 191, 0.16);
+  color: rgb(153, 246, 228);
 }
 
 .ui-budget-checkin-row-planned {

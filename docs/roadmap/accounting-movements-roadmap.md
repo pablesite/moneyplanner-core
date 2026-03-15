@@ -9,17 +9,25 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
 3. La UX canonica de frontend vive en `../frontend/accounting-movements-ux-notes.md`.
 4. El trabajo debe ejecutarse en PRs pequenas y validarse dentro de Docker.
 
-## Estado real backend (2026-03-15)
-1. Fase 1 backend: implementada en codigo
-   - app `accounting`, modelos `LedgerAccount`/`LedgerTransaction`/`LedgerEntry`, CRUD API, validacion de balance y resumen mensual base
-   - cobertura en `backend/accounting/tests/test_accounting.py`
-2. Fase 2 backend: parcialmente implementada
-   - soporte explicito para `income`, `expense` y `transfer` via `POST /api/accounting/transactions/quick-entry/`
+## Estado real (2026-03-15)
+1. Fase 1: implementada en codigo
+   - backend `accounting` con `LedgerAccount`/`LedgerTransaction`/`LedgerEntry`, CRUD API, validacion de balance y resumen mensual base
+   - frontend con dominio dedicado, workspace de movimientos, lista cronologica y formulario avanzado
+   - cobertura minima en `backend/accounting/tests/test_accounting.py`, `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
+2. Fase 2: avanzada pero no cerrada
+   - backend disponible para `income`, `expense` y `transfer` via `POST /api/accounting/transactions/quick-entry/`
+   - frontend con alta rapida operativa sobre `quick-entry` y fallback a asiento balanceado manual en modo avanzado
    - saldos actuales y agregados por periodo disponibles via `current_balance` y `GET /api/accounting/accounts/balances/`
-3. Pendiente backend para fases posteriores
-   - cobertura/fallback de cierre mensual basada en ledger
-   - actividad contable contextual en patrimonio
+   - pendiente rematar UX/cobertura para declarar la fase completamente cerrada
+3. Fase 3: iniciada de forma parcial
+   - `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
+   - el fallback a check-ins legacy queda explicito cuando no hay cobertura ledger
+   - cobertura especifica en `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
+   - pendiente extender el enfoque a liquidez y endurecer la logica de cobertura parcial
+4. Fases posteriores pendientes
+   - actividad contable contextual mas profunda en patrimonio
    - compras de inversion y pagos de deuda con breakdown especializado
+   - sugerencias historicas derivadas del ledger
 
 ## Principios de trabajo
 1. PRs pequenas y reversibles.
@@ -61,6 +69,12 @@ Entregables:
 4. Documentacion
    - actualizar contratos si cambia algun comportamiento acordado
 
+Estado actual:
+1. Backend listo para la fase.
+2. Frontend ya expone alta rapida para `income`, `expense` y `transfer` en `frontend/src/views/AccountingMovementsView.vue`.
+3. El asiento balanceado manual sigue disponible como modo avanzado para no perder capacidad operativa.
+4. La fase queda funcionalmente muy avanzada, pero todavia no se marca cerrada hasta confirmar que la UX rapida cubre satisfactoriamente el flujo diario previsto.
+
 Criterios de salida:
 1. Los movimientos simples de liquidez se pueden registrar y consultar.
 2. Los saldos derivados son reproducibles desde ledger.
@@ -77,6 +91,11 @@ Entregables:
    - regresion sobre cierre mensual y casos de cobertura parcial
 4. Documentacion
    - notas de convivencia actualizadas si fuese necesario
+
+Estado actual:
+1. `BudgetDashboardView` ya mezcla ledger y fallback legacy para ingresos y gastos.
+2. Falta hacer ledger-aware la liquidez del cierre mensual.
+3. Falta consolidar la cobertura parcial como comportamiento estable de fase, no solo como primer corte de frontend.
 
 Criterios de salida:
 1. El cierre mensual puede operar con cobertura ledger completa o parcial.
