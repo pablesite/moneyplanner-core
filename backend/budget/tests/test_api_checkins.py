@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -10,6 +11,7 @@ from budget.models import (
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
 )
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 
 
 class AnnualIncomeApiCheckinsTests(APITestCase):
@@ -188,6 +190,72 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("year", response.data["error"]["details"])
+
+    def test_income_monthly_summary_prefers_ledger_and_reports_mixed_coverage(self):
+        recurring = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("24000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        AnnualIncomeMonthlyCheckin.objects.create(
+            user=self.user,
+            annual_income_entry=recurring,
+            fiscal_year=2026,
+            month=2,
+            status="adjusted",
+            executed_amount=Decimal("1950.00"),
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 31),
+            value_date=date(2026, 1, 31),
+            description="Nomina enero",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("2000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("2000.00"),
+            currency="EUR",
+            annual_income_entry=recurring,
+        )
+
+        response = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["executed_total"], "3950.00")
+        self.assertEqual(response.data["months_with_ledger"], 1)
+        self.assertEqual(response.data["months_with_fallback"], 1)
+        self.assertEqual(response.data["coverage_mode"], "mixed")
+        months = {row["month"]: row for row in response.data["months"]}
+        self.assertEqual(months[1]["executed"], "2000.00")
+        self.assertEqual(months[1]["coverage_mode"], "ledger")
+        self.assertEqual(months[2]["executed"], "1950.00")
+        self.assertEqual(months[2]["coverage_mode"], "checkin")
 
 
 class AnnualExpenseApiCheckinsTests(APITestCase):
@@ -370,3 +438,68 @@ class AnnualExpenseApiCheckinsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("year", response.data["error"]["details"])
+
+    def test_expense_monthly_summary_prefers_ledger_over_checkin_for_same_slot(self):
+        expense = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Supermercado",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        AnnualExpenseMonthlyCheckin.objects.create(
+            user=self.user,
+            annual_expense_entry=expense,
+            fiscal_year=2026,
+            month=3,
+            status="adjusted",
+            executed_amount=Decimal("90.00"),
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 15),
+            value_date=date(2026, 3, 15),
+            description="Compra marzo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+            annual_expense_entry=expense,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=cash,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/budget/annual-expense/monthly-summary/?year=2026")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["executed_total"], "120.00")
+        self.assertTrue(response.data["has_ledger_data"])
+        self.assertEqual(response.data["coverage_mode"], "ledger")
+        month = next(row for row in response.data["months"] if row["month"] == 3)
+        self.assertEqual(month["executed"], "120.00")
+        self.assertEqual(month["ledger_confirmed"], 1)
+        self.assertEqual(month["fallback_confirmed"], 0)
+        self.assertEqual(month["coverage_mode"], "ledger")

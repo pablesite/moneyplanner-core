@@ -1,6 +1,9 @@
 from decimal import Decimal, ROUND_HALF_UP
+from typing import cast
 
 from django.core.exceptions import ValidationError
+
+from accounting.models import LedgerEntry, LedgerTransaction
 
 from .models import (
     AnnualExpenseEntry,
@@ -140,6 +143,44 @@ def _round_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
+def _build_ledger_monthly_execution_map(
+    *,
+    user,
+    fiscal_year: int,
+    fk_name: str,
+    positive_side: str,
+) -> dict[tuple[int, int], Decimal]:
+    queryset = (
+        LedgerEntry.objects.filter(
+            transaction__user=user,
+            transaction__status=LedgerTransaction.Status.POSTED,
+            transaction__booking_date__year=fiscal_year,
+            **{f"{fk_name}__isnull": False},
+        )
+        .select_related("transaction")
+        .only(fk_name, "side", "amount", "transaction__booking_date")
+    )
+    totals: dict[tuple[int, int], Decimal] = {}
+    for row in queryset:
+        entry_id = getattr(row, f"{fk_name}_id")
+        if entry_id is None:
+            continue
+        key = (entry_id, row.transaction.booking_date.month)
+        signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+        totals[key] = totals.get(key, Decimal("0.00")) + signed_amount
+    return {key: _round_money(value) for key, value in totals.items()}
+
+
+def _resolve_coverage_mode(*, ledger_count: int, fallback_count: int) -> str:
+    if ledger_count > 0 and fallback_count > 0:
+        return "mixed"
+    if ledger_count > 0:
+        return "ledger"
+    if fallback_count > 0:
+        return "checkin"
+    return "none"
+
+
 def expense_entry_applies_to_fiscal_year(*, entry: AnnualExpenseEntry, fiscal_year: int) -> bool:
     if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
         return entry.fiscal_year == fiscal_year
@@ -205,22 +246,37 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         for item in checkins
         if 1 <= item.month <= 12
     }
+    ledger_by_key = _build_ledger_monthly_execution_map(
+        user=user,
+        fiscal_year=fiscal_year,
+        fk_name="annual_expense_entry",
+        positive_side=cast(str, LedgerEntry.Side.DEBIT),
+    )
 
     planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     executed_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     pending_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     confirmed_entries_by_month = {month: 0 for month in range(1, 13)}
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
+    ledger_entries_by_month = {month: 0 for month in range(1, 13)}
+    fallback_entries_by_month = {month: 0 for month in range(1, 13)}
 
     for entry in entries:
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
+            ledger_amount = ledger_by_key.get((entry.id, month))
+            if ledger_amount is not None:
+                ledger_entries_by_month[month] += 1
+                confirmed_entries_by_month[month] += 1
+                executed_by_month[month] += ledger_amount
+                continue
             checkin = checkins_by_key.get((entry.id, month))
             if checkin is None:
                 pending_by_month[month] += planned_amount
                 continue
+            fallback_entries_by_month[month] += 1
             confirmed_entries_by_month[month] += 1
             if checkin.status == AnnualExpenseMonthlyCheckin.Status.SKIPPED:
                 continue
@@ -233,15 +289,29 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
 
     months_payload = []
     months_with_checkins = 0
+    months_with_ledger = 0
+    months_with_fallback = 0
+    months_with_coverage = 0
     expected_slots_total = 0
     confirmed_slots_total = 0
+    ledger_slots_total = 0
+    fallback_slots_total = 0
     for month in range(1, 13):
         expected = expected_entries_by_month[month]
         confirmed = confirmed_entries_by_month[month]
+        ledger_count = ledger_entries_by_month[month]
+        fallback_count = fallback_entries_by_month[month]
         expected_slots_total += expected
         confirmed_slots_total += confirmed
-        if confirmed > 0:
+        ledger_slots_total += ledger_count
+        fallback_slots_total += fallback_count
+        if fallback_count > 0:
             months_with_checkins += 1
+            months_with_fallback += 1
+        if ledger_count > 0:
+            months_with_ledger += 1
+        if confirmed > 0:
+            months_with_coverage += 1
         completion_ratio = 1.0 if expected == 0 else (confirmed / expected)
         months_payload.append(
             {
@@ -252,6 +322,12 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
                 "completion_ratio": round(completion_ratio, 4),
                 "checkins_confirmed": confirmed,
                 "checkins_expected": expected,
+                "ledger_confirmed": ledger_count,
+                "fallback_confirmed": fallback_count,
+                "coverage_mode": _resolve_coverage_mode(
+                    ledger_count=ledger_count,
+                    fallback_count=fallback_count,
+                ),
             }
         )
 
@@ -268,7 +344,15 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "has_executed_data": months_with_checkins > 0,
+        "months_with_ledger": months_with_ledger,
+        "months_with_fallback": months_with_fallback,
+        "months_with_coverage": months_with_coverage,
+        "has_ledger_data": ledger_slots_total > 0,
+        "has_executed_data": confirmed_slots_total > 0,
+        "coverage_mode": _resolve_coverage_mode(
+            ledger_count=ledger_slots_total,
+            fallback_count=fallback_slots_total,
+        ),
     }
 
 
@@ -336,22 +420,37 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         for item in checkins
         if 1 <= item.month <= 12
     }
+    ledger_by_key = _build_ledger_monthly_execution_map(
+        user=user,
+        fiscal_year=fiscal_year,
+        fk_name="annual_income_entry",
+        positive_side=cast(str, LedgerEntry.Side.CREDIT),
+    )
 
     planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     executed_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     pending_by_month = {month: Decimal("0.00") for month in range(1, 13)}
     confirmed_entries_by_month = {month: 0 for month in range(1, 13)}
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
+    ledger_entries_by_month = {month: 0 for month in range(1, 13)}
+    fallback_entries_by_month = {month: 0 for month in range(1, 13)}
 
     for entry in entries:
         distribution = planned_income_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
+            ledger_amount = ledger_by_key.get((entry.id, month))
+            if ledger_amount is not None:
+                ledger_entries_by_month[month] += 1
+                confirmed_entries_by_month[month] += 1
+                executed_by_month[month] += ledger_amount
+                continue
             checkin = checkins_by_key.get((entry.id, month))
             if checkin is None:
                 pending_by_month[month] += planned_amount
                 continue
+            fallback_entries_by_month[month] += 1
             confirmed_entries_by_month[month] += 1
             if checkin.status == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
                 continue
@@ -364,15 +463,29 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
 
     months_payload = []
     months_with_checkins = 0
+    months_with_ledger = 0
+    months_with_fallback = 0
+    months_with_coverage = 0
     expected_slots_total = 0
     confirmed_slots_total = 0
+    ledger_slots_total = 0
+    fallback_slots_total = 0
     for month in range(1, 13):
         expected = expected_entries_by_month[month]
         confirmed = confirmed_entries_by_month[month]
+        ledger_count = ledger_entries_by_month[month]
+        fallback_count = fallback_entries_by_month[month]
         expected_slots_total += expected
         confirmed_slots_total += confirmed
-        if confirmed > 0:
+        ledger_slots_total += ledger_count
+        fallback_slots_total += fallback_count
+        if fallback_count > 0:
             months_with_checkins += 1
+            months_with_fallback += 1
+        if ledger_count > 0:
+            months_with_ledger += 1
+        if confirmed > 0:
+            months_with_coverage += 1
         completion_ratio = 1.0 if expected == 0 else (confirmed / expected)
         months_payload.append(
             {
@@ -383,6 +496,12 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
                 "completion_ratio": round(completion_ratio, 4),
                 "checkins_confirmed": confirmed,
                 "checkins_expected": expected,
+                "ledger_confirmed": ledger_count,
+                "fallback_confirmed": fallback_count,
+                "coverage_mode": _resolve_coverage_mode(
+                    ledger_count=ledger_count,
+                    fallback_count=fallback_count,
+                ),
             }
         )
 
@@ -398,5 +517,13 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "has_executed_data": months_with_checkins > 0,
+        "months_with_ledger": months_with_ledger,
+        "months_with_fallback": months_with_fallback,
+        "months_with_coverage": months_with_coverage,
+        "has_ledger_data": ledger_slots_total > 0,
+        "has_executed_data": confirmed_slots_total > 0,
+        "coverage_mode": _resolve_coverage_mode(
+            ledger_count=ledger_slots_total,
+            fallback_count=fallback_slots_total,
+        ),
     }

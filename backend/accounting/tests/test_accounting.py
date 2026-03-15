@@ -53,6 +53,59 @@ class AccountingServicesTests(TestCase):
         self.assertEqual(get_account_balance(account=cash), Decimal("1000.00"))
         self.assertEqual(get_account_balance(account=income), Decimal("1000.00"))
 
+    def test_get_account_balance_can_be_cut_by_date_and_status(self):
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ventas",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        posted_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Cobro febrero",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        draft_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 5),
+            value_date=date(2026, 3, 5),
+            description="Borrador marzo",
+            status=LedgerTransaction.Status.DRAFT,
+        )
+        for tx, amount in ((posted_tx, Decimal("1000.00")), (draft_tx, Decimal("300.00"))):
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=cash,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=income,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        self.assertEqual(
+            get_account_balance(
+                account=cash,
+                as_of_date=date(2026, 2, 28),
+                status=LedgerTransaction.Status.POSTED,
+            ),
+            Decimal("1000.00"),
+        )
+        self.assertEqual(get_account_balance(account=cash), Decimal("1300.00"))
+
     def test_build_monthly_summary_aggregates_linked_budget_entries(self):
         income_plan = AnnualIncomeEntry.objects.create(
             user=self.user,
