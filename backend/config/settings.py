@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     # apps
     "core",
+    "accounting.apps.AccountingConfig",
     "budget.apps.BudgetConfig",
     "accounts.apps.AccountsConfig",
     "memberships.apps.MembershipsConfig",
@@ -132,7 +133,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "MoneyPlanner Core API",
     "DESCRIPTION": "API del core de MoneyPlanner.",
-    "VERSION": "0.18.16",
+    "VERSION": "0.19.0",
 }
 
 SIMPLE_JWT = {
