@@ -28,6 +28,9 @@ export const coreAccountingApi = {
   createAccount(payload: LedgerAccountWritePayload) {
     return coreApi.post<LedgerAccount>('/api/accounting/accounts/', payload);
   },
+  updateAccount(id: number, payload: Partial<LedgerAccountWritePayload>) {
+    return coreApi.patch<LedgerAccount>(`/api/accounting/accounts/${id}/`, payload);
+  },
   getTransactions(params?: { year?: number; month?: number; status?: string }) {
     return coreApi.get<LedgerTransaction[]>('/api/accounting/transactions/', {
       params:

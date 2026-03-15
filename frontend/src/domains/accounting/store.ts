@@ -81,6 +81,20 @@ export const useAccountingStore = defineStore('accounting', {
       }
     },
 
+    async archiveAccount(accountId: number) {
+      this.accountCreationLoading = true;
+      this.error = null;
+      try {
+        await coreAccountingApi.updateAccount(accountId, { is_active: false });
+        await this.refreshAll();
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.accountCreationLoading = false;
+      }
+    },
+
     async createTransaction(payload: LedgerTransactionWritePayload) {
       this.transactionCreationLoading = true;
       this.error = null;

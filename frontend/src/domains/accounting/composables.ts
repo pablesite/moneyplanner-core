@@ -446,6 +446,13 @@ export function useAccountingPage() {
     successMessage.value = 'Cuenta contable creada.';
   }
 
+  async function archiveAccount(accountId: number, accountName: string) {
+    successMessage.value = null;
+    if (!confirm(`Archivar cuenta "${accountName}"?`)) return;
+    await store.archiveAccount(accountId);
+    successMessage.value = 'Cuenta contable archivada.';
+  }
+
   async function submitTransaction() {
     successMessage.value = null;
     const payload: LedgerTransactionWritePayload = {
@@ -558,6 +565,7 @@ export function useAccountingPage() {
     removeEntry,
     reloadPeriod,
     submitAccount,
+    archiveAccount,
     submitQuickEntry,
     submitTransaction,
   };
