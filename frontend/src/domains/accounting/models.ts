@@ -1,0 +1,94 @@
+export type LedgerAccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+export type LedgerAccountOrigin = 'user' | 'system';
+export type LedgerTransactionStatus = 'draft' | 'posted';
+export type LedgerTransactionOrigin = 'manual' | 'import' | 'system';
+export type LedgerEntrySide = 'debit' | 'credit';
+
+export type LedgerAccount = {
+  id: number;
+  name: string;
+  account_type: LedgerAccountType;
+  currency: string;
+  origin: LedgerAccountOrigin;
+  asset_id: number | null;
+  liability_id: number | null;
+  is_active: boolean;
+  notes: string;
+  current_balance: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LedgerEntry = {
+  id: number;
+  account_id: number;
+  account_name: string;
+  side: LedgerEntrySide;
+  amount: string;
+  currency: string;
+  annual_income_entry_id: number | null;
+  annual_expense_entry_id: number | null;
+  asset_id: number | null;
+  liability_id: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LedgerTransaction = {
+  id: number;
+  booking_date: string;
+  value_date: string;
+  description: string;
+  status: LedgerTransactionStatus;
+  origin: LedgerTransactionOrigin;
+  notes: string;
+  entries: LedgerEntry[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type MonthlyAccountingSummaryMonth = {
+  month: number;
+  income_total: string;
+  expense_total: string;
+  uncategorized_total: string;
+};
+
+export type MonthlyAccountingSummary = {
+  fiscal_year: number;
+  months: MonthlyAccountingSummaryMonth[];
+};
+
+export type LedgerAccountWritePayload = {
+  name: string;
+  account_type: LedgerAccountType;
+  currency: string;
+  origin?: LedgerAccountOrigin;
+  asset_id?: number | null;
+  liability_id?: number | null;
+  is_active?: boolean;
+  notes?: string;
+};
+
+export type LedgerEntryWritePayload = {
+  account_id: number;
+  side: LedgerEntrySide;
+  amount: string;
+  currency?: string;
+  annual_income_entry_id?: number | null;
+  annual_expense_entry_id?: number | null;
+  asset_id?: number | null;
+  liability_id?: number | null;
+  notes?: string;
+};
+
+export type LedgerTransactionWritePayload = {
+  booking_date: string;
+  value_date: string;
+  description: string;
+  status?: LedgerTransactionStatus;
+  origin?: LedgerTransactionOrigin;
+  notes?: string;
+  entries: LedgerEntryWritePayload[];
+};

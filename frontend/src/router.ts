@@ -10,6 +10,7 @@ import SettingsFxView from './views/SettingsFxView.vue';
 import SettingsIpcView from './views/SettingsIpcView.vue';
 import AccountView from './views/AccountView.vue';
 import PeopleView from './views/PeopleView.vue';
+import AccountingMovementsView from './views/AccountingMovementsView.vue';
 import { registerAuthGuard } from '@/domains/auth';
 
 const routes: RouteRecordRaw[] = [
@@ -31,6 +32,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/data/ipc', name: 'settings-ipc', component: SettingsIpcView },
   { path: '/account', name: 'account', component: AccountView },
   { path: '/people', name: 'people', component: PeopleView },
+  { path: '/movimientos', name: 'accounting-movements', component: AccountingMovementsView },
 ];
 
 export const router = createRouter({

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { defineComponent, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import NetWorthView from '../NetWorthView.vue';
 
 const mockUseNetWorthViewState = vi.fn();
@@ -10,6 +10,9 @@ const mockPush = vi.fn();
 const mockCoreNetWorthApi = vi.hoisted(() => ({
   getAssetTimeline: vi.fn(async () => ({ data: { rows: [], base_currency: 'EUR' } })),
   getLiabilityTimeline: vi.fn(async () => ({ data: { rows: [], base_currency: 'EUR' } })),
+}));
+const mockCoreAccountingApi = vi.hoisted(() => ({
+  getTransactions: vi.fn(async () => ({ data: [] })),
 }));
 
 function makeStub(name: string) {
@@ -75,6 +78,10 @@ vi.mock('@/domains/ui', () => ({
     },
     template: '<div><slot v-if="open" /></div>',
   }),
+}));
+
+vi.mock('@/domains/accounting', () => ({
+  coreAccountingApi: mockCoreAccountingApi,
 }));
 
 function makeState(overrides: Record<string, unknown> = {}) {
@@ -167,6 +174,7 @@ describe('NetWorthView', () => {
     mockPush.mockReset();
     mockCoreNetWorthApi.getAssetTimeline.mockClear();
     mockCoreNetWorthApi.getLiabilityTimeline.mockClear();
+    mockCoreAccountingApi.getTransactions.mockClear();
   });
 
   it('renders key sections and current analytics blocks', () => {
@@ -494,6 +502,8 @@ describe('NetWorthView', () => {
             name: 'Cuenta nomina',
             category: 'cash',
             subcategory: 'bank_account',
+            tracking_mode: 'accounting',
+            accounting_account_id: 81,
             amount: '1000',
             amount_base: '1000',
             currency: 'EUR',
@@ -519,6 +529,135 @@ describe('NetWorthView', () => {
 
     expect(state.store.fetchPositionTimeline).toHaveBeenCalledWith('asset', 11);
     expect(state.store.fetchPositionActivity).toHaveBeenCalledWith('asset', 11, 'cash');
+    expect(mockCoreAccountingApi.getTransactions).toHaveBeenCalledWith({ year: 2026 });
+  });
+
+  it('shows accounting activity for positions tracked through accounting', async () => {
+    mockCoreAccountingApi.getTransactions.mockResolvedValue({
+      data: [
+        {
+          id: 91,
+          booking_date: '2026-03-14',
+          value_date: '2026-03-14',
+          description: 'Transferencia a broker',
+          status: 'posted',
+          origin: 'manual',
+          notes: 'Aportacion mensual',
+          created_at: '',
+          updated_at: '',
+          entries: [
+            {
+              id: 501,
+              account_id: 81,
+              account_name: 'Broker',
+              side: 'debit',
+              amount: '250.00',
+              currency: 'EUR',
+              annual_income_entry_id: null,
+              annual_expense_entry_id: null,
+              asset_id: null,
+              liability_id: null,
+              notes: '',
+              created_at: '',
+              updated_at: '',
+            },
+            {
+              id: 502,
+              account_id: 12,
+              account_name: 'Cuenta corriente',
+              side: 'credit',
+              amount: '250.00',
+              currency: 'EUR',
+              annual_income_entry_id: null,
+              annual_expense_entry_id: null,
+              asset_id: null,
+              liability_id: null,
+              notes: '',
+              created_at: '',
+              updated_at: '',
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Broker Indexado',
+            category: 'cash',
+            subcategory: 'broker',
+            tracking_mode: 'accounting',
+            accounting_account_id: 81,
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        fetchPositionTimeline: vi.fn(),
+        fetchPositionActivity: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    await wrapper.get('select.ui-nw-position-select-input').setValue('11');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Actividad contable');
+    expect(wrapper.text()).toContain('Transferencia a broker');
+    expect(wrapper.text()).toContain('Contrapartida: Cuenta corriente');
+  });
+
+  it('shows the setup gap when an accounting-tracked position has no linked account', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta puente',
+            category: 'cash',
+            subcategory: 'bank_account',
+            tracking_mode: 'accounting',
+            accounting_account_id: null,
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        fetchPositionTimeline: vi.fn(),
+        fetchPositionActivity: vi.fn(),
+      },
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    await wrapper.get('select.ui-nw-position-select-input').setValue('11');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Actividad contable');
+    expect(wrapper.text()).toContain('aun no tiene una cuenta enlazada');
+    expect(mockCoreAccountingApi.getTransactions).not.toHaveBeenCalled();
   });
 
   it('removes the redundant selected summary and exposes edit/delete actions in the category workspace', async () => {

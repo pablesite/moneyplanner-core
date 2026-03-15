@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { coreAccountingApi, type LedgerTransaction } from '@/domains/accounting';
 import {
   ItemForm,
   NetWorthDonut,
@@ -10,6 +11,7 @@ import {
   useNetWorthViewState,
 } from '@/domains/net-worth';
 import { BaseModal } from '@/domains/ui';
+import { toApiErrorMessage } from '@/lib/errors';
 
 const {
   store,
@@ -329,6 +331,17 @@ type PositionActivityRow = {
   note: string;
 };
 
+type AccountingActivityRow = {
+  id: string;
+  date: string;
+  description: string;
+  sideLabel: string;
+  amount: number;
+  currency: string;
+  counterpartLabel: string;
+  note: string;
+};
+
 function resolvePositionValue(item: {
   amount?: string | null;
   amount_base?: string | null;
@@ -628,6 +641,11 @@ const selectedPosition = computed(() => {
       ? liabilityPositionRows.value
       : assetPositionRows.value;
   return rows.find((row) => row.id === selectedPositionId.value) ?? null;
+});
+
+const selectedPositionSource = computed(() => {
+  const row = selectedPosition.value;
+  return row ? sourceItemForRow(row) : null;
 });
 
 const positionTimelineRows = computed<PositionTimelinePoint[]>(() =>
@@ -1088,6 +1106,95 @@ const legacyTimelineSummaryValue = computed(() =>
   latestTimelinePoint.value ? getTimelineMetricValue(latestTimelinePoint.value) : 0,
 );
 
+const accountingActivityLoading = ref(false);
+const accountingActivityError = ref<string | null>(null);
+const accountingActivityRows = ref<AccountingActivityRow[]>([]);
+const accountingActivityYear = ref(new Date().getFullYear());
+
+const selectedPositionUsesAccounting = computed(
+  () => selectedPositionSource.value?.tracking_mode === 'accounting',
+);
+const selectedPositionAccountingAccountId = computed(
+  () => selectedPositionSource.value?.accounting_account_id ?? null,
+);
+const showAccountingActivitySetupGap = computed(
+  () => selectedPositionUsesAccounting.value && selectedPositionAccountingAccountId.value == null,
+);
+const showAccountingActivityBlock = computed(() => selectedPositionUsesAccounting.value);
+
+function summarizeCounterparts(
+  transaction: LedgerTransaction,
+  selectedAccountId: number,
+  selectedEntryId: number,
+): string {
+  const counterparts = transaction.entries.filter(
+    (entry) => entry.account_id !== selectedAccountId && entry.id !== selectedEntryId,
+  );
+  if (!counterparts.length) return 'Sin contrapartida visible';
+  const names = Array.from(
+    new Set(counterparts.map((entry) => entry.account_name).filter(Boolean)),
+  );
+  if (names.length <= 2) return names.join(' + ');
+  return `${names.slice(0, 2).join(' + ')} +${names.length - 2}`;
+}
+
+function resetAccountingActivity(): void {
+  accountingActivityLoading.value = false;
+  accountingActivityError.value = null;
+  accountingActivityRows.value = [];
+  accountingActivityYear.value = new Date().getFullYear();
+}
+
+async function loadAccountingActivity(row: PositionRow): Promise<void> {
+  const source = sourceItemForRow(row);
+  if (!source || source.tracking_mode !== 'accounting') {
+    resetAccountingActivity();
+    return;
+  }
+
+  accountingActivityYear.value = new Date().getFullYear();
+  if (!source.accounting_account_id) {
+    accountingActivityError.value = null;
+    accountingActivityRows.value = [];
+    return;
+  }
+
+  accountingActivityLoading.value = true;
+  accountingActivityError.value = null;
+  try {
+    const response = await coreAccountingApi.getTransactions({
+      year: accountingActivityYear.value,
+    });
+    const relevantRows = response.data
+      .flatMap((transaction) =>
+        transaction.entries
+          .filter((entry) => entry.account_id === source.accounting_account_id)
+          .map((entry) => ({
+            id: `accounting-${transaction.id}-${entry.id}`,
+            date: transaction.booking_date,
+            description: transaction.description,
+            sideLabel: entry.side === 'debit' ? 'Debe' : 'Haber',
+            amount: toNumber(entry.amount),
+            currency: entry.currency,
+            counterpartLabel: summarizeCounterparts(
+              transaction,
+              source.accounting_account_id ?? 0,
+              entry.id,
+            ),
+            note: entry.notes || transaction.notes || '',
+          })),
+      )
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 6);
+    accountingActivityRows.value = relevantRows;
+  } catch (error: unknown) {
+    accountingActivityError.value = toApiErrorMessage(error);
+    accountingActivityRows.value = [];
+  } finally {
+    accountingActivityLoading.value = false;
+  }
+}
+
 const positionActivityRows = computed<PositionActivityRow[]>(() => {
   if (selectedPositionType.value === 'asset') {
     const valuations = store.assetValuations.map((row) => ({
@@ -1155,6 +1262,7 @@ function resetPositionSelection(): void {
   store.investmentEvents = [];
   store.liquidityEvents = [];
   store.liabilityEvents = [];
+  resetAccountingActivity();
 }
 
 function openCreateModal(type: 'asset' | 'liability', category: string | null = null): void {
@@ -1224,6 +1332,7 @@ async function selectPosition(row: PositionRow): Promise<void> {
   await Promise.all([
     store.fetchPositionTimeline(row.type, row.id),
     store.fetchPositionActivity(row.type, row.id, row.type === 'asset' ? row.category : null),
+    loadAccountingActivity(row),
   ]);
 }
 
@@ -1525,6 +1634,44 @@ const liabilityCreateInitial = computed(() =>
               </div>
 
               <div v-if="selectedPosition" class="ui-nw-position-activity">
+                <div
+                  v-if="showAccountingActivityBlock"
+                  class="ui-nw-position-activity ui-nw-position-activity-accounting"
+                >
+                  <div class="ui-nw-position-activity-head">
+                    <h3 class="ui-nw-position-activity-title">Actividad contable</h3>
+                    <span v-if="accountingActivityLoading" class="subtle">Cargando...</span>
+                    <span v-else class="subtle">Ejercicio {{ accountingActivityYear }}</span>
+                  </div>
+                  <div v-if="showAccountingActivitySetupGap" class="subtle">
+                    Esta posicion usa tracking contable pero aun no tiene una cuenta enlazada.
+                    Vinculala desde editar posicion para derivar saldo y movimientos.
+                  </div>
+                  <div v-else-if="accountingActivityError" class="subtle">
+                    No se pudo cargar la actividad contable: {{ accountingActivityError }}
+                  </div>
+                  <div v-else-if="accountingActivityRows.length === 0" class="subtle">
+                    No hay asientos del ejercicio actual vinculados a esta posicion contable.
+                  </div>
+                  <div v-else class="ui-nw-position-activity-list">
+                    <div
+                      v-for="row in accountingActivityRows"
+                      :key="row.id"
+                      class="ui-nw-position-activity-row ui-nw-position-activity-row-accounting"
+                    >
+                      <div class="ui-nw-position-activity-main">
+                        <strong>{{ row.date }}</strong>
+                        <span>{{ row.description }}</span>
+                        <span>{{ row.sideLabel }} | Contrapartida: {{ row.counterpartLabel }}</span>
+                        <span v-if="row.note">{{ row.note }}</span>
+                      </div>
+                      <div class="ui-nw-position-activity-amount">
+                        {{ formatNumber(row.amount, 2) }} {{ row.currency }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="ui-nw-position-activity-head">
                   <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
                   <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
@@ -1978,6 +2125,44 @@ const liabilityCreateInitial = computed(() =>
           </div>
 
           <div class="ui-nw-position-activity">
+            <div
+              v-if="showAccountingActivityBlock"
+              class="ui-nw-position-activity ui-nw-position-activity-accounting"
+            >
+              <div class="ui-nw-position-activity-head">
+                <h3 class="ui-nw-position-activity-title">Actividad contable</h3>
+                <span v-if="accountingActivityLoading" class="subtle">Cargando...</span>
+                <span v-else class="subtle">Ejercicio {{ accountingActivityYear }}</span>
+              </div>
+              <div v-if="showAccountingActivitySetupGap" class="subtle">
+                Esta posicion usa tracking contable pero aun no tiene una cuenta enlazada. Vinculala
+                desde editar posicion para derivar saldo y movimientos.
+              </div>
+              <div v-else-if="accountingActivityError" class="subtle">
+                No se pudo cargar la actividad contable: {{ accountingActivityError }}
+              </div>
+              <div v-else-if="accountingActivityRows.length === 0" class="subtle">
+                No hay asientos del ejercicio actual vinculados a esta posicion contable.
+              </div>
+              <div v-else class="ui-nw-position-activity-list">
+                <div
+                  v-for="row in accountingActivityRows"
+                  :key="row.id"
+                  class="ui-nw-position-activity-row ui-nw-position-activity-row-accounting"
+                >
+                  <div class="ui-nw-position-activity-main">
+                    <strong>{{ row.date }}</strong>
+                    <span>{{ row.description }}</span>
+                    <span>{{ row.sideLabel }} | Contrapartida: {{ row.counterpartLabel }}</span>
+                    <span v-if="row.note">{{ row.note }}</span>
+                  </div>
+                  <div class="ui-nw-position-activity-amount">
+                    {{ formatNumber(row.amount, 2) }} {{ row.currency }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="ui-nw-position-activity-head">
               <h3 class="ui-nw-position-activity-title">Eventos y checkpoints</h3>
               <span v-if="store.positionActivityLoading" class="subtle">Cargando...</span>
@@ -3205,6 +3390,20 @@ const liabilityCreateInitial = computed(() =>
 .ui-nw-position-activity-row-valuation {
   border-color: rgba(76, 195, 255, 0.22);
   background: rgba(76, 195, 255, 0.08);
+}
+
+.ui-nw-position-activity-accounting {
+  padding: 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.12), transparent 40%),
+    rgba(45, 212, 191, 0.04);
+}
+
+.ui-nw-position-activity-row-accounting {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(45, 212, 191, 0.08);
 }
 
 .ui-nw-position-activity-main {
