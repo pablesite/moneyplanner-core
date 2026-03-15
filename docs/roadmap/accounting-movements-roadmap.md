@@ -33,10 +33,11 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - backend: endpoint `GET /api/accounting/transactions/budget-suggestions/` con series mensuales historicas y sugerencias orientativas anualizadas por categoria/subcategoria
    - frontend: `BudgetDashboardView` muestra lectura de sugerencias ledger para planificacion sin bloquear la edicion manual del presupuesto
    - cobertura base en `backend/accounting/tests/test_accounting.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
-6. Fase 4b (integracion de existentes): objetivo documental definido, implementacion pendiente
-   - objetivo: auto-vincular y auto-crear cuentas ledger para `Asset`/`Liability` existentes en `tracking_mode=accounting`
-   - estados operativos esperados por posicion: `linked`, `auto_created`, `needs_review`
-   - precedencia operativa: ledger primero con enlace valido; fallback legacy solo con cobertura contable ausente o insegura
+6. Fase 4b (integracion de existentes): implementada y cerrada
+   - backend: auto-vinculacion/autocreacion idempotente para `Asset`/`Liability` en `tracking_mode=accounting` con estado explicito por posicion (`linked`, `auto_created`, `needs_review`)
+   - backend: para posiciones con enlace inseguro/incompatible se preserva fallback legacy y se marca `needs_review` sin forzar enlaces inseguros
+   - frontend: `NetWorthView` muestra el estado `needs_review` como gap accionable y evita leer actividad ledger en ese estado
+   - cobertura base reforzada en `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/NetWorthView.spec.ts`
 
 ## Principios de trabajo
 1. PRs pequenas y reversibles.

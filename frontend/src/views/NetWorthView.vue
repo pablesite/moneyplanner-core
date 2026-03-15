@@ -1114,11 +1114,22 @@ const accountingActivityYear = ref(new Date().getFullYear());
 const selectedPositionUsesAccounting = computed(
   () => selectedPositionSource.value?.tracking_mode === 'accounting',
 );
+const selectedPositionAccountingIntegrationState = computed(
+  () => selectedPositionSource.value?.accounting_integration_state ?? null,
+);
 const selectedPositionAccountingAccountId = computed(
   () => selectedPositionSource.value?.accounting_account_id ?? null,
 );
 const showAccountingActivitySetupGap = computed(
-  () => selectedPositionUsesAccounting.value && selectedPositionAccountingAccountId.value == null,
+  () =>
+    selectedPositionUsesAccounting.value &&
+    selectedPositionAccountingIntegrationState.value !== 'needs_review' &&
+    selectedPositionAccountingAccountId.value == null,
+);
+const showAccountingActivityNeedsReview = computed(
+  () =>
+    selectedPositionUsesAccounting.value &&
+    selectedPositionAccountingIntegrationState.value === 'needs_review',
 );
 const showAccountingActivityBlock = computed(() => selectedPositionUsesAccounting.value);
 
@@ -1153,7 +1164,7 @@ async function loadAccountingActivity(row: PositionRow): Promise<void> {
   }
 
   accountingActivityYear.value = new Date().getFullYear();
-  if (!source.accounting_account_id) {
+  if (source.accounting_integration_state === 'needs_review' || !source.accounting_account_id) {
     accountingActivityError.value = null;
     accountingActivityRows.value = [];
     return;
@@ -1643,7 +1654,12 @@ const liabilityCreateInitial = computed(() =>
                     <span v-if="accountingActivityLoading" class="subtle">Cargando...</span>
                     <span v-else class="subtle">Ejercicio {{ accountingActivityYear }}</span>
                   </div>
-                  <div v-if="showAccountingActivitySetupGap" class="subtle">
+                  <div v-if="showAccountingActivityNeedsReview" class="subtle">
+                    Esta posicion esta en estado <strong>needs_review</strong>: la cuenta contable
+                    actual no es compatible (usuario, moneda o tipo). Se mantiene fallback legacy
+                    hasta corregir el enlace.
+                  </div>
+                  <div v-else-if="showAccountingActivitySetupGap" class="subtle">
                     Esta posicion usa tracking contable pero aun no tiene una cuenta enlazada.
                     Vinculala desde editar posicion para derivar saldo y movimientos.
                   </div>
@@ -2134,7 +2150,12 @@ const liabilityCreateInitial = computed(() =>
                 <span v-if="accountingActivityLoading" class="subtle">Cargando...</span>
                 <span v-else class="subtle">Ejercicio {{ accountingActivityYear }}</span>
               </div>
-              <div v-if="showAccountingActivitySetupGap" class="subtle">
+              <div v-if="showAccountingActivityNeedsReview" class="subtle">
+                Esta posicion esta en estado <strong>needs_review</strong>: la cuenta contable
+                actual no es compatible (usuario, moneda o tipo). Se mantiene fallback legacy hasta
+                corregir el enlace.
+              </div>
+              <div v-else-if="showAccountingActivitySetupGap" class="subtle">
                 Esta posicion usa tracking contable pero aun no tiene una cuenta enlazada. Vinculala
                 desde editar posicion para derivar saldo y movimientos.
               </div>

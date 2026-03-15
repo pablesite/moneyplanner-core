@@ -701,6 +701,54 @@ describe('NetWorthView', () => {
     expect(mockCoreAccountingApi.getTransactions).not.toHaveBeenCalled();
   });
 
+  it('shows needs_review state and keeps fallback when accounting integration is unsafe', async () => {
+    const state = makeState({
+      store: {
+        ...makeState().store,
+        assets: [
+          {
+            id: 11,
+            name: 'Cuenta dudosa',
+            category: 'cash',
+            subcategory: 'bank_account',
+            tracking_mode: 'accounting',
+            accounting_account_id: 91,
+            accounting_integration_state: 'needs_review',
+            amount: '1000',
+            amount_base: '1000',
+            currency: 'EUR',
+            is_active: true,
+          },
+        ],
+        fetchPositionTimeline: vi.fn(),
+        fetchPositionActivity: vi.fn(),
+      },
+    });
+    state.store.fetchPositionTimeline = vi.fn(async () => {
+      state.store.positionTimeline = {
+        base_currency: 'EUR',
+        position_type: 'asset',
+        position_id: 11,
+        rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+      };
+    });
+    mockUseNetWorthViewState.mockReturnValue(state);
+    mockUseNetWorthViewExtensions.mockReturnValue({
+      HeaderActions: null,
+      itemFormProps: {},
+      itemListProps: {},
+    });
+
+    const wrapper = mount(NetWorthView);
+
+    await wrapper.get('[data-test="donut-select-asset"]').trigger('click');
+    await wrapper.get('select.ui-nw-position-select-input').setValue('11');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('needs_review');
+    expect(mockCoreAccountingApi.getTransactions).not.toHaveBeenCalled();
+  });
+
   it('removes the redundant selected summary and exposes edit/delete actions in the category workspace', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const state = makeState({
