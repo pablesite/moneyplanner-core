@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   coreAccountingApi,
+  type BudgetDerivedSuggestions,
+  type BudgetSuggestionSubcategoryRow,
   type LedgerEntry,
   type MonthlyAccountingSummary,
 } from '@/domains/accounting';
@@ -231,6 +233,9 @@ const accountingExecutionLoading = ref(false);
 const accountingExecutionError = ref<string | null>(null);
 const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);
 const accountingPostedEntries = ref<LedgerEntry[]>([]);
+const budgetSuggestionsLoading = ref(false);
+const budgetSuggestionsError = ref<string | null>(null);
+const budgetSuggestions = ref<BudgetDerivedSuggestions | null>(null);
 const liquidityMonthlySummary = ref<LiquidityMonthlySummaryResponse | null>(null);
 const liquidityExecutionLoading = ref(false);
 const liquidityExecutionBusyAssetId = ref<number | null>(null);
@@ -1281,6 +1286,20 @@ async function refreshAccountingExecutionData(): Promise<void> {
   }
 }
 
+async function refreshBudgetSuggestionData(): Promise<void> {
+  budgetSuggestionsLoading.value = true;
+  budgetSuggestionsError.value = null;
+  try {
+    const response = await coreAccountingApi.getBudgetSuggestions(fiscalYear.value, 2);
+    budgetSuggestions.value = response.data ?? null;
+  } catch (e: unknown) {
+    budgetSuggestionsError.value = toApiErrorMessage(e);
+    budgetSuggestions.value = null;
+  } finally {
+    budgetSuggestionsLoading.value = false;
+  }
+}
+
 function formatMoney(value: number, decimals = 2): string {
   return new Intl.NumberFormat('es-ES', {
     minimumFractionDigits: decimals,
@@ -1475,6 +1494,68 @@ const sections = computed<BudgetSectionModel[]>(() => [
     groups: expenseGroups.value,
   },
 ]);
+
+const budgetSuggestionBySubcategory = computed(() => {
+  const income = new Map<string, BudgetSuggestionSubcategoryRow>();
+  const expense = new Map<string, BudgetSuggestionSubcategoryRow>();
+  for (const row of budgetSuggestions.value?.income.subcategories ?? []) {
+    income.set(`${row.category}:${row.subcategory}`, row);
+  }
+  for (const row of budgetSuggestions.value?.expense.subcategories ?? []) {
+    expense.set(`${row.category}:${row.subcategory}`, row);
+  }
+  return { income, expense };
+});
+
+const incomeBudgetSuggestions = computed(() =>
+  incomeGroups.value
+    .flatMap((group) =>
+      group.rows.map((row) => {
+        const key = `${row.categoryKey}:${row.subcategoryKey}`;
+        const suggestion = budgetSuggestionBySubcategory.value.income.get(key);
+        if (!suggestion) return null;
+        return {
+          key,
+          subcategoryLabel: row.subcategoryLabel,
+          plannedAnnual: row.plannedAnnual,
+          suggestedAnnual: toNumberOrZero(suggestion.suggested_annual),
+          observedMonths: suggestion.observed_months,
+        };
+      }),
+    )
+    .filter((row): row is NonNullable<typeof row> => row != null)
+    .sort(
+      (a, b) =>
+        Math.abs(b.suggestedAnnual - b.plannedAnnual) -
+        Math.abs(a.suggestedAnnual - a.plannedAnnual),
+    )
+    .slice(0, 6),
+);
+
+const expenseBudgetSuggestions = computed(() =>
+  expenseGroups.value
+    .flatMap((group) =>
+      group.rows.map((row) => {
+        const key = `${row.categoryKey}:${row.subcategoryKey}`;
+        const suggestion = budgetSuggestionBySubcategory.value.expense.get(key);
+        if (!suggestion) return null;
+        return {
+          key,
+          subcategoryLabel: row.subcategoryLabel,
+          plannedAnnual: row.plannedAnnual,
+          suggestedAnnual: toNumberOrZero(suggestion.suggested_annual),
+          observedMonths: suggestion.observed_months,
+        };
+      }),
+    )
+    .filter((row): row is NonNullable<typeof row> => row != null)
+    .sort(
+      (a, b) =>
+        Math.abs(b.suggestedAnnual - b.plannedAnnual) -
+        Math.abs(a.suggestedAnnual - a.plannedAnnual),
+    )
+    .slice(0, 6),
+);
 
 const hasAnyPlannedData = computed(
   () => plannedIncomeTotal.value > 0 || plannedExpenseTotal.value > 0,
@@ -2067,6 +2148,7 @@ watch(
   (year) => {
     void Promise.all([
       refreshBudgetData(year),
+      refreshBudgetSuggestionData(),
       refreshAccountingExecutionData(),
       refreshIncomeExecutionData(),
       refreshExpenseExecutionData(),
@@ -2205,6 +2287,57 @@ watch(
               </div>
             </details>
           </label>
+        </div>
+      </div>
+
+      <div class="ui-budget-suggestions">
+        <div class="ui-budget-suggestions-head">
+          <div>
+            <strong>Sugerencias desde historico ledger</strong>
+            <p>
+              Referencia orientativa para plan anual. El presupuesto sigue siendo editable y manual.
+            </p>
+          </div>
+          <span class="ui-budget-pill">
+            {{ budgetSuggestions?.window_months ?? 0 }} meses observados
+          </span>
+        </div>
+
+        <div v-if="budgetSuggestionsLoading" class="subtle">Calculando sugerencias...</div>
+        <div v-else-if="budgetSuggestionsError" class="subtle text-red-400">
+          {{ budgetSuggestionsError }}
+        </div>
+        <div
+          v-else-if="!incomeBudgetSuggestions.length && !expenseBudgetSuggestions.length"
+          class="subtle"
+        >
+          Sin cobertura ledger por subcategoria para sugerir ajustes todavia.
+        </div>
+        <div v-else class="ui-budget-suggestions-grid">
+          <article class="ui-budget-suggestions-col">
+            <h3>Ingresos (top diferencias)</h3>
+            <ul>
+              <li v-for="row in incomeBudgetSuggestions" :key="`inc-${row.key}`">
+                <span>{{ row.subcategoryLabel }}</span>
+                <span>
+                  Plan {{ formatMoney(row.plannedAnnual) }} EUR · Sug
+                  {{ formatMoney(row.suggestedAnnual) }} EUR ({{ row.observedMonths }} meses)
+                </span>
+              </li>
+            </ul>
+          </article>
+          <article class="ui-budget-suggestions-col">
+            <h3>Gastos (top diferencias)</h3>
+            <ul>
+              <li v-for="row in expenseBudgetSuggestions" :key="`exp-${row.key}`">
+                <span>{{ row.subcategoryLabel }}</span>
+                <span>
+                  Plan {{ formatMoney(row.plannedAnnual) }} EUR · Sug
+                  {{ formatMoney(row.suggestedAnnual) }} EUR ({{ row.observedMonths }} meses)
+                </span>
+              </li>
+            </ul>
+          </article>
         </div>
       </div>
 
@@ -3654,6 +3787,63 @@ watch(
   gap: 10px;
 }
 
+.ui-budget-suggestions {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.ui-budget-suggestions-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.ui-budget-suggestions-head p {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.8rem;
+}
+
+.ui-budget-suggestions-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-budget-suggestions-col {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.015);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.ui-budget-suggestions-col h3 {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.ui-budget-suggestions-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ui-budget-suggestions-col li {
+  display: grid;
+  gap: 2px;
+  font-size: 0.77rem;
+}
+
 .ui-monthly-close-flow {
   margin-top: 12px;
   display: grid;
@@ -5044,6 +5234,10 @@ watch(
 
   .ui-budget-toolbar {
     justify-content: flex-start;
+  }
+
+  .ui-budget-suggestions-grid {
+    grid-template-columns: 1fr;
   }
 
   .ui-budget-filter-segment {

@@ -66,6 +66,40 @@ export type MonthlyAccountingSummary = {
   months: MonthlyAccountingSummaryMonth[];
 };
 
+export type BudgetSuggestionMonthlyPoint = {
+  year: number;
+  month: number;
+  executed_total: string;
+};
+
+export type BudgetSuggestionCategoryRow = {
+  category: string;
+  months: BudgetSuggestionMonthlyPoint[];
+  window_total: string;
+  observed_months: number;
+  average_monthly: string;
+  suggested_annual: string;
+};
+
+export type BudgetSuggestionSubcategoryRow = BudgetSuggestionCategoryRow & {
+  subcategory: string;
+};
+
+export type BudgetSuggestionSection = {
+  series: BudgetSuggestionMonthlyPoint[];
+  categories: BudgetSuggestionCategoryRow[];
+  subcategories: BudgetSuggestionSubcategoryRow[];
+};
+
+export type BudgetDerivedSuggestions = {
+  fiscal_year: number;
+  lookback_years: number;
+  window_months: number;
+  income: BudgetSuggestionSection;
+  expense: BudgetSuggestionSection;
+  method_note: string;
+};
+
 export type LedgerAccountBalanceSummaryItem = {
   account_id: number;
   name: string;

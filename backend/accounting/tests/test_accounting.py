@@ -7,7 +7,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
-from accounting.services import build_monthly_accounting_summary, get_account_balance
+from accounting.services import (
+    build_budget_derived_suggestions,
+    build_monthly_accounting_summary,
+    get_account_balance,
+)
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from net_worth.models import Asset, Liability
 
@@ -192,6 +196,136 @@ class AccountingServicesTests(TestCase):
         january = summary["months"][0]
         self.assertEqual(january["income_total"], "1000.00")
         self.assertEqual(january["expense_total"], "600.00")
+
+    def test_build_budget_derived_suggestions_returns_stable_monthly_series(self):
+        income_plan = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="employee_salary",
+            amount_annual=Decimal("24000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Supermercado",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            amount_annual=Decimal("7200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingreso",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        tx_income_1 = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 12, 5),
+            value_date=date(2025, 12, 5),
+            description="Nomina dic",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income_1,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1500.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income_1,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1500.00"),
+            currency="EUR",
+            annual_income_entry=income_plan,
+        )
+
+        tx_income_2 = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 5),
+            value_date=date(2026, 1, 5),
+            description="Nomina ene",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income_2,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1500.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income_2,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1500.00"),
+            currency="EUR",
+            annual_income_entry=income_plan,
+        )
+
+        tx_expense = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 3),
+            value_date=date(2026, 2, 3),
+            description="Supermercado",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_expense,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("400.00"),
+            currency="EUR",
+            annual_expense_entry=expense_plan,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_expense,
+            account=cash,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("400.00"),
+            currency="EUR",
+        )
+
+        suggestions = build_budget_derived_suggestions(
+            user_id=self.user.id,
+            fiscal_year=2026,
+            lookback_years=2,
+        )
+        self.assertEqual(suggestions["window_months"], 24)
+        self.assertEqual(len(suggestions["income"]["series"]), 24)
+        self.assertEqual(len(suggestions["expense"]["series"]), 24)
+
+        income_sub = suggestions["income"]["subcategories"][0]
+        self.assertEqual(income_sub["category"], "salary")
+        self.assertEqual(income_sub["subcategory"], "employee_salary")
+        self.assertEqual(income_sub["window_total"], "3000.00")
+        self.assertEqual(income_sub["suggested_annual"], "1500.00")
+        self.assertEqual(income_sub["observed_months"], 2)
+
+        expense_sub = suggestions["expense"]["subcategories"][0]
+        self.assertEqual(expense_sub["category"], "consumption_expenses")
+        self.assertEqual(expense_sub["subcategory"], "living_expenses")
+        self.assertEqual(expense_sub["window_total"], "400.00")
+        self.assertEqual(expense_sub["suggested_annual"], "200.00")
+        self.assertEqual(expense_sub["observed_months"], 1)
 
 
 class AccountingApiTests(APITestCase):
@@ -802,3 +936,88 @@ class AccountingApiTests(APITestCase):
         response = self.client.get("/api/accounting/accounts/balances/?month=4")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("year", response.data["error"]["details"])
+
+    def test_budget_suggestions_endpoint_returns_historical_series(self):
+        income_plan = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="employee_salary",
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Alimentacion",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            amount_annual=Decimal("4800.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos hogar",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        tx_income = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 10),
+            value_date=date(2026, 1, 10),
+            description="Nomina enero",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income,
+            account=self.cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_income,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            annual_income_entry=income_plan,
+        )
+
+        tx_expense = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Compra mensual",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_expense,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("350.00"),
+            currency="EUR",
+            annual_expense_entry=expense_plan,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_expense,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("350.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/accounting/transactions/budget-suggestions/?year=2026")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["fiscal_year"], 2026)
+        self.assertEqual(response.data["lookback_years"], 2)
+        self.assertEqual(response.data["window_months"], 24)
+        self.assertEqual(len(response.data["income"]["series"]), 24)
+        self.assertEqual(len(response.data["expense"]["series"]), 24)
+        self.assertEqual(response.data["income"]["subcategories"][0]["category"], "salary")
+        self.assertEqual(
+            response.data["expense"]["subcategories"][0]["subcategory"],
+            "living_expenses",
+        )
