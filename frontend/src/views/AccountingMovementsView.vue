@@ -10,6 +10,7 @@ const {
   successMessage,
   accounts,
   transactions,
+  accountBalancesSummary,
   selectedYear,
   selectedMonth,
   yearOptions,
@@ -19,7 +20,10 @@ const {
   accountForm,
   quickEntryForm,
   transactionForm,
+  activityFilters,
   liquidityAccounts,
+  liquidityBalanceRows,
+  liquidityBalanceTotal,
   incomeOptions,
   expenseOptions,
   transferCounterpartyOptions,
@@ -28,7 +32,10 @@ const {
   creditTotal,
   transactionBalanced,
   summaryRows,
+  filteredTransactions,
   addEntry,
+  activityKindLabel,
+  liquidityBalanceDeltaTone,
   removeEntry,
   reloadPeriod,
   submitAccount,
@@ -116,7 +123,12 @@ const accountsByType = computed(() => {
           <p class="ui-accounting-panel-kicker">Alta rapida</p>
           <h2 class="h2">Registrar movimiento diario</h2>
         </div>
-        <span class="ui-accounting-pill">Income · expense · transfer</span>
+        <span class="ui-accounting-pill">Income / expense / transfer</span>
+      </div>
+
+      <div v-if="!liquidityAccounts.length" class="ui-accounting-inline-note">
+        Necesitas al menos una cuenta de liquidez para registrar ingresos, gastos o transferencias
+        con alta rapida.
       </div>
 
       <form
@@ -153,7 +165,7 @@ const accountsByType = computed(() => {
           <select v-model="quickEntryForm.account_id" class="select" required>
             <option :value="null">Cuenta de liquidez</option>
             <option v-for="account in liquidityAccounts" :key="account.id" :value="account.id">
-              {{ account.name }} · {{ account.currency }}
+              {{ account.name }} / {{ account.currency }}
             </option>
           </select>
 
@@ -177,7 +189,7 @@ const accountsByType = computed(() => {
               :key="account.id"
               :value="account.id"
             >
-              {{ account.name }} · {{ account.currency }}
+              {{ account.name }} / {{ account.currency }}
             </option>
           </select>
 
@@ -223,12 +235,17 @@ const accountsByType = computed(() => {
             {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento rapido' }}
           </button>
         </div>
+
+        <p v-if="!quickEntryReady && !transactionCreationLoading" class="ui-accounting-inline-note">
+          Completa descripcion, fechas, importe y cuenta de liquidez. Las transferencias tambien
+          necesitan cuenta destino.
+        </p>
       </form>
 
       <details class="ui-accounting-advanced">
         <summary class="ui-accounting-advanced-summary">
           <span>Modo avanzado</span>
-          <span>Debe {{ formatMoney(debitTotal) }} · Haber {{ formatMoney(creditTotal) }}</span>
+          <span>Debe {{ formatMoney(debitTotal) }} / Haber {{ formatMoney(creditTotal) }}</span>
         </summary>
 
         <form
@@ -255,7 +272,7 @@ const accountsByType = computed(() => {
               <select v-model="entry.account_id" class="select" required>
                 <option :value="null">Selecciona cuenta</option>
                 <option v-for="account in accounts" :key="account.id" :value="account.id">
-                  {{ account.name }} · {{ account.currency }}
+                  {{ account.name }} / {{ account.currency }}
                 </option>
               </select>
 
@@ -316,6 +333,13 @@ const accountsByType = computed(() => {
               {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento balanceado' }}
             </button>
           </div>
+
+          <p
+            v-if="!transactionBalanced && !transactionCreationLoading"
+            class="ui-accounting-inline-note"
+          >
+            El modo avanzado bloquea el guardado hasta que debe y haber coincidan exactamente.
+          </p>
         </form>
       </details>
     </section>
@@ -356,7 +380,7 @@ const accountsByType = computed(() => {
               >
                 <div>
                   <strong>{{ account.name }}</strong>
-                  <p>{{ account.currency }} · {{ account.origin }}</p>
+                  <p>{{ account.currency }} / {{ account.origin }}</p>
                 </div>
                 <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
               </li>
@@ -401,29 +425,106 @@ const accountsByType = computed(() => {
       <article class="card ui-pro-panel ui-accounting-panel">
         <div class="ui-accounting-panel-head">
           <div>
+            <p class="ui-accounting-panel-kicker">Liquidez</p>
+            <h2 class="h2">Saldos derivados del ledger</h2>
+          </div>
+          <span class="ui-accounting-pill">{{ formatMoney(liquidityBalanceTotal) }}</span>
+        </div>
+
+        <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
+          Cargando balances del periodo...
+        </div>
+
+        <div v-else-if="!liquidityBalanceRows.length" class="ui-accounting-empty">
+          Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.
+        </div>
+
+        <div v-else class="ui-accounting-balance-list">
+          <article
+            v-for="row in liquidityBalanceRows"
+            :key="row.account_id"
+            class="ui-accounting-balance-card"
+          >
+            <div class="ui-accounting-balance-card-head">
+              <div>
+                <strong>{{ row.name }}</strong>
+                <p>
+                  {{ row.currency }} / saldo actual
+                  {{ formatCompact(row.current_balance, row.currency) }}
+                </p>
+              </div>
+              <span
+                class="ui-accounting-balance-delta"
+                :class="`ui-accounting-balance-delta-${liquidityBalanceDeltaTone(row)}`"
+              >
+                {{ formatCompact(row.period_net_change, row.currency) }}
+              </span>
+            </div>
+
+            <dl class="ui-accounting-balance-metrics">
+              <div>
+                <dt>Entradas</dt>
+                <dd>{{ formatCompact(row.period_debit_total, row.currency) }}</dd>
+              </div>
+              <div>
+                <dt>Salidas</dt>
+                <dd>{{ formatCompact(row.period_credit_total, row.currency) }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </article>
+
+      <article class="card ui-pro-panel ui-accounting-panel ui-accounting-activity-panel">
+        <div class="ui-accounting-panel-head">
+          <div>
             <p class="ui-accounting-panel-kicker">Actividad</p>
             <h2 class="h2">Asientos del periodo</h2>
           </div>
-          <span class="ui-accounting-pill">{{ transactions.length }} movimientos</span>
+          <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
+        </div>
+
+        <div class="ui-accounting-form-grid">
+          <input
+            v-model="activityFilters.query"
+            class="input"
+            placeholder="Filtrar por texto o cuenta"
+          />
+          <select v-model="activityFilters.accountId" class="select">
+            <option value="all">Todas las cuentas</option>
+            <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
+              {{ account.name }}
+            </option>
+          </select>
+          <select v-model="activityFilters.kind" class="select">
+            <option value="all">Todos los movimientos</option>
+            <option value="income">Solo ingresos</option>
+            <option value="expense">Solo gastos</option>
+            <option value="transfer">Solo transferencias</option>
+          </select>
         </div>
 
         <div class="ui-accounting-summary-strip">
           <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
             <span>{{ monthLabel(row.month) }}</span>
             <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
-            <small>
-              I {{ formatMoney(row.incomeValue) }} · G {{ formatMoney(row.expenseValue) }}
-            </small>
+            <small
+              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
+            >
           </div>
         </div>
 
-        <div v-if="!transactions.length && !loading" class="ui-accounting-empty">
+        <div v-if="loading && !transactions.length" class="ui-accounting-empty">
+          Cargando movimientos del periodo...
+        </div>
+
+        <div v-else-if="!filteredTransactions.length && !loading" class="ui-accounting-empty">
           No hay movimientos para el periodo seleccionado.
         </div>
 
         <div v-else class="ui-accounting-transaction-list">
           <article
-            v-for="transaction in transactions"
+            v-for="transaction in filteredTransactions"
             :key="transaction.id"
             class="ui-accounting-transaction"
           >
@@ -431,8 +532,8 @@ const accountsByType = computed(() => {
               <div>
                 <strong>{{ transaction.description }}</strong>
                 <p>
-                  {{ transaction.booking_date }} · {{ transaction.status }} ·
-                  {{ transaction.origin }}
+                  {{ transaction.booking_date }} / {{ activityKindLabel(transaction) }} /
+                  {{ transaction.status }} / {{ transaction.origin }}
                 </p>
               </div>
               <span>{{ transaction.entries.length }} apuntes</span>
@@ -505,6 +606,10 @@ const accountsByType = computed(() => {
   gap: 18px;
 }
 
+.ui-accounting-activity-panel {
+  grid-column: 1 / -1;
+}
+
 .ui-accounting-panel {
   display: grid;
   gap: 16px;
@@ -526,8 +631,7 @@ const accountsByType = computed(() => {
   letter-spacing: 0.08em;
 }
 
-.ui-accounting-pill,
-.ui-accounting-balance-pill {
+.ui-accounting-pill {
   display: inline-flex;
   align-items: center;
   min-height: 34px;
@@ -583,7 +687,8 @@ const accountsByType = computed(() => {
 
 .ui-accounting-account-row p,
 .ui-accounting-entry-row p,
-.ui-accounting-transaction-head p {
+.ui-accounting-transaction-head p,
+.ui-accounting-balance-card-head p {
   margin: 4px 0 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.78rem;
@@ -619,6 +724,12 @@ const accountsByType = computed(() => {
   grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
 }
 
+.ui-accounting-inline-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.82rem;
+}
+
 .ui-accounting-summary-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -640,11 +751,13 @@ const accountsByType = computed(() => {
   font-size: 0.75rem;
 }
 
+.ui-accounting-balance-list,
 .ui-accounting-transaction-list {
   display: grid;
   gap: 10px;
 }
 
+.ui-accounting-balance-card,
 .ui-accounting-transaction {
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -652,13 +765,70 @@ const accountsByType = computed(() => {
   overflow: hidden;
 }
 
+.ui-accounting-balance-card {
+  padding: 12px;
+  gap: 10px;
+}
+
+.ui-accounting-balance-card-head,
 .ui-accounting-transaction-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: start;
+}
+
+.ui-accounting-transaction-head {
   padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ui-accounting-balance-delta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ui-accounting-balance-delta-positive {
+  color: #8cf0d0;
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.ui-accounting-balance-delta-negative {
+  color: #ffb3b3;
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.ui-accounting-balance-delta-neutral {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ui-accounting-balance-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.ui-accounting-balance-metrics div {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+}
+
+.ui-accounting-balance-metrics dt {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.74rem;
+}
+
+.ui-accounting-balance-metrics dd {
+  margin: 6px 0 0;
+  font-weight: 600;
 }
 
 .ui-accounting-entry-editor {
@@ -727,6 +897,10 @@ const accountsByType = computed(() => {
 
   .ui-accounting-entry-editor-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-accounting-balance-metrics {
+    grid-template-columns: 1fr;
   }
 }
 

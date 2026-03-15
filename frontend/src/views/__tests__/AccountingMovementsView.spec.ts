@@ -52,7 +52,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
             side: 'debit',
             amount: '2100.00',
             currency: 'EUR',
-            annual_income_entry_id: null,
+            annual_income_entry_id: 11,
             annual_expense_entry_id: null,
             asset_id: null,
             liability_id: null,
@@ -63,6 +63,23 @@ function makeState(overrides: Record<string, unknown> = {}) {
         ],
       },
     ]),
+    accountBalancesSummary: ref({
+      filters: { year: 2026, month: 3, account_type: 'asset', status: 'posted' },
+      totals_by_account_type: { asset: '2100.00' },
+      accounts: [
+        {
+          account_id: 1,
+          name: 'Cuenta corriente',
+          account_type: 'asset',
+          currency: 'EUR',
+          origin: 'user',
+          current_balance: '2100.00',
+          period_debit_total: '2100.00',
+          period_credit_total: '0.00',
+          period_net_change: '2100.00',
+        },
+      ],
+    }),
     selectedYear: computed({
       get: () => 2026,
       set: () => undefined,
@@ -130,6 +147,11 @@ function makeState(overrides: Record<string, unknown> = {}) {
     },
     debitTotal: computed(() => 100),
     creditTotal: computed(() => 100),
+    activityFilters: {
+      query: '',
+      accountId: 'all',
+      kind: 'all',
+    },
     liquidityAccounts: computed(() => [
       {
         id: 1,
@@ -138,6 +160,20 @@ function makeState(overrides: Record<string, unknown> = {}) {
         currency: 'EUR',
       },
     ]),
+    liquidityBalanceRows: computed(() => [
+      {
+        account_id: 1,
+        name: 'Cuenta corriente',
+        account_type: 'asset',
+        currency: 'EUR',
+        origin: 'user',
+        current_balance: '2100.00',
+        period_debit_total: '2100.00',
+        period_credit_total: '0.00',
+        period_net_change: '2100.00',
+      },
+    ]),
+    liquidityBalanceTotal: computed(() => 2100),
     incomeOptions: computed(() => [{ id: 11, name: 'Nomina' }]),
     expenseOptions: computed(() => [{ id: 22, name: 'Supermercado' }]),
     transferCounterpartyOptions: computed(() => []),
@@ -154,7 +190,39 @@ function makeState(overrides: Record<string, unknown> = {}) {
         uncategorizedValue: 0,
       },
     ]),
+    filteredTransactions: computed(() => [
+      {
+        id: 7,
+        booking_date: '2026-03-15',
+        value_date: '2026-03-15',
+        description: 'Nomina marzo',
+        status: 'posted',
+        origin: 'manual',
+        notes: '',
+        created_at: '',
+        updated_at: '',
+        entries: [
+          {
+            id: 1,
+            account_id: 1,
+            account_name: 'Cuenta corriente',
+            side: 'debit',
+            amount: '2100.00',
+            currency: 'EUR',
+            annual_income_entry_id: 11,
+            annual_expense_entry_id: null,
+            asset_id: null,
+            liability_id: null,
+            notes: '',
+            created_at: '',
+            updated_at: '',
+          },
+        ],
+      },
+    ]),
     addEntry: vi.fn(),
+    activityKindLabel: vi.fn(() => 'Ingreso'),
+    liquidityBalanceDeltaTone: vi.fn(() => 'positive'),
     removeEntry: vi.fn(),
     reloadPeriod: vi.fn(),
     submitAccount: vi.fn(),
@@ -178,6 +246,7 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Nomina marzo');
     expect(wrapper.text()).toContain('Registrar movimiento diario');
     expect(wrapper.text()).toContain('Registrar movimiento rapido');
+    expect(wrapper.text()).toContain('Saldos derivados del ledger');
   });
 
   it('shows empty state and error message when needed', () => {
@@ -186,12 +255,16 @@ describe('AccountingMovementsView', () => {
         error: ref('La transaccion no esta balanceada.'),
         accounts: ref([]),
         transactions: ref([]),
+        filteredTransactions: computed(() => []),
+        liquidityAccounts: computed(() => []),
+        liquidityBalanceRows: computed(() => []),
       }),
     );
     const wrapper = mount(AccountingMovementsView);
 
     expect(wrapper.text()).toContain('La transaccion no esta balanceada.');
     expect(wrapper.text()).toContain('No hay movimientos para el periodo seleccionado.');
+    expect(wrapper.text()).toContain('Necesitas al menos una cuenta de liquidez');
   });
 
   it('wires entry add action from quick controls', async () => {
@@ -219,5 +292,13 @@ describe('AccountingMovementsView', () => {
     await wrapper.find('form.ui-accounting-transaction-form').trigger('submit.prevent');
 
     expect(state.submitQuickEntry).toHaveBeenCalled();
+  });
+
+  it('shows filter controls and derived transaction label', () => {
+    mockUseAccountingPage.mockReturnValue(makeState());
+    const wrapper = mount(AccountingMovementsView);
+
+    expect(wrapper.find('input[placeholder="Filtrar por texto o cuenta"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Ingreso');
   });
 });

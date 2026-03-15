@@ -61,6 +61,29 @@ export type MonthlyAccountingSummary = {
   months: MonthlyAccountingSummaryMonth[];
 };
 
+export type LedgerAccountBalanceSummaryItem = {
+  account_id: number;
+  name: string;
+  account_type: LedgerAccountType;
+  currency: string;
+  origin: LedgerAccountOrigin;
+  current_balance: string;
+  period_debit_total: string;
+  period_credit_total: string;
+  period_net_change: string;
+};
+
+export type LedgerAccountBalanceSummary = {
+  filters: {
+    year: number | null;
+    month: number | null;
+    account_type: LedgerAccountType | null;
+    status: LedgerTransactionStatus | null;
+  };
+  totals_by_account_type: Partial<Record<LedgerAccountType, string>>;
+  accounts: LedgerAccountBalanceSummaryItem[];
+};
+
 export type LedgerAccountWritePayload = {
   name: string;
   account_type: LedgerAccountType;

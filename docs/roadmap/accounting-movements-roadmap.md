@@ -14,11 +14,11 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - backend `accounting` con `LedgerAccount`/`LedgerTransaction`/`LedgerEntry`, CRUD API, validacion de balance y resumen mensual base
    - frontend con dominio dedicado, workspace de movimientos, lista cronologica y formulario avanzado
    - cobertura minima en `backend/accounting/tests/test_accounting.py`, `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
-2. Fase 2: avanzada pero no cerrada
+2. Fase 2: implementada y cerrada
    - backend disponible para `income`, `expense` y `transfer` via `POST /api/accounting/transactions/quick-entry/`
-   - frontend con alta rapida operativa sobre `quick-entry` y fallback a asiento balanceado manual en modo avanzado
-   - saldos actuales y agregados por periodo disponibles via `current_balance` y `GET /api/accounting/accounts/balances/`
-   - pendiente rematar UX/cobertura para declarar la fase completamente cerrada
+   - frontend con alta rapida operativa sobre `quick-entry`, fallback a asiento balanceado manual y filtros locales para la lista cronologica
+   - saldos actuales y agregados por periodo visibles en la vista via `current_balance` y `GET /api/accounting/accounts/balances/`
+   - cobertura reforzada en `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
 3. Fase 3: iniciada de forma parcial
    - `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
    - el fallback a check-ins legacy queda explicito cuando no hay cobertura ledger
@@ -71,13 +71,16 @@ Entregables:
 
 Estado actual:
 1. Backend listo para la fase.
-2. Frontend ya expone alta rapida para `income`, `expense` y `transfer` en `frontend/src/views/AccountingMovementsView.vue`.
-3. El asiento balanceado manual sigue disponible como modo avanzado para no perder capacidad operativa.
-4. La fase queda funcionalmente muy avanzada, pero todavia no se marca cerrada hasta confirmar que la UX rapida cubre satisfactoriamente el flujo diario previsto.
+2. Frontend expone alta rapida para `income`, `expense` y `transfer` en `frontend/src/views/AccountingMovementsView.vue`.
+3. La actividad del periodo ya es filtrable por texto, cuenta y tipo de movimiento sin pedir cambios de contrato al backend.
+4. La vista muestra saldos derivados del ledger por cuenta de liquidez para el periodo seleccionado.
+5. El asiento balanceado manual sigue disponible como modo avanzado para no perder capacidad operativa.
+6. La cobertura minima de store y vista confirma el flujo rapido diario y la lectura de balances, por lo que la fase queda cerrada.
 
 Criterios de salida:
 1. Los movimientos simples de liquidez se pueden registrar y consultar.
 2. Los saldos derivados son reproducibles desde ledger.
+3. La vista principal ofrece filtros operativos y estados basicos suficientes para el uso diario.
 
 ### Fase 3 - Integracion con cierre mensual
 Entregables:
