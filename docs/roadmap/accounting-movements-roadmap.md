@@ -19,7 +19,7 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - frontend con alta rapida operativa sobre `quick-entry`, fallback a asiento balanceado manual y filtros locales para la lista cronologica
    - saldos actuales y agregados por periodo visibles en la vista via `current_balance` y `GET /api/accounting/accounts/balances/`
    - cobertura reforzada en `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
-3. Fase 3: backend cerrado, frontend en convivencia controlada
+3. Fase 3: implementada y cerrada
    - backend: los resúmenes mensuales de `budget` ya mezclan ledger publicado y fallback legacy con cobertura parcial estable
    - backend: la liquidez del cierre mensual ya es ledger-aware para posiciones `tracking_mode=accounting`, respetando `as_of_date`
    - frontend: `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
@@ -103,11 +103,17 @@ Estado actual:
    - los saldos contables usados por cierre y patrimonio respetan `as_of_date`, evitando leer saldo vivo en cierres historicos
 2. Frontend en convivencia controlada:
    - `BudgetDashboardView` ya mezcla ledger y fallback legacy para ingresos y gastos
+   - las filas cubiertas por ledger se presentan como tal y bloquean la edicion de check-ins legacy para evitar doble fuente operativa
    - la lectura de liquidez ya puede apoyarse en el contrato backend estabilizado, aunque la UX todavia puede refinar la presentacion de cobertura
+3. Validacion ejecutada en Docker el 2026-03-15:
+   - backend: `ruff check .`, `mypy .`, `python manage.py test accounting --keepdb`, `python manage.py test budget --keepdb`, `python manage.py test net_worth --keepdb`
+   - frontend: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts src/views/__tests__/AccountingMovementsView.spec.ts src/domains/accounting/__tests__/store.spec.ts`
+   - incidencia conocida de entorno: `docker compose exec backend ruff format --check .` sigue fallando por archivos preexistentes fuera del alcance de esta fase
 
 Criterios de salida:
 1. El cierre mensual puede operar con cobertura ledger completa o parcial.
 2. El fallback legacy sigue funcionando.
+3. La cobertura ledger por linea deja trazable cuando una fila es contable y cuando sigue en fallback legacy.
 
 ### Fase 4 - Integracion con patrimonio
 Entregables:

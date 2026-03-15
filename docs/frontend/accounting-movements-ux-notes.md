@@ -47,6 +47,8 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 2. `BudgetDashboardView`
    - should consume ledger execution when movement coverage exists
    - should fall back to existing execution and check-in data when coverage is partial or absent
+   - should label the source row-by-row so the user can distinguish `Ledger` from `Fallback legacy`
+   - should disable legacy edit actions on rows already covered by ledger
 3. `NetWorthView`
    - positions in `tracking_mode=accounting` should show `Actividad contable`
    - the user should not be forced to leave the current workspace to inspect position activity
@@ -54,6 +56,7 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 ## States and UX edge cases
 1. Partial coverage
    - the UI should say when only part of the month or only part of the position flow is covered by ledger data
+   - the monthly-close workspace should keep editable fallback rows only where ledger coverage is absent
 2. Legacy position without ledger
    - the UI should keep current event/checkpoint behavior without implying missing data
 3. `tracking_mode=accounting` without linked account

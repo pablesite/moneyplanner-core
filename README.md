@@ -13,6 +13,7 @@ Open-source personal finance app foundation for MoneyPlanner.
 3. Data input
 4. Financial guide v1
 5. Family and ownership
+6. Daily accounting movements with monthly-close coexistence in phase 3
 
 ## Stack
 1. `backend/` Django + DRF
