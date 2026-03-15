@@ -1,6 +1,7 @@
 import { coreApi } from '@/lib/api';
 import type {
   LedgerAccount,
+  LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
   LedgerEntry,
   LedgerTransaction,
@@ -65,6 +66,24 @@ export const coreAccountingApi = {
   getMonthlySummary(year: number) {
     return coreApi.get<MonthlyAccountingSummary>('/api/accounting/transactions/monthly-summary/', {
       params: { year },
+    });
+  },
+  getAccountBalances(params?: {
+    year?: number;
+    month?: number;
+    account_type?: string;
+    status?: string;
+  }) {
+    return coreApi.get<LedgerAccountBalanceSummary>('/api/accounting/accounts/balances/', {
+      params:
+        params && (params.year || params.month || params.account_type || params.status)
+          ? {
+              ...(params.year ? { year: params.year } : {}),
+              ...(params.month ? { month: params.month } : {}),
+              ...(params.account_type ? { account_type: params.account_type } : {}),
+              ...(params.status ? { status: params.status } : {}),
+            }
+          : undefined,
     });
   },
 };

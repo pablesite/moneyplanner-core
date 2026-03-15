@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { coreAccountingApi } from '@/domains/accounting/api';
 import type {
   LedgerAccount,
+  LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
   LedgerTransaction,
   LedgerTransactionWritePayload,
@@ -19,6 +20,7 @@ export const useAccountingStore = defineStore('accounting', {
     accounts: [] as LedgerAccount[],
     transactions: [] as LedgerTransaction[],
     monthlySummary: null as MonthlyAccountingSummary | null,
+    accountBalancesSummary: null as LedgerAccountBalanceSummary | null,
     selectedYear: new Date().getFullYear() as number,
     selectedMonth: (new Date().getMonth() + 1) as number,
   }),
@@ -34,17 +36,24 @@ export const useAccountingStore = defineStore('accounting', {
       this.loading = true;
       this.error = null;
       try {
-        const [accountsRes, transactionsRes, summaryRes] = await Promise.all([
+        const [accountsRes, transactionsRes, summaryRes, balancesRes] = await Promise.all([
           coreAccountingApi.getAccounts({ is_active: true }),
           coreAccountingApi.getTransactions({
             year: this.selectedYear,
             month: this.selectedMonth,
           }),
           coreAccountingApi.getMonthlySummary(this.selectedYear),
+          coreAccountingApi.getAccountBalances({
+            year: this.selectedYear,
+            month: this.selectedMonth,
+            account_type: 'asset',
+            status: 'posted',
+          }),
         ]);
         this.accounts = accountsRes.data;
         this.transactions = transactionsRes.data;
         this.monthlySummary = summaryRes.data;
+        this.accountBalancesSummary = balancesRes.data;
       } catch (error: unknown) {
         this.error = toApiErrorMessage(error);
       } finally {

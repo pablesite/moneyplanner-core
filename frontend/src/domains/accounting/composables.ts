@@ -8,8 +8,10 @@ import {
   type AnnualIncomeEntry,
 } from '@/domains/data-input';
 import type {
+  LedgerAccountBalanceSummaryItem,
   LedgerAccountType,
   LedgerEntrySide,
+  LedgerTransaction,
   LedgerTransactionWritePayload,
   QuickLedgerMovementType,
   QuickLedgerTransactionWritePayload,
@@ -23,6 +25,8 @@ type TransactionFormRow = {
   currency: string;
   notes: string;
 };
+
+type ActivityFilter = 'all' | 'income' | 'expense' | 'transfer';
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -38,7 +42,7 @@ export function useAccountingPage() {
   const incomeStore = useAnnualIncomeStore('core');
   const expenseStore = useAnnualExpenseStore('core');
   const { loading, accountCreationLoading, transactionCreationLoading, error } = storeToRefs(store);
-  const { accounts, transactions, monthlySummary } = storeToRefs(store);
+  const { accounts, transactions, monthlySummary, accountBalancesSummary } = storeToRefs(store);
 
   const successMessage = ref<string | null>(null);
 
@@ -61,6 +65,12 @@ export function useAccountingPage() {
     annual_income_entry_id: null as number | null,
     annual_expense_entry_id: null as number | null,
     notes: '',
+  });
+
+  const activityFilters = reactive({
+    query: '',
+    accountId: 'all',
+    kind: 'all' as ActivityFilter,
   });
 
   let rowId = 0;
@@ -216,6 +226,45 @@ export function useAccountingPage() {
       uncategorizedValue: toNumber(row.uncategorized_total),
     })),
   );
+  const liquidityBalanceRows = computed(() =>
+    (accountBalancesSummary.value?.accounts ?? []).map((row) => ({
+      ...row,
+      currentBalanceValue: toNumber(row.current_balance),
+      periodDebitValue: toNumber(row.period_debit_total),
+      periodCreditValue: toNumber(row.period_credit_total),
+      periodNetChangeValue: toNumber(row.period_net_change),
+    })),
+  );
+  const liquidityBalanceTotal = computed(() =>
+    toNumber(accountBalancesSummary.value?.totals_by_account_type.asset ?? '0'),
+  );
+  const filteredTransactions = computed(() =>
+    transactions.value.filter((transaction) => {
+      const normalizedQuery = activityFilters.query.trim().toLocaleLowerCase('es');
+      if (normalizedQuery) {
+        const haystack = [
+          transaction.description,
+          transaction.notes,
+          ...transaction.entries.map((entry) => `${entry.account_name} ${entry.notes}`),
+        ]
+          .join(' ')
+          .toLocaleLowerCase('es');
+        if (!haystack.includes(normalizedQuery)) return false;
+      }
+
+      if (activityFilters.accountId !== 'all') {
+        const expectedAccountId = Number(activityFilters.accountId);
+        if (!transaction.entries.some((entry) => entry.account_id === expectedAccountId))
+          return false;
+      }
+
+      if (activityFilters.kind !== 'all') {
+        if (getTransactionActivityKind(transaction) !== activityFilters.kind) return false;
+      }
+
+      return true;
+    }),
+  );
 
   function resetAccountForm() {
     accountForm.name = '';
@@ -263,6 +312,44 @@ export function useAccountingPage() {
     quickEntryForm.annual_income_entry_id = null;
     quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
+  }
+
+  function getTransactionActivityKind(
+    transaction: LedgerTransaction,
+  ): Exclude<ActivityFilter, 'all'> | 'other' {
+    const hasIncomeLink = transaction.entries.some((entry) => entry.annual_income_entry_id != null);
+    if (hasIncomeLink) return 'income';
+
+    const hasExpenseLink = transaction.entries.some(
+      (entry) => entry.annual_expense_entry_id != null,
+    );
+    if (hasExpenseLink) return 'expense';
+
+    const assetEntries = transaction.entries.filter(
+      (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
+    );
+    if (assetEntries.length >= 2) return 'transfer';
+
+    return 'other';
+  }
+
+  function activityKindLabel(transaction: LedgerTransaction): string {
+    const kind = getTransactionActivityKind(transaction);
+    if (kind === 'income') return 'Ingreso';
+    if (kind === 'expense') return 'Gasto';
+    if (kind === 'transfer') return 'Transferencia';
+    return 'Asiento';
+  }
+
+  function liquidityBalanceDeltaTone(
+    row: Pick<LedgerAccountBalanceSummaryItem, 'account_type'> & { period_net_change: string },
+  ): 'positive' | 'negative' | 'neutral' {
+    const value = toNumber(row.period_net_change);
+    if (value === 0) return 'neutral';
+    if (row.account_type === 'asset' || row.account_type === 'expense') {
+      return value > 0 ? 'positive' : 'negative';
+    }
+    return value > 0 ? 'negative' : 'positive';
   }
 
   function addEntry(side: LedgerEntrySide) {
@@ -369,6 +456,7 @@ export function useAccountingPage() {
     accounts,
     transactions,
     monthlySummary,
+    accountBalancesSummary,
     selectedYear,
     selectedMonth,
     yearOptions,
@@ -378,7 +466,10 @@ export function useAccountingPage() {
     accountForm,
     quickEntryForm,
     transactionForm,
+    activityFilters,
     liquidityAccounts,
+    liquidityBalanceRows,
+    liquidityBalanceTotal,
     incomeOptions,
     expenseOptions,
     transferCounterpartyOptions,
@@ -387,7 +478,10 @@ export function useAccountingPage() {
     creditTotal,
     transactionBalanced,
     summaryRows,
+    filteredTransactions,
     addEntry,
+    activityKindLabel,
+    liquidityBalanceDeltaTone,
     removeEntry,
     reloadPeriod,
     submitAccount,
