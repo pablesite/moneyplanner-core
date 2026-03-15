@@ -104,7 +104,12 @@ function makeState(overrides: Record<string, unknown> = {}) {
     ownerships: [],
     timeline: { rows: [], base_currency: 'EUR' },
     timelineLoading: false,
-    positionTimeline: { rows: [], base_currency: 'EUR', position_type: 'asset', position_id: 1 },
+    positionTimeline: {
+      rows: [] as Array<{ date: string; value: string; value_base: string }>,
+      base_currency: 'EUR',
+      position_type: 'asset',
+      position_id: 1,
+    },
     positionTimelineLoading: false,
     positionActivityLoading: false,
     assetValuations: [],
