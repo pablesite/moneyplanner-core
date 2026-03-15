@@ -20,12 +20,16 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - saldos actuales y agregados por periodo visibles en la vista via `current_balance` y `GET /api/accounting/accounts/balances/`
    - cobertura reforzada en `frontend/src/domains/accounting/__tests__/store.spec.ts` y `frontend/src/views/__tests__/AccountingMovementsView.spec.ts`
 3. Fase 3: implementada y cerrada
-   - backend: los resúmenes mensuales de `budget` ya mezclan ledger publicado y fallback legacy con cobertura parcial estable
+   - backend: los resumenes mensuales de `budget` ya mezclan ledger publicado y fallback legacy con cobertura parcial estable
    - backend: la liquidez del cierre mensual ya es ledger-aware para posiciones `tracking_mode=accounting`, respetando `as_of_date`
    - frontend: `BudgetDashboardView` ya consume ledger por linea para ingresos y gastos cuando existe enlace con presupuesto
    - frontend: el fallback a check-ins legacy sigue explicito cuando no hay cobertura ledger
    - cobertura reforzada en `backend/accounting/tests/test_accounting.py`, `backend/budget/tests/test_api_checkins.py`, `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
-4. Fase 5: implementada y cerrada
+4. Fase 4: implementada y cerrada
+   - backend: `POST /api/accounting/transactions/quick-entry/` soporta `investment_purchase` y `debt_payment` con desglose principal/interes cuando aplica
+   - frontend: `AccountingMovementsView` y `NetWorthView` exponen flujos y actividad contable para posiciones `tracking_mode=accounting`
+   - cobertura reforzada en `backend/accounting/tests/test_accounting.py`, `backend/net_worth/tests/test_net_worth.py` y `frontend/src/views/__tests__/NetWorthView.spec.ts`
+5. Fase 5: implementada y cerrada
    - backend: endpoint `GET /api/accounting/transactions/budget-suggestions/` con series mensuales historicas y sugerencias orientativas anualizadas por categoria/subcategoria
    - frontend: `BudgetDashboardView` muestra lectura de sugerencias ledger para planificacion sin bloquear la edicion manual del presupuesto
    - cobertura base en `backend/accounting/tests/test_accounting.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
