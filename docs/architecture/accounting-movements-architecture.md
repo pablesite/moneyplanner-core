@@ -1,0 +1,104 @@
+# Accounting Movements Architecture
+
+## Objective
+Define the Core-owned architecture for daily movements and the new `accounting` domain.
+
+## Problem to solve
+Core already has useful but separate execution layers:
+1. annual budget entries and monthly check-ins
+2. net-worth events split by position type
+3. liquidity monthly closing balances
+
+This leaves a gap:
+1. there is no shared book of daily movements
+2. liquidity, investment, debt, and patrimonial purchases do not yet converge on one operational model
+3. monthly close can reconcile results, but not derive them from a common transactional layer
+
+## Principles
+1. `accounting` belongs to Core, not to SaaS.
+2. The domain starts with double-entry bookkeeping semantics.
+3. Legacy models can coexist temporarily while the new domain is rolled out.
+4. `tracking_mode` remains the main complexity control for positions.
+5. Rollout must happen in small phases without breaking `budget`, `net_worth`, or `monthly close`.
+
+## Conceptual model v1
+1. `LedgerTransaction`
+   - user-owned transactional envelope
+   - booking/value dates, description, status, origin, notes
+   - can represent simple flows, transfers, debt payments, and patrimonial purchases
+2. `LedgerEntry`
+   - belongs to one `LedgerTransaction`
+   - points to one `LedgerAccount`
+   - stores side, amount, currency, and optional classification metadata
+   - may keep optional links to `Asset`, `Liability`, `AnnualIncomeEntry`, or `AnnualExpenseEntry`
+3. `LedgerAccount`
+   - user-owned operational account
+   - can be backed by an `Asset`, a `Liability`, or a system/virtual account
+   - will be the balance source for positions tracked through accounting
+
+## Relationships with current domains
+1. `Asset`
+   - cash and investment assets in `tracking_mode=accounting` should map to a `LedgerAccount`
+   - purchases of other assets can be represented as liquidity outflow plus patrimonial counterpart entry
+2. `Liability`
+   - liabilities in `tracking_mode=accounting` should map to a `LedgerAccount`
+   - debt payment flows should separate principal from interest/fees
+3. `AnnualIncomeEntry`
+   - remains planning data in v1
+   - can receive optional execution links or category alignment from ledger data
+4. `AnnualExpenseEntry`
+   - remains planning data in v1
+   - can receive optional execution links or category alignment from ledger data
+
+## Behavioral rules
+1. `tracking_mode=manual`
+   - current manual valuations, events, and check-ins remain valid
+   - balances are not derived from the ledger by default
+2. `tracking_mode=accounting`
+   - the linked account becomes the operational source for balance and execution flows
+   - the position should expose accounting activity in addition to legacy views where relevant
+3. Liquidity balances
+   - liquidity accounts tracked through accounting derive their closing balance from ledger entries
+   - liquidity monthly check-ins stay as fallback and reconciliation support during transition
+4. Investments
+   - contributions, withdrawals, fees, and income should move toward transaction-driven activity
+   - legacy investment events remain available until explicit replacement
+5. Debt and patrimonial purchases
+   - debt payment transactions should model principal and cost separately
+   - purchases of real estate, furnishings, vehicles, or similar positions should be representable from liquidity to asset counterpart entries
+6. Legacy status during transition
+   - `LiquidityAssetEvent`, `InvestmentAssetEvent`, and `LiabilityEvent` remain active
+   - they are compatibility layers, not the long-term primary execution model
+
+## Integration with current views
+1. Net worth
+   - positions in `tracking_mode=accounting` should expose accounting activity in the same contextual workspace
+   - the net-worth view remains summary-first and position drilldown stays in place
+2. Budget
+   - annual budget remains the planning layer
+   - executed monthly figures should consume ledger aggregates when coverage exists
+3. Monthly close
+   - monthly close should progressively use ledger-derived liquidity and execution
+   - legacy check-ins remain fallback when coverage is partial or absent
+
+## Rollout phases
+1. Base module
+   - create the `accounting` backend app and frontend domain
+   - define core ledger entities and initial API surface
+2. Liquidity plus simple income/expense
+   - support daily inflows and outflows against liquidity accounts
+   - support basic categorization for monthly execution
+3. Internal transfers
+   - support account-to-account transfers between liquidity accounts
+   - keep transfer semantics explicit and balanced
+4. Investment and debt flows
+   - support investment purchases and withdrawals
+   - support debt payments with principal and interest separation
+5. Budget-derived aggregates
+   - expose historical monthly aggregates and suggestion-ready series for planning
+
+## Explicit assumptions
+1. Firefly is only a conceptual reference for transaction and account modeling.
+2. There is no Firefly import/export integration in v1.
+3. There is no automatic migration of legacy data in v1.
+4. The architecture document is the canonical functional source for this initiative.

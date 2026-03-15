@@ -21,10 +21,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 ## Product Scope
 1. Net worth
 2. Budget and monthly close
-3. Data input
-4. Financial guide v1
-5. Family and ownership
-6. Supporting product capabilities that belong to the Core domain baseline
+3. Accounting / daily movements
+4. Data input
+5. Financial guide v1
+6. Family and ownership
+7. Supporting product capabilities that belong to the Core domain baseline
 
 ## Architectural Rule
 1. Shared product behavior belongs in Core.
@@ -32,14 +33,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. Core documentation must remain self-contained and understandable without SaaS documentation.
 
 ## Internal Structure
-1. Backend apps organize domain areas such as accounts, budget, net worth, memberships, and shared core services.
-2. Frontend code is organized by product domains under `frontend/src/domains/*`.
+1. Backend apps organize domain areas such as accounts, budget, net worth, accounting, memberships, and shared core services.
+2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
 ## Related Documents
 1. `../../README.md`
 2. `../../CONTRIBUTING.md`
 3. `../../RELEASING.md`
-4. `../operations/dev-setup.md`
-5. `../roadmap/community-roadmap.md`
-6. `../roadmap/backend-refactor-roadmap.md`
+4. `accounting-movements-architecture.md`
+5. `../operations/dev-setup.md`
+6. `../roadmap/community-roadmap.md`
+7. `../roadmap/backend-refactor-roadmap.md`
