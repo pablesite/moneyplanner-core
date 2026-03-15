@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import cast
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
@@ -7,8 +10,12 @@ from net_worth.models import Asset, Liability
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services import (
+    create_quick_transaction,
     get_account_balance,
+    get_or_create_system_account,
     normalize_currency_code,
+    validate_counterparty_account_type,
+    validate_liquidity_account,
     validate_booking_and_value_dates,
     validate_transaction_entries,
 )
@@ -246,3 +253,145 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
                 payload["currency"] = payload.get("currency") or payload["account"].currency
                 LedgerEntry.objects.create(transaction=instance, **payload)
         return instance
+
+
+class QuickLedgerTransactionSerializer(serializers.Serializer):
+    movement_type = serializers.ChoiceField(choices=["income", "expense", "transfer"])
+    booking_date = serializers.DateField(default=timezone.localdate)
+    value_date = serializers.DateField(default=timezone.localdate)
+    description = serializers.CharField(max_length=240)
+    amount = serializers.DecimalField(max_digits=20, decimal_places=8)
+    account_id = serializers.PrimaryKeyRelatedField(
+        source="account",
+        queryset=LedgerAccount.objects.select_related("asset"),
+    )
+    counterparty_account_id = serializers.PrimaryKeyRelatedField(
+        source="counterparty_account",
+        queryset=LedgerAccount.objects.select_related("asset"),
+        allow_null=True,
+        required=False,
+    )
+    annual_income_entry_id = serializers.PrimaryKeyRelatedField(
+        source="annual_income_entry",
+        queryset=AnnualIncomeEntry.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    annual_expense_entry_id = serializers.PrimaryKeyRelatedField(
+        source="annual_expense_entry",
+        queryset=AnnualExpenseEntry.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    status = serializers.ChoiceField(
+        choices=LedgerTransaction.Status.choices,
+        default=LedgerTransaction.Status.POSTED,
+    )
+    origin = serializers.ChoiceField(
+        choices=LedgerTransaction.Origin.choices,
+        default=LedgerTransaction.Origin.MANUAL,
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        request = self.context["request"]
+        user = request.user
+        movement_type = attrs["movement_type"]
+        account = attrs["account"]
+        counterparty_account = attrs.get("counterparty_account")
+        annual_income_entry = attrs.get("annual_income_entry")
+        annual_expense_entry = attrs.get("annual_expense_entry")
+
+        validate_booking_and_value_dates(
+            booking_date=attrs["booking_date"],
+            value_date=attrs["value_date"],
+        )
+        validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
+
+        if annual_income_entry is not None and annual_income_entry.user_id != user.id:
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "La referencia no pertenece al usuario autenticado."}
+            )
+        if annual_expense_entry is not None and annual_expense_entry.user_id != user.id:
+            raise serializers.ValidationError(
+                {"annual_expense_entry_id": "La referencia no pertenece al usuario autenticado."}
+            )
+
+        if movement_type == "income":
+            if annual_expense_entry is not None:
+                raise serializers.ValidationError(
+                    {"annual_expense_entry_id": "No aplica a movimientos de ingreso."}
+                )
+            if counterparty_account is not None:
+                validate_counterparty_account_type(
+                    account=counterparty_account,
+                    user_id=user.id,
+                    expected_type=cast(str, LedgerAccount.AccountType.INCOME),
+                    field_name="counterparty_account_id",
+                )
+            else:
+                attrs["counterparty_account"] = get_or_create_system_account(
+                    user_id=user.id,
+                    account_type=cast(str, LedgerAccount.AccountType.INCOME),
+                    currency=account.currency,
+                    name=(
+                        f"Ingreso: {annual_income_entry.name}"
+                        if annual_income_entry is not None
+                        else "Ingresos sin categoria"
+                    ),
+                )
+        elif movement_type == "expense":
+            if annual_income_entry is not None:
+                raise serializers.ValidationError(
+                    {"annual_income_entry_id": "No aplica a movimientos de gasto."}
+                )
+            if counterparty_account is not None:
+                validate_counterparty_account_type(
+                    account=counterparty_account,
+                    user_id=user.id,
+                    expected_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+                    field_name="counterparty_account_id",
+                )
+            else:
+                attrs["counterparty_account"] = get_or_create_system_account(
+                    user_id=user.id,
+                    account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+                    currency=account.currency,
+                    name=(
+                        f"Gasto: {annual_expense_entry.name}"
+                        if annual_expense_entry is not None
+                        else "Gastos sin categoria"
+                    ),
+                )
+        else:
+            if annual_income_entry is not None:
+                raise serializers.ValidationError(
+                    {"annual_income_entry_id": "No aplica a transferencias internas."}
+                )
+            if annual_expense_entry is not None:
+                raise serializers.ValidationError(
+                    {"annual_expense_entry_id": "No aplica a transferencias internas."}
+                )
+            validate_liquidity_account(
+                account=counterparty_account,
+                user_id=user.id,
+                field_name="counterparty_account_id",
+            )
+            if account.id == counterparty_account.id:
+                raise serializers.ValidationError(
+                    {"counterparty_account_id": "La cuenta destino debe ser distinta a la origen."}
+                )
+            if account.currency != counterparty_account.currency:
+                raise serializers.ValidationError(
+                    {
+                        "counterparty_account_id": (
+                            "La transferencia interna exige la misma moneda en ambas cuentas."
+                        )
+                    }
+                )
+
+        return attrs
+
+    def create(self, validated_data: dict) -> LedgerTransaction:
+        request = self.context["request"]
+        return create_quick_transaction(user=request.user, **validated_data)

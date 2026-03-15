@@ -9,6 +9,18 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
 3. La UX canonica de frontend vive en `../frontend/accounting-movements-ux-notes.md`.
 4. El trabajo debe ejecutarse en PRs pequenas y validarse dentro de Docker.
 
+## Estado real backend (2026-03-15)
+1. Fase 1 backend: implementada en codigo
+   - app `accounting`, modelos `LedgerAccount`/`LedgerTransaction`/`LedgerEntry`, CRUD API, validacion de balance y resumen mensual base
+   - cobertura en `backend/accounting/tests/test_accounting.py`
+2. Fase 2 backend: parcialmente implementada
+   - soporte explicito para `income`, `expense` y `transfer` via `POST /api/accounting/transactions/quick-entry/`
+   - saldos actuales disponibles por cuenta via `current_balance`
+3. Pendiente backend para fases posteriores
+   - cobertura/fallback de cierre mensual basada en ledger
+   - actividad contable contextual en patrimonio
+   - compras de inversion y pagos de deuda con breakdown especializado
+
 ## Principios de trabajo
 1. PRs pequenas y reversibles.
 2. Compatibilidad temporal con eventos y check-ins legacy.

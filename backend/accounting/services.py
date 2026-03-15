@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import QuerySet
 from rest_framework.exceptions import ValidationError
 
-from .models import LedgerAccount, LedgerEntry
+from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 
 ZERO = Decimal("0")
 TWO_DECIMAL_PLACES = Decimal("0.01")
@@ -161,3 +162,169 @@ def validate_booking_and_value_dates(*, booking_date: date, value_date: date) ->
         raise ValidationError(
             {"value_date": "La fecha valor no puede ser anterior a la fecha de contabilizacion."}
         )
+
+
+def validate_liquidity_account(
+    *, account: LedgerAccount | None, user_id: int, field_name: str
+) -> None:
+    if account is None:
+        raise ValidationError({field_name: "La cuenta es obligatoria."})
+    if account.user_id != user_id:
+        raise ValidationError({field_name: "La cuenta no pertenece al usuario autenticado."})
+    if account.account_type != LedgerAccount.AccountType.ASSET:
+        raise ValidationError({field_name: "La cuenta debe ser de tipo asset."})
+
+    if account.asset_id is None:
+        return
+
+    from net_worth.models import Asset
+
+    if account.asset.category != Asset.Category.CASH:
+        raise ValidationError(
+            {field_name: "La cuenta debe estar ligada a un activo de liquidez o ser operativa."}
+        )
+
+
+def validate_counterparty_account_type(
+    *,
+    account: LedgerAccount | None,
+    user_id: int,
+    expected_type: str,
+    field_name: str,
+) -> None:
+    if account is None:
+        raise ValidationError({field_name: "La cuenta contrapartida es obligatoria."})
+    if account.user_id != user_id:
+        raise ValidationError({field_name: "La cuenta no pertenece al usuario autenticado."})
+    if account.account_type != expected_type:
+        raise ValidationError(
+            {field_name: (f"La cuenta contrapartida debe ser de tipo {expected_type}.")}
+        )
+
+
+def get_or_create_system_account(
+    *,
+    user_id: int,
+    account_type: str,
+    currency: str,
+    name: str,
+) -> LedgerAccount:
+    normalized_currency = normalize_currency_code(currency)
+    account, _created = LedgerAccount.objects.get_or_create(
+        user_id=user_id,
+        account_type=account_type,
+        currency=normalized_currency,
+        origin=LedgerAccount.Origin.SYSTEM,
+        name=name,
+        defaults={"is_active": True},
+    )
+    return account
+
+
+@transaction.atomic
+def create_quick_transaction(
+    *,
+    user,
+    movement_type: str,
+    booking_date: date,
+    value_date: date,
+    description: str,
+    amount: Decimal,
+    account: LedgerAccount,
+    counterparty_account: LedgerAccount,
+    status: str,
+    origin: str,
+    notes: str = "",
+    annual_income_entry=None,
+    annual_expense_entry=None,
+) -> LedgerTransaction:
+    validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
+    validate_transaction_entries(
+        entries_data=_build_quick_entry_payload(
+            movement_type=movement_type,
+            amount=amount,
+            account=account,
+            counterparty_account=counterparty_account,
+            annual_income_entry=annual_income_entry,
+            annual_expense_entry=annual_expense_entry,
+        ),
+        user_id=user.id,
+    )
+
+    transaction_row = LedgerTransaction.objects.create(
+        user=user,
+        booking_date=booking_date,
+        value_date=value_date,
+        description=description,
+        status=status,
+        origin=origin,
+        notes=notes,
+    )
+    for entry_data in _build_quick_entry_payload(
+        movement_type=movement_type,
+        amount=amount,
+        account=account,
+        counterparty_account=counterparty_account,
+        annual_income_entry=annual_income_entry,
+        annual_expense_entry=annual_expense_entry,
+    ):
+        LedgerEntry.objects.create(transaction=transaction_row, **entry_data)
+    return transaction_row
+
+
+def _build_quick_entry_payload(
+    *,
+    movement_type: str,
+    amount: Decimal,
+    account: LedgerAccount,
+    counterparty_account: LedgerAccount,
+    annual_income_entry=None,
+    annual_expense_entry=None,
+) -> list[dict]:
+    base_amount = Decimal(amount)
+    if movement_type == "income":
+        return [
+            {
+                "account": account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+            {
+                "account": counterparty_account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": counterparty_account.currency,
+                "annual_income_entry": annual_income_entry,
+            },
+        ]
+    if movement_type == "expense":
+        return [
+            {
+                "account": counterparty_account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": base_amount,
+                "currency": counterparty_account.currency,
+                "annual_expense_entry": annual_expense_entry,
+            },
+            {
+                "account": account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+        ]
+    return [
+        {
+            "account": counterparty_account,
+            "side": LedgerEntry.Side.DEBIT,
+            "amount": base_amount,
+            "currency": counterparty_account.currency,
+        },
+        {
+            "account": account,
+            "side": LedgerEntry.Side.CREDIT,
+            "amount": base_amount,
+            "currency": account.currency,
+        },
+    ]
