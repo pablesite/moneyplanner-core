@@ -141,6 +141,7 @@ class AssetSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, attrs):
+        request = self.context.get("request")
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
         accounting_account_id = attrs.get(
             "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
@@ -314,6 +315,9 @@ class AssetSerializer(serializers.ModelSerializer):
             monthly_contribution_amount=monthly_contribution_amount,
             market_value_override=market_value_override,
             market_value_override_date=market_value_override_date,
+            user_id=getattr(getattr(request, "user", None), "id", None),
+            current_asset_id=getattr(self.instance, "id", None),
+            currency=attrs.get("currency", getattr(self.instance, "currency", None)),
         )
         return attrs
 
@@ -497,6 +501,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             self.fields["financed_asset_id"].queryset = financed_asset_queryset
 
     def validate(self, attrs):
+        request = self.context.get("request")
         tracking_mode = attrs.get("tracking_mode", getattr(self.instance, "tracking_mode", None))
         accounting_account_id = attrs.get(
             "accounting_account_id", getattr(self.instance, "accounting_account_id", None)
@@ -560,6 +565,9 @@ class LiabilitySerializer(serializers.ModelSerializer):
             cancellation_fee_amount=cancellation_fee_amount,
             expense_subcategory_override=expense_subcategory_override,
             financed_asset=financed_asset,
+            user_id=getattr(getattr(request, "user", None), "id", None),
+            current_liability_id=getattr(self.instance, "id", None),
+            currency=attrs.get("currency", getattr(self.instance, "currency", None)),
         )
 
         attrs["is_asset_backed"] = infer_liability_is_asset_backed(financed_asset=financed_asset)

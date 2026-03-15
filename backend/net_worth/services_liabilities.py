@@ -48,6 +48,50 @@ INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
 }
 
 
+def _get_accounting_liability_account(*, user_id: int, account_id: int | None):
+    from accounting.models import LedgerAccount
+    from accounting.services import get_user_ledger_account
+
+    return get_user_ledger_account(
+        user_id=user_id,
+        account_id=account_id,
+        expected_type=cast(str, LedgerAccount.AccountType.LIABILITY),
+    )
+
+
+def _validate_accounting_liability_account_link(
+    *,
+    user_id: int | None,
+    accounting_account_id,
+    current_liability_id: int | None,
+    currency: str | None,
+) -> None:
+    if user_id is None:
+        return
+
+    accounting_account = _get_accounting_liability_account(
+        user_id=user_id,
+        account_id=accounting_account_id,
+    )
+    if accounting_account is None:
+        raise DRFValidationError(
+            {
+                "accounting_account_id": (
+                    "La cuenta contable no existe, no pertenece al usuario o no es de tipo liability."
+                )
+            }
+        )
+    normalized_currency = str(currency or "").strip().upper()
+    if normalized_currency and accounting_account.currency != normalized_currency:
+        raise DRFValidationError(
+            {"accounting_account_id": "La cuenta contable debe usar la misma moneda que el pasivo."}
+        )
+    if accounting_account.liability_id not in (None, current_liability_id):
+        raise DRFValidationError(
+            {"accounting_account_id": "La cuenta contable ya esta vinculada a otro pasivo."}
+        )
+
+
 def validate_liability_payload(
     *,
     tracking_mode: str | None,
@@ -63,6 +107,9 @@ def validate_liability_payload(
     cancellation_fee_amount=None,
     expense_subcategory_override: str | None = None,
     financed_asset=None,
+    user_id: int | None = None,
+    current_liability_id: int | None = None,
+    currency: str | None = None,
 ) -> None:
     if tracking_mode == Liability.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -72,6 +119,13 @@ def validate_liability_payload(
                     "(placeholder hasta que exista contabilidad)."
                 )
             }
+        )
+    if tracking_mode == Liability.TrackingMode.ACCOUNTING and user_id is not None:
+        _validate_accounting_liability_account_link(
+            user_id=user_id,
+            accounting_account_id=accounting_account_id,
+            current_liability_id=current_liability_id,
+            currency=currency,
         )
 
     requires_tae = category in LIABILITY_CATEGORIES_REQUIRING_TAE
@@ -452,6 +506,16 @@ def get_effective_liability_amount(
     *, liability: Liability, as_of_date: date | None = None
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
+    if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
+        from accounting.services import get_account_balance
+
+        accounting_account = _get_accounting_liability_account(
+            user_id=liability.user_id,
+            account_id=liability.accounting_account_id,
+        )
+        if accounting_account is not None and accounting_account.currency == liability.currency:
+            return get_account_balance(account=accounting_account)
+
     valuation = (
         LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)
         .order_by("-valuation_date", "-updated_at", "-id")

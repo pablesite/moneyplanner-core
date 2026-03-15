@@ -73,6 +73,50 @@ INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
 }
 
 
+def _get_accounting_asset_account(*, user_id: int, account_id: int | None):
+    from accounting.models import LedgerAccount
+    from accounting.services import get_user_ledger_account
+
+    return get_user_ledger_account(
+        user_id=user_id,
+        account_id=account_id,
+        expected_type=cast(str, LedgerAccount.AccountType.ASSET),
+    )
+
+
+def _validate_accounting_asset_account_link(
+    *,
+    user_id: int | None,
+    accounting_account_id,
+    current_asset_id: int | None,
+    currency: str | None,
+) -> None:
+    if user_id is None:
+        return
+
+    accounting_account = _get_accounting_asset_account(
+        user_id=user_id,
+        account_id=accounting_account_id,
+    )
+    if accounting_account is None:
+        raise DRFValidationError(
+            {
+                "accounting_account_id": (
+                    "La cuenta contable no existe, no pertenece al usuario o no es de tipo asset."
+                )
+            }
+        )
+    normalized_currency = str(currency or "").strip().upper()
+    if normalized_currency and accounting_account.currency != normalized_currency:
+        raise DRFValidationError(
+            {"accounting_account_id": "La cuenta contable debe usar la misma moneda que el activo."}
+        )
+    if accounting_account.asset_id not in (None, current_asset_id):
+        raise DRFValidationError(
+            {"accounting_account_id": "La cuenta contable ya esta vinculada a otro activo."}
+        )
+
+
 def _validate_periodic_investment_payload(
     *,
     start_date: date | None,
@@ -165,6 +209,9 @@ def validate_asset_payload(
     monthly_contribution_amount=None,
     market_value_override=None,
     market_value_override_date: date | None = None,
+    user_id: int | None = None,
+    current_asset_id: int | None = None,
+    currency: str | None = None,
 ) -> None:
     if tracking_mode == Asset.TrackingMode.ACCOUNTING and not accounting_account_id:
         raise DRFValidationError(
@@ -174,6 +221,13 @@ def validate_asset_payload(
                     "(placeholder hasta que exista contabilidad)."
                 )
             }
+        )
+    if tracking_mode == Asset.TrackingMode.ACCOUNTING and user_id is not None:
+        _validate_accounting_asset_account_link(
+            user_id=user_id,
+            accounting_account_id=accounting_account_id,
+            current_asset_id=current_asset_id,
+            currency=currency,
         )
 
     if category and subcategory:
@@ -418,6 +472,16 @@ def _get_degressive_remaining_ratio(
 
 def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
+    if asset.tracking_mode == Asset.TrackingMode.ACCOUNTING:
+        from accounting.services import get_account_balance
+
+        accounting_account = _get_accounting_asset_account(
+            user_id=asset.user_id,
+            account_id=asset.accounting_account_id,
+        )
+        if accounting_account is not None and accounting_account.currency == asset.currency:
+            return get_account_balance(account=accounting_account)
+
     if asset.category == Asset.Category.INVESTMENTS:
         return _get_effective_investment_asset_amount(asset=asset, as_of_date=ref_date)
     if asset.category == Asset.Category.CASH:
