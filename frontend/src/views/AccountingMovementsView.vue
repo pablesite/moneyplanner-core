@@ -15,8 +15,15 @@ const {
   yearOptions,
   monthOptions,
   accountTypeOptions,
+  quickMovementTypeOptions,
   accountForm,
+  quickEntryForm,
   transactionForm,
+  liquidityAccounts,
+  incomeOptions,
+  expenseOptions,
+  transferCounterpartyOptions,
+  quickEntryReady,
   debitTotal,
   creditTotal,
   transactionBalanced,
@@ -25,6 +32,7 @@ const {
   removeEntry,
   reloadPeriod,
   submitAccount,
+  submitQuickEntry,
   submitTransaction,
 } = useAccountingPage();
 
@@ -73,8 +81,8 @@ const accountsByType = computed(() => {
         <p class="ui-pro-kicker">Accounting movements</p>
         <h1 class="h1 ui-accounting-title">Libro diario operativo</h1>
         <p class="subtle ui-accounting-subtitle">
-          Primera entrega del dominio contable: cuentas, asientos balanceados y lectura mensual para
-          preparar la integracion futura con presupuesto y patrimonio.
+          Primera entrega del dominio contable: cuentas, entrada rapida de movimientos y lectura
+          mensual para preparar la integracion futura con presupuesto y patrimonio.
         </p>
       </div>
 
@@ -101,6 +109,216 @@ const accountsByType = computed(() => {
 
     <div v-if="error" class="alert">{{ error }}</div>
     <div v-if="successMessage" class="ui-alert-success">{{ successMessage }}</div>
+
+    <section class="card ui-pro-panel ui-accounting-panel">
+      <div class="ui-accounting-panel-head">
+        <div>
+          <p class="ui-accounting-panel-kicker">Alta rapida</p>
+          <h2 class="h2">Registrar movimiento diario</h2>
+        </div>
+        <span class="ui-accounting-pill">Income · expense · transfer</span>
+      </div>
+
+      <form
+        class="ui-accounting-form ui-accounting-transaction-form"
+        @submit.prevent="submitQuickEntry"
+      >
+        <div class="ui-accounting-segmented">
+          <button
+            v-for="option in quickMovementTypeOptions"
+            :key="option.value"
+            type="button"
+            class="btn ui-accounting-segmented-btn"
+            :class="{
+              'ui-accounting-segmented-btn-active': quickEntryForm.movement_type === option.value,
+            }"
+            @click="quickEntryForm.movement_type = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <input
+            v-model="quickEntryForm.description"
+            class="input"
+            placeholder="Nomina marzo, compra semanal, mover a ahorro..."
+            required
+          />
+          <input v-model="quickEntryForm.booking_date" type="date" class="input" required />
+          <input v-model="quickEntryForm.value_date" type="date" class="input" required />
+        </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <select v-model="quickEntryForm.account_id" class="select" required>
+            <option :value="null">Cuenta de liquidez</option>
+            <option v-for="account in liquidityAccounts" :key="account.id" :value="account.id">
+              {{ account.name }} · {{ account.currency }}
+            </option>
+          </select>
+
+          <input
+            v-model="quickEntryForm.amount"
+            class="input"
+            inputmode="decimal"
+            placeholder="0.00"
+            required
+          />
+
+          <select
+            v-if="quickEntryForm.movement_type === 'transfer'"
+            v-model="quickEntryForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">Cuenta destino</option>
+            <option
+              v-for="account in transferCounterpartyOptions"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ account.name }} · {{ account.currency }}
+            </option>
+          </select>
+
+          <select
+            v-else-if="quickEntryForm.movement_type === 'income'"
+            v-model="quickEntryForm.annual_income_entry_id"
+            class="select"
+          >
+            <option :value="null">Categoria anual opcional</option>
+            <option v-for="entry in incomeOptions" :key="entry.id" :value="entry.id">
+              {{ entry.name }}
+            </option>
+          </select>
+
+          <select v-else v-model="quickEntryForm.annual_expense_entry_id" class="select">
+            <option :value="null">Categoria anual opcional</option>
+            <option v-for="entry in expenseOptions" :key="entry.id" :value="entry.id">
+              {{ entry.name }}
+            </option>
+          </select>
+        </div>
+
+        <textarea
+          v-model="quickEntryForm.notes"
+          class="textarea"
+          rows="2"
+          placeholder="Nota opcional para el movimiento"
+        />
+
+        <div class="ui-accounting-submit-row">
+          <p class="subtle">
+            {{
+              quickEntryForm.movement_type === 'transfer'
+                ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
+                : 'El backend genera la contrapartida contable y enlaza la categoria anual si la indicas.'
+            }}
+          </p>
+          <button
+            class="btn btn-primary"
+            type="submit"
+            :disabled="transactionCreationLoading || !quickEntryReady"
+          >
+            {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento rapido' }}
+          </button>
+        </div>
+      </form>
+
+      <details class="ui-accounting-advanced">
+        <summary class="ui-accounting-advanced-summary">
+          <span>Modo avanzado</span>
+          <span>Debe {{ formatMoney(debitTotal) }} · Haber {{ formatMoney(creditTotal) }}</span>
+        </summary>
+
+        <form
+          class="ui-accounting-form ui-accounting-transaction-form"
+          @submit.prevent="submitTransaction"
+        >
+          <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+            <input
+              v-model="transactionForm.description"
+              class="input"
+              placeholder="Nomina marzo, alquiler abril, transferencia interna..."
+              required
+            />
+            <input v-model="transactionForm.booking_date" type="date" class="input" required />
+            <input v-model="transactionForm.value_date" type="date" class="input" required />
+          </div>
+
+          <div class="ui-accounting-entry-editor">
+            <div
+              v-for="entry in transactionForm.entries"
+              :key="entry.key"
+              class="ui-accounting-entry-editor-row"
+            >
+              <select v-model="entry.account_id" class="select" required>
+                <option :value="null">Selecciona cuenta</option>
+                <option v-for="account in accounts" :key="account.id" :value="account.id">
+                  {{ account.name }} · {{ account.currency }}
+                </option>
+              </select>
+
+              <select v-model="entry.side" class="select">
+                <option value="debit">Debe</option>
+                <option value="credit">Haber</option>
+              </select>
+
+              <input
+                v-model="entry.amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="0.00"
+                required
+              />
+              <input
+                v-model="entry.currency"
+                class="input"
+                maxlength="3"
+                placeholder="EUR"
+                required
+              />
+              <input v-model="entry.notes" class="input" placeholder="Nota opcional" />
+
+              <button
+                class="btn"
+                type="button"
+                :disabled="transactionForm.entries.length <= 2"
+                @click="removeEntry(entry.key)"
+              >
+                Quitar
+              </button>
+            </div>
+          </div>
+
+          <div class="ui-accounting-inline-actions">
+            <button class="btn" type="button" @click="addEntry('debit')">Anadir debe</button>
+            <button class="btn" type="button" @click="addEntry('credit')">Anadir haber</button>
+          </div>
+
+          <textarea
+            v-model="transactionForm.notes"
+            class="textarea"
+            rows="2"
+            placeholder="Notas generales del movimiento"
+          />
+
+          <div class="ui-accounting-submit-row">
+            <p class="subtle">
+              El guardado exige al menos dos apuntes y balance exacto por moneda, igual que el
+              backend.
+            </p>
+            <button
+              class="btn btn-primary"
+              type="submit"
+              :disabled="transactionCreationLoading || !transactionBalanced"
+            >
+              {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento balanceado' }}
+            </button>
+          </div>
+        </form>
+      </details>
+    </section>
 
     <section class="ui-accounting-grid">
       <article class="card ui-pro-panel ui-accounting-panel">
@@ -237,108 +455,6 @@ const accountsByType = computed(() => {
         </div>
       </article>
     </section>
-
-    <section class="card ui-pro-panel ui-accounting-panel">
-      <div class="ui-accounting-panel-head">
-        <div>
-          <p class="ui-accounting-panel-kicker">Alta rapida</p>
-          <h2 class="h2">Registrar movimiento balanceado</h2>
-        </div>
-        <span
-          class="ui-accounting-balance-pill"
-          :class="{ 'ui-accounting-balance-pill-ok': transactionBalanced }"
-        >
-          Debe {{ formatMoney(debitTotal) }} · Haber {{ formatMoney(creditTotal) }}
-        </span>
-      </div>
-
-      <form
-        class="ui-accounting-form ui-accounting-transaction-form"
-        @submit.prevent="submitTransaction"
-      >
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
-          <input
-            v-model="transactionForm.description"
-            class="input"
-            placeholder="Nomina marzo, alquiler abril, transferencia interna..."
-            required
-          />
-          <input v-model="transactionForm.booking_date" type="date" class="input" required />
-          <input v-model="transactionForm.value_date" type="date" class="input" required />
-        </div>
-
-        <div class="ui-accounting-entry-editor">
-          <div
-            v-for="entry in transactionForm.entries"
-            :key="entry.key"
-            class="ui-accounting-entry-editor-row"
-          >
-            <select v-model="entry.account_id" class="select" required>
-              <option :value="null">Selecciona cuenta</option>
-              <option v-for="account in accounts" :key="account.id" :value="account.id">
-                {{ account.name }} · {{ account.currency }}
-              </option>
-            </select>
-
-            <select v-model="entry.side" class="select">
-              <option value="debit">Debe</option>
-              <option value="credit">Haber</option>
-            </select>
-
-            <input
-              v-model="entry.amount"
-              class="input"
-              inputmode="decimal"
-              placeholder="0.00"
-              required
-            />
-            <input
-              v-model="entry.currency"
-              class="input"
-              maxlength="3"
-              placeholder="EUR"
-              required
-            />
-            <input v-model="entry.notes" class="input" placeholder="Nota opcional" />
-
-            <button
-              class="btn"
-              type="button"
-              :disabled="transactionForm.entries.length <= 2"
-              @click="removeEntry(entry.key)"
-            >
-              Quitar
-            </button>
-          </div>
-        </div>
-
-        <div class="ui-accounting-inline-actions">
-          <button class="btn" type="button" @click="addEntry('debit')">Anadir debe</button>
-          <button class="btn" type="button" @click="addEntry('credit')">Anadir haber</button>
-        </div>
-
-        <textarea
-          v-model="transactionForm.notes"
-          class="textarea"
-          rows="2"
-          placeholder="Notas generales del movimiento"
-        />
-
-        <div class="ui-accounting-submit-row">
-          <p class="subtle">
-            El guardado exige al menos dos apuntes y balance exacto por moneda, igual que el
-            backend.
-          </p>
-          <button
-            class="btn btn-primary"
-            type="submit"
-            :disabled="transactionCreationLoading || !transactionBalanced"
-          >
-            {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento' }}
-          </button>
-        </div>
-      </form>
-    </section>
   </div>
 </template>
 
@@ -421,11 +537,6 @@ const accountsByType = computed(() => {
   background: rgba(255, 255, 255, 0.03);
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.86);
-}
-
-.ui-accounting-balance-pill-ok {
-  border-color: rgba(45, 212, 191, 0.34);
-  background: rgba(45, 212, 191, 0.1);
 }
 
 .ui-accounting-account-groups {
@@ -555,6 +666,36 @@ const accountsByType = computed(() => {
   gap: 10px;
 }
 
+.ui-accounting-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ui-accounting-segmented-btn {
+  min-width: 120px;
+}
+
+.ui-accounting-segmented-btn-active {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.ui-accounting-advanced {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.ui-accounting-advanced-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.84rem;
+}
+
 .ui-accounting-entry-editor-row {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) auto;
@@ -595,6 +736,11 @@ const accountsByType = computed(() => {
   .ui-accounting-summary-strip,
   .ui-accounting-entry-editor-row {
     grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-advanced-summary {
+    flex-direction: column;
+    align-items: start;
   }
 }
 </style>

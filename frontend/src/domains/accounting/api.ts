@@ -6,6 +6,7 @@ import type {
   LedgerTransaction,
   LedgerTransactionWritePayload,
   MonthlyAccountingSummary,
+  QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
 
 export const coreAccountingApi = {
@@ -39,6 +40,9 @@ export const coreAccountingApi = {
   },
   createTransaction(payload: LedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/', payload);
+  },
+  createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
+    return coreApi.post<LedgerTransaction>('/api/accounting/transactions/quick-entry/', payload);
   },
   getEntries(params?: {
     account_id?: number;

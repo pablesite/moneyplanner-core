@@ -1,0 +1,294 @@
+/** @vitest-environment jsdom */
+import { defineComponent } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import BudgetDashboardView from '../BudgetDashboardView.vue';
+
+const currentYear = new Date().getFullYear();
+const currentMonth = new Date().getMonth() + 1;
+
+const mockUseRoute = vi.fn(() => ({ name: 'budget', path: '/presupuesto' }));
+const mockCoreApiGet = vi.hoisted(() => vi.fn());
+const mockIncomeStore = vi.hoisted(() => ({
+  entries: { value: [] as unknown[] },
+  totalAnnual: { value: 0 },
+  loading: { value: false },
+  error: { value: null as string | null },
+  loadAll: vi.fn(async () => undefined),
+}));
+const mockExpenseStore = vi.hoisted(() => ({
+  entries: { value: [] as unknown[] },
+  totalAnnual: { value: 0 },
+  loading: { value: false },
+  error: { value: null as string | null },
+  loadAll: vi.fn(async () => undefined),
+}));
+const mockAccountingApi = vi.hoisted(() => ({
+  getMonthlySummary: vi.fn(async () => ({ data: { fiscal_year: currentYear, months: [] } })),
+  getTransactions: vi.fn(async () => ({ data: [] })),
+}));
+
+vi.mock('vue-router', () => ({
+  useRoute: () => mockUseRoute(),
+}));
+
+vi.mock('@/lib/api', () => ({
+  coreApi: {
+    get: mockCoreApiGet,
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
+
+vi.mock('@/domains/accounting', () => ({
+  coreAccountingApi: mockAccountingApi,
+}));
+
+vi.mock('@/domains/data-input', () => ({
+  incomeCategories: [{ value: 'salary', label: 'Salario' }],
+  incomeSubcategories: [{ category: 'salary', value: 'employee_salary', label: 'Nomina' }],
+  expenseCategories: [{ value: 'consumption_expenses', label: 'Gastos' }],
+  expenseSubcategories: [
+    { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
+  ],
+  useAnnualIncomeStore: () => mockIncomeStore,
+  useAnnualExpenseStore: () => mockExpenseStore,
+}));
+
+function makeMonthlySummary(executed = '0.00') {
+  return {
+    fiscal_year: currentYear,
+    planned_total: '12000.00',
+    executed_total: executed,
+    pending_total: '0.00',
+    variance_total: '0.00',
+    completion_ratio: 0,
+    months_with_checkins: 0,
+    has_executed_data: executed !== '0.00',
+    months: [
+      {
+        month: currentMonth,
+        planned: '1000.00',
+        executed,
+        pending: '0.00',
+        completion_ratio: 0,
+        checkins_confirmed: 0,
+        checkins_expected: 1,
+      },
+    ],
+  };
+}
+
+function makeLiquiditySummary() {
+  return {
+    fiscal_year: currentYear,
+    month: currentMonth,
+    base_currency: 'EUR',
+    planned_total: '0.00',
+    executed_total: '0.00',
+    deviation_total: '0.00',
+    completion_ratio: 0,
+    checkins_confirmed: 0,
+    checkins_expected: 0,
+    rows: [],
+  };
+}
+
+function configureCoreApi(overrides?: {
+  incomeCheckins?: unknown[];
+  expenseCheckins?: unknown[];
+  incomeSummaryExecuted?: string;
+  expenseSummaryExecuted?: string;
+}) {
+  mockCoreApiGet.mockImplementation(async (url: string) => {
+    if (url === '/api/budget/annual-income/monthly-summary/') {
+      return { data: makeMonthlySummary(overrides?.incomeSummaryExecuted) };
+    }
+    if (url === '/api/budget/annual-expense/monthly-summary/') {
+      return { data: makeMonthlySummary(overrides?.expenseSummaryExecuted) };
+    }
+    if (url === '/api/budget/annual-income-checkins/') {
+      return { data: overrides?.incomeCheckins ?? [] };
+    }
+    if (url === '/api/budget/annual-expense-checkins/') {
+      return { data: overrides?.expenseCheckins ?? [] };
+    }
+    if (url === '/api/net-worth/liquidity/monthly-summary/') {
+      return { data: makeLiquiditySummary() };
+    }
+    throw new Error(`Unexpected GET ${url}`);
+  });
+}
+
+async function openMonthlyStep(wrapper: ReturnType<typeof mount>, label: string) {
+  const button = wrapper.findAll('button').find((candidate) => candidate.text().includes(label));
+  await button?.trigger('click');
+  await flushPromises();
+}
+
+function mountMonthlyCloseView() {
+  return mount(BudgetDashboardView, {
+    props: { mode: 'monthly-close' },
+    global: {
+      stubs: {
+        RouterLink: defineComponent({
+          name: 'RouterLink',
+          template: '<a><slot /></a>',
+        }),
+      },
+    },
+  });
+}
+
+describe('BudgetDashboardView', () => {
+  beforeEach(() => {
+    mockCoreApiGet.mockReset();
+    mockAccountingApi.getMonthlySummary.mockReset();
+    mockAccountingApi.getTransactions.mockReset();
+    mockIncomeStore.entries.value = [];
+    mockIncomeStore.totalAnnual.value = 0;
+    mockExpenseStore.entries.value = [];
+    mockExpenseStore.totalAnnual.value = 0;
+    mockIncomeStore.loadAll.mockClear();
+    mockExpenseStore.loadAll.mockClear();
+  });
+
+  it('uses ledger coverage for income rows and disables legacy check-in editing', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 1,
+        name: 'Nomina',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 12000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 12000;
+    configureCoreApi();
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: {
+        fiscal_year: currentYear,
+        months: [
+          {
+            month: currentMonth,
+            income_total: '1000.00',
+            expense_total: '0.00',
+            uncategorized_total: '0.00',
+          },
+        ],
+      },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: [
+        {
+          id: 10,
+          booking_date: `${currentYear}-03-15`,
+          value_date: `${currentYear}-03-15`,
+          description: 'Nomina',
+          status: 'posted',
+          origin: 'manual',
+          notes: '',
+          created_at: '',
+          updated_at: '',
+          entries: [
+            {
+              id: 101,
+              account_id: 1,
+              account_name: 'Cuenta corriente',
+              side: 'credit',
+              amount: '1000.00',
+              currency: 'EUR',
+              annual_income_entry_id: 1,
+              annual_expense_entry_id: null,
+              asset_id: null,
+              liability_id: null,
+              notes: '',
+              created_at: '',
+              updated_at: '',
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+    await openMonthlyStep(wrapper, 'Ingresos');
+
+    expect(wrapper.text()).toContain('1 via ledger');
+    expect(wrapper.text()).toContain('Ledger');
+    const input = wrapper.find('input[placeholder="Importe ejecutado"]');
+    expect(input.attributes('disabled')).toBeDefined();
+  });
+
+  it('keeps legacy expense fallback editable when there is no ledger coverage', async () => {
+    mockExpenseStore.entries.value = [
+      {
+        id: 2,
+        sourceLiabilityId: null,
+        isSystemGenerated: false,
+        name: 'Supermercado',
+        category: 'consumption_expenses',
+        subcategory: 'living_expenses',
+        owner: '',
+        expenseType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 6000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockExpenseStore.totalAnnual.value = 6000;
+    configureCoreApi({
+      expenseCheckins: [
+        {
+          id: 7,
+          annual_expense_entry_id: 2,
+          fiscal_year: currentYear,
+          month: currentMonth,
+          status: 'confirmed',
+          executed_amount: '500.00',
+          note: '',
+          confirmed_at: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      expenseSummaryExecuted: '500.00',
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+    await openMonthlyStep(wrapper, 'Gastos');
+
+    expect(wrapper.text()).toContain('1 via fallback legacy');
+    const input = wrapper.find('input[placeholder="Importe ejecutado"]');
+    expect(input.attributes('disabled')).toBeUndefined();
+  });
+});
