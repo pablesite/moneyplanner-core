@@ -42,6 +42,7 @@ const {
   removeEntry,
   reloadPeriod,
   submitAccount,
+  archiveAccount,
   submitQuickEntry,
   submitTransaction,
 } = useAccountingPage();
@@ -442,11 +443,22 @@ const accountsByType = computed(() => {
                 :key="account.id"
                 class="ui-accounting-account-row"
               >
-                <div>
+                <div class="ui-accounting-account-meta">
                   <strong>{{ account.name }}</strong>
                   <p>{{ account.currency }} / {{ account.origin }}</p>
                 </div>
-                <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                <div class="ui-accounting-account-actions">
+                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                  <button
+                    v-if="account.origin === 'user'"
+                    class="btn ui-accounting-account-archive-btn"
+                    type="button"
+                    :disabled="accountCreationLoading"
+                    @click="archiveAccount(account.id, account.name)"
+                  >
+                    Archivar
+                  </button>
+                </div>
               </li>
             </ul>
           </section>
@@ -758,6 +770,23 @@ const accountsByType = computed(() => {
   margin: 4px 0 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.78rem;
+}
+
+.ui-accounting-account-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.ui-accounting-account-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ui-accounting-account-archive-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.74rem;
 }
 
 .ui-accounting-form {
