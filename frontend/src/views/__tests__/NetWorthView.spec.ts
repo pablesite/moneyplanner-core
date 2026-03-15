@@ -353,6 +353,12 @@ describe('NetWorthView', () => {
     const state = makeState({
       store: {
         ...makeState().store,
+        positionTimeline: {
+          base_currency: 'EUR',
+          position_type: 'asset',
+          position_id: 11,
+          rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+        },
         assets: [
           {
             id: 11,
@@ -418,6 +424,12 @@ describe('NetWorthView', () => {
     const state = makeState({
       store: {
         ...makeState().store,
+        positionTimeline: {
+          base_currency: 'EUR',
+          position_type: 'asset',
+          position_id: 11,
+          rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+        },
         assets: [
           {
             id: 11,
@@ -515,6 +527,14 @@ describe('NetWorthView', () => {
         fetchPositionActivity: vi.fn(),
       },
     });
+    state.store.fetchPositionTimeline = vi.fn(async () => {
+      state.store.positionTimeline = {
+        base_currency: 'EUR',
+        position_type: 'asset',
+        position_id: 11,
+        rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+      };
+    });
     mockUseNetWorthViewState.mockReturnValue(state);
     mockUseNetWorthViewExtensions.mockReturnValue({
       HeaderActions: null,
@@ -602,6 +622,14 @@ describe('NetWorthView', () => {
         fetchPositionActivity: vi.fn(),
       },
     });
+    state.store.fetchPositionTimeline = vi.fn(async () => {
+      state.store.positionTimeline = {
+        base_currency: 'EUR',
+        position_type: 'asset',
+        position_id: 11,
+        rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+      };
+    });
     mockUseNetWorthViewState.mockReturnValue(state);
     mockUseNetWorthViewExtensions.mockReturnValue({
       HeaderActions: null,
@@ -641,6 +669,14 @@ describe('NetWorthView', () => {
         fetchPositionTimeline: vi.fn(),
         fetchPositionActivity: vi.fn(),
       },
+    });
+    state.store.fetchPositionTimeline = vi.fn(async () => {
+      state.store.positionTimeline = {
+        base_currency: 'EUR',
+        position_type: 'asset',
+        position_id: 11,
+        rows: [{ date: '2026-03-31', value: '1000', value_base: '1000' }],
+      };
     });
     mockUseNetWorthViewState.mockReturnValue(state);
     mockUseNetWorthViewExtensions.mockReturnValue({
