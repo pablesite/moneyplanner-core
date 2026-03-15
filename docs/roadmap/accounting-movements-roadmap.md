@@ -33,6 +33,10 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
    - backend: endpoint `GET /api/accounting/transactions/budget-suggestions/` con series mensuales historicas y sugerencias orientativas anualizadas por categoria/subcategoria
    - frontend: `BudgetDashboardView` muestra lectura de sugerencias ledger para planificacion sin bloquear la edicion manual del presupuesto
    - cobertura base en `backend/accounting/tests/test_accounting.py` y `frontend/src/views/__tests__/BudgetDashboardView.spec.ts`
+6. Fase 4b (integracion de existentes): objetivo documental definido, implementacion pendiente
+   - objetivo: auto-vincular y auto-crear cuentas ledger para `Asset`/`Liability` existentes en `tracking_mode=accounting`
+   - estados operativos esperados por posicion: `linked`, `auto_created`, `needs_review`
+   - precedencia operativa: ledger primero con enlace valido; fallback legacy solo con cobertura contable ausente o insegura
 
 ## Principios de trabajo
 1. PRs pequenas y reversibles.
@@ -140,10 +144,37 @@ Estado actual:
    - `AccountingMovementsView` expone alta rapida para compra de inversion y pago de deuda con campos condicionales de breakdown
    - la actividad del periodo permite filtrar estos nuevos tipos y mantiene convivencia con `income`/`expense`/`transfer`
    - `NetWorthView` mantiene actividad contable contextual para posiciones `tracking_mode=accounting` y gap explicito cuando falta cuenta enlazada
+3. Integracion de existentes (pendiente):
+   - actualmente el enlace contable para posiciones existentes no es totalmente automatico en todos los casos
+   - se requiere subfase 4b para cerrar auto-vinculacion/autocreacion con controles de idempotencia y seguridad
 
 Criterios de salida:
 1. Las posiciones `accounting` muestran actividad contextual.
 2. Patrimonio no pierde comportamiento legacy durante la convivencia.
+3. Subfase 4b (integracion de existentes) cerrada con criterios medibles:
+   - >= 95% de posiciones `tracking_mode=accounting` quedan con cuenta enlazada (`linked` o `auto_created`) en entornos con datos validos
+   - 0 duplicados de cuenta por posicion (`Asset`/`Liability`)
+   - todos los casos no auto-integrables quedan marcados como `needs_review` con fallback legacy explicito
+
+#### Subfase 4b - Integracion de existentes (`net_worth` -> `accounting`)
+Entregables:
+1. Backend
+   - auto-vinculacion/autocreacion de `LedgerAccount` para `Asset`/`Liability` existentes en `tracking_mode=accounting`
+   - reglas de idempotencia: sin duplicados por posicion y sin violar ownership/moneda/tipo
+   - marcacion de estado de integracion: `linked`, `auto_created`, `needs_review`
+2. Frontend
+   - visibilidad del estado de enlace por posicion en `NetWorthView`
+   - señal clara de fallback legacy cuando el estado sea `needs_review`
+3. Tests
+   - regresiones en `accounting`, `net_worth` y `monthly close` cubriendo auto-link, auto-create y needs-review
+4. Documentacion
+   - contratos y reglas de precedencia alineadas entre arquitectura, roadmap y QA
+
+Criterios de salida de subfase:
+1. No se recrea cuenta cuando existe `accounting_account_id` valido y compatible.
+2. Se crea y enlaza cuenta cuando falta y la autocreacion es segura.
+3. No se fuerza enlace cuando hay incompatibilidad de ownership/moneda/tipo; se marca `needs_review`.
+4. `monthly close` y `net worth` priorizan ledger con enlace valido y usan fallback solo cuando no hay cobertura contable segura.
 
 ### Fase 5 - Sugerencias de presupuesto derivado
 Entregables:
@@ -187,4 +218,5 @@ Estado actual:
 
 ## Nota de convivencia
 1. Los eventos legacy siguen activos hasta que una fase posterior marque su sustitucion explicita.
-2. La convivencia no debe reinterpretarse como migracion automatica.
+2. La convivencia no debe reinterpretarse como migracion masiva automatica.
+3. La subfase 4b si habilita integracion automatica controlada por posicion (`linked`/`auto_created`/`needs_review`).

@@ -20,6 +20,7 @@ This leaves a gap:
 3. Legacy models can coexist temporarily while the new domain is rolled out.
 4. `tracking_mode` remains the main complexity control for positions.
 5. Rollout must happen in small phases without breaking `budget`, `net_worth`, or `monthly close`.
+6. Positions in `tracking_mode=accounting` must end with an operational `LedgerAccount` link, including pre-existing rows in `net_worth`.
 
 ## Conceptual model v1
 1. `LedgerTransaction`
@@ -57,6 +58,8 @@ This leaves a gap:
 2. `tracking_mode=accounting`
    - the linked account becomes the operational source for balance and execution flows
    - the position should expose accounting activity in addition to legacy views where relevant
+   - if the position has no valid linked account, Core should try auto-linking or auto-creating a compatible `LedgerAccount`
+   - the integration result should be explicit via one state: `linked`, `auto_created`, or `needs_review`
 3. Liquidity balances
    - liquidity accounts tracked through accounting derive their closing balance from ledger entries
    - liquidity monthly check-ins stay as fallback and reconciliation support during transition
@@ -70,6 +73,24 @@ This leaves a gap:
    - `LiquidityAssetEvent`, `InvestmentAssetEvent`, and `LiabilityEvent` remain active
    - they are compatibility layers, not the long-term primary execution model
 
+## Net-worth integration contract (vNext target)
+1. Functional contract
+   - any `Asset` or `Liability` in `tracking_mode=accounting` must have an operational `LedgerAccount` (`asset` type for assets, `liability` type for liabilities)
+   - if missing at runtime or on update, Core should auto-link first and auto-create second
+2. Idempotency and safety rules
+   - never duplicate accounts for the same position
+   - preserve ownership (`user`) boundaries
+   - preserve currency compatibility between position and account
+   - preserve account-type compatibility (`asset` with `Asset`, `liability` with `Liability`)
+3. Existing data policy
+   - for pre-existing `net_worth` positions, attempt auto-linking via direct references
+   - if no safe link exists, create a compatible account and persist the relation
+   - if ownership/currency/type checks fail, do not force-link; mark the row as `needs_review`
+4. Integration states
+   - `linked`: position already had a valid compatible account
+   - `auto_created`: position had no account and Core created + linked one
+   - `needs_review`: Core could not safely link/create without violating compatibility rules
+
 ## Integration with current views
 1. Net worth
    - positions in `tracking_mode=accounting` should expose accounting activity in the same contextual workspace
@@ -82,6 +103,7 @@ This leaves a gap:
    - monthly close uses ledger-derived liquidity and execution where `tracking_mode=accounting` or budget links provide coverage
    - legacy check-ins remain fallback when coverage is partial or absent
    - historical closes must respect `as_of_date` instead of reading current live balances
+   - precedence is explicit: use ledger first when the account link is valid and covered; fallback only when ledger coverage is unsafe or absent
 
 ## Rollout phases
 1. Base module
@@ -102,5 +124,5 @@ This leaves a gap:
 ## Explicit assumptions
 1. Firefly is only a conceptual reference for transaction and account modeling.
 2. There is no Firefly import/export integration in v1.
-3. There is no automatic migration of legacy data in v1.
+3. There is no bulk automatic migration of legacy data in v1; integration is position-level with safe auto-link/auto-create rules.
 4. The architecture document is the canonical functional source for this initiative.
