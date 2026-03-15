@@ -611,6 +611,37 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
         asset.refresh_from_db()
         self.assertIsNone(asset.accounting_account_id)
+        self.assertEqual(asset.tracking_mode, Asset.TrackingMode.MANUAL)
+
+    def test_account_delete_unlinks_liability_accounting_reference(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Pasivo enlazado",
+            category=Liability.Category.OTHER,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=None,
+            currency="EUR",
+            annual_interest_tae=None,
+            amount=Decimal("1000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        linked_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta pasivo enlazada",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+            origin=LedgerAccount.Origin.USER,
+        )
+        liability.accounting_account_id = linked_account.id
+        liability.save(update_fields=["accounting_account_id"])
+
+        response = self.client.delete(f"/api/accounting/accounts/{linked_account.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        liability.refresh_from_db()
+        self.assertIsNone(liability.accounting_account_id)
+        self.assertEqual(liability.tracking_mode, Liability.TrackingMode.MANUAL)
 
     def test_account_delete_rejects_system_accounts(self):
         system_account = LedgerAccount.objects.create(
