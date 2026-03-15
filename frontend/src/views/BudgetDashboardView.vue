@@ -154,6 +154,13 @@ type BudgetExecutionPreview = {
   tone: BudgetExecutionTone;
   overflow: boolean;
 };
+type MonthlyCoverageSummary = {
+  total: number;
+  viaLedger: number;
+  viaFallback: number;
+  pending: number;
+  ratio: number;
+};
 
 type MonthlyResultBreakdownSubrow = {
   key: string;
@@ -1162,7 +1169,7 @@ const executionStatusDetail = computed(() => {
   return `Sin cobertura ledger todavia. Check-ins legacy disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
 });
 
-const monthlyIncomeCoverageSummary = computed(() => {
+const monthlyIncomeCoverageSummary = computed<MonthlyCoverageSummary>(() => {
   const total = monthlyIncomeExecutionEntries.value.length;
   const viaLedger = monthlyIncomeExecutionEntries.value.filter(
     (row) => row.executionSource === 'ledger',
@@ -1180,7 +1187,7 @@ const monthlyIncomeCoverageSummary = computed(() => {
   };
 });
 
-const monthlyExpenseCoverageSummary = computed(() => {
+const monthlyExpenseCoverageSummary = computed<MonthlyCoverageSummary>(() => {
   const total = monthlyExpenseExecutionEntries.value.length;
   const viaLedger = monthlyExpenseExecutionEntries.value.filter(
     (row) => row.executionSource === 'ledger',
@@ -1201,6 +1208,53 @@ const monthlyExpenseCoverageSummary = computed(() => {
 function isLedgerBackedExecutionRow(row: { executionSource: BudgetExecutionSource }): boolean {
   return row.executionSource === 'ledger';
 }
+
+function resolveCoverageMode(summary: MonthlyCoverageSummary): string {
+  if (summary.total === 0 || summary.viaLedger + summary.viaFallback === 0) return 'none';
+  if (summary.pending > 0) return 'partial';
+  if (summary.viaLedger > 0 && summary.viaFallback > 0) return 'mixed';
+  if (summary.viaLedger > 0) return 'ledger';
+  return 'fallback';
+}
+
+function coverageBadgeLabel(summary: MonthlyCoverageSummary): string {
+  const mode = resolveCoverageMode(summary);
+  if (mode === 'ledger') return 'Cobertura ledger completa';
+  if (mode === 'fallback') return 'Cobertura fallback legacy';
+  if (mode === 'mixed') return 'Cobertura mixta completa';
+  if (mode === 'partial') return 'Cobertura parcial';
+  return 'Sin cobertura';
+}
+
+function coverageDetail(summary: MonthlyCoverageSummary): string {
+  const mode = resolveCoverageMode(summary);
+  if (mode === 'ledger') {
+    return 'Todas las lineas del mes estan cubiertas por ledger y las acciones legacy quedan bloqueadas.';
+  }
+  if (mode === 'fallback') {
+    return 'Todas las lineas cubiertas usan check-ins legacy; puedes editar cada fila.';
+  }
+  if (mode === 'mixed') {
+    return 'Hay lineas con ledger y lineas legacy; solo se pueden editar las filas en fallback.';
+  }
+  if (mode === 'partial') {
+    return 'Hay lineas cubiertas y lineas pendientes; completa solo las filas sin cobertura.';
+  }
+  return 'Todavia no hay lineas ejecutadas para este mes.';
+}
+
+const monthlyExpenseCoverageLabel = computed(() =>
+  coverageBadgeLabel(monthlyExpenseCoverageSummary.value),
+);
+const monthlyExpenseCoverageDetail = computed(() =>
+  coverageDetail(monthlyExpenseCoverageSummary.value),
+);
+const monthlyIncomeCoverageLabel = computed(() =>
+  coverageBadgeLabel(monthlyIncomeCoverageSummary.value),
+);
+const monthlyIncomeCoverageDetail = computed(() =>
+  coverageDetail(monthlyIncomeCoverageSummary.value),
+);
 
 async function refreshAccountingExecutionData(): Promise<void> {
   accountingExecutionLoading.value = true;
@@ -2296,12 +2350,18 @@ watch(
         </div>
         <div v-else class="ui-budget-checkin-groups-box">
           <div class="ui-budget-execution-note">
-            <strong>Cobertura del mes</strong>
-            <span>
-              {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger ·
-              {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
-              {{ monthlyExpenseCoverageSummary.pending }} pendientes
-            </span>
+            <div class="ui-budget-execution-note-main">
+              <strong>Cobertura del mes</strong>
+              <span>
+                {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger ·
+                {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
+                {{ monthlyExpenseCoverageSummary.pending }} pendientes
+              </span>
+              <small class="ui-budget-execution-note-detail">
+                {{ monthlyExpenseCoverageDetail }}
+              </small>
+            </div>
+            <span class="ui-budget-execution-badge">{{ monthlyExpenseCoverageLabel }}</span>
           </div>
           <details
             v-for="group in groupedMonthlyExpenseExecutionEntries"
@@ -2357,6 +2417,7 @@ watch(
                     <template v-if="row.executed != null"
                       >({{ formatMoney(row.executed) }} EUR)</template
                     >
+                    <span class="ui-budget-checkin-row-lock-note">Edicion legacy bloqueada</span>
                   </div>
                   <div v-if="row.checkin" class="ui-budget-checkin-row-state">
                     <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
@@ -2684,12 +2745,18 @@ watch(
         </div>
         <div v-else class="ui-budget-checkin-groups-box">
           <div class="ui-budget-execution-note">
-            <strong>Cobertura del mes</strong>
-            <span>
-              {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger ·
-              {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy ·
-              {{ monthlyIncomeCoverageSummary.pending }} pendientes
-            </span>
+            <div class="ui-budget-execution-note-main">
+              <strong>Cobertura del mes</strong>
+              <span>
+                {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger ·
+                {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy ·
+                {{ monthlyIncomeCoverageSummary.pending }} pendientes
+              </span>
+              <small class="ui-budget-execution-note-detail">
+                {{ monthlyIncomeCoverageDetail }}
+              </small>
+            </div>
+            <span class="ui-budget-execution-badge">{{ monthlyIncomeCoverageLabel }}</span>
           </div>
           <div class="ui-budget-checkin-group">
             <div class="ui-budget-checkin-group-summary">
@@ -2738,6 +2805,7 @@ watch(
                     <template v-if="row.executed != null"
                       >({{ formatMoney(row.executed) }} EUR)</template
                     >
+                    <span class="ui-budget-checkin-row-lock-note">Edicion legacy bloqueada</span>
                   </div>
                   <div v-if="row.checkin" class="ui-budget-checkin-row-state">
                     <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
@@ -4248,10 +4316,32 @@ watch(
   color: rgba(255, 255, 255, 0.84);
 }
 
+.ui-budget-execution-note-main {
+  display: grid;
+  gap: 3px;
+}
+
 .ui-budget-execution-note strong {
   font-size: 0.8rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.ui-budget-execution-note-detail {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.72rem;
+}
+
+.ui-budget-execution-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: rgba(45, 212, 191, 0.16);
+  color: rgba(191, 255, 241, 0.98);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .ui-budget-execution-chip {
@@ -4287,6 +4377,12 @@ watch(
 
 .ui-budget-checkin-row-state {
   margin-top: 3px;
+}
+
+.ui-budget-checkin-row-lock-note {
+  display: block;
+  margin-top: 2px;
+  color: rgba(191, 255, 241, 0.9);
 }
 
 .ui-budget-checkin-row-actions {
