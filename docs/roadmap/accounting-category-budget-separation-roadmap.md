@@ -14,7 +14,11 @@
    - `LedgerEntry` ya persiste `flow_family`, `category_key` y `subcategory_key`.
    - La API de `transactions` y `entries` ya devuelve la nueva clasificacion.
    - Se mantiene compatibilidad con `annual_income_entry_id` y `annual_expense_entry_id`.
-2. Fase 2+ pendientes.
+2. Fase 2 implementada en `core/backend` y `core/frontend`:
+   - `quick-entry` acepta categoria/subcategoria como contrato primario en `income`/`expense` y coste de `debt_payment` cuando aplica.
+   - `AccountingMovementsView` ya pide `Categoria` + `Subcategoria` y deja la linea anual como opcional secundaria.
+   - La UX reduce protagonismo de cuentas `income`/`expense` como cuentas operativas visibles.
+3. Fase 3+ pendientes.
 
 ## Objetivo
 Separar de forma explicita y reversible las tres capas funcionales que hoy se mezclan parcialmente en `accounting` y `budget`, de modo que:
