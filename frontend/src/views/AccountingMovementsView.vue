@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useAccountingPage } from '@/domains/accounting';
+import BaseModal from '@/domains/ui/components/BaseModal.vue';
 
 const {
   loading,
@@ -83,6 +84,19 @@ const accountsByType = computed(() => {
   });
   return groups;
 });
+
+const showAccountModal = ref(false);
+const showQuickEntryModal = ref(false);
+
+async function submitAccountFromModal() {
+  await submitAccount();
+  showAccountModal.value = false;
+}
+
+async function submitQuickEntryFromModal() {
+  await submitQuickEntry();
+  showQuickEntryModal.value = false;
+}
 </script>
 
 <template>
@@ -121,13 +135,388 @@ const accountsByType = computed(() => {
     <div v-if="error" class="alert">{{ error }}</div>
     <div v-if="successMessage" class="ui-alert-success">{{ successMessage }}</div>
 
-    <section class="card ui-pro-panel ui-accounting-panel">
-      <div class="ui-accounting-panel-head">
-        <div>
-          <p class="ui-accounting-panel-kicker">Alta rapida</p>
-          <h2 class="h2">Registrar movimiento diario</h2>
+    <section class="ui-accounting-grid">
+      <article class="card ui-pro-panel ui-accounting-panel">
+        <div class="ui-accounting-panel-head">
+          <div>
+            <p class="ui-accounting-panel-kicker">Cuentas</p>
+            <h2 class="h2">Catalogo operativo</h2>
+          </div>
+          <div class="ui-accounting-panel-actions">
+            <span class="ui-accounting-pill">{{ accounts.length }} activas</span>
+            <button
+              class="icon-btn ui-accounting-panel-add"
+              type="button"
+              aria-label="Nueva cuenta"
+              title="Nueva cuenta"
+              @click="showAccountModal = true"
+            >
+              <span class="icon" aria-hidden="true">+</span>
+            </button>
+          </div>
         </div>
-        <span class="ui-accounting-pill">Income / expense / transfer / investment / debt</span>
+
+        <div class="ui-accounting-account-groups">
+          <section
+            v-for="type in accountTypeOptions"
+            :key="type.value"
+            class="ui-accounting-account-group"
+          >
+            <div class="ui-accounting-account-group-head">
+              <strong>{{ type.label }}</strong>
+              <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
+            </div>
+
+            <div
+              v-if="(accountsByType.get(type.value)?.length ?? 0) === 0"
+              class="ui-accounting-empty"
+            >
+              Sin cuentas de este tipo todavia.
+            </div>
+
+            <ul v-else class="ui-accounting-account-list">
+              <li
+                v-for="account in accountsByType.get(type.value)"
+                :key="account.id"
+                class="ui-accounting-account-row"
+              >
+                <div class="ui-accounting-account-meta">
+                  <strong>{{ account.name }}</strong>
+                  <p>{{ account.currency }} / {{ account.origin }}</p>
+                </div>
+                <div class="ui-accounting-account-actions">
+                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                  <button
+                    v-if="account.origin === 'user'"
+                    class="btn ui-accounting-account-delete-btn"
+                    type="button"
+                    :disabled="accountCreationLoading"
+                    @click="deleteAccount(account.id, account.name)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <p class="ui-accounting-inline-note">
+          Usa el boton <strong>+</strong> para anadir nuevas cuentas sin perder el contexto del
+          libro diario.
+        </p>
+      </article>
+
+      <article class="card ui-pro-panel ui-accounting-panel">
+        <div class="ui-accounting-panel-head">
+          <div>
+            <p class="ui-accounting-panel-kicker">Liquidez</p>
+            <h2 class="h2">Saldos derivados del ledger</h2>
+          </div>
+          <div class="ui-accounting-panel-actions">
+            <span class="ui-accounting-pill">{{ formatMoney(liquidityBalanceTotal) }}</span>
+            <button
+              class="icon-btn ui-accounting-panel-add"
+              type="button"
+              aria-label="Registrar movimiento diario"
+              title="Registrar movimiento diario"
+              :disabled="!liquidityAccounts.length"
+              @click="showQuickEntryModal = true"
+            >
+              <span class="icon" aria-hidden="true">+</span>
+            </button>
+          </div>
+        </div>
+
+        <p class="ui-accounting-inline-note">
+          El alta rapida ahora vive en un modal para mantener visible el estado de cuentas y
+          liquidez mientras registras movimientos.
+        </p>
+
+        <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
+          Cargando balances del periodo...
+        </div>
+
+        <div v-else-if="!liquidityBalanceRows.length" class="ui-accounting-empty">
+          Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.
+        </div>
+
+        <div v-else class="ui-accounting-balance-list">
+          <article
+            v-for="row in liquidityBalanceRows"
+            :key="row.account_id"
+            class="ui-accounting-balance-card"
+          >
+            <div class="ui-accounting-balance-card-head">
+              <div>
+                <strong>{{ row.name }}</strong>
+                <p>
+                  {{ row.currency }} / saldo actual
+                  {{ formatCompact(row.current_balance, row.currency) }}
+                </p>
+              </div>
+              <span
+                class="ui-accounting-balance-delta"
+                :class="`ui-accounting-balance-delta-${liquidityBalanceDeltaTone(row)}`"
+              >
+                {{ formatCompact(row.period_net_change, row.currency) }}
+              </span>
+            </div>
+
+            <dl class="ui-accounting-balance-metrics">
+              <div>
+                <dt>Entradas</dt>
+                <dd>{{ formatCompact(row.period_debit_total, row.currency) }}</dd>
+              </div>
+              <div>
+                <dt>Salidas</dt>
+                <dd>{{ formatCompact(row.period_credit_total, row.currency) }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+      </article>
+
+      <article class="card ui-pro-panel ui-accounting-panel ui-accounting-activity-panel">
+        <div class="ui-accounting-panel-head">
+          <div>
+            <p class="ui-accounting-panel-kicker">Actividad</p>
+            <h2 class="h2">Asientos del periodo</h2>
+          </div>
+          <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
+        </div>
+
+        <div class="ui-accounting-form-grid">
+          <input
+            v-model="activityFilters.query"
+            class="input"
+            placeholder="Filtrar por texto o cuenta"
+          />
+          <select v-model="activityFilters.accountId" class="select">
+            <option value="all">Todas las cuentas</option>
+            <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
+              {{ account.name }}
+            </option>
+          </select>
+          <select v-model="activityFilters.kind" class="select">
+            <option value="all">Todos los movimientos</option>
+            <option value="income">Solo ingresos</option>
+            <option value="expense">Solo gastos</option>
+            <option value="transfer">Solo transferencias</option>
+            <option value="investment_purchase">Solo compras de inversion</option>
+            <option value="debt_payment">Solo pagos de deuda</option>
+          </select>
+        </div>
+
+        <div class="ui-accounting-summary-strip">
+          <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
+            <span>{{ monthLabel(row.month) }}</span>
+            <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
+            <small
+              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
+            >
+          </div>
+        </div>
+
+        <div v-if="loading && !transactions.length" class="ui-accounting-empty">
+          Cargando movimientos del periodo...
+        </div>
+
+        <div v-else-if="!filteredTransactions.length && !loading" class="ui-accounting-empty">
+          No hay movimientos para el periodo seleccionado.
+        </div>
+
+        <div v-else class="ui-accounting-transaction-list">
+          <article
+            v-for="transaction in filteredTransactions"
+            :key="transaction.id"
+            class="ui-accounting-transaction"
+          >
+            <div class="ui-accounting-transaction-head">
+              <div>
+                <strong>{{ transaction.description }}</strong>
+                <p>
+                  {{ transaction.booking_date }} / {{ activityKindLabel(transaction) }} /
+                  {{ transaction.status }} / {{ transaction.origin }}
+                </p>
+              </div>
+              <span>{{ transaction.entries.length }} apuntes</span>
+            </div>
+
+            <ul class="ui-accounting-entry-list">
+              <li
+                v-for="entry in transaction.entries"
+                :key="entry.id"
+                class="ui-accounting-entry-row"
+              >
+                <div>
+                  <strong>{{ entry.account_name }}</strong>
+                  <p>{{ entry.side === 'debit' ? 'Debe' : 'Haber' }}</p>
+                </div>
+                <span>{{ formatCompact(entry.amount, entry.currency) }}</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <details class="ui-accounting-advanced">
+          <summary class="ui-accounting-advanced-summary">
+            <span>Modo avanzado</span>
+            <span>Debe {{ formatMoney(debitTotal) }} / Haber {{ formatMoney(creditTotal) }}</span>
+          </summary>
+
+          <form
+            class="ui-accounting-form ui-accounting-transaction-form"
+            @submit.prevent="submitTransaction"
+          >
+            <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+              <input
+                v-model="transactionForm.description"
+                class="input"
+                placeholder="Nomina marzo, alquiler abril, transferencia interna..."
+                required
+              />
+              <input v-model="transactionForm.booking_date" type="date" class="input" required />
+              <input v-model="transactionForm.value_date" type="date" class="input" required />
+            </div>
+
+            <div class="ui-accounting-entry-editor">
+              <div
+                v-for="entry in transactionForm.entries"
+                :key="entry.key"
+                class="ui-accounting-entry-editor-row"
+              >
+                <select v-model="entry.account_id" class="select" required>
+                  <option :value="null">Selecciona cuenta</option>
+                  <option v-for="account in accounts" :key="account.id" :value="account.id">
+                    {{ account.name }} / {{ account.currency }}
+                  </option>
+                </select>
+
+                <select v-model="entry.side" class="select">
+                  <option value="debit">Debe</option>
+                  <option value="credit">Haber</option>
+                </select>
+
+                <input
+                  v-model="entry.amount"
+                  class="input"
+                  inputmode="decimal"
+                  placeholder="0.00"
+                  required
+                />
+                <input
+                  v-model="entry.currency"
+                  class="input"
+                  maxlength="3"
+                  placeholder="EUR"
+                  required
+                />
+                <input v-model="entry.notes" class="input" placeholder="Nota opcional" />
+
+                <button
+                  class="btn"
+                  type="button"
+                  :disabled="transactionForm.entries.length <= 2"
+                  @click="removeEntry(entry.key)"
+                >
+                  Quitar
+                </button>
+              </div>
+            </div>
+
+            <div class="ui-accounting-inline-actions">
+              <button class="btn" type="button" @click="addEntry('debit')">Anadir debe</button>
+              <button class="btn" type="button" @click="addEntry('credit')">Anadir haber</button>
+            </div>
+
+            <textarea
+              v-model="transactionForm.notes"
+              class="textarea"
+              rows="2"
+              placeholder="Notas generales del movimiento"
+            />
+
+            <div class="ui-accounting-submit-row">
+              <p class="subtle">
+                El guardado exige al menos dos apuntes y balance exacto por moneda, igual que el
+                backend.
+              </p>
+              <button
+                class="btn btn-primary"
+                type="submit"
+                :disabled="transactionCreationLoading || !transactionBalanced"
+              >
+                {{
+                  transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento balanceado'
+                }}
+              </button>
+            </div>
+
+            <p
+              v-if="!transactionBalanced && !transactionCreationLoading"
+              class="ui-accounting-inline-note"
+            >
+              El modo avanzado bloquea el guardado hasta que debe y haber coincidan exactamente.
+            </p>
+          </form>
+        </details>
+      </article>
+    </section>
+
+    <BaseModal :open="showAccountModal" title="Nueva cuenta" @close="showAccountModal = false">
+      <form
+        class="ui-accounting-form ui-accounting-modal-form"
+        @submit.prevent="submitAccountFromModal"
+      >
+        <div class="ui-accounting-form-head">
+          <h3>Nueva cuenta</h3>
+          <span class="subtle">Base operativa para tracking contable</span>
+        </div>
+
+        <div class="ui-accounting-form-grid">
+          <input
+            v-model="accountForm.name"
+            class="input"
+            placeholder="Cuenta corriente, gastos hogar, ingresos salariales..."
+            required
+          />
+          <select v-model="accountForm.account_type" class="select">
+            <option v-for="type in accountTypeOptions" :key="type.value" :value="type.value">
+              {{ type.label }}
+            </option>
+          </select>
+          <input v-model="accountForm.currency" class="input" maxlength="3" placeholder="EUR" />
+        </div>
+
+        <textarea
+          v-model="accountForm.notes"
+          class="textarea"
+          rows="2"
+          placeholder="Notas operativas opcionales"
+        />
+
+        <div class="ui-accounting-submit-row">
+          <p class="ui-accounting-inline-note">Se crea dentro del catalogo operativo actual.</p>
+          <button class="btn btn-primary" type="submit" :disabled="accountCreationLoading">
+            {{ accountCreationLoading ? 'Creando...' : 'Crear cuenta' }}
+          </button>
+        </div>
+      </form>
+    </BaseModal>
+
+    <BaseModal
+      :open="showQuickEntryModal"
+      title="Registrar movimiento diario"
+      panel-class="max-w-[920px]"
+      @close="showQuickEntryModal = false"
+    >
+      <div class="ui-accounting-modal-copy">
+        <p class="ui-accounting-panel-kicker">Alta rapida</p>
+        <p class="subtle">
+          La fecha de contabilizacion manda en el libro y la fecha valor indica cuando impacta
+          realmente en saldo.
+        </p>
       </div>
 
       <div v-if="!liquidityAccounts.length" class="ui-accounting-inline-note">
@@ -135,8 +524,8 @@ const accountsByType = computed(() => {
       </div>
 
       <form
-        class="ui-accounting-form ui-accounting-transaction-form"
-        @submit.prevent="submitQuickEntry"
+        class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form"
+        @submit.prevent="submitQuickEntryFromModal"
       >
         <div class="ui-accounting-segmented">
           <button
@@ -160,9 +549,21 @@ const accountsByType = computed(() => {
             placeholder="Nomina marzo, compra semanal, mover a ahorro..."
             required
           />
-          <input v-model="quickEntryForm.booking_date" type="date" class="input" required />
-          <input v-model="quickEntryForm.value_date" type="date" class="input" required />
+
+          <label class="ui-accounting-field">
+            <span>Fecha contabilizacion</span>
+            <input v-model="quickEntryForm.booking_date" type="date" class="input" required />
+          </label>
+
+          <label class="ui-accounting-field">
+            <span>Fecha valor</span>
+            <input v-model="quickEntryForm.value_date" type="date" class="input" required />
+          </label>
         </div>
+
+        <p class="ui-accounting-inline-note">
+          Normalmente coinciden. Si el banco liquida despues, usa una fecha valor posterior.
+        </p>
 
         <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <select v-model="quickEntryForm.account_id" class="select" required>
@@ -306,334 +707,7 @@ const accountsByType = computed(() => {
           cuentas y desglose adicionales.
         </p>
       </form>
-
-      <details class="ui-accounting-advanced">
-        <summary class="ui-accounting-advanced-summary">
-          <span>Modo avanzado</span>
-          <span>Debe {{ formatMoney(debitTotal) }} / Haber {{ formatMoney(creditTotal) }}</span>
-        </summary>
-
-        <form
-          class="ui-accounting-form ui-accounting-transaction-form"
-          @submit.prevent="submitTransaction"
-        >
-          <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
-            <input
-              v-model="transactionForm.description"
-              class="input"
-              placeholder="Nomina marzo, alquiler abril, transferencia interna..."
-              required
-            />
-            <input v-model="transactionForm.booking_date" type="date" class="input" required />
-            <input v-model="transactionForm.value_date" type="date" class="input" required />
-          </div>
-
-          <div class="ui-accounting-entry-editor">
-            <div
-              v-for="entry in transactionForm.entries"
-              :key="entry.key"
-              class="ui-accounting-entry-editor-row"
-            >
-              <select v-model="entry.account_id" class="select" required>
-                <option :value="null">Selecciona cuenta</option>
-                <option v-for="account in accounts" :key="account.id" :value="account.id">
-                  {{ account.name }} / {{ account.currency }}
-                </option>
-              </select>
-
-              <select v-model="entry.side" class="select">
-                <option value="debit">Debe</option>
-                <option value="credit">Haber</option>
-              </select>
-
-              <input
-                v-model="entry.amount"
-                class="input"
-                inputmode="decimal"
-                placeholder="0.00"
-                required
-              />
-              <input
-                v-model="entry.currency"
-                class="input"
-                maxlength="3"
-                placeholder="EUR"
-                required
-              />
-              <input v-model="entry.notes" class="input" placeholder="Nota opcional" />
-
-              <button
-                class="btn"
-                type="button"
-                :disabled="transactionForm.entries.length <= 2"
-                @click="removeEntry(entry.key)"
-              >
-                Quitar
-              </button>
-            </div>
-          </div>
-
-          <div class="ui-accounting-inline-actions">
-            <button class="btn" type="button" @click="addEntry('debit')">Anadir debe</button>
-            <button class="btn" type="button" @click="addEntry('credit')">Anadir haber</button>
-          </div>
-
-          <textarea
-            v-model="transactionForm.notes"
-            class="textarea"
-            rows="2"
-            placeholder="Notas generales del movimiento"
-          />
-
-          <div class="ui-accounting-submit-row">
-            <p class="subtle">
-              El guardado exige al menos dos apuntes y balance exacto por moneda, igual que el
-              backend.
-            </p>
-            <button
-              class="btn btn-primary"
-              type="submit"
-              :disabled="transactionCreationLoading || !transactionBalanced"
-            >
-              {{ transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento balanceado' }}
-            </button>
-          </div>
-
-          <p
-            v-if="!transactionBalanced && !transactionCreationLoading"
-            class="ui-accounting-inline-note"
-          >
-            El modo avanzado bloquea el guardado hasta que debe y haber coincidan exactamente.
-          </p>
-        </form>
-      </details>
-    </section>
-
-    <section class="ui-accounting-grid">
-      <article class="card ui-pro-panel ui-accounting-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Cuentas</p>
-            <h2 class="h2">Catalogo operativo</h2>
-          </div>
-          <span class="ui-accounting-pill">{{ accounts.length }} activas</span>
-        </div>
-
-        <div class="ui-accounting-account-groups">
-          <section
-            v-for="type in accountTypeOptions"
-            :key="type.value"
-            class="ui-accounting-account-group"
-          >
-            <div class="ui-accounting-account-group-head">
-              <strong>{{ type.label }}</strong>
-              <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
-            </div>
-
-            <div
-              v-if="(accountsByType.get(type.value)?.length ?? 0) === 0"
-              class="ui-accounting-empty"
-            >
-              Sin cuentas de este tipo todavia.
-            </div>
-
-            <ul v-else class="ui-accounting-account-list">
-              <li
-                v-for="account in accountsByType.get(type.value)"
-                :key="account.id"
-                class="ui-accounting-account-row"
-              >
-                <div class="ui-accounting-account-meta">
-                  <strong>{{ account.name }}</strong>
-                  <p>{{ account.currency }} / {{ account.origin }}</p>
-                </div>
-                <div class="ui-accounting-account-actions">
-                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
-                  <button
-                    v-if="account.origin === 'user'"
-                    class="btn ui-accounting-account-delete-btn"
-                    type="button"
-                    :disabled="accountCreationLoading"
-                    @click="deleteAccount(account.id, account.name)"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </section>
-        </div>
-
-        <form class="ui-accounting-form" @submit.prevent="submitAccount">
-          <div class="ui-accounting-form-head">
-            <h3>Nueva cuenta</h3>
-            <span class="subtle">Base operativa para tracking contable</span>
-          </div>
-
-          <div class="ui-accounting-form-grid">
-            <input
-              v-model="accountForm.name"
-              class="input"
-              placeholder="Cuenta corriente, gastos hogar, ingresos salariales..."
-              required
-            />
-            <select v-model="accountForm.account_type" class="select">
-              <option v-for="type in accountTypeOptions" :key="type.value" :value="type.value">
-                {{ type.label }}
-              </option>
-            </select>
-            <input v-model="accountForm.currency" class="input" maxlength="3" placeholder="EUR" />
-          </div>
-
-          <textarea
-            v-model="accountForm.notes"
-            class="textarea"
-            rows="2"
-            placeholder="Notas operativas opcionales"
-          />
-
-          <button class="btn btn-primary" type="submit" :disabled="accountCreationLoading">
-            {{ accountCreationLoading ? 'Creando...' : 'Crear cuenta' }}
-          </button>
-        </form>
-      </article>
-
-      <article class="card ui-pro-panel ui-accounting-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Liquidez</p>
-            <h2 class="h2">Saldos derivados del ledger</h2>
-          </div>
-          <span class="ui-accounting-pill">{{ formatMoney(liquidityBalanceTotal) }}</span>
-        </div>
-
-        <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
-          Cargando balances del periodo...
-        </div>
-
-        <div v-else-if="!liquidityBalanceRows.length" class="ui-accounting-empty">
-          Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.
-        </div>
-
-        <div v-else class="ui-accounting-balance-list">
-          <article
-            v-for="row in liquidityBalanceRows"
-            :key="row.account_id"
-            class="ui-accounting-balance-card"
-          >
-            <div class="ui-accounting-balance-card-head">
-              <div>
-                <strong>{{ row.name }}</strong>
-                <p>
-                  {{ row.currency }} / saldo actual
-                  {{ formatCompact(row.current_balance, row.currency) }}
-                </p>
-              </div>
-              <span
-                class="ui-accounting-balance-delta"
-                :class="`ui-accounting-balance-delta-${liquidityBalanceDeltaTone(row)}`"
-              >
-                {{ formatCompact(row.period_net_change, row.currency) }}
-              </span>
-            </div>
-
-            <dl class="ui-accounting-balance-metrics">
-              <div>
-                <dt>Entradas</dt>
-                <dd>{{ formatCompact(row.period_debit_total, row.currency) }}</dd>
-              </div>
-              <div>
-                <dt>Salidas</dt>
-                <dd>{{ formatCompact(row.period_credit_total, row.currency) }}</dd>
-              </div>
-            </dl>
-          </article>
-        </div>
-      </article>
-
-      <article class="card ui-pro-panel ui-accounting-panel ui-accounting-activity-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Actividad</p>
-            <h2 class="h2">Asientos del periodo</h2>
-          </div>
-          <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
-        </div>
-
-        <div class="ui-accounting-form-grid">
-          <input
-            v-model="activityFilters.query"
-            class="input"
-            placeholder="Filtrar por texto o cuenta"
-          />
-          <select v-model="activityFilters.accountId" class="select">
-            <option value="all">Todas las cuentas</option>
-            <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
-              {{ account.name }}
-            </option>
-          </select>
-          <select v-model="activityFilters.kind" class="select">
-            <option value="all">Todos los movimientos</option>
-            <option value="income">Solo ingresos</option>
-            <option value="expense">Solo gastos</option>
-            <option value="transfer">Solo transferencias</option>
-            <option value="investment_purchase">Solo compras de inversion</option>
-            <option value="debt_payment">Solo pagos de deuda</option>
-          </select>
-        </div>
-
-        <div class="ui-accounting-summary-strip">
-          <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
-            <span>{{ monthLabel(row.month) }}</span>
-            <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
-            <small
-              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
-            >
-          </div>
-        </div>
-
-        <div v-if="loading && !transactions.length" class="ui-accounting-empty">
-          Cargando movimientos del periodo...
-        </div>
-
-        <div v-else-if="!filteredTransactions.length && !loading" class="ui-accounting-empty">
-          No hay movimientos para el periodo seleccionado.
-        </div>
-
-        <div v-else class="ui-accounting-transaction-list">
-          <article
-            v-for="transaction in filteredTransactions"
-            :key="transaction.id"
-            class="ui-accounting-transaction"
-          >
-            <div class="ui-accounting-transaction-head">
-              <div>
-                <strong>{{ transaction.description }}</strong>
-                <p>
-                  {{ transaction.booking_date }} / {{ activityKindLabel(transaction) }} /
-                  {{ transaction.status }} / {{ transaction.origin }}
-                </p>
-              </div>
-              <span>{{ transaction.entries.length }} apuntes</span>
-            </div>
-
-            <ul class="ui-accounting-entry-list">
-              <li
-                v-for="entry in transaction.entries"
-                :key="entry.id"
-                class="ui-accounting-entry-row"
-              >
-                <div>
-                  <strong>{{ entry.account_name }}</strong>
-                  <p>{{ entry.side === 'debit' ? 'Debe' : 'Haber' }}</p>
-                </div>
-                <span>{{ formatCompact(entry.amount, entry.currency) }}</span>
-              </li>
-            </ul>
-          </article>
-        </div>
-      </article>
-    </section>
+    </BaseModal>
   </div>
 </template>
 
@@ -699,6 +773,17 @@ const accountsByType = computed(() => {
   gap: 12px;
   align-items: start;
   flex-wrap: wrap;
+}
+
+.ui-accounting-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-panel-add {
+  flex: 0 0 auto;
 }
 
 .ui-accounting-panel-kicker {
@@ -817,6 +902,18 @@ const accountsByType = computed(() => {
 
 .ui-accounting-form-grid-wide {
   grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+}
+
+.ui-accounting-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-accounting-field span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.66);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .ui-accounting-inline-note {
@@ -944,6 +1041,22 @@ const accountsByType = computed(() => {
 .ui-accounting-segmented-btn-active {
   border-color: rgba(45, 212, 191, 0.34);
   background: rgba(45, 212, 191, 0.12);
+}
+
+.ui-accounting-modal-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ui-accounting-modal-copy .subtle,
+.ui-accounting-modal-copy .ui-accounting-panel-kicker {
+  margin: 0;
+}
+
+.ui-accounting-modal-form {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .ui-accounting-advanced {

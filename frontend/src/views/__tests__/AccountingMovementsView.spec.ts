@@ -253,9 +253,9 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Libro diario operativo');
     expect(wrapper.text()).toContain('Cuenta corriente');
     expect(wrapper.text()).toContain('Nomina marzo');
-    expect(wrapper.text()).toContain('Registrar movimiento diario');
-    expect(wrapper.text()).toContain('Registrar movimiento rapido');
     expect(wrapper.text()).toContain('Saldos derivados del ledger');
+    expect(wrapper.find('button[title="Nueva cuenta"]').exists()).toBe(true);
+    expect(wrapper.find('button[title="Registrar movimiento diario"]').exists()).toBe(true);
   });
 
   it('shows empty state and error message when needed', () => {
@@ -273,7 +273,9 @@ describe('AccountingMovementsView', () => {
 
     expect(wrapper.text()).toContain('La transaccion no esta balanceada.');
     expect(wrapper.text()).toContain('No hay movimientos para el periodo seleccionado.');
-    expect(wrapper.text()).toContain('Necesitas al menos una cuenta de liquidez');
+    expect(wrapper.text()).toContain(
+      'Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.',
+    );
   });
 
   it('wires entry add action from quick controls', async () => {
@@ -289,16 +291,19 @@ describe('AccountingMovementsView', () => {
     expect(state.addEntry).toHaveBeenCalledWith('debit');
   });
 
-  it('submits fast entry from the primary form', async () => {
+  it('opens the quick-entry modal and submits from there', async () => {
     const state = makeState();
     mockUseAccountingPage.mockReturnValue(state);
-    const wrapper = mount(AccountingMovementsView);
+    const wrapper = mount(AccountingMovementsView, {
+      attachTo: document.body,
+    });
 
-    const button = wrapper
-      .findAll('button')
-      .find((candidate) => candidate.text().includes('Registrar movimiento rapido'));
-    await button?.trigger('submit');
-    await wrapper.find('form.ui-accounting-transaction-form').trigger('submit.prevent');
+    await wrapper.find('button[title="Registrar movimiento diario"]').trigger('click');
+    const modalForm = document.body.querySelector(
+      'form.ui-accounting-modal-form.ui-accounting-transaction-form',
+    ) as HTMLFormElement | null;
+    modalForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await wrapper.vm.$nextTick();
 
     expect(state.submitQuickEntry).toHaveBeenCalled();
   });
