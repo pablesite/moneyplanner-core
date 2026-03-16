@@ -3,11 +3,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import cast
 
+from django.core.exceptions import ValidationError
+
 
 def _build_net_worth_summary_impl(
     *,
     user,
     get_base_currency_for_user_fn,
+    get_inflation_region_for_user_fn,
     get_active_positions_fn,
     calculate_totals_fn,
     get_inflation_base_period_fn,
@@ -25,8 +28,12 @@ def _build_net_worth_summary_impl(
     )
 
     net_worth = totals.total_assets - totals.total_liabilities
-    inflation_region = "ES" if base_currency == "EUR" else None
+    inflation_region = (
+        get_inflation_region_for_user_fn(user=user) if base_currency == "EUR" else None
+    )
     inflation_base_period = None
+    inflation_available = False
+    inflation_status = "disabled" if base_currency != "EUR" else "missing"
 
     total_assets_real = None
     total_liabilities_real = None
@@ -37,56 +44,62 @@ def _build_net_worth_summary_impl(
     liabilities_unbacked_real = None
 
     if inflation_region is not None:
-        inflation_base_period = get_inflation_base_period_fn(region=inflation_region)
+        try:
+            inflation_base_period = get_inflation_base_period_fn(region=inflation_region)
 
-        total_assets_real = adjust_for_inflation_fn(
-            totals.total_assets,
-            date=today,
-            region=inflation_region,
-            base_period=inflation_base_period,
-        )
-        total_liabilities_real = adjust_for_inflation_fn(
-            totals.total_liabilities,
-            date=today,
-            region=inflation_region,
-            base_period=inflation_base_period,
-        )
-        net_worth_real = adjust_for_inflation_fn(
-            net_worth,
-            date=today,
-            region=inflation_region,
-            base_period=inflation_base_period,
-        )
-        assets_by_category_real = {
-            category: adjust_for_inflation_fn(
-                amount,
+            total_assets_real = adjust_for_inflation_fn(
+                totals.total_assets,
                 date=today,
                 region=inflation_region,
                 base_period=inflation_base_period,
             )
-            for category, amount in totals.assets_by_category.items()
-        }
-        liabilities_by_category_real = {
-            category: adjust_for_inflation_fn(
-                amount,
+            total_liabilities_real = adjust_for_inflation_fn(
+                totals.total_liabilities,
                 date=today,
                 region=inflation_region,
                 base_period=inflation_base_period,
             )
-            for category, amount in totals.liabilities_by_category.items()
-        }
-        liabilities_asset_backed_real = adjust_for_inflation_fn(
-            totals.liabilities_asset_backed,
-            date=today,
-            region=inflation_region,
-            base_period=inflation_base_period,
-        )
-        liabilities_unbacked_real = adjust_for_inflation_fn(
-            totals.liabilities_unbacked,
-            date=today,
-            region=inflation_region,
-            base_period=inflation_base_period,
-        )
+            net_worth_real = adjust_for_inflation_fn(
+                net_worth,
+                date=today,
+                region=inflation_region,
+                base_period=inflation_base_period,
+            )
+            assets_by_category_real = {
+                category: adjust_for_inflation_fn(
+                    amount,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
+                )
+                for category, amount in totals.assets_by_category.items()
+            }
+            liabilities_by_category_real = {
+                category: adjust_for_inflation_fn(
+                    amount,
+                    date=today,
+                    region=inflation_region,
+                    base_period=inflation_base_period,
+                )
+                for category, amount in totals.liabilities_by_category.items()
+            }
+            liabilities_asset_backed_real = adjust_for_inflation_fn(
+                totals.liabilities_asset_backed,
+                date=today,
+                region=inflation_region,
+                base_period=inflation_base_period,
+            )
+            liabilities_unbacked_real = adjust_for_inflation_fn(
+                totals.liabilities_unbacked,
+                date=today,
+                region=inflation_region,
+                base_period=inflation_base_period,
+            )
+            inflation_available = True
+            inflation_status = "available"
+        except ValidationError:
+            inflation_available = False
+            inflation_status = "missing"
 
     return {
         "base_currency": base_currency,
@@ -98,6 +111,8 @@ def _build_net_worth_summary_impl(
         "liabilities_by_category": totals.liabilities_by_category,
         "inflation_region": inflation_region,
         "inflation_base_period": inflation_base_period,
+        "inflation_available": inflation_available,
+        "inflation_status": inflation_status,
         "total_assets_real": total_assets_real,
         "total_liabilities_real": total_liabilities_real,
         "net_worth_real": net_worth_real,
@@ -117,6 +132,7 @@ def build_net_worth_summary(*, user) -> dict[str, object]:
     return _build_net_worth_summary_impl(
         user=user,
         get_base_currency_for_user_fn=services_facade.get_base_currency_for_user,
+        get_inflation_region_for_user_fn=services_facade.get_inflation_region_for_user,
         get_active_positions_fn=services_facade._get_active_positions,
         calculate_totals_fn=services_facade.calculate_totals,
         get_inflation_base_period_fn=services_facade.get_inflation_base_period,
@@ -146,6 +162,8 @@ def serialize_net_worth_summary(summary: dict[str, object]) -> dict[str, object]
         "inflation_base_period": (
             str(summary["inflation_base_period"]) if summary["inflation_base_period"] else None
         ),
+        "inflation_available": bool(summary["inflation_available"]),
+        "inflation_status": summary["inflation_status"],
         "total_assets_real": (
             str(summary["total_assets_real"]) if summary["total_assets_real"] is not None else None
         ),

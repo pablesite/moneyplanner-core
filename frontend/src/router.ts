@@ -6,8 +6,6 @@ import GuidePhaseDetailView from './views/GuidePhaseDetailView.vue';
 import DataInputView from './views/DataInputView.vue';
 import BudgetDashboardView from './views/BudgetDashboardView.vue';
 import AuxDataView from './views/AuxDataView.vue';
-import SettingsFxView from './views/SettingsFxView.vue';
-import SettingsIpcView from './views/SettingsIpcView.vue';
 import AccountView from './views/AccountView.vue';
 import PeopleView from './views/PeopleView.vue';
 import AccountingMovementsView from './views/AccountingMovementsView.vue';
@@ -28,8 +26,8 @@ const routes: RouteRecordRaw[] = [
     props: { mode: 'monthly-close' as const },
   },
   { path: '/data', name: 'aux-data', component: AuxDataView },
-  { path: '/data/fx', name: 'settings-fx', component: SettingsFxView },
-  { path: '/data/ipc', name: 'settings-ipc', component: SettingsIpcView },
+  { path: '/data/fx', redirect: '/data' },
+  { path: '/data/ipc', redirect: '/data' },
   { path: '/account', name: 'account', component: AccountView },
   { path: '/people', name: 'people', component: PeopleView },
   { path: '/movimientos', name: 'accounting-movements', component: AccountingMovementsView },

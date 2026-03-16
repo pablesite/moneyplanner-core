@@ -5,7 +5,7 @@ from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from core.market_data import sync_market_history
+from core.market_data import sync_market_data, sync_market_history
 from net_worth.models import Asset, Liability
 
 
@@ -46,6 +46,15 @@ class Command(BaseCommand):
 
         inferred_ranges: dict[str, date] = {}
         if options.get("for_active_positions"):
+            if not options.get("currencies") and not options.get("start_date"):
+                summary = sync_market_data(datasets=["fx"], mode="reconcile")
+                total_rows = summary.get("fx", 0)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Delegated to sync_market_data --datasets fx --mode reconcile. Total rows upserted: {total_rows}."
+                    )
+                )
+                return
             inferred_ranges = self._collect_position_ranges(quote_currency=quote_currency)
 
         explicit_currencies = [

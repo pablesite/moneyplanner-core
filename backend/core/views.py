@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .market_data import get_market_data_status
 from .models import FxRate, InflationIndex
 from .portable_data import (
     get_current_portable_app_version,
@@ -40,3 +41,10 @@ class PortableDataImportAPIView(APIView):
             request=request,
         )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class MarketDataStatusAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(get_market_data_status())

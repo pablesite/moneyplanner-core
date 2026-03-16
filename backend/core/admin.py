@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import FxRate, InflationIndex
+from .models import FxRate, InflationIndex, MarketDataSyncState
 
 
 @admin.register(FxRate)
@@ -43,3 +43,17 @@ class InflationIndexAdmin(admin.ModelAdmin):
     )
     ordering = ("-period",)
     date_hierarchy = "period"
+
+
+@admin.register(MarketDataSyncState)
+class MarketDataSyncStateAdmin(admin.ModelAdmin):
+    list_display = (
+        "dataset",
+        "scope",
+        "required_start_date",
+        "covered_until",
+        "last_success_at",
+    )
+    list_filter = ("dataset",)
+    search_fields = ("scope",)
+    ordering = ("dataset", "scope")

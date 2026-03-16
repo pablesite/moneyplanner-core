@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     FxRateViewSet,
     InflationIndexViewSet,
+    MarketDataStatusAPIView,
     PortableDataImportAPIView,
     PortableDataMetaAPIView,
 )
@@ -14,6 +15,7 @@ router.register(r"inflation", InflationIndexViewSet, basename="inflation")
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("market-data/status/", MarketDataStatusAPIView.as_view(), name="market-data-status"),
     path("portable-data/meta/", PortableDataMetaAPIView.as_view(), name="portable-data-meta"),
     path("portable-data/import/", PortableDataImportAPIView.as_view(), name="portable-data-import"),
 ]

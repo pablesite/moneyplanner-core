@@ -51,6 +51,29 @@ const {
 
 const { itemFormProps } = useNetWorthViewExtensions(store);
 
+const inflationRegions = [
+  { code: 'ES', label: 'Espana' },
+  { code: 'ES-AN', label: 'Andalucia' },
+  { code: 'ES-AR', label: 'Aragon' },
+  { code: 'ES-AS', label: 'Asturias' },
+  { code: 'ES-IB', label: 'Illes Balears' },
+  { code: 'ES-CN', label: 'Canarias' },
+  { code: 'ES-CB', label: 'Cantabria' },
+  { code: 'ES-CL', label: 'Castilla y Leon' },
+  { code: 'ES-CM', label: 'Castilla-La Mancha' },
+  { code: 'ES-CT', label: 'Cataluna' },
+  { code: 'ES-VC', label: 'Comunitat Valenciana' },
+  { code: 'ES-EX', label: 'Extremadura' },
+  { code: 'ES-GA', label: 'Galicia' },
+  { code: 'ES-MD', label: 'Comunidad de Madrid' },
+  { code: 'ES-MC', label: 'Region de Murcia' },
+  { code: 'ES-NC', label: 'Comunidad Foral de Navarra' },
+  { code: 'ES-PV', label: 'Pais Vasco' },
+  { code: 'ES-RI', label: 'La Rioja' },
+  { code: 'ES-CE', label: 'Ceuta' },
+  { code: 'ES-ML', label: 'Melilla' },
+];
+
 type OwnershipFilterValue = 'all' | number;
 
 type OwnershipOption = {
@@ -1429,6 +1452,8 @@ const liabilityCreateInitial = computed(() =>
             :loading="store.loading"
             :base-currency="store.baseCurrency ?? 'EUR'"
             :currencies="currencies"
+            :inflation-region="store.inflationRegion"
+            :inflation-regions="inflationRegions"
             :value-mode="valueMode"
             :can-show-real="canShowReal()"
             :mode-help="modeLabel()"
@@ -1437,6 +1462,7 @@ const liabilityCreateInitial = computed(() =>
             :show-snapshot="false"
             :icon-only="true"
             @update:base-currency="store.updateBaseCurrency"
+            @update:inflation-region="store.updateInflationRegion"
             @update:value-mode="(v) => (valueMode = v)"
             @snapshot="store.createTodaySnapshot()"
             @refresh="store.refreshAll()"

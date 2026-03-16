@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 type CurrencyOption = { value: string; label: string };
+type RegionOption = { code: string; label: string };
 
 type Props = {
   loading: boolean;
@@ -9,6 +10,8 @@ type Props = {
   // moneda base (store)
   baseCurrency: string;
   currencies: CurrencyOption[];
+  inflationRegion: string;
+  inflationRegions: RegionOption[];
 
   // modo nominal/real (vista)
   valueMode: 'nominal' | 'real';
@@ -30,6 +33,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'update:baseCurrency', value: string): void;
+  (e: 'update:inflationRegion', value: string): void;
   (e: 'update:valueMode', value: 'nominal' | 'real'): void;
   (e: 'snapshot'): void;
   (e: 'refresh'): void;
@@ -74,6 +78,11 @@ function onSelectBaseCurrency(e: Event) {
 function onSelectMode(e: Event) {
   const v = (e.target as HTMLSelectElement).value as 'nominal' | 'real';
   emit('update:valueMode', v);
+}
+
+function onSelectInflationRegion(e: Event) {
+  const v = (e.target as HTMLSelectElement).value;
+  emit('update:inflationRegion', v);
 }
 </script>
 
@@ -131,6 +140,25 @@ function onSelectMode(e: Event) {
 
           <div v-if="!canShowReal" class="nw-settings-hint nw-settings-hint-error">
             El modo IPC solo esta disponible cuando se puede calcular (EUR + IPC cargado).
+          </div>
+        </div>
+      </div>
+
+      <div class="nw-settings-block">
+        <div class="nw-settings-field">
+          <div class="nw-settings-label">Region IPC</div>
+          <select
+            class="input nw-settings-select-mode"
+            :value="inflationRegion"
+            :disabled="loading || baseCurrency !== 'EUR'"
+            @change="onSelectInflationRegion"
+          >
+            <option v-for="region in inflationRegions" :key="region.code" :value="region.code">
+              {{ region.label }}
+            </option>
+          </select>
+          <div class="nw-settings-hint">
+            Preferencia persistente para el modo real basado en IPC.
           </div>
         </div>
       </div>

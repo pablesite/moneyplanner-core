@@ -2,25 +2,64 @@ from __future__ import annotations
 
 import json
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Iterable
+from typing import Any, Iterable, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.utils import timezone
 
-from .models import FxRate
+from accounts.models import UserSettings
+from net_worth.models import (
+    Asset,
+    AssetValuation,
+    InvestmentAssetEvent,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+)
+
+from .models import FxRate, InflationIndex, MarketDataSyncState
 
 logger = logging.getLogger(__name__)
 
 FRANKFURTER_API_URL = "https://api.frankfurter.app"
 COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
+INE_API_URL = "https://servicios.ine.es/wstempus/js/ES"
+INE_GENERAL_INDEX_TABLE_ID = 24078
+
 SUPPORTED_CRYPTO_IDS = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
+}
+
+INE_REGION_NAME_TO_CODE = {
+    "Nacional": "ES",
+    "Andalucía": "ES-AN",
+    "Aragón": "ES-AR",
+    "Asturias, Principado de": "ES-AS",
+    "Balears, Illes": "ES-IB",
+    "Canarias": "ES-CN",
+    "Cantabria": "ES-CB",
+    "Castilla y León": "ES-CL",
+    "Castilla - La Mancha": "ES-CM",
+    "Cataluña": "ES-CT",
+    "Comunitat Valenciana": "ES-VC",
+    "Extremadura": "ES-EX",
+    "Galicia": "ES-GA",
+    "Madrid, Comunidad de": "ES-MD",
+    "Murcia, Región de": "ES-MC",
+    "Navarra, Comunidad Foral de": "ES-NC",
+    "País Vasco": "ES-PV",
+    "Rioja, La": "ES-RI",
+    "Ceuta": "ES-CE",
+    "Melilla": "ES-ML",
 }
 
 
@@ -28,7 +67,14 @@ class MarketDataSyncError(RuntimeError):
     pass
 
 
-def _fetch_json(*, url: str, timeout: int = 30) -> dict:
+@dataclass(frozen=True)
+class SyncScopeRequest:
+    dataset: str
+    scope: str
+    required_start_date: date | None
+
+
+def _fetch_json(*, url: str, timeout: int = 30) -> Any:
     try:
         request = Request(
             url,
@@ -51,16 +97,73 @@ def _normalize_date_range(*, start_date: date | None, end_date: date | None) -> 
     return resolved_start_date, resolved_end_date
 
 
+def _month_start(value: date) -> date:
+    return value.replace(day=1)
+
+
+def _next_month(value: date) -> date:
+    if value.month == 12:
+        return date(value.year + 1, 1, 1)
+    return date(value.year, value.month + 1, 1)
+
+
+def _normalize_month_range(*, start_date: date | None, end_date: date | None) -> tuple[date, date]:
+    resolved_end = _month_start(end_date or timezone.localdate())
+    resolved_start = _month_start(start_date or resolved_end)
+    if resolved_end < resolved_start:
+        raise MarketDataSyncError("end_date must be equal to or later than start_date.")
+    return resolved_start, resolved_end
+
+
 def _upsert_fx_rows(
-    *, from_currency: str, to_currency: str, rows: Iterable[tuple[date, Decimal]]
+    *,
+    from_currency: str,
+    to_currency: str,
+    rows: Iterable[tuple[date, Decimal]],
+    source: str,
+    source_key: str,
+    managed_by_system: bool = True,
 ) -> int:
+    synced_at = timezone.now()
     created_or_updated = 0
     for rate_date, rate in rows:
         FxRate.objects.update_or_create(
             from_currency=from_currency,
             to_currency=to_currency,
             rate_date=rate_date,
-            defaults={"rate": rate},
+            defaults={
+                "rate": rate,
+                "source": source,
+                "source_key": source_key,
+                "managed_by_system": managed_by_system,
+                "last_synced_at": synced_at,
+            },
+        )
+        created_or_updated += 1
+    return created_or_updated
+
+
+def _upsert_inflation_rows(
+    *,
+    region: str,
+    rows: Iterable[tuple[date, Decimal]],
+    source: str,
+    source_key: str,
+    managed_by_system: bool = True,
+) -> int:
+    synced_at = timezone.now()
+    created_or_updated = 0
+    for period, index_value in rows:
+        InflationIndex.objects.update_or_create(
+            region=region,
+            period=period,
+            defaults={
+                "index": index_value,
+                "source": source,
+                "source_key": source_key,
+                "managed_by_system": managed_by_system,
+                "last_synced_at": synced_at,
+            },
         )
         created_or_updated += 1
     return created_or_updated
@@ -82,7 +185,13 @@ def sync_fiat_history(
         if rate in (None, ""):
             continue
         rows.append((date.fromisoformat(raw_date), Decimal(str(rate))))
-    return _upsert_fx_rows(from_currency=from_currency, to_currency=to_currency, rows=rows)
+    return _upsert_fx_rows(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        rows=rows,
+        source="frankfurter",
+        source_key=f"{from_currency}->{to_currency}",
+    )
 
 
 def _iter_crypto_range_chunks(
@@ -136,7 +245,13 @@ def sync_crypto_history(
             daily_prices[point_date] = last_price
 
     rows = sorted(daily_prices.items(), key=lambda row: row[0])
-    return _upsert_fx_rows(from_currency=from_currency, to_currency=to_currency, rows=rows)
+    return _upsert_fx_rows(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        rows=rows,
+        source="coingecko",
+        source_key=f"{from_currency}->{to_currency}",
+    )
 
 
 def sync_market_history(
@@ -225,3 +340,454 @@ def ensure_market_history_safe(
             exc_info=True,
         )
         return 0
+
+
+def _extract_ine_region_name(series: dict[str, Any]) -> str | None:
+    for metadata in series.get("MetaData") or []:
+        variable = str(metadata.get("T3_Variable") or "")
+        if variable in {"Totales Territoriales", "Comunidades y Ciudades Autónomas"}:
+            return str(metadata.get("Nombre") or "").strip() or None
+    name = str(series.get("Nombre") or "")
+    if not name:
+        return None
+    return name.split(".")[0].strip() or None
+
+
+def _fetch_ine_general_index_series() -> dict[str, list[tuple[date, Decimal]]]:
+    payload = _fetch_json(url=f"{INE_API_URL}/DATOS_TABLA/{INE_GENERAL_INDEX_TABLE_ID}?tip=AM")
+    if not isinstance(payload, list):
+        raise MarketDataSyncError("Unexpected INE response for inflation data.")
+
+    grouped: dict[str, list[tuple[date, Decimal]]] = defaultdict(list)
+    for series in payload:
+        region_name = _extract_ine_region_name(series)
+        region_code = INE_REGION_NAME_TO_CODE.get(region_name or "")
+        if not region_code:
+            continue
+        for row in series.get("Data") or []:
+            raw_value = row.get("Valor")
+            raw_date = str(row.get("Fecha") or "")
+            if raw_value in (None, "") or not raw_date:
+                continue
+            grouped[region_code].append(
+                (date.fromisoformat(raw_date[:10]), Decimal(str(raw_value)))
+            )
+
+    return {
+        region: sorted({period: value for period, value in rows}.items(), key=lambda item: item[0])
+        for region, rows in grouped.items()
+    }
+
+
+def sync_inflation_history(
+    *, region: str, start_date: date | None, end_date: date | None = None
+) -> int:
+    normalized_region = str(region or "").strip().upper()
+    if not normalized_region:
+        return 0
+
+    resolved_start_date, resolved_end_date = _normalize_month_range(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    rows_by_region = _fetch_ine_general_index_series()
+    region_rows = rows_by_region.get(normalized_region, [])
+    rows = [
+        (period, index_value)
+        for period, index_value in region_rows
+        if resolved_start_date <= period <= resolved_end_date
+    ]
+    return _upsert_inflation_rows(
+        region=normalized_region,
+        rows=rows,
+        source="ine",
+        source_key=f"ine:{normalized_region}",
+    )
+
+
+def _collect_relevant_position_dates() -> dict[str, date]:
+    earliest_by_currency: dict[str, date] = {}
+    global_dates: list[date] = []
+
+    def register(currency: str, point_date: date | None) -> None:
+        normalized_currency = str(currency or "").strip().upper()
+        if point_date is None:
+            return
+        global_dates.append(point_date)
+        if not normalized_currency:
+            return
+        current = earliest_by_currency.get(normalized_currency)
+        if current is None or point_date < current:
+            earliest_by_currency[normalized_currency] = point_date
+
+    for asset in Asset.objects.all().only("currency", "start_date"):
+        register(asset.currency, asset.start_date)
+    for liability in Liability.objects.all().only("currency", "start_date"):
+        register(liability.currency, liability.start_date)
+    for valuation in AssetValuation.objects.select_related("asset").all():
+        register(valuation.asset.currency, valuation.valuation_date)
+    for valuation in LiabilityValuation.objects.select_related("liability").all():
+        register(valuation.liability.currency, valuation.valuation_date)
+    for event in InvestmentAssetEvent.objects.select_related("asset").all():
+        register(event.asset.currency, event.event_date)
+    for event in LiquidityAssetEvent.objects.select_related("asset").all():
+        register(event.asset.currency, event.event_date)
+    for event in LiabilityEvent.objects.select_related("liability").all():
+        register(event.liability.currency, event.event_date)
+
+    if global_dates:
+        earliest_by_currency["__global__"] = min(global_dates)
+    return earliest_by_currency
+
+
+def _build_fx_scope_requests() -> list[SyncScopeRequest]:
+    earliest_by_currency = _collect_relevant_position_dates()
+    global_start = earliest_by_currency.get("__global__")
+    if global_start is None:
+        return []
+
+    base_currencies = {
+        str(value or "").strip().upper()
+        for value in UserSettings.objects.values_list("base_currency", flat=True)
+        if str(value or "").strip()
+    }
+    if not base_currencies:
+        base_currencies = {"EUR"}
+
+    source_currencies = {
+        currency
+        for currency in earliest_by_currency.keys()
+        if currency and currency != "__global__"
+    }
+    requests: list[SyncScopeRequest] = []
+    for quote_currency in sorted(base_currencies):
+        for from_currency in sorted(source_currencies):
+            if from_currency == quote_currency:
+                continue
+            requests.append(
+                SyncScopeRequest(
+                    dataset=cast(str, MarketDataSyncState.Dataset.FX),
+                    scope=f"{from_currency}->{quote_currency}",
+                    required_start_date=earliest_by_currency.get(from_currency, global_start),
+                )
+            )
+    return requests
+
+
+def _build_inflation_scope_requests() -> list[SyncScopeRequest]:
+    earliest_by_currency = _collect_relevant_position_dates()
+    global_start = earliest_by_currency.get("__global__")
+    if global_start is None:
+        return []
+
+    regions = {
+        str(value or "").strip().upper()
+        for value in UserSettings.objects.values_list("inflation_region", flat=True)
+        if str(value or "").strip()
+    }
+    regions.add(cast(str, InflationIndex.Region.ES))
+    return [
+        SyncScopeRequest(
+            dataset=cast(str, MarketDataSyncState.Dataset.INFLATION),
+            scope=region,
+            required_start_date=_month_start(global_start),
+        )
+        for region in sorted(regions)
+    ]
+
+
+class MarketDataProvider(ABC):
+    dataset: str
+    source: str
+
+    @abstractmethod
+    def build_scope_requests(self) -> list[SyncScopeRequest]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_scope(
+        self, *, scope: str, required_start_date: date | None, mode: str, today: date
+    ) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_coverage_bounds(self, *, scope: str) -> tuple[date | None, date | None]:
+        raise NotImplementedError
+
+
+class FxMarketDataProvider(MarketDataProvider):
+    dataset = MarketDataSyncState.Dataset.FX
+    source = "fx_provider"
+
+    def build_scope_requests(self) -> list[SyncScopeRequest]:
+        return _build_fx_scope_requests()
+
+    def get_coverage_bounds(self, *, scope: str) -> tuple[date | None, date | None]:
+        from_currency, to_currency = scope.split("->", 1)
+        rows = FxRate.objects.filter(from_currency=from_currency, to_currency=to_currency)
+        earliest = rows.order_by("rate_date").values_list("rate_date", flat=True).first()
+        latest = rows.order_by("-rate_date").values_list("rate_date", flat=True).first()
+        return earliest, latest
+
+    def sync_scope(
+        self, *, scope: str, required_start_date: date | None, mode: str, today: date
+    ) -> int:
+        from_currency, to_currency = scope.split("->", 1)
+        if required_start_date is None:
+            return 0
+
+        earliest, latest = self.get_coverage_bounds(scope=scope)
+        inserted = 0
+        if mode == "refresh":
+            start_date = latest + timedelta(days=1) if latest else required_start_date
+            if start_date <= today:
+                inserted += sync_market_history(
+                    from_currency=from_currency,
+                    to_currency=to_currency,
+                    start_date=start_date,
+                    end_date=today,
+                )
+            return inserted
+
+        if earliest is None or latest is None:
+            return sync_market_history(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                start_date=required_start_date,
+                end_date=today,
+            )
+
+        if required_start_date < earliest:
+            inserted += sync_market_history(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                start_date=required_start_date,
+                end_date=earliest - timedelta(days=1),
+            )
+        if latest < today:
+            inserted += sync_market_history(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                start_date=latest + timedelta(days=1),
+                end_date=today,
+            )
+        return inserted
+
+
+class InflationMarketDataProvider(MarketDataProvider):
+    dataset = MarketDataSyncState.Dataset.INFLATION
+    source = "ine"
+
+    def build_scope_requests(self) -> list[SyncScopeRequest]:
+        return _build_inflation_scope_requests()
+
+    def get_coverage_bounds(self, *, scope: str) -> tuple[date | None, date | None]:
+        rows = InflationIndex.objects.filter(region=scope)
+        earliest = rows.order_by("period").values_list("period", flat=True).first()
+        latest = rows.order_by("-period").values_list("period", flat=True).first()
+        return earliest, latest
+
+    def sync_scope(
+        self, *, scope: str, required_start_date: date | None, mode: str, today: date
+    ) -> int:
+        if required_start_date is None:
+            return 0
+
+        target_end = _month_start(today)
+        earliest, latest = self.get_coverage_bounds(scope=scope)
+        inserted = 0
+
+        if mode == "refresh":
+            start_date = _next_month(latest) if latest else required_start_date
+            if start_date <= target_end:
+                inserted += sync_inflation_history(
+                    region=scope,
+                    start_date=start_date,
+                    end_date=target_end,
+                )
+            return inserted
+
+        if earliest is None or latest is None:
+            return sync_inflation_history(
+                region=scope,
+                start_date=required_start_date,
+                end_date=target_end,
+            )
+
+        if required_start_date < earliest:
+            inserted += sync_inflation_history(
+                region=scope,
+                start_date=required_start_date,
+                end_date=earliest,
+            )
+        if latest < target_end:
+            inserted += sync_inflation_history(
+                region=scope,
+                start_date=_next_month(latest),
+                end_date=target_end,
+            )
+        return inserted
+
+
+def _get_provider_registry() -> dict[str, MarketDataProvider]:
+    return {
+        cast(str, MarketDataSyncState.Dataset.FX): FxMarketDataProvider(),
+        cast(str, MarketDataSyncState.Dataset.INFLATION): InflationMarketDataProvider(),
+    }
+
+
+def sync_market_data(
+    *, datasets: Iterable[str] | None = None, mode: str = "reconcile"
+) -> dict[str, int]:
+    normalized_mode = str(mode or "reconcile").strip().lower()
+    if normalized_mode not in {"reconcile", "refresh"}:
+        raise MarketDataSyncError("mode must be reconcile or refresh.")
+
+    registry = _get_provider_registry()
+    dataset_list = [
+        str(item).strip().lower() for item in (datasets or registry.keys()) if str(item).strip()
+    ]
+    if not dataset_list:
+        dataset_list = list(registry.keys())
+
+    summary: dict[str, int] = {dataset: 0 for dataset in dataset_list}
+    today = timezone.localdate()
+    attempted_at = timezone.now()
+
+    for dataset in dataset_list:
+        provider = registry.get(dataset)
+        if provider is None:
+            raise MarketDataSyncError(f"Unsupported dataset '{dataset}'.")
+
+        for request in provider.build_scope_requests():
+            state, _ = MarketDataSyncState.objects.get_or_create(
+                dataset=request.dataset,
+                scope=request.scope,
+            )
+            state.required_start_date = request.required_start_date
+            state.last_attempt_at = attempted_at
+            state.source = provider.source
+            state.save(
+                update_fields=["required_start_date", "last_attempt_at", "source", "updated_at"]
+            )
+
+            try:
+                summary[dataset] += provider.sync_scope(
+                    scope=request.scope,
+                    required_start_date=request.required_start_date,
+                    mode=normalized_mode,
+                    today=today,
+                )
+                _, latest = provider.get_coverage_bounds(scope=request.scope)
+                state.covered_until = latest
+                state.last_success_at = timezone.now()
+                state.last_error = ""
+            except MarketDataSyncError as exc:
+                logger.warning(
+                    "Market data sync failed for %s/%s.",
+                    request.dataset,
+                    request.scope,
+                    exc_info=True,
+                )
+                state.last_error = str(exc)
+            state.save(
+                update_fields=[
+                    "covered_until",
+                    "last_success_at",
+                    "last_error",
+                    "updated_at",
+                ]
+            )
+
+    return summary
+
+
+def get_market_data_status() -> dict[str, Any]:
+    states = list(MarketDataSyncState.objects.all())
+    return {
+        "supported_inflation_regions": InflationIndex.supported_regions(),
+        "datasets": {
+            "fx": {
+                "states": [
+                    {
+                        "scope": state.scope,
+                        "required_start_date": (
+                            state.required_start_date.isoformat()
+                            if state.required_start_date
+                            else None
+                        ),
+                        "covered_until": state.covered_until.isoformat()
+                        if state.covered_until
+                        else None,
+                        "last_attempt_at": (
+                            state.last_attempt_at.isoformat() if state.last_attempt_at else None
+                        ),
+                        "last_success_at": (
+                            state.last_success_at.isoformat() if state.last_success_at else None
+                        ),
+                        "last_error": state.last_error or None,
+                    }
+                    for state in states
+                    if state.dataset == MarketDataSyncState.Dataset.FX
+                ],
+                "latest_rows": [
+                    {
+                        "id": row.id,
+                        "rate_date": row.rate_date.isoformat(),
+                        "from_currency": row.from_currency,
+                        "to_currency": row.to_currency,
+                        "rate": str(row.rate),
+                        "source": row.source,
+                        "managed_by_system": row.managed_by_system,
+                        "last_synced_at": row.last_synced_at.isoformat()
+                        if row.last_synced_at
+                        else None,
+                        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    }
+                    for row in FxRate.objects.order_by(
+                        "-rate_date", "from_currency", "to_currency"
+                    )[:25]
+                ],
+            },
+            "inflation": {
+                "states": [
+                    {
+                        "scope": state.scope,
+                        "required_start_date": (
+                            state.required_start_date.isoformat()
+                            if state.required_start_date
+                            else None
+                        ),
+                        "covered_until": state.covered_until.isoformat()
+                        if state.covered_until
+                        else None,
+                        "last_attempt_at": (
+                            state.last_attempt_at.isoformat() if state.last_attempt_at else None
+                        ),
+                        "last_success_at": (
+                            state.last_success_at.isoformat() if state.last_success_at else None
+                        ),
+                        "last_error": state.last_error or None,
+                    }
+                    for state in states
+                    if state.dataset == MarketDataSyncState.Dataset.INFLATION
+                ],
+                "latest_rows": [
+                    {
+                        "id": row.id,
+                        "region": row.region,
+                        "period": row.period.isoformat(),
+                        "index": str(row.index),
+                        "source": row.source,
+                        "managed_by_system": row.managed_by_system,
+                        "last_synced_at": row.last_synced_at.isoformat()
+                        if row.last_synced_at
+                        else None,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    }
+                    for row in InflationIndex.objects.order_by("-period", "region")[:50]
+                ],
+            },
+        },
+    }

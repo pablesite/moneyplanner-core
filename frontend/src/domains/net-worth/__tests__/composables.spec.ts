@@ -22,6 +22,8 @@ function makeSummary(overrides: Partial<Summary> = {}): Summary {
     liabilities_by_category: {},
     inflation_region: 'ES',
     inflation_base_period: '2025-01',
+    inflation_available: true,
+    inflation_status: 'available',
     total_assets_real: '900',
     total_liabilities_real: '180',
     net_worth_real: '720',

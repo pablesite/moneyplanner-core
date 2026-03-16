@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember, Ownership, OwnershipLink
-from .models import FxRate, InflationIndex
+from .models import FxRate, InflationIndex, MarketDataSyncState
 from net_worth.models import Asset, Liability
 from .services import (
     _get_inflation_index,
@@ -24,7 +24,12 @@ from .services import (
     validate_fx_currency_pair,
     validate_inflation_period_start,
 )
-from .market_data import ensure_market_history, sync_market_history
+from .market_data import (
+    ensure_market_history,
+    sync_inflation_history,
+    sync_market_data,
+    sync_market_history,
+)
 
 
 class CoreServicesTests(TestCase):
@@ -307,6 +312,91 @@ class CoreServicesTests(TestCase):
             end_date=date(2025, 4, 30),
         )
 
+    @patch(
+        "core.market_data._fetch_json",
+        return_value=[
+            {
+                "Nombre": "Total Nacional. Indice general. Indice.",
+                "MetaData": [{"T3_Variable": "Totales Territoriales", "Nombre": "Nacional"}],
+                "Data": [
+                    {"Fecha": "2025-01-01T00:00:00.000+01:00", "Valor": 98.579},
+                    {"Fecha": "2025-02-01T00:00:00.000+01:00", "Valor": 98.966},
+                ],
+            },
+            {
+                "Nombre": "Madrid, Comunidad de. Indice general. Indice.",
+                "MetaData": [
+                    {
+                        "T3_Variable": "Comunidades y Ciudades Autónomas",
+                        "Nombre": "Madrid, Comunidad de",
+                    }
+                ],
+                "Data": [
+                    {"Fecha": "2025-01-01T00:00:00.000+01:00", "Valor": 99.100},
+                    {"Fecha": "2025-02-01T00:00:00.000+01:00", "Valor": 99.400},
+                ],
+            },
+        ],
+    )
+    def test_sync_inflation_history_imports_region_rows(self, _fetch_json_mock):
+        inserted = sync_inflation_history(
+            region=InflationIndex.Region.ES_MD,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 2, 1),
+        )
+
+        self.assertEqual(inserted, 2)
+        row = InflationIndex.objects.get(
+            region=InflationIndex.Region.ES_MD, period=date(2025, 1, 1)
+        )
+        self.assertEqual(row.index, Decimal("99.1"))
+        self.assertEqual(row.source, "ine")
+
+    @patch("core.market_data._fetch_json")
+    def test_sync_market_data_updates_sync_state(self, fetch_json_mock):
+        fetch_json_mock.side_effect = [
+            {
+                "amount": 1.0,
+                "base": "USD",
+                "rates": {
+                    "2025-03-03": {"EUR": 0.92},
+                },
+            },
+            [
+                {
+                    "Nombre": "Total Nacional. Indice general. Indice.",
+                    "MetaData": [{"T3_Variable": "Totales Territoriales", "Nombre": "Nacional"}],
+                    "Data": [{"Fecha": "2025-03-01T00:00:00.000+01:00", "Valor": 99.024}],
+                }
+            ],
+        ]
+        user = get_user_model().objects.create_user(username="sync_user", password="pass1234")
+        UserSettings.objects.update_or_create(
+            user=user,
+            defaults={"base_currency": "EUR", "inflation_region": "ES"},
+        )
+        Asset.objects.create(
+            user=user,
+            name="Cuenta USD",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="USD",
+            start_date=date(2025, 3, 3),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+
+        summary = sync_market_data(datasets=["fx", "inflation"], mode="reconcile")
+
+        self.assertEqual(summary["fx"], 1)
+        self.assertEqual(summary["inflation"], 1)
+        fx_state = MarketDataSyncState.objects.get(dataset="fx", scope="USD->EUR")
+        self.assertEqual(fx_state.required_start_date, date(2025, 3, 3))
+        self.assertEqual(fx_state.covered_until, date(2025, 3, 3))
+        inflation_state = MarketDataSyncState.objects.get(dataset="inflation", scope="ES")
+        self.assertEqual(inflation_state.required_start_date, date(2025, 3, 1))
+
 
 class PortableDataImportAPITests(APITestCase):
     def setUp(self):
@@ -436,7 +526,7 @@ class PortableDataImportAPITests(APITestCase):
     def test_portable_data_meta_returns_current_version(self):
         response = self.client.get("/api/core/portable-data/meta/")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["app_version"], "0.18.16")
+        self.assertEqual(response.data["app_version"], "0.19.0")
 
     def test_portable_import_append_creates_all_blocks(self):
         response = self.client.post(
@@ -481,7 +571,7 @@ class PortableDataImportAPITests(APITestCase):
         self.assertTrue(Asset.objects.filter(user=self.user, name="Cuenta previa").exists())
 
     def test_portable_import_replace_rejects_newer_bundle_version(self):
-        bundle = self._build_bundle(exported_app_version="0.18.17")
+        bundle = self._build_bundle(exported_app_version="0.19.1")
         response = self.client.post(
             "/api/core/portable-data/import/",
             {"mode": "replace", "bundle": bundle},
@@ -558,6 +648,11 @@ class CoreApiTests(APITestCase):
         self.assertIn("message", response.data["error"])
         self.assertIn("details", response.data["error"])
 
+    def test_market_data_status_requires_auth_with_canonical_error_shape(self):
+        response = self.client.get("/api/core/market-data/status/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"]["code"], "unauthorized")
+
     def test_fx_rates_create_and_list(self):
         self.client.force_authenticate(user=self.user)
         create_response = self.client.post(
@@ -608,3 +703,13 @@ class CoreApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("period", response.data["error"]["details"])
+
+    def test_market_data_status_returns_supported_regions_and_states(self):
+        self.client.force_authenticate(user=self.user)
+        MarketDataSyncState.objects.create(dataset="fx", scope="USD->EUR")
+
+        response = self.client.get("/api/core/market-data/status/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("supported_inflation_regions", response.data)
+        self.assertIn("datasets", response.data)
+        self.assertEqual(response.data["datasets"]["fx"]["states"][0]["scope"], "USD->EUR")

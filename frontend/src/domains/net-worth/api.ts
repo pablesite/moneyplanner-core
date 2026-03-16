@@ -11,13 +11,13 @@ import type {
   NetWorthWritePayload,
   Ownership,
   PositionTimeline,
+  Settings,
   Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
 import type { OwnershipLink } from '@/domains/net-worth/ownership';
 
 type TargetType = 'asset' | 'liability';
-type Settings = { base_currency: string };
 type OwnershipSyncPayload = {
   target_type: TargetType;
   target_id: number;

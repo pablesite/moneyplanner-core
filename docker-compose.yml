@@ -37,11 +37,11 @@ services:
       python manage.py runserver 0.0.0.0:8000
       "
 
-  fx_sync:
+  market_data_sync:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: core_fx_sync
+    container_name: core_market_data_sync
     env_file:
       - ./backend/.env
     volumes:
@@ -52,9 +52,10 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
+      python manage.py migrate &&
       while true; do
         if [ \"$${FX_SYNC_ENABLED:-1}\" = \"1\" ]; then
-          python manage.py sync_fx_rates --for-active-positions --quote-currency $${FX_SYNC_QUOTE_CURRENCY:-EUR} || true;
+          python manage.py sync_market_data --datasets fx inflation --mode reconcile || true;
         fi;
         sleep $${FX_SYNC_INTERVAL_SECONDS:-86400};
       done
