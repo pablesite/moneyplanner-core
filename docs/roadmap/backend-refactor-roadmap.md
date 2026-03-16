@@ -62,7 +62,7 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 4. Reescritura masiva de migraciones historicas.
 
 ## Referencias cruzadas obligatorias
-1. El roadmap funcional de `accounting` vive en `accounting-movements-roadmap.md`.
+1. El roadmap funcional cerrado de `accounting` vive en `terminados/accounting-movements-roadmap.md`.
 2. La separacion entre cuenta contable, categoria/subcategoria y linea anual de presupuesto vive en `accounting-category-budget-separation-roadmap.md`.
 3. Este documento no reemplaza esos roadmaps: define la continuidad del refactor de mantenibilidad del backend completo.
 4. Cuando cambien los boundaries entre `accounting`, `budget` y `net_worth`, este documento debe actualizarse en paralelo para mantener trazabilidad.
@@ -214,7 +214,7 @@ Objetivo: evitar duplicacion, drift funcional y mezclar capas de ejecucion, plan
 2. Definir que sigue perteneciendo a `budget` como plan anual.
 3. Definir como `net_worth` consume actividad, balances y enlaces contables sin duplicar reglas.
 4. Mantener alineado este roadmap con:
-   - `accounting-movements-roadmap.md`
+   - `terminados/accounting-movements-roadmap.md`
    - `accounting-category-budget-separation-roadmap.md`
 
 ### Trabajo esperado

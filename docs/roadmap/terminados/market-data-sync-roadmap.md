@@ -9,6 +9,34 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 3. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
 4. El resultado debe dejar preparada la arquitectura para futuros datasets como cotizaciones de acciones.
 
+## Estado real (2026-03-16)
+1. La iniciativa figura implementada en codigo y documentacion operativa.
+2. Fase 1 implementada y cerrada:
+   - existe el comando canonico `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`
+   - existe `MarketDataSyncState` como tabla de cobertura/estado
+   - `sync_fx_rates` queda como wrapper de compatibilidad
+   - Docker ya usa `market_data_sync` como worker dedicado
+3. Fase 2 implementada y cerrada:
+   - el worker calcula cobertura requerida y reconcilia huecos historicos
+   - la cobertura ya no depende de fetch inline en flujos de usuario
+   - `core/backend/core/tests.py` cubre actualizacion de sync state y reconciliacion base
+4. Fase 3 implementada y cerrada:
+   - `InflationIndex` soporta `ES + CCAA`
+   - el status endpoint devuelve `supported_inflation_regions`
+   - existen datos y estado por region
+5. Fase 4 implementada y cerrada:
+   - `accounts.UserSettings` persiste `inflation_region`
+   - `SettingsPopover` expone selector de region IPC
+   - `net_worth` usa la region efectiva en `summary` y `timeline`
+6. Fase 5 implementada y cerrada:
+   - `AuxDataView` ya no es CRUD manual
+   - `/data` actua como vista observacional de FX/IPC y estado de sync
+   - el frontend consume `GET /api/core/market-data/status/`
+7. Fase 6 implementada y cerrada:
+   - la arquitectura ya refleja `market_data_sync` y `sync_market_data`
+   - existen docs operativas en `core/docs/operations/market-data-sync.md`
+   - `core/docs/operations/dev-setup.md` ya incorpora el worker en el arranque estandar
+
 ## Decisiones ya fijadas
 1. La ejecucion vive en un worker dedicado dentro de Core.
 2. La persistencia vive en PostgreSQL de Core.

@@ -8,9 +8,11 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
 3. `operations/dev-setup.md` -> local setup, validation, and troubleshooting
 4. `roadmap/community-roadmap.md` -> current Core priorities
 5. `roadmap/backend-refactor-roadmap.md` -> backend maintainability roadmap
-6. `roadmap/accounting-movements-roadmap.md` -> executable roadmap for accounting movements
-7. `../CONTRIBUTING.md` -> contribution workflow
-8. `../RELEASING.md` -> release process
+6. `roadmap/accounting-category-budget-separation-roadmap.md` -> active roadmap for the accounting/budget boundary
+7. `roadmap/frontend-refactor-roadmap.md` -> frontend maintainability roadmap
+8. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
+9. `../CONTRIBUTING.md` -> contribution workflow
+10. `../RELEASING.md` -> release process
 
 ## Active Documents
 1. `architecture/`
@@ -22,10 +24,13 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
 3. `roadmap/`
    - community roadmap
    - backend refactor roadmap
+   - active execution roadmaps
+   - `terminados/` for completed roadmaps
 4. `frontend/`
    - active frontend UX notes
 5. `tasks/`
    - executable task specs by specialty
+   - `terminados/` subfolders for completed task specs
 6. `scoring/`
    - financial guide scoring models by phase
 

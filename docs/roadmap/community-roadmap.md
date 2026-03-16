@@ -11,10 +11,31 @@ Consolidate a strong open-core base that is useful on its own and easy to improv
 5. Accounting and daily-movement rollout in small phases without breaking net worth, budget, or monthly close
 6. Documentation and contributor onboarding
 
-## Active Roadmaps
+## Roadmap Status
+### Terminados
+1. Accounting movements roadmap: `terminados/accounting-movements-roadmap.md`
+   - Estado: terminado
+   - Lectura: las fases 1-5 y la subfase 4b figuran como implementadas y cerradas.
+   - Tasks asociadas terminadas:
+     - `../tasks/accounting-movements/terminados/backend-foundation.md`
+     - `../tasks/accounting-movements/terminados/frontend-foundation.md`
+     - `../tasks/accounting-movements/terminados/qa-validation.md`
+2. Market data sync roadmap: `terminados/market-data-sync-roadmap.md`
+   - Estado: terminado
+   - Lectura: el codigo, Docker, la UX observacional de `/data` y las docs operativas ya reflejan las fases 1-6 cerradas.
+
+### Activos y a medio
 1. Backend refactor roadmap: `backend-refactor-roadmap.md`
-2. Accounting movements roadmap: `accounting-movements-roadmap.md`
-3. Market data sync roadmap: `market-data-sync-roadmap.md`
+   - Estado: activo y a medio
+   - Lectura: mantiene fases y checklist abiertos sobre hotspots reales del backend.
+2. Accounting category-budget separation roadmap: `accounting-category-budget-separation-roadmap.md`
+   - Estado: activo y a medio
+   - Lectura: la fase 1 figura implementada y las fases 2+ siguen pendientes.
+
+### Por empezar
+1. Frontend refactor roadmap: `frontend-refactor-roadmap.md`
+   - Estado: por empezar
+   - Lectura: define baseline y fases, pero todavia no registra ejecucion cerrada.
 
 ## Product Areas In Evolution
 1. Net worth
