@@ -718,6 +718,50 @@ class AccountingApiTests(APITestCase):
             self.client.get("/api/accounting/accounts/").data[0]["current_balance"], "2000.00000000"
         )
 
+    def test_quick_entry_income_accepts_category_without_annual_link(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "income",
+                "booking_date": "2026-04-06",
+                "value_date": "2026-04-06",
+                "description": "Ingreso clasificado sin linea anual",
+                "amount": "550.00",
+                "account_id": self.cash_account.id,
+                "category_key": "salary",
+                "subcategory_key": "employee_salary",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        income_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] != self.cash_account.id
+        )
+        self.assertEqual(income_entry["flow_family"], "income")
+        self.assertEqual(income_entry["category_key"], "salary")
+        self.assertEqual(income_entry["subcategory_key"], "employee_salary")
+        self.assertIsNone(income_entry["annual_income_entry_id"])
+
+    def test_quick_entry_expense_requires_category_when_annual_link_is_missing(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-06",
+                "value_date": "2026-04-06",
+                "description": "Gasto sin clasificar",
+                "amount": "90.00",
+                "account_id": self.cash_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("subcategory_key", response.data["error"]["details"])
+
     def test_quick_entry_expense_uses_expense_counterpart_and_updates_monthly_summary(self):
         income_plan = AnnualIncomeEntry.objects.create(
             user=self.user,
@@ -993,11 +1037,55 @@ class AccountingApiTests(APITestCase):
                 "account_id": self.cash_account.id,
                 "liability_account_id": liability_account.id,
                 "interest_account_id": interest_account.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "financial_commitments",
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("amount", response.data["error"]["details"])
+
+    def test_quick_entry_debt_payment_requires_category_for_interest_when_no_annual_link(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo personal",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("2000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo personal",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        interest_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Intereses tarjeta",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-22",
+                "value_date": "2026-04-22",
+                "description": "Cuota sin clasificar",
+                "amount": "250.00",
+                "principal_amount": "200.00",
+                "interest_amount": "50.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "interest_account_id": interest_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("subcategory_key", response.data["error"]["details"])
 
     def test_account_balances_endpoint_returns_period_aggregates_for_liquidity_accounts(self):
         income_plan = AnnualIncomeEntry.objects.create(

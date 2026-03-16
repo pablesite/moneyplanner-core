@@ -2,10 +2,16 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAccountingStore } from '@/domains/accounting/store';
 import {
+  expenseCategories,
+  expenseSubcategories,
+  incomeCategories,
+  incomeSubcategories,
   useAnnualExpenseStore,
   useAnnualIncomeStore,
   type AnnualExpenseEntry,
   type AnnualIncomeEntry,
+  type ExpenseCategoryKey,
+  type IncomeCategoryKey,
 } from '@/domains/data-input';
 import type {
   LedgerAccountBalanceSummaryItem,
@@ -33,6 +39,11 @@ type ActivityFilter =
   | 'transfer'
   | 'investment_purchase'
   | 'debt_payment';
+
+type LastQuickClassification = {
+  category_key: string;
+  subcategory_key: string;
+};
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -72,9 +83,19 @@ export function useAccountingPage() {
     interest_account_id: null as number | null,
     principal_amount: '',
     interest_amount: '',
+    flow_family: '' as '' | 'income' | 'expense',
+    category_key: '',
+    subcategory_key: '',
     annual_income_entry_id: null as number | null,
     annual_expense_entry_id: null as number | null,
     notes: '',
+  });
+  const lastQuickClassification = reactive<
+    Record<'income' | 'expense' | 'debt_payment', LastQuickClassification>
+  >({
+    income: { category_key: '', subcategory_key: '' },
+    expense: { category_key: '', subcategory_key: '' },
+    debt_payment: { category_key: '', subcategory_key: '' },
   });
 
   const activityFilters = reactive({
@@ -189,6 +210,18 @@ export function useAccountingPage() {
   const debtInterestOptions = computed(() =>
     accounts.value.filter((account) => account.account_type === 'expense'),
   );
+  function hasQuickClassification(): boolean {
+    return Boolean(quickEntryForm.category_key && quickEntryForm.subcategory_key);
+  }
+  function debtPaymentBreakdownReady(amountValue: number): boolean {
+    const principalValue = toNumber(quickEntryForm.principal_amount);
+    const interestValue = toNumber(quickEntryForm.interest_amount);
+    if (quickEntryForm.liability_account_id == null) return false;
+    if (principalValue <= 0 || interestValue < 0) return false;
+    if (interestValue > 0 && quickEntryForm.interest_account_id == null) return false;
+    if (interestValue > 0 && !hasQuickClassification()) return false;
+    return Math.abs(principalValue + interestValue - amountValue) < 0.000001;
+  }
   const quickEntryReady = computed(() => {
     if (!quickEntryForm.description.trim()) return false;
     if (!quickEntryForm.booking_date || !quickEntryForm.value_date) return false;
@@ -202,14 +235,73 @@ export function useAccountingPage() {
       return quickEntryForm.counterparty_account_id != null;
     }
     if (quickEntryForm.movement_type === 'debt_payment') {
-      const principalValue = toNumber(quickEntryForm.principal_amount);
-      const interestValue = toNumber(quickEntryForm.interest_amount);
-      if (quickEntryForm.liability_account_id == null) return false;
-      if (principalValue <= 0 || interestValue < 0) return false;
-      if (interestValue > 0 && quickEntryForm.interest_account_id == null) return false;
-      return Math.abs(principalValue + interestValue - amountValue) < 0.000001;
+      return debtPaymentBreakdownReady(amountValue);
+    }
+    if (
+      (quickEntryForm.movement_type === 'income' || quickEntryForm.movement_type === 'expense') &&
+      !hasQuickClassification()
+    ) {
+      return false;
     }
     return true;
+  });
+  const quickEntryNeedsClassification = computed(() => {
+    if (quickEntryForm.movement_type === 'income') return true;
+    if (quickEntryForm.movement_type === 'expense') return true;
+    if (quickEntryForm.movement_type !== 'debt_payment') return false;
+    return toNumber(quickEntryForm.interest_amount) > 0;
+  });
+  const quickCategoryOptions = computed(() => {
+    if (quickEntryForm.movement_type === 'income') return incomeCategories;
+    if (quickEntryForm.movement_type === 'expense') return expenseCategories;
+    if (
+      quickEntryForm.movement_type === 'debt_payment' &&
+      toNumber(quickEntryForm.interest_amount) > 0
+    ) {
+      return expenseCategories;
+    }
+    return [];
+  });
+  const quickSubcategoryOptions = computed(() => {
+    if (!quickEntryForm.category_key) return [];
+    if (quickEntryForm.movement_type === 'income') {
+      return incomeSubcategories.filter(
+        (row) => row.category === (quickEntryForm.category_key as IncomeCategoryKey),
+      );
+    }
+    if (
+      quickEntryForm.movement_type === 'expense' ||
+      (quickEntryForm.movement_type === 'debt_payment' &&
+        toNumber(quickEntryForm.interest_amount) > 0)
+    ) {
+      return expenseSubcategories.filter(
+        (row) => row.category === (quickEntryForm.category_key as ExpenseCategoryKey),
+      );
+    }
+    return [];
+  });
+  const annualIncomeOptionsCompatible = computed<AnnualIncomeEntry[]>(() => {
+    if (quickEntryForm.movement_type !== 'income') return [];
+    if (!quickEntryForm.category_key || !quickEntryForm.subcategory_key) return [];
+    return incomeOptions.value.filter(
+      (entry) =>
+        entry.category === quickEntryForm.category_key &&
+        entry.subcategory === quickEntryForm.subcategory_key,
+    );
+  });
+  const annualExpenseOptionsCompatible = computed<AnnualExpenseEntry[]>(() => {
+    if (
+      quickEntryForm.movement_type !== 'expense' &&
+      quickEntryForm.movement_type !== 'debt_payment'
+    ) {
+      return [];
+    }
+    if (!quickEntryForm.category_key || !quickEntryForm.subcategory_key) return [];
+    return expenseOptions.value.filter(
+      (entry) =>
+        entry.category === quickEntryForm.category_key &&
+        entry.subcategory === quickEntryForm.subcategory_key,
+    );
   });
   const quickMovementTypeOptions: { value: QuickLedgerMovementType; label: string }[] = [
     { value: 'income', label: 'Ingreso' },
@@ -240,9 +332,56 @@ export function useAccountingPage() {
       quickEntryForm.interest_account_id = null;
       quickEntryForm.principal_amount = '';
       quickEntryForm.interest_amount = '';
+      quickEntryForm.flow_family = '';
       if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
       if (movementType !== 'expense' && movementType !== 'debt_payment') {
         quickEntryForm.annual_expense_entry_id = null;
+      }
+      const remembered =
+        movementType === 'income' || movementType === 'expense' || movementType === 'debt_payment'
+          ? lastQuickClassification[movementType]
+          : null;
+      if (remembered) {
+        quickEntryForm.category_key = remembered.category_key;
+        quickEntryForm.subcategory_key = remembered.subcategory_key;
+      } else {
+        quickEntryForm.category_key = '';
+        quickEntryForm.subcategory_key = '';
+      }
+    },
+  );
+  watch(
+    () => quickEntryForm.category_key,
+    () => {
+      if (
+        quickEntryForm.subcategory_key &&
+        !quickSubcategoryOptions.value.some((row) => row.value === quickEntryForm.subcategory_key)
+      ) {
+        quickEntryForm.subcategory_key = '';
+        quickEntryForm.annual_income_entry_id = null;
+        quickEntryForm.annual_expense_entry_id = null;
+      }
+    },
+  );
+  watch(
+    () => quickEntryForm.subcategory_key,
+    (value) => {
+      if (!value) return;
+      if (quickEntryForm.movement_type === 'income') {
+        lastQuickClassification.income = {
+          category_key: quickEntryForm.category_key,
+          subcategory_key: value,
+        };
+      } else if (quickEntryForm.movement_type === 'expense') {
+        lastQuickClassification.expense = {
+          category_key: quickEntryForm.category_key,
+          subcategory_key: value,
+        };
+      } else if (quickEntryForm.movement_type === 'debt_payment') {
+        lastQuickClassification.debt_payment = {
+          category_key: quickEntryForm.category_key,
+          subcategory_key: value,
+        };
       }
     },
   );
@@ -359,6 +498,9 @@ export function useAccountingPage() {
     quickEntryForm.interest_account_id = null;
     quickEntryForm.principal_amount = '';
     quickEntryForm.interest_amount = '';
+    quickEntryForm.flow_family = '';
+    quickEntryForm.category_key = '';
+    quickEntryForm.subcategory_key = '';
     quickEntryForm.annual_income_entry_id = null;
     quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
@@ -367,6 +509,12 @@ export function useAccountingPage() {
   function getTransactionActivityKind(
     transaction: LedgerTransaction,
   ): Exclude<ActivityFilter, 'all'> | 'other' {
+    const hasIncomeClassified = transaction.entries.some((entry) => entry.flow_family === 'income');
+    if (hasIncomeClassified) return 'income';
+    const hasExpenseClassified = transaction.entries.some(
+      (entry) => entry.flow_family === 'expense',
+    );
+
     const hasIncomeLink = transaction.entries.some((entry) => entry.annual_income_entry_id != null);
     if (hasIncomeLink) return 'income';
 
@@ -375,6 +523,7 @@ export function useAccountingPage() {
     );
     const hasLiabilityLink = transaction.entries.some((entry) => entry.liability_id != null);
     if (hasLiabilityLink) return 'debt_payment';
+    if (hasExpenseClassified) return 'expense';
     if (hasExpenseLink) return 'expense';
 
     const assetEntries = transaction.entries.filter(
@@ -494,6 +643,14 @@ export function useAccountingPage() {
       notes: quickEntryForm.notes.trim(),
       status: 'posted',
       origin: 'manual',
+      ...(quickEntryNeedsClassification.value
+        ? {
+            flow_family:
+              quickEntryForm.movement_type === 'income' ? 'income' : ('expense' as const),
+            category_key: quickEntryForm.category_key,
+            subcategory_key: quickEntryForm.subcategory_key,
+          }
+        : {}),
       ...(quickEntryForm.movement_type === 'transfer'
         ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
         : {}),
@@ -556,6 +713,11 @@ export function useAccountingPage() {
     liquidityBalanceTotal,
     incomeOptions,
     expenseOptions,
+    annualIncomeOptionsCompatible,
+    annualExpenseOptionsCompatible,
+    quickEntryNeedsClassification,
+    quickCategoryOptions,
+    quickSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,

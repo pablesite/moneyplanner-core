@@ -25,8 +25,11 @@ const {
   liquidityAccounts,
   liquidityBalanceRows,
   liquidityBalanceTotal,
-  incomeOptions,
-  expenseOptions,
+  annualIncomeOptionsCompatible,
+  annualExpenseOptionsCompatible,
+  quickEntryNeedsClassification,
+  quickCategoryOptions,
+  quickSubcategoryOptions,
   transferCounterpartyOptions,
   investmentCounterpartyOptions,
   liabilityCounterpartyOptions,
@@ -84,6 +87,17 @@ const accountsByType = computed(() => {
   });
   return groups;
 });
+const primaryAccountTypeOptions = computed(() =>
+  accountTypeOptions.filter((type) => type.value !== 'income' && type.value !== 'expense'),
+);
+const technicalAccountTypeOptions = computed(() =>
+  accountTypeOptions.filter((type) => type.value === 'income' || type.value === 'expense'),
+);
+const hasTechnicalAccounts = computed(() =>
+  technicalAccountTypeOptions.value.some(
+    (type) => (accountsByType.value.get(type.value)?.length ?? 0) > 0,
+  ),
+);
 
 const showAccountModal = ref(false);
 const showQuickEntryModal = ref(false);
@@ -158,7 +172,7 @@ async function submitQuickEntryFromModal() {
 
         <div class="ui-accounting-account-groups">
           <section
-            v-for="type in accountTypeOptions"
+            v-for="type in primaryAccountTypeOptions"
             :key="type.value"
             class="ui-accounting-account-group"
           >
@@ -199,6 +213,48 @@ async function submitQuickEntryFromModal() {
               </li>
             </ul>
           </section>
+
+          <details v-if="hasTechnicalAccounts" class="ui-accounting-account-legacy">
+            <summary>Cuentas tecnicas (legacy)</summary>
+            <section
+              v-for="type in technicalAccountTypeOptions"
+              :key="type.value"
+              class="ui-accounting-account-group"
+            >
+              <div class="ui-accounting-account-group-head">
+                <strong>{{ type.label }}</strong>
+                <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
+              </div>
+
+              <ul
+                v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
+                class="ui-accounting-account-list"
+              >
+                <li
+                  v-for="account in accountsByType.get(type.value)"
+                  :key="account.id"
+                  class="ui-accounting-account-row"
+                >
+                  <div class="ui-accounting-account-meta">
+                    <strong>{{ account.name }}</strong>
+                    <p>{{ account.currency }} / {{ account.origin }}</p>
+                  </div>
+                  <div class="ui-accounting-account-actions">
+                    <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                    <button
+                      v-if="account.origin === 'user'"
+                      class="btn ui-accounting-account-delete-btn"
+                      type="button"
+                      :disabled="accountCreationLoading"
+                      @click="deleteAccount(account.id, account.name)"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </details>
         </div>
 
         <p class="ui-accounting-inline-note">
@@ -229,8 +285,8 @@ async function submitQuickEntryFromModal() {
         </div>
 
         <p class="ui-accounting-inline-note">
-          El alta rapida ahora vive en un modal para mantener visible el estado de cuentas y
-          liquidez mientras registras movimientos.
+          El alta rapida usa un contrato category-first: categoria y subcategoria son primarias, y
+          la linea anual es opcional.
         </p>
 
         <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
@@ -597,16 +653,12 @@ async function submitQuickEntryFromModal() {
             </option>
           </select>
 
-          <select
+          <div
             v-else-if="quickEntryForm.movement_type === 'income'"
-            v-model="quickEntryForm.annual_income_entry_id"
-            class="select"
+            class="ui-accounting-inline-note"
           >
-            <option :value="null">Categoria anual opcional</option>
-            <option v-for="entry in incomeOptions" :key="entry.id" :value="entry.id">
-              {{ entry.name }}
-            </option>
-          </select>
+            Selecciona categoria y subcategoria debajo.
+          </div>
 
           <select
             v-else-if="quickEntryForm.movement_type === 'investment_purchase'"
@@ -640,9 +692,59 @@ async function submitQuickEntryFromModal() {
             </option>
           </select>
 
+          <div v-else class="ui-accounting-inline-note">
+            Selecciona categoria y subcategoria debajo.
+          </div>
+        </div>
+
+        <div
+          v-if="quickEntryNeedsClassification"
+          class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+        >
+          <select v-model="quickEntryForm.category_key" class="select" required>
+            <option value="">Categoria</option>
+            <option
+              v-for="category in quickCategoryOptions"
+              :key="category.value"
+              :value="category.value"
+            >
+              {{ category.label }}
+            </option>
+          </select>
+
+          <select v-model="quickEntryForm.subcategory_key" class="select" required>
+            <option value="">Subcategoria</option>
+            <option
+              v-for="subcategory in quickSubcategoryOptions"
+              :key="subcategory.value"
+              :value="subcategory.value"
+            >
+              {{ subcategory.label }}
+            </option>
+          </select>
+
+          <select
+            v-if="quickEntryForm.movement_type === 'income'"
+            v-model="quickEntryForm.annual_income_entry_id"
+            class="select"
+          >
+            <option :value="null">Linea anual opcional</option>
+            <option
+              v-for="entry in annualIncomeOptionsCompatible"
+              :key="entry.id"
+              :value="entry.id"
+            >
+              {{ entry.name }}
+            </option>
+          </select>
+
           <select v-else v-model="quickEntryForm.annual_expense_entry_id" class="select">
-            <option :value="null">Categoria anual opcional</option>
-            <option v-for="entry in expenseOptions" :key="entry.id" :value="entry.id">
+            <option :value="null">Linea anual opcional</option>
+            <option
+              v-for="entry in annualExpenseOptionsCompatible"
+              :key="entry.id"
+              :value="entry.id"
+            >
               {{ entry.name }}
             </option>
           </select>
@@ -690,7 +792,7 @@ async function submitQuickEntryFromModal() {
                   ? 'La compra registra salida de liquidez y alta en la cuenta de inversion.'
                   : quickEntryForm.movement_type === 'debt_payment'
                     ? 'El pago separa principal e intereses; total = principal + interes.'
-                    : 'El backend genera la contrapartida contable y enlaza la categoria anual si la indicas.'
+                    : 'El backend genera la contrapartida contable y registra categoria/subcategoria como clasificacion primaria.'
             }}
           </p>
           <button
@@ -704,7 +806,7 @@ async function submitQuickEntryFromModal() {
 
         <p v-if="!quickEntryReady && !transactionCreationLoading" class="ui-accounting-inline-note">
           Completa descripcion, fechas, importe y cuenta de liquidez. Cada tipo puede requerir
-          cuentas y desglose adicionales.
+          cuentas, clasificacion funcional y desglose adicionales.
         </p>
       </form>
     </BaseModal>
@@ -816,6 +918,20 @@ async function submitQuickEntryFromModal() {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   overflow: hidden;
+}
+
+.ui-accounting-account-legacy {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.01);
+  padding: 10px;
+}
+
+.ui-accounting-account-legacy summary {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.82rem;
+  margin-bottom: 10px;
 }
 
 .ui-accounting-account-group-head {

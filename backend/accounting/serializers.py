@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
 from net_worth.models import Asset, Liability
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
@@ -410,6 +411,13 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"annual_expense_entry_id": "La referencia no pertenece al usuario autenticado."}
             )
+        inferred_flow_family = self._infer_flow_family(
+            movement_type=movement_type,
+            interest_amount=interest_amount,
+        )
+        if (category_key or subcategory_key) and not flow_family and inferred_flow_family:
+            attrs["flow_family"] = inferred_flow_family
+            flow_family = inferred_flow_family
         self._validate_functional_classification(
             flow_family=flow_family,
             category_key=category_key,
@@ -424,10 +432,25 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             and flow_family == LedgerEntry.FlowFamily.INCOME
         ):
             raise serializers.ValidationError({"flow_family": "No aplica a movimientos de gasto."})
-        if movement_type in {"transfer", "investment_purchase"} and flow_family:
+        if movement_type in {"transfer", "investment_purchase"} and (
+            flow_family or category_key or subcategory_key
+        ):
             raise serializers.ValidationError(
                 {"flow_family": "No aplica a transferencias internas ni compras de inversion."}
             )
+        self._validate_required_category_contract(
+            movement_type=movement_type,
+            category_key=category_key,
+            subcategory_key=subcategory_key,
+            annual_income_entry=annual_income_entry,
+            annual_expense_entry=annual_expense_entry,
+            interest_amount=interest_amount,
+        )
+        self._validate_category_taxonomy(
+            flow_family=flow_family,
+            category_key=category_key,
+            subcategory_key=subcategory_key,
+        )
 
         if movement_type == "income":
             self._validate_income_movement(
@@ -476,7 +499,53 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 interest_amount=interest_amount,
             )
 
+        self._align_category_with_legacy_link(
+            attrs=attrs,
+            movement_type=movement_type,
+            annual_income_entry=annual_income_entry,
+            annual_expense_entry=annual_expense_entry,
+            interest_amount=interest_amount or Decimal("0"),
+        )
         return attrs
+
+    def _infer_flow_family(self, *, movement_type: str, interest_amount: Decimal | None) -> str:
+        if movement_type == "income":
+            return cast(str, LedgerEntry.FlowFamily.INCOME)
+        if movement_type == "expense":
+            return cast(str, LedgerEntry.FlowFamily.EXPENSE)
+        if movement_type == "debt_payment" and (interest_amount or Decimal("0")) > 0:
+            return cast(str, LedgerEntry.FlowFamily.EXPENSE)
+        return ""
+
+    def _validate_required_category_contract(
+        self,
+        *,
+        movement_type: str,
+        category_key: str,
+        subcategory_key: str,
+        annual_income_entry: AnnualIncomeEntry | None,
+        annual_expense_entry: AnnualExpenseEntry | None,
+        interest_amount: Decimal | None,
+    ) -> None:
+        has_classification = bool(category_key and subcategory_key)
+        if movement_type == "income" and not has_classification and annual_income_entry is None:
+            raise serializers.ValidationError(
+                {"subcategory_key": "Categoria y subcategoria son obligatorias para ingresos."}
+            )
+        if movement_type == "expense" and not has_classification and annual_expense_entry is None:
+            raise serializers.ValidationError(
+                {"subcategory_key": "Categoria y subcategoria son obligatorias para gastos."}
+            )
+        if movement_type == "debt_payment" and (interest_amount or Decimal("0")) > 0:
+            if not has_classification and annual_expense_entry is None:
+                raise serializers.ValidationError(
+                    {
+                        "subcategory_key": (
+                            "Cuando hay intereses debes informar categoria/subcategoria de gasto "
+                            "o annual_expense_entry_id."
+                        )
+                    }
+                )
 
     def _validate_functional_classification(
         self,
@@ -497,6 +566,100 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                         )
                     }
                 )
+
+    def _validate_category_taxonomy(
+        self,
+        *,
+        flow_family: str,
+        category_key: str,
+        subcategory_key: str,
+    ) -> None:
+        if not category_key and not subcategory_key:
+            return
+        if flow_family == LedgerEntry.FlowFamily.INCOME:
+            try:
+                validate_annual_income_taxonomy(category=category_key, subcategory=subcategory_key)
+            except Exception as exc:
+                raise serializers.ValidationError(
+                    {"subcategory_key": "Subcategoria de ingreso no valida para la categoria dada."}
+                ) from exc
+            return
+        if flow_family == LedgerEntry.FlowFamily.EXPENSE:
+            try:
+                validate_annual_expense_taxonomy(
+                    category=category_key,
+                    subcategory=subcategory_key,
+                )
+            except Exception as exc:
+                raise serializers.ValidationError(
+                    {"subcategory_key": "Subcategoria de gasto no valida para la categoria dada."}
+                ) from exc
+
+    def _align_category_with_legacy_link(
+        self,
+        *,
+        attrs: dict,
+        movement_type: str,
+        annual_income_entry: AnnualIncomeEntry | None,
+        annual_expense_entry: AnnualExpenseEntry | None,
+        interest_amount: Decimal,
+    ) -> None:
+        category_key = attrs.get("category_key", "")
+        subcategory_key = attrs.get("subcategory_key", "")
+        flow_family = attrs.get("flow_family", "")
+
+        if movement_type == "income" and annual_income_entry is not None:
+            self._validate_compatibility_with_legacy_link(
+                category_key=category_key,
+                subcategory_key=subcategory_key,
+                expected_category=annual_income_entry.category,
+                expected_subcategory=annual_income_entry.subcategory,
+                legacy_field="annual_income_entry_id",
+            )
+            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.INCOME)
+            attrs["category_key"] = annual_income_entry.category
+            attrs["subcategory_key"] = annual_income_entry.subcategory
+            return
+
+        if movement_type in {"expense", "debt_payment"} and annual_expense_entry is not None:
+            self._validate_compatibility_with_legacy_link(
+                category_key=category_key,
+                subcategory_key=subcategory_key,
+                expected_category=annual_expense_entry.category,
+                expected_subcategory=annual_expense_entry.subcategory,
+                legacy_field="annual_expense_entry_id",
+            )
+            if movement_type == "expense" or interest_amount > 0:
+                attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
+                attrs["category_key"] = annual_expense_entry.category
+                attrs["subcategory_key"] = annual_expense_entry.subcategory
+            return
+
+        if category_key and subcategory_key and not flow_family:
+            attrs["flow_family"] = self._infer_flow_family(
+                movement_type=movement_type,
+                interest_amount=interest_amount,
+            )
+
+    def _validate_compatibility_with_legacy_link(
+        self,
+        *,
+        category_key: str,
+        subcategory_key: str,
+        expected_category: str,
+        expected_subcategory: str,
+        legacy_field: str,
+    ) -> None:
+        if not category_key and not subcategory_key:
+            return
+        if category_key != expected_category or subcategory_key != expected_subcategory:
+            raise serializers.ValidationError(
+                {
+                    legacy_field: (
+                        "La linea anual indicada no coincide con la categoria/subcategoria informada."
+                    )
+                }
+            )
 
     def _validate_income_movement(
         self,

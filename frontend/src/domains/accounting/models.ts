@@ -32,6 +32,9 @@ export type LedgerEntry = {
   side: LedgerEntrySide;
   amount: string;
   currency: string;
+  flow_family: '' | 'income' | 'expense';
+  category_key: string;
+  subcategory_key: string;
   annual_income_entry_id: number | null;
   annual_expense_entry_id: number | null;
   asset_id: number | null;
@@ -163,6 +166,9 @@ export type QuickLedgerTransactionWritePayload = {
   description: string;
   amount: string;
   account_id: number;
+  flow_family?: '' | 'income' | 'expense';
+  category_key?: string;
+  subcategory_key?: string;
   counterparty_account_id?: number | null;
   liability_account_id?: number | null;
   interest_account_id?: number | null;
