@@ -6,15 +6,18 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
-from django.db.models import Q
 from django.db import transaction
+from django.db.models import Q
 from django.db.models import QuerySet
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 
 ZERO = Decimal("0")
 TWO_DECIMAL_PLACES = Decimal("0.01")
+NET_WORTH_OPENING_NOTE_PREFIX = "net_worth_opening_balance"
+SYSTEM_EQUITY_ACCOUNT_NAME = "Patrimonio neto"
 
 
 @dataclass(frozen=True)
@@ -467,6 +470,121 @@ def get_or_create_system_account(
         defaults={"is_active": True},
     )
     return account
+
+
+def get_or_create_system_equity_account(*, user_id: int, currency: str) -> LedgerAccount:
+    return get_or_create_system_account(
+        user_id=user_id,
+        account_type=cast(str, LedgerAccount.AccountType.EQUITY),
+        currency=currency,
+        name=SYSTEM_EQUITY_ACCOUNT_NAME,
+    )
+
+
+def build_net_worth_opening_balance_note(*, position_kind: str, position_id: int) -> str:
+    return f"{NET_WORTH_OPENING_NOTE_PREFIX}:{position_kind}:{position_id}"
+
+
+@transaction.atomic
+def ensure_net_worth_opening_balance_transaction(
+    *,
+    user,
+    account: LedgerAccount,
+    amount: Decimal,
+    booking_date: date | None = None,
+    asset=None,
+    liability=None,
+) -> LedgerTransaction | None:
+    if asset is not None and liability is not None:
+        raise ValidationError(
+            {
+                "detail": (
+                    "El saldo de apertura contable no puede vincularse a un activo "
+                    "y a un pasivo a la vez."
+                )
+            }
+        )
+    if asset is None and liability is None:
+        raise ValidationError(
+            {"detail": "El saldo de apertura contable requiere un activo o un pasivo."}
+        )
+
+    opening_amount = Decimal(amount or ZERO)
+    if opening_amount == ZERO:
+        return None
+
+    position_kind = "asset" if asset is not None else "liability"
+    position_id = asset.id if asset is not None else liability.id
+    position_label = asset.name if asset is not None else liability.name
+    opening_note = build_net_worth_opening_balance_note(
+        position_kind=position_kind,
+        position_id=position_id,
+    )
+
+    existing_transaction = (
+        LedgerTransaction.objects.filter(
+            user_id=user.id,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=opening_note,
+            entries__account_id=account.id,
+        )
+        .distinct()
+        .first()
+    )
+    if existing_transaction is not None:
+        return existing_transaction
+
+    if has_account_entries(
+        account=account,
+        status=cast(str, LedgerTransaction.Status.POSTED),
+    ):
+        return None
+
+    normalized_currency = normalize_currency_code(account.currency)
+    equity_account = get_or_create_system_equity_account(
+        user_id=user.id,
+        currency=normalized_currency,
+    )
+    amount_abs = abs(opening_amount)
+
+    if account.account_type == LedgerAccount.AccountType.ASSET:
+        position_side = LedgerEntry.Side.DEBIT if opening_amount > ZERO else LedgerEntry.Side.CREDIT
+        equity_side = LedgerEntry.Side.CREDIT if opening_amount > ZERO else LedgerEntry.Side.DEBIT
+    elif account.account_type == LedgerAccount.AccountType.LIABILITY:
+        position_side = LedgerEntry.Side.CREDIT if opening_amount > ZERO else LedgerEntry.Side.DEBIT
+        equity_side = LedgerEntry.Side.DEBIT if opening_amount > ZERO else LedgerEntry.Side.CREDIT
+    else:
+        raise ValidationError(
+            {"detail": ("El saldo de apertura contable solo aplica a cuentas asset o liability.")}
+        )
+
+    effective_booking_date = booking_date or timezone.localdate()
+    transaction_row = LedgerTransaction.objects.create(
+        user=user,
+        booking_date=effective_booking_date,
+        value_date=effective_booking_date,
+        description=f"Saldo inicial contable: {position_label}"[:240],
+        status=LedgerTransaction.Status.POSTED,
+        origin=LedgerTransaction.Origin.SYSTEM,
+        notes=opening_note,
+    )
+    LedgerEntry.objects.create(
+        transaction=transaction_row,
+        account=account,
+        side=position_side,
+        amount=amount_abs,
+        currency=normalized_currency,
+        asset=asset,
+        liability=liability,
+    )
+    LedgerEntry.objects.create(
+        transaction=transaction_row,
+        account=equity_account,
+        side=equity_side,
+        amount=amount_abs,
+        currency=normalized_currency,
+    )
+    return transaction_row
 
 
 @transaction.atomic

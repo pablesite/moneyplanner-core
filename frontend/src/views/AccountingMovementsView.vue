@@ -6,6 +6,7 @@ import BaseModal from '@/domains/ui/components/BaseModal.vue';
 const {
   loading,
   accountCreationLoading,
+  accountActivationLoading,
   transactionCreationLoading,
   error,
   successMessage,
@@ -17,12 +18,15 @@ const {
   yearOptions,
   monthOptions,
   accountTypeOptions,
+  manualPositionTypeOptions,
   quickMovementTypeOptions,
-  accountForm,
+  activationForm,
   quickEntryForm,
   transactionForm,
   activityFilters,
   liquidityAccounts,
+  availableManualPositionOptions,
+  hasAvailableManualPositions,
   liquidityBalanceRows,
   liquidityBalanceTotal,
   annualIncomeOptionsCompatible,
@@ -45,7 +49,7 @@ const {
   liquidityBalanceDeltaTone,
   removeEntry,
   reloadPeriod,
-  submitAccount,
+  activateNetWorthPosition,
   deleteAccount,
   submitQuickEntry,
   submitTransaction,
@@ -111,12 +115,12 @@ const hasCompatibleAnnualPlanOptions = computed(() => {
   return false;
 });
 
-const showAccountModal = ref(false);
+const showActivationModal = ref(false);
 const showQuickEntryModal = ref(false);
 
-async function submitAccountFromModal() {
-  await submitAccount();
-  showAccountModal.value = false;
+async function activatePositionFromModal() {
+  await activateNetWorthPosition();
+  showActivationModal.value = false;
 }
 
 async function submitQuickEntryFromModal() {
@@ -173,9 +177,10 @@ async function submitQuickEntryFromModal() {
             <button
               class="icon-btn ui-accounting-panel-add"
               type="button"
-              aria-label="Nueva cuenta"
-              title="Nueva cuenta"
-              @click="showAccountModal = true"
+              aria-label="Activar tracking contable"
+              title="Activar tracking contable"
+              :disabled="!hasAvailableManualPositions"
+              @click="showActivationModal = true"
             >
               <span class="icon" aria-hidden="true">+</span>
             </button>
@@ -274,8 +279,8 @@ async function submitQuickEntryFromModal() {
         </div>
 
         <p class="ui-accounting-inline-note">
-          Usa el boton <strong>+</strong> para anadir nuevas cuentas sin perder el contexto del
-          libro diario.
+          Usa el boton <strong>+</strong> para seleccionar posiciones manuales ya existentes y
+          pasarlas a tracking contable sin salir del libro diario.
         </p>
       </article>
 
@@ -536,42 +541,66 @@ async function submitQuickEntryFromModal() {
       </article>
     </section>
 
-    <BaseModal :open="showAccountModal" title="Nueva cuenta" @close="showAccountModal = false">
+    <BaseModal
+      :open="showActivationModal"
+      title="Activar tracking contable"
+      @close="showActivationModal = false"
+    >
       <form
         class="ui-accounting-form ui-accounting-modal-form"
-        @submit.prevent="submitAccountFromModal"
+        @submit.prevent="activatePositionFromModal"
       >
         <div class="ui-accounting-form-head">
-          <h3>Nueva cuenta</h3>
-          <span class="subtle">Base operativa para tracking contable</span>
+          <h3>Activar tracking contable</h3>
+          <span class="subtle">Selecciona una posicion manual ya existente del patrimonio</span>
         </div>
 
         <div class="ui-accounting-form-grid">
-          <input
-            v-model="accountForm.name"
-            class="input"
-            placeholder="Cuenta corriente, broker, hipoteca..."
-            required
-          />
-          <select v-model="accountForm.account_type" class="select">
-            <option v-for="type in primaryAccountTypeOptions" :key="type.value" :value="type.value">
+          <select v-model="activationForm.position_type" class="select">
+            <option v-for="type in manualPositionTypeOptions" :key="type.value" :value="type.value">
               {{ type.label }}
             </option>
           </select>
-          <input v-model="accountForm.currency" class="input" maxlength="3" placeholder="EUR" />
+          <select
+            v-model="activationForm.position_id"
+            class="select"
+            :disabled="!availableManualPositionOptions.length"
+          >
+            <option :value="null">
+              {{
+                availableManualPositionOptions.length
+                  ? 'Selecciona una posicion manual'
+                  : 'No hay posiciones manuales disponibles'
+              }}
+            </option>
+            <option
+              v-for="position in availableManualPositionOptions"
+              :key="position.id"
+              :value="position.id"
+            >
+              {{ position.name }} / {{ position.currency }}
+            </option>
+          </select>
         </div>
 
-        <textarea
-          v-model="accountForm.notes"
-          class="textarea"
-          rows="2"
-          placeholder="Notas operativas opcionales"
-        />
+        <div v-if="!hasAvailableManualPositions" class="ui-accounting-empty">
+          No hay activos ni pasivos manuales disponibles para activar desde esta vista.
+        </div>
+        <p v-else class="ui-accounting-inline-note">
+          Al activar una posicion, Core la vincula al ledger y genera automaticamente el saldo de
+          apertura contra patrimonio neto.
+        </p>
 
         <div class="ui-accounting-submit-row">
-          <p class="ui-accounting-inline-note">Se crea dentro del catalogo operativo actual.</p>
-          <button class="btn btn-primary" type="submit" :disabled="accountCreationLoading">
-            {{ accountCreationLoading ? 'Creando...' : 'Crear cuenta' }}
+          <p class="ui-accounting-inline-note">
+            Solo se muestran posiciones del patrimonio con `tracking_mode=manual`.
+          </p>
+          <button
+            class="btn btn-primary"
+            type="submit"
+            :disabled="accountActivationLoading || activationForm.position_id == null"
+          >
+            {{ accountActivationLoading ? 'Activando...' : 'Activar tracking' }}
           </button>
         </div>
       </form>
