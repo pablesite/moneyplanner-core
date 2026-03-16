@@ -5,8 +5,11 @@ Describe how to run, validate, and troubleshoot `MoneyPlanner Core` locally.
 
 ## Local Startup
 1. From `core/`, run `docker compose up --build -d`
-2. Frontend: `http://localhost:5173`
-3. Backend: `http://localhost:8000`
+2. Verify `backend`, `frontend`, `db`, and `fx_sync` are `Up` with `docker compose ps`
+3. Frontend: `http://localhost:5173`
+4. Backend: `http://localhost:8000`
+
+`fx_sync` is part of the standard Core startup. It backfills and refreshes FX history used by net worth timelines.
 
 ## Standard Diagnostics
 1. `docker compose ps`

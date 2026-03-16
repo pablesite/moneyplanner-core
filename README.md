@@ -23,8 +23,9 @@ Open-source personal finance app foundation for MoneyPlanner.
 
 ## Quick Start
 1. `docker compose up --build -d`
-2. Frontend: `http://localhost:5173`
-3. Backend: `http://localhost:8000`
+2. Verify `backend`, `frontend`, `db`, and `fx_sync` are `Up` with `docker compose ps`
+3. Frontend: `http://localhost:5173`
+4. Backend: `http://localhost:8000`
 
 ## Documentation
 1. `docs/README.md`
