@@ -4,20 +4,19 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('memberships', '0003_ownershiplink'),
+        ("memberships", "0003_ownershiplink"),
     ]
 
     operations = [
         migrations.RenameIndex(
-            model_name='ownershiplink',
-            new_name='memberships_user_id_bd713b_idx',
-            old_name='memberships_user_id_247f36_idx',
+            model_name="ownershiplink",
+            new_name="memberships_user_id_bd713b_idx",
+            old_name="memberships_user_id_247f36_idx",
         ),
         migrations.RenameIndex(
-            model_name='ownershiplink',
-            new_name='memberships_ownersh_fe3f32_idx',
-            old_name='memberships_ownersh_95cc7f_idx',
+            model_name="ownershiplink",
+            new_name="memberships_ownersh_fe3f32_idx",
+            old_name="memberships_ownersh_95cc7f_idx",
         ),
     ]

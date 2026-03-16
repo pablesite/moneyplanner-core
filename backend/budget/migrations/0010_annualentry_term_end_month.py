@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('budget', '0009_annualexpenseentry_source_asset_and_more'),
+        ("budget", "0009_annualexpenseentry_source_asset_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='annualexpenseentry',
-            name='term_end_month',
+            model_name="annualexpenseentry",
+            name="term_end_month",
             field=models.PositiveSmallIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='annualincomeentry',
-            name='term_end_month',
+            model_name="annualincomeentry",
+            name="term_end_month",
             field=models.PositiveSmallIntegerField(blank=True, null=True),
         ),
     ]

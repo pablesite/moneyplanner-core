@@ -6,21 +6,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('budget', '0008_annualincomemonthlycheckin'),
-        ('net_worth', '0025_asset_expected_end_date_and_more'),
+        ("budget", "0008_annualincomemonthlycheckin"),
+        ("net_worth", "0025_asset_expected_end_date_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='annualexpenseentry',
-            name='source_asset',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='generated_annual_expense_entries', to='net_worth.asset'),
+            model_name="annualexpenseentry",
+            name="source_asset",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="generated_annual_expense_entries",
+                to="net_worth.asset",
+            ),
         ),
         migrations.AddIndex(
-            model_name='annualexpenseentry',
-            index=models.Index(fields=['source_asset'], name='budget_ae_src_asset_idx'),
+            model_name="annualexpenseentry",
+            index=models.Index(fields=["source_asset"], name="budget_ae_src_asset_idx"),
         ),
     ]

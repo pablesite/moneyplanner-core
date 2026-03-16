@@ -485,9 +485,7 @@ class AnnualIncomeMonthlyCheckinSerializer(AnnualEntryValidationMixin, serialize
             and month != entry.target_month
         ):
             raise serializers.ValidationError(
-                {
-                    "month": "Los ingresos puntuales solo admiten check-in en su mes objetivo."
-                }
+                {"month": "Los ingresos puntuales solo admiten check-in en su mes objetivo."}
             )
         if status_value == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
             attrs["executed_amount"] = None

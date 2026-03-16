@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounts', '0003_rename_accounts_ex_provider_22f7f7_idx_accounts_ex_provide_c1192a_idx_and_more'),
+        (
+            "accounts",
+            "0003_rename_accounts_ex_provider_22f7f7_idx_accounts_ex_provide_c1192a_idx_and_more",
+        ),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='usersettings',
-            name='inflation_region',
-            field=models.CharField(default='ES', max_length=10),
+            model_name="usersettings",
+            name="inflation_region",
+            field=models.CharField(default="ES", max_length=10),
         ),
     ]
