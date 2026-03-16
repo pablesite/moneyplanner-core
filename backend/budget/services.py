@@ -1,3 +1,4 @@
+from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
@@ -143,32 +144,79 @@ def _round_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
-def _build_ledger_monthly_execution_map(
+def _resolve_ledger_budget_classification(
+    row: LedgerEntry,
+) -> tuple[str, str, str, bool]:
+    if row.flow_family and row.category_key and row.subcategory_key:
+        return row.flow_family, row.category_key, row.subcategory_key, True
+    if row.annual_income_entry_id is not None and row.annual_income_entry is not None:
+        return (
+            cast(str, LedgerEntry.FlowFamily.INCOME),
+            row.annual_income_entry.category,
+            row.annual_income_entry.subcategory,
+            False,
+        )
+    if row.annual_expense_entry_id is not None and row.annual_expense_entry is not None:
+        return (
+            cast(str, LedgerEntry.FlowFamily.EXPENSE),
+            row.annual_expense_entry.category,
+            row.annual_expense_entry.subcategory,
+            False,
+        )
+    return "", "", "", False
+
+
+def _build_ledger_monthly_execution_maps(
     *,
     user,
     fiscal_year: int,
-    fk_name: str,
+    flow_family: str,
+    legacy_fk_name: str,
     positive_side: str,
-) -> dict[tuple[int, int], Decimal]:
+) -> tuple[dict[tuple[str, str, int], Decimal], dict[tuple[int, int], Decimal]]:
     queryset = (
         LedgerEntry.objects.filter(
             transaction__user=user,
             transaction__status=LedgerTransaction.Status.POSTED,
             transaction__booking_date__year=fiscal_year,
-            **{f"{fk_name}__isnull": False},
         )
-        .select_related("transaction")
-        .only(fk_name, "side", "amount", "transaction__booking_date")
+        .select_related("transaction", "annual_income_entry", "annual_expense_entry")
+        .only(
+            "side",
+            "amount",
+            "flow_family",
+            "category_key",
+            "subcategory_key",
+            "annual_income_entry_id",
+            "annual_expense_entry_id",
+            "transaction__booking_date",
+            "annual_income_entry__category",
+            "annual_income_entry__subcategory",
+            "annual_expense_entry__category",
+            "annual_expense_entry__subcategory",
+        )
     )
-    totals: dict[tuple[int, int], Decimal] = {}
+    categorized_totals: dict[tuple[str, str, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
+    legacy_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
     for row in queryset:
-        entry_id = getattr(row, f"{fk_name}_id")
+        resolved_flow_family, category_key, subcategory_key, is_primary_classification = (
+            _resolve_ledger_budget_classification(row)
+        )
+        if resolved_flow_family != flow_family:
+            continue
+        signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+        if is_primary_classification and category_key and subcategory_key:
+            key = (category_key, subcategory_key, row.transaction.booking_date.month)
+            categorized_totals[key] += signed_amount
+            continue
+        entry_id = getattr(row, f"{legacy_fk_name}_id")
         if entry_id is None:
             continue
-        key = (entry_id, row.transaction.booking_date.month)
-        signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
-        totals[key] = totals.get(key, Decimal("0.00")) + signed_amount
-    return {key: _round_money(value) for key, value in totals.items()}
+        legacy_totals[(entry_id, row.transaction.booking_date.month)] += signed_amount
+    return (
+        {key: _round_money(value) for key, value in categorized_totals.items()},
+        {key: _round_money(value) for key, value in legacy_totals.items()},
+    )
 
 
 def _resolve_coverage_mode(*, ledger_count: int, fallback_count: int) -> str:
@@ -246,10 +294,11 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         for item in checkins
         if 1 <= item.month <= 12
     }
-    ledger_by_key = _build_ledger_monthly_execution_map(
+    categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
-        fk_name="annual_expense_entry",
+        flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
+        legacy_fk_name="annual_expense_entry",
         positive_side=cast(str, LedgerEntry.Side.DEBIT),
     )
 
@@ -260,21 +309,41 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
     ledger_entries_by_month = {month: 0 for month in range(1, 13)}
     fallback_entries_by_month = {month: 0 for month in range(1, 13)}
+    planned_entry_amounts_by_key: dict[tuple[int, int], Decimal] = {}
+    planned_slots: dict[tuple[str, str, int], dict[str, object]] = {}
 
     for entry in entries:
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
-            ledger_amount = ledger_by_key.get((entry.id, month))
-            if ledger_amount is not None:
-                ledger_entries_by_month[month] += 1
+            planned_entry_amounts_by_key[(entry.id, month)] = planned_amount
+            slot_key = (entry.category, entry.subcategory, month)
+            slot = planned_slots.get(slot_key)
+            if slot is None:
+                slot = {"entry_ids": [], "month": month}
+                planned_slots[slot_key] = slot
+            cast(list[int], slot["entry_ids"]).append(entry.id)
+
+    for slot_key, slot in planned_slots.items():
+        month = cast(int, slot["month"])
+        entry_ids = cast(list[int], slot["entry_ids"])
+        ledger_amount = categorized_ledger_by_key.get(slot_key)
+        if ledger_amount is not None:
+            ledger_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += ledger_amount
+            continue
+        for entry_id in entry_ids:
+            legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
+            if legacy_ledger_amount is not None:
+                fallback_entries_by_month[month] += 1
                 confirmed_entries_by_month[month] += 1
-                executed_by_month[month] += ledger_amount
+                executed_by_month[month] += legacy_ledger_amount
                 continue
-            checkin = checkins_by_key.get((entry.id, month))
+            checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
-                pending_by_month[month] += planned_amount
+                pending_by_month[month] += planned_entry_amounts_by_key[(entry_id, month)]
                 continue
             fallback_entries_by_month[month] += 1
             confirmed_entries_by_month[month] += 1
@@ -420,10 +489,11 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         for item in checkins
         if 1 <= item.month <= 12
     }
-    ledger_by_key = _build_ledger_monthly_execution_map(
+    categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
-        fk_name="annual_income_entry",
+        flow_family=cast(str, LedgerEntry.FlowFamily.INCOME),
+        legacy_fk_name="annual_income_entry",
         positive_side=cast(str, LedgerEntry.Side.CREDIT),
     )
 
@@ -434,21 +504,41 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     expected_entries_by_month = {month: 0 for month in range(1, 13)}
     ledger_entries_by_month = {month: 0 for month in range(1, 13)}
     fallback_entries_by_month = {month: 0 for month in range(1, 13)}
+    planned_entry_amounts_by_key: dict[tuple[int, int], Decimal] = {}
+    planned_slots: dict[tuple[str, str, int], dict[str, object]] = {}
 
     for entry in entries:
         distribution = planned_income_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
-            ledger_amount = ledger_by_key.get((entry.id, month))
-            if ledger_amount is not None:
-                ledger_entries_by_month[month] += 1
+            planned_entry_amounts_by_key[(entry.id, month)] = planned_amount
+            slot_key = (entry.category, entry.subcategory, month)
+            slot = planned_slots.get(slot_key)
+            if slot is None:
+                slot = {"entry_ids": [], "month": month}
+                planned_slots[slot_key] = slot
+            cast(list[int], slot["entry_ids"]).append(entry.id)
+
+    for slot_key, slot in planned_slots.items():
+        month = cast(int, slot["month"])
+        entry_ids = cast(list[int], slot["entry_ids"])
+        ledger_amount = categorized_ledger_by_key.get(slot_key)
+        if ledger_amount is not None:
+            ledger_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += ledger_amount
+            continue
+        for entry_id in entry_ids:
+            legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
+            if legacy_ledger_amount is not None:
+                fallback_entries_by_month[month] += 1
                 confirmed_entries_by_month[month] += 1
-                executed_by_month[month] += ledger_amount
+                executed_by_month[month] += legacy_ledger_amount
                 continue
-            checkin = checkins_by_key.get((entry.id, month))
+            checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
-                pending_by_month[month] += planned_amount
+                pending_by_month[month] += planned_entry_amounts_by_key[(entry_id, month)]
                 continue
             fallback_entries_by_month[month] += 1
             confirmed_entries_by_month[month] += 1

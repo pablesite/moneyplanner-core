@@ -233,7 +233,10 @@ describe('BudgetDashboardView', () => {
               side: 'credit',
               amount: '1000.00',
               currency: 'EUR',
-              annual_income_entry_id: 1,
+              flow_family: 'income',
+              category_key: 'salary',
+              subcategory_key: 'employee_salary',
+              annual_income_entry_id: null,
               annual_expense_entry_id: null,
               asset_id: null,
               liability_id: null,
@@ -251,7 +254,7 @@ describe('BudgetDashboardView', () => {
     await openMonthlyStep(wrapper, 'Ingresos');
 
     expect(wrapper.text()).toContain('1 via ledger');
-    expect(wrapper.text()).toContain('Ledger');
+    expect(wrapper.text()).toContain('Ledger categorizado');
     const input = wrapper.find('input[placeholder="Importe ejecutado"]');
     expect(input.attributes('disabled')).toBeDefined();
   });
@@ -311,5 +314,108 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('1 via fallback legacy');
     const input = wrapper.find('input[placeholder="Importe ejecutado"]');
     expect(input.attributes('disabled')).toBeUndefined();
+  });
+
+  it('surfaces pendiente clasificar when categorized ledger is ambiguous across multiple lines', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 1,
+        name: 'Nomina A',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 12000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+      {
+        id: 2,
+        name: 'Nomina B',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 6000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 18000;
+    configureCoreApi();
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: {
+        fiscal_year: currentYear,
+        months: [
+          {
+            month: currentMonth,
+            income_total: '1500.00',
+            expense_total: '0.00',
+            uncategorized_total: '0.00',
+          },
+        ],
+      },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: [
+        {
+          id: 10,
+          booking_date: `${currentYear}-03-15`,
+          value_date: `${currentYear}-03-15`,
+          description: 'Nomina',
+          status: 'posted',
+          origin: 'manual',
+          notes: '',
+          created_at: '',
+          updated_at: '',
+          entries: [
+            {
+              id: 101,
+              account_id: 1,
+              account_name: 'Cuenta corriente',
+              side: 'credit',
+              amount: '1500.00',
+              currency: 'EUR',
+              flow_family: 'income',
+              category_key: 'salary',
+              subcategory_key: 'employee_salary',
+              annual_income_entry_id: null,
+              annual_expense_entry_id: null,
+              asset_id: null,
+              liability_id: null,
+              notes: '',
+              created_at: '',
+              updated_at: '',
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+    await openMonthlyStep(wrapper, 'Ingresos');
+
+    expect(wrapper.text()).toContain('Pendiente clasificar');
+    expect(wrapper.text()).toContain('Nomina A');
+    expect(wrapper.text()).toContain('Nomina B');
   });
 });

@@ -18,7 +18,12 @@
    - `quick-entry` acepta categoria/subcategoria como contrato primario en `income`/`expense` y coste de `debt_payment` cuando aplica.
    - `AccountingMovementsView` ya pide `Categoria` + `Subcategoria` y deja la linea anual como opcional secundaria.
    - La UX reduce protagonismo de cuentas `income`/`expense` como cuentas operativas visibles.
-3. Fase 3+ pendientes.
+3. Fase 3 implementada en `core/backend`, `core/frontend` y tests:
+   - `budget` ya agrega ejecucion mensual por taxonomia `category_key`/`subcategory_key` del ledger como fuente primaria.
+   - `budget` mantiene fallback legacy de lectura por `annual_*` cuando faltan clasificaciones nuevas en historico.
+   - `accounting` ya genera resumen mensual y sugerencias de presupuesto consumiendo clasificacion propia del ledger con fallback legacy.
+   - `BudgetDashboardView` distingue `Ledger categorizado`, `Fallback legacy` y `Pendiente clasificar` cuando la alineacion automatica no es segura.
+4. Fase 4+ pendientes.
 
 ## Objetivo
 Separar de forma explicita y reversible las tres capas funcionales que hoy se mezclan parcialmente en `accounting` y `budget`, de modo que:
