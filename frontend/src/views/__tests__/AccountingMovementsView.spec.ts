@@ -14,6 +14,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
   return {
     loading: ref(false),
     accountCreationLoading: ref(false),
+    accountActivationLoading: ref(false),
     transactionCreationLoading: ref(false),
     error: ref<string | null>(null),
     successMessage: ref<string | null>(null),
@@ -113,8 +114,14 @@ function makeState(overrides: Record<string, unknown> = {}) {
     ],
     accountTypeOptions: [
       { value: 'asset', label: 'Activo' },
+      { value: 'liability', label: 'Pasivo' },
+      { value: 'equity', label: 'Patrimonio neto' },
       { value: 'income', label: 'Ingreso' },
       { value: 'expense', label: 'Gasto' },
+    ],
+    manualPositionTypeOptions: [
+      { value: 'asset', label: 'Activo manual' },
+      { value: 'liability', label: 'Pasivo manual' },
     ],
     quickMovementTypeOptions: [
       { value: 'income', label: 'Ingreso' },
@@ -129,6 +136,10 @@ function makeState(overrides: Record<string, unknown> = {}) {
       currency: 'EUR',
       origin: 'user',
       notes: '',
+    },
+    activationForm: {
+      position_type: 'asset',
+      position_id: null,
     },
     quickEntryForm: {
       movement_type: 'expense',
@@ -190,6 +201,14 @@ function makeState(overrides: Record<string, unknown> = {}) {
         currency: 'EUR',
       },
     ]),
+    availableManualPositionOptions: computed(() => [
+      {
+        id: 91,
+        name: 'Broker manual',
+        currency: 'EUR',
+      },
+    ]),
+    hasAvailableManualPositions: computed(() => true),
     liquidityBalanceRows: computed(() => [
       {
         account_id: 1,
@@ -266,6 +285,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
     liquidityBalanceDeltaTone: vi.fn(() => 'positive'),
     removeEntry: vi.fn(),
     reloadPeriod: vi.fn(),
+    activateNetWorthPosition: vi.fn(),
+    refreshManualPositionOptions: vi.fn(),
     submitAccount: vi.fn(),
     submitQuickEntry: vi.fn(),
     submitTransaction: vi.fn(),
@@ -286,7 +307,7 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Cuenta corriente');
     expect(wrapper.text()).toContain('Nomina marzo');
     expect(wrapper.text()).toContain('Saldos derivados del ledger');
-    expect(wrapper.find('button[title="Nueva cuenta"]').exists()).toBe(true);
+    expect(wrapper.find('button[title="Activar tracking contable"]').exists()).toBe(true);
     expect(wrapper.find('button[title="Registrar movimiento diario"]').exists()).toBe(true);
   });
 
@@ -348,22 +369,20 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Ingreso');
   });
 
-  it('keeps legacy account types out of the manual account creation modal', async () => {
+  it('opens the activation modal with manual net-worth positions', async () => {
     mockUseAccountingPage.mockReturnValue(makeState());
     const wrapper = mount(AccountingMovementsView, {
       attachTo: document.body,
     });
 
-    await wrapper.find('button[title="Nueva cuenta"]').trigger('click');
+    await wrapper.find('button[title="Activar tracking contable"]').trigger('click');
 
-    const modalSelect = document.body.querySelector(
-      'form.ui-accounting-modal-form select',
-    ) as HTMLSelectElement | null;
-    const optionLabels = Array.from(modalSelect?.options ?? []).map((option) => option.text);
+    const modalSelects = Array.from(
+      document.body.querySelectorAll('form.ui-accounting-modal-form select'),
+    ) as HTMLSelectElement[];
+    const positionLabels = Array.from(modalSelects[1]?.options ?? []).map((option) => option.text);
 
-    expect(optionLabels).toContain('Activo');
-    expect(optionLabels).not.toContain('Ingreso');
-    expect(optionLabels).not.toContain('Gasto');
+    expect(positionLabels).toContain('Broker manual / EUR');
     expect(wrapper.text()).toContain('Contrapartidas tecnicas del sistema');
   });
 });

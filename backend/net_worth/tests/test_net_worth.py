@@ -1726,6 +1726,37 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertIsNotNone(response.data["accounting_account_id"])
         self.assertEqual(response.data["accounting_integration_state"], "auto_created")
+        asset_account = LedgerAccount.objects.get(id=response.data["accounting_account_id"])
+        equity_account = LedgerAccount.objects.get(
+            user=self.user,
+            account_type=LedgerAccount.AccountType.EQUITY,
+            origin=LedgerAccount.Origin.SYSTEM,
+            currency="EUR",
+        )
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=f"net_worth_opening_balance:asset:{response.data['id']}",
+        )
+        self.assertEqual(opening_tx.description, "Saldo inicial contable: Cuenta contable")
+        self.assertEqual(opening_tx.entries.count(), 2)
+        self.assertTrue(
+            LedgerEntry.objects.filter(
+                transaction=opening_tx,
+                account=asset_account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=Decimal("500.00"),
+                asset_id=response.data["id"],
+            ).exists()
+        )
+        self.assertTrue(
+            LedgerEntry.objects.filter(
+                transaction=opening_tx,
+                account=equity_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=Decimal("500.00"),
+            ).exists()
+        )
 
     def test_liability_create_auto_links_accounting_without_account(self):
         response = self.client.post(
@@ -1743,6 +1774,100 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertIsNotNone(response.data["accounting_account_id"])
         self.assertEqual(response.data["accounting_integration_state"], "auto_created")
+        liability_account = LedgerAccount.objects.get(id=response.data["accounting_account_id"])
+        equity_account = LedgerAccount.objects.get(
+            user=self.user,
+            account_type=LedgerAccount.AccountType.EQUITY,
+            origin=LedgerAccount.Origin.SYSTEM,
+            currency="EUR",
+        )
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=f"net_worth_opening_balance:liability:{response.data['id']}",
+        )
+        self.assertEqual(opening_tx.entries.count(), 2)
+        self.assertTrue(
+            LedgerEntry.objects.filter(
+                transaction=opening_tx,
+                account=liability_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=Decimal("50.00"),
+                liability_id=response.data["id"],
+            ).exists()
+        )
+        self.assertTrue(
+            LedgerEntry.objects.filter(
+                transaction=opening_tx,
+                account=equity_account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=Decimal("50.00"),
+            ).exists()
+        )
+
+    def test_asset_update_to_accounting_creates_opening_balance_against_equity(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta manual",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1200.00"),
+            is_active=True,
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/assets/{asset.id}/",
+            {"tracking_mode": Asset.TrackingMode.ACCOUNTING},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        asset.refresh_from_db()
+        self.assertEqual(asset.tracking_mode, Asset.TrackingMode.ACCOUNTING)
+        self.assertIsNotNone(asset.accounting_account_id)
+        self.assertEqual(get_effective_asset_amount(asset=asset), Decimal("1200.00"))
+        self.assertTrue(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.SYSTEM,
+                notes=f"net_worth_opening_balance:asset:{asset.id}",
+            ).exists()
+        )
+
+    def test_liability_update_to_accounting_creates_opening_balance_against_equity(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo manual",
+            category=Liability.Category.PERSONAL_LOAN,
+            tracking_mode=Liability.TrackingMode.MANUAL,
+            currency="EUR",
+            annual_interest_tae=Decimal("5.00"),
+            amount=Decimal("900.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/liabilities/{liability.id}/",
+            {"tracking_mode": Liability.TrackingMode.ACCOUNTING},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        liability.refresh_from_db()
+        self.assertEqual(liability.tracking_mode, Liability.TrackingMode.ACCOUNTING)
+        self.assertIsNotNone(liability.accounting_account_id)
+        self.assertEqual(get_effective_liability_amount(liability=liability), Decimal("900.00"))
+        self.assertTrue(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.SYSTEM,
+                notes=f"net_worth_opening_balance:liability:{liability.id}",
+            ).exists()
+        )
 
     def test_liability_create_rejects_missing_tae_for_mortgage(self):
         response = self.client.post(

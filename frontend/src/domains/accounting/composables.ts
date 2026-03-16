@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAccountingStore } from '@/domains/accounting/store';
+import { coreNetWorthApi } from '@/domains/net-worth/api';
 import {
   expenseCategories,
   expenseSubcategories,
@@ -22,6 +23,8 @@ import type {
   QuickLedgerMovementType,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
+import type { Asset, Liability } from '@/domains/net-worth/models';
+import { toApiErrorMessage } from '@/lib/errors';
 
 type TransactionFormRow = {
   key: number;
@@ -45,6 +48,8 @@ type LastQuickClassification = {
   subcategory_key: string;
 };
 
+type ManualPositionType = 'asset' | 'liability';
+
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
 }
@@ -62,6 +67,9 @@ export function useAccountingPage() {
   const { accounts, transactions, monthlySummary, accountBalancesSummary } = storeToRefs(store);
 
   const successMessage = ref<string | null>(null);
+  const accountActivationLoading = ref(false);
+  const manualAssets = ref<Asset[]>([]);
+  const manualLiabilities = ref<Liability[]>([]);
 
   const accountForm = reactive({
     name: '',
@@ -69,6 +77,10 @@ export function useAccountingPage() {
     currency: 'EUR',
     origin: 'user' as const,
     notes: '',
+  });
+  const activationForm = reactive({
+    position_type: 'asset' as ManualPositionType,
+    position_id: null as number | null,
   });
 
   const quickEntryForm = reactive({
@@ -180,6 +192,28 @@ export function useAccountingPage() {
   );
   const liquidityAccounts = computed(() =>
     accounts.value.filter((account) => account.account_type === 'asset'),
+  );
+  const manualPositionTypeOptions: { value: ManualPositionType; label: string }[] = [
+    { value: 'asset', label: 'Activo manual' },
+    { value: 'liability', label: 'Pasivo manual' },
+  ];
+  const availableManualAssetOptions = computed(() =>
+    manualAssets.value.filter((asset) => asset.is_active && asset.tracking_mode === 'manual'),
+  );
+  const availableManualLiabilityOptions = computed(() =>
+    manualLiabilities.value.filter(
+      (liability) => liability.is_active && liability.tracking_mode === 'manual',
+    ),
+  );
+  const availableManualPositionOptions = computed(() =>
+    activationForm.position_type === 'asset'
+      ? availableManualAssetOptions.value
+      : availableManualLiabilityOptions.value,
+  );
+  const hasAvailableManualPositions = computed(
+    () =>
+      availableManualAssetOptions.value.length > 0 ||
+      availableManualLiabilityOptions.value.length > 0,
   );
   const incomeOptions = computed<AnnualIncomeEntry[]>(() =>
     incomeStore.entries.value
@@ -385,6 +419,12 @@ export function useAccountingPage() {
       }
     },
   );
+  watch(
+    () => activationForm.position_type,
+    () => {
+      activationForm.position_id = null;
+    },
+  );
 
   const debitTotal = computed(() =>
     transactionForm.entries
@@ -582,6 +622,25 @@ export function useAccountingPage() {
     await store.setPeriod(selectedYear.value, selectedMonth.value);
   }
 
+  async function refreshManualPositionOptions() {
+    try {
+      const [assetsRes, liabilitiesRes] = await Promise.all([
+        coreNetWorthApi.getAssets(),
+        coreNetWorthApi.getLiabilities(),
+      ]);
+      manualAssets.value = assetsRes.data;
+      manualLiabilities.value = liabilitiesRes.data;
+      if (
+        activationForm.position_id != null &&
+        !availableManualPositionOptions.value.some((row) => row.id === activationForm.position_id)
+      ) {
+        activationForm.position_id = null;
+      }
+    } catch (error: unknown) {
+      store.error = toApiErrorMessage(error);
+    }
+  }
+
   async function submitAccount() {
     successMessage.value = null;
     await store.createAccount({
@@ -593,6 +652,33 @@ export function useAccountingPage() {
     });
     resetAccountForm();
     successMessage.value = 'Cuenta contable creada.';
+  }
+
+  async function activateNetWorthPosition() {
+    if (activationForm.position_id == null) return;
+
+    accountActivationLoading.value = true;
+    successMessage.value = null;
+    store.error = null;
+    try {
+      if (activationForm.position_type === 'asset') {
+        await coreNetWorthApi.updateAsset(activationForm.position_id, {
+          tracking_mode: 'accounting',
+        });
+      } else {
+        await coreNetWorthApi.updateLiability(activationForm.position_id, {
+          tracking_mode: 'accounting',
+        });
+      }
+      activationForm.position_id = null;
+      await Promise.all([store.refreshAll(), refreshManualPositionOptions()]);
+      successMessage.value = 'Tracking contable activado para la posicion seleccionada.';
+    } catch (error: unknown) {
+      store.error = toApiErrorMessage(error);
+      throw error;
+    } finally {
+      accountActivationLoading.value = false;
+    }
   }
 
   async function deleteAccount(accountId: number, accountName: string) {
@@ -691,12 +777,14 @@ export function useAccountingPage() {
       store.refreshAll(),
       incomeStore.loadAll(selectedYear.value),
       expenseStore.loadAll(selectedYear.value),
+      refreshManualPositionOptions(),
     ]);
   });
 
   return {
     loading,
     accountCreationLoading,
+    accountActivationLoading,
     transactionCreationLoading,
     error,
     successMessage,
@@ -709,12 +797,16 @@ export function useAccountingPage() {
     yearOptions,
     monthOptions,
     accountTypeOptions,
+    manualPositionTypeOptions,
     quickMovementTypeOptions,
     accountForm,
+    activationForm,
     quickEntryForm,
     transactionForm,
     activityFilters,
     liquidityAccounts,
+    availableManualPositionOptions,
+    hasAvailableManualPositions,
     liquidityBalanceRows,
     liquidityBalanceTotal,
     incomeOptions,
@@ -739,6 +831,8 @@ export function useAccountingPage() {
     liquidityBalanceDeltaTone,
     removeEntry,
     reloadPeriod,
+    activateNetWorthPosition,
+    refreshManualPositionOptions,
     submitAccount,
     deleteAccount,
     submitQuickEntry,

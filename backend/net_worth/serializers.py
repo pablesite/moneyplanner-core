@@ -2,6 +2,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from accounting.services import (
+    ensure_net_worth_opening_balance_transaction,
+    get_user_ledger_account,
+)
 from .models import (
     Asset,
     AssetImprovement,
@@ -355,6 +359,7 @@ class AssetSerializer(serializers.ModelSerializer):
         improvements_data = validated_data.pop("improvements", [])
         asset = create_asset_for_user(user=request.user, validated_data=validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
+        self._ensure_accounting_opening_balance(asset=asset)
         self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
 
@@ -362,9 +367,27 @@ class AssetSerializer(serializers.ModelSerializer):
         improvements_data = validated_data.pop("improvements", None)
         asset = super().update(instance, validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
+        self._ensure_accounting_opening_balance(asset=asset)
         if improvements_data is not None:
             self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
+
+    def _ensure_accounting_opening_balance(self, *, asset: Asset) -> None:
+        if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
+            return
+        account = get_user_ledger_account(
+            user_id=asset.user_id,
+            account_id=asset.accounting_account_id,
+        )
+        if account is None:
+            return
+        ensure_net_worth_opening_balance_transaction(
+            user=asset.user,
+            account=account,
+            amount=get_effective_asset_amount(asset=asset, as_of_date=timezone.localdate()),
+            booking_date=timezone.localdate(),
+            asset=asset,
+        )
 
     def _sync_improvements(self, *, asset: Asset, improvements_data: list[dict]) -> None:
         if (
@@ -638,6 +661,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
         liability._accounting_integration_state = ensure_liability_accounting_account(
             liability=liability
         )
+        self._ensure_accounting_opening_balance(liability=liability)
         return liability
 
     def update(self, instance, validated_data):
@@ -645,7 +669,27 @@ class LiabilitySerializer(serializers.ModelSerializer):
         liability._accounting_integration_state = ensure_liability_accounting_account(
             liability=liability
         )
+        self._ensure_accounting_opening_balance(liability=liability)
         return liability
+
+    def _ensure_accounting_opening_balance(self, *, liability: Liability) -> None:
+        if liability.tracking_mode != Liability.TrackingMode.ACCOUNTING:
+            return
+        account = get_user_ledger_account(
+            user_id=liability.user_id,
+            account_id=liability.accounting_account_id,
+        )
+        if account is None:
+            return
+        ensure_net_worth_opening_balance_transaction(
+            user=liability.user,
+            account=account,
+            amount=get_effective_liability_amount(
+                liability=liability, as_of_date=timezone.localdate()
+            ),
+            booking_date=timezone.localdate(),
+            liability=liability,
+        )
 
 
 class LiquidityMonthlyCheckinSerializer(serializers.ModelSerializer):
