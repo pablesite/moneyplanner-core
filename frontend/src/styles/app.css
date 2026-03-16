@@ -92,12 +92,14 @@ body {
   background: var(--panel);
 }
 
-.ui-pro-page {
+.ui-pro-page,
+.ui-page-shell {
   display: grid;
   gap: 14px;
 }
 
-.ui-pro-panel {
+.ui-pro-panel,
+.ui-section-card {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   background:
@@ -108,21 +110,31 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.ui-pro-header {
+.ui-pro-header,
+.ui-page-head,
+.ui-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.ui-pro-title {
+.ui-page-head,
+.ui-section-head {
+  flex-wrap: wrap;
+}
+
+.ui-pro-title,
+.ui-page-title,
+.ui-section-title {
   margin: 0;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
-.ui-pro-kicker {
+.ui-pro-kicker,
+.ui-page-eyebrow {
   margin: 0 0 6px;
   font-size: 11px;
   text-transform: uppercase;
@@ -131,7 +143,21 @@ body {
   font-weight: 700;
 }
 
-.ui-pro-toolbar {
+.ui-page-lead,
+.ui-section-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ui-section-copy {
+  min-width: min(100%, 420px);
+}
+
+.ui-pro-toolbar,
+.ui-page-actions,
+.ui-section-actions,
+.ui-action-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -152,6 +178,48 @@ body {
 .ui-pro-divider {
   border-top: 1px solid rgba(255, 255, 255, 0.09);
   padding-top: 12px;
+}
+
+.ui-inline-offset-sm {
+  margin-left: var(--space-2);
+}
+
+.ui-surface-muted {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ui-surface-strong {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+    rgba(11, 13, 18, 0.82);
+}
+
+.ui-state-block {
+  padding: var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.ui-state-empty {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.ui-state-error {
+  border-color: var(--state-error-border);
+  background: var(--state-error-bg);
+}
+
+.ui-state-success {
+  border-color: rgba(45, 212, 191, 0.38);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.ui-state-loading {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: rgba(56, 189, 248, 0.08);
 }
 
 .ui-balance-air {

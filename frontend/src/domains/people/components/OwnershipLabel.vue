@@ -23,12 +23,12 @@ function fmtPercent(p: string) {
   <div>
     <template v-if="props.kind === 'individual'">
       <span class="subtle">Individual</span>
-      <span style="margin-left: 8px">{{ props.member?.name ?? '-' }}</span>
+      <span class="ui-inline-offset-sm">{{ props.member?.name ?? '-' }}</span>
     </template>
 
     <template v-else>
       <span class="subtle">Compartido</span>
-      <span style="margin-left: 8px">
+      <span class="ui-inline-offset-sm">
         <span v-for="(s, i) in props.splits" :key="s.member.id">
           {{ s.member.name }} {{ fmtPercent(s.percent)
           }}<span v-if="i < props.splits.length - 1"> · </span>
