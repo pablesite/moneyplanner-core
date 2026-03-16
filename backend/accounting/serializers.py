@@ -141,6 +141,21 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         required=False,
     )
     account_name = serializers.CharField(source="account.name", read_only=True)
+    flow_family = serializers.ChoiceField(
+        choices=LedgerEntry.FlowFamily.choices,
+        allow_blank=True,
+        required=False,
+    )
+    category_key = serializers.CharField(
+        max_length=64,
+        allow_blank=True,
+        required=False,
+    )
+    subcategory_key = serializers.CharField(
+        max_length=64,
+        allow_blank=True,
+        required=False,
+    )
 
     class Meta:
         model = LedgerEntry
@@ -151,6 +166,9 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "side",
             "amount",
             "currency",
+            "flow_family",
+            "category_key",
+            "subcategory_key",
             "annual_income_entry_id",
             "annual_expense_entry_id",
             "asset_id",
@@ -179,6 +197,11 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         )
         asset = attrs.get("asset", getattr(self.instance, "asset", None))
         liability = attrs.get("liability", getattr(self.instance, "liability", None))
+        flow_family = attrs.get("flow_family", getattr(self.instance, "flow_family", ""))
+        category_key = attrs.get("category_key", getattr(self.instance, "category_key", ""))
+        subcategory_key = attrs.get(
+            "subcategory_key", getattr(self.instance, "subcategory_key", "")
+        )
 
         if annual_income_entry is not None and annual_expense_entry is not None:
             raise serializers.ValidationError(
@@ -199,6 +222,27 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {field_name: "La referencia no pertenece al usuario autenticado."}
                 )
+
+        has_flow_family = bool(flow_family)
+        has_category_key = bool(category_key)
+        has_subcategory_key = bool(subcategory_key)
+        if has_flow_family or has_category_key or has_subcategory_key:
+            if not (has_flow_family and has_category_key and has_subcategory_key):
+                raise serializers.ValidationError(
+                    {
+                        "subcategory_key": (
+                            "flow_family, category_key y subcategory_key deben informarse juntos."
+                        )
+                    }
+                )
+        if annual_income_entry is not None and flow_family == LedgerEntry.FlowFamily.EXPENSE:
+            raise serializers.ValidationError(
+                {"flow_family": "No es compatible con annual_income_entry_id."}
+            )
+        if annual_expense_entry is not None and flow_family == LedgerEntry.FlowFamily.INCOME:
+            raise serializers.ValidationError(
+                {"flow_family": "No es compatible con annual_expense_entry_id."}
+            )
         return attrs
 
 
@@ -310,6 +354,21 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         allow_null=True,
         required=False,
     )
+    flow_family = serializers.ChoiceField(
+        choices=LedgerEntry.FlowFamily.choices,
+        allow_blank=True,
+        required=False,
+    )
+    category_key = serializers.CharField(
+        max_length=64,
+        allow_blank=True,
+        required=False,
+    )
+    subcategory_key = serializers.CharField(
+        max_length=64,
+        allow_blank=True,
+        required=False,
+    )
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     status = serializers.ChoiceField(
         choices=LedgerTransaction.Status.choices,
@@ -331,6 +390,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         interest_account = attrs.get("interest_account")
         annual_income_entry = attrs.get("annual_income_entry")
         annual_expense_entry = attrs.get("annual_expense_entry")
+        flow_family = attrs.get("flow_family", "")
+        category_key = attrs.get("category_key", "")
+        subcategory_key = attrs.get("subcategory_key", "")
         principal_amount = attrs.get("principal_amount")
         interest_amount = attrs.get("interest_amount")
 
@@ -347,6 +409,24 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         if annual_expense_entry is not None and annual_expense_entry.user_id != user.id:
             raise serializers.ValidationError(
                 {"annual_expense_entry_id": "La referencia no pertenece al usuario autenticado."}
+            )
+        self._validate_functional_classification(
+            flow_family=flow_family,
+            category_key=category_key,
+            subcategory_key=subcategory_key,
+        )
+        if movement_type == "income" and flow_family == LedgerEntry.FlowFamily.EXPENSE:
+            raise serializers.ValidationError(
+                {"flow_family": "No aplica a movimientos de ingreso."}
+            )
+        if (
+            movement_type in {"expense", "debt_payment"}
+            and flow_family == LedgerEntry.FlowFamily.INCOME
+        ):
+            raise serializers.ValidationError({"flow_family": "No aplica a movimientos de gasto."})
+        if movement_type in {"transfer", "investment_purchase"} and flow_family:
+            raise serializers.ValidationError(
+                {"flow_family": "No aplica a transferencias internas ni compras de inversion."}
             )
 
         if movement_type == "income":
@@ -397,6 +477,26 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             )
 
         return attrs
+
+    def _validate_functional_classification(
+        self,
+        *,
+        flow_family: str,
+        category_key: str,
+        subcategory_key: str,
+    ) -> None:
+        has_flow_family = bool(flow_family)
+        has_category_key = bool(category_key)
+        has_subcategory_key = bool(subcategory_key)
+        if has_flow_family or has_category_key or has_subcategory_key:
+            if not (has_flow_family and has_category_key and has_subcategory_key):
+                raise serializers.ValidationError(
+                    {
+                        "subcategory_key": (
+                            "flow_family, category_key y subcategory_key deben informarse juntos."
+                        )
+                    }
+                )
 
     def _validate_income_movement(
         self,

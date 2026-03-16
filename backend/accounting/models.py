@@ -92,6 +92,10 @@ class LedgerEntry(models.Model):
         DEBIT = "debit", "Debe"
         CREDIT = "credit", "Haber"
 
+    class FlowFamily(models.TextChoices):
+        INCOME = "income", "Ingreso"
+        EXPENSE = "expense", "Gasto"
+
     transaction = models.ForeignKey(
         LedgerTransaction,
         on_delete=models.CASCADE,
@@ -109,6 +113,14 @@ class LedgerEntry(models.Model):
         validators=[MinValueValidator(0)],
     )
     currency = models.CharField(max_length=3, default="EUR")
+    flow_family = models.CharField(
+        max_length=16,
+        choices=FlowFamily.choices,
+        blank=True,
+        default="",
+    )
+    category_key = models.CharField(max_length=64, blank=True, default="")
+    subcategory_key = models.CharField(max_length=64, blank=True, default="")
     annual_income_entry = models.ForeignKey(
         "budget.AnnualIncomeEntry",
         on_delete=models.SET_NULL,
@@ -147,6 +159,11 @@ class LedgerEntry(models.Model):
             models.Index(fields=["transaction"], name="acct_entry_tx_idx"),
             models.Index(fields=["account"], name="acct_entry_acc_idx"),
             models.Index(fields=["currency"], name="acct_entry_currency_idx"),
+            models.Index(fields=["flow_family"], name="acct_entry_flow_idx"),
+            models.Index(
+                fields=["flow_family", "category_key", "subcategory_key"],
+                name="acct_entry_class_idx",
+            ),
         ]
 
     def __str__(self) -> str:
