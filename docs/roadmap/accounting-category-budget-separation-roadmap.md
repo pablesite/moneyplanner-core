@@ -23,7 +23,11 @@
    - `budget` mantiene fallback legacy de lectura por `annual_*` cuando faltan clasificaciones nuevas en historico.
    - `accounting` ya genera resumen mensual y sugerencias de presupuesto consumiendo clasificacion propia del ledger con fallback legacy.
    - `BudgetDashboardView` distingue `Ledger categorizado`, `Fallback legacy` y `Pendiente clasificar` cuando la alineacion automatica no es segura.
-4. Fase 4+ pendientes.
+4. Fase 4 implementada en `core/backend` y tests:
+   - existe comando explicito `python manage.py backfill_ledger_classification` para migrar historico legacy desde `annual_*` a `flow_family` + `category_key` + `subcategory_key`.
+   - el backfill soporta `--dry-run`, `--user-id` y `--limit` para ejecucion gradual y trazable.
+   - los casos ambiguos o parcialmente clasificados no se fuerzan: permanecen sin backfill y se reportan para revision posterior como `Pendiente clasificar`.
+5. Fase 5 pendiente.
 
 ## Objetivo
 Separar de forma explicita y reversible las tres capas funcionales que hoy se mezclan parcialmente en `accounting` y `budget`, de modo que:
