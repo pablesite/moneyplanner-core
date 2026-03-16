@@ -8,6 +8,7 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
 2. La especificacion funcional canonica vive en `../architecture/accounting-movements-architecture.md`.
 3. La UX canonica de frontend vive en `../frontend/accounting-movements-ux-notes.md`.
 4. El trabajo debe ejecutarse en PRs pequenas y validarse dentro de Docker.
+5. La subiniciativa de separacion entre cuenta contable, categoria/subcategoria y linea anual de presupuesto vive en `accounting-category-budget-separation-roadmap.md`.
 
 ## Estado real (2026-03-15)
 1. Fase 1: implementada en codigo
@@ -45,6 +46,16 @@ Introducir una capa contable de movimientos diarios en Core sin romper patrimoni
 3. Validacion en Docker del stack afectado.
 4. Primero cobertura minima y contratos, luego extension funcional.
 5. No duplicar logica existente entre `budget`, `net_worth` y el nuevo dominio `accounting`.
+
+## Subiniciativa abierta
+### Separacion entre cuenta contable, categoria y presupuesto anual
+1. Existe un roadmap especifico en `accounting-category-budget-separation-roadmap.md`.
+2. Su objetivo es desacoplar:
+   - la cuenta contable como capa de impacto,
+   - la categoria/subcategoria como clasificacion funcional del movimiento,
+   - la linea anual como capa de plan.
+3. Esa iniciativa no reabre el roadmap general completo de `accounting`, pero si redefine la forma en que `budget` debe consumir ejecucion ledger.
+4. Cualquier PR que toque esa separacion debe seguir primero el roadmap especifico y despues volver a este documento para mantener trazabilidad global.
 
 ## Fases
 ### Fase 1 - Dominio base `accounting`
