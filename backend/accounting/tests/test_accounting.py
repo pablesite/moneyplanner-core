@@ -110,8 +110,8 @@ class AccountingServicesTests(TestCase):
         )
         self.assertEqual(get_account_balance(account=cash), Decimal("1300.00"))
 
-    def test_build_monthly_summary_aggregates_linked_budget_entries(self):
-        income_plan = AnnualIncomeEntry.objects.create(
+    def test_build_monthly_summary_aggregates_category_first_entries(self):
+        AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
             category=AnnualIncomeEntry.Category.SALARY,
@@ -120,7 +120,7 @@ class AccountingServicesTests(TestCase):
             fiscal_year=2026,
             currency="EUR",
         )
-        expense_plan = AnnualExpenseEntry.objects.create(
+        AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Alquiler",
             category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
@@ -167,7 +167,9 @@ class AccountingServicesTests(TestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("1000.00"),
             currency="EUR",
-            annual_income_entry=income_plan,
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
         )
 
         tx_expense = LedgerTransaction.objects.create(
@@ -182,7 +184,9 @@ class AccountingServicesTests(TestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("600.00"),
             currency="EUR",
-            annual_expense_entry=expense_plan,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="housing_home",
         )
         LedgerEntry.objects.create(
             transaction=tx_expense,
@@ -197,8 +201,10 @@ class AccountingServicesTests(TestCase):
         self.assertEqual(january["income_total"], "1000.00")
         self.assertEqual(january["expense_total"], "600.00")
 
-    def test_build_budget_derived_suggestions_returns_stable_monthly_series(self):
-        income_plan = AnnualIncomeEntry.objects.create(
+    def test_build_budget_derived_suggestions_returns_stable_monthly_series_from_ledger_taxonomy(
+        self,
+    ):
+        AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
             category=AnnualIncomeEntry.Category.SALARY,
@@ -207,7 +213,7 @@ class AccountingServicesTests(TestCase):
             fiscal_year=2026,
             currency="EUR",
         )
-        expense_plan = AnnualExpenseEntry.objects.create(
+        AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Supermercado",
             category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
@@ -255,7 +261,9 @@ class AccountingServicesTests(TestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("1500.00"),
             currency="EUR",
-            annual_income_entry=income_plan,
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
         )
 
         tx_income_2 = LedgerTransaction.objects.create(
@@ -278,7 +286,9 @@ class AccountingServicesTests(TestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("1500.00"),
             currency="EUR",
-            annual_income_entry=income_plan,
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
         )
 
         tx_expense = LedgerTransaction.objects.create(
@@ -294,7 +304,9 @@ class AccountingServicesTests(TestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("400.00"),
             currency="EUR",
-            annual_expense_entry=expense_plan,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
         )
         LedgerEntry.objects.create(
             transaction=tx_expense,
@@ -496,7 +508,7 @@ class AccountingApiTests(APITestCase):
             account_type=LedgerAccount.AccountType.EXPENSE,
             currency="EUR",
         )
-        expense_entry = AnnualExpenseEntry.objects.create(
+        AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Alquiler",
             category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
@@ -517,7 +529,9 @@ class AccountingApiTests(APITestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("700.00"),
             currency="EUR",
-            annual_expense_entry=expense_entry,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="housing_home",
         )
         LedgerEntry.objects.create(
             transaction=tx,
@@ -1183,7 +1197,7 @@ class AccountingApiTests(APITestCase):
         self.assertIn("year", response.data["error"]["details"])
 
     def test_budget_suggestions_endpoint_returns_historical_series(self):
-        income_plan = AnnualIncomeEntry.objects.create(
+        AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
             category=AnnualIncomeEntry.Category.SALARY,
@@ -1192,7 +1206,7 @@ class AccountingApiTests(APITestCase):
             fiscal_year=2026,
             currency="EUR",
         )
-        expense_plan = AnnualExpenseEntry.objects.create(
+        AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Alimentacion",
             category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
@@ -1228,7 +1242,9 @@ class AccountingApiTests(APITestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("1000.00"),
             currency="EUR",
-            annual_income_entry=income_plan,
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
         )
 
         tx_expense = LedgerTransaction.objects.create(
@@ -1244,7 +1260,9 @@ class AccountingApiTests(APITestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("350.00"),
             currency="EUR",
-            annual_expense_entry=expense_plan,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
         )
         LedgerEntry.objects.create(
             transaction=tx_expense,

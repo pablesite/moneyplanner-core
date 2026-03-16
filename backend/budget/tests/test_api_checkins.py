@@ -191,7 +191,7 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("year", response.data["error"]["details"])
 
-    def test_income_monthly_summary_prefers_ledger_and_reports_mixed_coverage(self):
+    def test_income_monthly_summary_prefers_categorized_ledger_and_reports_mixed_coverage(self):
         recurring = AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
@@ -242,7 +242,9 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("2000.00"),
             currency="EUR",
-            annual_income_entry=recurring,
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
         )
 
         response = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
@@ -256,6 +258,64 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
         self.assertEqual(months[1]["coverage_mode"], "ledger")
         self.assertEqual(months[2]["executed"], "1950.00")
         self.assertEqual(months[2]["coverage_mode"], "checkin")
+
+    def test_income_monthly_summary_uses_legacy_link_as_fallback_when_new_classification_missing(
+        self,
+    ):
+        recurring = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("24000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 31),
+            value_date=date(2026, 1, 31),
+            description="Nomina enero",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("2000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("2000.00"),
+            currency="EUR",
+            annual_income_entry=recurring,
+        )
+
+        response = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["executed_total"], "2000.00")
+        self.assertFalse(response.data["has_ledger_data"])
+        self.assertEqual(response.data["months_with_fallback"], 1)
+        self.assertEqual(response.data["coverage_mode"], "checkin")
+        months = {row["month"]: row for row in response.data["months"]}
+        self.assertEqual(months[1]["executed"], "2000.00")
+        self.assertEqual(months[1]["coverage_mode"], "checkin")
 
 
 class AnnualExpenseApiCheckinsTests(APITestCase):
@@ -439,7 +499,7 @@ class AnnualExpenseApiCheckinsTests(APITestCase):
         self.assertEqual(response.data["error"]["code"], "validation_error")
         self.assertIn("year", response.data["error"]["details"])
 
-    def test_expense_monthly_summary_prefers_ledger_over_checkin_for_same_slot(self):
+    def test_expense_monthly_summary_prefers_categorized_ledger_over_checkin_for_same_slot(self):
         expense = AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Supermercado",
@@ -483,7 +543,9 @@ class AnnualExpenseApiCheckinsTests(APITestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("120.00"),
             currency="EUR",
-            annual_expense_entry=expense,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
         )
         LedgerEntry.objects.create(
             transaction=tx,

@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
+from django.db.models import Q
 from django.db import transaction
 from django.db.models import QuerySet
 from rest_framework.exceptions import ValidationError
@@ -171,13 +172,14 @@ def build_monthly_accounting_summary(*, user_id: int, fiscal_year: int) -> dict:
             entry for entry in queryset if entry.transaction.booking_date.month == month
         ]
         for entry in month_entries:
-            if entry.annual_income_entry_id is not None:
+            flow_family, _category_key, _subcategory_key = _resolve_budget_classification(entry)
+            if flow_family == LedgerEntry.FlowFamily.INCOME:
                 if entry.side == LedgerEntry.Side.CREDIT:
                     income_total += entry.amount
                 else:
                     income_total -= entry.amount
                 continue
-            if entry.annual_expense_entry_id is not None:
+            if flow_family == LedgerEntry.FlowFamily.EXPENSE:
                 if entry.side == LedgerEntry.Side.DEBIT:
                     expense_total += entry.amount
                 else:
@@ -207,13 +209,13 @@ def build_budget_derived_suggestions(
     income_payload = _build_budget_suggestion_section(
         user_id=user_id,
         period_keys=period_keys,
-        fk_name="annual_income_entry",
+        flow_family=cast(str, LedgerEntry.FlowFamily.INCOME),
         positive_side=cast(str, LedgerEntry.Side.CREDIT),
     )
     expense_payload = _build_budget_suggestion_section(
         user_id=user_id,
         period_keys=period_keys,
-        fk_name="annual_expense_entry",
+        flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
         positive_side=cast(str, LedgerEntry.Side.DEBIT),
     )
     return {
@@ -639,7 +641,7 @@ def _build_budget_suggestion_section(
     *,
     user_id: int,
     period_keys: list[tuple[int, int]],
-    fk_name: str,
+    flow_family: str,
     positive_side: str,
 ) -> dict:
     start_year = period_keys[0][0]
@@ -650,15 +652,26 @@ def _build_budget_suggestion_section(
             transaction__status=LedgerTransaction.Status.POSTED,
             transaction__booking_date__year__gte=start_year,
             transaction__booking_date__year__lte=end_year,
-            **{f"{fk_name}__isnull": False},
         )
-        .select_related("transaction", fk_name)
+        .filter(
+            Q(flow_family=flow_family)
+            | Q(annual_income_entry__isnull=False)
+            | Q(annual_expense_entry__isnull=False)
+        )
+        .select_related("transaction", "annual_income_entry", "annual_expense_entry")
         .only(
             "side",
             "amount",
+            "flow_family",
+            "category_key",
+            "subcategory_key",
+            "annual_income_entry_id",
+            "annual_expense_entry_id",
             "transaction__booking_date",
-            f"{fk_name}__category",
-            f"{fk_name}__subcategory",
+            "annual_income_entry__category",
+            "annual_income_entry__subcategory",
+            "annual_expense_entry__category",
+            "annual_expense_entry__subcategory",
         )
     )
 
@@ -674,14 +687,10 @@ def _build_budget_suggestion_section(
         period_key = (row.transaction.booking_date.year, row.transaction.booking_date.month)
         if period_key not in period_keys:
             continue
+        resolved_flow_family, category_key, subcategory_key = _resolve_budget_classification(row)
+        if resolved_flow_family != flow_family or not category_key or not subcategory_key:
+            continue
         signed_amount = row.amount if row.side == positive_side else -row.amount
-        reference = getattr(row, fk_name)
-        if reference is None:
-            continue
-        category_key = getattr(reference, "category", "")
-        subcategory_key = getattr(reference, "subcategory", "")
-        if not category_key or not subcategory_key:
-            continue
         total_by_period[period_key] += signed_amount
         totals_by_category[category_key][period_key] += signed_amount
         totals_by_subcategory[(category_key, subcategory_key)][period_key] += signed_amount
@@ -741,3 +750,21 @@ def _serialize_categorized_suggestions(
             row["subcategory"] = key[1]
         rows.append(row)
     return rows
+
+
+def _resolve_budget_classification(entry: LedgerEntry) -> tuple[str, str, str]:
+    if entry.flow_family and entry.category_key and entry.subcategory_key:
+        return entry.flow_family, entry.category_key, entry.subcategory_key
+    if entry.annual_income_entry_id is not None and entry.annual_income_entry is not None:
+        return (
+            cast(str, LedgerEntry.FlowFamily.INCOME),
+            entry.annual_income_entry.category,
+            entry.annual_income_entry.subcategory,
+        )
+    if entry.annual_expense_entry_id is not None and entry.annual_expense_entry is not None:
+        return (
+            cast(str, LedgerEntry.FlowFamily.EXPENSE),
+            entry.annual_expense_entry.category,
+            entry.annual_expense_entry.subcategory,
+        )
+    return "", "", ""

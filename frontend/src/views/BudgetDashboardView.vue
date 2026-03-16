@@ -149,7 +149,17 @@ type BudgetSectionModel = {
 
 type BudgetEntryViewMode = 'all' | 'recurrent' | 'one_off';
 type BudgetExecutionTone = 'neutral' | 'good' | 'warn' | 'danger';
-type BudgetExecutionSource = 'ledger' | 'checkin' | 'none';
+type BudgetExecutionSource =
+  | 'categorized_ledger'
+  | 'legacy_fallback'
+  | 'pending_classification'
+  | 'none';
+type BudgetExecutionOrigin =
+  | 'categorized_ledger'
+  | 'legacy_ledger'
+  | 'legacy_checkin'
+  | 'ambiguous_taxonomy'
+  | 'none';
 type BudgetExecutionPreview = {
   ratio: number;
   widthPct: number;
@@ -162,6 +172,10 @@ type MonthlyCoverageSummary = {
   viaFallback: number;
   pending: number;
   ratio: number;
+};
+type PendingClassificationSummary = {
+  amount: number;
+  ambiguousRows: number;
 };
 
 type MonthlyResultBreakdownSubrow = {
@@ -473,6 +487,27 @@ function toNumberOrZero(raw: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function budgetTaxonomyKey(category: string, subcategory: string): string {
+  return `${category}::${subcategory}`;
+}
+
+function resolveLedgerEntryFlowFamily(entry: LedgerEntry): '' | 'income' | 'expense' {
+  if (entry.flow_family === 'income' || entry.flow_family === 'expense') return entry.flow_family;
+  if (entry.annual_income_entry_id != null) return 'income';
+  if (entry.annual_expense_entry_id != null) return 'expense';
+  return '';
+}
+
+function isPositiveExecutionLedgerEntry(
+  entry: LedgerEntry,
+  flowFamily: 'income' | 'expense',
+): boolean {
+  return (
+    (flowFamily === 'income' && entry.side === 'credit') ||
+    (flowFamily === 'expense' && entry.side === 'debit')
+  );
+}
+
 function monthlyPlannedAmountForExpenseEntry(
   entry: (typeof expenseEntries.value)[number],
   month: number,
@@ -515,26 +550,75 @@ const accountingSummaryByMonth = computed(() => {
   return map;
 });
 
-const accountingIncomeExecutedByEntryId = computed(() => {
-  const map = new Map<number, number>();
+const accountingExecutionBuckets = computed(() => {
+  const incomeCategorizedByTaxonomy = new Map<string, number>();
+  const expenseCategorizedByTaxonomy = new Map<string, number>();
+  const incomeLegacyByEntryId = new Map<number, number>();
+  const expenseLegacyByEntryId = new Map<number, number>();
+  let incomeUnclassifiedTotal = 0;
+  let expenseUnclassifiedTotal = 0;
+
   for (const entry of accountingPostedEntries.value) {
-    if (entry.annual_income_entry_id == null) continue;
-    map.set(
-      entry.annual_income_entry_id,
-      (map.get(entry.annual_income_entry_id) ?? 0) + toNumberOrZero(entry.amount),
-    );
+    const flowFamily = resolveLedgerEntryFlowFamily(entry);
+    if (!flowFamily || !isPositiveExecutionLedgerEntry(entry, flowFamily)) continue;
+
+    const amount = toNumberOrZero(entry.amount);
+    if (entry.category_key && entry.subcategory_key) {
+      const key = budgetTaxonomyKey(entry.category_key, entry.subcategory_key);
+      const targetMap =
+        flowFamily === 'income' ? incomeCategorizedByTaxonomy : expenseCategorizedByTaxonomy;
+      targetMap.set(key, (targetMap.get(key) ?? 0) + amount);
+      continue;
+    }
+
+    if (flowFamily === 'income' && entry.annual_income_entry_id != null) {
+      incomeLegacyByEntryId.set(
+        entry.annual_income_entry_id,
+        (incomeLegacyByEntryId.get(entry.annual_income_entry_id) ?? 0) + amount,
+      );
+      continue;
+    }
+    if (flowFamily === 'expense' && entry.annual_expense_entry_id != null) {
+      expenseLegacyByEntryId.set(
+        entry.annual_expense_entry_id,
+        (expenseLegacyByEntryId.get(entry.annual_expense_entry_id) ?? 0) + amount,
+      );
+      continue;
+    }
+
+    if (flowFamily === 'income') incomeUnclassifiedTotal += amount;
+    if (flowFamily === 'expense') expenseUnclassifiedTotal += amount;
+  }
+
+  return {
+    incomeCategorizedByTaxonomy,
+    expenseCategorizedByTaxonomy,
+    incomeLegacyByEntryId,
+    expenseLegacyByEntryId,
+    incomeUnclassifiedTotal,
+    expenseUnclassifiedTotal,
+  };
+});
+
+const incomeTaxonomyLineCounts = computed(() => {
+  const map = new Map<string, number>();
+  for (const entry of incomeEntries.value) {
+    if (entry.fiscalYear !== fiscalYear.value || entry.incomeType === 'one_off') continue;
+    const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
+    if (planned <= 0) continue;
+    const key = budgetTaxonomyKey(entry.category, entry.subcategory);
+    map.set(key, (map.get(key) ?? 0) + 1);
   }
   return map;
 });
 
-const accountingExpenseExecutedByEntryId = computed(() => {
-  const map = new Map<number, number>();
-  for (const entry of accountingPostedEntries.value) {
-    if (entry.annual_expense_entry_id == null) continue;
-    map.set(
-      entry.annual_expense_entry_id,
-      (map.get(entry.annual_expense_entry_id) ?? 0) + toNumberOrZero(entry.amount),
-    );
+const expenseTaxonomyLineCounts = computed(() => {
+  const map = new Map<string, number>();
+  for (const entry of expenseEntries.value) {
+    const planned = monthlyPlannedAmountForExpenseEntry(entry, selectedExecutionMonth.value);
+    if (planned <= 0) continue;
+    const key = budgetTaxonomyKey(entry.category, entry.subcategory);
+    map.set(key, (map.get(key) ?? 0) + 1);
   }
   return map;
 });
@@ -556,22 +640,44 @@ const monthlyIncomeExecutionEntries = computed(() => {
     .map((entry) => {
       const checkin = incomeCheckinsByEntryId.value[entry.id] ?? null;
       const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
-      const ledgerExecuted = accountingIncomeExecutedByEntryId.value.get(entry.id) ?? null;
+      const taxonomyKey = budgetTaxonomyKey(entry.category, entry.subcategory);
+      const categorizedLedgerExecuted =
+        accountingExecutionBuckets.value.incomeCategorizedByTaxonomy.get(taxonomyKey) ?? null;
+      const legacyLedgerExecuted =
+        accountingExecutionBuckets.value.incomeLegacyByEntryId.get(entry.id) ?? null;
+      const taxonomyLineCount = incomeTaxonomyLineCounts.value.get(taxonomyKey) ?? 0;
       const fallbackExecuted =
         checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
-      const executionSource: BudgetExecutionSource =
-        ledgerExecuted != null ? 'ledger' : checkin ? 'checkin' : 'none';
+      const uniqueCategorizedLedgerExecuted =
+        categorizedLedgerExecuted != null && taxonomyLineCount === 1
+          ? categorizedLedgerExecuted
+          : 0;
+      let executionOrigin: BudgetExecutionOrigin = 'none';
+      let executionSource: BudgetExecutionSource = 'none';
+      let executed: number | null = null;
+
+      if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+        executionOrigin =
+          uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
+        executionSource =
+          uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_fallback';
+        executed = uniqueCategorizedLedgerExecuted + (legacyLedgerExecuted ?? 0);
+      } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
+        executionOrigin = 'ambiguous_taxonomy';
+        executionSource = 'pending_classification';
+      } else if (checkin) {
+        executionOrigin = 'legacy_checkin';
+        executionSource = 'legacy_fallback';
+        executed = fallbackExecuted;
+      }
       return {
         entry,
         planned,
         checkin,
-        executed:
-          executionSource === 'ledger'
-            ? ledgerExecuted
-            : executionSource === 'checkin'
-              ? fallbackExecuted
-              : null,
-        ledgerExecuted,
+        executed,
+        executionOrigin,
+        categorizedLedgerExecuted,
+        legacyLedgerExecuted,
         executionSource,
       };
     })
@@ -677,22 +783,44 @@ const monthlyExpenseExecutionEntries = computed(() => {
     .map((entry) => {
       const checkin = expenseCheckinsByEntryId.value[entry.id] ?? null;
       const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
-      const ledgerExecuted = accountingExpenseExecutedByEntryId.value.get(entry.id) ?? null;
+      const taxonomyKey = budgetTaxonomyKey(entry.category, entry.subcategory);
+      const categorizedLedgerExecuted =
+        accountingExecutionBuckets.value.expenseCategorizedByTaxonomy.get(taxonomyKey) ?? null;
+      const legacyLedgerExecuted =
+        accountingExecutionBuckets.value.expenseLegacyByEntryId.get(entry.id) ?? null;
+      const taxonomyLineCount = expenseTaxonomyLineCounts.value.get(taxonomyKey) ?? 0;
       const fallbackExecuted =
         checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
-      const executionSource: BudgetExecutionSource =
-        ledgerExecuted != null ? 'ledger' : checkin ? 'checkin' : 'none';
+      const uniqueCategorizedLedgerExecuted =
+        categorizedLedgerExecuted != null && taxonomyLineCount === 1
+          ? categorizedLedgerExecuted
+          : 0;
+      let executionOrigin: BudgetExecutionOrigin = 'none';
+      let executionSource: BudgetExecutionSource = 'none';
+      let executed: number | null = null;
+
+      if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+        executionOrigin =
+          uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
+        executionSource =
+          uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_fallback';
+        executed = uniqueCategorizedLedgerExecuted + (legacyLedgerExecuted ?? 0);
+      } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
+        executionOrigin = 'ambiguous_taxonomy';
+        executionSource = 'pending_classification';
+      } else if (checkin) {
+        executionOrigin = 'legacy_checkin';
+        executionSource = 'legacy_fallback';
+        executed = fallbackExecuted;
+      }
       return {
         entry,
         planned,
         checkin,
-        executed:
-          executionSource === 'ledger'
-            ? ledgerExecuted
-            : executionSource === 'checkin'
-              ? fallbackExecuted
-              : null,
-        ledgerExecuted,
+        executed,
+        executionOrigin,
+        categorizedLedgerExecuted,
+        legacyLedgerExecuted,
         executionSource,
       };
     })
@@ -1153,7 +1281,7 @@ const executionStatusLabel = computed(() => {
   const monthsWithLedger = Array.from(accountingSummaryByMonth.value.values()).filter(
     (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
   ).length;
-  if (monthsWithLedger > 0) return 'Ledger + fallback';
+  if (monthsWithLedger > 0) return 'Ledger categorizado + fallback';
   if (!expenseMonthlySummary.value) return 'Cargando ejecucion';
   if (expenseMonthlySummary.value.has_executed_data) return 'Fallback legacy';
   return 'Sin ejecucion';
@@ -1166,7 +1294,7 @@ const executionStatusDetail = computed(() => {
     (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
   ).length;
   if (monthsWithLedger > 0) {
-    return `Ledger enlazado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa ledger por linea cuando existe enlace y check-ins legacy solo como fallback.`;
+    return `Ledger categorizado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa taxonomia compartida como fuente primaria y fallback legacy solo cuando falta clasificacion nueva.`;
   }
   if (!expenseMonthlySummary.value) {
     return 'Cargando agregados mensuales para ledger y check-ins legacy.';
@@ -1177,10 +1305,10 @@ const executionStatusDetail = computed(() => {
 const monthlyIncomeCoverageSummary = computed<MonthlyCoverageSummary>(() => {
   const total = monthlyIncomeExecutionEntries.value.length;
   const viaLedger = monthlyIncomeExecutionEntries.value.filter(
-    (row) => row.executionSource === 'ledger',
+    (row) => row.executionSource === 'categorized_ledger',
   ).length;
   const viaFallback = monthlyIncomeExecutionEntries.value.filter(
-    (row) => row.executionSource === 'checkin',
+    (row) => row.executionSource === 'legacy_fallback',
   ).length;
   const pending = total - viaLedger - viaFallback;
   return {
@@ -1195,10 +1323,10 @@ const monthlyIncomeCoverageSummary = computed<MonthlyCoverageSummary>(() => {
 const monthlyExpenseCoverageSummary = computed<MonthlyCoverageSummary>(() => {
   const total = monthlyExpenseExecutionEntries.value.length;
   const viaLedger = monthlyExpenseExecutionEntries.value.filter(
-    (row) => row.executionSource === 'ledger',
+    (row) => row.executionSource === 'categorized_ledger',
   ).length;
   const viaFallback = monthlyExpenseExecutionEntries.value.filter(
-    (row) => row.executionSource === 'checkin',
+    (row) => row.executionSource === 'legacy_fallback',
   ).length;
   const pending = total - viaLedger - viaFallback;
   return {
@@ -1210,8 +1338,36 @@ const monthlyExpenseCoverageSummary = computed<MonthlyCoverageSummary>(() => {
   };
 });
 
-function isLedgerBackedExecutionRow(row: { executionSource: BudgetExecutionSource }): boolean {
-  return row.executionSource === 'ledger';
+const monthlyIncomePendingClassification = computed<PendingClassificationSummary>(() => {
+  const ambiguousRows = monthlyIncomeExecutionEntries.value.filter(
+    (row) => row.executionSource === 'pending_classification',
+  ).length;
+  const ambiguousAmount = monthlyIncomeExecutionEntries.value.reduce((sum, row) => {
+    if (row.executionSource !== 'pending_classification') return sum;
+    return sum + (row.categorizedLedgerExecuted ?? 0);
+  }, 0);
+  return {
+    amount: ambiguousAmount + accountingExecutionBuckets.value.incomeUnclassifiedTotal,
+    ambiguousRows,
+  };
+});
+
+const monthlyExpensePendingClassification = computed<PendingClassificationSummary>(() => {
+  const ambiguousRows = monthlyExpenseExecutionEntries.value.filter(
+    (row) => row.executionSource === 'pending_classification',
+  ).length;
+  const ambiguousAmount = monthlyExpenseExecutionEntries.value.reduce((sum, row) => {
+    if (row.executionSource !== 'pending_classification') return sum;
+    return sum + (row.categorizedLedgerExecuted ?? 0);
+  }, 0);
+  return {
+    amount: ambiguousAmount + accountingExecutionBuckets.value.expenseUnclassifiedTotal,
+    ambiguousRows,
+  };
+});
+
+function isLockedExecutionRow(row: { executionOrigin: BudgetExecutionOrigin }): boolean {
+  return row.executionOrigin === 'categorized_ledger' || row.executionOrigin === 'legacy_ledger';
 }
 
 function resolveCoverageMode(summary: MonthlyCoverageSummary): string {
@@ -1246,6 +1402,13 @@ function coverageDetail(summary: MonthlyCoverageSummary): string {
     return 'Hay lineas cubiertas y lineas pendientes; completa solo las filas sin cobertura.';
   }
   return 'Todavia no hay lineas ejecutadas para este mes.';
+}
+
+function executionSourceLabel(origin: BudgetExecutionOrigin): string {
+  if (origin === 'categorized_ledger') return 'Ledger categorizado';
+  if (origin === 'legacy_ledger' || origin === 'legacy_checkin') return 'Fallback legacy';
+  if (origin === 'ambiguous_taxonomy') return 'Pendiente clasificar';
+  return '';
 }
 
 const monthlyExpenseCoverageLabel = computed(() =>
@@ -2424,8 +2587,8 @@ watch(
           </div>
           <h2 v-else class="ui-budget-checkin-title">Check-in mensual de gastos</h2>
           <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-            Ledger por linea cuando exista enlace a presupuesto y fallback explicito a check-ins
-            legacy para el resto.
+            Ledger categorizado por taxonomia compartida y fallback legacy explicito solo cuando
+            falte esa clasificacion.
           </p>
           <p class="ui-budget-checkin-subtitle">
             Cierre mensual rápido de `Gastos` (14C v1). `Ingresos` se integrará después con el mismo
@@ -2486,7 +2649,7 @@ watch(
             <div class="ui-budget-execution-note-main">
               <strong>Cobertura del mes</strong>
               <span>
-                {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger ·
+                {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger categorizado ·
                 {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
                 {{ monthlyExpenseCoverageSummary.pending }} pendientes
               </span>
@@ -2495,6 +2658,20 @@ watch(
               </small>
             </div>
             <span class="ui-budget-execution-badge">{{ monthlyExpenseCoverageLabel }}</span>
+          </div>
+          <div
+            v-if="monthlyExpensePendingClassification.amount > 0"
+            class="ui-state-block ui-state-error"
+          >
+            <strong>Pendiente clasificar</strong>
+            <span>
+              {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del ledger no se
+              puede alinear automaticamente con el presupuesto de este mes.
+            </span>
+            <small v-if="monthlyExpensePendingClassification.ambiguousRows > 0">
+              {{ monthlyExpensePendingClassification.ambiguousRows }} lineas comparten la misma
+              subcategoria y requieren revision manual.
+            </small>
           </div>
           <details
             v-for="group in groupedMonthlyExpenseExecutionEntries"
@@ -2534,9 +2711,12 @@ watch(
                   <div
                     v-if="row.executionSource !== 'none'"
                     class="ui-budget-execution-chip"
-                    :class="{ 'ui-budget-execution-chip-ledger': row.executionSource === 'ledger' }"
+                    :class="{
+                      'ui-budget-execution-chip-ledger':
+                        row.executionOrigin === 'categorized_ledger',
+                    }"
                   >
-                    {{ row.executionSource === 'ledger' ? 'Ledger' : 'Fallback legacy' }}
+                    {{ executionSourceLabel(row.executionOrigin) }}
                   </div>
                   <div class="ui-budget-checkin-row-title" :title="expenseCheckinRowSummary(row)">
                     {{ expenseCheckinRowSummary(row) }}
@@ -2545,12 +2725,29 @@ watch(
                     </span>
                     <template v-if="row.entry.expenseType === 'one_off'"> · Puntual</template>
                   </div>
-                  <div v-if="row.executionSource === 'ledger'" class="ui-budget-checkin-row-state">
-                    <strong>Ledger</strong>
+                  <div
+                    v-if="
+                      row.executionOrigin === 'categorized_ledger' ||
+                      row.executionOrigin === 'legacy_ledger' ||
+                      row.executionOrigin === 'ambiguous_taxonomy'
+                    "
+                    class="ui-budget-checkin-row-state"
+                  >
+                    <strong>{{ executionSourceLabel(row.executionOrigin) }}</strong>
                     <template v-if="row.executed != null"
                       >({{ formatMoney(row.executed) }} EUR)</template
                     >
-                    <span class="ui-budget-checkin-row-lock-note">Edicion legacy bloqueada</span>
+                    <span
+                      v-if="
+                        row.executionOrigin === 'categorized_ledger' ||
+                        row.executionOrigin === 'legacy_ledger'
+                      "
+                      class="ui-budget-checkin-row-lock-note"
+                      >Edicion legacy bloqueada</span
+                    >
+                    <span v-else class="ui-budget-checkin-row-lock-note">
+                      Varias lineas comparten esta subcategoria.
+                    </span>
                   </div>
                   <div v-if="row.checkin" class="ui-budget-checkin-row-state">
                     <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
@@ -2567,8 +2764,7 @@ watch(
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
                         :disabled="
-                          isLedgerBackedExecutionRow(row) ||
-                          expenseExecutionBusyEntryId === row.entry.id
+                          isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
                         "
                         title="Poner importe ejecutado a 0"
                         @click="resetExpenseCheckinDraftValue(row, 'zero')"
@@ -2579,8 +2775,7 @@ watch(
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
                         :disabled="
-                          isLedgerBackedExecutionRow(row) ||
-                          expenseExecutionBusyEntryId === row.entry.id
+                          isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
                         "
                         title="Restaurar importe previsto del mes"
                         @click="resetExpenseCheckinDraftValue(row, 'planned')"
@@ -2592,7 +2787,7 @@ watch(
                       v-model="expenseAdjustAmounts[row.entry.id]"
                       inputmode="decimal"
                       class="input ui-data-field"
-                      :disabled="isLedgerBackedExecutionRow(row)"
+                      :disabled="isLockedExecutionRow(row)"
                       placeholder="Importe ejecutado"
                       @focus="ensureExpenseAdjustAmountPrefilled(row)"
                       @blur="onExpenseAdjustAmountBlur(row)"
@@ -2604,8 +2799,7 @@ watch(
                       type="checkbox"
                       :checked="row.executionSource !== 'none'"
                       :disabled="
-                        isLedgerBackedExecutionRow(row) ||
-                        expenseExecutionBusyEntryId === row.entry.id
+                        isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
                       "
                       aria-label="Confirmar check-in del mes"
                       @change="
@@ -2836,8 +3030,8 @@ watch(
             tengan mes objetivo.
           </p>
           <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-            Ledger por linea cuando exista enlace a presupuesto y fallback legacy solo cuando esa
-            cobertura todavia no exista.
+            Ledger categorizado por taxonomia compartida y fallback legacy solo cuando esa
+            clasificacion todavia no exista.
           </p>
         </div>
       </div>
@@ -2881,7 +3075,7 @@ watch(
             <div class="ui-budget-execution-note-main">
               <strong>Cobertura del mes</strong>
               <span>
-                {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger ·
+                {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger categorizado ·
                 {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy ·
                 {{ monthlyIncomeCoverageSummary.pending }} pendientes
               </span>
@@ -2890,6 +3084,20 @@ watch(
               </small>
             </div>
             <span class="ui-budget-execution-badge">{{ monthlyIncomeCoverageLabel }}</span>
+          </div>
+          <div
+            v-if="monthlyIncomePendingClassification.amount > 0"
+            class="ui-state-block ui-state-error"
+          >
+            <strong>Pendiente clasificar</strong>
+            <span>
+              {{ formatMoney(monthlyIncomePendingClassification.amount) }} EUR del ledger no se
+              puede alinear automaticamente con el presupuesto de este mes.
+            </span>
+            <small v-if="monthlyIncomePendingClassification.ambiguousRows > 0">
+              {{ monthlyIncomePendingClassification.ambiguousRows }} lineas comparten la misma
+              subcategoria y requieren revision manual.
+            </small>
           </div>
           <div class="ui-budget-checkin-group">
             <div class="ui-budget-checkin-group-summary">
@@ -2923,9 +3131,12 @@ watch(
                   <div
                     v-if="row.executionSource !== 'none'"
                     class="ui-budget-execution-chip"
-                    :class="{ 'ui-budget-execution-chip-ledger': row.executionSource === 'ledger' }"
+                    :class="{
+                      'ui-budget-execution-chip-ledger':
+                        row.executionOrigin === 'categorized_ledger',
+                    }"
                   >
-                    {{ row.executionSource === 'ledger' ? 'Ledger' : 'Fallback legacy' }}
+                    {{ executionSourceLabel(row.executionOrigin) }}
                   </div>
                   <div class="ui-budget-checkin-row-title" :title="incomeCheckinRowSummary(row)">
                     {{ incomeCheckinRowSummary(row) }}
@@ -2933,14 +3144,34 @@ watch(
                       >(Previsto {{ formatMoney(row.planned) }} €)</span
                     >
                   </div>
-                  <div v-if="row.executionSource === 'ledger'" class="ui-budget-checkin-row-state">
-                    <strong>Ledger</strong>
+                  <div
+                    v-if="
+                      row.executionOrigin === 'categorized_ledger' ||
+                      row.executionOrigin === 'legacy_ledger' ||
+                      row.executionOrigin === 'ambiguous_taxonomy'
+                    "
+                    class="ui-budget-checkin-row-state"
+                  >
+                    <strong>{{ executionSourceLabel(row.executionOrigin) }}</strong>
                     <template v-if="row.executed != null"
                       >({{ formatMoney(row.executed) }} EUR)</template
                     >
-                    <span class="ui-budget-checkin-row-lock-note">Edicion legacy bloqueada</span>
+                    <span
+                      v-if="
+                        row.executionOrigin === 'categorized_ledger' ||
+                        row.executionOrigin === 'legacy_ledger'
+                      "
+                      class="ui-budget-checkin-row-lock-note"
+                      >Edicion legacy bloqueada</span
+                    >
+                    <span v-else class="ui-budget-checkin-row-lock-note">
+                      Varias lineas comparten esta subcategoria.
+                    </span>
                   </div>
-                  <div v-if="row.checkin" class="ui-budget-checkin-row-state">
+                  <div
+                    v-if="row.executionOrigin === 'legacy_checkin' && row.checkin"
+                    class="ui-budget-checkin-row-state"
+                  >
                     <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
                     <template v-if="row.checkin.status !== 'skipped' && row.executed != null"
                       >({{ formatMoney(row.executed) }} €)</template
@@ -2954,8 +3185,7 @@ watch(
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
                         :disabled="
-                          isLedgerBackedExecutionRow(row) ||
-                          incomeExecutionBusyEntryId === row.entry.id
+                          isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
                         "
                         @click="resetIncomeCheckinDraftValue(row, 'zero')"
                       >
@@ -2965,8 +3195,7 @@ watch(
                         type="button"
                         class="btn ui-budget-checkin-mini-btn"
                         :disabled="
-                          isLedgerBackedExecutionRow(row) ||
-                          incomeExecutionBusyEntryId === row.entry.id
+                          isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
                         "
                         @click="resetIncomeCheckinDraftValue(row, 'planned')"
                       >
@@ -2977,7 +3206,7 @@ watch(
                       v-model="incomeAdjustAmounts[row.entry.id]"
                       inputmode="decimal"
                       class="input ui-data-field"
-                      :disabled="isLedgerBackedExecutionRow(row)"
+                      :disabled="isLockedExecutionRow(row)"
                       placeholder="Importe ejecutado"
                       @focus="ensureIncomeAdjustAmountPrefilled(row)"
                       @blur="onIncomeAdjustAmountBlur(row)"
@@ -2989,8 +3218,7 @@ watch(
                       type="checkbox"
                       :checked="row.executionSource !== 'none'"
                       :disabled="
-                        isLedgerBackedExecutionRow(row) ||
-                        incomeExecutionBusyEntryId === row.entry.id
+                        isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
                       "
                       @change="
                         onIncomeCheckinCheckboxToggle(
