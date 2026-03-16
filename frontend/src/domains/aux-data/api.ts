@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { FxRate, InflationIndex } from '@/domains/aux-data/types';
+import type { MarketDataStatus } from '@/domains/aux-data/types';
 
 export type CreateFxRatePayload = {
   rate_date: string;
@@ -15,32 +15,12 @@ export type CreateInflationPayload = {
 };
 
 export type AuxDataApiAdapter = {
-  getFxRates(): ReturnType<typeof api.get<FxRate[]>>;
-  getInflation(): ReturnType<typeof api.get<InflationIndex[]>>;
-  createFxRate(payload: CreateFxRatePayload): ReturnType<typeof api.post>;
-  deleteFxRate(id: number): ReturnType<typeof api.delete>;
-  createInflation(payload: CreateInflationPayload): ReturnType<typeof api.post>;
-  deleteInflation(id: number): ReturnType<typeof api.delete>;
+  getStatus(): ReturnType<typeof api.get<MarketDataStatus>>;
 };
 
 export const coreAuxDataApi: AuxDataApiAdapter = {
-  getFxRates() {
-    return api.get<FxRate[]>('/api/core/fx-rates/');
-  },
-  getInflation() {
-    return api.get<InflationIndex[]>('/api/core/inflation/');
-  },
-  createFxRate(payload: CreateFxRatePayload) {
-    return api.post('/api/core/fx-rates/', payload);
-  },
-  deleteFxRate(id: number) {
-    return api.delete(`/api/core/fx-rates/${id}/`);
-  },
-  createInflation(payload: CreateInflationPayload) {
-    return api.post('/api/core/inflation/', payload);
-  },
-  deleteInflation(id: number) {
-    return api.delete(`/api/core/inflation/${id}/`);
+  getStatus() {
+    return api.get<MarketDataStatus>('/api/core/market-data/status/');
   },
 };
 

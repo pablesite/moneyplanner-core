@@ -56,6 +56,7 @@ from ..services import (
     get_liquidity_asset_events_delta,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
+    get_inflation_region_for_user,
     get_amount_base_value,
     infer_liability_is_asset_backed,
     serialize_net_worth_summary,
@@ -579,6 +580,8 @@ class NetWorthServicesTests(TestCase):
                 "liabilities_by_category": {"mortgage": Decimal("30.00")},
                 "inflation_region": "ES",
                 "inflation_base_period": date(2026, 1, 1),
+                "inflation_available": True,
+                "inflation_status": "available",
                 "total_assets_real": Decimal("101.00"),
                 "total_liabilities_real": Decimal("29.00"),
                 "net_worth_real": Decimal("72.00"),
@@ -1537,6 +1540,7 @@ class NetWorthServicesTests(TestCase):
     def test_get_base_currency_and_inflation_base_period(self):
         base = get_base_currency_for_user(user=self.user)
         self.assertEqual(base, "EUR")
+        self.assertEqual(get_inflation_region_for_user(user=self.user), "ES")
 
         with self.assertRaises(ValidationError):
             get_inflation_base_period(region="ES")
@@ -1587,16 +1591,19 @@ class NetWorthServicesTests(TestCase):
         ),
     )
     @patch("net_worth.services.get_base_currency_for_user", return_value="EUR")
+    @patch("net_worth.services.get_inflation_region_for_user", return_value="ES-MD")
     @patch("net_worth.services.get_inflation_base_period", return_value=date(2026, 1, 1))
     @patch("net_worth.services.adjust_for_inflation", side_effect=lambda amount, **_: amount)
     def test_build_net_worth_summary_with_inflation(
-        self, _adj_mock, _period_mock, _base_mock, _totals_mock, _date_mock
+        self, _adj_mock, _period_mock, _region_mock, _base_mock, _totals_mock, _date_mock
     ):
         summary = build_net_worth_summary(user=self.user)
-        self.assertEqual(summary["inflation_region"], "ES")
+        self.assertEqual(summary["inflation_region"], "ES-MD")
         self.assertEqual(summary["net_worth"], Decimal("180.00"))
         self.assertEqual(summary["net_worth_real"], Decimal("180.00"))
         self.assertEqual(summary["liabilities_unbacked_real"], Decimal("40.00"))
+        self.assertTrue(summary["inflation_available"])
+        self.assertEqual(summary["inflation_status"], "available")
 
     @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
     @patch(
@@ -1619,6 +1626,34 @@ class NetWorthServicesTests(TestCase):
         self.assertIsNone(summary["inflation_region"])
         self.assertIsNone(summary["net_worth_real"])
         self.assertIsNone(summary["assets_by_category_real"])
+        self.assertFalse(summary["inflation_available"])
+        self.assertEqual(summary["inflation_status"], "disabled")
+
+    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
+    @patch(
+        "net_worth.services.calculate_totals",
+        return_value=NetWorthTotals(
+            total_assets=Decimal("300.00"),
+            total_liabilities=Decimal("120.00"),
+            liabilities_asset_backed=Decimal("80.00"),
+            liabilities_unbacked=Decimal("40.00"),
+            assets_by_category={"cash": Decimal("300.00")},
+            assets_by_subcategory={"cash:bank_account": Decimal("300.00")},
+            liabilities_by_category={"mortgage": Decimal("120.00")},
+        ),
+    )
+    @patch("net_worth.services.get_base_currency_for_user", return_value="EUR")
+    @patch("net_worth.services.get_inflation_region_for_user", return_value="ES-MD")
+    @patch("net_worth.services.get_inflation_base_period", side_effect=ValidationError("missing"))
+    def test_build_net_worth_summary_handles_missing_inflation_coverage(
+        self, _period_mock, _region_mock, _base_mock, _totals_mock, _date_mock
+    ):
+        summary = build_net_worth_summary(user=self.user)
+        self.assertEqual(summary["inflation_region"], "ES-MD")
+        self.assertIsNone(summary["inflation_base_period"])
+        self.assertIsNone(summary["net_worth_real"])
+        self.assertFalse(summary["inflation_available"])
+        self.assertEqual(summary["inflation_status"], "missing")
 
 
 class NetWorthApiTests(APITestCase):
@@ -1773,8 +1808,7 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(liability_res.data["start_date"], "2021-06-15")
 
-    @patch("net_worth.serializers.ensure_market_history_safe")
-    def test_asset_create_backfills_fx_history_for_foreign_currency(self, backfill_mock):
+    def test_asset_create_no_longer_backfills_fx_history_inline(self):
         response = self.client.post(
             "/api/net-worth/assets/",
             {
@@ -1790,14 +1824,9 @@ class NetWorthApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        backfill_mock.assert_called_once_with(
-            from_currency="USD",
-            to_currency="EUR",
-            start_date=date(2025, 3, 3),
-        )
+        self.assertEqual(response.data["currency"], "USD")
 
-    @patch("net_worth.serializers.ensure_market_history_safe")
-    def test_liability_create_backfills_fx_history_for_foreign_currency(self, backfill_mock):
+    def test_liability_create_no_longer_backfills_fx_history_inline(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",
             {
@@ -1813,11 +1842,7 @@ class NetWorthApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        backfill_mock.assert_called_once_with(
-            from_currency="USD",
-            to_currency="EUR",
-            start_date=date(2025, 3, 3),
-        )
+        self.assertEqual(response.data["currency"], "USD")
 
     def test_asset_create_accepts_short_term_deposit_duration(self):
         response = self.client.post(
@@ -3133,11 +3158,14 @@ class NetWorthApiTests(APITestCase):
         delete_res = self.client.delete(f"/api/net-worth/snapshots/{snapshot_id}/")
         self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)
 
-    def test_summary_returns_400_without_inflation_index_for_eur(self):
+    def test_summary_returns_200_without_real_values_when_inflation_is_missing(self):
         response = self.client.get("/api/net-worth/summary/")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"]["code"], "validation_error")
-        self.assertIn("error", response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["inflation_region"], "ES")
+        self.assertIsNone(response.data["inflation_base_period"])
+        self.assertFalse(response.data["inflation_available"])
+        self.assertEqual(response.data["inflation_status"], "missing")
+        self.assertIsNone(response.data["net_worth_real"])
 
     def test_summary_returns_200_with_inflation_index(self):
         InflationIndex.objects.create(

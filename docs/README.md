@@ -17,7 +17,7 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
    - Core architecture and internal product boundaries
 2. `operations/`
    - local development and operational guides
-   - FX sync
+   - market data sync
    - portable import
 3. `roadmap/`
    - community roadmap

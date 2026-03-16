@@ -11,12 +11,19 @@ class UserSettings(models.Model):
 
     # ISO 4217 (EUR, USD, GBP...). En v1 lista cerrada en frontend.
     base_currency = models.CharField(max_length=3, default="EUR")
+    inflation_region = models.CharField(max_length=10, default="ES")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return f"UserSettings(user_id={self.user_id}, base_currency={self.base_currency})"
+        return (
+            "UserSettings("
+            f"user_id={self.user_id}, "
+            f"base_currency={self.base_currency}, "
+            f"inflation_region={self.inflation_region}"
+            ")"
+        )
 
 
 class ExternalIdentity(models.Model):

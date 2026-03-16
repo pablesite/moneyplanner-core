@@ -15,6 +15,7 @@ import type {
   NetWorthWritePayload,
   Ownership,
   PositionTimeline,
+  Settings,
   Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
@@ -29,6 +30,7 @@ export const useNetWorthStore = defineStore('netWorth', {
     error: null as string | null,
 
     baseCurrency: null as string | null,
+    inflationRegion: 'ES' as string,
 
     summary: null as Summary | null,
     assets: [] as Asset[],
@@ -345,23 +347,36 @@ export const useNetWorthStore = defineStore('netWorth', {
       try {
         const res = await coreNetWorthApi.getSettings();
         this.baseCurrency = res.data.base_currency;
+        this.inflationRegion = res.data.inflation_region;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       }
     },
 
-    async updateBaseCurrency(currency: string) {
+    async updateSettings(payload: Partial<Settings>) {
       this.loading = true;
       this.error = null;
       try {
-        const res = await coreNetWorthApi.updateSettings({ base_currency: currency });
+        const res = await coreNetWorthApi.updateSettings({
+          base_currency: payload.base_currency ?? this.baseCurrency ?? 'EUR',
+          inflation_region: payload.inflation_region ?? this.inflationRegion ?? 'ES',
+        });
         this.baseCurrency = res.data.base_currency;
+        this.inflationRegion = res.data.inflation_region;
         await this.refreshAll();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
+    },
+
+    async updateBaseCurrency(currency: string) {
+      await this.updateSettings({ base_currency: currency });
+    },
+
+    async updateInflationRegion(region: string) {
+      await this.updateSettings({ inflation_region: region });
     },
   },
 });

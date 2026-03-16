@@ -85,21 +85,23 @@ class CoreAuthModeApiTests(APITestCase):
 
     def test_settings_put_updates_existing_row(self):
         settings_obj, _ = UserSettings.objects.get_or_create(
-            user=self.user, defaults={"base_currency": "EUR"}
+            user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
         )
         self.client.force_authenticate(user=self.user)
 
         response = self.client.put(
             "/api/auth/settings/",
-            {"base_currency": "USD"},
+            {"base_currency": "USD", "inflation_region": "ES-MD"},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["base_currency"], "USD")
+        self.assertEqual(response.data["inflation_region"], "ES-MD")
 
         refreshed = UserSettings.objects.get(user=self.user)
         self.assertEqual(refreshed.id, settings_obj.id)
         self.assertEqual(refreshed.base_currency, "USD")
+        self.assertEqual(refreshed.inflation_region, "ES-MD")
 
 
 @override_settings(
@@ -132,6 +134,7 @@ class CoreCrossStackSaasTokenTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["base_currency"], "EUR")
+        self.assertEqual(response.data["inflation_region"], "ES")
 
         mapped = ExternalIdentity.objects.get(
             provider=ExternalIdentity.Provider.SAAS,
@@ -165,7 +168,12 @@ class CoreAccountServicesTests(TestCase):
         settings_b = get_or_create_user_settings(user=self.user)
         self.assertEqual(settings_a.id, settings_b.id)
         self.assertEqual(settings_a.base_currency, "EUR")
+        self.assertEqual(settings_a.inflation_region, "ES")
 
     def test_update_user_settings_persists_values(self):
-        updated = update_user_settings(user=self.user, validated_data={"base_currency": "USD"})
+        updated = update_user_settings(
+            user=self.user,
+            validated_data={"base_currency": "USD", "inflation_region": "ES-AN"},
+        )
         self.assertEqual(updated.base_currency, "USD")
+        self.assertEqual(updated.inflation_region, "ES-AN")

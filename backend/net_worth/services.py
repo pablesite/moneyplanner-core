@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from decimal import ROUND_HALF_UP
+from typing import cast
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone as _timezone
@@ -123,6 +124,11 @@ def get_liquidity_asset_queryset_for_user(*, user):
 def get_base_currency_for_user(*, user) -> str:
     UserSettings.objects.get_or_create(user=user)
     return user.settings.base_currency
+
+
+def get_inflation_region_for_user(*, user) -> str:
+    UserSettings.objects.get_or_create(user=user)
+    return cast(str, user.settings.inflation_region or InflationIndex.Region.ES)
 
 
 def get_inflation_base_period(*, region: str) -> date:

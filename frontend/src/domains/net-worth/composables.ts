@@ -209,7 +209,7 @@ export function useNetWorthViewState() {
 
   const canShowReal = () =>
     store.baseCurrency === 'EUR' &&
-    !!store.summary?.inflation_base_period &&
+    !!store.summary?.inflation_available &&
     store.summary?.net_worth_real !== null;
 
   watch(

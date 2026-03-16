@@ -2,9 +2,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
-from accounts.models import UserSettings
-from core.market_data import ensure_market_history_safe
-
 from .models import (
     Asset,
     AssetImprovement,
@@ -358,7 +355,6 @@ class AssetSerializer(serializers.ModelSerializer):
         improvements_data = validated_data.pop("improvements", [])
         asset = create_asset_for_user(user=request.user, validated_data=validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
-        self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
 
@@ -366,7 +362,6 @@ class AssetSerializer(serializers.ModelSerializer):
         improvements_data = validated_data.pop("improvements", None)
         asset = super().update(instance, validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
-        self._ensure_position_fx_history(asset.user, asset.currency, asset.start_date)
         if improvements_data is not None:
             self._sync_improvements(asset=asset, improvements_data=improvements_data)
         return asset
@@ -409,14 +404,6 @@ class AssetSerializer(serializers.ModelSerializer):
         for improvement_id, current in existing_by_id.items():
             if improvement_id not in seen_ids:
                 current.delete()
-
-    def _ensure_position_fx_history(self, user, currency: str, start_date) -> None:
-        settings, _ = UserSettings.objects.get_or_create(user=user)
-        ensure_market_history_safe(
-            from_currency=currency,
-            to_currency=settings.base_currency,
-            start_date=start_date,
-        )
 
 
 class NetWorthSnapshotSerializer(serializers.ModelSerializer):
@@ -651,7 +638,6 @@ class LiabilitySerializer(serializers.ModelSerializer):
         liability._accounting_integration_state = ensure_liability_accounting_account(
             liability=liability
         )
-        self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
         return liability
 
     def update(self, instance, validated_data):
@@ -659,16 +645,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
         liability._accounting_integration_state = ensure_liability_accounting_account(
             liability=liability
         )
-        self._ensure_position_fx_history(liability.user, liability.currency, liability.start_date)
         return liability
-
-    def _ensure_position_fx_history(self, user, currency: str, start_date) -> None:
-        settings, _ = UserSettings.objects.get_or_create(user=user)
-        ensure_market_history_safe(
-            from_currency=currency,
-            to_currency=settings.base_currency,
-            start_date=start_date,
-        )
 
 
 class LiquidityMonthlyCheckinSerializer(serializers.ModelSerializer):

@@ -91,6 +91,8 @@ export type Summary = {
 
   inflation_region: string | null;
   inflation_base_period: string | null;
+  inflation_available: boolean;
+  inflation_status: string;
 
   total_assets_real: string | null;
   total_liabilities_real: string | null;
@@ -98,6 +100,11 @@ export type Summary = {
 
   assets_by_category_real: Record<string, string> | null;
   liabilities_by_category_real: Record<string, string> | null;
+};
+
+export type Settings = {
+  base_currency: string;
+  inflation_region: string;
 };
 
 export type TimelineRow = {

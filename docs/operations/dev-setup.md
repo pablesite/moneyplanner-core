@@ -5,11 +5,12 @@ Describe how to run, validate, and troubleshoot `MoneyPlanner Core` locally.
 
 ## Local Startup
 1. From `core/`, run `docker compose up --build -d`
-2. Verify `backend`, `frontend`, `db`, and `fx_sync` are `Up` with `docker compose ps`
+2. Verify `backend`, `frontend`, `db`, and `market_data_sync` are `Up` with `docker compose ps`
 3. Frontend: `http://localhost:5173`
 4. Backend: `http://localhost:8000`
 
-`fx_sync` is part of the standard Core startup. It backfills and refreshes FX history used by net worth timelines.
+`market_data_sync` is part of the standard Core startup. It reconciles and refreshes persisted
+market datasets (`FX` and `IPC`) used by net worth calculations and the `/data` observability view.
 
 ## Standard Diagnostics
 1. `docker compose ps`
@@ -52,5 +53,5 @@ docker compose exec frontend npm run test:unit
 ```
 
 ## Related Operational Docs
-1. `fx-sync.md`
+1. `market-data-sync.md`
 2. `portable-import.md`

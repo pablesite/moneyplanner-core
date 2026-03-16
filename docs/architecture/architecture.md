@@ -37,6 +37,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
+## Market Data Layer
+1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
+2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`.
+3. Persisted datasets in Core are:
+   - `FxRate` (daily FX and supported crypto crosses)
+   - `InflationIndex` (monthly IPC national + CCAA)
+4. Sync coverage and operational status are tracked in `MarketDataSyncState`.
+5. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
+
 ## Related Documents
 1. `../../README.md`
 2. `../../CONTRIBUTING.md`

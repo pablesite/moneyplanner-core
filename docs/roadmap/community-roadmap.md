@@ -14,6 +14,7 @@ Consolidate a strong open-core base that is useful on its own and easy to improv
 ## Active Roadmaps
 1. Backend refactor roadmap: `backend-refactor-roadmap.md`
 2. Accounting movements roadmap: `accounting-movements-roadmap.md`
+3. Market data sync roadmap: `market-data-sync-roadmap.md`
 
 ## Product Areas In Evolution
 1. Net worth
@@ -23,6 +24,7 @@ Consolidate a strong open-core base that is useful on its own and easy to improv
 5. Financial simulator
 6. Accounting
 7. Investment portfolio
+8. Market data and auxiliary datasets
 
 ## Good Contribution Candidates
 1. Better empty states and error messages

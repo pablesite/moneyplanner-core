@@ -43,7 +43,7 @@ describe('net worth api (core)', () => {
     await coreNetWorthApi.updateLiability(4, { name: 'Loan EUR' });
     await coreNetWorthApi.deleteLiability(4);
     await coreNetWorthApi.getSettings();
-    await coreNetWorthApi.updateSettings({ base_currency: 'EUR' });
+    await coreNetWorthApi.updateSettings({ base_currency: 'EUR', inflation_region: 'ES' });
 
     expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/summary/');
     expect(mocks.api.get).toHaveBeenCalledWith('/api/net-worth/assets/');
@@ -70,6 +70,9 @@ describe('net worth api (core)', () => {
     });
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/net-worth/liabilities/4/');
     expect(mocks.api.get).toHaveBeenCalledWith('/api/auth/settings/');
-    expect(mocks.api.put).toHaveBeenCalledWith('/api/auth/settings/', { base_currency: 'EUR' });
+    expect(mocks.api.put).toHaveBeenCalledWith('/api/auth/settings/', {
+      base_currency: 'EUR',
+      inflation_region: 'ES',
+    });
   });
 });
