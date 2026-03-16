@@ -369,6 +369,9 @@ class AccountingApiTests(APITestCase):
                         "side": "credit",
                         "amount": "2100.00",
                         "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "salary",
+                        "subcategory_key": "employee_salary",
                     },
                 ],
             },
@@ -376,6 +379,12 @@ class AccountingApiTests(APITestCase):
         )
         self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
         self.assertEqual(len(create_res.data["entries"]), 2)
+        classified_entry = next(
+            row for row in create_res.data["entries"] if row["account_id"] == self.income_account.id
+        )
+        self.assertEqual(classified_entry["flow_family"], "income")
+        self.assertEqual(classified_entry["category_key"], "salary")
+        self.assertEqual(classified_entry["subcategory_key"], "employee_salary")
 
         accounts_res = self.client.get("/api/accounting/accounts/")
         self.assertEqual(accounts_res.status_code, status.HTTP_200_OK)
@@ -384,6 +393,7 @@ class AccountingApiTests(APITestCase):
         entries_res = self.client.get("/api/accounting/entries/")
         self.assertEqual(entries_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(entries_res.data), 2)
+        self.assertTrue(any(entry["flow_family"] == "income" for entry in entries_res.data))
 
     def test_create_transaction_rejects_unbalanced_entries(self):
         response = self.client.post(
@@ -683,6 +693,14 @@ class AccountingApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(len(response.data["entries"]), 2)
+        income_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] != self.cash_account.id
+        )
+        self.assertEqual(income_entry["flow_family"], "income")
+        self.assertEqual(income_entry["category_key"], "salary")
+        self.assertEqual(income_entry["subcategory_key"], "employee_salary")
         self.assertTrue(
             LedgerAccount.objects.filter(
                 user=self.user,
@@ -748,6 +766,14 @@ class AccountingApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        expense_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] != self.cash_account.id
+        )
+        self.assertEqual(expense_entry["flow_family"], "expense")
+        self.assertEqual(expense_entry["category_key"], "consumption_expenses")
+        self.assertEqual(expense_entry["subcategory_key"], "living_expenses")
         self.assertTrue(
             LedgerAccount.objects.filter(
                 user=self.user,
@@ -802,6 +828,24 @@ class AccountingApiTests(APITestCase):
             invalid_response.status_code, status.HTTP_400_BAD_REQUEST, invalid_response.data
         )
         self.assertIn("counterparty_account_id", invalid_response.data["error"]["details"])
+
+    def test_quick_entry_rejects_partial_functional_classification(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-11",
+                "value_date": "2026-04-11",
+                "description": "Clasificacion incompleta",
+                "amount": "90.00",
+                "account_id": self.cash_account.id,
+                "flow_family": "expense",
+                "category_key": "consumption_expenses",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("subcategory_key", response.data["error"]["details"])
 
     def test_quick_entry_investment_purchase_creates_balanced_entries_with_asset_link(self):
         investment_asset = Asset.objects.create(
@@ -910,6 +954,9 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(principal_entry["liability_id"], liability.id)
         self.assertEqual(interest_entry["side"], "debit")
         self.assertEqual(interest_entry["annual_expense_entry_id"], expense_plan.id)
+        self.assertEqual(interest_entry["flow_family"], "expense")
+        self.assertEqual(interest_entry["category_key"], "consumption_expenses")
+        self.assertEqual(interest_entry["subcategory_key"], "financial_commitments")
 
     def test_quick_entry_debt_payment_rejects_mismatched_total_breakdown(self):
         liability = Liability.objects.create(

@@ -401,6 +401,9 @@ def create_quick_transaction(
     notes: str = "",
     annual_income_entry=None,
     annual_expense_entry=None,
+    flow_family: str = "",
+    category_key: str = "",
+    subcategory_key: str = "",
     principal_amount: Decimal | None = None,
     interest_amount: Decimal | None = None,
     liability_account: LedgerAccount | None = None,
@@ -415,6 +418,9 @@ def create_quick_transaction(
             counterparty_account=counterparty_account,
             annual_income_entry=annual_income_entry,
             annual_expense_entry=annual_expense_entry,
+            flow_family=flow_family,
+            category_key=category_key,
+            subcategory_key=subcategory_key,
             principal_amount=principal_amount,
             interest_amount=interest_amount,
             liability_account=liability_account,
@@ -439,6 +445,9 @@ def create_quick_transaction(
         counterparty_account=counterparty_account,
         annual_income_entry=annual_income_entry,
         annual_expense_entry=annual_expense_entry,
+        flow_family=flow_family,
+        category_key=category_key,
+        subcategory_key=subcategory_key,
         principal_amount=principal_amount,
         interest_amount=interest_amount,
         liability_account=liability_account,
@@ -456,12 +465,23 @@ def _build_quick_entry_payload(
     counterparty_account: LedgerAccount,
     annual_income_entry=None,
     annual_expense_entry=None,
+    flow_family: str = "",
+    category_key: str = "",
+    subcategory_key: str = "",
     principal_amount: Decimal | None = None,
     interest_amount: Decimal | None = None,
     liability_account: LedgerAccount | None = None,
     interest_account: LedgerAccount | None = None,
 ) -> list[dict]:
     base_amount = Decimal(amount)
+    classification = _resolve_entry_classification(
+        movement_type=movement_type,
+        flow_family=flow_family,
+        category_key=category_key,
+        subcategory_key=subcategory_key,
+        annual_income_entry=annual_income_entry,
+        annual_expense_entry=annual_expense_entry,
+    )
     if movement_type == "income":
         return [
             {
@@ -476,6 +496,7 @@ def _build_quick_entry_payload(
                 "amount": base_amount,
                 "currency": counterparty_account.currency,
                 "annual_income_entry": annual_income_entry,
+                **classification,
             },
         ]
     if movement_type == "expense":
@@ -486,6 +507,7 @@ def _build_quick_entry_payload(
                 "amount": base_amount,
                 "currency": counterparty_account.currency,
                 "annual_expense_entry": annual_expense_entry,
+                **classification,
             },
             {
                 "account": account,
@@ -545,6 +567,7 @@ def _build_quick_entry_payload(
                     "amount": interest,
                     "currency": interest_account.currency,
                     "annual_expense_entry": annual_expense_entry,
+                    **classification,
                 },
             )
         return rows
@@ -562,6 +585,37 @@ def _build_quick_entry_payload(
             "currency": account.currency,
         },
     ]
+
+
+def _resolve_entry_classification(
+    *,
+    movement_type: str,
+    flow_family: str,
+    category_key: str,
+    subcategory_key: str,
+    annual_income_entry,
+    annual_expense_entry,
+) -> dict[str, str]:
+    if flow_family and category_key and subcategory_key:
+        return {
+            "flow_family": flow_family,
+            "category_key": category_key,
+            "subcategory_key": subcategory_key,
+        }
+
+    if movement_type == "income" and annual_income_entry is not None:
+        return {
+            "flow_family": LedgerEntry.FlowFamily.INCOME,
+            "category_key": annual_income_entry.category,
+            "subcategory_key": annual_income_entry.subcategory,
+        }
+    if movement_type in {"expense", "debt_payment"} and annual_expense_entry is not None:
+        return {
+            "flow_family": LedgerEntry.FlowFamily.EXPENSE,
+            "category_key": annual_expense_entry.category,
+            "subcategory_key": annual_expense_entry.subcategory,
+        }
+    return {}
 
 
 def _group_balance_totals_by_account(entries: list[LedgerEntry]) -> dict[int, LedgerBalanceTotals]:
