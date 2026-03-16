@@ -77,7 +77,9 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
             .distinct()
         )
         if transaction_ids:
-            LedgerTransaction.objects.filter(user_id=instance.user_id, id__in=transaction_ids).delete()
+            LedgerTransaction.objects.filter(
+                user_id=instance.user_id, id__in=transaction_ids
+            ).delete()
         instance.delete()
 
     @action(detail=False, methods=["get"], url_path="balances")

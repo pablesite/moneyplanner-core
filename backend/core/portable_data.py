@@ -32,9 +32,7 @@ def _parse_version(version: str) -> tuple[int, ...]:
             parsed.append(0)
             continue
         if not segment.isdigit():
-            raise DRFValidationError(
-                {"detail": f"Version portable invalida: {version}."}
-            )
+            raise DRFValidationError({"detail": f"Version portable invalida: {version}."})
         parsed.append(int(segment))
     return tuple(parsed)
 
@@ -233,6 +231,8 @@ def _build_liability_payload(
         "notes": liability.get("notes", "") or "",
         "financed_asset_id": financed_asset_id,
     }
+
+
 def _prepare_income_payload(entry: dict[str, Any]) -> dict[str, Any]:
     inferred_time_profile = entry.get("time_profile") or (
         AnnualIncomeEntry.TimeProfile.ONE_OFF
@@ -240,7 +240,10 @@ def _prepare_income_payload(entry: dict[str, Any]) -> dict[str, Any]:
         else AnnualIncomeEntry.TimeProfile.STRUCTURAL_RECURRENT
     )
     target_month = entry.get("target_month")
-    if inferred_time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF and target_month in (None, ""):
+    if inferred_time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF and target_month in (
+        None,
+        "",
+    ):
         target_month = 12
     return {
         "name": str(entry.get("name", "")),
@@ -391,7 +394,9 @@ def _import_family_and_ownerships(
     return ownership_id_map
 
 
-def _import_assets(*, context: PortableImportContext, assets: list[dict[str, Any]]) -> dict[int, int]:
+def _import_assets(
+    *, context: PortableImportContext, assets: list[dict[str, Any]]
+) -> dict[int, int]:
     asset_id_map: dict[int, int] = {}
     for asset in sorted(assets, key=lambda row: int(row.get("id", 0))):
         serializer = AssetSerializer(
