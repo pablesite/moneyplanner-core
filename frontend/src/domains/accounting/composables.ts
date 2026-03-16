@@ -655,10 +655,14 @@ export function useAccountingPage() {
         ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
         : {}),
       ...(quickEntryForm.movement_type === 'income'
-        ? { annual_income_entry_id: quickEntryForm.annual_income_entry_id }
+        ? quickEntryForm.annual_income_entry_id != null
+          ? { annual_income_entry_id: quickEntryForm.annual_income_entry_id }
+          : {}
         : {}),
       ...(quickEntryForm.movement_type === 'expense'
-        ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
+        ? quickEntryForm.annual_expense_entry_id != null
+          ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
+          : {}
         : {}),
       ...(quickEntryForm.movement_type === 'investment_purchase'
         ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
@@ -668,7 +672,9 @@ export function useAccountingPage() {
             liability_account_id: quickEntryForm.liability_account_id,
             principal_amount: formatDecimalInput(quickEntryForm.principal_amount),
             interest_amount: formatDecimalInput(quickEntryForm.interest_amount || '0'),
-            annual_expense_entry_id: quickEntryForm.annual_expense_entry_id,
+            ...(quickEntryForm.annual_expense_entry_id != null
+              ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
+              : {}),
             ...(toNumber(quickEntryForm.interest_amount) > 0
               ? { interest_account_id: quickEntryForm.interest_account_id }
               : {}),

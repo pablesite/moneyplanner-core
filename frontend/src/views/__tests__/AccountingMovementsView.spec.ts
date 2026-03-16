@@ -32,6 +32,20 @@ function makeState(overrides: Record<string, unknown> = {}) {
         created_at: '',
         updated_at: '',
       },
+      {
+        id: 2,
+        name: 'Ingresos sistema',
+        account_type: 'income',
+        currency: 'EUR',
+        origin: 'system',
+        asset_id: null,
+        liability_id: null,
+        is_active: true,
+        notes: '',
+        current_balance: '2100.00',
+        created_at: '',
+        updated_at: '',
+      },
     ]),
     transactions: ref([
       {
@@ -97,7 +111,11 @@ function makeState(overrides: Record<string, unknown> = {}) {
       { value: 2, label: 'Febrero' },
       { value: 3, label: 'Marzo' },
     ],
-    accountTypeOptions: [{ value: 'asset', label: 'Activo' }],
+    accountTypeOptions: [
+      { value: 'asset', label: 'Activo' },
+      { value: 'income', label: 'Ingreso' },
+      { value: 'expense', label: 'Gasto' },
+    ],
     quickMovementTypeOptions: [
       { value: 'income', label: 'Ingreso' },
       { value: 'expense', label: 'Gasto' },
@@ -328,5 +346,24 @@ describe('AccountingMovementsView', () => {
 
     expect(wrapper.find('input[placeholder="Filtrar por texto o cuenta"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Ingreso');
+  });
+
+  it('keeps legacy account types out of the manual account creation modal', async () => {
+    mockUseAccountingPage.mockReturnValue(makeState());
+    const wrapper = mount(AccountingMovementsView, {
+      attachTo: document.body,
+    });
+
+    await wrapper.find('button[title="Nueva cuenta"]').trigger('click');
+
+    const modalSelect = document.body.querySelector(
+      'form.ui-accounting-modal-form select',
+    ) as HTMLSelectElement | null;
+    const optionLabels = Array.from(modalSelect?.options ?? []).map((option) => option.text);
+
+    expect(optionLabels).toContain('Activo');
+    expect(optionLabels).not.toContain('Ingreso');
+    expect(optionLabels).not.toContain('Gasto');
+    expect(wrapper.text()).toContain('Contrapartidas tecnicas del sistema');
   });
 });

@@ -27,7 +27,10 @@
    - existe comando explicito `python manage.py backfill_ledger_classification` para migrar historico legacy desde `annual_*` a `flow_family` + `category_key` + `subcategory_key`.
    - el backfill soporta `--dry-run`, `--user-id` y `--limit` para ejecucion gradual y trazable.
    - los casos ambiguos o parcialmente clasificados no se fuerzan: permanecen sin backfill y se reportan para revision posterior como `Pendiente clasificar`.
-5. Fase 5 pendiente.
+5. Fase 5 implementada en `core/frontend`, `core/backend` residual y tests:
+   - la creacion manual de cuentas oculta `income` y `expense` como tipos operativos visibles.
+   - las cuentas legacy quedan relegadas a `Contrapartidas tecnicas del sistema` en la UX.
+   - `quick-entry` deja la vinculacion `annual_*` en un bloque secundario opcional y ya no envia ids legacy vacios cuando no hay alineacion explicita con el plan.
 
 ## Objetivo
 Separar de forma explicita y reversible las tres capas funcionales que hoy se mezclan parcialmente en `accounting` y `budget`, de modo que:

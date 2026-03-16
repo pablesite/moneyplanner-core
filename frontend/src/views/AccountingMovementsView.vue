@@ -98,6 +98,18 @@ const hasTechnicalAccounts = computed(() =>
     (type) => (accountsByType.value.get(type.value)?.length ?? 0) > 0,
   ),
 );
+const hasCompatibleAnnualPlanOptions = computed(() => {
+  if (quickEntryForm.movement_type === 'income') {
+    return annualIncomeOptionsCompatible.value.length > 0;
+  }
+  if (
+    quickEntryForm.movement_type === 'expense' ||
+    quickEntryForm.movement_type === 'debt_payment'
+  ) {
+    return annualExpenseOptionsCompatible.value.length > 0;
+  }
+  return false;
+});
 
 const showAccountModal = ref(false);
 const showQuickEntryModal = ref(false);
@@ -215,7 +227,11 @@ async function submitQuickEntryFromModal() {
           </section>
 
           <details v-if="hasTechnicalAccounts" class="ui-accounting-account-legacy">
-            <summary>Cuentas tecnicas (legacy)</summary>
+            <summary>Contrapartidas tecnicas del sistema</summary>
+            <p class="ui-accounting-legacy-copy">
+              Estas cuentas siguen existiendo por compatibilidad interna, pero no forman parte del
+              catalogo operativo que se gestiona manualmente.
+            </p>
             <section
               v-for="type in technicalAccountTypeOptions"
               :key="type.value"
@@ -285,8 +301,8 @@ async function submitQuickEntryFromModal() {
         </div>
 
         <p class="ui-accounting-inline-note">
-          El alta rapida usa un contrato category-first: categoria y subcategoria son primarias, y
-          la linea anual es opcional.
+          El alta rapida clasifica primero por categoria y subcategoria. La alineacion con el plan
+          anual queda como ayuda secundaria.
         </p>
 
         <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
@@ -534,11 +550,11 @@ async function submitQuickEntryFromModal() {
           <input
             v-model="accountForm.name"
             class="input"
-            placeholder="Cuenta corriente, gastos hogar, ingresos salariales..."
+            placeholder="Cuenta corriente, broker, hipoteca..."
             required
           />
           <select v-model="accountForm.account_type" class="select">
-            <option v-for="type in accountTypeOptions" :key="type.value" :value="type.value">
+            <option v-for="type in primaryAccountTypeOptions" :key="type.value" :value="type.value">
               {{ type.label }}
             </option>
           </select>
@@ -722,13 +738,35 @@ async function submitQuickEntryFromModal() {
               {{ subcategory.label }}
             </option>
           </select>
+        </div>
+
+        <details
+          v-if="quickEntryNeedsClassification"
+          class="ui-accounting-annual-link"
+          :open="
+            quickEntryForm.annual_income_entry_id != null ||
+            quickEntryForm.annual_expense_entry_id != null
+          "
+        >
+          <summary>
+            {{
+              hasCompatibleAnnualPlanOptions
+                ? 'Alinear con una linea del plan (opcional)'
+                : 'Sin lineas anuales compatibles para esta clasificacion'
+            }}
+          </summary>
+          <p class="ui-accounting-inline-note">
+            Usa este enlace solo si quieres relacionar el movimiento con una fila concreta del
+            presupuesto anual. La clasificacion principal ya queda guardada en el ledger.
+          </p>
 
           <select
             v-if="quickEntryForm.movement_type === 'income'"
             v-model="quickEntryForm.annual_income_entry_id"
             class="select"
+            :disabled="!annualIncomeOptionsCompatible.length"
           >
-            <option :value="null">Linea anual opcional</option>
+            <option :value="null">Sin vincular al plan anual</option>
             <option
               v-for="entry in annualIncomeOptionsCompatible"
               :key="entry.id"
@@ -738,8 +776,13 @@ async function submitQuickEntryFromModal() {
             </option>
           </select>
 
-          <select v-else v-model="quickEntryForm.annual_expense_entry_id" class="select">
-            <option :value="null">Linea anual opcional</option>
+          <select
+            v-else
+            v-model="quickEntryForm.annual_expense_entry_id"
+            class="select"
+            :disabled="!annualExpenseOptionsCompatible.length"
+          >
+            <option :value="null">Sin vincular al plan anual</option>
             <option
               v-for="entry in annualExpenseOptionsCompatible"
               :key="entry.id"
@@ -748,7 +791,7 @@ async function submitQuickEntryFromModal() {
               {{ entry.name }}
             </option>
           </select>
-        </div>
+        </details>
 
         <div
           v-if="quickEntryForm.movement_type === 'debt_payment'"
@@ -932,6 +975,12 @@ async function submitQuickEntryFromModal() {
   color: rgba(255, 255, 255, 0.74);
   font-size: 0.82rem;
   margin-bottom: 10px;
+}
+
+.ui-accounting-legacy-copy {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.78rem;
 }
 
 .ui-accounting-account-group-head {
@@ -1178,6 +1227,21 @@ async function submitQuickEntryFromModal() {
 .ui-accounting-advanced {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 12px;
+}
+
+.ui-accounting-annual-link {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-annual-link summary {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.84rem;
 }
 
 .ui-accounting-advanced-summary {
