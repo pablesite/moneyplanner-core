@@ -78,6 +78,10 @@ Convenciones:
 - Pendiente después de v1:
   - Afinar heurísticas de mapeo para categorías MoneyWiz menos frecuentes.
   - Contraste e importador dedicado desde Excel.
+  - Corregir el parseo del export real de MoneyWiz detectado el 2026-03-18:
+    - fechas reales marcadas como inválidas en todas las filas,
+    - columna `Account` no reconocida en el CSV del usuario,
+    - filas degradadas a `income` con `0.00 EUR` en preview.
 
 ---
 

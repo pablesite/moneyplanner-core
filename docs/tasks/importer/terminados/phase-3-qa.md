@@ -73,3 +73,8 @@ Expected outcome: todos los comandos en verde y sin regresiones funcionales rele
 2. Excel queda para contraste/validacion.
 3. Idempotencia por huella obligatoria.
 4. Fallback seguro de categorias es el comportamiento esperado, no error bloqueante por defecto.
+
+## Follow-up abierto (2026-03-18)
+1. Con el CSV real del usuario, la preview del importador muestra 682 filas con error `La fecha no es valida o falta en la fila.`.
+2. El mismo caso genera cuentas provisionales `MoneyWiz source ...`, lo que indica que el campo `Account` del export real no se está normalizando como esperábamos.
+3. La preview clasifica todas las filas como `income` y con importe `0.00 EUR`, por lo que mañana hay que depurar juntos el parser contra ese export real antes de seguir usando el flujo en producción personal.

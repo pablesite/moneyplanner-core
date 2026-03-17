@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-17 | **Versión Core:** 0.23.0
+**Última revisión:** 2026-03-18 | **Versión Core:** 0.23.0
 
 ---
 
@@ -64,6 +64,14 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
 | Auth Core (JWT, link-token para SaaS) | ✅ | Incluyendo generación de token para linking con SaaS |
 | Importador MoneyWiz v1 | ✅ | CSV con `sep=`, preview/commit, huella idempotente, fallback seguro de clasificación y flujo UI en movimientos |
+
+## Incidencias abiertas
+
+### Importador MoneyWiz v1
+1. Pendiente revisar el parser con dataset real de usuario: la preview actual puede marcar todas las filas como error (`La fecha no es valida o falta en la fila.`) aunque el CSV sea válido.
+2. En el caso observado el importador está interpretando `Account` como vacío y genera cuentas provisionales tipo `MoneyWiz source ...`, señal de que el mapeo de columnas reales del export necesita ajuste.
+3. La preview del caso real está clasificando 682/682 filas como `income` con importe `0.00 EUR`, lo que apunta a un problema adicional en el parseo de fecha y/o importes del export real.
+4. Mantener el bloque como funcionalidad disponible pero no darlo por listo para uso real hasta reproducir y corregir estos tres puntos con el CSV del usuario.
 
 ## En progreso activo
 
