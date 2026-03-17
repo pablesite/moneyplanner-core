@@ -19,13 +19,24 @@ const {
   accountTypeOptions,
   manualPositionTypeOptions,
   quickMovementTypeOptions,
+  editMovementTypeOptions,
+  editAccountOptions,
+  editCounterpartyOptions,
+  editCounterpartyMissingHint,
+  editKindNeedsCounterparty,
+  editKindNeedsClassification,
+  editCounterpartyLabel,
+  editSelectedAccountCurrentBalance,
+  editCategoryOptions,
+  editSubcategoryOptions,
   activationForm,
   quickEntryForm,
-  transactionForm,
   editTransactionForm,
   activityFilters,
   liquidityAccounts,
   availableManualPositionOptions,
+  accountPositionMetaByAccountId,
+  accountDisplayName,
   hasAvailableManualPositions,
   annualIncomeOptionsCompatible,
   annualExpenseOptionsCompatible,
@@ -37,14 +48,10 @@ const {
   liabilityCounterpartyOptions,
   debtInterestOptions,
   quickEntryReady,
-  debitTotal,
-  creditTotal,
-  transactionBalanced,
+  editEntryReady,
   summaryRows,
   filteredTransactions,
-  addEntry,
   activityKindLabel,
-  removeEntry,
   reloadPeriod,
   activateNetWorthPositions,
   removeNetWorthTracking,
@@ -53,7 +60,6 @@ const {
   openTransactionForEditing,
   submitQuickEntry,
   submitEditedTransaction,
-  submitTransaction,
 } = useAccountingPage();
 
 function toNumber(raw: string): number {
@@ -82,6 +88,12 @@ function monthLabel(month: number): string {
     monthOptions.find((option) => option.value === month)?.label.slice(0, 3) ??
     String(month).padStart(2, '0')
   );
+}
+
+function humanizeKey(value: string): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return 'Sin clasificar';
+  return normalized.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 const accountsByType = computed(() => {
@@ -172,61 +184,167 @@ const accountTimelineRows = computed(() => {
       selectedOperationalAccountId.value == null ||
       account.id === selectedOperationalAccountId.value,
   );
-  const rows = scopedAccounts.map((account) => {
-    const movements = filteredTransactions.value
-      .map((transaction) => {
-        const impactValue = transaction.entries
-          .filter((entry) => entry.account_id === account.id)
-          .reduce(
-            (total, entry) =>
-              total + signedEntryImpact(account.account_type, entry.side, entry.amount),
-            0,
-          );
-        if (impactValue === 0) return null;
-        return {
-          id: transaction.id,
-          booking_date: transaction.booking_date,
-          description: transaction.description,
-          kind_label: activityKindLabel(transaction),
-          origin: transaction.origin,
-          status: transaction.status,
-          impact_value: impactValue,
-          tone: impactTone(impactValue),
-        };
-      })
-      .filter((movement): movement is NonNullable<typeof movement> => movement != null)
-      .sort((a, b) => b.booking_date.localeCompare(a.booking_date) || b.id - a.id);
-    return {
-      account,
-      movements,
-      movement_count: movements.length,
-    };
-  });
+  const rows = scopedAccounts
+    .map((account) => {
+      const movements = filteredTransactions.value
+        .map((transaction) => {
+          const impactValue = transaction.entries
+            .filter((entry) => entry.account_id === account.id)
+            .reduce(
+              (total, entry) =>
+                total + signedEntryImpact(account.account_type, entry.side, entry.amount),
+              0,
+            );
+          if (impactValue === 0) return null;
+          return {
+            id: transaction.id,
+            booking_date: transaction.booking_date,
+            description: transaction.description,
+            kind_label: activityKindLabel(transaction),
+            origin: transaction.origin,
+            status: transaction.status,
+            impact_value: impactValue,
+            tone: impactTone(impactValue),
+          };
+        })
+        .filter((movement): movement is NonNullable<typeof movement> => movement != null)
+        .sort((a, b) => b.booking_date.localeCompare(a.booking_date) || b.id - a.id);
+      return {
+        account,
+        movements,
+        movement_count: movements.length,
+      };
+    })
+    .filter((row) => row.movement_count > 0);
   return rows.sort(
     (left, right) =>
       right.movement_count - left.movement_count ||
-      left.account.name.localeCompare(right.account.name, 'es'),
+      accountDisplayName(left.account).localeCompare(accountDisplayName(right.account), 'es'),
   );
 });
-
-const defaultExpandedAccountIds = computed(() =>
-  accountTimelineRows.value
-    .filter((row) => row.movement_count > 0)
-    .slice(0, 2)
-    .map((row) => row.account.id),
-);
+const groupedAccountTimelineRows = computed(() => {
+  const grouped = new Map<
+    string,
+    {
+      positionType: 'asset' | 'liability';
+      category: string;
+      subgroups: Map<string, typeof accountTimelineRows.value>;
+    }
+  >();
+  accountTimelineRows.value.forEach((row) => {
+    const meta = accountPositionMetaByAccountId.value.get(row.account.id);
+    const positionType =
+      meta?.position_type ?? (row.account.account_type === 'liability' ? 'liability' : 'asset');
+    const category = meta?.category ?? 'other';
+    const subcategory = meta?.subcategory ?? 'other';
+    const categoryKey = `${positionType}:${category}`;
+    const categoryBucket = grouped.get(categoryKey) ?? {
+      positionType,
+      category,
+      subgroups: new Map<string, typeof accountTimelineRows.value>(),
+    };
+    const subRows = categoryBucket.subgroups.get(subcategory) ?? [];
+    subRows.push(row);
+    categoryBucket.subgroups.set(subcategory, subRows);
+    grouped.set(categoryKey, categoryBucket);
+  });
+  return Array.from(grouped.entries())
+    .map(([key, group]) => {
+      const subgroups = Array.from(group.subgroups.entries())
+        .map(([subcategory, rows]) => ({
+          key: `${key}:${subcategory}`,
+          subcategory,
+          rows: rows
+            .slice()
+            .sort((a, b) => accountDisplayName(a.account).localeCompare(accountDisplayName(b.account), 'es')),
+          accountCount: rows.length,
+        }))
+        .sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'es'));
+      return {
+        key,
+        positionType: group.positionType,
+        category: group.category,
+        subgroups,
+        accountCount: subgroups.reduce((total, subgroup) => total + subgroup.accountCount, 0),
+      };
+    })
+    .sort((a, b) => {
+      const typeOrder = a.positionType === b.positionType ? 0 : a.positionType === 'asset' ? -1 : 1;
+      if (typeOrder !== 0) return typeOrder;
+      return a.category.localeCompare(b.category, 'es');
+    });
+});
 
 const showActivationModal = ref(false);
 const showEditTransactionModal = ref(false);
 const showQuickEntryModal = ref(false);
 const activationQuery = ref('');
+const activationOperationalOnly = ref(true);
 const selectedActivationIds = ref<number[]>([]);
+const assetActivationCategoryOrder = ['cash', 'investments', 'real_estate', 'furnishings', 'other'];
+const assetActivationCategoryLabels: Record<string, string> = {
+  cash: 'Liquidez',
+  investments: 'Inversiones',
+  real_estate: 'Inmuebles',
+  furnishings: 'Mobiliario',
+  other: 'Otros',
+};
+const liabilityActivationCategoryOrder = ['mortgage', 'personal_loan', 'credit_card', 'other'];
+const liabilityActivationCategoryLabels: Record<string, string> = {
+  mortgage: 'Hipoteca',
+  personal_loan: 'Prestamo personal',
+  credit_card: 'Tarjeta',
+  other: 'Otros',
+};
+const activationOperationalCategories = new Set(['cash', 'investments']);
 const filteredManualPositionOptions = computed(() => {
+  const base =
+    activationForm.position_type === 'liability'
+      ? availableManualPositionOptions.value
+      : activationOperationalOnly.value
+        ? availableManualPositionOptions.value.filter((position) =>
+            activationOperationalCategories.has(String(position.category ?? '').trim()),
+          )
+        : availableManualPositionOptions.value;
   const query = activationQuery.value.trim().toLowerCase();
-  if (!query) return availableManualPositionOptions.value;
-  return availableManualPositionOptions.value.filter((position) =>
+  if (!query) return base;
+  return base.filter((position) =>
     `${position.name} ${position.currency}`.toLowerCase().includes(query),
   );
+});
+const activationExcludedByOperationalFilter = computed(() => {
+  if (activationForm.position_type === 'liability') return 0;
+  if (!activationOperationalOnly.value) return 0;
+  return Math.max(
+    availableManualPositionOptions.value.length - filteredManualPositionOptions.value.length,
+    0,
+  );
+});
+const groupedManualPositionOptions = computed(() => {
+  const groups = new Map<string, typeof filteredManualPositionOptions.value>();
+  filteredManualPositionOptions.value.forEach((position) => {
+    const key = String(position.category ?? 'other').trim() || 'other';
+    const existing = groups.get(key) ?? [];
+    existing.push(position);
+    groups.set(key, existing);
+  });
+  const order =
+    activationForm.position_type === 'asset'
+      ? assetActivationCategoryOrder
+      : liabilityActivationCategoryOrder;
+  const labels =
+    activationForm.position_type === 'asset'
+      ? assetActivationCategoryLabels
+      : liabilityActivationCategoryLabels;
+  const orderedKeys = [
+    ...order.filter((key) => groups.has(key)),
+    ...Array.from(groups.keys()).filter((key) => !order.includes(key)),
+  ];
+  return orderedKeys.map((key) => ({
+    key,
+    label: labels[key] ?? key,
+    positions: (groups.get(key) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, 'es')),
+  }));
 });
 const allFilteredSelected = computed(
   () =>
@@ -239,6 +357,7 @@ const allFilteredSelected = computed(
 function openActivationModal() {
   selectedActivationIds.value = [];
   activationQuery.value = '';
+  activationOperationalOnly.value = true;
   showActivationModal.value = true;
 }
 
@@ -276,8 +395,10 @@ function openEditTransactionModal(transactionId: number) {
 }
 
 async function submitEditedTransactionFromModal() {
-  await submitEditedTransaction();
-  showEditTransactionModal.value = false;
+  const saved = await submitEditedTransaction();
+  if (saved) {
+    showEditTransactionModal.value = false;
+  }
 }
 
 async function deleteTransactionFromTimeline(transactionId: number, description: string) {
@@ -337,7 +458,7 @@ watch(availableManualPositionOptions, (options) => {
             <span class="ui-accounting-pill">{{ operationalAccountsCount }} activas</span>
             <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
             <button
-              class="icon-btn ui-accounting-panel-add"
+              class="btn ui-accounting-panel-action-btn"
               type="button"
               aria-label="Activar tracking contable"
               title="Activar tracking contable"
@@ -345,9 +466,10 @@ watch(availableManualPositionOptions, (options) => {
               @click="openActivationModal"
             >
               <span class="icon" aria-hidden="true">+</span>
+              <span>Activar tracking</span>
             </button>
             <button
-              class="icon-btn ui-accounting-panel-add"
+              class="btn ui-accounting-panel-action-btn"
               type="button"
               aria-label="Registrar movimiento diario"
               title="Registrar movimiento diario"
@@ -355,6 +477,7 @@ watch(availableManualPositionOptions, (options) => {
               @click="showQuickEntryModal = true"
             >
               <span class="icon" aria-hidden="true">+</span>
+              <span>Registrar movimiento</span>
             </button>
           </div>
         </div>
@@ -395,7 +518,7 @@ watch(availableManualPositionOptions, (options) => {
           <select v-model="activityFilters.accountId" class="select">
             <option value="all">Todas las cuentas</option>
             <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
-              {{ account.name }}
+              {{ accountDisplayName(account) }}
             </option>
           </select>
           <select v-model="activityFilters.kind" class="select">
@@ -408,16 +531,6 @@ watch(availableManualPositionOptions, (options) => {
           </select>
         </div>
 
-        <div class="ui-accounting-summary-strip">
-          <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
-            <span>{{ monthLabel(row.month) }}</span>
-            <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
-            <small
-              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
-            >
-          </div>
-        </div>
-
         <div v-if="loading && !transactions.length" class="ui-accounting-empty">
           Cargando movimientos del periodo...
         </div>
@@ -428,93 +541,126 @@ watch(availableManualPositionOptions, (options) => {
 
         <div v-else class="ui-accounting-account-groups">
           <details
-            v-for="row in accountTimelineRows"
-            :key="row.account.id"
-            class="ui-accounting-account-timeline"
-            :open="defaultExpandedAccountIds.includes(row.account.id)"
+            v-for="categoryGroup in groupedAccountTimelineRows"
+            :key="categoryGroup.key"
+            class="ui-accounting-account-group-accordion"
           >
-            <summary class="ui-accounting-account-timeline-summary">
-              <div class="ui-accounting-account-meta">
-                <strong>{{ row.account.name }}</strong>
-                <p>
-                  {{ row.account.currency }} / {{ row.account.origin }} /
-                  {{ row.account.account_type === 'asset' ? 'Activo' : 'Pasivo' }}
-                </p>
-              </div>
-              <div class="ui-accounting-account-actions">
-                <span class="ui-accounting-pill ui-accounting-pill-compact">
-                  {{ row.movement_count }} movs.
-                </span>
-                <span>{{ formatCompact(row.account.current_balance, row.account.currency) }}</span>
-                <button
-                  v-if="row.account.asset_id != null || row.account.liability_id != null"
-                  class="btn ui-accounting-account-untrack-btn"
-                  type="button"
-                  :disabled="accountActivationLoading || accountCreationLoading"
-                  @click.stop.prevent="removeNetWorthTracking(row.account)"
-                >
-                  Quitar tracking
-                </button>
-                <button
-                  v-if="row.account.origin === 'user'"
-                  class="btn ui-accounting-account-delete-btn"
-                  type="button"
-                  :disabled="accountCreationLoading"
-                  @click.stop.prevent="deleteAccount(row.account.id, row.account.name)"
-                >
-                  Eliminar
-                </button>
-              </div>
+            <summary class="ui-accounting-account-group-summary">
+              <strong>
+                {{
+                  `${categoryGroup.positionType === 'asset' ? 'Activo' : 'Pasivo'} / ${humanizeKey(categoryGroup.category)}`
+                }}
+              </strong>
+              <span class="ui-accounting-pill ui-accounting-pill-compact">
+                {{ categoryGroup.accountCount }} cuentas
+              </span>
             </summary>
-
-            <div class="ui-accounting-account-timeline-body">
-              <div v-if="!row.movements.length" class="ui-accounting-empty">
-                Sin movimientos para esta cuenta en los filtros actuales.
-              </div>
-              <ul v-else class="ui-accounting-entry-list">
-                <li
-                  v-for="movement in row.movements"
-                  :key="`${row.account.id}-${movement.id}`"
-                  class="ui-accounting-entry-row"
-                >
-                  <div>
-                    <strong>{{ movement.description }}</strong>
+            <details
+              v-for="subcategoryGroup in categoryGroup.subgroups"
+              :key="subcategoryGroup.key"
+              class="ui-accounting-account-group-accordion"
+            >
+              <summary class="ui-accounting-account-group-summary">
+                <strong>{{ humanizeKey(subcategoryGroup.subcategory) }}</strong>
+                <span class="ui-accounting-pill ui-accounting-pill-compact">
+                  {{ subcategoryGroup.accountCount }} cuentas
+                </span>
+              </summary>
+              <details
+                v-for="row in subcategoryGroup.rows"
+                :key="row.account.id"
+                class="ui-accounting-account-timeline"
+              >
+                <summary class="ui-accounting-account-timeline-summary">
+                  <div class="ui-accounting-account-meta">
+                    <strong>{{ accountDisplayName(row.account) }}</strong>
                     <p>
-                      {{ movement.booking_date }} / {{ movement.kind_label }} /
-                      {{ movement.status }} / {{ movement.origin }}
+                      {{ row.account.currency }} / {{ row.account.origin }} /
+                      {{ row.account.account_type === 'asset' ? 'Activo' : 'Pasivo' }}
                     </p>
                   </div>
-                  <div class="ui-accounting-entry-actions">
-                    <span
-                      class="ui-accounting-balance-delta"
-                      :class="`ui-accounting-balance-delta-${movement.tone}`"
-                    >
-                      {{ formatSignedMoney(movement.impact_value, row.account.currency) }}
+                  <div class="ui-accounting-account-actions">
+                    <span class="ui-accounting-pill ui-accounting-pill-compact">
+                      {{ row.movement_count }} movs.
                     </span>
+                    <span>{{
+                      formatCompact(row.account.current_balance, row.account.currency)
+                    }}</span>
                     <button
-                      class="icon-btn ui-accounting-entry-action-btn"
+                      v-if="row.account.asset_id != null || row.account.liability_id != null"
+                      class="btn ui-accounting-account-untrack-btn"
                       type="button"
-                      title="Editar movimiento"
-                      aria-label="Editar movimiento"
-                      :disabled="transactionCreationLoading || movement.origin === 'system'"
-                      @click="openEditTransactionModal(movement.id)"
+                      :disabled="accountActivationLoading || accountCreationLoading"
+                      @click.stop.prevent="removeNetWorthTracking(row.account)"
                     >
-                      &#9998;&#65039;
+                      Quitar tracking
                     </button>
                     <button
-                      class="icon-btn ui-accounting-entry-action-btn"
+                      v-if="row.account.origin === 'user'"
+                      class="btn ui-accounting-account-delete-btn"
                       type="button"
-                      title="Eliminar movimiento"
-                      aria-label="Eliminar movimiento"
-                      :disabled="transactionCreationLoading || movement.origin === 'system'"
-                      @click="deleteTransactionFromTimeline(movement.id, movement.description)"
+                      :disabled="accountCreationLoading"
+                      @click.stop.prevent="
+                        deleteAccount(row.account.id, accountDisplayName(row.account))
+                      "
                     >
-                      &#128465;&#65039;
+                      Eliminar
                     </button>
                   </div>
-                </li>
-              </ul>
-            </div>
+                </summary>
+
+                <div class="ui-accounting-account-timeline-body">
+                  <div v-if="!row.movements.length" class="ui-accounting-empty">
+                    Sin movimientos para esta cuenta en los filtros actuales.
+                  </div>
+                  <ul v-else class="ui-accounting-entry-list">
+                    <li
+                      v-for="movement in row.movements"
+                      :key="`${row.account.id}-${movement.id}`"
+                      class="ui-accounting-entry-row"
+                    >
+                      <div>
+                        <strong>{{ movement.description }}</strong>
+                        <p>
+                          {{ movement.booking_date }} / {{ movement.kind_label }} /
+                          {{ movement.status }} / {{ movement.origin }}
+                        </p>
+                      </div>
+                      <div class="ui-accounting-entry-actions">
+                        <span
+                          class="ui-accounting-balance-delta"
+                          :class="`ui-accounting-balance-delta-${movement.tone}`"
+                        >
+                          {{ formatSignedMoney(movement.impact_value, row.account.currency) }}
+                        </span>
+                        <button
+                          v-if="movement.origin !== 'system'"
+                          class="icon-btn ui-accounting-entry-action-btn"
+                          type="button"
+                          title="Editar movimiento"
+                          aria-label="Editar movimiento"
+                          :disabled="transactionCreationLoading"
+                          @click="openEditTransactionModal(movement.id)"
+                        >
+                          &#9998;&#65039;
+                        </button>
+                        <button
+                          v-if="movement.origin !== 'system'"
+                          class="icon-btn ui-accounting-entry-action-btn"
+                          type="button"
+                          title="Eliminar movimiento"
+                          aria-label="Eliminar movimiento"
+                          :disabled="transactionCreationLoading"
+                          @click="deleteTransactionFromTimeline(movement.id, movement.description)"
+                        >
+                          &#128465;&#65039;
+                        </button>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+            </details>
           </details>
         </div>
 
@@ -573,113 +719,15 @@ watch(availableManualPositionOptions, (options) => {
           </section>
         </details>
 
-        <p class="ui-accounting-inline-note">
-          Usa el boton <strong>+</strong> para seleccionar posiciones manuales ya existentes y
-          pasarlas a tracking contable sin salir del libro diario.
-        </p>
-
-        <details class="ui-accounting-advanced">
-          <summary class="ui-accounting-advanced-summary">
-            <span>Modo avanzado</span>
-            <span>Debe {{ formatMoney(debitTotal) }} / Haber {{ formatMoney(creditTotal) }}</span>
-          </summary>
-
-          <form
-            class="ui-accounting-form ui-accounting-transaction-form"
-            @submit.prevent="submitTransaction"
-          >
-            <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
-              <input
-                v-model="transactionForm.description"
-                class="input"
-                placeholder="Nomina marzo, alquiler abril, transferencia interna..."
-                required
-              />
-              <input v-model="transactionForm.booking_date" type="date" class="input" required />
-              <input v-model="transactionForm.value_date" type="date" class="input" required />
-            </div>
-
-            <div class="ui-accounting-entry-editor">
-              <div
-                v-for="entry in transactionForm.entries"
-                :key="entry.key"
-                class="ui-accounting-entry-editor-row"
-              >
-                <select v-model="entry.account_id" class="select" required>
-                  <option :value="null">Selecciona cuenta</option>
-                  <option v-for="account in accounts" :key="account.id" :value="account.id">
-                    {{ account.name }} / {{ account.currency }}
-                  </option>
-                </select>
-
-                <select v-model="entry.side" class="select">
-                  <option value="debit">Debe</option>
-                  <option value="credit">Haber</option>
-                </select>
-
-                <input
-                  v-model="entry.amount"
-                  class="input"
-                  inputmode="decimal"
-                  placeholder="0.00"
-                  required
-                />
-                <input
-                  v-model="entry.currency"
-                  class="input"
-                  maxlength="3"
-                  placeholder="EUR"
-                  required
-                />
-                <input v-model="entry.notes" class="input" placeholder="Nota opcional" />
-
-                <button
-                  class="btn"
-                  type="button"
-                  :disabled="transactionForm.entries.length <= 2"
-                  @click="removeEntry(entry.key)"
-                >
-                  Quitar
-                </button>
-              </div>
-            </div>
-
-            <div class="ui-accounting-inline-actions">
-              <button class="btn" type="button" @click="addEntry('debit')">Anadir debe</button>
-              <button class="btn" type="button" @click="addEntry('credit')">Anadir haber</button>
-            </div>
-
-            <textarea
-              v-model="transactionForm.notes"
-              class="textarea"
-              rows="2"
-              placeholder="Notas generales del movimiento"
-            />
-
-            <div class="ui-accounting-submit-row">
-              <p class="subtle">
-                El guardado exige al menos dos apuntes y balance exacto por moneda, igual que el
-                backend.
-              </p>
-              <button
-                class="btn btn-primary"
-                type="submit"
-                :disabled="transactionCreationLoading || !transactionBalanced"
-              >
-                {{
-                  transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento balanceado'
-                }}
-              </button>
-            </div>
-
-            <p
-              v-if="!transactionBalanced && !transactionCreationLoading"
-              class="ui-accounting-inline-note"
+        <div class="ui-accounting-summary-strip">
+          <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
+            <span>{{ monthLabel(row.month) }}</span>
+            <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
+            <small
+              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
             >
-              El modo avanzado bloquea el guardado hasta que debe y haber coincidan exactamente.
-            </p>
-          </form>
-        </details>
+          </div>
+        </div>
       </article>
     </section>
 
@@ -711,6 +759,19 @@ watch(availableManualPositionOptions, (options) => {
             :disabled="!availableManualPositionOptions.length"
           />
         </div>
+        <label v-if="activationForm.position_type === 'asset'" class="ui-accounting-inline-note">
+          <input v-model="activationOperationalOnly" type="checkbox" />
+          Mostrar solo activos operativos recomendados (liquidez e inversiones)
+        </label>
+        <p
+          v-if="
+            activationExcludedByOperationalFilter > 0 && activationForm.position_type === 'asset'
+          "
+          class="ui-accounting-inline-note"
+        >
+          Se han ocultado {{ activationExcludedByOperationalFilter }} activos no operativos (ej:
+          vivienda/mobiliario). Desactiva el filtro para verlos.
+        </p>
 
         <div v-if="availableManualPositionOptions.length" class="ui-accounting-inline-actions">
           <p class="ui-accounting-inline-note">{{ selectedActivationIds.length }} seleccionadas</p>
@@ -719,23 +780,28 @@ watch(availableManualPositionOptions, (options) => {
           </button>
         </div>
 
-        <div v-if="filteredManualPositionOptions.length" class="ui-accounting-activation-list">
-          <label
-            v-for="position in filteredManualPositionOptions"
-            :key="position.id"
-            class="ui-accounting-activation-option"
-          >
-            <input
-              v-model="selectedActivationIds"
-              class="ui-accounting-activation-checkbox"
-              type="checkbox"
-              :value="position.id"
-            />
-            <span class="ui-accounting-activation-meta">
-              <strong>{{ position.name }}</strong>
-              <small>{{ position.currency }}</small>
-            </span>
-          </label>
+        <div v-if="groupedManualPositionOptions.length" class="ui-accounting-activation-list">
+          <div v-for="group in groupedManualPositionOptions" :key="group.key">
+            <p class="ui-accounting-inline-note">
+              <strong>{{ group.label }}</strong>
+            </p>
+            <label
+              v-for="position in group.positions"
+              :key="position.id"
+              class="ui-accounting-activation-option"
+            >
+              <input
+                v-model="selectedActivationIds"
+                class="ui-accounting-activation-checkbox"
+                type="checkbox"
+                :value="position.id"
+              />
+              <span class="ui-accounting-activation-meta">
+                <strong>{{ position.name }}</strong>
+                <small>{{ position.currency }}</small>
+              </span>
+            </label>
+          </div>
         </div>
         <div
           v-else-if="availableManualPositionOptions.length && activationQuery.trim()"
@@ -774,49 +840,181 @@ watch(availableManualPositionOptions, (options) => {
     <BaseModal
       :open="showEditTransactionModal"
       title="Editar movimiento"
-      panel-class="max-w-[720px]"
+      panel-class="max-w-[760px]"
       @close="showEditTransactionModal = false"
     >
+      <div class="ui-accounting-modal-copy">
+        <p class="ui-accounting-panel-kicker">Edicion</p>
+        <p class="subtle">
+          Ajusta tipo, cuenta, fechas e importe manteniendo el asiento balanceado y coherente.
+        </p>
+      </div>
       <form
-        class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form"
+        class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form ui-accounting-edit-form"
         @submit.prevent="submitEditedTransactionFromModal"
       >
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-edit-simple">
+        <div class="ui-accounting-segmented">
+          <button
+            v-for="option in editMovementTypeOptions"
+            :key="option.value"
+            type="button"
+            class="btn ui-accounting-segmented-btn"
+            :class="{
+              'ui-accounting-segmented-btn-active': editTransactionForm.kind === option.value,
+            }"
+            @click="editTransactionForm.kind = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <input
             v-model="editTransactionForm.description"
             class="input"
-            placeholder="Descripcion del movimiento"
+            placeholder="Nomina marzo, compra semanal, mover a ahorro..."
             required
           />
-          <input v-model="editTransactionForm.booking_date" type="date" class="input" required />
+          <label class="ui-accounting-field">
+            <span>Fecha contabilizacion</span>
+            <input v-model="editTransactionForm.booking_date" type="date" class="input" required />
+          </label>
+          <label class="ui-accounting-field">
+            <span>Fecha valor</span>
+            <input v-model="editTransactionForm.value_date" type="date" class="input" required />
+          </label>
+        </div>
+        <p class="ui-accounting-inline-note">
+          La API persiste fecha de contabilizacion y fecha valor. La hora todavia no.
+        </p>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <label class="ui-accounting-field">
+            <span>Hora</span>
+            <input v-model="editTransactionForm.booking_time" type="time" class="input" />
+          </label>
         </div>
 
-        <div class="ui-accounting-edit-readonly">
-          <div>
-            <span>Tipo</span>
-            <strong>{{ editTransactionForm.kind_label }}</strong>
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <select v-model="editTransactionForm.account_id" class="select" required>
+            <option :value="null" disabled>Cuenta principal</option>
+            <option v-for="account in editAccountOptions" :key="account.id" :value="account.id">
+              {{ account.name }} / {{ account.currency }}
+            </option>
+          </select>
+
+          <input
+            v-model="editTransactionForm.amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="
+              editTransactionForm.kind === 'balance_adjustment' ? 'Saldo objetivo' : '0.00'
+            "
+            required
+          />
+
+          <select
+            v-if="editKindNeedsCounterparty"
+            v-model="editTransactionForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">{{ editCounterpartyLabel }}</option>
+            <option
+              v-for="account in editCounterpartyOptions"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ account.name }} / {{ account.currency }}
+            </option>
+          </select>
+
+          <div v-else-if="editKindNeedsClassification" class="ui-accounting-inline-note">
+            Selecciona categoria y subcategoria debajo.
           </div>
-          <div>
-            <span>Importe</span>
-            <strong>{{
-              formatCompact(editTransactionForm.amount, editTransactionForm.currency)
-            }}</strong>
+
+          <div v-else class="ui-accounting-inline-note">
+            {{
+              editTransactionForm.kind === 'balance_adjustment'
+                ? 'Introduce el saldo objetivo actual de la cuenta.'
+                : 'No requiere contracuenta manual para este tipo.'
+            }}
           </div>
         </div>
+        <p
+          v-if="editKindNeedsCounterparty && !editCounterpartyOptions.length"
+          class="ui-accounting-inline-note"
+        >
+          {{ editCounterpartyMissingHint }}
+        </p>
 
-        <textarea
-          v-model="editTransactionForm.notes"
-          class="textarea"
-          rows="2"
-          placeholder="Notas generales del movimiento"
-        />
+        <div
+          v-if="editKindNeedsClassification"
+          class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+        >
+          <select v-model="editTransactionForm.category_key" class="select" required>
+            <option value="">Categoria</option>
+            <option v-for="option in editCategoryOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <select v-model="editTransactionForm.subcategory_key" class="select" required>
+            <option value="">Subcategoria</option>
+            <option
+              v-for="option in editSubcategoryOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+
+        <p
+          v-if="editTransactionForm.kind === 'balance_adjustment'"
+          class="ui-accounting-inline-note"
+        >
+          Saldo actual de la cuenta:
+          <strong>
+            {{
+              editSelectedAccountCurrentBalance != null
+                ? formatCompact(editSelectedAccountCurrentBalance, editTransactionForm.currency)
+                : '-'
+            }}
+          </strong>
+          . Se registrara un asiento de ajuste por la diferencia.
+        </p>
+
+        <label class="ui-accounting-field">
+          <span>Notas</span>
+          <textarea
+            v-model="editTransactionForm.notes"
+            class="textarea"
+            rows="2"
+            placeholder="Nota opcional para el movimiento"
+          />
+        </label>
 
         <div class="ui-accounting-submit-row">
-          <p class="subtle">La edicion mantiene la logica contable interna del movimiento.</p>
-          <button class="btn btn-primary" type="submit" :disabled="transactionCreationLoading">
+          <p class="subtle">
+            {{
+              editTransactionForm.kind === 'balance_adjustment'
+                ? 'Ajuste: fija el saldo actual de la cuenta al valor objetivo sin tocar otros movimientos.'
+                : 'Se mantiene el asiento balanceado y se actualizan tipo, cuenta, clasificacion e importe.'
+            }}
+          </p>
+          <button
+            class="btn btn-primary"
+            type="submit"
+            :disabled="transactionCreationLoading || !editEntryReady"
+          >
             {{ transactionCreationLoading ? 'Guardando...' : 'Guardar cambios' }}
           </button>
         </div>
+        <p v-if="!editEntryReady && !transactionCreationLoading" class="ui-accounting-inline-note">
+          Completa descripcion, fechas, importe y cuenta principal. Segun el tipo tambien puede
+          requerir contracuenta y clasificacion.
+        </p>
       </form>
     </BaseModal>
 
@@ -1170,6 +1368,15 @@ watch(availableManualPositionOptions, (options) => {
   flex: 0 0 auto;
 }
 
+.ui-accounting-panel-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  min-height: 34px;
+  border-radius: 999px;
+}
+
 .ui-accounting-panel-kicker {
   margin: 0 0 4px;
   font-size: 0.74rem;
@@ -1198,6 +1405,22 @@ watch(availableManualPositionOptions, (options) => {
 .ui-accounting-account-groups {
   display: grid;
   gap: 12px;
+}
+
+.ui-accounting-account-group-accordion {
+  border: 1px solid var(--ui-border-soft);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface-muted);
+  overflow: hidden;
+}
+
+.ui-accounting-account-group-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
 }
 
 .ui-accounting-kpi-grid {
@@ -1640,6 +1863,28 @@ watch(availableManualPositionOptions, (options) => {
 .ui-accounting-modal-form {
   padding-top: 0;
   border-top: 0;
+}
+
+.ui-accounting-edit-form {
+  gap: 14px;
+}
+
+.ui-accounting-edit-amount-wrap {
+  position: relative;
+}
+
+.ui-accounting-edit-amount-wrap small {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.ui-accounting-edit-amount-wrap .input {
+  padding-right: 56px;
 }
 
 .ui-accounting-advanced {
