@@ -109,6 +109,34 @@ export const useAccountingStore = defineStore('accounting', {
       }
     },
 
+    async updateTransaction(transactionId: number, payload: LedgerTransactionWritePayload) {
+      this.transactionCreationLoading = true;
+      this.error = null;
+      try {
+        await coreAccountingApi.updateTransaction(transactionId, payload);
+        await this.refreshAll();
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.transactionCreationLoading = false;
+      }
+    },
+
+    async deleteTransaction(transactionId: number) {
+      this.transactionCreationLoading = true;
+      this.error = null;
+      try {
+        await coreAccountingApi.deleteTransaction(transactionId);
+        await this.refreshAll();
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.transactionCreationLoading = false;
+      }
+    },
+
     async createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
       this.transactionCreationLoading = true;
       this.error = null;

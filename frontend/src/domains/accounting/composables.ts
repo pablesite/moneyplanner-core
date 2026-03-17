@@ -36,6 +36,21 @@ type TransactionFormRow = {
   currency: string;
   notes: string;
 };
+type TransactionFormState = {
+  booking_date: string;
+  description: string;
+  notes: string;
+  amount: string;
+  currency: string;
+  kind_label: string;
+};
+type PersistedTransactionEntry = {
+  account_id: number;
+  side: LedgerEntrySide;
+  amount: string;
+  currency: string;
+  notes: string;
+};
 
 type ActivityFilter =
   | 'all'
@@ -145,6 +160,16 @@ export function useAccountingPage() {
       },
     ] as TransactionFormRow[],
   });
+  const editTransactionId = ref<number | null>(null);
+  const editTransactionForm = reactive<TransactionFormState>({
+    booking_date: new Date().toISOString().slice(0, 10),
+    description: '',
+    notes: '',
+    amount: '',
+    currency: 'EUR',
+    kind_label: '',
+  });
+  const editTransactionPersistedEntries = ref<PersistedTransactionEntry[]>([]);
 
   const selectedYear = computed({
     get: () => store.selectedYear,
@@ -359,7 +384,6 @@ export function useAccountingPage() {
     },
     { deep: true },
   );
-
   watch(
     () => quickEntryForm.movement_type,
     (movementType) => {
@@ -444,7 +468,6 @@ export function useAccountingPage() {
       debitTotal.value > 0 &&
       debitTotal.value === creditTotal.value,
   );
-
   const summaryRows = computed(() =>
     (monthlySummary.value?.months ?? []).map((row) => ({
       ...row,
@@ -546,6 +569,40 @@ export function useAccountingPage() {
     quickEntryForm.annual_income_entry_id = null;
     quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
+  }
+  function resetEditTransactionForm() {
+    editTransactionId.value = null;
+    editTransactionPersistedEntries.value = [];
+    editTransactionForm.booking_date = new Date().toISOString().slice(0, 10);
+    editTransactionForm.description = '';
+    editTransactionForm.notes = '';
+    editTransactionForm.amount = '';
+    editTransactionForm.currency = 'EUR';
+    editTransactionForm.kind_label = '';
+  }
+
+  function getTransactionEditAmount(transaction: LedgerTransaction): string {
+    const debitTotalValue = transaction.entries
+      .filter((entry) => entry.side === 'debit')
+      .reduce((sum, entry) => sum + toNumber(entry.amount), 0);
+    return debitTotalValue.toFixed(2);
+  }
+
+  function fillEditTransactionForm(transaction: LedgerTransaction) {
+    editTransactionId.value = transaction.id;
+    editTransactionPersistedEntries.value = transaction.entries.map((entry) => ({
+      account_id: entry.account_id,
+      side: entry.side,
+      amount: String(entry.amount),
+      currency: entry.currency,
+      notes: entry.notes ?? '',
+    }));
+    editTransactionForm.booking_date = transaction.booking_date;
+    editTransactionForm.description = transaction.description;
+    editTransactionForm.notes = transaction.notes ?? '';
+    editTransactionForm.currency = transaction.entries[0]?.currency ?? 'EUR';
+    editTransactionForm.amount = getTransactionEditAmount(transaction);
+    editTransactionForm.kind_label = activityKindLabel(transaction);
   }
 
   function getTransactionActivityKind(
@@ -777,6 +834,60 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento contable registrado.';
   }
 
+  function openTransactionForEditing(transactionId: number) {
+    const transaction = transactions.value.find((row) => row.id === transactionId);
+    if (!transaction) return false;
+    if (transaction.origin === 'system') {
+      store.error = 'Los asientos de origen system no se pueden editar desde esta vista.';
+      return false;
+    }
+    fillEditTransactionForm(transaction);
+    return true;
+  }
+
+  async function submitEditedTransaction() {
+    if (editTransactionId.value == null) return;
+    if (!editTransactionPersistedEntries.value.length) return;
+    successMessage.value = null;
+    const payload: LedgerTransactionWritePayload = {
+      booking_date: editTransactionForm.booking_date,
+      value_date: editTransactionForm.booking_date,
+      description: editTransactionForm.description.trim(),
+      status: 'posted',
+      origin: 'manual',
+      notes: editTransactionForm.notes.trim(),
+      entries: editTransactionPersistedEntries.value.map((entry) => ({
+        account_id: entry.account_id,
+        side: entry.side,
+        amount: formatDecimalInput(entry.amount),
+        currency: entry.currency.trim().toUpperCase(),
+        notes: entry.notes.trim(),
+      })),
+    };
+    await store.updateTransaction(editTransactionId.value, payload);
+    resetEditTransactionForm();
+    successMessage.value = 'Movimiento contable actualizado.';
+  }
+
+  async function deleteTransaction(transactionId: number, transactionDescription: string) {
+    const transaction = transactions.value.find((row) => row.id === transactionId);
+    if (transaction?.origin === 'system') {
+      store.error = 'Los asientos de origen system no se pueden eliminar desde esta vista.';
+      return;
+    }
+    successMessage.value = null;
+    if (
+      !confirm(
+        `Eliminar movimiento "${transactionDescription}"?\n\n` +
+          'La accion es irreversible y puede afectar saldos e historico.',
+      )
+    ) {
+      return;
+    }
+    await store.deleteTransaction(transactionId);
+    successMessage.value = 'Movimiento contable eliminado.';
+  }
+
   async function submitQuickEntry() {
     successMessage.value = null;
     const payload: QuickLedgerTransactionWritePayload = {
@@ -863,6 +974,8 @@ export function useAccountingPage() {
     activationForm,
     quickEntryForm,
     transactionForm,
+    editTransactionId,
+    editTransactionForm,
     activityFilters,
     liquidityAccounts,
     availableManualPositionOptions,
@@ -899,5 +1012,9 @@ export function useAccountingPage() {
     deleteAccount,
     submitQuickEntry,
     submitTransaction,
+    openTransactionForEditing,
+    submitEditedTransaction,
+    resetEditTransactionForm,
+    deleteTransaction,
   };
 }

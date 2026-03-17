@@ -49,6 +49,12 @@ export const coreAccountingApi = {
   createTransaction(payload: LedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/', payload);
   },
+  updateTransaction(id: number, payload: LedgerTransactionWritePayload) {
+    return coreApi.patch<LedgerTransaction>(`/api/accounting/transactions/${id}/`, payload);
+  },
+  deleteTransaction(id: number) {
+    return coreApi.delete<void>(`/api/accounting/transactions/${id}/`);
+  },
   createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/quick-entry/', payload);
   },
