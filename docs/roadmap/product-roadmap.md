@@ -60,7 +60,7 @@ Convenciones:
 
 ## MÓDULO DE CONTABILIDAD
 
-> **Revisión manual pendiente (usuario)** — Revisar la experiencia de uso del módulo para decidir qué mejoras implementar y en qué dirección orientarlo. Esta tarea requiere guía directa del usuario: no es delegable a un agente sin esa revisión previa.
+> ✅ **Revisión manual completada (usuario) el 2026-03-17.** Los ajustes finos de contabilidad se validarán durante la implementación y pruebas del importador.
 
 ### Pendientes próximos
 - **UX de entrada rápida**: registro simple de movimientos, formulario ultrasencillo tipo app bancaria. Opcionalmente como asistente rápido o agente conversacional (cuatro datos clave → listo).

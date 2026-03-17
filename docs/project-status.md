@@ -16,7 +16,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 | Módulo | Tipo | Descripción |
 |--------|------|-------------|
-| Contabilidad | Manual | Revisión de la experiencia de uso del módulo para decidir mejoras y orientación funcional. Ver `roadmap/product-roadmap.md`. |
+| — | — | Sin tareas manuales en curso. |
 
 ### Siguiente tarea disponible
 
@@ -24,7 +24,9 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Importador MoneyWiz | Agente | Importar movimientos desde MoneyWiz con mapeo de tipos. | Pendiente de diseñar tras revisión del módulo de contabilidad. |
+| Importador MoneyWiz Fase 1 — Backend | Agente | Parser CSV MoneyWiz (`sep=`), preview/commit, idempotencia por huella, auto-creación de cuentas y fallback seguro de clasificación. | `docs/tasks/importer/phase-1-moneywiz-backend/backend.md` |
+| Importador MoneyWiz Fase 2 — Frontend | Agente | Flujo subir CSV -> preview -> commit -> resultado en `AccountingMovementsView` con integración API y espejo Core->SaaS. | `docs/tasks/importer/phase-2-moneywiz-ui/frontend.md` |
+| Importador MoneyWiz Fase 3 — QA | Agente | Validación E2E y regresión contable: tipos de movimiento, idempotencia, auto-creación de cuentas e impacto en resúmenes mensuales. | `docs/tasks/importer/phase-3-qa/qa.md` |
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
 
 ### Hoja de ruta pre-producción (resumen por área)
