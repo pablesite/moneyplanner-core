@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAccountingStore } from '@/domains/accounting/store';
+import { coreAccountingApi } from '@/domains/accounting/api';
 import { coreNetWorthApi } from '@/domains/net-worth/api';
 import {
   expenseCategories,
@@ -15,6 +16,7 @@ import {
   type IncomeCategoryKey,
 } from '@/domains/data-input';
 import type {
+  LedgerAccount,
   LedgerAccountBalanceSummaryItem,
   LedgerAccountType,
   LedgerEntrySide,
@@ -161,7 +163,7 @@ export function useAccountingPage() {
   const accountTypeOptions: { value: LedgerAccountType; label: string }[] = [
     { value: 'asset', label: 'Activo' },
     { value: 'liability', label: 'Pasivo' },
-    { value: 'equity', label: 'Patrimonio neto' },
+    { value: 'equity', label: 'Patrimonio neto contable' },
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
   ];
@@ -657,22 +659,80 @@ export function useAccountingPage() {
   async function activateNetWorthPosition() {
     if (activationForm.position_id == null) return;
 
+    await activateNetWorthPositions(activationForm.position_type, [activationForm.position_id]);
+  }
+
+  async function activateNetWorthPositions(
+    positionType: ManualPositionType,
+    positionIds: number[],
+  ) {
+    if (!positionIds.length) return;
+
     accountActivationLoading.value = true;
     successMessage.value = null;
     store.error = null;
     try {
-      if (activationForm.position_type === 'asset') {
-        await coreNetWorthApi.updateAsset(activationForm.position_id, {
-          tracking_mode: 'accounting',
-        });
+      if (positionType === 'asset') {
+        await Promise.all(
+          positionIds.map((positionId) =>
+            coreNetWorthApi.updateAsset(positionId, {
+              tracking_mode: 'accounting',
+            }),
+          ),
+        );
       } else {
-        await coreNetWorthApi.updateLiability(activationForm.position_id, {
-          tracking_mode: 'accounting',
-        });
+        await Promise.all(
+          positionIds.map((positionId) =>
+            coreNetWorthApi.updateLiability(positionId, {
+              tracking_mode: 'accounting',
+            }),
+          ),
+        );
       }
       activationForm.position_id = null;
       await Promise.all([store.refreshAll(), refreshManualPositionOptions()]);
-      successMessage.value = 'Tracking contable activado para la posicion seleccionada.';
+      successMessage.value =
+        positionIds.length === 1
+          ? 'Tracking contable activado para la posicion seleccionada.'
+          : `Tracking contable activado para ${positionIds.length} posiciones seleccionadas.`;
+    } catch (error: unknown) {
+      store.error = toApiErrorMessage(error);
+      throw error;
+    } finally {
+      accountActivationLoading.value = false;
+    }
+  }
+
+  async function removeNetWorthTracking(account: LedgerAccount) {
+    const targetType =
+      account.asset_id != null ? 'asset' : account.liability_id != null ? 'liability' : null;
+    const targetId = account.asset_id ?? account.liability_id;
+    if (!targetType || targetId == null) return;
+
+    successMessage.value = null;
+    if (
+      !confirm(
+        `Quitar tracking contable de "${account.name}"?\n\n` +
+          'La posicion volvera a tracking manual y dejara de formar parte del resumen contable.',
+      )
+    )
+      return;
+
+    accountActivationLoading.value = true;
+    store.error = null;
+    try {
+      if (targetType === 'asset') {
+        await coreNetWorthApi.updateAsset(targetId, { tracking_mode: 'manual' });
+      } else {
+        await coreNetWorthApi.updateLiability(targetId, { tracking_mode: 'manual' });
+      }
+      await coreAccountingApi.updateAccount(account.id, {
+        is_active: false,
+        asset_id: null,
+        liability_id: null,
+      });
+      await Promise.all([store.refreshAll(), refreshManualPositionOptions()]);
+      successMessage.value = 'Tracking contable desactivado para la cuenta seleccionada.';
     } catch (error: unknown) {
       store.error = toApiErrorMessage(error);
       throw error;
@@ -832,6 +892,8 @@ export function useAccountingPage() {
     removeEntry,
     reloadPeriod,
     activateNetWorthPosition,
+    activateNetWorthPositions,
+    removeNetWorthTracking,
     refreshManualPositionOptions,
     submitAccount,
     deleteAccount,
