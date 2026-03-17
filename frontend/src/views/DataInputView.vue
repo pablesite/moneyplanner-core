@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { api, coreApi } from '@/lib/api';
+import { coreApi } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import {
   ItemForm,
@@ -1903,9 +1903,9 @@ async function exportDataBundle(): Promise<void> {
       coreApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
       coreApi.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
       coreApi.get<PortableSettingsRecord>('/api/auth/settings/'),
-      api.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
-      api.get<PortableOwnershipRecord[]>('/api/ownerships/'),
-      api.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+      coreApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+      coreApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+      coreApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
     ]);
 
     const payload: PortableDataBundle = {
