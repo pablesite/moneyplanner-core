@@ -3,14 +3,16 @@
 Canonical documentation for the open-source `MoneyPlanner Core` repository.
 
 ## Read First
-1. `architecture/architecture.md` -> current Core architecture
+1. `project-status.md` -> estado actual de funcionalidades y tareas en curso
+2. `architecture/architecture.md` -> current Core architecture
 2. `architecture/accounting-movements-architecture.md` -> canonical accounting movements architecture
 3. `operations/dev-setup.md` -> local setup, validation, and troubleshooting
-4. `roadmap/community-roadmap.md` -> current Core priorities
-5. `roadmap/backend-refactor-roadmap.md` -> backend maintainability roadmap
-6. `roadmap/accounting-category-budget-separation-roadmap.md` -> active roadmap for the accounting/budget boundary
-7. `roadmap/frontend-refactor-roadmap.md` -> frontend maintainability roadmap
-8. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
+4. `roadmap/product-roadmap.md` -> product evolution roadmap by module
+5. `roadmap/community-roadmap.md` -> high-level future areas and ideas (public-facing)
+6. `roadmap/backend-refactor-roadmap.md` -> backend maintainability roadmap
+7. `roadmap/terminados/accounting-category-budget-separation-roadmap.md` -> completed roadmap for the accounting/budget boundary (all 5 phases done)
+8. `roadmap/frontend-refactor-roadmap.md` -> frontend maintainability roadmap
+9. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
 9. `../CONTRIBUTING.md` -> contribution workflow
 10. `../RELEASING.md` -> release process
 
