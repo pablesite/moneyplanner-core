@@ -16,7 +16,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 | Módulo | Tipo | Descripción |
 |--------|------|-------------|
-| — | — | Sin tareas manuales en curso. |
+| Contabilidad | Manual | Reabrir `Importador MoneyWiz v1`: corregir parseo de fechas, cuentas e importes con CSV real antes de considerarlo listo para uso real. |
 
 ### Siguiente tarea disponible
 
@@ -42,7 +42,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Refactor backend Core | Media | ⏸ | Limpieza de lógica, eliminación de deuda técnica; ver `roadmap/backend-refactor-roadmap.md` |
 | Refactor frontend Core | Media | ⏸ | Estructura de componentes, extracción de lógica al backend; ver `roadmap/frontend-refactor-roadmap.md` |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
-| Importación de datos | Media | 🔄 | MoneyWiz v1 disponible con preview/commit idempotente, auto-creación de cuentas y espejo UI Core/SaaS. Excel sigue pendiente. |
+| Importación de datos | Media | 🔄 | MoneyWiz v1 quedó reabierto por incidencias con CSV real en fecha/cuentas/importes; mantener preview/commit disponible pero no darlo por estable hasta corregir y revalidar. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -63,7 +63,6 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
 | Auth Core (JWT, link-token para SaaS) | ✅ | Incluyendo generación de token para linking con SaaS |
-| Importador MoneyWiz v1 | ✅ | CSV con `sep=`, preview/commit, huella idempotente, fallback seguro de clasificación y flujo UI en movimientos |
 
 ## Incidencias abiertas
 
@@ -71,7 +70,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 1. Pendiente revisar el parser con dataset real de usuario: la preview actual puede marcar todas las filas como error (`La fecha no es valida o falta en la fila.`) aunque el CSV sea válido.
 2. En el caso observado el importador está interpretando `Account` como vacío y genera cuentas provisionales tipo `MoneyWiz source ...`, señal de que el mapeo de columnas reales del export necesita ajuste.
 3. La preview del caso real está clasificando 682/682 filas como `income` con importe `0.00 EUR`, lo que apunta a un problema adicional en el parseo de fecha y/o importes del export real.
-4. Mantener el bloque como funcionalidad disponible pero no darlo por listo para uso real hasta reproducir y corregir estos tres puntos con el CSV del usuario.
+4. Estado documental corregido: el bloque queda reabierto y debe tratarse como tarea manual en curso hasta reproducir y corregir estos tres puntos con el CSV del usuario.
 
 ## En progreso activo
 
