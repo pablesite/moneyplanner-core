@@ -1597,3 +1597,26 @@ class MoneyWizImportAPITests(APITestCase):
         self.assertEqual(second_response.data["created_count"], 0)
         self.assertEqual(second_response.data["skipped_existing_count"], 5)
         self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 5)
+
+    def test_moneywiz_commit_updates_monthly_summary_and_marks_import_origin(self):
+        upload = SimpleUploadedFile("moneywiz.csv", self._build_csv(), content_type="text/csv")
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        summary = self.client.get("/api/accounting/transactions/monthly-summary/?year=2026")
+        self.assertEqual(summary.status_code, status.HTTP_200_OK, summary.data)
+        april = summary.data["months"][3]
+        self.assertEqual(april["income_total"], "1500.00")
+        self.assertEqual(april["expense_total"], "120.00")
+
+        imported_rows = LedgerTransaction.objects.filter(
+            user=self.user,
+            origin=LedgerTransaction.Origin.IMPORT,
+            import_source="moneywiz",
+        )
+        self.assertEqual(imported_rows.count(), 5)
+        self.assertTrue(imported_rows.exclude(import_fingerprint="").exists())

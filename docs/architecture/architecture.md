@@ -37,6 +37,17 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
+## Public Import API
+1. Core exposes MoneyWiz import endpoints in `accounting` for preview and commit:
+   - `POST /api/accounting/transactions/import-moneywiz/preview/`
+   - `POST /api/accounting/transactions/import-moneywiz/commit/`
+2. The import flow is Core-owned and supports:
+   - CSV parsing with optional `sep=` header
+   - row fingerprint idempotency persisted on `LedgerTransaction`
+   - safe fallback classification when MoneyWiz categories do not map exactly
+   - automatic creation of missing operational ledger accounts
+3. The frontend workspace for accounting consumes this API directly in Core and mirrors the same flow in SaaS.
+
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
 2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`.

@@ -12,6 +12,8 @@ vi.mock('../api', () => ({
     createAccount: vi.fn(),
     createTransaction: vi.fn(),
     createQuickEntry: vi.fn(),
+    previewMoneyWizImport: vi.fn(),
+    commitMoneyWizImport: vi.fn(),
   },
 }));
 
@@ -116,5 +118,79 @@ describe('useAccountingStore', () => {
     expect(coreAccountingApi.createQuickEntry).toHaveBeenCalled();
     expect(coreAccountingApi.getAccountBalances).toHaveBeenCalled();
     expect(store.accountBalancesSummary?.totals_by_account_type.asset).toBe('500.00');
+  });
+
+  it('stores MoneyWiz preview and commit results', async () => {
+    vi.mocked(coreAccountingApi.previewMoneyWizImport).mockResolvedValue({
+      data: {
+        delimiter: ';',
+        row_count: 2,
+        valid_row_count: 2,
+        error_row_count: 0,
+        duplicate_row_count: 0,
+        existing_row_count: 0,
+        warnings: [],
+        stats: {
+          income: 1,
+          expense: 1,
+          transfer: 0,
+          investment_purchase: 0,
+          debt_payment: 0,
+        },
+        detected_accounts: [],
+        rows: [],
+      },
+    } as never);
+    vi.mocked(coreAccountingApi.commitMoneyWizImport).mockResolvedValue({
+      data: {
+        source: 'moneywiz',
+        row_count: 2,
+        created_count: 2,
+        skipped_existing_count: 0,
+        warning_count: 0,
+        rows: [],
+        preview: {
+          delimiter: ';',
+          row_count: 2,
+          valid_row_count: 2,
+          error_row_count: 0,
+          duplicate_row_count: 0,
+          existing_row_count: 0,
+          warnings: [],
+          stats: {
+            income: 1,
+            expense: 1,
+            transfer: 0,
+            investment_purchase: 0,
+            debt_payment: 0,
+          },
+          detected_accounts: [],
+          rows: [],
+        },
+        created_transaction_ids: [1, 2],
+      },
+    } as never);
+    vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({ data: [] } as never);
+    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
+    vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
+      data: { fiscal_year: 2026, months: [] },
+    } as never);
+    vi.mocked(coreAccountingApi.getAccountBalances).mockResolvedValue({
+      data: {
+        filters: { year: 2026, month: 3, account_type: 'asset', status: 'posted' },
+        totals_by_account_type: { asset: '0.00' },
+        accounts: [],
+      },
+    } as never);
+
+    const store = useAccountingStore();
+    const file = new File(['csv'], 'moneywiz.csv', { type: 'text/csv' });
+
+    await store.previewMoneyWizImport(file);
+    await store.commitMoneyWizImport(file);
+
+    expect(store.moneyWizImportPreview?.row_count).toBe(2);
+    expect(store.moneyWizImportCommitResult?.created_count).toBe(2);
+    expect(coreAccountingApi.commitMoneyWizImport).toHaveBeenCalledWith(file);
   });
 });
