@@ -27,6 +27,26 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 | Importador MoneyWiz | Agente | Importar movimientos desde MoneyWiz con mapeo de tipos. | Pendiente de diseñar tras revisión del módulo de contabilidad. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
 
+### Hoja de ruta pre-producción (resumen por área)
+
+Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ver `roadmap/product-roadmap.md` para detalle por módulo.
+
+| Área | Prioridad | Estado | Descripción |
+|------|-----------|--------|-------------|
+| Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
+| Presupuesto — migración y UX | Alta | ⚪ | Migrar ingresos/gastos previstos desde Introducción de Datos; conectar con valores reales del cierre; mejorar visualización |
+| Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
+| Cierre mensual — modo dual | Alta | ⚪ | Integrar modo manual + automático (contabilidad); diseñar UX de elección de modo; simplificar vista de resultados |
+| Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
+| Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
+| Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
+| Refactor backend Core | Media | ⏸ | Limpieza de lógica, eliminación de deuda técnica; ver `roadmap/backend-refactor-roadmap.md` |
+| Refactor frontend Core | Media | ⏸ | Estructura de componentes, extracción de lógica al backend; ver `roadmap/frontend-refactor-roadmap.md` |
+| Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
+| Importación de datos | Media | ⚪ | Importador desde MoneyWiz y Excel; mapeo de movimientos, cuentas y categorías |
+| Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
+| Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
+
 ---
 
 ## Funcionalidades implementadas y estables
@@ -57,9 +77,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 |------|--------|-------|
 | Frontend refactor | ⏸ Aparcado | `roadmap/frontend-refactor-roadmap.md`. No se aborda hasta que la funcionalidad esté completa. BudgetDashboardView ~4836 líneas, NetWorthView ~3218 líneas — deuda técnica conocida y aceptada. |
 | Backend refactor | ⏸ Aparcado | Mismo criterio. El roadmap está definido pero no es prioritario frente a funcionalidad. |
-| Scoring fase 5 (independencia financiera) | ⚪ | Modelo documentado, sin runtime |
-| Investment portfolio básico | ⚪ | En capabilities pero no implementado |
-| Financial simulator básico | ⚪ | En capabilities pero no implementado |
 
 ---
 

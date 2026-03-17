@@ -12,41 +12,43 @@ Convenciones:
 ## PATRIMONIO
 
 ### Pendientes próximos
-- Revisar si añadir más gráficas: evolución temporal o gráfico de quesito.
+- Revisar si añadir más gráficas: evolución temporal o gráfico de quesito (donut de distribución).
 - **UX — Asistente para meter activos más fácilmente.** Formulario/flujo ultrasencillo de alta de activos.
-
-### Activos — Inmuebles
-- Vivienda no habitual:
-  - Uso propio: mismo modelo que la vivienda habitual.
-  - Alquiler: modelo de generación de rentas → ingresos automáticos vinculados al activo.
-- Inversiones:
-  - Las inversiones generan ingresos pasivos (reinvertidos) o revalorizaciones automáticas.
-
-### Pasivos
-- `(Roadmap compartido)` Motor de hipotecas. Por ahora vale con tipo fijo; añadir soporte completo en el futuro.
+- Validar consistencia global de datos y KPIs (activos, pasivos, liquidez neta).
+- Evaluar eliminación del sistema de snapshots si resulta legacy/redundante.
 
 ---
 
 ## PRESUPUESTO
 
-- Conectar los gastos del presupuesto con los valores reales del cierre del mes y los movimientos del día a día.
-- Incluir los formularios de alta de ingresos/gastos directamente en la vista de presupuesto y eliminar la vista separada de Introducción de Datos.
-- Revisar el estilo de la evolución ejecutada mensual: las barras son visualmente correctas pero no se distinguen bien las categorías de las líneas de gasto/ingreso.
+- Migrar los formularios de ingresos/gastos previstos desde el módulo de Introducción de Datos directamente a la vista de presupuesto.
+- Conectar gastos definidos en el presupuesto con los valores reales del cierre y los movimientos contables del día a día (ahora son placeholders).
+- Revisar el estilo de la evolución ejecutada mensual: las barras son visualmente correctas pero no se distinguen bien las categorías.
+- Simplificar la interpretación del estado financiero: menos ruido visual, más claridad para el usuario final.
+- Mejorar UX general: barras de progreso más legibles, estado del presupuesto más explícito.
 
 ---
 
 ## CIERRE DEL MES / AÑO
 
+> Considerar renombrar este módulo para que refleje mejor su función (ej. "Revisión mensual" o "Seguimiento mensual").
+
+### Modos de cierre
+- Integrar dos modos de trabajo:
+  - **Manual:** input directo de saldos por el usuario.
+  - **Automático:** cierre basado en datos de contabilidad (movimientos del período).
+- Diseñar UX para elegir el modo activo y, si aplica, combinar ambos (manual como ajuste sobre el automático).
+
 ### Integración con movimientos
 - Decidir si la introducción de ingresos/gastos sirve tanto para el día a día como para el presupuesto, o sólo para uno de ellos.
 - La vista de detalle del cierre debería autocompletar:
   - El líquido de cada activo de liquidez.
-  - Los totales por categoría de ingreso y gasto, a partir de la vista de movimientos.
-  - A partir de ahí, se pueden hacer ajustes manuales para movimientos no anotados.
+  - Los totales por categoría de ingreso y gasto a partir de los movimientos contables.
+  - A partir de ahí, ajustes manuales para movimientos no anotados.
 
 ### Vista de resultados
-- Simplificar: actualmente hay dos bloques para la conciliación del cierre con datos repetidos.
-- Añadir gráficas más explicables: ingresos y gastos ejecutados con detalle desplegable.
+- Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.
+- Mostrar solo insights relevantes; añadir gráficas explicables (ingresos/gastos ejecutados con detalle desplegable).
 
 ### Cierre del año
 - Replicar la lógica del cierre mensual para el cierre anual.
@@ -60,7 +62,13 @@ Convenciones:
 
 > **Revisión manual pendiente (usuario)** — Revisar la experiencia de uso del módulo para decidir qué mejoras implementar y en qué dirección orientarlo. Esta tarea requiere guía directa del usuario: no es delegable a un agente sin esa revisión previa.
 
-- **UX de entrada rápida**: formulario ultrasencillo para anotar movimientos del día a día. Opcionalmente como asistente rápido o agente conversacional (indicar los cuatro datos clave y listo).
+### Pendientes próximos
+- **UX de entrada rápida**: registro simple de movimientos, formulario ultrasencillo tipo app bancaria. Opcionalmente como asistente rápido o agente conversacional (cuatro datos clave → listo).
+- **Transferencias entre cuentas**: implementar doble impacto automático (salida de una cuenta + entrada en otra).
+- **Bug edición de movimientos**: corregir modal roto al editar un movimiento existente.
+- Validar consistencia end-to-end: movimientos → cuentas → patrimonio.
+
+### Importación de datos
 - `(Privado - Futuro)` Importador de movimientos desde MoneyWiz. Tipos de movimiento a mapear:
   - Ingresos a cuentas de liquidez.
   - Ingresos pasivos: dividendos, intereses, otros.
@@ -78,52 +86,87 @@ Convenciones:
 
 ---
 
-## CARTERA DE INVERSIÓN
-
-- `(Roadmap compartido)` Vista de cartera de inversión.
-
----
-
 ## COACH FINANCIERO
 
+El coach (fases 1–4) está funcional. Pendiente antes de producción:
+
 - ~~Las barras del coach no se renderizan en el frontend del Core.~~ (resuelto)
-- `(Roadmap compartido)` Completar Fase 5 del modelo de scoring.
-- `(Roadmap compartido)` Incluir objetivos financieros personales. El coach identifica qué KPIs priorizar y qué palancas accionar. Ejemplos de objetivos:
-  - Ahorrar X€ para una casa.
-  - Eliminar la deuda mala.
-  - Alcanzar la independencia financiera en N años.
+- **Rediseñar navegación**: integración fluida con los módulos del producto (patrimonio, presupuesto, cierre, contabilidad). El usuario debe poder pasar naturalmente de una recomendación del coach al módulo correspondiente.
+- Flujo natural entre coach ↔ producto sin romper el contexto.
 
 ---
 
-## SIMULADOR FINANCIERO
+## MÓDULO INTRODUCCIÓN DE DATOS
 
-- `(Roadmap compartido)` Plantear motor de simulaciones: ¿qué pasa si compro una casa de X€? ¿Y si compro un coche?
+- **Eliminar el módulo completo** una vez migrado todo:
+  - Formularios de ingresos/gastos previstos → Presupuesto.
+  - Entradas relacionadas con activos/pasivos → Patrimonio.
+- Hacer esta migración antes del rediseño para no arrastrar deuda de UX.
 
 ---
 
-## REFACTOR Y SEGURIDAD
+## DISEÑO Y EXPERIENCIA DE USUARIO
+
+### Sistema de diseño unificado (crítico para producción)
+- Crear sistema de diseño coherente: colores, tipografías, espaciados, componentes base.
+- Unificar todas las vistas bajo el mismo sistema.
+- Elevar calidad visual a nivel SaaS profesional.
+- ⚠️ Rediseño ≠ refactor técnico — ambos son necesarios y pueden hacerse en paralelo.
+
+### UX transversal
+- Simplificar flujos de entrada de datos.
+- Mejorar navegación entre módulos.
+- Reducir fricción general para el usuario final.
+
+---
+
+## AUTENTICACIÓN Y MODELO DE USUARIO
+
+- Revisar login completo (Core + SaaS).
+- Validar sistema de usuarios, familias y ownership de activos/pasivos.
+- Verificar permisos y seguridad.
+- Test completo de flujos reales (registro, login, ownership compartido, etc.).
+
+---
+
+## IMPORTACIÓN DE DATOS
+
+- Implementar importador masivo para uso propio (objetivo: test real con datos personales):
+  - Desde MoneyWiz.
+  - Desde Excel.
+- Mapear: movimientos, cuentas, categorías.
+
+---
+
+## SEGURIDAD
+
+- Auditoría de código: vulnerabilidades backend, validaciones de inputs.
+- Auditoría de dependencias: librerías, CVEs conocidos.
+- Validación básica: auth, permisos, sanitización de inputs.
+
+---
+
+## REFACTOR Y DEUDA TÉCNICA
+
+> Aparcado deliberadamente hasta completar funcionalidad y rediseño. No es prioritario frente a funcionalidad.
 
 ### Core — Backend
 - Revisar que funcionen correctamente las funciones de exportar/importar datos.
-- Revisión general de backend Core.
+- Revisión general de backend Core: limpieza de lógica, estructura consistente, eliminación de deuda técnica.
 
 ### Core — Frontend
 - Extraer lógica de negocio hacia el backend donde corresponda.
-- Hacer que los estilos sean coherentes en todas las vistas.
+- Hacer que los estilos sean coherentes en todas las vistas (después del sistema de diseño).
 - Mejorar la navegabilidad.
 - Revisar tildes y textos.
 
 ### SaaS — Frontend
 - Alinear con el frontend del Core; la única diferencia debe ser la vista de administración de perfiles.
+- Separar claramente código Core vs SaaS.
 
 ### SaaS — Backend
 - Revisión general de backend SaaS.
 
-### Autenticación y seguridad
-- Revisar autenticación de ambos sistemas (Core y SaaS).
-- Revisar agujeros de seguridad en general.
-
 ### Documentación y operaciones
 - Actualizar la documentación del Core y del SaaS.
 - Incluir buenas prácticas de CI/CD.
-- `(Roadmap compartido)` Adaptar el frontend a PWA.
