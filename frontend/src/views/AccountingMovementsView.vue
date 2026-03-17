@@ -91,11 +91,32 @@ const accountsByType = computed(() => {
   });
   return groups;
 });
-const primaryAccountTypeOptions = computed(() =>
-  accountTypeOptions.filter((type) => type.value !== 'income' && type.value !== 'expense'),
+const accountingAssetsTotal = computed(() =>
+  (accountsByType.value.get('asset') ?? []).reduce(
+    (total, account) => total + toNumber(account.current_balance),
+    0,
+  ),
+);
+const accountingLiabilitiesTotal = computed(() =>
+  (accountsByType.value.get('liability') ?? []).reduce(
+    (total, account) => total + toNumber(account.current_balance),
+    0,
+  ),
+);
+const accountingNetBalance = computed(
+  () => accountingAssetsTotal.value - accountingLiabilitiesTotal.value,
+);
+const operationalAccountTypeOptions = computed(() =>
+  accountTypeOptions.filter((type) => type.value === 'asset' || type.value === 'liability'),
+);
+const operationalAccountsCount = computed(() =>
+  operationalAccountTypeOptions.value.reduce(
+    (total, type) => total + (accountsByType.value.get(type.value)?.length ?? 0),
+    0,
+  ),
 );
 const technicalAccountTypeOptions = computed(() =>
-  accountTypeOptions.filter((type) => type.value === 'income' || type.value === 'expense'),
+  accountTypeOptions.filter((type) => type.value !== 'asset' && type.value !== 'liability'),
 );
 const hasTechnicalAccounts = computed(() =>
   technicalAccountTypeOptions.value.some(
@@ -173,7 +194,7 @@ async function submitQuickEntryFromModal() {
             <h2 class="h2">Catalogo operativo</h2>
           </div>
           <div class="ui-accounting-panel-actions">
-            <span class="ui-accounting-pill">{{ accounts.length }} activas</span>
+            <span class="ui-accounting-pill">{{ operationalAccountsCount }} activas</span>
             <button
               class="icon-btn ui-accounting-panel-add"
               type="button"
@@ -187,9 +208,29 @@ async function submitQuickEntryFromModal() {
           </div>
         </div>
 
+        <div class="ui-accounting-net-summary">
+          <div class="ui-accounting-net-summary-copy">
+            <p class="ui-accounting-panel-kicker">Resumen contable</p>
+            <h3 class="ui-accounting-net-summary-title">Saldo neto contable</h3>
+            <p class="ui-accounting-net-summary-subtitle">Activo contable - Pasivo contable</p>
+          </div>
+          <div class="ui-accounting-net-summary-values">
+            <strong>{{ formatMoney(accountingNetBalance) }}</strong>
+            <small>
+              Activos {{ formatMoney(accountingAssetsTotal) }} / Pasivos
+              {{ formatMoney(accountingLiabilitiesTotal) }}
+            </small>
+          </div>
+        </div>
+
+        <p class="ui-accounting-inline-note">
+          Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
+          mobiliario u otros activos fuera del ledger.
+        </p>
+
         <div class="ui-accounting-account-groups">
           <section
-            v-for="type in primaryAccountTypeOptions"
+            v-for="type in operationalAccountTypeOptions"
             :key="type.value"
             class="ui-accounting-account-group"
           >
@@ -588,7 +629,7 @@ async function submitQuickEntryFromModal() {
         </div>
         <p v-else class="ui-accounting-inline-note">
           Al activar una posicion, Core la vincula al ledger y genera automaticamente el saldo de
-          apertura contra patrimonio neto.
+          apertura contra patrimonio neto contable.
         </p>
 
         <div class="ui-accounting-submit-row">
@@ -985,6 +1026,49 @@ async function submitQuickEntryFromModal() {
   gap: 12px;
 }
 
+.ui-accounting-net-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-net-summary-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.ui-accounting-net-summary-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ui-accounting-net-summary-subtitle {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.78rem;
+}
+
+.ui-accounting-net-summary-values {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.ui-accounting-net-summary-values strong {
+  font-size: 1.25rem;
+}
+
+.ui-accounting-net-summary-values small {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.76rem;
+  text-align: right;
+}
+
 .ui-accounting-account-group {
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1318,6 +1402,14 @@ async function submitQuickEntryFromModal() {
 
   .ui-accounting-balance-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-net-summary-values {
+    justify-items: start;
+  }
+
+  .ui-accounting-net-summary-values small {
+    text-align: left;
   }
 }
 
