@@ -25,7 +25,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
         account_type: 'asset',
         currency: 'EUR',
         origin: 'user',
-        asset_id: null,
+        asset_id: 91,
         liability_id: null,
         is_active: true,
         notes: '',
@@ -115,7 +115,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     accountTypeOptions: [
       { value: 'asset', label: 'Activo' },
       { value: 'liability', label: 'Pasivo' },
-      { value: 'equity', label: 'Patrimonio neto' },
+      { value: 'equity', label: 'Patrimonio neto contable' },
       { value: 'income', label: 'Ingreso' },
       { value: 'expense', label: 'Gasto' },
     ],
@@ -286,6 +286,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
     removeEntry: vi.fn(),
     reloadPeriod: vi.fn(),
     activateNetWorthPosition: vi.fn(),
+    activateNetWorthPositions: vi.fn(),
+    removeNetWorthTracking: vi.fn(),
     refreshManualPositionOptions: vi.fn(),
     submitAccount: vi.fn(),
     submitQuickEntry: vi.fn(),
@@ -307,6 +309,8 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Cuenta corriente');
     expect(wrapper.text()).toContain('Nomina marzo');
     expect(wrapper.text()).toContain('Saldos derivados del ledger');
+    expect(wrapper.text()).toContain('Saldo neto contable');
+    expect(wrapper.text()).toContain('Activo contable - Pasivo contable');
     expect(wrapper.find('button[title="Activar tracking contable"]').exists()).toBe(true);
     expect(wrapper.find('button[title="Registrar movimiento diario"]').exists()).toBe(true);
   });
@@ -369,20 +373,43 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Ingreso');
   });
 
-  it('opens the activation modal with manual net-worth positions', async () => {
-    mockUseAccountingPage.mockReturnValue(makeState());
+  it('opens the activation modal and allows batch activation', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
     const wrapper = mount(AccountingMovementsView, {
       attachTo: document.body,
     });
 
     await wrapper.find('button[title="Activar tracking contable"]').trigger('click');
+    const checkbox = document.body.querySelector(
+      'input.ui-accounting-activation-checkbox',
+    ) as HTMLInputElement | null;
+    checkbox?.click();
+    const activationForm = document.body.querySelector(
+      'form.ui-accounting-modal-form',
+    ) as HTMLFormElement | null;
+    activationForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await wrapper.vm.$nextTick();
 
-    const modalSelects = Array.from(
-      document.body.querySelectorAll('form.ui-accounting-modal-form select'),
-    ) as HTMLSelectElement[];
-    const positionLabels = Array.from(modalSelects[1]?.options ?? []).map((option) => option.text);
-
-    expect(positionLabels).toContain('Broker manual / EUR');
+    expect(state.activateNetWorthPositions).toHaveBeenCalledWith('asset', [91]);
+    expect(wrapper.text()).toContain('Patrimonio neto contable');
     expect(wrapper.text()).toContain('Contrapartidas tecnicas del sistema');
+  });
+
+  it('allows removing accounting tracking for linked positions', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const wrapper = mount(AccountingMovementsView);
+
+    const untrackButton = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Quitar tracking'));
+    await untrackButton?.trigger('click');
+
+    expect(state.removeNetWorthTracking).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, asset_id: 91 }),
+    );
+    confirmSpy.mockRestore();
   });
 });

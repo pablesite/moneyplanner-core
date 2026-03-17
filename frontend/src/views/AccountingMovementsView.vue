@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useAccountingPage } from '@/domains/accounting';
 import BaseModal from '@/domains/ui/components/BaseModal.vue';
 
@@ -49,7 +49,8 @@ const {
   liquidityBalanceDeltaTone,
   removeEntry,
   reloadPeriod,
-  activateNetWorthPosition,
+  activateNetWorthPositions,
+  removeNetWorthTracking,
   deleteAccount,
   submitQuickEntry,
   submitTransaction,
@@ -138,9 +139,48 @@ const hasCompatibleAnnualPlanOptions = computed(() => {
 
 const showActivationModal = ref(false);
 const showQuickEntryModal = ref(false);
+const activationQuery = ref('');
+const selectedActivationIds = ref<number[]>([]);
+const filteredManualPositionOptions = computed(() => {
+  const query = activationQuery.value.trim().toLowerCase();
+  if (!query) return availableManualPositionOptions.value;
+  return availableManualPositionOptions.value.filter((position) =>
+    `${position.name} ${position.currency}`.toLowerCase().includes(query),
+  );
+});
+const allFilteredSelected = computed(
+  () =>
+    filteredManualPositionOptions.value.length > 0 &&
+    filteredManualPositionOptions.value.every((position) =>
+      selectedActivationIds.value.includes(position.id),
+    ),
+);
+
+function openActivationModal() {
+  selectedActivationIds.value = [];
+  activationQuery.value = '';
+  showActivationModal.value = true;
+}
+
+function toggleSelectAllFiltered() {
+  if (allFilteredSelected.value) {
+    const filteredIds = new Set(filteredManualPositionOptions.value.map((position) => position.id));
+    selectedActivationIds.value = selectedActivationIds.value.filter((id) => !filteredIds.has(id));
+    return;
+  }
+  const merged = new Set(selectedActivationIds.value);
+  filteredManualPositionOptions.value.forEach((position) => merged.add(position.id));
+  selectedActivationIds.value = Array.from(merged);
+}
 
 async function activatePositionFromModal() {
-  await activateNetWorthPosition();
+  if (!selectedActivationIds.value.length) return;
+  await activateNetWorthPositions(
+    activationForm.position_type,
+    selectedActivationIds.value.map((id) => Number(id)),
+  );
+  selectedActivationIds.value = [];
+  activationQuery.value = '';
   showActivationModal.value = false;
 }
 
@@ -148,6 +188,11 @@ async function submitQuickEntryFromModal() {
   await submitQuickEntry();
   showQuickEntryModal.value = false;
 }
+
+watch(availableManualPositionOptions, (options) => {
+  const optionIds = new Set(options.map((option) => option.id));
+  selectedActivationIds.value = selectedActivationIds.value.filter((id) => optionIds.has(id));
+});
 </script>
 
 <template>
@@ -201,7 +246,7 @@ async function submitQuickEntryFromModal() {
               aria-label="Activar tracking contable"
               title="Activar tracking contable"
               :disabled="!hasAvailableManualPositions"
-              @click="showActivationModal = true"
+              @click="openActivationModal"
             >
               <span class="icon" aria-hidden="true">+</span>
             </button>
@@ -259,6 +304,15 @@ async function submitQuickEntryFromModal() {
                 <div class="ui-accounting-account-actions">
                   <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
                   <button
+                    v-if="account.asset_id != null || account.liability_id != null"
+                    class="btn ui-accounting-account-untrack-btn"
+                    type="button"
+                    :disabled="accountActivationLoading || accountCreationLoading"
+                    @click="removeNetWorthTracking(account)"
+                  >
+                    Quitar tracking
+                  </button>
+                  <button
                     v-if="account.origin === 'user'"
                     class="btn ui-accounting-account-delete-btn"
                     type="button"
@@ -303,6 +357,15 @@ async function submitQuickEntryFromModal() {
                   </div>
                   <div class="ui-accounting-account-actions">
                     <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                    <button
+                      v-if="account.asset_id != null || account.liability_id != null"
+                      class="btn ui-accounting-account-untrack-btn"
+                      type="button"
+                      :disabled="accountActivationLoading || accountCreationLoading"
+                      @click="removeNetWorthTracking(account)"
+                    >
+                      Quitar tracking
+                    </button>
                     <button
                       v-if="account.origin === 'user'"
                       class="btn ui-accounting-account-delete-btn"
@@ -602,26 +665,45 @@ async function submitQuickEntryFromModal() {
               {{ type.label }}
             </option>
           </select>
-          <select
-            v-model="activationForm.position_id"
-            class="select"
+          <input
+            v-model="activationQuery"
+            class="input"
+            type="search"
+            placeholder="Buscar posicion por nombre o divisa"
             :disabled="!availableManualPositionOptions.length"
+          />
+        </div>
+
+        <div v-if="availableManualPositionOptions.length" class="ui-accounting-inline-actions">
+          <p class="ui-accounting-inline-note">{{ selectedActivationIds.length }} seleccionadas</p>
+          <button class="btn" type="button" @click="toggleSelectAllFiltered">
+            {{ allFilteredSelected ? 'Quitar seleccion visible' : 'Seleccionar visibles' }}
+          </button>
+        </div>
+
+        <div v-if="filteredManualPositionOptions.length" class="ui-accounting-activation-list">
+          <label
+            v-for="position in filteredManualPositionOptions"
+            :key="position.id"
+            class="ui-accounting-activation-option"
           >
-            <option :value="null">
-              {{
-                availableManualPositionOptions.length
-                  ? 'Selecciona una posicion manual'
-                  : 'No hay posiciones manuales disponibles'
-              }}
-            </option>
-            <option
-              v-for="position in availableManualPositionOptions"
-              :key="position.id"
+            <input
+              v-model="selectedActivationIds"
+              class="ui-accounting-activation-checkbox"
+              type="checkbox"
               :value="position.id"
-            >
-              {{ position.name }} / {{ position.currency }}
-            </option>
-          </select>
+            />
+            <span class="ui-accounting-activation-meta">
+              <strong>{{ position.name }}</strong>
+              <small>{{ position.currency }}</small>
+            </span>
+          </label>
+        </div>
+        <div
+          v-else-if="availableManualPositionOptions.length && activationQuery.trim()"
+          class="ui-accounting-empty"
+        >
+          No hay coincidencias para la busqueda actual.
         </div>
 
         <div v-if="!hasAvailableManualPositions" class="ui-accounting-empty">
@@ -639,9 +721,13 @@ async function submitQuickEntryFromModal() {
           <button
             class="btn btn-primary"
             type="submit"
-            :disabled="accountActivationLoading || activationForm.position_id == null"
+            :disabled="accountActivationLoading || !selectedActivationIds.length"
           >
-            {{ accountActivationLoading ? 'Activando...' : 'Activar tracking' }}
+            {{
+              accountActivationLoading
+                ? 'Activando...'
+                : `Activar tracking (${selectedActivationIds.length})`
+            }}
           </button>
         </div>
       </form>
@@ -1152,6 +1238,12 @@ async function submitQuickEntryFromModal() {
   font-size: 0.74rem;
 }
 
+.ui-accounting-account-untrack-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.74rem;
+}
+
 .ui-accounting-form {
   display: grid;
   gap: 12px;
@@ -1198,6 +1290,41 @@ async function submitQuickEntryFromModal() {
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.82rem;
+}
+
+.ui-accounting-activation-list {
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-activation-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.ui-accounting-activation-option + .ui-accounting-activation-option {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ui-accounting-activation-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-accounting-activation-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.ui-accounting-activation-meta small {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.76rem;
 }
 
 .ui-accounting-summary-strip {
