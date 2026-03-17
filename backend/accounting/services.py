@@ -461,14 +461,25 @@ def get_or_create_system_account(
     name: str,
 ) -> LedgerAccount:
     normalized_currency = normalize_currency_code(currency)
-    account, _created = LedgerAccount.objects.get_or_create(
-        user_id=user_id,
-        account_type=account_type,
-        currency=normalized_currency,
-        origin=LedgerAccount.Origin.SYSTEM,
-        name=name,
-        defaults={"is_active": True},
-    )
+    lookup = {
+        "user_id": user_id,
+        "account_type": account_type,
+        "currency": normalized_currency,
+        "origin": LedgerAccount.Origin.SYSTEM,
+        "name": name,
+    }
+    try:
+        account, _created = LedgerAccount.objects.get_or_create(
+            **lookup,
+            defaults={"is_active": True},
+        )
+    except LedgerAccount.MultipleObjectsReturned:
+        account = LedgerAccount.objects.filter(**lookup).order_by("id").first()
+        if account is None:
+            raise
+    if not account.is_active:
+        account.is_active = True
+        account.save(update_fields=["is_active", "updated_at"])
     return account
 
 
