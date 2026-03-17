@@ -574,15 +574,10 @@ watch(availableManualPositionOptions, (options) => {
                 <summary class="ui-accounting-account-timeline-summary">
                   <div class="ui-accounting-account-meta">
                     <strong>{{ accountDisplayName(row.account) }}</strong>
-                    <p>
-                      {{ row.account.currency }} / {{ row.account.origin }} /
-                      {{ row.account.account_type === 'asset' ? 'Activo' : 'Pasivo' }}
-                    </p>
+                    <p>{{ row.account.currency }}</p>
                   </div>
                   <div class="ui-accounting-account-actions">
-                    <span class="ui-accounting-pill ui-accounting-pill-compact">
-                      {{ row.movement_count }} movs.
-                    </span>
+                    <span class="ui-accounting-movs-count">{{ row.movement_count }} mov.</span>
                     <span>{{
                       formatCompact(row.account.current_balance, row.account.currency)
                     }}</span>
@@ -1400,6 +1395,13 @@ watch(availableManualPositionOptions, (options) => {
 .ui-accounting-pill-compact {
   min-height: 28px;
   font-size: 0.74rem;
+}
+
+.ui-accounting-movs-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .ui-accounting-account-groups {
