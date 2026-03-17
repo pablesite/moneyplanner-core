@@ -75,6 +75,14 @@ class CoreAuthModeApiTests(APITestCase):
         )
         self.assertEqual(settings_res.status_code, status.HTTP_200_OK)
 
+        me_res = self.client.get(
+            "/api/auth/me/",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
+        self.assertEqual(me_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(me_res.data["base_currency"], settings_res.data["base_currency"])
+        self.assertEqual(me_res.data["inflation_region"], settings_res.data["inflation_region"])
+
         refresh_res = self.client.post(
             "/api/auth/refresh/",
             {"refresh": refresh},
