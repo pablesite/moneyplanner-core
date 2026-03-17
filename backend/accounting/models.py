@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -72,15 +73,28 @@ class LedgerTransaction(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.POSTED)
     origin = models.CharField(max_length=16, choices=Origin.choices, default=Origin.MANUAL)
     notes = models.TextField(blank=True, default="")
+    import_source = models.CharField(max_length=32, blank=True, default="")
+    import_fingerprint = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-booking_date", "-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "import_source", "import_fingerprint"],
+                condition=~Q(import_fingerprint=""),
+                name="acct_tx_user_import_fp_unique",
+            )
+        ]
         indexes = [
             models.Index(fields=["user", "booking_date"], name="acct_tx_user_book_idx"),
             models.Index(fields=["user", "value_date"], name="acct_tx_user_value_idx"),
             models.Index(fields=["user", "status"], name="acct_tx_user_status_idx"),
+            models.Index(
+                fields=["user", "import_source", "import_fingerprint"],
+                name="acct_tx_user_import_idx",
+            ),
         ]
 
     def __str__(self) -> str:

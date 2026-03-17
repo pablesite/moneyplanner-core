@@ -260,11 +260,13 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "status",
             "origin",
             "notes",
+            "import_source",
+            "import_fingerprint",
             "entries",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "import_source", "import_fingerprint", "created_at", "updated_at"]
 
     def validate(self, attrs: dict) -> dict:
         booking_date = attrs.get("booking_date", getattr(self.instance, "booking_date", None))

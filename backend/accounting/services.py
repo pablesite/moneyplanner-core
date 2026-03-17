@@ -612,6 +612,8 @@ def create_quick_transaction(
     status: str,
     origin: str,
     notes: str = "",
+    import_source: str = "",
+    import_fingerprint: str = "",
     annual_income_entry=None,
     annual_expense_entry=None,
     flow_family: str = "",
@@ -650,6 +652,8 @@ def create_quick_transaction(
         status=status,
         origin=origin,
         notes=notes,
+        import_source=import_source,
+        import_fingerprint=import_fingerprint,
     )
     for entry_data in _build_quick_entry_payload(
         movement_type=movement_type,

@@ -1,9 +1,8 @@
 from django.db.models import Prefetch
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
 from rest_framework.response import Response
 
 from budget.query_params import parse_optional_int_query_param, parse_required_int_query_param
@@ -14,6 +13,11 @@ from .serializers import (
     LedgerEntrySerializer,
     LedgerTransactionSerializer,
     QuickLedgerTransactionSerializer,
+)
+from .moneywiz_import import (
+    build_moneywiz_import_preview,
+    commit_moneywiz_import,
+    extract_moneywiz_csv_text,
 )
 from .services import (
     build_account_balances_summary,
@@ -148,6 +152,38 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             LedgerTransactionSerializer(transaction, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-moneywiz/preview",
+    )
+    def import_preview(self, request):
+        csv_text = extract_moneywiz_csv_text(
+            csv_text=request.data.get("csv_text"),
+            file=request.FILES.get("file"),
+        )
+        payload = build_moneywiz_import_preview(
+            user=request.user,
+            csv_text=csv_text,
+        )
+        return Response(payload)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-moneywiz/commit",
+    )
+    def import_commit(self, request):
+        csv_text = extract_moneywiz_csv_text(
+            csv_text=request.data.get("csv_text"),
+            file=request.FILES.get("file"),
+        )
+        payload = commit_moneywiz_import(
+            user=request.user,
+            csv_text=csv_text,
+        )
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class LedgerEntryViewSet(viewsets.ReadOnlyModelViewSet):

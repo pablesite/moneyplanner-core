@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -1509,3 +1510,90 @@ class AccountingApiTests(APITestCase):
             response.data["expense"]["subcategories"][0]["subcategory"],
             "living_expenses",
         )
+
+
+class MoneyWizImportAPITests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="moneywiz_user",
+            password="pass1234",
+        )
+        self.client.force_authenticate(self.user)
+        LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+    def _build_csv(self) -> bytes:
+        return (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-04-01;Nomina abril;;salary;Banco;;1500;;1500\n"
+            "2026-04-02;Compra supermercado;;food;Banco;;120;120;\n"
+            "2026-04-03;Mover ahorro;;transfer;Banco;Ahorro;300;;\n"
+            "2026-04-04;Compra fondo;;investment;Banco;;250;250;\n"
+            "2026-04-05;Pago hipoteca;;mortgage;Banco;;330;330;\n"
+        ).encode("utf-8")
+
+    def test_moneywiz_preview_reports_rows_and_detected_accounts(self):
+        upload = SimpleUploadedFile("moneywiz.csv", self._build_csv(), content_type="text/csv")
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 5)
+        self.assertEqual(response.data["stats"]["income"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 1)
+        self.assertEqual(response.data["stats"]["investment_purchase"], 1)
+        self.assertEqual(response.data["stats"]["debt_payment"], 1)
+        self.assertTrue(any(row["movement_type"] == "transfer" for row in response.data["rows"]))
+        self.assertTrue(
+            any(account["name"] == "Ahorro" for account in response.data["detected_accounts"])
+        )
+
+    def test_moneywiz_commit_creates_transactions_and_is_idempotent(self):
+        upload = SimpleUploadedFile("moneywiz.csv", self._build_csv(), content_type="text/csv")
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["created_count"], 5)
+        self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 5)
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                user=self.user,
+                name="Ahorro",
+                account_type=LedgerAccount.AccountType.ASSET,
+            ).exists()
+        )
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                user=self.user,
+                account_type=LedgerAccount.AccountType.LIABILITY,
+            ).exists()
+        )
+
+        second_upload = SimpleUploadedFile(
+            "moneywiz.csv",
+            self._build_csv(),
+            content_type="text/csv",
+        )
+        second_response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": second_upload},
+            format="multipart",
+        )
+
+        self.assertEqual(second_response.status_code, status.HTTP_201_CREATED, second_response.data)
+        self.assertEqual(second_response.data["created_count"], 0)
+        self.assertEqual(second_response.data["skipped_existing_count"], 5)
+        self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 5)
