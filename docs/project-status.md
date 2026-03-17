@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-17 | **Versión Core:** 0.22.0
+**Última revisión:** 2026-03-17 | **Versión Core:** 0.23.0
 
 ---
 
@@ -24,9 +24,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Importador MoneyWiz Fase 1 — Backend | Agente | Parser CSV MoneyWiz (`sep=`), preview/commit, idempotencia por huella, auto-creación de cuentas y fallback seguro de clasificación. | `docs/tasks/importer/phase-1-moneywiz-backend/backend.md` |
-| Importador MoneyWiz Fase 2 — Frontend | Agente | Flujo subir CSV -> preview -> commit -> resultado en `AccountingMovementsView` con integración API y espejo Core->SaaS. | `docs/tasks/importer/phase-2-moneywiz-ui/frontend.md` |
-| Importador MoneyWiz Fase 3 — QA | Agente | Validación E2E y regresión contable: tipos de movimiento, idempotencia, auto-creación de cuentas e impacto en resúmenes mensuales. | `docs/tasks/importer/phase-3-qa/qa.md` |
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
 
 ### Hoja de ruta pre-producción (resumen por área)
@@ -45,7 +42,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Refactor backend Core | Media | ⏸ | Limpieza de lógica, eliminación de deuda técnica; ver `roadmap/backend-refactor-roadmap.md` |
 | Refactor frontend Core | Media | ⏸ | Estructura de componentes, extracción de lógica al backend; ver `roadmap/frontend-refactor-roadmap.md` |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
-| Importación de datos | Media | ⚪ | Importador desde MoneyWiz y Excel; mapeo de movimientos, cuentas y categorías |
+| Importación de datos | Media | 🔄 | MoneyWiz v1 disponible con preview/commit idempotente, auto-creación de cuentas y espejo UI Core/SaaS. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -66,6 +63,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
 | Auth Core (JWT, link-token para SaaS) | ✅ | Incluyendo generación de token para linking con SaaS |
+| Importador MoneyWiz v1 | ✅ | CSV con `sep=`, preview/commit, huella idempotente, fallback seguro de clasificación y flujo UI en movimientos |
 
 ## En progreso activo
 

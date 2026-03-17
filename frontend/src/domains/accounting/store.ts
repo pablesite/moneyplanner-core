@@ -6,6 +6,8 @@ import type {
   LedgerAccountWritePayload,
   LedgerTransaction,
   LedgerTransactionWritePayload,
+  MoneyWizImportCommit,
+  MoneyWizImportPreview,
   MonthlyAccountingSummary,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
@@ -16,11 +18,15 @@ export const useAccountingStore = defineStore('accounting', {
     loading: false as boolean,
     accountCreationLoading: false as boolean,
     transactionCreationLoading: false as boolean,
+    importPreviewLoading: false as boolean,
+    importCommitLoading: false as boolean,
     error: null as string | null,
     accounts: [] as LedgerAccount[],
     transactions: [] as LedgerTransaction[],
     monthlySummary: null as MonthlyAccountingSummary | null,
     accountBalancesSummary: null as LedgerAccountBalanceSummary | null,
+    moneyWizImportPreview: null as MoneyWizImportPreview | null,
+    moneyWizImportCommitResult: null as MoneyWizImportCommit | null,
     selectedYear: new Date().getFullYear() as number,
     selectedMonth: (new Date().getMonth() + 1) as number,
   }),
@@ -148,6 +154,44 @@ export const useAccountingStore = defineStore('accounting', {
         throw error;
       } finally {
         this.transactionCreationLoading = false;
+      }
+    },
+
+    clearMoneyWizImportState() {
+      this.moneyWizImportPreview = null;
+      this.moneyWizImportCommitResult = null;
+    },
+
+    async previewMoneyWizImport(file: File) {
+      this.importPreviewLoading = true;
+      this.error = null;
+      this.moneyWizImportCommitResult = null;
+      try {
+        const response = await coreAccountingApi.previewMoneyWizImport(file);
+        this.moneyWizImportPreview = response.data;
+        return response.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.importPreviewLoading = false;
+      }
+    },
+
+    async commitMoneyWizImport(file: File) {
+      this.importCommitLoading = true;
+      this.error = null;
+      try {
+        const response = await coreAccountingApi.commitMoneyWizImport(file);
+        this.moneyWizImportCommitResult = response.data;
+        this.moneyWizImportPreview = response.data.preview;
+        await this.refreshAll();
+        return response.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.importCommitLoading = false;
       }
     },
   },

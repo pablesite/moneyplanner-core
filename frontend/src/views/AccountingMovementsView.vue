@@ -8,10 +8,13 @@ const {
   accountCreationLoading,
   accountActivationLoading,
   transactionCreationLoading,
+  importPreviewLoading,
+  importCommitLoading,
   error,
   successMessage,
   accounts,
   transactions,
+  moneyWizImportPreview,
   selectedYear,
   selectedMonth,
   yearOptions,
@@ -30,6 +33,7 @@ const {
   editCategoryOptions,
   editSubcategoryOptions,
   activationForm,
+  moneyWizImportFile,
   quickEntryForm,
   editTransactionForm,
   activityFilters,
@@ -58,6 +62,9 @@ const {
   deleteAccount,
   deleteTransaction,
   openTransactionForEditing,
+  setMoneyWizImportFile,
+  previewMoneyWizImport,
+  commitMoneyWizImport,
   submitQuickEntry,
   submitEditedTransaction,
 } = useAccountingPage();
@@ -261,7 +268,9 @@ const groupedAccountTimelineRows = computed(() => {
           subcategory,
           rows: rows
             .slice()
-            .sort((a, b) => accountDisplayName(a.account).localeCompare(accountDisplayName(b.account), 'es')),
+            .sort((a, b) =>
+              accountDisplayName(a.account).localeCompare(accountDisplayName(b.account), 'es'),
+            ),
           accountCount: rows.length,
         }))
         .sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'es'));
@@ -282,6 +291,7 @@ const groupedAccountTimelineRows = computed(() => {
 
 const showActivationModal = ref(false);
 const showEditTransactionModal = ref(false);
+const showMoneyWizImportModal = ref(false);
 const showQuickEntryModal = ref(false);
 const activationQuery = ref('');
 const activationOperationalOnly = ref(true);
@@ -393,6 +403,32 @@ async function submitQuickEntryFromModal() {
   showQuickEntryModal.value = false;
 }
 
+function handleMoneyWizFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0] ?? null;
+  setMoneyWizImportFile(file);
+}
+
+const moneyWizPreviewRows = computed(() => moneyWizImportPreview.value?.rows.slice(0, 6) ?? []);
+const moneyWizPreviewWarnings = computed(() => moneyWizImportPreview.value?.warnings ?? []);
+const moneyWizCanCommit = computed(
+  () =>
+    moneyWizImportFile.value != null &&
+    moneyWizImportPreview.value != null &&
+    moneyWizImportPreview.value.error_row_count === 0,
+);
+
+async function previewMoneyWizImportFromModal() {
+  await previewMoneyWizImport();
+}
+
+async function commitMoneyWizImportFromModal() {
+  const result = await commitMoneyWizImport();
+  if (result) {
+    showMoneyWizImportModal.value = false;
+  }
+}
+
 function openEditTransactionModal(transactionId: number) {
   if (openTransactionForEditing(transactionId)) {
     showEditTransactionModal.value = true;
@@ -458,6 +494,15 @@ watch(availableManualPositionOptions, (options) => {
               Activar tracking
             </button>
             <button
+              class="btn"
+              type="button"
+              aria-label="Importar CSV MoneyWiz"
+              title="Importar CSV MoneyWiz"
+              @click="showMoneyWizImportModal = true"
+            >
+              Importar MoneyWiz
+            </button>
+            <button
               class="btn btn-primary ui-accounting-cta"
               type="button"
               aria-label="Registrar movimiento diario"
@@ -481,16 +526,12 @@ watch(availableManualPositionOptions, (options) => {
         <div class="ui-kpi-card">
           <span class="ui-kpi-label">Activos</span>
           <strong class="ui-kpi-value">{{ formatMoney(accountingAssetsTotal) }}</strong>
-          <p class="ui-kpi-meta">
-            {{ (accountsByType.get('asset') ?? []).length }} cuentas
-          </p>
+          <p class="ui-kpi-meta">{{ (accountsByType.get('asset') ?? []).length }} cuentas</p>
         </div>
         <div class="ui-kpi-card">
           <span class="ui-kpi-label">Pasivos</span>
           <strong class="ui-kpi-value">{{ formatMoney(accountingLiabilitiesTotal) }}</strong>
-          <p class="ui-kpi-meta">
-            {{ (accountsByType.get('liability') ?? []).length }} cuentas
-          </p>
+          <p class="ui-kpi-meta">{{ (accountsByType.get('liability') ?? []).length }} cuentas</p>
         </div>
       </div>
 
@@ -506,7 +547,9 @@ watch(availableManualPositionOptions, (options) => {
           <strong
             class="ui-cashflow-month-value"
             :class="
-              row.incomeValue - row.expenseValue >= 0 ? 'ui-cashflow-positive' : 'ui-cashflow-negative'
+              row.incomeValue - row.expenseValue >= 0
+                ? 'ui-cashflow-positive'
+                : 'ui-cashflow-negative'
             "
           >
             {{ formatMoney(row.incomeValue - row.expenseValue) }}
@@ -526,7 +569,6 @@ watch(availableManualPositionOptions, (options) => {
       <div v-if="successMessage" class="ui-state-block ui-state-success">{{ successMessage }}</div>
     </section>
 
-
     <!-- ── Ledger: filters + account / movement timeline ── -->
     <section class="ui-section-card ui-accounting-ledger-panel">
       <div class="ui-section-head">
@@ -535,8 +577,8 @@ watch(availableManualPositionOptions, (options) => {
           <p class="ui-section-subtitle">
             {{ monthOptions.find((m) => m.value === selectedMonth)?.label ?? '' }}
             {{ selectedYear }}
-            &middot; {{ filteredTransactions.length }} movimientos
-            &middot; {{ operationalAccountsCount }} cuentas activas
+            &middot; {{ filteredTransactions.length }} movimientos &middot;
+            {{ operationalAccountsCount }} cuentas activas
           </p>
         </div>
       </div>
@@ -590,10 +632,7 @@ watch(availableManualPositionOptions, (options) => {
           </summary>
 
           <template v-for="subcategoryGroup in categoryGroup.subgroups" :key="subcategoryGroup.key">
-            <div
-              v-if="categoryGroup.subgroups.length > 1"
-              class="ui-ledger-subcategory-label"
-            >
+            <div v-if="categoryGroup.subgroups.length > 1" class="ui-ledger-subcategory-label">
               {{ humanizeKey(subcategoryGroup.subcategory) }}
             </div>
 
@@ -604,7 +643,9 @@ watch(availableManualPositionOptions, (options) => {
             >
               <summary class="ui-ledger-account-summary">
                 <div class="ui-ledger-account-meta">
-                  <strong class="ui-ledger-account-name">{{ accountDisplayName(row.account) }}</strong>
+                  <strong class="ui-ledger-account-name">{{
+                    accountDisplayName(row.account)
+                  }}</strong>
                   <div class="ui-action-bar ui-ledger-account-chips">
                     <span class="ui-pro-chip">{{ row.account.currency }}</span>
                   </div>
@@ -721,10 +762,7 @@ watch(availableManualPositionOptions, (options) => {
             <strong>{{ type.label }}</strong>
             <span class="ui-pro-chip">{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
           </div>
-          <ul
-            v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
-            class="ui-entry-list"
-          >
+          <ul v-if="(accountsByType.get(type.value)?.length ?? 0) > 0" class="ui-entry-list">
             <li
               v-for="account in accountsByType.get(type.value)"
               :key="account.id"
@@ -926,7 +964,11 @@ watch(availableManualPositionOptions, (options) => {
 
         <div
           class="ui-accounting-form-grid"
-          :class="editKindNeedsCounterparty ? 'ui-accounting-form-grid-wide' : 'ui-accounting-form-grid-edit-simple'"
+          :class="
+            editKindNeedsCounterparty
+              ? 'ui-accounting-form-grid-wide'
+              : 'ui-accounting-form-grid-edit-simple'
+          "
         >
           <select v-model="editTransactionForm.account_id" class="select" required>
             <option :value="null" disabled>Cuenta principal</option>
@@ -970,7 +1012,10 @@ watch(availableManualPositionOptions, (options) => {
         <p v-else-if="editKindNeedsClassification" class="ui-accounting-inline-note">
           Selecciona categoria y subcategoria debajo.
         </p>
-        <p v-else-if="editTransactionForm.kind !== 'balance_adjustment'" class="ui-accounting-inline-note">
+        <p
+          v-else-if="editTransactionForm.kind !== 'balance_adjustment'"
+          class="ui-accounting-inline-note"
+        >
           No requiere contracuenta manual para este tipo.
         </p>
 
@@ -1041,6 +1086,156 @@ watch(availableManualPositionOptions, (options) => {
           Completa descripcion, fechas, importe y cuenta principal. Segun el tipo tambien puede
           requerir contracuenta y clasificacion.
         </p>
+      </form>
+    </BaseModal>
+
+    <BaseModal
+      :open="showMoneyWizImportModal"
+      title="Importar CSV MoneyWiz"
+      panel-class="max-w-[920px]"
+      @close="showMoneyWizImportModal = false"
+    >
+      <div class="ui-accounting-modal-copy">
+        <p class="ui-page-eyebrow">Importacion guiada</p>
+        <p class="subtle">
+          Sube el CSV exportado desde MoneyWiz, revisa la preview y confirma solo cuando no haya
+          filas con errores.
+        </p>
+      </div>
+
+      <form
+        class="ui-accounting-form ui-accounting-modal-form"
+        @submit.prevent="previewMoneyWizImportFromModal"
+      >
+        <div class="ui-accounting-import-dropzone">
+          <label class="ui-accounting-field">
+            <span>Archivo CSV</span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              class="input"
+              @change="handleMoneyWizFileChange"
+            />
+          </label>
+          <p class="ui-accounting-inline-note">
+            {{
+              moneyWizImportFile
+                ? `Archivo listo: ${moneyWizImportFile.name}`
+                : 'Acepta el CSV exportado desde MoneyWiz con cabeceras en ingles.'
+            }}
+          </p>
+        </div>
+
+        <div v-if="moneyWizImportPreview" class="ui-accounting-import-summary">
+          <div class="ui-accounting-import-kpis">
+            <div class="ui-accounting-import-kpi">
+              <span>Filas</span>
+              <strong>{{ moneyWizImportPreview.row_count }}</strong>
+            </div>
+            <div class="ui-accounting-import-kpi">
+              <span>Validas</span>
+              <strong>{{ moneyWizImportPreview.valid_row_count }}</strong>
+            </div>
+            <div class="ui-accounting-import-kpi">
+              <span>Errores</span>
+              <strong>{{ moneyWizImportPreview.error_row_count }}</strong>
+            </div>
+            <div class="ui-accounting-import-kpi">
+              <span>Ya existentes</span>
+              <strong>{{ moneyWizImportPreview.existing_row_count }}</strong>
+            </div>
+          </div>
+
+          <div class="ui-accounting-import-grid">
+            <div class="ui-accounting-import-card">
+              <h3>Tipos detectados</h3>
+              <ul class="ui-accounting-import-list">
+                <li>Ingresos: {{ moneyWizImportPreview.stats.income }}</li>
+                <li>Gastos: {{ moneyWizImportPreview.stats.expense }}</li>
+                <li>Transferencias: {{ moneyWizImportPreview.stats.transfer }}</li>
+                <li>Inversion: {{ moneyWizImportPreview.stats.investment_purchase }}</li>
+                <li>Deuda: {{ moneyWizImportPreview.stats.debt_payment }}</li>
+              </ul>
+            </div>
+
+            <div class="ui-accounting-import-card">
+              <h3>Cuentas detectadas</h3>
+              <ul class="ui-accounting-import-list">
+                <li
+                  v-for="account in moneyWizImportPreview.detected_accounts.slice(0, 6)"
+                  :key="`${account.role}-${account.account_type}-${account.name}`"
+                >
+                  {{ account.name }} · {{ account.account_type }}
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div v-if="moneyWizPreviewWarnings.length" class="ui-state-block ui-state-empty">
+            <strong>Warnings de preview</strong>
+            <ul class="ui-accounting-import-list">
+              <li v-for="warning in moneyWizPreviewWarnings.slice(0, 5)" :key="warning">
+                {{ warning }}
+              </li>
+            </ul>
+          </div>
+
+          <div class="ui-accounting-import-card">
+            <h3>Primeras filas</h3>
+            <div class="ui-accounting-import-rows">
+              <article
+                v-for="row in moneyWizPreviewRows"
+                :key="row.fingerprint"
+                class="ui-accounting-import-row"
+              >
+                <div class="ui-accounting-import-row-head">
+                  <strong>#{{ row.row_number }} · {{ row.description }}</strong>
+                  <span>{{ row.movement_type }} · {{ row.amount }} {{ row.currency }}</span>
+                </div>
+                <p class="subtle">
+                  {{ row.account_name }}
+                  <template v-if="row.counterparty_name">→ {{ row.counterparty_name }}</template>
+                  <template v-if="row.category">· {{ row.category }}</template>
+                </p>
+                <p v-if="row.warnings.length" class="ui-accounting-inline-note">
+                  {{ row.warnings[0] }}
+                </p>
+                <p v-if="row.errors.length" class="ui-state-block ui-state-error">
+                  {{ row.errors[0] }}
+                </p>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        <div class="ui-accounting-submit-row">
+          <p class="subtle">
+            {{
+              moneyWizImportPreview
+                ? moneyWizCanCommit
+                  ? 'La preview esta lista. Al confirmar se refrescaran movimientos, saldos y resumen mensual.'
+                  : 'La preview necesita revision: si hay filas con errores no se habilita el commit.'
+                : 'Empieza generando la preview para revisar warnings, duplicados y cuentas detectadas.'
+            }}
+          </p>
+          <div class="ui-accounting-inline-actions">
+            <button
+              class="btn"
+              type="submit"
+              :disabled="importPreviewLoading || importCommitLoading"
+            >
+              {{ importPreviewLoading ? 'Preparando preview...' : 'Generar preview' }}
+            </button>
+            <button
+              class="btn btn-primary"
+              type="button"
+              :disabled="importCommitLoading || importPreviewLoading || !moneyWizCanCommit"
+              @click="commitMoneyWizImportFromModal"
+            >
+              {{ importCommitLoading ? 'Importando...' : 'Confirmar importacion' }}
+            </button>
+          </div>
+        </div>
       </form>
     </BaseModal>
 
@@ -1857,6 +2052,74 @@ watch(availableManualPositionOptions, (options) => {
   transform: rotate(90deg);
 }
 
+.ui-accounting-import-dropzone,
+.ui-accounting-import-summary,
+.ui-accounting-import-card {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-accounting-import-dropzone,
+.ui-accounting-import-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-import-kpis,
+.ui-accounting-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-import-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-accounting-import-kpi {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-import-kpi span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ui-accounting-import-kpi strong {
+  font-size: 1.1rem;
+}
+
+.ui-accounting-import-list,
+.ui-accounting-import-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ui-accounting-import-row {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  padding: 10px 12px;
+}
+
+.ui-accounting-import-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .ui-accounting-activation-list {
   max-height: 280px;
   overflow: auto;
@@ -1958,6 +2221,11 @@ watch(availableManualPositionOptions, (options) => {
   }
 
   .ui-accounting-edit-readonly {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-import-kpis,
+  .ui-accounting-import-grid {
     grid-template-columns: 1fr;
   }
 

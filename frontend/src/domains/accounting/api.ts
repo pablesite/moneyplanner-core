@@ -7,6 +7,8 @@ import type {
   LedgerEntry,
   LedgerTransaction,
   LedgerTransactionWritePayload,
+  MoneyWizImportCommit,
+  MoneyWizImportPreview,
   MonthlyAccountingSummary,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
@@ -57,6 +59,28 @@ export const coreAccountingApi = {
   },
   createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/quick-entry/', payload);
+  },
+  previewMoneyWizImport(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return coreApi.post<MoneyWizImportPreview>(
+      '/api/accounting/transactions/import-moneywiz/preview/',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    );
+  },
+  commitMoneyWizImport(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return coreApi.post<MoneyWizImportCommit>(
+      '/api/accounting/transactions/import-moneywiz/commit/',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    );
   },
   getEntries(params?: {
     account_id?: number;

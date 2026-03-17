@@ -16,6 +16,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
     accountCreationLoading: ref(false),
     accountActivationLoading: ref(false),
     transactionCreationLoading: ref(false),
+    importPreviewLoading: ref(false),
+    importCommitLoading: ref(false),
     error: ref<string | null>(null),
     successMessage: ref<string | null>(null),
     accounts: ref([
@@ -98,6 +100,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
         },
       ],
     }),
+    moneyWizImportPreview: ref(null),
+    moneyWizImportCommitResult: ref(null),
     selectedYear: computed({
       get: () => 2026,
       set: () => undefined,
@@ -160,6 +164,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
       position_type: 'asset',
       position_id: null,
     },
+    moneyWizImportFile: ref<File | null>(null),
     quickEntryForm: {
       movement_type: 'expense',
       booking_date: '2026-03-15',
@@ -328,6 +333,9 @@ function makeState(overrides: Record<string, unknown> = {}) {
     removeNetWorthTracking: vi.fn(),
     refreshManualPositionOptions: vi.fn(),
     submitAccount: vi.fn(),
+    setMoneyWizImportFile: vi.fn(),
+    previewMoneyWizImport: vi.fn(),
+    commitMoneyWizImport: vi.fn(),
     deleteAccount: vi.fn(),
     deleteTransaction: vi.fn(),
     openTransactionForEditing: vi.fn(() => true),
@@ -357,6 +365,7 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).not.toContain('Entradas');
     expect(wrapper.text()).not.toContain('Salidas');
     expect(wrapper.find('button[title="Activar tracking contable"]').exists()).toBe(true);
+    expect(wrapper.find('button[title="Importar CSV MoneyWiz"]').exists()).toBe(true);
     expect(wrapper.find('button[title="Registrar movimiento diario"]').exists()).toBe(true);
   });
 
@@ -390,6 +399,23 @@ describe('AccountingMovementsView', () => {
     await wrapper.vm.$nextTick();
 
     expect(state.submitQuickEntry).toHaveBeenCalled();
+  });
+
+  it('opens the MoneyWiz import modal and triggers preview', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
+    const wrapper = mount(AccountingMovementsView, {
+      attachTo: document.body,
+    });
+
+    await wrapper.find('button[title="Importar CSV MoneyWiz"]').trigger('click');
+    const previewButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Generar preview'),
+    ) as HTMLButtonElement | undefined;
+    previewButton?.click();
+    await wrapper.vm.$nextTick();
+
+    expect(state.previewMoneyWizImport).toHaveBeenCalled();
   });
 
   it('shows filter controls and derived transaction label', () => {
@@ -580,9 +606,7 @@ describe('AccountingMovementsView', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const wrapper = mount(AccountingMovementsView);
 
-    const untrackButton = wrapper
-      .findAll('button')
-      .find((candidate) => candidate.text().includes('Quitar tracking'));
+    const untrackButton = wrapper.find('button[title="Quitar tracking de patrimonio"]');
     await untrackButton?.trigger('click');
 
     expect(state.removeNetWorthTracking).toHaveBeenCalledWith(

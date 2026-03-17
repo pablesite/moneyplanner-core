@@ -113,13 +113,28 @@ export function useAccountingPage() {
   const store = useAccountingStore();
   const incomeStore = useAnnualIncomeStore('core');
   const expenseStore = useAnnualExpenseStore('core');
-  const { loading, accountCreationLoading, transactionCreationLoading, error } = storeToRefs(store);
-  const { accounts, transactions, monthlySummary, accountBalancesSummary } = storeToRefs(store);
+  const {
+    loading,
+    accountCreationLoading,
+    transactionCreationLoading,
+    importPreviewLoading,
+    importCommitLoading,
+    error,
+  } = storeToRefs(store);
+  const {
+    accounts,
+    transactions,
+    monthlySummary,
+    accountBalancesSummary,
+    moneyWizImportPreview,
+    moneyWizImportCommitResult,
+  } = storeToRefs(store);
 
   const successMessage = ref<string | null>(null);
   const accountActivationLoading = ref(false);
   const manualAssets = ref<Asset[]>([]);
   const manualLiabilities = ref<Liability[]>([]);
+  const moneyWizImportFile = ref<File | null>(null);
 
   const accountForm = reactive({
     name: '',
@@ -1617,6 +1632,47 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento rapido registrado.';
   }
 
+  function setMoneyWizImportFile(file: File | null) {
+    moneyWizImportFile.value = file;
+    store.clearMoneyWizImportState();
+  }
+
+  async function previewMoneyWizImport() {
+    if (!moneyWizImportFile.value) {
+      store.error = 'Selecciona antes un CSV exportado desde MoneyWiz.';
+      return null;
+    }
+    successMessage.value = null;
+    const preview = await store.previewMoneyWizImport(moneyWizImportFile.value);
+    successMessage.value =
+      preview.error_row_count > 0
+        ? 'Preview generada con filas que necesitan revision antes de importar.'
+        : 'Preview MoneyWiz lista para confirmar la importacion.';
+    return preview;
+  }
+
+  async function commitMoneyWizImport() {
+    if (!moneyWizImportFile.value) {
+      store.error = 'Selecciona antes un CSV exportado desde MoneyWiz.';
+      return null;
+    }
+    if (!moneyWizImportPreview.value) {
+      store.error = 'Genera primero la preview del CSV antes de confirmar.';
+      return null;
+    }
+    if (moneyWizImportPreview.value.error_row_count > 0) {
+      store.error = 'Corrige o elimina las filas con errores antes de confirmar la importacion.';
+      return null;
+    }
+    successMessage.value = null;
+    const result = await store.commitMoneyWizImport(moneyWizImportFile.value);
+    successMessage.value =
+      result.created_count > 0
+        ? `Importacion MoneyWiz completada: ${result.created_count} movimientos nuevos.`
+        : 'Importacion MoneyWiz completada sin crear movimientos nuevos.';
+    return result;
+  }
+
   onMounted(() => {
     void Promise.all([
       store.refreshAll(),
@@ -1631,12 +1687,16 @@ export function useAccountingPage() {
     accountCreationLoading,
     accountActivationLoading,
     transactionCreationLoading,
+    importPreviewLoading,
+    importCommitLoading,
     error,
     successMessage,
     accounts,
     transactions,
     monthlySummary,
     accountBalancesSummary,
+    moneyWizImportPreview,
+    moneyWizImportCommitResult,
     selectedYear,
     selectedMonth,
     yearOptions,
@@ -1661,6 +1721,7 @@ export function useAccountingPage() {
     editTransactionId,
     editTransactionForm,
     activityFilters,
+    moneyWizImportFile,
     liquidityAccounts,
     availableManualPositionOptions,
     accountPositionMetaByAccountId,
@@ -1696,6 +1757,9 @@ export function useAccountingPage() {
     removeNetWorthTracking,
     refreshManualPositionOptions,
     submitAccount,
+    setMoneyWizImportFile,
+    previewMoneyWizImport,
+    commitMoneyWizImport,
     deleteAccount,
     submitQuickEntry,
     submitTransaction,

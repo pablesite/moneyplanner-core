@@ -69,14 +69,15 @@ Convenciones:
 - Validar consistencia end-to-end: movimientos → cuentas → patrimonio.
 
 ### Importación de datos
-- `(Privado - Futuro)` Importador de movimientos desde MoneyWiz. Tipos de movimiento a mapear:
-  - Ingresos a cuentas de liquidez.
-  - Ingresos pasivos: dividendos, intereses, otros.
-  - Transferencias entre cuentas de liquidez.
-  - Gastos corrientes.
-  - Gastos a inversiones → Ingreso en inversión.
-  - Gastos a inmobiliario → Activo inmobiliario.
-  - Gasto en mobiliario → Activo mobiliario.
+- ✅ Importador MoneyWiz v1 completado:
+  - Preview + commit desde CSV exportado por MoneyWiz.
+  - Idempotencia por huella de fila.
+  - Auto-creación de cuentas operativas cuando faltan.
+  - Fallback seguro de clasificación para categorías sin mapeo exacto.
+  - Flujo UI integrado en `AccountingMovementsView` y espejado en SaaS.
+- Pendiente después de v1:
+  - Afinar heurísticas de mapeo para categorías MoneyWiz menos frecuentes.
+  - Contraste e importador dedicado desde Excel.
 
 ---
 

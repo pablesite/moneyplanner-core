@@ -20,6 +20,8 @@ vi.mock('../api', () => ({
     deleteAccount: vi.fn(),
     createTransaction: vi.fn(),
     createQuickEntry: vi.fn(),
+    previewMoneyWizImport: vi.fn(),
+    commitMoneyWizImport: vi.fn(),
   },
 }));
 
@@ -112,5 +114,21 @@ describe('useAccountingPage', () => {
       }),
     );
     expect(store.transactionCreationLoading).toBe(false);
+  });
+
+  it('requires a file before generating MoneyWiz preview', async () => {
+    const Harness = defineComponent({
+      setup() {
+        return useAccountingPage();
+      },
+      template: '<div />',
+    });
+
+    const wrapper = mount(Harness);
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.previewMoneyWizImport();
+
+    expect(wrapper.vm.error).toBe('Selecciona antes un CSV exportado desde MoneyWiz.');
   });
 });
