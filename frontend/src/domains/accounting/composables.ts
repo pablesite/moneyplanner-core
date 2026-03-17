@@ -38,10 +38,18 @@ type TransactionFormRow = {
 };
 type TransactionFormState = {
   booking_date: string;
+  value_date: string;
+  booking_time: string;
   description: string;
   notes: string;
+  account_id: number | null;
+  counterparty_account_id: number | null;
   amount: string;
   currency: string;
+  kind: EditableActivityKind;
+  initial_kind: EditableActivityKind;
+  category_key: string;
+  subcategory_key: string;
   kind_label: string;
 };
 type PersistedTransactionEntry = {
@@ -49,6 +57,13 @@ type PersistedTransactionEntry = {
   side: LedgerEntrySide;
   amount: string;
   currency: string;
+  flow_family: '' | 'income' | 'expense';
+  category_key: string;
+  subcategory_key: string;
+  annual_income_entry_id: number | null;
+  annual_expense_entry_id: number | null;
+  asset_id: number | null;
+  liability_id: number | null;
   notes: string;
 };
 
@@ -59,6 +74,15 @@ type ActivityFilter =
   | 'transfer'
   | 'investment_purchase'
   | 'debt_payment';
+type EditableActivityKind =
+  | 'income'
+  | 'expense'
+  | 'transfer'
+  | 'investment_purchase'
+  | 'debt_payment'
+  | 'balance_adjustment';
+type ClassificationActivityKind = 'income' | 'expense';
+type CounterpartyEditableKind = 'transfer' | 'investment_purchase' | 'debt_payment';
 
 type LastQuickClassification = {
   category_key: string;
@@ -66,6 +90,11 @@ type LastQuickClassification = {
 };
 
 type ManualPositionType = 'asset' | 'liability';
+type AccountPositionMeta = {
+  position_type: ManualPositionType;
+  category: string;
+  subcategory: string;
+};
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -74,6 +103,10 @@ function formatDecimalInput(raw: string): string {
 function toNumber(raw: string): number {
   const parsed = Number(formatDecimalInput(raw));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 export function useAccountingPage() {
@@ -163,10 +196,18 @@ export function useAccountingPage() {
   const editTransactionId = ref<number | null>(null);
   const editTransactionForm = reactive<TransactionFormState>({
     booking_date: new Date().toISOString().slice(0, 10),
+    value_date: new Date().toISOString().slice(0, 10),
+    booking_time: '12:00',
     description: '',
     notes: '',
+    account_id: null,
+    counterparty_account_id: null,
     amount: '',
     currency: 'EUR',
+    kind: 'transfer',
+    initial_kind: 'transfer',
+    category_key: '',
+    subcategory_key: '',
     kind_label: '',
   });
   const editTransactionPersistedEntries = ref<PersistedTransactionEntry[]>([]);
@@ -237,6 +278,54 @@ export function useAccountingPage() {
       ? availableManualAssetOptions.value
       : availableManualLiabilityOptions.value,
   );
+  const assetNameById = computed(
+    () => new Map(manualAssets.value.map((asset) => [asset.id, String(asset.name ?? '').trim()])),
+  );
+  const liabilityNameById = computed(
+    () =>
+      new Map(
+        manualLiabilities.value.map((liability) => [
+          liability.id,
+          String(liability.name ?? '').trim(),
+        ]),
+      ),
+  );
+  function accountDisplayName(account: LedgerAccount): string {
+    if (account.asset_id != null) {
+      return assetNameById.value.get(account.asset_id) || account.name;
+    }
+    if (account.liability_id != null) {
+      return liabilityNameById.value.get(account.liability_id) || account.name;
+    }
+    return account.name;
+  }
+  const accountPositionMetaByAccountId = computed(() => {
+    const map = new Map<number, AccountPositionMeta>();
+    accounts.value.forEach((account) => {
+      if (account.asset_id != null) {
+        const asset = manualAssets.value.find((row) => row.id === account.asset_id);
+        if (asset) {
+          map.set(account.id, {
+            position_type: 'asset',
+            category: String(asset.category ?? '').trim() || 'other',
+            subcategory: String(asset.subcategory ?? '').trim() || 'other',
+          });
+          return;
+        }
+      }
+      if (account.liability_id != null) {
+        const liability = manualLiabilities.value.find((row) => row.id === account.liability_id);
+        if (liability) {
+          map.set(account.id, {
+            position_type: 'liability',
+            category: String(liability.category ?? '').trim() || 'other',
+            subcategory: String(liability.subcategory ?? '').trim() || 'other',
+          });
+        }
+      }
+    });
+    return map;
+  });
   const hasAvailableManualPositions = computed(
     () =>
       availableManualAssetOptions.value.length > 0 ||
@@ -371,6 +460,107 @@ export function useAccountingPage() {
     { value: 'investment_purchase', label: 'Compra inversion' },
     { value: 'debt_payment', label: 'Pago deuda' },
   ];
+  const editMovementTypeOptions: { value: EditableActivityKind; label: string }[] = [
+    { value: 'income', label: 'Ingreso' },
+    { value: 'expense', label: 'Gasto' },
+    { value: 'transfer', label: 'Transferencia' },
+    { value: 'investment_purchase', label: 'Inversion' },
+    { value: 'debt_payment', label: 'Deuda' },
+    { value: 'balance_adjustment', label: 'Ajuste' },
+  ];
+  const editAccountOptions = computed(() =>
+    accounts.value
+      .filter((account) => account.account_type === 'asset' || account.account_type === 'liability')
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')),
+  );
+  function isClassificationKind(kind: EditableActivityKind): kind is ClassificationActivityKind {
+    return kind === 'income' || kind === 'expense';
+  }
+
+  function isCounterpartyKind(kind: EditableActivityKind): kind is CounterpartyEditableKind {
+    return kind === 'transfer' || kind === 'investment_purchase' || kind === 'debt_payment';
+  }
+
+  const editKindNeedsClassification = computed(() =>
+    isClassificationKind(editTransactionForm.kind),
+  );
+  const editKindNeedsCounterparty = computed(() => isCounterpartyKind(editTransactionForm.kind));
+  const editCounterpartyLabel = computed(() => {
+    if (editTransactionForm.kind === 'investment_purchase') return 'Cuenta de inversion';
+    if (editTransactionForm.kind === 'debt_payment') return 'Cuenta de pasivo';
+    return 'Contracuenta';
+  });
+  const editSelectedAccountCurrentBalance = computed(() => {
+    if (editTransactionForm.account_id == null) return null;
+    const account = accountMap.value.get(editTransactionForm.account_id);
+    if (!account) return null;
+    return toNumber(account.current_balance).toFixed(2);
+  });
+  const editCounterpartyOptions = computed(() => {
+    const baseOptions = editAccountOptions.value.filter(
+      (account) => account.id !== editTransactionForm.account_id,
+    );
+    if (editTransactionForm.kind === 'investment_purchase') {
+      return baseOptions.filter(
+        (account) => account.account_type === 'asset' && account.asset_id != null,
+      );
+    }
+    if (editTransactionForm.kind === 'debt_payment') {
+      return baseOptions.filter(
+        (account) => account.account_type === 'liability' && account.liability_id != null,
+      );
+    }
+    return baseOptions;
+  });
+  const editCounterpartyMissingHint = computed(() => {
+    if (!editKindNeedsCounterparty.value) return '';
+    if (editCounterpartyOptions.value.length > 0) return '';
+    if (editTransactionForm.kind === 'investment_purchase') {
+      return 'No hay cuentas de inversion contables activas. Activa tracking contable en la posicion manual para poder usarla aqui.';
+    }
+    if (editTransactionForm.kind === 'debt_payment') {
+      return 'No hay cuentas de pasivo contables activas. Activa tracking contable en el pasivo manual para poder usarlo aqui.';
+    }
+    return 'No hay contracuentas disponibles para el tipo seleccionado.';
+  });
+  const editCategoryOptions = computed(() => {
+    if (editTransactionForm.kind === 'income') return incomeCategories;
+    if (editTransactionForm.kind === 'expense') return expenseCategories;
+    return [];
+  });
+  const editSubcategoryOptions = computed(() => {
+    if (!editTransactionForm.category_key) return [];
+    if (editTransactionForm.kind === 'income') {
+      return incomeSubcategories.filter(
+        (row) => row.category === (editTransactionForm.category_key as IncomeCategoryKey),
+      );
+    }
+    if (editTransactionForm.kind === 'expense') {
+      return expenseSubcategories.filter(
+        (row) => row.category === (editTransactionForm.category_key as ExpenseCategoryKey),
+      );
+    }
+    return [];
+  });
+  const editEntryReady = computed(() => {
+    if (!editTransactionForm.description.trim()) return false;
+    if (!editTransactionForm.booking_date || !editTransactionForm.value_date) return false;
+    if (editTransactionForm.account_id == null) return false;
+    const parsedAmount = Number(formatDecimalInput(editTransactionForm.amount));
+    if (!Number.isFinite(parsedAmount)) return false;
+    if (editTransactionForm.kind !== 'balance_adjustment' && parsedAmount <= 0) return false;
+    if (
+      editKindNeedsCounterparty.value &&
+      (editTransactionForm.counterparty_account_id == null ||
+        editTransactionForm.counterparty_account_id === editTransactionForm.account_id)
+    ) {
+      return false;
+    }
+    if (editKindNeedsClassification.value) {
+      return Boolean(editTransactionForm.category_key && editTransactionForm.subcategory_key);
+    }
+    return true;
+  });
 
   watch(
     () => transactionForm.entries.map((entry) => entry.account_id),
@@ -442,6 +632,66 @@ export function useAccountingPage() {
           category_key: quickEntryForm.category_key,
           subcategory_key: value,
         };
+      }
+    },
+  );
+  watch(
+    () => editTransactionForm.kind,
+    (kind) => {
+      if (editTransactionForm.account_id == null && editAccountOptions.value.length) {
+        editTransactionForm.account_id = editAccountOptions.value[0]!.id;
+      }
+      if (!isClassificationKind(kind)) {
+        editTransactionForm.category_key = '';
+        editTransactionForm.subcategory_key = '';
+      }
+      if (isCounterpartyKind(kind)) {
+        if (
+          editTransactionForm.counterparty_account_id == null &&
+          editCounterpartyOptions.value.length
+        ) {
+          editTransactionForm.counterparty_account_id = editCounterpartyOptions.value[0]!.id;
+        }
+        return;
+      }
+      editTransactionForm.counterparty_account_id = null;
+      if (kind === 'balance_adjustment' && editTransactionForm.account_id != null) {
+        const selectedAccount = accountMap.value.get(editTransactionForm.account_id);
+        if (selectedAccount) {
+          editTransactionForm.amount = toNumber(selectedAccount.current_balance).toFixed(2);
+        }
+      }
+    },
+  );
+  watch(
+    () => editTransactionForm.account_id,
+    (accountId) => {
+      if (accountId == null) {
+        editTransactionForm.currency = 'EUR';
+        return;
+      }
+      const account = accountMap.value.get(accountId);
+      if (!account) return;
+      editTransactionForm.currency = account.currency;
+      if (editTransactionForm.kind === 'balance_adjustment') {
+        editTransactionForm.amount = toNumber(account.current_balance).toFixed(2);
+      }
+      if (!isCounterpartyKind(editTransactionForm.kind)) return;
+      if (editTransactionForm.counterparty_account_id === accountId) {
+        editTransactionForm.counterparty_account_id = editCounterpartyOptions.value[0]?.id ?? null;
+      }
+    },
+  );
+  watch(
+    () => editTransactionForm.category_key,
+    () => {
+      if (
+        editTransactionForm.subcategory_key &&
+        !editSubcategoryOptions.value.some(
+          (row) => row.value === editTransactionForm.subcategory_key,
+        )
+      ) {
+        editTransactionForm.subcategory_key = '';
       }
     },
   );
@@ -574,11 +824,37 @@ export function useAccountingPage() {
     editTransactionId.value = null;
     editTransactionPersistedEntries.value = [];
     editTransactionForm.booking_date = new Date().toISOString().slice(0, 10);
+    editTransactionForm.value_date = editTransactionForm.booking_date;
+    editTransactionForm.booking_time = '12:00';
     editTransactionForm.description = '';
     editTransactionForm.notes = '';
+    editTransactionForm.account_id = null;
+    editTransactionForm.counterparty_account_id = null;
     editTransactionForm.amount = '';
     editTransactionForm.currency = 'EUR';
+    editTransactionForm.kind = 'transfer';
+    editTransactionForm.initial_kind = 'transfer';
+    editTransactionForm.category_key = '';
+    editTransactionForm.subcategory_key = '';
     editTransactionForm.kind_label = '';
+  }
+
+  function toEditableKind(transaction: LedgerTransaction): EditableActivityKind {
+    const detected = getTransactionActivityKind(transaction);
+    if (detected === 'income') return 'income';
+    if (detected === 'expense') return 'expense';
+    if (detected === 'investment_purchase') return 'investment_purchase';
+    if (detected === 'debt_payment') return 'debt_payment';
+    return 'transfer';
+  }
+
+  function activityKindDisplay(kind: EditableActivityKind): string {
+    if (kind === 'income') return 'Ingreso';
+    if (kind === 'expense') return 'Gasto';
+    if (kind === 'transfer') return 'Transferencia';
+    if (kind === 'investment_purchase') return 'Inversion';
+    if (kind === 'debt_payment') return 'Deuda';
+    return 'Ajuste';
   }
 
   function getTransactionEditAmount(transaction: LedgerTransaction): string {
@@ -588,21 +864,396 @@ export function useAccountingPage() {
     return debitTotalValue.toFixed(2);
   }
 
+  function resolveEditAccountsForKind(
+    transaction: LedgerTransaction,
+    kind: EditableActivityKind,
+    debitEntry: LedgerTransaction['entries'][number] | null,
+    creditEntry: LedgerTransaction['entries'][number] | null,
+  ): { accountId: number | null; counterpartyAccountId: number | null } {
+    if (kind === 'income') {
+      return {
+        accountId: debitEntry?.account_id ?? null,
+        counterpartyAccountId: null,
+      };
+    }
+    if (kind === 'expense') {
+      return {
+        accountId: creditEntry?.account_id ?? null,
+        counterpartyAccountId: null,
+      };
+    }
+    if (kind === 'debt_payment') {
+      const liabilityEntry =
+        transaction.entries.find(
+          (entry) => accountMap.value.get(entry.account_id)?.account_type === 'liability',
+        ) ??
+        transaction.entries.find((entry) => entry.side === 'debit') ??
+        debitEntry;
+      return {
+        accountId: creditEntry?.account_id ?? null,
+        counterpartyAccountId: liabilityEntry?.account_id ?? null,
+      };
+    }
+    return {
+      accountId: creditEntry?.account_id ?? null,
+      counterpartyAccountId: debitEntry?.account_id ?? null,
+    };
+  }
+
   function fillEditTransactionForm(transaction: LedgerTransaction) {
+    const primaryClassifiedEntry =
+      transaction.entries.find(
+        (entry) =>
+          Boolean(entry.flow_family) &&
+          Boolean(entry.category_key) &&
+          Boolean(entry.subcategory_key),
+      ) ?? null;
     editTransactionId.value = transaction.id;
     editTransactionPersistedEntries.value = transaction.entries.map((entry) => ({
       account_id: entry.account_id,
       side: entry.side,
       amount: String(entry.amount),
       currency: entry.currency,
+      flow_family: entry.flow_family ?? '',
+      category_key: entry.category_key ?? '',
+      subcategory_key: entry.subcategory_key ?? '',
+      annual_income_entry_id: entry.annual_income_entry_id ?? null,
+      annual_expense_entry_id: entry.annual_expense_entry_id ?? null,
+      asset_id: entry.asset_id ?? null,
+      liability_id: entry.liability_id ?? null,
       notes: entry.notes ?? '',
     }));
     editTransactionForm.booking_date = transaction.booking_date;
+    editTransactionForm.value_date = transaction.value_date;
+    editTransactionForm.booking_time = '12:00';
     editTransactionForm.description = transaction.description;
     editTransactionForm.notes = transaction.notes ?? '';
     editTransactionForm.currency = transaction.entries[0]?.currency ?? 'EUR';
     editTransactionForm.amount = getTransactionEditAmount(transaction);
-    editTransactionForm.kind_label = activityKindLabel(transaction);
+    const kind = toEditableKind(transaction);
+    editTransactionForm.kind = kind;
+    editTransactionForm.initial_kind = kind;
+    const debitEntry =
+      transaction.entries.find((entry) => entry.side === 'debit') ?? transaction.entries[0] ?? null;
+    const creditEntry =
+      transaction.entries.find((entry) => entry.side === 'credit') ??
+      transaction.entries[1] ??
+      null;
+    const { accountId, counterpartyAccountId } = resolveEditAccountsForKind(
+      transaction,
+      kind,
+      debitEntry,
+      creditEntry,
+    );
+    editTransactionForm.account_id = accountId;
+    editTransactionForm.counterparty_account_id = counterpartyAccountId;
+    editTransactionForm.category_key = primaryClassifiedEntry?.category_key ?? '';
+    editTransactionForm.subcategory_key = primaryClassifiedEntry?.subcategory_key ?? '';
+    editTransactionForm.kind_label = activityKindDisplay(kind);
+  }
+
+  function scaleEntriesToAmount(
+    entries: PersistedTransactionEntry[],
+    targetAmount: number,
+  ): PersistedTransactionEntry[] {
+    const scaled = entries.map((entry) => ({ ...entry }));
+    const debitIndexes = scaled
+      .map((entry, index) => (entry.side === 'debit' ? index : -1))
+      .filter((index) => index >= 0);
+    const creditIndexes = scaled
+      .map((entry, index) => (entry.side === 'credit' ? index : -1))
+      .filter((index) => index >= 0);
+    const currentDebitTotal = debitIndexes.reduce(
+      (sum, index) => sum + toNumber(scaled[index]!.amount),
+      0,
+    );
+    if (currentDebitTotal <= 0) return scaled;
+    const factor = targetAmount / currentDebitTotal;
+    const round2 = (value: number) => Math.round(value * 100) / 100;
+    const applySide = (indexes: number[]) => {
+      if (!indexes.length) return;
+      let allocated = 0;
+      indexes.forEach((index, position) => {
+        const currentValue = toNumber(scaled[index]!.amount);
+        const isLast = position === indexes.length - 1;
+        const nextValue = isLast ? round2(targetAmount - allocated) : round2(currentValue * factor);
+        allocated = round2(allocated + nextValue);
+        scaled[index]!.amount = nextValue.toFixed(2);
+      });
+    };
+    applySide(debitIndexes);
+    applySide(creditIndexes);
+    return scaled;
+  }
+
+  function setEditedKindOnEntries(
+    entries: PersistedTransactionEntry[],
+    kind: EditableActivityKind,
+    categoryKey: string,
+    subcategoryKey: string,
+  ): PersistedTransactionEntry[] {
+    const nextEntries = entries.map((entry) => ({
+      ...entry,
+      flow_family: '' as '' | 'income' | 'expense',
+      category_key: '',
+      subcategory_key: '',
+      annual_income_entry_id: null,
+      annual_expense_entry_id: null,
+      asset_id: null,
+      liability_id: null,
+    }));
+    if (!isClassificationKind(kind)) return nextEntries;
+
+    const preferredSide = kind === 'income' ? 'credit' : 'debit';
+    const preferredEntry =
+      nextEntries.find((entry) => entry.side === preferredSide) ?? nextEntries[0] ?? null;
+    if (!preferredEntry) return nextEntries;
+    preferredEntry.flow_family = kind;
+    preferredEntry.category_key = categoryKey;
+    preferredEntry.subcategory_key = subcategoryKey;
+    return nextEntries;
+  }
+
+  function setEditedAccountsOnEntries(
+    entries: PersistedTransactionEntry[],
+    kind: EditableActivityKind,
+    accountId: number,
+    counterpartyAccountId: number | null,
+  ): PersistedTransactionEntry[] {
+    const nextEntries = entries.map((entry) => ({ ...entry }));
+    const debitEntry =
+      nextEntries.find((entry) => entry.side === 'debit') ?? nextEntries[0] ?? null;
+    const creditEntry =
+      nextEntries.find((entry) => entry.side === 'credit') ?? nextEntries[1] ?? null;
+    const setAccount = (entry: PersistedTransactionEntry | null, targetId: number | null) => {
+      if (!entry || targetId == null) return;
+      const targetAccount = accountMap.value.get(targetId);
+      if (!targetAccount) return;
+      entry.account_id = targetId;
+      entry.currency = targetAccount.currency;
+    };
+    if (kind === 'income') {
+      setAccount(debitEntry, accountId);
+      setAccount(creditEntry, counterpartyAccountId);
+      return nextEntries;
+    }
+    if (kind === 'expense') {
+      setAccount(creditEntry, accountId);
+      setAccount(debitEntry, counterpartyAccountId);
+      return nextEntries;
+    }
+    if (kind === 'balance_adjustment') {
+      return nextEntries;
+    }
+    setAccount(creditEntry, accountId);
+    setAccount(debitEntry, counterpartyAccountId);
+    return nextEntries;
+  }
+
+  function resolveClassificationCounterpartyAccountId(
+    kind: ClassificationActivityKind,
+    currency: string,
+  ): number | null {
+    const expectedType = kind === 'income' ? 'income' : 'expense';
+    const candidates = accounts.value.filter((account) => account.account_type === expectedType);
+    if (!candidates.length) return null;
+    return (
+      candidates.find((account) => account.currency === currency && account.origin === 'system')
+        ?.id ??
+      candidates.find((account) => account.currency === currency)?.id ??
+      candidates.find((account) => account.origin === 'system')?.id ??
+      candidates[0]?.id ??
+      null
+    );
+  }
+
+  async function ensureClassificationCounterpartyAccountId(
+    kind: ClassificationActivityKind,
+    currency: string,
+  ): Promise<number | null> {
+    const existingId = resolveClassificationCounterpartyAccountId(kind, currency);
+    if (existingId != null) return existingId;
+
+    const normalizedCurrency = currency.trim().toUpperCase();
+    const accountType = kind === 'income' ? 'income' : 'expense';
+    const defaultName = kind === 'income' ? 'Ingresos sin categoria' : 'Gastos sin categoria';
+    try {
+      const created = await coreAccountingApi.createAccount({
+        name: defaultName,
+        account_type: accountType,
+        currency: normalizedCurrency,
+        origin: 'system',
+        notes: 'Autogenerada al reclasificar movimiento desde edicion.',
+      });
+      await store.refreshAll();
+      return created.data.id;
+    } catch (error: unknown) {
+      store.error = toApiErrorMessage(error);
+      return null;
+    }
+  }
+
+  function resolveAdjustmentCounterpartyAccountId(currency: string): number | null {
+    const candidates = accounts.value.filter((account) => account.account_type === 'equity');
+    if (!candidates.length) return null;
+    return (
+      candidates.find((account) => account.currency === currency && account.origin === 'system')
+        ?.id ??
+      candidates.find((account) => account.currency === currency)?.id ??
+      candidates.find((account) => account.origin === 'system')?.id ??
+      candidates[0]?.id ??
+      null
+    );
+  }
+
+  async function ensureAdjustmentCounterpartyAccountId(currency: string): Promise<number | null> {
+    const existingId = resolveAdjustmentCounterpartyAccountId(currency);
+    if (existingId != null) return existingId;
+
+    const normalizedCurrency = currency.trim().toUpperCase();
+    try {
+      const created = await coreAccountingApi.createAccount({
+        name: 'Ajustes de saldo',
+        account_type: 'equity',
+        currency: normalizedCurrency,
+        origin: 'system',
+        notes: 'Autogenerada al ajustar saldos desde edicion de movimientos.',
+      });
+      await store.refreshAll();
+      return created.data.id;
+    } catch (error: unknown) {
+      store.error = toApiErrorMessage(error);
+      return null;
+    }
+  }
+
+  function accountDeltaSide(accountType: LedgerAccountType, delta: number): LedgerEntrySide {
+    const debitIncreases = accountType === 'asset' || accountType === 'expense';
+    if (delta >= 0) return debitIncreases ? 'debit' : 'credit';
+    return debitIncreases ? 'credit' : 'debit';
+  }
+
+  function buildBalanceAdjustmentEntries(
+    amount: number,
+    targetAccount: LedgerAccount,
+    counterpartyAccount: LedgerAccount,
+  ): PersistedTransactionEntry[] {
+    const targetSide = accountDeltaSide(targetAccount.account_type, amount);
+    const counterpartySide = targetSide === 'debit' ? 'credit' : 'debit';
+    const absoluteAmount = Math.abs(round2(amount)).toFixed(2);
+    const makeEntry = (
+      account: LedgerAccount,
+      side: LedgerEntrySide,
+    ): PersistedTransactionEntry => ({
+      account_id: account.id,
+      side,
+      amount: absoluteAmount,
+      currency: account.currency,
+      flow_family: '',
+      category_key: '',
+      subcategory_key: '',
+      annual_income_entry_id: null,
+      annual_expense_entry_id: null,
+      asset_id: null,
+      liability_id: null,
+      notes: '',
+    });
+    return [makeEntry(targetAccount, targetSide), makeEntry(counterpartyAccount, counterpartySide)];
+  }
+
+  function validateEditedTransactionInput(): {
+    parsedAmount: number;
+    selectedAccount: LedgerAccount;
+  } | null {
+    const parsedAmount = Number(formatDecimalInput(editTransactionForm.amount));
+    if (!Number.isFinite(parsedAmount)) {
+      store.error = 'Introduce un importe valido.';
+      return null;
+    }
+    if (editTransactionForm.kind !== 'balance_adjustment' && parsedAmount <= 0) {
+      store.error = 'El importe debe ser mayor que 0.';
+      return null;
+    }
+    if (editKindNeedsClassification.value) {
+      if (!editTransactionForm.category_key || !editTransactionForm.subcategory_key) {
+        store.error = 'Selecciona categoria y subcategoria para el tipo elegido.';
+        return null;
+      }
+    }
+    if (editTransactionForm.account_id == null) {
+      store.error = 'Selecciona una cuenta.';
+      return null;
+    }
+    if (
+      editKindNeedsCounterparty.value &&
+      (editTransactionForm.counterparty_account_id == null ||
+        editTransactionForm.counterparty_account_id === editTransactionForm.account_id)
+    ) {
+      store.error =
+        editTransactionForm.kind === 'debt_payment'
+          ? 'Selecciona una cuenta de pasivo distinta para la deuda.'
+          : 'Selecciona una contracuenta distinta.';
+      return null;
+    }
+    const selectedAccount = accountMap.value.get(editTransactionForm.account_id);
+    if (!selectedAccount) {
+      store.error = 'La cuenta seleccionada no existe o no esta activa.';
+      return null;
+    }
+    return { parsedAmount, selectedAccount };
+  }
+
+  async function resolveEditedTransactionEntries(
+    parsedAmount: number,
+    selectedAccount: LedgerAccount,
+  ): Promise<PersistedTransactionEntry[] | null> {
+    if (editTransactionForm.kind === 'balance_adjustment') {
+      const targetBalance = round2(parsedAmount);
+      const currentBalance = round2(toNumber(selectedAccount.current_balance));
+      const delta = round2(targetBalance - currentBalance);
+      if (Math.abs(delta) < 0.005) {
+        store.error = 'El saldo de la cuenta ya coincide con el objetivo.';
+        return null;
+      }
+      const counterpartyId = await ensureAdjustmentCounterpartyAccountId(selectedAccount.currency);
+      if (counterpartyId == null) {
+        store.error = 'No hay cuenta de contrapartida para registrar el ajuste.';
+        return null;
+      }
+      const counterpartyAccount = accountMap.value.get(counterpartyId);
+      if (!counterpartyAccount) {
+        store.error = 'No se pudo resolver la cuenta de contrapartida del ajuste.';
+        return null;
+      }
+      return buildBalanceAdjustmentEntries(delta, selectedAccount, counterpartyAccount);
+    }
+    const editedAmount = round2(parsedAmount);
+    const classificationCounterpartyAccountId = editKindNeedsCounterparty.value
+      ? editTransactionForm.counterparty_account_id
+      : await ensureClassificationCounterpartyAccountId(
+          editTransactionForm.kind as ClassificationActivityKind,
+          selectedAccount.currency,
+        );
+    if (!editKindNeedsCounterparty.value && classificationCounterpartyAccountId == null) {
+      store.error = 'No hay cuenta contable de contrapartida para ese tipo y moneda.';
+      return null;
+    }
+    const scaledEntries = scaleEntriesToAmount(editTransactionPersistedEntries.value, editedAmount);
+    const kindAdjustedEntries =
+      editTransactionForm.kind === editTransactionForm.initial_kind
+        ? scaledEntries
+        : setEditedKindOnEntries(
+            scaledEntries,
+            editTransactionForm.kind,
+            editTransactionForm.category_key,
+            editTransactionForm.subcategory_key,
+          );
+    return setEditedAccountsOnEntries(
+      kindAdjustedEntries,
+      editTransactionForm.kind,
+      editTransactionForm.account_id!,
+      classificationCounterpartyAccountId,
+    );
   }
 
   function getTransactionActivityKind(
@@ -845,28 +1496,51 @@ export function useAccountingPage() {
     return true;
   }
 
-  async function submitEditedTransaction() {
-    if (editTransactionId.value == null) return;
-    if (!editTransactionPersistedEntries.value.length) return;
+  async function submitEditedTransaction(): Promise<boolean> {
+    if (editTransactionId.value == null) return false;
+    if (!editTransactionPersistedEntries.value.length) return false;
+    const validated = validateEditedTransactionInput();
+    if (!validated) return false;
+    const payloadEntries = await resolveEditedTransactionEntries(
+      validated.parsedAmount,
+      validated.selectedAccount,
+    );
+    if (!payloadEntries?.length) {
+      store.error = 'No se pudo construir el asiento actualizado.';
+      return false;
+    }
     successMessage.value = null;
+    store.error = null;
     const payload: LedgerTransactionWritePayload = {
       booking_date: editTransactionForm.booking_date,
-      value_date: editTransactionForm.booking_date,
+      value_date: editTransactionForm.value_date,
       description: editTransactionForm.description.trim(),
       status: 'posted',
       origin: 'manual',
       notes: editTransactionForm.notes.trim(),
-      entries: editTransactionPersistedEntries.value.map((entry) => ({
+      entries: payloadEntries.map((entry) => ({
         account_id: entry.account_id,
         side: entry.side,
         amount: formatDecimalInput(entry.amount),
         currency: entry.currency.trim().toUpperCase(),
+        flow_family: entry.flow_family,
+        category_key: entry.category_key,
+        subcategory_key: entry.subcategory_key,
+        annual_income_entry_id: entry.annual_income_entry_id,
+        annual_expense_entry_id: entry.annual_expense_entry_id,
+        asset_id: entry.asset_id,
+        liability_id: entry.liability_id,
         notes: entry.notes.trim(),
       })),
     };
-    await store.updateTransaction(editTransactionId.value, payload);
-    resetEditTransactionForm();
-    successMessage.value = 'Movimiento contable actualizado.';
+    try {
+      await store.updateTransaction(editTransactionId.value, payload);
+      resetEditTransactionForm();
+      successMessage.value = 'Movimiento contable actualizado.';
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function deleteTransaction(transactionId: number, transactionDescription: string) {
@@ -970,6 +1644,16 @@ export function useAccountingPage() {
     accountTypeOptions,
     manualPositionTypeOptions,
     quickMovementTypeOptions,
+    editMovementTypeOptions,
+    editAccountOptions,
+    editCounterpartyOptions,
+    editCounterpartyMissingHint,
+    editKindNeedsCounterparty,
+    editKindNeedsClassification,
+    editCounterpartyLabel,
+    editSelectedAccountCurrentBalance,
+    editCategoryOptions,
+    editSubcategoryOptions,
     accountForm,
     activationForm,
     quickEntryForm,
@@ -979,6 +1663,8 @@ export function useAccountingPage() {
     activityFilters,
     liquidityAccounts,
     availableManualPositionOptions,
+    accountPositionMetaByAccountId,
+    accountDisplayName,
     hasAvailableManualPositions,
     liquidityBalanceRows,
     liquidityBalanceTotal,
@@ -994,6 +1680,7 @@ export function useAccountingPage() {
     liabilityCounterpartyOptions,
     debtInterestOptions,
     quickEntryReady,
+    editEntryReady,
     debitTotal,
     creditTotal,
     transactionBalanced,

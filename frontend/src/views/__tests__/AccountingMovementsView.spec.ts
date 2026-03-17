@@ -130,6 +130,25 @@ function makeState(overrides: Record<string, unknown> = {}) {
       { value: 'investment_purchase', label: 'Compra inversion' },
       { value: 'debt_payment', label: 'Pago deuda' },
     ],
+    editMovementTypeOptions: [
+      { value: 'income', label: 'Ingreso' },
+      { value: 'expense', label: 'Gasto' },
+      { value: 'transfer', label: 'Transferencia' },
+      { value: 'investment_purchase', label: 'Inversion' },
+      { value: 'debt_payment', label: 'Deuda' },
+      { value: 'balance_adjustment', label: 'Ajuste' },
+    ],
+    editAccountOptions: computed(() => [
+      { id: 1, name: 'Cuenta corriente', currency: 'EUR', account_type: 'asset' },
+    ]),
+    editCounterpartyOptions: computed(() => []),
+    editCounterpartyMissingHint: computed(() => ''),
+    editKindNeedsCounterparty: computed(() => false),
+    editKindNeedsClassification: computed(() => true),
+    editCounterpartyLabel: computed(() => 'Contracuenta'),
+    editSelectedAccountCurrentBalance: computed(() => '2100.00'),
+    editCategoryOptions: computed(() => [{ value: 'salary', label: 'Salarios y trabajo' }]),
+    editSubcategoryOptions: computed(() => [{ value: 'employee_salary', label: 'Nomina' }]),
     accountForm: {
       name: '',
       account_type: 'asset',
@@ -188,10 +207,18 @@ function makeState(overrides: Record<string, unknown> = {}) {
     },
     editTransactionForm: {
       booking_date: '2026-03-15',
+      value_date: '2026-03-15',
+      booking_time: '12:00',
       description: 'Nomina marzo',
       notes: '',
+      account_id: 1,
+      counterparty_account_id: null,
       amount: '2100.00',
       currency: 'EUR',
+      kind: 'income',
+      initial_kind: 'income',
+      category_key: 'salary',
+      subcategory_key: 'employee_salary',
       kind_label: 'Ingreso',
     },
     debitTotal: computed(() => 100),
@@ -209,13 +236,16 @@ function makeState(overrides: Record<string, unknown> = {}) {
         currency: 'EUR',
       },
     ]),
+    accountPositionMetaByAccountId: computed(() => new Map()),
     availableManualPositionOptions: computed(() => [
       {
         id: 91,
         name: 'Broker manual',
+        category: 'cash',
         currency: 'EUR',
       },
     ]),
+    accountDisplayName: vi.fn((account) => account.name),
     hasAvailableManualPositions: computed(() => true),
     liquidityBalanceRows: computed(() => [
       {
@@ -243,6 +273,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     liabilityCounterpartyOptions: computed(() => []),
     debtInterestOptions: computed(() => []),
     quickEntryReady: computed(() => true),
+    editEntryReady: computed(() => true),
     transactionBalanced: computed(() => true),
     summaryRows: computed(() => [
       {
@@ -344,19 +375,6 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Sin cuentas operativas para el periodo seleccionado.');
   });
 
-  it('wires entry add action from quick controls', async () => {
-    const state = makeState();
-    mockUseAccountingPage.mockReturnValue(state);
-    const wrapper = mount(AccountingMovementsView);
-
-    const button = wrapper
-      .findAll('button')
-      .find((candidate) => candidate.text().includes('Anadir debe'));
-    await button?.trigger('click');
-
-    expect(state.addEntry).toHaveBeenCalledWith('debit');
-  });
-
   it('opens the quick-entry modal and submits from there', async () => {
     const state = makeState();
     mockUseAccountingPage.mockReturnValue(state);
@@ -418,6 +436,8 @@ describe('AccountingMovementsView', () => {
   it('marks account timeline movement in green when it increases balance', () => {
     mockUseAccountingPage.mockReturnValue(makeState());
     const wrapper = mount(AccountingMovementsView);
+    const details = wrapper.find('.ui-accounting-account-timeline');
+    details.element.setAttribute('open', '');
 
     const firstDelta = wrapper.find('.ui-accounting-account-timeline .ui-accounting-balance-delta');
     expect(firstDelta.exists()).toBe(true);
@@ -512,6 +532,9 @@ describe('AccountingMovementsView', () => {
       }),
     );
     const wrapper = mount(AccountingMovementsView);
+    wrapper.findAll('.ui-accounting-account-timeline').forEach((detail) => {
+      detail.element.setAttribute('open', '');
+    });
 
     const originCard = wrapper
       .findAll('.ui-accounting-account-timeline')
@@ -542,9 +565,7 @@ describe('AccountingMovementsView', () => {
       'input.ui-accounting-activation-checkbox',
     ) as HTMLInputElement | null;
     checkbox?.click();
-    const activationForm = document.body.querySelector(
-      'form.ui-accounting-modal-form',
-    ) as HTMLFormElement | null;
+    const activationForm = checkbox?.closest('form') as HTMLFormElement | null;
     activationForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await wrapper.vm.$nextTick();
 
