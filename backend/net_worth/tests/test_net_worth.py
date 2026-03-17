@@ -1837,6 +1837,55 @@ class NetWorthApiTests(APITestCase):
             ).exists()
         )
 
+    def test_asset_update_to_accounting_handles_duplicated_system_equity_accounts(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta manual duplicados",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("300.00"),
+            is_active=True,
+        )
+        LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+            is_active=True,
+        )
+        LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+            is_active=True,
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/assets/{asset.id}/",
+            {"tracking_mode": Asset.TrackingMode.ACCOUNTING},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=f"net_worth_opening_balance:asset:{asset.id}",
+        )
+        self.assertEqual(opening_tx.entries.count(), 2)
+        self.assertEqual(
+            opening_tx.entries.filter(
+                account__account_type=LedgerAccount.AccountType.EQUITY
+            ).count(),
+            1,
+        )
+
     def test_liability_update_to_accounting_creates_opening_balance_against_equity(self):
         liability = Liability.objects.create(
             user=self.user,
