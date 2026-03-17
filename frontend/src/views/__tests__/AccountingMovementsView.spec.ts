@@ -186,6 +186,14 @@ function makeState(overrides: Record<string, unknown> = {}) {
         },
       ],
     },
+    editTransactionForm: {
+      booking_date: '2026-03-15',
+      description: 'Nomina marzo',
+      notes: '',
+      amount: '2100.00',
+      currency: 'EUR',
+      kind_label: 'Ingreso',
+    },
     debitTotal: computed(() => 100),
     creditTotal: computed(() => 100),
     activityFilters: {
@@ -282,7 +290,6 @@ function makeState(overrides: Record<string, unknown> = {}) {
     ]),
     addEntry: vi.fn(),
     activityKindLabel: vi.fn(() => 'Ingreso'),
-    liquidityBalanceDeltaTone: vi.fn(() => 'positive'),
     removeEntry: vi.fn(),
     reloadPeriod: vi.fn(),
     activateNetWorthPosition: vi.fn(),
@@ -290,7 +297,11 @@ function makeState(overrides: Record<string, unknown> = {}) {
     removeNetWorthTracking: vi.fn(),
     refreshManualPositionOptions: vi.fn(),
     submitAccount: vi.fn(),
+    deleteAccount: vi.fn(),
+    deleteTransaction: vi.fn(),
+    openTransactionForEditing: vi.fn(() => true),
     submitQuickEntry: vi.fn(),
+    submitEditedTransaction: vi.fn(),
     submitTransaction: vi.fn(),
     ...overrides,
   };
@@ -308,9 +319,12 @@ describe('AccountingMovementsView', () => {
     expect(wrapper.text()).toContain('Libro diario operativo');
     expect(wrapper.text()).toContain('Cuenta corriente');
     expect(wrapper.text()).toContain('Nomina marzo');
-    expect(wrapper.text()).toContain('Saldos derivados del ledger');
+    expect(wrapper.text()).toContain('Cuentas + historico por cuenta');
     expect(wrapper.text()).toContain('Saldo neto contable');
     expect(wrapper.text()).toContain('Activo contable - Pasivo contable');
+    expect(wrapper.text()).not.toContain('Saldos derivados del ledger');
+    expect(wrapper.text()).not.toContain('Entradas');
+    expect(wrapper.text()).not.toContain('Salidas');
     expect(wrapper.find('button[title="Activar tracking contable"]').exists()).toBe(true);
     expect(wrapper.find('button[title="Registrar movimiento diario"]').exists()).toBe(true);
   });
@@ -322,17 +336,12 @@ describe('AccountingMovementsView', () => {
         accounts: ref([]),
         transactions: ref([]),
         filteredTransactions: computed(() => []),
-        liquidityAccounts: computed(() => []),
-        liquidityBalanceRows: computed(() => []),
       }),
     );
     const wrapper = mount(AccountingMovementsView);
 
     expect(wrapper.text()).toContain('La transaccion no esta balanceada.');
-    expect(wrapper.text()).toContain('No hay movimientos para el periodo seleccionado.');
-    expect(wrapper.text()).toContain(
-      'Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.',
-    );
+    expect(wrapper.text()).toContain('Sin cuentas operativas para el periodo seleccionado.');
   });
 
   it('wires entry add action from quick controls', async () => {
@@ -371,6 +380,154 @@ describe('AccountingMovementsView', () => {
 
     expect(wrapper.find('input[placeholder="Filtrar por texto o cuenta"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Ingreso');
+  });
+
+  it('opens movement edit modal from timeline and submits changes', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
+    const wrapper = mount(AccountingMovementsView, {
+      attachTo: document.body,
+    });
+
+    const editButton = wrapper.find('button[aria-label="Editar movimiento"]');
+    await editButton?.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    expect(state.openTransactionForEditing).toHaveBeenCalledWith(7);
+
+    const editForm = document.body.querySelector(
+      'form.ui-accounting-modal-form.ui-accounting-transaction-form',
+    ) as HTMLFormElement | null;
+    editForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await wrapper.vm.$nextTick();
+
+    expect(state.submitEditedTransaction).toHaveBeenCalled();
+  });
+
+  it('deletes movement from timeline', async () => {
+    const state = makeState();
+    mockUseAccountingPage.mockReturnValue(state);
+    const wrapper = mount(AccountingMovementsView);
+
+    const deleteButton = wrapper.find('button[aria-label="Eliminar movimiento"]');
+    await deleteButton?.trigger('click');
+
+    expect(state.deleteTransaction).toHaveBeenCalledWith(7, 'Nomina marzo');
+  });
+
+  it('marks account timeline movement in green when it increases balance', () => {
+    mockUseAccountingPage.mockReturnValue(makeState());
+    const wrapper = mount(AccountingMovementsView);
+
+    const firstDelta = wrapper.find('.ui-accounting-account-timeline .ui-accounting-balance-delta');
+    expect(firstDelta.exists()).toBe(true);
+    expect(firstDelta.classes()).toContain('ui-accounting-balance-delta-positive');
+  });
+
+  it('shows transfer impact in red for origin and green for destination', () => {
+    mockUseAccountingPage.mockReturnValue(
+      makeState({
+        accounts: ref([
+          {
+            id: 1,
+            name: 'Cuenta origen',
+            account_type: 'asset',
+            currency: 'EUR',
+            origin: 'user',
+            asset_id: null,
+            liability_id: null,
+            is_active: true,
+            notes: '',
+            current_balance: '900.00',
+            created_at: '',
+            updated_at: '',
+          },
+          {
+            id: 3,
+            name: 'Cuenta destino',
+            account_type: 'asset',
+            currency: 'EUR',
+            origin: 'user',
+            asset_id: null,
+            liability_id: null,
+            is_active: true,
+            notes: '',
+            current_balance: '1200.00',
+            created_at: '',
+            updated_at: '',
+          },
+        ]),
+        filteredTransactions: computed(() => [
+          {
+            id: 9,
+            booking_date: '2026-03-17',
+            value_date: '2026-03-17',
+            description: 'Transferencia interna',
+            status: 'posted',
+            origin: 'manual',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 11,
+                account_id: 1,
+                account_name: 'Cuenta origen',
+                side: 'credit',
+                amount: '100.00',
+                currency: 'EUR',
+                flow_family: '',
+                category_key: '',
+                subcategory_key: '',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: null,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+              {
+                id: 12,
+                account_id: 3,
+                account_name: 'Cuenta destino',
+                side: 'debit',
+                amount: '100.00',
+                currency: 'EUR',
+                flow_family: '',
+                category_key: '',
+                subcategory_key: '',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: null,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+        ]),
+        activityKindLabel: vi.fn(() => 'Transferencia'),
+      }),
+    );
+    const wrapper = mount(AccountingMovementsView);
+
+    const originCard = wrapper
+      .findAll('.ui-accounting-account-timeline')
+      .find((card) => card.text().includes('Cuenta origen'));
+    const destinationCard = wrapper
+      .findAll('.ui-accounting-account-timeline')
+      .find((card) => card.text().includes('Cuenta destino'));
+
+    expect(originCard).toBeTruthy();
+    expect(destinationCard).toBeTruthy();
+    expect(originCard?.find('.ui-accounting-balance-delta').classes()).toContain(
+      'ui-accounting-balance-delta-negative',
+    );
+    expect(destinationCard?.find('.ui-accounting-balance-delta').classes()).toContain(
+      'ui-accounting-balance-delta-positive',
+    );
   });
 
   it('opens the activation modal and allows batch activation', async () => {

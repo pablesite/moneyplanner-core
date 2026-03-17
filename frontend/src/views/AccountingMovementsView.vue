@@ -12,7 +12,6 @@ const {
   successMessage,
   accounts,
   transactions,
-  accountBalancesSummary,
   selectedYear,
   selectedMonth,
   yearOptions,
@@ -23,12 +22,11 @@ const {
   activationForm,
   quickEntryForm,
   transactionForm,
+  editTransactionForm,
   activityFilters,
   liquidityAccounts,
   availableManualPositionOptions,
   hasAvailableManualPositions,
-  liquidityBalanceRows,
-  liquidityBalanceTotal,
   annualIncomeOptionsCompatible,
   annualExpenseOptionsCompatible,
   quickEntryNeedsClassification,
@@ -46,13 +44,15 @@ const {
   filteredTransactions,
   addEntry,
   activityKindLabel,
-  liquidityBalanceDeltaTone,
   removeEntry,
   reloadPeriod,
   activateNetWorthPositions,
   removeNetWorthTracking,
   deleteAccount,
+  deleteTransaction,
+  openTransactionForEditing,
   submitQuickEntry,
+  submitEditedTransaction,
   submitTransaction,
 } = useAccountingPage();
 
@@ -68,6 +68,7 @@ function formatMoney(value: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
     currency,
+    minimumFractionDigits: currency === 'EUR' ? 2 : undefined,
     maximumFractionDigits: 2,
   }).format(value);
 }
@@ -116,6 +117,9 @@ const operationalAccountsCount = computed(() =>
     0,
   ),
 );
+const operationalAccounts = computed(() =>
+  operationalAccountTypeOptions.value.flatMap((type) => accountsByType.value.get(type.value) ?? []),
+);
 const technicalAccountTypeOptions = computed(() =>
   accountTypeOptions.filter((type) => type.value !== 'asset' && type.value !== 'liability'),
 );
@@ -136,8 +140,84 @@ const hasCompatibleAnnualPlanOptions = computed(() => {
   }
   return false;
 });
+const selectedOperationalAccountId = computed<number | null>(() => {
+  if (activityFilters.accountId === 'all') return null;
+  const parsed = Number(activityFilters.accountId);
+  return Number.isFinite(parsed) ? parsed : null;
+});
+
+function signedEntryImpact(accountType: string, side: 'debit' | 'credit', amount: string): number {
+  const value = toNumber(amount);
+  if (value === 0) return 0;
+  const increasesOnDebit = accountType === 'asset' || accountType === 'expense';
+  const increases = increasesOnDebit ? side === 'debit' : side === 'credit';
+  return increases ? value : -value;
+}
+
+function impactTone(value: number): 'positive' | 'negative' | 'neutral' {
+  if (value > 0) return 'positive';
+  if (value < 0) return 'negative';
+  return 'neutral';
+}
+
+function formatSignedMoney(value: number, currency = 'EUR'): string {
+  if (value > 0) return `+${formatMoney(value, currency)}`;
+  if (value < 0) return `-${formatMoney(Math.abs(value), currency)}`;
+  return formatMoney(0, currency);
+}
+
+const accountTimelineRows = computed(() => {
+  const scopedAccounts = operationalAccounts.value.filter(
+    (account) =>
+      selectedOperationalAccountId.value == null ||
+      account.id === selectedOperationalAccountId.value,
+  );
+  const rows = scopedAccounts.map((account) => {
+    const movements = filteredTransactions.value
+      .map((transaction) => {
+        const impactValue = transaction.entries
+          .filter((entry) => entry.account_id === account.id)
+          .reduce(
+            (total, entry) =>
+              total + signedEntryImpact(account.account_type, entry.side, entry.amount),
+            0,
+          );
+        if (impactValue === 0) return null;
+        return {
+          id: transaction.id,
+          booking_date: transaction.booking_date,
+          description: transaction.description,
+          kind_label: activityKindLabel(transaction),
+          origin: transaction.origin,
+          status: transaction.status,
+          impact_value: impactValue,
+          tone: impactTone(impactValue),
+        };
+      })
+      .filter((movement): movement is NonNullable<typeof movement> => movement != null)
+      .sort((a, b) => b.booking_date.localeCompare(a.booking_date) || b.id - a.id);
+    return {
+      account,
+      movements,
+      movement_count: movements.length,
+    };
+  });
+  return rows.sort(
+    (left, right) =>
+      right.movement_count - left.movement_count ||
+      left.account.name.localeCompare(right.account.name, 'es'),
+  );
+});
+
+const defaultExpandedAccountIds = computed(() =>
+  accountTimelineRows.value
+    .filter((row) => row.movement_count > 0)
+    .slice(0, 2)
+    .map((row) => row.account.id),
+);
 
 const showActivationModal = ref(false);
+const showEditTransactionModal = ref(false);
 const showQuickEntryModal = ref(false);
 const activationQuery = ref('');
 const selectedActivationIds = ref<number[]>([]);
@@ -189,6 +269,21 @@ async function submitQuickEntryFromModal() {
   showQuickEntryModal.value = false;
 }
 
+function openEditTransactionModal(transactionId: number) {
+  if (openTransactionForEditing(transactionId)) {
+    showEditTransactionModal.value = true;
+  }
+}
+
+async function submitEditedTransactionFromModal() {
+  await submitEditedTransaction();
+  showEditTransactionModal.value = false;
+}
+
+async function deleteTransactionFromTimeline(transactionId: number, description: string) {
+  await deleteTransaction(transactionId, description);
+}
+
 watch(availableManualPositionOptions, (options) => {
   const optionIds = new Set(options.map((option) => option.id));
   selectedActivationIds.value = selectedActivationIds.value.filter((id) => optionIds.has(id));
@@ -236,10 +331,11 @@ watch(availableManualPositionOptions, (options) => {
         <div class="ui-accounting-panel-head">
           <div>
             <p class="ui-accounting-panel-kicker">Cuentas</p>
-            <h2 class="h2">Catalogo operativo</h2>
+            <h2 class="h2">Cuentas + historico por cuenta</h2>
           </div>
           <div class="ui-accounting-panel-actions">
             <span class="ui-accounting-pill">{{ operationalAccountsCount }} activas</span>
+            <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
             <button
               class="icon-btn ui-accounting-panel-add"
               type="button"
@@ -250,152 +346,6 @@ watch(availableManualPositionOptions, (options) => {
             >
               <span class="icon" aria-hidden="true">+</span>
             </button>
-          </div>
-        </div>
-
-        <div class="ui-accounting-net-summary">
-          <div class="ui-accounting-net-summary-copy">
-            <p class="ui-accounting-panel-kicker">Resumen contable</p>
-            <h3 class="ui-accounting-net-summary-title">Saldo neto contable</h3>
-            <p class="ui-accounting-net-summary-subtitle">Activo contable - Pasivo contable</p>
-          </div>
-          <div class="ui-accounting-net-summary-values">
-            <strong>{{ formatMoney(accountingNetBalance) }}</strong>
-            <small>
-              Activos {{ formatMoney(accountingAssetsTotal) }} / Pasivos
-              {{ formatMoney(accountingLiabilitiesTotal) }}
-            </small>
-          </div>
-        </div>
-
-        <p class="ui-accounting-inline-note">
-          Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
-          mobiliario u otros activos fuera del ledger.
-        </p>
-
-        <div class="ui-accounting-account-groups">
-          <section
-            v-for="type in operationalAccountTypeOptions"
-            :key="type.value"
-            class="ui-accounting-account-group"
-          >
-            <div class="ui-accounting-account-group-head">
-              <strong>{{ type.label }}</strong>
-              <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
-            </div>
-
-            <div
-              v-if="(accountsByType.get(type.value)?.length ?? 0) === 0"
-              class="ui-accounting-empty"
-            >
-              Sin cuentas de este tipo todavia.
-            </div>
-
-            <ul v-else class="ui-accounting-account-list">
-              <li
-                v-for="account in accountsByType.get(type.value)"
-                :key="account.id"
-                class="ui-accounting-account-row"
-              >
-                <div class="ui-accounting-account-meta">
-                  <strong>{{ account.name }}</strong>
-                  <p>{{ account.currency }} / {{ account.origin }}</p>
-                </div>
-                <div class="ui-accounting-account-actions">
-                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
-                  <button
-                    v-if="account.asset_id != null || account.liability_id != null"
-                    class="btn ui-accounting-account-untrack-btn"
-                    type="button"
-                    :disabled="accountActivationLoading || accountCreationLoading"
-                    @click="removeNetWorthTracking(account)"
-                  >
-                    Quitar tracking
-                  </button>
-                  <button
-                    v-if="account.origin === 'user'"
-                    class="btn ui-accounting-account-delete-btn"
-                    type="button"
-                    :disabled="accountCreationLoading"
-                    @click="deleteAccount(account.id, account.name)"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </section>
-
-          <details v-if="hasTechnicalAccounts" class="ui-accounting-account-legacy">
-            <summary>Contrapartidas tecnicas del sistema</summary>
-            <p class="ui-accounting-legacy-copy">
-              Estas cuentas siguen existiendo por compatibilidad interna, pero no forman parte del
-              catalogo operativo que se gestiona manualmente.
-            </p>
-            <section
-              v-for="type in technicalAccountTypeOptions"
-              :key="type.value"
-              class="ui-accounting-account-group"
-            >
-              <div class="ui-accounting-account-group-head">
-                <strong>{{ type.label }}</strong>
-                <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
-              </div>
-
-              <ul
-                v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
-                class="ui-accounting-account-list"
-              >
-                <li
-                  v-for="account in accountsByType.get(type.value)"
-                  :key="account.id"
-                  class="ui-accounting-account-row"
-                >
-                  <div class="ui-accounting-account-meta">
-                    <strong>{{ account.name }}</strong>
-                    <p>{{ account.currency }} / {{ account.origin }}</p>
-                  </div>
-                  <div class="ui-accounting-account-actions">
-                    <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
-                    <button
-                      v-if="account.asset_id != null || account.liability_id != null"
-                      class="btn ui-accounting-account-untrack-btn"
-                      type="button"
-                      :disabled="accountActivationLoading || accountCreationLoading"
-                      @click="removeNetWorthTracking(account)"
-                    >
-                      Quitar tracking
-                    </button>
-                    <button
-                      v-if="account.origin === 'user'"
-                      class="btn ui-accounting-account-delete-btn"
-                      type="button"
-                      :disabled="accountCreationLoading"
-                      @click="deleteAccount(account.id, account.name)"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </section>
-          </details>
-        </div>
-
-        <p class="ui-accounting-inline-note">
-          Usa el boton <strong>+</strong> para seleccionar posiciones manuales ya existentes y
-          pasarlas a tracking contable sin salir del libro diario.
-        </p>
-      </article>
-
-      <article class="card ui-pro-panel ui-accounting-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Liquidez</p>
-            <h2 class="h2">Saldos derivados del ledger</h2>
-          </div>
-          <div class="ui-accounting-panel-actions">
-            <span class="ui-accounting-pill">{{ formatMoney(liquidityBalanceTotal) }}</span>
             <button
               class="icon-btn ui-accounting-panel-add"
               type="button"
@@ -409,63 +359,32 @@ watch(availableManualPositionOptions, (options) => {
           </div>
         </div>
 
-        <p class="ui-accounting-inline-note">
-          El alta rapida clasifica primero por categoria y subcategoria. La alineacion con el plan
-          anual queda como ayuda secundaria.
-        </p>
-
-        <div v-if="loading && !accountBalancesSummary" class="ui-accounting-empty">
-          Cargando balances del periodo...
-        </div>
-
-        <div v-else-if="!liquidityBalanceRows.length" class="ui-accounting-empty">
-          Sin cuentas de liquidez con actividad ledger en el periodo seleccionado.
-        </div>
-
-        <div v-else class="ui-accounting-balance-list">
-          <article
-            v-for="row in liquidityBalanceRows"
-            :key="row.account_id"
-            class="ui-accounting-balance-card"
-          >
-            <div class="ui-accounting-balance-card-head">
-              <div>
-                <strong>{{ row.name }}</strong>
-                <p>
-                  {{ row.currency }} / saldo actual
-                  {{ formatCompact(row.current_balance, row.currency) }}
-                </p>
-              </div>
-              <span
-                class="ui-accounting-balance-delta"
-                :class="`ui-accounting-balance-delta-${liquidityBalanceDeltaTone(row)}`"
-              >
-                {{ formatCompact(row.period_net_change, row.currency) }}
-              </span>
+        <div class="ui-accounting-kpi-grid">
+          <div class="ui-accounting-net-summary">
+            <div class="ui-accounting-net-summary-copy">
+              <p class="ui-accounting-panel-kicker">Resumen contable</p>
+              <h3 class="ui-accounting-net-summary-title">Saldo neto contable</h3>
+              <p class="ui-accounting-net-summary-subtitle">Activo contable - Pasivo contable</p>
             </div>
-
-            <dl class="ui-accounting-balance-metrics">
-              <div>
-                <dt>Entradas</dt>
-                <dd>{{ formatCompact(row.period_debit_total, row.currency) }}</dd>
-              </div>
-              <div>
-                <dt>Salidas</dt>
-                <dd>{{ formatCompact(row.period_credit_total, row.currency) }}</dd>
-              </div>
-            </dl>
-          </article>
-        </div>
-      </article>
-
-      <article class="card ui-pro-panel ui-accounting-panel ui-accounting-activity-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Actividad</p>
-            <h2 class="h2">Asientos del periodo</h2>
+            <div class="ui-accounting-net-summary-values">
+              <strong>{{ formatMoney(accountingNetBalance) }}</strong>
+              <small>Total</small>
+            </div>
           </div>
-          <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
+          <div class="ui-accounting-kpi-card">
+            <span>Activos</span>
+            <strong>{{ formatMoney(accountingAssetsTotal) }}</strong>
+          </div>
+          <div class="ui-accounting-kpi-card">
+            <span>Pasivos</span>
+            <strong>{{ formatMoney(accountingLiabilitiesTotal) }}</strong>
+          </div>
         </div>
+
+        <p class="ui-accounting-inline-note">
+          Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
+          mobiliario u otros activos fuera del ledger.
+        </p>
 
         <div class="ui-accounting-form-grid">
           <input
@@ -503,42 +422,161 @@ watch(availableManualPositionOptions, (options) => {
           Cargando movimientos del periodo...
         </div>
 
-        <div v-else-if="!filteredTransactions.length && !loading" class="ui-accounting-empty">
-          No hay movimientos para el periodo seleccionado.
+        <div v-else-if="!accountTimelineRows.length" class="ui-accounting-empty">
+          Sin cuentas operativas para el periodo seleccionado.
         </div>
 
-        <div v-else class="ui-accounting-transaction-list">
-          <article
-            v-for="transaction in filteredTransactions"
-            :key="transaction.id"
-            class="ui-accounting-transaction"
+        <div v-else class="ui-accounting-account-groups">
+          <details
+            v-for="row in accountTimelineRows"
+            :key="row.account.id"
+            class="ui-accounting-account-timeline"
+            :open="defaultExpandedAccountIds.includes(row.account.id)"
           >
-            <div class="ui-accounting-transaction-head">
-              <div>
-                <strong>{{ transaction.description }}</strong>
+            <summary class="ui-accounting-account-timeline-summary">
+              <div class="ui-accounting-account-meta">
+                <strong>{{ row.account.name }}</strong>
                 <p>
-                  {{ transaction.booking_date }} / {{ activityKindLabel(transaction) }} /
-                  {{ transaction.status }} / {{ transaction.origin }}
+                  {{ row.account.currency }} / {{ row.account.origin }} /
+                  {{ row.account.account_type === 'asset' ? 'Activo' : 'Pasivo' }}
                 </p>
               </div>
-              <span>{{ transaction.entries.length }} apuntes</span>
+              <div class="ui-accounting-account-actions">
+                <span class="ui-accounting-pill ui-accounting-pill-compact">
+                  {{ row.movement_count }} movs.
+                </span>
+                <span>{{ formatCompact(row.account.current_balance, row.account.currency) }}</span>
+                <button
+                  v-if="row.account.asset_id != null || row.account.liability_id != null"
+                  class="btn ui-accounting-account-untrack-btn"
+                  type="button"
+                  :disabled="accountActivationLoading || accountCreationLoading"
+                  @click.stop.prevent="removeNetWorthTracking(row.account)"
+                >
+                  Quitar tracking
+                </button>
+                <button
+                  v-if="row.account.origin === 'user'"
+                  class="btn ui-accounting-account-delete-btn"
+                  type="button"
+                  :disabled="accountCreationLoading"
+                  @click.stop.prevent="deleteAccount(row.account.id, row.account.name)"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </summary>
+
+            <div class="ui-accounting-account-timeline-body">
+              <div v-if="!row.movements.length" class="ui-accounting-empty">
+                Sin movimientos para esta cuenta en los filtros actuales.
+              </div>
+              <ul v-else class="ui-accounting-entry-list">
+                <li
+                  v-for="movement in row.movements"
+                  :key="`${row.account.id}-${movement.id}`"
+                  class="ui-accounting-entry-row"
+                >
+                  <div>
+                    <strong>{{ movement.description }}</strong>
+                    <p>
+                      {{ movement.booking_date }} / {{ movement.kind_label }} /
+                      {{ movement.status }} / {{ movement.origin }}
+                    </p>
+                  </div>
+                  <div class="ui-accounting-entry-actions">
+                    <span
+                      class="ui-accounting-balance-delta"
+                      :class="`ui-accounting-balance-delta-${movement.tone}`"
+                    >
+                      {{ formatSignedMoney(movement.impact_value, row.account.currency) }}
+                    </span>
+                    <button
+                      class="icon-btn ui-accounting-entry-action-btn"
+                      type="button"
+                      title="Editar movimiento"
+                      aria-label="Editar movimiento"
+                      :disabled="transactionCreationLoading || movement.origin === 'system'"
+                      @click="openEditTransactionModal(movement.id)"
+                    >
+                      &#9998;&#65039;
+                    </button>
+                    <button
+                      class="icon-btn ui-accounting-entry-action-btn"
+                      type="button"
+                      title="Eliminar movimiento"
+                      aria-label="Eliminar movimiento"
+                      :disabled="transactionCreationLoading || movement.origin === 'system'"
+                      @click="deleteTransactionFromTimeline(movement.id, movement.description)"
+                    >
+                      &#128465;&#65039;
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </details>
+        </div>
+
+        <details v-if="hasTechnicalAccounts" class="ui-accounting-account-legacy">
+          <summary>Contrapartidas tecnicas del sistema</summary>
+          <p class="ui-accounting-legacy-copy">
+            Estas cuentas siguen existiendo por compatibilidad interna, pero no forman parte del
+            catalogo operativo que se gestiona manualmente.
+          </p>
+          <section
+            v-for="type in technicalAccountTypeOptions"
+            :key="type.value"
+            class="ui-accounting-account-group"
+          >
+            <div class="ui-accounting-account-group-head">
+              <strong>{{ type.label }}</strong>
+              <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
             </div>
 
-            <ul class="ui-accounting-entry-list">
+            <ul
+              v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
+              class="ui-accounting-account-list"
+            >
               <li
-                v-for="entry in transaction.entries"
-                :key="entry.id"
-                class="ui-accounting-entry-row"
+                v-for="account in accountsByType.get(type.value)"
+                :key="account.id"
+                class="ui-accounting-account-row"
               >
-                <div>
-                  <strong>{{ entry.account_name }}</strong>
-                  <p>{{ entry.side === 'debit' ? 'Debe' : 'Haber' }}</p>
+                <div class="ui-accounting-account-meta">
+                  <strong>{{ account.name }}</strong>
+                  <p>{{ account.currency }} / {{ account.origin }}</p>
                 </div>
-                <span>{{ formatCompact(entry.amount, entry.currency) }}</span>
+                <div class="ui-accounting-account-actions">
+                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                  <button
+                    v-if="account.asset_id != null || account.liability_id != null"
+                    class="btn ui-accounting-account-untrack-btn"
+                    type="button"
+                    :disabled="accountActivationLoading || accountCreationLoading"
+                    @click="removeNetWorthTracking(account)"
+                  >
+                    Quitar tracking
+                  </button>
+                  <button
+                    v-if="account.origin === 'user'"
+                    class="btn ui-accounting-account-delete-btn"
+                    type="button"
+                    :disabled="accountCreationLoading"
+                    @click="deleteAccount(account.id, account.name)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               </li>
             </ul>
-          </article>
-        </div>
+          </section>
+        </details>
+
+        <p class="ui-accounting-inline-note">
+          Usa el boton <strong>+</strong> para seleccionar posiciones manuales ya existentes y
+          pasarlas a tracking contable sin salir del libro diario.
+        </p>
 
         <details class="ui-accounting-advanced">
           <summary class="ui-accounting-advanced-summary">
@@ -728,6 +766,55 @@ watch(availableManualPositionOptions, (options) => {
                 ? 'Activando...'
                 : `Activar tracking (${selectedActivationIds.length})`
             }}
+          </button>
+        </div>
+      </form>
+    </BaseModal>
+
+    <BaseModal
+      :open="showEditTransactionModal"
+      title="Editar movimiento"
+      panel-class="max-w-[720px]"
+      @close="showEditTransactionModal = false"
+    >
+      <form
+        class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form"
+        @submit.prevent="submitEditedTransactionFromModal"
+      >
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-edit-simple">
+          <input
+            v-model="editTransactionForm.description"
+            class="input"
+            placeholder="Descripcion del movimiento"
+            required
+          />
+          <input v-model="editTransactionForm.booking_date" type="date" class="input" required />
+        </div>
+
+        <div class="ui-accounting-edit-readonly">
+          <div>
+            <span>Tipo</span>
+            <strong>{{ editTransactionForm.kind_label }}</strong>
+          </div>
+          <div>
+            <span>Importe</span>
+            <strong>{{
+              formatCompact(editTransactionForm.amount, editTransactionForm.currency)
+            }}</strong>
+          </div>
+        </div>
+
+        <textarea
+          v-model="editTransactionForm.notes"
+          class="textarea"
+          rows="2"
+          placeholder="Notas generales del movimiento"
+        />
+
+        <div class="ui-accounting-submit-row">
+          <p class="subtle">La edicion mantiene la logica contable interna del movimiento.</p>
+          <button class="btn btn-primary" type="submit" :disabled="transactionCreationLoading">
+            {{ transactionCreationLoading ? 'Guardando...' : 'Guardar cambios' }}
           </button>
         </div>
       </form>
@@ -1055,12 +1142,8 @@ watch(availableManualPositionOptions, (options) => {
 
 .ui-accounting-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
-}
-
-.ui-accounting-activity-panel {
-  grid-column: 1 / -1;
 }
 
 .ui-accounting-panel {
@@ -1107,9 +1190,38 @@ watch(availableManualPositionOptions, (options) => {
   color: rgba(255, 255, 255, 0.86);
 }
 
+.ui-accounting-pill-compact {
+  min-height: 28px;
+  font-size: 0.74rem;
+}
+
 .ui-accounting-account-groups {
   display: grid;
   gap: 12px;
+}
+
+.ui-accounting-kpi-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-kpi-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-kpi-card span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.76rem;
+}
+
+.ui-accounting-kpi-card strong {
+  font-size: 1.05rem;
 }
 
 .ui-accounting-net-summary {
@@ -1160,6 +1272,31 @@ watch(availableManualPositionOptions, (options) => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   overflow: hidden;
+}
+
+.ui-accounting-account-timeline {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.ui-accounting-account-timeline-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+}
+
+.ui-accounting-account-timeline-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-accounting-account-timeline-body {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ui-accounting-account-legacy {
@@ -1230,6 +1367,47 @@ watch(availableManualPositionOptions, (options) => {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-entry-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ui-accounting-entry-action-btn {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 0.88rem;
+}
+
+.ui-accounting-form-grid-edit-simple {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.ui-accounting-edit-readonly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-edit-readonly div {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-edit-readonly span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .ui-accounting-account-delete-btn {
@@ -1515,12 +1693,12 @@ watch(availableManualPositionOptions, (options) => {
 }
 
 @media (max-width: 1024px) {
-  .ui-accounting-grid {
-    grid-template-columns: 1fr;
-  }
-
   .ui-accounting-summary-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ui-accounting-kpi-grid {
+    grid-template-columns: 1fr;
   }
 
   .ui-accounting-entry-editor-row {
@@ -1543,8 +1721,13 @@ watch(availableManualPositionOptions, (options) => {
 @media (max-width: 720px) {
   .ui-accounting-form-grid,
   .ui-accounting-form-grid-wide,
+  .ui-accounting-form-grid-edit-simple,
   .ui-accounting-summary-strip,
   .ui-accounting-entry-editor-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-edit-readonly {
     grid-template-columns: 1fr;
   }
 
