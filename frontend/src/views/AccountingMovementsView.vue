@@ -70,6 +70,11 @@ function toNumber(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatDate(isoDate: string): string {
+  const d = new Date(isoDate + 'T00:00:00');
+  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(d);
+}
+
 function formatMoney(value: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
@@ -412,318 +417,353 @@ watch(availableManualPositionOptions, (options) => {
 </script>
 
 <template>
-  <div class="container ui-pro-page ui-accounting-page">
-    <section class="card ui-pro-panel ui-accounting-hero">
-      <div class="ui-accounting-hero-copy">
-        <p class="ui-pro-kicker">Accounting movements</p>
-        <h1 class="h1 ui-accounting-title">Libro diario operativo</h1>
-        <p class="subtle ui-accounting-subtitle">
-          Primera entrega del dominio contable: cuentas, entrada rapida de movimientos y lectura
-          mensual para preparar la integracion futura con presupuesto y patrimonio.
-        </p>
-      </div>
-
-      <div class="ui-accounting-filters">
-        <label class="ui-accounting-filter">
-          <span>Ejercicio</span>
-          <select v-model="selectedYear" class="select" @change="reloadPeriod">
-            <option v-for="year in yearOptions" :key="year" :value="year">
-              {{ year }}
-            </option>
-          </select>
-        </label>
-
-        <label class="ui-accounting-filter">
-          <span>Mes</span>
-          <select v-model="selectedMonth" class="select" @change="reloadPeriod">
-            <option v-for="month in monthOptions" :key="month.value" :value="month.value">
-              {{ month.label }}
-            </option>
-          </select>
-        </label>
-      </div>
-    </section>
-
-    <div v-if="error" class="alert">{{ error }}</div>
-    <div v-if="successMessage" class="ui-alert-success">{{ successMessage }}</div>
-
-    <section class="ui-accounting-grid">
-      <article class="card ui-pro-panel ui-accounting-panel">
-        <div class="ui-accounting-panel-head">
-          <div>
-            <p class="ui-accounting-panel-kicker">Cuentas</p>
-            <h2 class="h2">Cuentas + historico por cuenta</h2>
+  <div class="container ui-page-shell">
+    <!-- ── Hero: period selector + KPIs + monthly cashflow ── -->
+    <section class="ui-section-card ui-accounting-hero-panel">
+      <div class="ui-page-head">
+        <div>
+          <p class="ui-page-eyebrow">Accounting Movements</p>
+          <h1 class="ui-accounting-hero-title">Libro diario operativo</h1>
+        </div>
+        <div class="ui-accounting-hero-right">
+          <div class="ui-period-bar ui-accounting-period-bar">
+            <label class="ui-period-field">
+              <span>Ejercicio</span>
+              <select v-model="selectedYear" class="select ui-period-select" @change="reloadPeriod">
+                <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}</option>
+              </select>
+            </label>
+            <label class="ui-period-field">
+              <span>Mes</span>
+              <select
+                v-model="selectedMonth"
+                class="select ui-period-select"
+                @change="reloadPeriod"
+              >
+                <option v-for="month in monthOptions" :key="month.value" :value="month.value">
+                  {{ month.label }}
+                </option>
+              </select>
+            </label>
           </div>
-          <div class="ui-accounting-panel-actions">
-            <span class="ui-accounting-pill">{{ operationalAccountsCount }} activas</span>
-            <span class="ui-accounting-pill">{{ filteredTransactions.length }} movimientos</span>
+          <div class="ui-page-actions">
             <button
-              class="btn ui-accounting-panel-action-btn"
+              class="btn"
               type="button"
               aria-label="Activar tracking contable"
               title="Activar tracking contable"
               :disabled="!hasAvailableManualPositions"
               @click="openActivationModal"
             >
-              <span class="icon" aria-hidden="true">+</span>
-              <span>Activar tracking</span>
+              Activar tracking
             </button>
             <button
-              class="btn ui-accounting-panel-action-btn"
+              class="btn btn-primary ui-accounting-cta"
               type="button"
               aria-label="Registrar movimiento diario"
               title="Registrar movimiento diario"
               :disabled="!liquidityAccounts.length"
               @click="showQuickEntryModal = true"
             >
-              <span class="icon" aria-hidden="true">+</span>
-              <span>Registrar movimiento</span>
+              + Registrar movimiento
             </button>
           </div>
         </div>
+      </div>
 
-        <div class="ui-accounting-kpi-grid">
-          <div class="ui-accounting-net-summary">
-            <div class="ui-accounting-net-summary-copy">
-              <p class="ui-accounting-panel-kicker">Resumen contable</p>
-              <h3 class="ui-accounting-net-summary-title">Saldo neto contable</h3>
-              <p class="ui-accounting-net-summary-subtitle">Activo contable - Pasivo contable</p>
-            </div>
-            <div class="ui-accounting-net-summary-values">
-              <strong>{{ formatMoney(accountingNetBalance) }}</strong>
-              <small>Total</small>
-            </div>
-          </div>
-          <div class="ui-accounting-kpi-card">
-            <span>Activos</span>
-            <strong>{{ formatMoney(accountingAssetsTotal) }}</strong>
-          </div>
-          <div class="ui-accounting-kpi-card">
-            <span>Pasivos</span>
-            <strong>{{ formatMoney(accountingLiabilitiesTotal) }}</strong>
-          </div>
+      <!-- KPI strip -->
+      <div class="ui-kpi-strip">
+        <div class="ui-kpi-card ui-kpi-card-primary">
+          <span class="ui-kpi-label">Saldo neto contable</span>
+          <strong class="ui-kpi-value">{{ formatMoney(accountingNetBalance) }}</strong>
+          <p class="ui-kpi-meta">Activo contable - Pasivo contable</p>
         </div>
-
-        <p class="ui-accounting-inline-note">
-          Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
-          mobiliario u otros activos fuera del ledger.
-        </p>
-
-        <div class="ui-accounting-form-grid">
-          <input
-            v-model="activityFilters.query"
-            class="input"
-            placeholder="Filtrar por texto o cuenta"
-          />
-          <select v-model="activityFilters.accountId" class="select">
-            <option value="all">Todas las cuentas</option>
-            <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
-              {{ accountDisplayName(account) }}
-            </option>
-          </select>
-          <select v-model="activityFilters.kind" class="select">
-            <option value="all">Todos los movimientos</option>
-            <option value="income">Solo ingresos</option>
-            <option value="expense">Solo gastos</option>
-            <option value="transfer">Solo transferencias</option>
-            <option value="investment_purchase">Solo compras de inversion</option>
-            <option value="debt_payment">Solo pagos de deuda</option>
-          </select>
-        </div>
-
-        <div v-if="loading && !transactions.length" class="ui-accounting-empty">
-          Cargando movimientos del periodo...
-        </div>
-
-        <div v-else-if="!accountTimelineRows.length" class="ui-accounting-empty">
-          Sin cuentas operativas para el periodo seleccionado.
-        </div>
-
-        <div v-else class="ui-accounting-account-groups">
-          <details
-            v-for="categoryGroup in groupedAccountTimelineRows"
-            :key="categoryGroup.key"
-            class="ui-accounting-account-group-accordion"
-          >
-            <summary class="ui-accounting-account-group-summary">
-              <strong>
-                {{
-                  `${categoryGroup.positionType === 'asset' ? 'Activo' : 'Pasivo'} / ${humanizeKey(categoryGroup.category)}`
-                }}
-              </strong>
-              <span class="ui-accounting-pill ui-accounting-pill-compact">
-                {{ categoryGroup.accountCount }} cuentas
-              </span>
-            </summary>
-            <details
-              v-for="subcategoryGroup in categoryGroup.subgroups"
-              :key="subcategoryGroup.key"
-              class="ui-accounting-account-group-accordion"
-            >
-              <summary class="ui-accounting-account-group-summary">
-                <strong>{{ humanizeKey(subcategoryGroup.subcategory) }}</strong>
-                <span class="ui-accounting-pill ui-accounting-pill-compact">
-                  {{ subcategoryGroup.accountCount }} cuentas
-                </span>
-              </summary>
-              <details
-                v-for="row in subcategoryGroup.rows"
-                :key="row.account.id"
-                class="ui-accounting-account-timeline"
-              >
-                <summary class="ui-accounting-account-timeline-summary">
-                  <div class="ui-accounting-account-meta">
-                    <strong>{{ accountDisplayName(row.account) }}</strong>
-                    <p>{{ row.account.currency }}</p>
-                  </div>
-                  <div class="ui-accounting-account-actions">
-                    <span class="ui-accounting-movs-count">{{ row.movement_count }} mov.</span>
-                    <span>{{
-                      formatCompact(row.account.current_balance, row.account.currency)
-                    }}</span>
-                    <button
-                      v-if="row.account.asset_id != null || row.account.liability_id != null"
-                      class="btn ui-accounting-account-untrack-btn"
-                      type="button"
-                      :disabled="accountActivationLoading || accountCreationLoading"
-                      @click.stop.prevent="removeNetWorthTracking(row.account)"
-                    >
-                      Quitar tracking
-                    </button>
-                    <button
-                      v-if="row.account.origin === 'user'"
-                      class="btn ui-accounting-account-delete-btn"
-                      type="button"
-                      :disabled="accountCreationLoading"
-                      @click.stop.prevent="
-                        deleteAccount(row.account.id, accountDisplayName(row.account))
-                      "
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </summary>
-
-                <div class="ui-accounting-account-timeline-body">
-                  <div v-if="!row.movements.length" class="ui-accounting-empty">
-                    Sin movimientos para esta cuenta en los filtros actuales.
-                  </div>
-                  <ul v-else class="ui-accounting-entry-list">
-                    <li
-                      v-for="movement in row.movements"
-                      :key="`${row.account.id}-${movement.id}`"
-                      class="ui-accounting-entry-row"
-                    >
-                      <div>
-                        <strong>{{ movement.description }}</strong>
-                        <p>
-                          {{ movement.booking_date }} / {{ movement.kind_label }} /
-                          {{ movement.status }} / {{ movement.origin }}
-                        </p>
-                      </div>
-                      <div class="ui-accounting-entry-actions">
-                        <span
-                          class="ui-accounting-balance-delta"
-                          :class="`ui-accounting-balance-delta-${movement.tone}`"
-                        >
-                          {{ formatSignedMoney(movement.impact_value, row.account.currency) }}
-                        </span>
-                        <button
-                          v-if="movement.origin !== 'system'"
-                          class="icon-btn ui-accounting-entry-action-btn"
-                          type="button"
-                          title="Editar movimiento"
-                          aria-label="Editar movimiento"
-                          :disabled="transactionCreationLoading"
-                          @click="openEditTransactionModal(movement.id)"
-                        >
-                          &#9998;&#65039;
-                        </button>
-                        <button
-                          v-if="movement.origin !== 'system'"
-                          class="icon-btn ui-accounting-entry-action-btn"
-                          type="button"
-                          title="Eliminar movimiento"
-                          aria-label="Eliminar movimiento"
-                          :disabled="transactionCreationLoading"
-                          @click="deleteTransactionFromTimeline(movement.id, movement.description)"
-                        >
-                          &#128465;&#65039;
-                        </button>
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-              </details>
-            </details>
-          </details>
-        </div>
-
-        <details v-if="hasTechnicalAccounts" class="ui-accounting-account-legacy">
-          <summary>Contrapartidas tecnicas del sistema</summary>
-          <p class="ui-accounting-legacy-copy">
-            Estas cuentas siguen existiendo por compatibilidad interna, pero no forman parte del
-            catalogo operativo que se gestiona manualmente.
+        <div class="ui-kpi-card">
+          <span class="ui-kpi-label">Activos</span>
+          <strong class="ui-kpi-value">{{ formatMoney(accountingAssetsTotal) }}</strong>
+          <p class="ui-kpi-meta">
+            {{ (accountsByType.get('asset') ?? []).length }} cuentas
           </p>
-          <section
-            v-for="type in technicalAccountTypeOptions"
-            :key="type.value"
-            class="ui-accounting-account-group"
+        </div>
+        <div class="ui-kpi-card">
+          <span class="ui-kpi-label">Pasivos</span>
+          <strong class="ui-kpi-value">{{ formatMoney(accountingLiabilitiesTotal) }}</strong>
+          <p class="ui-kpi-meta">
+            {{ (accountsByType.get('liability') ?? []).length }} cuentas
+          </p>
+        </div>
+      </div>
+
+      <!-- Monthly cashflow strip -->
+      <div v-if="summaryRows.length" class="ui-cashflow-strip">
+        <div
+          v-for="row in summaryRows"
+          :key="row.month"
+          class="ui-cashflow-month"
+          :class="{ 'ui-cashflow-month-active': row.month === selectedMonth }"
+        >
+          <span class="ui-cashflow-month-label">{{ monthLabel(row.month) }}</span>
+          <strong
+            class="ui-cashflow-month-value"
+            :class="
+              row.incomeValue - row.expenseValue >= 0 ? 'ui-cashflow-positive' : 'ui-cashflow-negative'
+            "
           >
-            <div class="ui-accounting-account-group-head">
-              <strong>{{ type.label }}</strong>
-              <span>{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
+            {{ formatMoney(row.incomeValue - row.expenseValue) }}
+          </strong>
+          <small class="ui-cashflow-month-meta">
+            I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}
+          </small>
+        </div>
+      </div>
+
+      <p class="ui-page-lead">
+        Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
+        mobiliario u otros activos fuera del ledger.
+      </p>
+
+      <div v-if="error" class="ui-state-block ui-state-error">{{ error }}</div>
+      <div v-if="successMessage" class="ui-state-block ui-state-success">{{ successMessage }}</div>
+    </section>
+
+
+    <!-- ── Ledger: filters + account / movement timeline ── -->
+    <section class="ui-section-card ui-accounting-ledger-panel">
+      <div class="ui-section-head">
+        <div class="ui-section-copy">
+          <h2 class="ui-section-title">Cuentas + historico por cuenta</h2>
+          <p class="ui-section-subtitle">
+            {{ monthOptions.find((m) => m.value === selectedMonth)?.label ?? '' }}
+            {{ selectedYear }}
+            &middot; {{ filteredTransactions.length }} movimientos
+            &middot; {{ operationalAccountsCount }} cuentas activas
+          </p>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="ui-action-bar">
+        <input
+          v-model="activityFilters.query"
+          class="input ui-accounting-filter-input"
+          placeholder="Filtrar por texto o cuenta"
+        />
+        <select v-model="activityFilters.accountId" class="select ui-accounting-filter-select">
+          <option value="all">Todas las cuentas</option>
+          <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
+            {{ accountDisplayName(account) }}
+          </option>
+        </select>
+        <select v-model="activityFilters.kind" class="select ui-accounting-filter-select">
+          <option value="all">Todos los movimientos</option>
+          <option value="income">Solo ingresos</option>
+          <option value="expense">Solo gastos</option>
+          <option value="transfer">Solo transferencias</option>
+          <option value="investment_purchase">Solo compras de inversion</option>
+          <option value="debt_payment">Solo pagos de deuda</option>
+        </select>
+      </div>
+
+      <!-- States -->
+      <div v-if="loading && !transactions.length" class="ui-state-block ui-state-loading">
+        Cargando movimientos del periodo...
+      </div>
+      <div v-else-if="!accountTimelineRows.length" class="ui-state-block ui-state-empty">
+        Sin cuentas operativas para el periodo seleccionado.
+      </div>
+
+      <!-- Account groups — 2-level: category → account (subcategory as label) -->
+      <div v-else class="ui-ledger-groups">
+        <details
+          v-for="categoryGroup in groupedAccountTimelineRows"
+          :key="categoryGroup.key"
+          class="ui-ledger-category"
+          open
+        >
+          <summary class="ui-ledger-category-summary">
+            <strong>
+              {{
+                `${categoryGroup.positionType === 'asset' ? 'Activo' : 'Pasivo'} / ${humanizeKey(categoryGroup.category)}`
+              }}
+            </strong>
+            <span class="ui-pro-chip">{{ categoryGroup.accountCount }} cuentas</span>
+          </summary>
+
+          <template v-for="subcategoryGroup in categoryGroup.subgroups" :key="subcategoryGroup.key">
+            <div
+              v-if="categoryGroup.subgroups.length > 1"
+              class="ui-ledger-subcategory-label"
+            >
+              {{ humanizeKey(subcategoryGroup.subcategory) }}
             </div>
 
-            <ul
-              v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
-              class="ui-accounting-account-list"
+            <details
+              v-for="row in subcategoryGroup.rows"
+              :key="row.account.id"
+              class="ui-ledger-account ui-accounting-account-timeline"
             >
-              <li
-                v-for="account in accountsByType.get(type.value)"
-                :key="account.id"
-                class="ui-accounting-account-row"
-              >
-                <div class="ui-accounting-account-meta">
-                  <strong>{{ account.name }}</strong>
-                  <p>{{ account.currency }} / {{ account.origin }}</p>
+              <summary class="ui-ledger-account-summary">
+                <div class="ui-ledger-account-meta">
+                  <strong class="ui-ledger-account-name">{{ accountDisplayName(row.account) }}</strong>
+                  <div class="ui-action-bar ui-ledger-account-chips">
+                    <span class="ui-pro-chip">{{ row.account.currency }}</span>
+                  </div>
                 </div>
-                <div class="ui-accounting-account-actions">
-                  <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                <div class="ui-ledger-account-info">
+                  <span class="ui-ledger-movs-count">{{ row.movement_count }} mov.</span>
+                  <strong class="ui-ledger-account-balance">
+                    {{ formatCompact(row.account.current_balance, row.account.currency) }}
+                  </strong>
                   <button
-                    v-if="account.asset_id != null || account.liability_id != null"
-                    class="btn ui-accounting-account-untrack-btn"
+                    v-if="row.account.asset_id != null || row.account.liability_id != null"
+                    class="icon-btn"
                     type="button"
+                    title="Quitar tracking de patrimonio"
+                    aria-label="Quitar tracking de patrimonio"
                     :disabled="accountActivationLoading || accountCreationLoading"
-                    @click="removeNetWorthTracking(account)"
+                    @click.stop.prevent="removeNetWorthTracking(row.account)"
                   >
-                    Quitar tracking
+                    &#128279;
                   </button>
                   <button
-                    v-if="account.origin === 'user'"
-                    class="btn ui-accounting-account-delete-btn"
+                    v-if="row.account.origin === 'user'"
+                    class="icon-btn"
                     type="button"
+                    title="Eliminar cuenta"
+                    aria-label="Eliminar cuenta"
                     :disabled="accountCreationLoading"
-                    @click="deleteAccount(account.id, account.name)"
+                    @click.stop.prevent="
+                      deleteAccount(row.account.id, accountDisplayName(row.account))
+                    "
                   >
-                    Eliminar
+                    &#128465;&#65039;
                   </button>
                 </div>
-              </li>
-            </ul>
-          </section>
-        </details>
+              </summary>
 
-        <div class="ui-accounting-summary-strip">
-          <div v-for="row in summaryRows" :key="row.month" class="ui-accounting-summary-month">
-            <span>{{ monthLabel(row.month) }}</span>
-            <strong>{{ formatMoney(row.incomeValue - row.expenseValue) }}</strong>
-            <small
-              >I {{ formatMoney(row.incomeValue) }} / G {{ formatMoney(row.expenseValue) }}</small
-            >
+              <div class="ui-ledger-account-body">
+                <div
+                  v-if="!row.movements.length"
+                  class="ui-state-block ui-state-empty ui-ledger-empty"
+                >
+                  Sin movimientos para esta cuenta en los filtros actuales.
+                </div>
+                <ul v-else class="ui-entry-list">
+                  <li
+                    v-for="movement in row.movements"
+                    :key="`${row.account.id}-${movement.id}`"
+                    class="ui-entry-row"
+                  >
+                    <span class="ui-entry-date">{{ formatDate(movement.booking_date) }}</span>
+                    <div class="ui-entry-body">
+                      <strong class="ui-entry-desc">{{ movement.description }}</strong>
+                      <div class="ui-action-bar ui-entry-tags">
+                        <span :class="`ui-type-badge ui-type-badge-${movement.tone}`">
+                          {{ movement.kind_label }}
+                        </span>
+                        <span class="ui-entry-status">
+                          {{ movement.status === 'posted' ? '●' : '○' }}
+                          {{ movement.origin !== 'system' ? movement.origin : '' }}
+                        </span>
+                      </div>
+                    </div>
+                    <span
+                      class="ui-accounting-balance-delta"
+                      :class="`ui-accounting-balance-delta-${movement.tone}`"
+                    >
+                      {{ formatSignedMoney(movement.impact_value, row.account.currency) }}
+                    </span>
+                    <div class="ui-entry-actions">
+                      <button
+                        v-if="movement.origin !== 'system'"
+                        class="icon-btn ui-accounting-entry-action-btn"
+                        type="button"
+                        title="Editar movimiento"
+                        aria-label="Editar movimiento"
+                        :disabled="transactionCreationLoading"
+                        @click="openEditTransactionModal(movement.id)"
+                      >
+                        &#9998;&#65039;
+                      </button>
+                      <button
+                        v-if="movement.origin !== 'system'"
+                        class="icon-btn ui-accounting-entry-action-btn"
+                        type="button"
+                        title="Eliminar movimiento"
+                        aria-label="Eliminar movimiento"
+                        :disabled="transactionCreationLoading"
+                        @click="deleteTransactionFromTimeline(movement.id, movement.description)"
+                      >
+                        &#128465;&#65039;
+                      </button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </template>
+        </details>
+      </div>
+
+      <!-- Technical / system accounts -->
+      <details v-if="hasTechnicalAccounts" class="ui-ledger-technical">
+        <summary>Contrapartidas tecnicas del sistema</summary>
+        <p class="ui-page-lead">
+          Estas cuentas siguen existiendo por compatibilidad interna, pero no forman parte del
+          catalogo operativo que se gestiona manualmente.
+        </p>
+        <section
+          v-for="type in technicalAccountTypeOptions"
+          :key="type.value"
+          class="ui-ledger-technical-group"
+        >
+          <div class="ui-section-head ui-ledger-technical-head">
+            <strong>{{ type.label }}</strong>
+            <span class="ui-pro-chip">{{ accountsByType.get(type.value)?.length ?? 0 }}</span>
           </div>
-        </div>
-      </article>
+          <ul
+            v-if="(accountsByType.get(type.value)?.length ?? 0) > 0"
+            class="ui-entry-list"
+          >
+            <li
+              v-for="account in accountsByType.get(type.value)"
+              :key="account.id"
+              class="ui-entry-row"
+            >
+              <div class="ui-ledger-account-meta ui-ledger-account-meta-stretch">
+                <strong>{{ account.name }}</strong>
+                <div class="ui-action-bar ui-ledger-account-chips">
+                  <span class="ui-pro-chip">{{ account.currency }}</span>
+                  <span class="ui-pro-chip">{{ account.origin }}</span>
+                </div>
+              </div>
+              <div class="ui-ledger-account-info">
+                <span>{{ formatCompact(account.current_balance, account.currency) }}</span>
+                <button
+                  v-if="account.asset_id != null || account.liability_id != null"
+                  class="icon-btn"
+                  type="button"
+                  title="Quitar tracking"
+                  :disabled="accountActivationLoading || accountCreationLoading"
+                  @click="removeNetWorthTracking(account)"
+                >
+                  &#128279;
+                </button>
+                <button
+                  v-if="account.origin === 'user'"
+                  class="icon-btn"
+                  type="button"
+                  title="Eliminar cuenta"
+                  :disabled="accountCreationLoading"
+                  @click="deleteAccount(account.id, account.name)"
+                >
+                  &#128465;&#65039;
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </details>
     </section>
 
     <BaseModal
@@ -735,10 +775,10 @@ watch(availableManualPositionOptions, (options) => {
         class="ui-accounting-form ui-accounting-modal-form"
         @submit.prevent="activatePositionFromModal"
       >
-        <div class="ui-accounting-form-head">
-          <h3>Activar tracking contable</h3>
-          <span class="subtle">Selecciona una posicion manual ya existente del patrimonio</span>
-        </div>
+        <p class="subtle">
+          Selecciona una o varias posiciones manuales del patrimonio para activar su seguimiento
+          contable en el ledger. Core generara automaticamente el saldo de apertura.
+        </p>
 
         <div class="ui-accounting-form-grid">
           <select v-model="activationForm.position_type" class="select">
@@ -839,7 +879,7 @@ watch(availableManualPositionOptions, (options) => {
       @close="showEditTransactionModal = false"
     >
       <div class="ui-accounting-modal-copy">
-        <p class="ui-accounting-panel-kicker">Edicion</p>
+        <p class="ui-page-eyebrow">Edicion</p>
         <p class="subtle">
           Ajusta tipo, cuenta, fechas e importe manteniendo el asiento balanceado y coherente.
         </p>
@@ -863,13 +903,13 @@ watch(availableManualPositionOptions, (options) => {
           </button>
         </div>
 
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
-          <input
-            v-model="editTransactionForm.description"
-            class="input"
-            placeholder="Nomina marzo, compra semanal, mover a ahorro..."
-            required
-          />
+        <input
+          v-model="editTransactionForm.description"
+          class="input"
+          placeholder="Nomina marzo, compra semanal, mover a ahorro..."
+          required
+        />
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-dates">
           <label class="ui-accounting-field">
             <span>Fecha contabilizacion</span>
             <input v-model="editTransactionForm.booking_date" type="date" class="input" required />
@@ -878,19 +918,16 @@ watch(availableManualPositionOptions, (options) => {
             <span>Fecha valor</span>
             <input v-model="editTransactionForm.value_date" type="date" class="input" required />
           </label>
-        </div>
-        <p class="ui-accounting-inline-note">
-          La API persiste fecha de contabilizacion y fecha valor. La hora todavia no.
-        </p>
-
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <label class="ui-accounting-field">
             <span>Hora</span>
             <input v-model="editTransactionForm.booking_time" type="time" class="input" />
           </label>
         </div>
 
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+        <div
+          class="ui-accounting-form-grid"
+          :class="editKindNeedsCounterparty ? 'ui-accounting-form-grid-wide' : 'ui-accounting-form-grid-edit-simple'"
+        >
           <select v-model="editTransactionForm.account_id" class="select" required>
             <option :value="null" disabled>Cuenta principal</option>
             <option v-for="account in editAccountOptions" :key="account.id" :value="account.id">
@@ -923,24 +960,18 @@ watch(availableManualPositionOptions, (options) => {
               {{ account.name }} / {{ account.currency }}
             </option>
           </select>
-
-          <div v-else-if="editKindNeedsClassification" class="ui-accounting-inline-note">
-            Selecciona categoria y subcategoria debajo.
-          </div>
-
-          <div v-else class="ui-accounting-inline-note">
-            {{
-              editTransactionForm.kind === 'balance_adjustment'
-                ? 'Introduce el saldo objetivo actual de la cuenta.'
-                : 'No requiere contracuenta manual para este tipo.'
-            }}
-          </div>
         </div>
         <p
           v-if="editKindNeedsCounterparty && !editCounterpartyOptions.length"
           class="ui-accounting-inline-note"
         >
           {{ editCounterpartyMissingHint }}
+        </p>
+        <p v-else-if="editKindNeedsClassification" class="ui-accounting-inline-note">
+          Selecciona categoria y subcategoria debajo.
+        </p>
+        <p v-else-if="editTransactionForm.kind !== 'balance_adjustment'" class="ui-accounting-inline-note">
+          No requiere contracuenta manual para este tipo.
         </p>
 
         <div
@@ -1020,7 +1051,7 @@ watch(availableManualPositionOptions, (options) => {
       @close="showQuickEntryModal = false"
     >
       <div class="ui-accounting-modal-copy">
-        <p class="ui-accounting-panel-kicker">Alta rapida</p>
+        <p class="ui-page-eyebrow">Alta rapida</p>
         <p class="subtle">
           La fecha de contabilizacion manda en el libro y la fecha valor indica cuando impacta
           realmente en saldo.
@@ -1073,7 +1104,16 @@ watch(availableManualPositionOptions, (options) => {
           Normalmente coinciden. Si el banco liquida despues, usa una fecha valor posterior.
         </p>
 
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+        <div
+          class="ui-accounting-form-grid"
+          :class="
+            quickEntryForm.movement_type === 'transfer' ||
+            quickEntryForm.movement_type === 'investment_purchase' ||
+            quickEntryForm.movement_type === 'debt_payment'
+              ? 'ui-accounting-form-grid-wide'
+              : 'ui-accounting-form-grid-edit-simple'
+          "
+        >
           <select v-model="quickEntryForm.account_id" class="select" required>
             <option :value="null">Cuenta de liquidez</option>
             <option v-for="account in liquidityAccounts" :key="account.id" :value="account.id">
@@ -1104,13 +1144,6 @@ watch(availableManualPositionOptions, (options) => {
               {{ account.name }} / {{ account.currency }}
             </option>
           </select>
-
-          <div
-            v-else-if="quickEntryForm.movement_type === 'income'"
-            class="ui-accounting-inline-note"
-          >
-            Selecciona categoria y subcategoria debajo.
-          </div>
 
           <select
             v-else-if="quickEntryForm.movement_type === 'investment_purchase'"
@@ -1143,10 +1176,6 @@ watch(availableManualPositionOptions, (options) => {
               {{ account.name }} / {{ account.currency }}
             </option>
           </select>
-
-          <div v-else class="ui-accounting-inline-note">
-            Selecciona categoria y subcategoria debajo.
-          </div>
         </div>
 
         <div
@@ -1293,360 +1322,338 @@ watch(availableManualPositionOptions, (options) => {
 </template>
 
 <style scoped>
-.ui-accounting-page {
+/* ── Hero panel ──────────────────────────────────────────────── */
+.ui-accounting-hero-panel {
   display: grid;
-  gap: 18px;
+  gap: 20px;
+  padding: 20px;
 }
 
-.ui-accounting-hero {
+.ui-accounting-hero-title {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Right cluster: period bar stacked above action buttons, right-aligned */
+.ui-accounting-hero-right {
   display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: end;
-  flex-wrap: wrap;
-}
-
-.ui-accounting-title {
-  margin-bottom: 8px;
-}
-
-.ui-accounting-subtitle {
-  max-width: 68ch;
-}
-
-.ui-accounting-filters {
-  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.ui-accounting-filter {
+@media (max-width: 640px) {
+  .ui-accounting-hero-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
+/* Period selector — compact context indicator, not an action */
+.ui-period-bar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
+.ui-accounting-period-bar {
+  padding: 6px 10px;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.ui-period-field {
   display: grid;
-  gap: 6px;
-  min-width: 140px;
-}
-
-.ui-accounting-filter span {
-  font-size: 0.76rem;
-  color: rgba(255, 255, 255, 0.66);
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.ui-accounting-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+.ui-period-select {
+  min-width: 120px;
+  height: 38px;
+  padding-top: 0;
+  padding-bottom: 0;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-.ui-accounting-panel {
+/* Primary CTA — more visual weight than secondary actions */
+.ui-accounting-cta {
+  padding: 10px 22px;
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Net balance hero number — larger than the shared kpi-value */
+.ui-accounting-hero-panel .ui-kpi-card-primary .ui-kpi-value {
+  font-size: 2rem;
+}
+
+/* Force 12-month cashflow in one row — override shared minmax(88px) */
+.ui-accounting-hero-panel .ui-cashflow-strip {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* Active month highlight in cashflow strip */
+.ui-cashflow-month-active {
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.07);
+}
+
+/* ── Ledger panel ────────────────────────────────────────────── */
+.ui-accounting-ledger-panel {
   display: grid;
   gap: 16px;
+  padding: 20px;
 }
 
-.ui-accounting-panel-head {
+.ui-accounting-filter-input {
+  min-width: 200px;
+  flex: 1;
+  width: auto;
+}
+
+.ui-accounting-filter-select {
+  min-width: 160px;
+  width: auto;
+  flex: 1;
+}
+
+/* ── Ledger accordion — category level ──────────────────────── */
+.ui-ledger-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-ledger-category {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.ui-ledger-category-summary {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  align-items: start;
-  flex-wrap: wrap;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
 }
 
-.ui-accounting-panel-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.ui-ledger-category-summary::-webkit-details-marker {
+  display: none;
 }
 
-.ui-accounting-panel-add {
-  flex: 0 0 auto;
-}
-
-.ui-accounting-panel-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  min-height: 34px;
-  border-radius: 999px;
-}
-
-.ui-accounting-panel-kicker {
-  margin: 0 0 4px;
-  font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.62);
+/* ── Subcategory label (non-interactive divider) ─────────────── */
+.ui-ledger-subcategory-label {
+  padding: 6px 16px;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.01);
 }
 
-.ui-accounting-pill {
-  display: inline-flex;
+/* ── Account level ───────────────────────────────────────────── */
+.ui-ledger-account {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Alias kept for test compatibility */
+.ui-accounting-account-timeline {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.ui-ledger-account-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ui-ledger-account-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-ledger-account-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.ui-ledger-account-meta-stretch {
+  flex: 1;
+}
+
+.ui-ledger-account-chips {
+  gap: 6px;
+}
+
+.ui-ledger-account-info {
+  display: flex;
   align-items: center;
-  min-height: 34px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.86);
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.ui-accounting-pill-compact {
-  min-height: 28px;
-  font-size: 0.74rem;
+.ui-ledger-account-name {
+  color: rgba(245, 250, 255, 0.92);
 }
 
-.ui-accounting-movs-count {
+.ui-ledger-movs-count {
   font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.ui-accounting-account-groups {
-  display: grid;
-  gap: 12px;
+.ui-ledger-account-balance {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.ui-accounting-account-group-accordion {
-  border: 1px solid var(--ui-border-soft);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-surface-muted);
-  overflow: hidden;
-}
-
-.ui-accounting-account-group-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  cursor: pointer;
-}
-
-.ui-accounting-kpi-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.ui-accounting-kpi-card {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 12px;
-  display: grid;
-  gap: 4px;
-}
-
-.ui-accounting-kpi-card span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 0.76rem;
-}
-
-.ui-accounting-kpi-card strong {
-  font-size: 1.05rem;
-}
-
-.ui-accounting-net-summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 12px;
-}
-
-.ui-accounting-net-summary-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.ui-accounting-net-summary-title {
-  margin: 0;
-  font-size: 1.05rem;
-}
-
-.ui-accounting-net-summary-subtitle {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 0.78rem;
-}
-
-.ui-accounting-net-summary-values {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-}
-
-.ui-accounting-net-summary-values strong {
-  font-size: 1.25rem;
-}
-
-.ui-accounting-net-summary-values small {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 0.76rem;
-  text-align: right;
-}
-
-.ui-accounting-account-group {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
-}
-
-.ui-accounting-account-timeline {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
-}
-
-.ui-accounting-account-timeline-summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: start;
-  padding: 10px 12px;
-}
-
-.ui-accounting-account-timeline-summary::-webkit-details-marker {
-  display: none;
-}
-
-.ui-accounting-account-timeline-body {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.ui-accounting-account-legacy {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.01);
-  padding: 10px;
-}
-
-.ui-accounting-account-legacy summary {
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 0.82rem;
-  margin-bottom: 10px;
-}
-
-.ui-accounting-legacy-copy {
-  margin: 0 0 10px;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.78rem;
-}
-
-.ui-accounting-account-group-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.ui-accounting-account-list,
-.ui-accounting-entry-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.ui-accounting-account-row,
-.ui-accounting-entry-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: start;
-  padding: 10px 12px;
-}
-
-.ui-accounting-account-row + .ui-accounting-account-row,
-.ui-accounting-entry-row + .ui-accounting-entry-row {
+.ui-ledger-account-body {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.ui-accounting-account-row p,
-.ui-accounting-entry-row p,
-.ui-accounting-transaction-head p,
-.ui-accounting-balance-card-head p {
-  margin: 4px 0 0;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.78rem;
+.ui-ledger-empty {
+  margin: 10px;
+  font-size: 0.82rem;
+  padding: 10px 14px;
 }
 
-.ui-accounting-account-meta {
-  display: grid;
-  gap: 2px;
-}
-
-.ui-accounting-account-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ui-accounting-entry-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.ui-accounting-entry-action-btn {
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+/* ── Entry list ──────────────────────────────────────────────── */
+.ui-entry-list {
+  list-style: none;
+  margin: 0;
   padding: 0;
-  font-size: 0.88rem;
 }
 
-.ui-accounting-form-grid-edit-simple {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-}
-
-.ui-accounting-edit-readonly {
+.ui-entry-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
 }
 
-.ui-accounting-edit-readonly div {
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px;
+.ui-entry-row + .ui-entry-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ui-entry-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ui-entry-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.ui-entry-body {
   display: grid;
   gap: 4px;
 }
 
-.ui-accounting-edit-readonly span {
-  font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.62);
+.ui-entry-desc {
+  font-size: 0.88rem;
 }
 
-.ui-accounting-account-delete-btn {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 0.74rem;
+.ui-entry-tags {
+  gap: 6px;
 }
 
-.ui-accounting-account-untrack-btn {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 0.74rem;
+.ui-entry-status {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
+.ui-entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Balance delta — kept for test compatibility ─────────────── */
+.ui-accounting-balance-delta {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ui-accounting-balance-delta-positive {
+  color: #8cf0d0;
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.2);
+}
+
+.ui-accounting-balance-delta-negative {
+  color: #ffb3b3;
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.ui-accounting-balance-delta-neutral {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ui-accounting-entry-action-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 0.84rem;
+}
+
+/* ── Technical accounts ──────────────────────────────────────── */
+.ui-ledger-technical {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+}
+
+.ui-ledger-technical > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.ui-ledger-technical-group {
+  margin-top: 12px;
+}
+
+.ui-ledger-technical-head {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+}
+
+/* ── Modal forms ─────────────────────────────────────────────── */
 .ui-accounting-form {
   display: grid;
   gap: 12px;
@@ -1677,6 +1684,17 @@ watch(availableManualPositionOptions, (options) => {
   grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
 }
 
+.ui-accounting-form-grid-edit-simple {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+/* 3-column row for booking_date + value_date + time in edit modal */
+.ui-accounting-form-grid-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.75fr;
+  gap: 10px;
+}
+
 .ui-accounting-field {
   display: grid;
   gap: 6px;
@@ -1693,6 +1711,150 @@ watch(availableManualPositionOptions, (options) => {
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.82rem;
+}
+
+.ui-accounting-form-grid > .ui-accounting-inline-note,
+.ui-accounting-form-grid-wide > .ui-accounting-inline-note {
+  align-self: center;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.76rem;
+}
+
+.ui-accounting-edit-readonly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-edit-readonly div {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-edit-readonly span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.ui-accounting-modal-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ui-accounting-modal-copy .subtle,
+.ui-accounting-modal-copy .ui-page-eyebrow {
+  margin: 0;
+}
+
+.ui-accounting-modal-form {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.ui-accounting-edit-form {
+  gap: 14px;
+}
+
+.ui-accounting-edit-amount-wrap {
+  position: relative;
+}
+
+.ui-accounting-edit-amount-wrap small {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.ui-accounting-edit-amount-wrap .input {
+  padding-right: 56px;
+}
+
+/* Segmented movement type selector — full-width tabs, no wrapping */
+.ui-accounting-segmented {
+  display: flex;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 8px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn:last-child {
+  border-right: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+  border-right-color: rgba(255, 255, 255, 0.08);
+  transform: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn.ui-accounting-segmented-btn-active {
+  background: rgba(45, 212, 191, 0.1);
+  color: rgba(45, 212, 191, 0.95);
+  font-weight: 600;
+}
+
+.ui-accounting-annual-link {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-annual-link summary {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.84rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-accounting-annual-link summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-accounting-annual-link summary::before {
+  content: '›';
+  display: inline-block;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.18s;
+  flex-shrink: 0;
+}
+
+.ui-accounting-annual-link[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .ui-accounting-activation-list {
@@ -1730,183 +1892,24 @@ watch(availableManualPositionOptions, (options) => {
   font-size: 0.76rem;
 }
 
-.ui-accounting-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.ui-accounting-summary-month {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 10px;
-  display: grid;
-  gap: 3px;
-}
-
-.ui-accounting-summary-month span,
-.ui-accounting-summary-month small {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.75rem;
-}
-
-.ui-accounting-balance-list,
-.ui-accounting-transaction-list {
-  display: grid;
-  gap: 10px;
-}
-
-.ui-accounting-balance-card,
-.ui-accounting-transaction {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;
-}
-
-.ui-accounting-balance-card {
-  padding: 12px;
-  gap: 10px;
-}
-
-.ui-accounting-balance-card-head,
-.ui-accounting-transaction-head {
+.ui-accounting-inline-actions,
+.ui-accounting-submit-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: start;
-}
-
-.ui-accounting-transaction-head {
-  padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.ui-accounting-balance-delta {
-  display: inline-flex;
   align-items: center;
-  min-height: 32px;
-  border-radius: 999px;
-  padding: 0 10px;
-  font-size: 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.ui-accounting-balance-delta-positive {
-  color: #8cf0d0;
-  background: rgba(45, 212, 191, 0.12);
-}
-
-.ui-accounting-balance-delta-negative {
-  color: #ffb3b3;
-  background: rgba(248, 113, 113, 0.14);
-}
-
-.ui-accounting-balance-delta-neutral {
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.ui-accounting-balance-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.ui-accounting-balance-metrics div {
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 10px;
-}
-
-.ui-accounting-balance-metrics dt {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.74rem;
-}
-
-.ui-accounting-balance-metrics dd {
-  margin: 6px 0 0;
-  font-weight: 600;
-}
-
-.ui-accounting-entry-editor {
-  display: grid;
-  gap: 10px;
-}
-
-.ui-accounting-segmented {
-  display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
-.ui-accounting-segmented-btn {
-  min-width: 120px;
-}
-
-.ui-accounting-segmented-btn-active {
-  border-color: rgba(45, 212, 191, 0.34);
-  background: rgba(45, 212, 191, 0.12);
-}
-
-.ui-accounting-modal-copy {
+.ui-accounting-entry-editor-row {
   display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.ui-accounting-modal-copy .subtle,
-.ui-accounting-modal-copy .ui-accounting-panel-kicker {
-  margin: 0;
-}
-
-.ui-accounting-modal-form {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.ui-accounting-edit-form {
-  gap: 14px;
-}
-
-.ui-accounting-edit-amount-wrap {
-  position: relative;
-}
-
-.ui-accounting-edit-amount-wrap small {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-}
-
-.ui-accounting-edit-amount-wrap .input {
-  padding-right: 56px;
+  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
 }
 
 .ui-accounting-advanced {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 12px;
-}
-
-.ui-accounting-annual-link {
-  display: grid;
-  gap: 10px;
-  border-radius: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 12px;
-}
-
-.ui-accounting-annual-link summary {
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.84rem;
 }
 
 .ui-accounting-advanced-summary {
@@ -1919,49 +1922,29 @@ watch(availableManualPositionOptions, (options) => {
   font-size: 0.84rem;
 }
 
-.ui-accounting-entry-editor-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) auto;
-  gap: 10px;
-}
-
-.ui-accounting-inline-actions,
-.ui-accounting-submit-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.ui-accounting-empty {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.86rem;
-}
-
-@media (max-width: 1024px) {
-  .ui-accounting-summary-strip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ui-period-bar {
+    flex-wrap: wrap;
   }
 
-  .ui-accounting-kpi-grid {
-    grid-template-columns: 1fr;
+  .ui-accounting-hero-right {
+    align-items: flex-start;
   }
 
-  .ui-accounting-entry-editor-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .ui-accounting-hero-panel .ui-cashflow-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
-  .ui-accounting-balance-metrics {
-    grid-template-columns: 1fr;
+  .ui-entry-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
   }
 
-  .ui-accounting-net-summary-values {
-    justify-items: start;
-  }
-
-  .ui-accounting-net-summary-values small {
-    text-align: left;
+  .ui-entry-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
   }
 }
 
@@ -1969,7 +1952,7 @@ watch(availableManualPositionOptions, (options) => {
   .ui-accounting-form-grid,
   .ui-accounting-form-grid-wide,
   .ui-accounting-form-grid-edit-simple,
-  .ui-accounting-summary-strip,
+  .ui-accounting-form-grid-dates,
   .ui-accounting-entry-editor-row {
     grid-template-columns: 1fr;
   }
@@ -1980,7 +1963,7 @@ watch(availableManualPositionOptions, (options) => {
 
   .ui-accounting-advanced-summary {
     flex-direction: column;
-    align-items: start;
+    align-items: flex-start;
   }
 }
 </style>
