@@ -63,7 +63,7 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 
 ## Referencias cruzadas obligatorias
 1. El roadmap funcional cerrado de `accounting` vive en `terminados/accounting-movements-roadmap.md`.
-2. La separacion entre cuenta contable, categoria/subcategoria y linea anual de presupuesto vive en `accounting-category-budget-separation-roadmap.md`.
+2. La separacion entre cuenta contable, categoria/subcategoria y linea anual de presupuesto vive en `terminados/accounting-category-budget-separation-roadmap.md` (completado).
 3. Este documento no reemplaza esos roadmaps: define la continuidad del refactor de mantenibilidad del backend completo.
 4. Cuando cambien los boundaries entre `accounting`, `budget` y `net_worth`, este documento debe actualizarse en paralelo para mantener trazabilidad.
 

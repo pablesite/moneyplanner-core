@@ -1,0 +1,74 @@
+# Estado del Proyecto — Core
+
+Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
+
+**Última revisión:** 2026-03-17 | **Versión Core:** 0.22.0
+
+---
+
+## En curso y próximas tareas
+
+> Convención de tipo de tarea:
+> - **(Manual)** — requiere guía directa del usuario; la dirección se define sobre la marcha. No delegable a un agente sin esa guía.
+> - **(Agente)** — delegable; requiere un plan maestro pero no decisiones continuas del usuario.
+
+### En curso
+
+| Módulo | Tipo | Descripción |
+|--------|------|-------------|
+| Contabilidad | Manual | Revisión de la experiencia de uso del módulo para decidir mejoras y orientación funcional. Ver `roadmap/product-roadmap.md`. |
+
+### Siguiente tarea disponible
+
+Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
+
+| Módulo | Tipo | Descripción | Spec |
+|--------|------|-------------|------|
+| Importador MoneyWiz | Agente | Importar movimientos desde MoneyWiz con mapeo de tipos. | Pendiente de diseñar tras revisión del módulo de contabilidad. |
+| Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
+
+---
+
+## Funcionalidades implementadas y estables
+
+| Área | Estado | Notas |
+|------|--------|-------|
+| Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Completo |
+| Cierre mensual | ✅ | Integrado con budget y accounting |
+| Data Input (entradas anuales) | ✅ | Completo |
+| Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
+| Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas |
+| Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
+| Portable data (export/import) | ✅ | Con versionado y validación |
+| Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
+| Auth Core (JWT, link-token para SaaS) | ✅ | Incluyendo generación de token para linking con SaaS |
+
+## En progreso activo
+
+| Área | Estado | Roadmap canónico |
+|------|--------|-----------------|
+| Accounting-budget separation | ✅ Fases 1-5 completadas | `roadmap/terminados/accounting-category-budget-separation-roadmap.md` |
+
+## Deliberadamente aparcado (funcionalidad primero)
+
+| Área | Estado | Notas |
+|------|--------|-------|
+| Frontend refactor | ⏸ Aparcado | `roadmap/frontend-refactor-roadmap.md`. No se aborda hasta que la funcionalidad esté completa. BudgetDashboardView ~4836 líneas, NetWorthView ~3218 líneas — deuda técnica conocida y aceptada. |
+| Backend refactor | ⏸ Aparcado | Mismo criterio. El roadmap está definido pero no es prioritario frente a funcionalidad. |
+| Scoring fase 5 (independencia financiera) | ⚪ | Modelo documentado, sin runtime |
+| Investment portfolio básico | ⚪ | En capabilities pero no implementado |
+| Financial simulator básico | ⚪ | En capabilities pero no implementado |
+
+---
+
+## Leyenda
+
+| Símbolo | Significado |
+|---------|-------------|
+| ✅ | Implementado y funcionando |
+| 🔄 | En progreso |
+| ⚪ | No iniciado (en scope futuro) |
+| ⛔ | Fuera de alcance explícito (decisión tomada) |
+| ⏸ | Aparcado conscientemente |

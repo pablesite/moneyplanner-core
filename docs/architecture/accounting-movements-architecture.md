@@ -4,7 +4,7 @@
 Define the Core-owned architecture for daily movements and the new `accounting` domain.
 
 ## Related roadmap note
-1. The specific implementation handoff for separating accounting account, category/subcategory, and annual budget line lives in `../roadmap/accounting-category-budget-separation-roadmap.md`.
+1. The specific implementation handoff for separating accounting account, category/subcategory, and annual budget line lives in `../roadmap/terminados/accounting-category-budget-separation-roadmap.md` (completed).
 2. That roadmap refines the execution-vs-plan boundary without changing Core ownership: `accounting` owns execution and movement classification, while `budget` remains the annual planning layer.
 
 ## Problem to solve
