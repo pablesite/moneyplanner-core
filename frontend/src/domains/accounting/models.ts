@@ -142,6 +142,9 @@ export type LedgerEntryWritePayload = {
   side: LedgerEntrySide;
   amount: string;
   currency?: string;
+  flow_family?: '' | 'income' | 'expense';
+  category_key?: string;
+  subcategory_key?: string;
   annual_income_entry_id?: number | null;
   annual_expense_entry_id?: number | null;
   asset_id?: number | null;
