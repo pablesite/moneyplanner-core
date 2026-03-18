@@ -306,6 +306,7 @@ def sync_ownership_link_from_payload(*, user, payload: dict) -> dict[str, object
     )
 
 
+@transaction.atomic
 def sync_ownership_link(
     *, user, target_type: str, target_id: int, ownership: Ownership | None
 ) -> dict[str, object]:

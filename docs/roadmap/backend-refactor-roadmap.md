@@ -12,8 +12,34 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 | 1 | Test coverage baseline (≥80% por app) | `core/docs/tasks/backend-refactor/terminados/phase-1-test-coverage-baseline/backend.md` | ✅ |
 | 2 | Particion `accounting/services.py` | `core/docs/tasks/backend-refactor/terminados/phase-2-accounting-services-partition/backend.md` | Completada |
 | 3 | net_worth domain cleanup | `core/docs/tasks/backend-refactor/terminados/phase-3-net-worth-domain-cleanup/backend.md` | Completada |
-| 4 | Boundary enforcement cross-domain | `core/docs/tasks/backend-refactor/phase-4-boundary-enforcement/backend.md` | ⚪ |
+| 4 | Boundary enforcement cross-domain | `core/docs/tasks/backend-refactor/terminados/phase-4-boundary-enforcement/backend.md` | Completada |
 | 5 | DX docs y guía de contribución | `core/docs/tasks/backend-refactor/phase-5-dx-docs/backend.md` | ⚪ |
+
+### Boundaries estabilizados (Phase 4)
+
+#### Tabla de responsabilidades definitiva
+
+| Dominio | Responsabilidad unica | No debe hacer |
+|---------|------------------------|---------------|
+| `accounting` | Registrar movimientos reales del ledger, balances de cuentas y clasificacion funcional de entries. | No modificar entradas de `budget` directamente ni operar `assets`/`liabilities` fuera de contratos publicos. |
+| `budget` | Gestionar plan anual y seguimiento mensual (incluyendo convivencia ledger/fallback). | No escribir directamente en el ledger contable ni recalcular balances de cuentas. |
+| `net_worth` | Calcular posicion patrimonial y sincronizar compromisos presupuestarios ligados a activos/pasivos. | No escribir en el ledger directamente ni duplicar reglas de clasificacion anual. |
+| `memberships` | Gestionar ownership y sincronizacion de ownership-links por usuario. | No persistir side effects parciales fuera de un bloque transaccional en sync cross-domain. |
+
+#### Flujos atomicos garantizados
+
+1. `accounting.services_quick_entry.create_quick_transaction` (ya atomico): creacion de transaccion + entries + links anuales en una sola transaccion.
+2. `net_worth.services_assets_budget.sync_generated_budget_commitments_for_asset`: borrado/recreacion de compromisos con rollback total ante fallo.
+3. `net_worth.services_liabilities_budget.sync_generated_budget_commitments_for_liability`: sync de compromisos de pasivos con rollback total.
+4. `memberships.services.sync_ownership_link`: actualizacion de ownership-link y sincronizacion de commitments en un unico bloque atomico.
+5. `net_worth.services_snapshots.import_snapshots_bulk_for_user` (ya atomico): importacion bulk todo-o-nada.
+
+#### Side effects cross-domain documentados
+
+1. `accounting -> budget`: el monthly summary consume clasificacion funcional y links anuales de entries del ledger.
+2. `net_worth -> budget`: assets/liabilities generan y sincronizan compromisos presupuestarios de sistema.
+3. `memberships -> net_worth/budget`: `ownership-links/sync` actualiza ownership efectivo y dispara resync de compromisos dependientes.
+4. `accounting -> net_worth`: posiciones `tracking_mode=accounting` leen balance efectivo desde cuentas contables vinculadas.
 
 ### Hotspots reales (2026-03-18)
 
@@ -396,6 +422,4 @@ Ejecutar dentro de contenedores. No usar `docker compose down -v`.
 3. Los boundaries entre ejecucion, plan y patrimonio quedan mas claros.
 4. Los hotspots reales quedan protegidos con tests y decisiones trazables.
 5. Otra persona puede continuar el trabajo sin depender de contexto oral.
-
-
 

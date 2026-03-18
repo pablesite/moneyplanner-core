@@ -19,6 +19,7 @@ from ..models import (
     Liability,
     LiquidityMonthlyCheckin,
 )
+from ..services_assets_budget import sync_generated_budget_commitments_for_asset
 from ..services_assets_core import get_effective_asset_amount
 from ..services_liabilities_core import get_effective_liability_amount
 from ..services_snapshots import create_snapshot_for_user
@@ -742,6 +743,47 @@ class NetWorthApiTests(APITestCase):
             row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
         )
         self.assertEqual(row_2026.amount_annual, Decimal("3600.00"))
+
+    def test_periodic_investment_asset_sync_is_atomic_when_budget_row_creation_fails(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo atomico",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            start_date=date(2026, 1, 15),
+            expected_end_date=date(2027, 2, 15),
+            amount=Decimal("5000.00"),
+            initial_purchase_value=Decimal("5000.00"),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            monthly_contribution_amount=Decimal("300.00"),
+            investment_contribution_currency="EUR",
+            is_active=True,
+        )
+        original_create = AnnualExpenseEntry.objects.create
+        call_count = {"value": 0}
+
+        def create_side_effect(*args, **kwargs):
+            if call_count["value"] == 0:
+                call_count["value"] += 1
+                return original_create(*args, **kwargs)
+            raise RuntimeError("boom")
+
+        with patch.object(
+            AnnualExpenseEntry.objects,
+            "create",
+            side_effect=create_side_effect,
+        ):
+            with self.assertRaises(RuntimeError):
+                sync_generated_budget_commitments_for_asset(asset=asset)
+
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                source_asset_id=asset.id,
+                is_system_generated=True,
+            ).exists()
+        )
 
     def test_periodic_investment_asset_requires_monthly_contribution_only(self):
         response = self.client.post(

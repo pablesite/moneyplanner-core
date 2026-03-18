@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -113,6 +114,7 @@ def _build_investment_contribution_schedule(
     return schedule
 
 
+@transaction.atomic
 def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
     from budget.models import AnnualExpenseEntry
 

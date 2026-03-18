@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import timedelta
 from typing import cast
 
+from django.db import transaction
 from django.db.models import Q
 
 from .models import Asset, Liability
@@ -168,6 +169,7 @@ def _get_generated_liability_owner_name(*, liability: Liability) -> str:
     return ""
 
 
+@transaction.atomic
 def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> None:
     from budget.models import AnnualExpenseEntry
 
