@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BudgetHeroSection from '@/domains/budget/components/BudgetHeroSection.vue';
+import BudgetMonthlyCloseIncomeSection from '@/domains/budget/components/BudgetMonthlyCloseIncomeSection.vue';
 import BudgetMonthlyCloseLiquiditySection from '@/domains/budget/components/BudgetMonthlyCloseLiquiditySection.vue';
 import {
   coreAccountingApi,
@@ -2674,239 +2675,36 @@ watch(
       :save-liquidity-checkin-from-input="saveLiquidityCheckinFromInput"
       :on-liquidity-checkin-checkbox-toggle="onLiquidityCheckinCheckboxToggle"
     />
-    <section
-      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'income'"
-      class="card ui-pro-panel ui-budget-checkin mt-3"
-    >
-      <div class="ui-budget-checkin-header">
-        <div>
-          <div class="ui-monthly-close-step-headline">
-            <button
-              type="button"
-              class="btn ui-monthly-close-step-nav-btn"
-              @click="goToPreviousMonthlyCloseStep()"
-            >
-              &larr;
-            </button>
-            <h2 class="ui-budget-checkin-title">Paso 2 ? Check-in mensual de ingresos</h2>
-            <button
-              type="button"
-              class="btn ui-monthly-close-step-nav-btn"
-              @click="goToNextMonthlyCloseStep()"
-            >
-              &rarr;
-            </button>
-          </div>
-          <p class="ui-budget-checkin-subtitle">
-            Confirma o ajusta ingresos recurrentes del mes. Los puntuales se integraran cuando
-            tengan mes objetivo.
-          </p>
-          <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-            Ledger categorizado por taxonomia compartida y fallback legacy solo cuando esa
-            clasificacion todavia no exista.
-          </p>
-        </div>
-      </div>
-      <div class="ui-budget-checkin-summary-grid">
-        <article class="ui-budget-checkin-kpi">
-          <span>Previsto mes</span>
-          <strong>{{ formatMoney(selectedIncomeMonthPlanned) }} €</strong>
-        </article>
-        <article class="ui-budget-checkin-kpi">
-          <span>Ejecutado mes</span>
-          <strong>{{ formatMoney(selectedIncomeMonthExecuted) }} €</strong>
-        </article>
-        <article
-          class="ui-budget-checkin-kpi"
-          :class="{
-            'ui-budget-checkin-kpi-good': selectedIncomeMonthDeviation > 0,
-            'ui-budget-checkin-kpi-danger': selectedIncomeMonthDeviation < 0,
-          }"
-        >
-          <span>Desviacion del mes</span>
-          <strong
-            >{{ selectedIncomeMonthDeviation > 0 ? '+' : ''
-            }}{{ formatMoney(selectedIncomeMonthDeviation) }} €</strong
-          >
-        </article>
-        <article class="ui-budget-checkin-kpi">
-          <span>Completitud</span>
-          <strong>{{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }}</strong>
-        </article>
-      </div>
-      <div class="ui-budget-checkin-list">
-        <div v-if="incomeExecutionLoading" class="subtle">Cargando check-ins de ingresos...</div>
-        <div v-else-if="incomeExecutionError" class="subtle text-red-400">
-          {{ incomeExecutionError }}
-        </div>
-        <div v-else-if="!monthlyIncomeExecutionEntries.length" class="subtle">
-          No hay ingresos recurrentes previstos para este mes.
-        </div>
-        <div v-else class="ui-budget-checkin-groups-box">
-          <div class="ui-budget-execution-note">
-            <div class="ui-budget-execution-note-main">
-              <strong>Cobertura del mes</strong>
-              <span>
-                {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger categorizado ·
-                {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy ·
-                {{ monthlyIncomeCoverageSummary.pending }} pendientes
-              </span>
-              <small class="ui-budget-execution-note-detail">
-                {{ monthlyIncomeCoverageDetail }}
-              </small>
-            </div>
-            <span class="ui-budget-execution-badge">{{ monthlyIncomeCoverageLabel }}</span>
-          </div>
-          <div
-            v-if="monthlyIncomePendingClassification.amount > 0"
-            class="ui-state-block ui-state-error"
-          >
-            <strong>Pendiente clasificar</strong>
-            <span>
-              {{ formatMoney(monthlyIncomePendingClassification.amount) }} EUR del ledger no se
-              puede alinear automaticamente con el presupuesto de este mes.
-            </span>
-            <small v-if="monthlyIncomePendingClassification.ambiguousRows > 0">
-              {{ monthlyIncomePendingClassification.ambiguousRows }} lineas comparten la misma
-              subcategoria y requieren revision manual.
-            </small>
-          </div>
-          <div class="ui-budget-checkin-group">
-            <div class="ui-budget-checkin-group-summary">
-              <div class="ui-budget-checkin-group-title-wrap">
-                <strong class="ui-budget-checkin-group-title">Ingresos recurrentes</strong>
-                <span class="ui-budget-checkin-group-meta"
-                  >{{ monthlyIncomeExecutionEntries.length }} lineas ·
-                  {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud</span
-                >
-              </div>
-              <div class="ui-budget-checkin-group-kpis">
-                <span>P {{ formatMoney(selectedIncomeMonthPlanned) }} €</span>
-                <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} €</span>
-                <span
-                  :class="{
-                    'ui-budget-checkin-group-dev-pos': selectedIncomeMonthDeviation > 0,
-                    'ui-budget-checkin-group-dev-neg': selectedIncomeMonthDeviation < 0,
-                  }"
-                  >D {{ selectedIncomeMonthDeviation > 0 ? '+' : ''
-                  }}{{ formatMoney(selectedIncomeMonthDeviation) }} €</span
-                >
-              </div>
-            </div>
-            <div class="ui-budget-checkin-group-rows">
-              <article
-                v-for="row in monthlyIncomeExecutionEntries"
-                :key="`income-checkin-${row.entry.id}`"
-                class="ui-budget-checkin-row"
-              >
-                <div class="ui-budget-checkin-row-main">
-                  <div
-                    v-if="row.executionSource !== 'none'"
-                    class="ui-budget-execution-chip"
-                    :class="{
-                      'ui-budget-execution-chip-ledger':
-                        row.executionOrigin === 'categorized_ledger',
-                    }"
-                  >
-                    {{ executionSourceLabel(row.executionOrigin) }}
-                  </div>
-                  <div class="ui-budget-checkin-row-title" :title="incomeCheckinRowSummary(row)">
-                    {{ incomeCheckinRowSummary(row) }}
-                    <span class="ui-budget-checkin-row-planned"
-                      >(Previsto {{ formatMoney(row.planned) }} €)</span
-                    >
-                  </div>
-                  <div
-                    v-if="
-                      row.executionOrigin === 'categorized_ledger' ||
-                      row.executionOrigin === 'legacy_ledger' ||
-                      row.executionOrigin === 'ambiguous_taxonomy'
-                    "
-                    class="ui-budget-checkin-row-state"
-                  >
-                    <strong>{{ executionSourceLabel(row.executionOrigin) }}</strong>
-                    <template v-if="row.executed != null"
-                      >({{ formatMoney(row.executed) }} EUR)</template
-                    >
-                    <span
-                      v-if="
-                        row.executionOrigin === 'categorized_ledger' ||
-                        row.executionOrigin === 'legacy_ledger'
-                      "
-                      class="ui-budget-checkin-row-lock-note"
-                      >Edicion legacy bloqueada</span
-                    >
-                    <span v-else class="ui-budget-checkin-row-lock-note">
-                      Varias lineas comparten esta subcategoria.
-                    </span>
-                  </div>
-                  <div
-                    v-if="row.executionOrigin === 'legacy_checkin' && row.checkin"
-                    class="ui-budget-checkin-row-state"
-                  >
-                    <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
-                    <template v-if="row.checkin.status !== 'skipped' && row.executed != null"
-                      >({{ formatMoney(row.executed) }} €)</template
-                    >
-                  </div>
-                </div>
-                <div class="ui-budget-checkin-row-actions">
-                  <div class="ui-budget-checkin-adjust">
-                    <div class="ui-budget-checkin-quick-actions">
-                      <button
-                        type="button"
-                        class="btn ui-budget-checkin-mini-btn"
-                        :disabled="
-                          isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
-                        "
-                        @click="resetIncomeCheckinDraftValue(row, 'zero')"
-                      >
-                        Borrar
-                      </button>
-                      <button
-                        type="button"
-                        class="btn ui-budget-checkin-mini-btn"
-                        :disabled="
-                          isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
-                        "
-                        @click="resetIncomeCheckinDraftValue(row, 'planned')"
-                      >
-                        Previsto
-                      </button>
-                    </div>
-                    <input
-                      v-model="incomeAdjustAmounts[row.entry.id]"
-                      inputmode="decimal"
-                      class="input ui-data-field"
-                      :disabled="isLockedExecutionRow(row)"
-                      placeholder="Importe ejecutado"
-                      @focus="ensureIncomeAdjustAmountPrefilled(row)"
-                      @blur="onIncomeAdjustAmountBlur(row)"
-                      @keydown.enter.prevent="saveIncomeCheckinFromInput(row)"
-                    />
-                  </div>
-                  <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
-                    <input
-                      type="checkbox"
-                      :checked="row.executionSource !== 'none'"
-                      :disabled="
-                        isLockedExecutionRow(row) || incomeExecutionBusyEntryId === row.entry.id
-                      "
-                      @change="
-                        onIncomeCheckinCheckboxToggle(
-                          row,
-                          Boolean(($event.target as HTMLInputElement).checked),
-                        )
-                      "
-                    />
-                  </label>
-                </div>
-              </article>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    <BudgetMonthlyCloseIncomeSection
+      :is-monthly-close-view="isMonthlyCloseView"
+      :active-monthly-close-step="activeMonthlyCloseStep"
+      :monthly-income-execution-entries="monthlyIncomeExecutionEntries"
+      :income-execution-loading="incomeExecutionLoading"
+      :income-execution-error="incomeExecutionError"
+      :income-execution-busy-entry-id="incomeExecutionBusyEntryId"
+      :income-adjust-amounts="incomeAdjustAmounts"
+      :selected-income-month-planned="selectedIncomeMonthPlanned"
+      :selected-income-month-executed="selectedIncomeMonthExecuted"
+      :selected-income-month-deviation="selectedIncomeMonthDeviation"
+      :selected-income-month-completion-ratio="selectedIncomeMonthCompletionRatio"
+      :monthly-income-coverage-summary="monthlyIncomeCoverageSummary"
+      :monthly-income-coverage-detail="monthlyIncomeCoverageDetail"
+      :monthly-income-coverage-label="monthlyIncomeCoverageLabel"
+      :monthly-income-pending-classification="monthlyIncomePendingClassification"
+      :format-money="formatMoney"
+      :format-percent="formatPercent"
+      :execution-source-label="executionSourceLabel"
+      :income-checkin-row-summary="incomeCheckinRowSummary"
+      :checkin-status-label="checkinStatusLabel"
+      :is-locked-execution-row="isLockedExecutionRow"
+      :go-to-previous-monthly-close-step="goToPreviousMonthlyCloseStep"
+      :go-to-next-monthly-close-step="goToNextMonthlyCloseStep"
+      :reset-income-checkin-draft-value="resetIncomeCheckinDraftValue"
+      :ensure-income-adjust-amount-prefilled="ensureIncomeAdjustAmountPrefilled"
+      :on-income-adjust-amount-blur="onIncomeAdjustAmountBlur"
+      :save-income-checkin-from-input="saveIncomeCheckinFromInput"
+      :on-income-checkin-checkbox-toggle="onIncomeCheckinCheckboxToggle"
+    />
     <section
       v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'result'"
       class="card ui-pro-panel ui-budget-checkin mt-3"
