@@ -240,7 +240,7 @@ Objetivo: dividir las vistas grandes en composables de pagina, secciones y compo
 
 ### 3.1 Orden recomendado (mayor a menor riesgo)
 
-1. `BudgetDashboardView.vue` (5,512 lineas) — **spec 3a**
+1. `BudgetDashboardView.vue` (5,512 lineas al inicio, 2,362 tras cierre) — **spec 3a completada**
 2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
 3. `DataInputView.vue` (2,742 lineas) — **spec 3c**
 4. `GuidePhaseDetailView.vue` (2,207 lineas) — **spec 3d**
@@ -257,7 +257,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 #### `BudgetDashboardView` (5,512 lineas)
 
 1. Secciones: modo anual, modo cierre mensual, ledger coverage, check-ins, sugerencias ledger.
-2. Composable: filtros, fetch, acciones.
+2. Cierre estructural aceptable: vista en rol de orquestacion, bloques grandes extraidos y CSS del dashboard fuera del SFC.
 
 #### `NetWorthView` (3,608 lineas)
 
@@ -289,7 +289,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 5. Cada composable extraido tiene tests con cobertura >= 80%.
 
 **Specs:**
-- `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3b-net-worth/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md`
