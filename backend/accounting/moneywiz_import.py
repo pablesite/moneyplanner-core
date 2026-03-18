@@ -22,6 +22,104 @@ DEFAULT_IMPORT_CURRENCY = "EUR"
 TWOPLACES = Decimal("0.01")
 ZERO = Decimal("0")
 
+# ---------------------------------------------------------------------------
+# MoneyWiz Spanish category path → (category_key, subcategory_key)
+# Keys: normalized segments joined by " > ", matched from most- to least-specific.
+# ---------------------------------------------------------------------------
+_MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
+    # Gastos > Corrientes
+    "gastos > corrientes > vivienda": ("consumption_expenses", "housing_home"),
+    "gastos > corrientes > alimentacion": ("consumption_expenses", "living_expenses"),
+    "gastos > corrientes > bebe": ("consumption_expenses", "family_childcare"),
+    "gastos > corrientes > vehiculos": ("consumption_expenses", "transport_mobility"),
+    "gastos > corrientes > ropa": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > corrientes > cuidado personal": ("consumption_expenses", "health_wellbeing"),
+    "gastos > corrientes > gestion": ("consumption_expenses", "other_consumption_expenses"),
+    "gastos > corrientes > noia": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > corrientes": ("consumption_expenses", "other_consumption_expenses"),
+    # Gastos > otros grupos
+    "gastos > deporte": ("consumption_expenses", "health_wellbeing"),
+    "gastos > ocio > restaurantes": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > ocio > cerves": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > ocio > musica": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > ocio > plataformas": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > ocio > viajes": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > ocio": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > regalos": ("consumption_expenses", "gifts_donations"),
+    "gastos > formacion": ("consumption_expenses", "education_growth"),
+    "gastos > side projects": ("consumption_expenses", "other_consumption_expenses"),
+    "gastos > global ana": ("consumption_expenses", "other_consumption_expenses"),
+    "gastos > otro general": ("consumption_expenses", "other_consumption_expenses"),
+    "gastos": ("consumption_expenses", "other_consumption_expenses"),
+    # Inversiones Gastos
+    "inversiones gastos > fondos": ("financial_investments", "index_funds"),
+    "inversiones gastos > crowdlending": ("financial_investments", "crowdlending_p2p"),
+    "inversiones gastos > roboadvisor": ("financial_investments", "roboadvisor"),
+    "inversiones gastos > plan de pensiones": ("financial_investments", "pension_plan"),
+    "inversiones gastos > st criptos": ("financial_investments", "crypto"),
+    "inversiones gastos > st stocks": ("financial_investments", "stocks_dividends"),
+    "inversiones gastos > suscripciones": ("consumption_expenses", "other_consumption_expenses"),
+    "inversiones gastos > deposito": ("financial_investments", "other_financial_investments"),
+    "inversiones gastos > crowdfunding inm": ("financial_investments", "crowdfunding_real_estate"),
+    "inversiones gastos > loterias y apuestas": ("consumption_expenses", "leisure_lifestyle"),
+    "inversiones gastos": ("financial_investments", "other_financial_investments"),
+    # Inmobiliario
+    "inmobiliario > hipoteca": ("real_estate_assets", "mortgage_principal"),
+    "inmobiliario > comunidad": ("consumption_expenses", "housing_home"),
+    "inmobiliario > seguro vivienda": ("consumption_expenses", "housing_home"),
+    "inmobiliario > obras": ("real_estate_assets", "property_improvements"),
+    "inmobiliario > atrio": ("real_estate_assets", "property_purchase"),
+    "inmobiliario > nueva vivienda": ("real_estate_assets", "property_purchase"),
+    "inmobiliario": ("real_estate_assets", "other_real_estate_assets"),
+    # Mobiliario
+    "mobiliario > vehiculos": ("consumption_expenses", "transport_mobility"),
+    "mobiliario": ("tangible_assets", "other_tangible_assets"),
+    # Acreedores
+    "acreedores": ("consumption_expenses", "financial_commitments"),
+}
+
+_MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
+    # Salarios
+    "salarios": ("salary", "employee_salary"),
+    # Inversiones Ingresos
+    "inversiones ingresos > fondos": ("capital_gains", "sale_financial_assets"),
+    "inversiones ingresos > crowdlending": ("passive_income", "p2p_lending"),
+    "inversiones ingresos > roboadvisor": ("capital_gains", "sale_financial_assets"),
+    "inversiones ingresos > plan de pensiones": ("passive_income", "other_passive"),
+    "inversiones ingresos > st criptos": ("capital_gains", "sale_financial_assets"),
+    "inversiones ingresos > st stocks": ("capital_gains", "sale_financial_assets"),
+    "inversiones ingresos > crowdfunding inm": ("capital_gains", "other_capital_gains"),
+    "inversiones ingresos > deposito": ("passive_income", "interest_income"),
+    "inversiones ingresos": ("passive_income", "other_passive"),
+    # Pasivos > Activos financieros
+    "pasivos > activos financieros > dividendos": ("passive_income", "dividends"),
+    "pasivos > activos financieros > crowdlending": ("passive_income", "p2p_lending"),
+    "pasivos > activos financieros > cuentas corrientes": ("passive_income", "interest_income"),
+    "pasivos > activos financieros > cashback": ("other_income", "misc"),
+    "pasivos > activos financieros > depositos": ("passive_income", "interest_income"),
+    "pasivos > activos financieros > fondos": ("capital_gains", "sale_financial_assets"),
+    "pasivos > activos financieros > st stocks": ("capital_gains", "sale_financial_assets"),
+    "pasivos > activos financieros > st criptos": ("capital_gains", "sale_financial_assets"),
+    "pasivos > activos financieros > roboadvisor": ("capital_gains", "sale_financial_assets"),
+    "pasivos > activos financieros > plan de pensiones": ("passive_income", "other_passive"),
+    "pasivos > activos financieros > spot act financieros": (
+        "capital_gains",
+        "sale_financial_assets",
+    ),
+    "pasivos > activos financieros > loterias y apuestas": ("other_income", "misc"),
+    "pasivos > activos financieros": ("other_income", "misc"),
+    "pasivos > regalos": ("transfers_support", "gifts_received"),
+    "pasivos > declaracion de la renta": ("other_income", "tax_refund"),
+    "pasivos": ("other_income", "misc"),
+    # Deudores
+    "deudores > devoluciones": ("other_income", "tax_refund"),
+    "deudores > prestamo personal": ("other_income", "misc"),
+    "deudores": ("other_income", "misc"),
+    # Ganancias de capital
+    "ganancias de capital > ventas activos": ("capital_gains", "sale_financial_assets"),
+    "ganancias de capital": ("capital_gains", "other_capital_gains"),
+}
+
 
 @dataclass(frozen=True)
 class MoneyWizRow:
@@ -335,6 +433,20 @@ def _infer_movement_type(
     return "income"
 
 
+def _lookup_moneywiz_path(
+    category_raw: str,
+    path_map: dict[str, tuple[str, str]],
+) -> tuple[str, str] | None:
+    """Matches MoneyWiz category path from most-specific to least-specific prefix."""
+    parts = [_normalize_lookup_text(p) for p in category_raw.split(">")]
+    parts = [p for p in parts if p]
+    for length in range(len(parts), 0, -1):
+        key = " > ".join(parts[:length])
+        if key in path_map:
+            return path_map[key]
+    return None
+
+
 def _classify_row(
     *,
     movement_type: str,
@@ -345,6 +457,9 @@ def _classify_row(
     text = _normalize_lookup_text(f"{category_raw} {description}")
 
     if movement_type == "income":
+        path_result = _lookup_moneywiz_path(category_raw, _MONEYWIZ_INCOME_PATH)
+        if path_result is not None:
+            return "income", path_result[0], path_result[1], warnings
         classification = _resolve_income_classification(text)
         if classification is None:
             warnings.append(
@@ -356,6 +471,9 @@ def _classify_row(
         return "income", classification[0], classification[1], warnings
 
     if movement_type == "expense":
+        path_result = _lookup_moneywiz_path(category_raw, _MONEYWIZ_EXPENSE_PATH)
+        if path_result is not None:
+            return "expense", path_result[0], path_result[1], warnings
         classification = _resolve_expense_classification(text)
         if classification is None:
             warnings.append(
@@ -754,8 +872,30 @@ def _build_preview_payload(*, delimiter: str, rows: list[MoneyWizRow]) -> dict:
         "warnings": _dedupe_preserve_order(warnings),
         "stats": stats,
         "detected_accounts": _build_detected_accounts(rows),
+        "unmapped_categories": _build_unmapped_categories(rows),
         "rows": payload_rows,
     }
+
+
+def _build_unmapped_categories(rows: list[MoneyWizRow]) -> list[dict]:
+    """Returns unique categories that used a fallback classification, sorted by row count."""
+    seen: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        if row.movement_type not in ("income", "expense"):
+            continue
+        if not any("fallback" in w.lower() for w in row.warnings):
+            continue
+        key = (row.movement_type, row.category_raw)
+        if key not in seen:
+            seen[key] = {
+                "category_raw": row.category_raw,
+                "movement_type": row.movement_type,
+                "fallback_category_key": row.category_key,
+                "fallback_subcategory_key": row.subcategory_key,
+                "row_count": 0,
+            }
+        seen[key]["row_count"] += 1
+    return sorted(seen.values(), key=lambda x: -x["row_count"])
 
 
 def _build_detected_accounts(rows: list[MoneyWizRow]) -> list[dict]:
