@@ -27,7 +27,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 | Refactor frontend — Fase 0 | Agente | Baseline limpia + cobertura ≥80%: subir thresholds, escribir tests gap, corregir formato app.css. | `core/docs/tasks/frontend-refactor/phase-0-baseline/frontend.md` |
 | Refactor frontend — Fase 1 | Agente | Fronteras de arquitectura: eliminar wrappers puente, mover BaseModal/AppHeader a dominios, alinear index.ts. | `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md` |
 | Refactor frontend — Fase 2 | Agente | Shell + router: adelgazar App.vue, crear composables de shell, limpiar router, retirar residuales. | `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md` |
-| Refactor frontend — Fase 3a | Agente | Descomponer BudgetDashboardView (5,512 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md` |
 | Refactor frontend — Fase 3c | Agente | Descomponer DataInputView (2,742 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md` |
 | Refactor frontend — Fase 3d | Agente | Descomponer GuidePhaseDetailView (2,207 líneas), extraer lógica compartida con HomeView. | `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md` |
 | Refactor frontend — Fase 3e | Agente | Descomponer AccountingMovementsView (2,263 líneas) en secciones controladas. | `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md` |
@@ -49,7 +48,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-refactor-roadmap.md`. |
-| Refactor frontend Core | Media | ⏸ | Estructura de componentes, extracción de lógica al backend; ver `roadmap/frontend-refactor-roadmap.md` |
+| Refactor frontend Core | Media | ⏸ | Roadmap aparcado salvo petición explícita. Fases 3a (BudgetDashboardView) y 3b (NetWorthView) cerradas a nivel estructural; ver `roadmap/frontend-refactor-roadmap.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
 | Importación de datos | Media | ✅ | MoneyWiz v1 corregido: aliases en español para cabeceras (Fecha, Cuentas, Importe, Moneda, etc.) y detección de filas de resumen de cuenta. Validado con CSV real. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
