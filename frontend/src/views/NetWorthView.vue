@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import {
-  ItemForm,
   NetWorthTimelineChart,
   useNetWorthViewExtensions,
   useNetWorthViewState,
 } from '@/domains/net-worth';
 import NetWorthCategoryWorkspace from '@/domains/net-worth/components/NetWorthCategoryWorkspace.vue';
 import NetWorthHeroSection from '@/domains/net-worth/components/NetWorthHeroSection.vue';
+import NetWorthItemModals from '@/domains/net-worth/components/NetWorthItemModals.vue';
 import NetWorthSnapshotsSection from '@/domains/net-worth/components/NetWorthSnapshotsSection.vue';
 import NetWorthTimelineMain from '@/domains/net-worth/components/NetWorthTimelineMain.vue';
 import '@/domains/net-worth/net-worth-view.css';
@@ -304,6 +304,16 @@ function clearPositionSelection(): void {
   resetAccountingActivity();
 }
 
+function closeAssetModal(): void {
+  showAssetModal.value = false;
+  createAssetCategory.value = null;
+}
+
+function closeLiabilityModal(): void {
+  showLiabilityModal.value = false;
+  createLiabilityCategory.value = null;
+}
+
 const {
   displayedTimelineLoading,
   visibleTimelineRows,
@@ -542,72 +552,28 @@ const {
       :confirm-delete-snapshot="confirmDeleteSnapshot"
     />
 
-    <BaseModal
-      :open="showAssetModal"
-      title="Nuevo activo"
-      @close="
-        showAssetModal = false;
-        createAssetCategory = null;
-      "
-    >
-      <ItemForm
-        title="Nuevo activo"
-        :categories="assetCategories"
-        :subcategories="assetSubcategories"
-        :initial="assetCreateInitial"
-        v-bind="itemFormProps"
-        :allow-negative="true"
-        :on-submit="submitAssetFromView"
-        :on-cancel="
-          () => {
-            showAssetModal = false;
-            createAssetCategory = null;
-          }
-        "
-      />
-    </BaseModal>
-
-    <BaseModal
-      :open="showLiabilityModal"
-      title="Nuevo pasivo"
-      @close="
-        showLiabilityModal = false;
-        createLiabilityCategory = null;
-      "
-    >
-      <ItemForm
-        title="Nuevo pasivo"
-        :categories="liabilityCategories"
-        :initial="liabilityCreateInitial"
-        v-bind="itemFormProps"
-        :assets="activeAssets"
-        :show-financed-asset="true"
-        :on-submit="submitLiabilityFromView"
-        :on-cancel="
-          () => {
-            showLiabilityModal = false;
-            createLiabilityCategory = null;
-          }
-        "
-      />
-    </BaseModal>
-
-    <BaseModal :open="showEditModal" :title="editTitle" @close="closeEdit">
-      <ItemForm
-        v-if="editInitial"
-        :title="editTitle"
-        :categories="editCategories"
-        :subcategories="editKind === 'asset' ? assetSubcategories : undefined"
-        v-bind="itemFormProps"
-        :assets="editKind === 'liability' ? activeAssets : []"
-        :show-financed-asset="editKind === 'liability'"
-        :allow-negative="editKind === 'asset'"
-        mode="edit"
-        :initial="editInitial"
-        :on-submit="submitEdit"
-        :on-cancel="closeEdit"
-      />
-    </BaseModal>
+    <NetWorthItemModals
+      :show-asset-modal="showAssetModal"
+      :show-liability-modal="showLiabilityModal"
+      :show-edit-modal="showEditModal"
+      :edit-title="editTitle"
+      :asset-categories="assetCategories"
+      :liability-categories="liabilityCategories"
+      :asset-subcategories="assetSubcategories"
+      :asset-create-initial="assetCreateInitial"
+      :liability-create-initial="liabilityCreateInitial"
+      :edit-initial="editInitial"
+      :edit-categories="editCategories"
+      :edit-kind="editKind"
+      :active-assets="activeAssets"
+      :item-form-props="itemFormProps"
+      :submit-asset-from-view="submitAssetFromView"
+      :submit-liability-from-view="submitLiabilityFromView"
+      :submit-edit="submitEdit"
+      :close-edit="closeEdit"
+      :on-close-asset-modal="closeAssetModal"
+      :on-close-liability-modal="closeLiabilityModal"
+    />
 
     <div v-if="store.loading" class="ui-status-line">Cargando...</div>
   </div>
