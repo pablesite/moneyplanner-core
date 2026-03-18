@@ -42,28 +42,29 @@ export const useAccountingStore = defineStore('accounting', {
       this.loading = true;
       this.error = null;
       try {
-        const [accountsRes, transactionsRes, summaryRes, balancesRes] = await Promise.all([
+        const [accountsRes, transactionsRes, summaryRes] = await Promise.all([
           coreAccountingApi.getAccounts({ is_active: true }),
-          coreAccountingApi.getTransactions({
-            year: this.selectedYear,
-            month: this.selectedMonth,
-          }),
+          coreAccountingApi.getTransactions(),
           coreAccountingApi.getMonthlySummary(this.selectedYear),
-          coreAccountingApi.getAccountBalances({
-            year: this.selectedYear,
-            month: this.selectedMonth,
-            account_type: 'asset',
-            status: 'posted',
-          }),
         ]);
         this.accounts = accountsRes.data;
         this.transactions = transactionsRes.data;
         this.monthlySummary = summaryRes.data;
-        this.accountBalancesSummary = balancesRes.data;
       } catch (error: unknown) {
         this.error = toApiErrorMessage(error);
       } finally {
         this.loading = false;
+      }
+    },
+
+    async setStatsYear(year: number) {
+      this.selectedYear = year;
+      this.error = null;
+      try {
+        const summaryRes = await coreAccountingApi.getMonthlySummary(year);
+        this.monthlySummary = summaryRes.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
       }
     },
 

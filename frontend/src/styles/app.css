@@ -1070,3 +1070,53 @@ body {
     align-self: auto;
   }
 }
+
+/* ================================================================
+   View Tabs — horizontal tab bar for switching main view panels
+   ================================================================ */
+.ui-view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+}
+
+.ui-view-tab {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: calc(var(--radius-lg) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+}
+
+.ui-view-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ui-view-tab-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.97);
+  font-weight: 600;
+}
+
+.ui-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+
+.ui-load-more-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px 0;
+}
