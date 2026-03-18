@@ -287,9 +287,6 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 3. Los side effects de pagina viven en composables.
 4. La logica derivada compartida deja de duplicarse entre vistas.
 5. Cada composable extraido tiene tests con cobertura >= 80%.
-6. El gate global de `test:coverage` >=80% sigue perteneciendo a Fase 0; en fases posteriores
-   se ejecuta la cobertura completa como señal de regresion y se exige cobertura dirigida
-   sobre el codigo movido por la fase.
 
 **Specs:**
 - `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md`
@@ -415,14 +412,14 @@ docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run format:check
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
-# -> ejecutar siempre; thresholds globales >=80% siguen siendo gate de Fase 0
+# -> statements >=80%, lines >=80%, functions >=80%, branches >=80%
 
 # SaaS (al replicar)
 docker compose exec saas_frontend npm run lint
 docker compose exec saas_frontend npm run format:check
 docker compose exec saas_frontend npm run typecheck
 docker compose exec saas_frontend npm run test:coverage
-# -> ejecutar siempre; thresholds globales >=80% siguen siendo gate de Fase 0
+# -> mismos thresholds
 ```
 
 ## Orden recomendado de ejecucion
@@ -452,3 +449,5 @@ docker compose exec saas_frontend npm run test:coverage
 2. Para SaaS: ver `docs/roadmap/frontend-refactor-roadmap.md`.
 3. Si durante la ejecucion aparece una mejora UX reutilizable, actualizar primero la documentacion canonica.
 4. Si una fase descubre deuda funcional real, aislarla en una subtarea o PR separado.
+
+
