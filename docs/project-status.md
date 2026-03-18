@@ -23,6 +23,22 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
+| Refactor backend — Phase 1 | Agente | Test coverage baseline: red de seguridad ≥80% por app, reorganizar test_net_worth.py, expandir test_services.py de budget, integration tests cross-domain. | `core/docs/tasks/backend-refactor/phase-1-test-coverage-baseline/backend.md` |
+| Refactor backend — Phase 2 | Agente | Partición de `accounting/services.py` (1,009 líneas) en 5 módulos cohesivos. | `core/docs/tasks/backend-refactor/phase-2-accounting-services-partition/backend.md` |
+| Refactor backend — Phase 3 | Agente | net_worth domain cleanup: partir services_assets.py y services_liabilities.py, adelgazar facade. | `core/docs/tasks/backend-refactor/phase-3-net-worth-domain-cleanup/backend.md` |
+| Refactor backend — Phase 4 | Agente | Boundary enforcement: transaction.atomic en flujos cross-domain, documentar contratos. | `core/docs/tasks/backend-refactor/phase-4-boundary-enforcement/backend.md` |
+| Refactor backend — Phase 5 | Agente | DX docs: backend patterns guide, PR checklist, backlog de contribución. | `core/docs/tasks/backend-refactor/phase-5-dx-docs/backend.md` |
+| Refactor frontend — Fase 0 | Agente | Baseline limpia + cobertura ≥80%: subir thresholds, escribir tests gap, corregir formato app.css. | `core/docs/tasks/frontend-refactor/phase-0-baseline/frontend.md` |
+| Refactor frontend — Fase 1 | Agente | Fronteras de arquitectura: eliminar wrappers puente, mover BaseModal/AppHeader a dominios, alinear index.ts. | `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md` |
+| Refactor frontend — Fase 2 | Agente | Shell + router: adelgazar App.vue, crear composables de shell, limpiar router, retirar residuales. | `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md` |
+| Refactor frontend — Fase 3a | Agente | Descomponer BudgetDashboardView (5,512 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md` |
+| Refactor frontend — Fase 3b | Agente | Descomponer NetWorthView (3,608 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3b-net-worth/frontend.md` |
+| Refactor frontend — Fase 3c | Agente | Descomponer DataInputView (2,742 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md` |
+| Refactor frontend — Fase 3d | Agente | Descomponer GuidePhaseDetailView (2,207 líneas), extraer lógica compartida con HomeView. | `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md` |
+| Refactor frontend — Fase 3e | Agente | Descomponer AccountingMovementsView (2,263 líneas) en secciones controladas. | `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md` |
+| Refactor frontend — Fase 4 | Agente | CSS contract: consolidar app.css (20K líneas), reducir style scoped, estandarizar estados. | `core/docs/tasks/frontend-refactor/phase-4-css-contract/frontend.md` |
+| Refactor frontend — Fase 5 | Agente | Contratos internos de dominio: estandarizar estructura, 0 imports @/lib/api desde vistas. | `core/docs/tasks/frontend-refactor/phase-5-domain-contracts/frontend.md` |
+| Refactor frontend — Fase 6 | Agente | Hardening: 0 imports legacy, 0 warnings, shared-package-candidates.md, docs actualizadas. | `core/docs/tasks/frontend-refactor/phase-6-hardening/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -72,8 +88,8 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Frontend refactor | ⏸ Aparcado | `roadmap/frontend-refactor-roadmap.md`. No se aborda hasta que la funcionalidad esté completa. BudgetDashboardView ~4836 líneas, NetWorthView ~3218 líneas — deuda técnica conocida y aceptada. |
-| Backend refactor | ⏸ Aparcado | Mismo criterio. El roadmap está definido pero no es prioritario frente a funcionalidad. |
+| Frontend refactor | 🔄 Planificado | `roadmap/frontend-refactor-roadmap.md`. 11 fases planificadas. Specs en `core/docs/tasks/frontend-refactor/`. BudgetDashboardView 5,512 líneas, NetWorthView 3,608 líneas. Coverage target ≥80%. |
+| Backend refactor | 🔄 En progreso | Refactor reactivo planificado. 5 fases con specs generadas. Ver `roadmap/backend-refactor-roadmap.md`. |
 
 ---
 

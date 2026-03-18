@@ -1,60 +1,95 @@
-# Roadmap: refactor integral del frontend (Core) - plan ejecutable
+# Roadmap: refactor integral del frontend (Core) — plan ejecutable
 
 ## Objetivo
-Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper contratos backend ni introducir cambios funcionales no intencionales.
+
+Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper contratos
+backend ni introducir cambios funcionales no intencionales.
+El refactor tambien prepara el terreno para un futuro shared package Core/SaaS
+(sin implementarlo aun — ver Fase 6).
 
 ## Estado de este documento
-1. Este documento define el plan operativo del refactor del frontend Core.
-2. Incluye Fase 0 con baseline real del repo revisada el 2026-03-16.
-3. Las fases 1-6 quedan desglosadas en entregables, pasos recomendados y criterios de salida.
-4. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
 
-## Estado real (2026-03-16)
-1. Baseline del stack Core:
-   - `backend`, `frontend`, `db` y `fx_sync` levantados en Docker.
-   - frontend validado dentro del contenedor `frontend`.
-2. Validacion actual en Docker:
-   - `docker compose exec frontend npm run lint`: verde
-   - `docker compose exec frontend npm run typecheck`: verde
-   - `docker compose exec frontend npm run test:unit`: verde (`34` suites, `137` tests)
-   - `docker compose exec frontend npm run format:check`: falla solo en `frontend/src/styles/app.css`
-3. Hotspots de tamano actuales:
-   - `frontend/src/views/BudgetDashboardView.vue`: ~4836 lineas
-   - `frontend/src/views/NetWorthView.vue`: ~3218 lineas
-   - `frontend/src/views/DataInputView.vue`: ~2557 lineas
-   - `frontend/src/views/GuidePhaseDetailView.vue`: ~2033 lineas
-   - `frontend/src/views/AccountingMovementsView.vue`: ~998 lineas
-   - `frontend/src/App.vue`: ~492 lineas
-4. Deuda estructural visible:
-   - coexistencia de arquitectura por dominios con capas legacy en `frontend/src/lib`, `frontend/src/stores` y `frontend/src/components`
-   - wrappers puente todavia activos:
-     - `frontend/src/stores/netWorth.ts`
-     - `frontend/src/stores/people.ts`
-     - `frontend/src/components/BaseModal.vue`
-     - `frontend/src/components/AppHeader.vue`
-   - varias vistas siguen importando `@/lib/api` y `@/lib/errors` directamente
-   - `frontend/src/domains/net-worth/composables.ts` sigue dependiendo de `@/stores/netWorth`
-   - varios `<style scoped>` siguen concentrando patrones visuales de pagina y shell
-   - archivos aparentemente residuales o placeholder:
-     - `frontend/src/components/HelloWorld.vue`
-     - `frontend/src/views/SettingsFxView.vue`
-     - `frontend/src/views/SettingsIpcView.vue`
-     - `frontend/src/style.css`
-5. Lectura de riesgo:
-   - riesgo alto: `BudgetDashboardView`, `NetWorthView`, `DataInputView`
-   - riesgo medio: `GuidePhaseDetailView`, `App.vue`, `styles/app.css`
-   - riesgo medio-bajo: wrappers puente, archivos residuales, contratos internos de dominio
+1. Este documento define el plan operativo del refactor del frontend Core.
+2. Baseline actualizada el 2026-03-18.
+3. Las fases 0-6 quedan desglosadas en entregables, pasos recomendados y criterios de salida.
+4. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
+5. Core-first: cada fase se ejecuta primero en Core y se replica en SaaS al cerrarla.
+   Ver `docs/roadmap/frontend-refactor-roadmap.md` (SaaS) para el roadmap espejo.
+
+## Estado real (2026-03-18)
+
+### Baseline del stack Core
+
+- `backend`, `frontend`, `db` y `fx_sync` levantados en Docker.
+- frontend validado dentro del contenedor `frontend`.
+
+### Validacion actual en Docker
+
+- `docker compose exec frontend npm run lint`: verde
+- `docker compose exec frontend npm run typecheck`: verde
+- `docker compose exec frontend npm run test:unit`: verde (35 suites)
+- `docker compose exec frontend npm run format:check`: falla en `frontend/src/styles/app.css`
+
+### Coverage thresholds actuales (vite.config.ts)
+
+```
+statements: 15%, lines: 15%, functions: 30%, branches: 40%
+```
+
+**Target acordado: >= 80% en todas las metricas** (Fase 0).
+
+### Hotspots de tamano actuales
+
+| Vista | Lineas | Riesgo |
+|-------|--------|--------|
+| `BudgetDashboardView.vue` | 5,512 | Alto |
+| `NetWorthView.vue` | 3,608 | Alto |
+| `DataInputView.vue` | 2,742 | Alto |
+| `AccountingMovementsView.vue` | 2,263 | Medio (crecio de 998 lineas desde 16-mar) |
+| `GuidePhaseDetailView.vue` | 2,207 | Medio |
+| `App.vue` | ~492 | Medio |
+
+### Deuda estructural visible
+
+- Wrappers puente activos:
+  - `frontend/src/stores/netWorth.ts`
+  - `frontend/src/stores/people.ts`
+  - `frontend/src/components/BaseModal.vue` (debe ir a `domains/ui/`)
+  - `frontend/src/components/AppHeader.vue` (debe ir a `domains/auth/components/`)
+- Vistas importan directamente `@/lib/api` y `@/lib/errors`
+- `lib/` tiene ~8 ficheros que son re-exports vacios de dominios
+- `frontend/src/styles/app.css`: 20,633 lineas — el fichero mas grande del frontend
+- Archivos residuales:
+  - `frontend/src/components/HelloWorld.vue`
+  - `frontend/src/views/SettingsFxView.vue` (7 lineas)
+  - `frontend/src/views/SettingsIpcView.vue` (7 lineas)
+  - `frontend/src/style.css`
+
+### Lectura de riesgo (actualizada)
+
+- riesgo alto: `BudgetDashboardView`, `NetWorthView`, `DataInputView`
+- riesgo medio: `AccountingMovementsView` (crecio x2.3), `GuidePhaseDetailView`, `App.vue`, `styles/app.css`
+- riesgo bajo: `lib/` re-exports, wrappers puente, residuales
+
+### Candidatos a shared package Core/SaaS (identificados, no ejecutar aun)
+
+Los siguientes dominios son identicos en ambos frontends:
+`net-worth`, `people`, `guide`, `aux-data`, `data-input`, `ui`
+No compartibles: `auth` (URLs distintas), `capabilities` (planes distintos), `lib/api.ts`
+La Fase 5 prepara los dominios para que sean inyectables; la Fase 6 documenta la extraccion.
 
 ## Principios de trabajo (obligatorios)
+
 1. Refactor por fases pequenas.
 2. Sin cambios de comportamiento no intencionales.
-3. Primero baseline, contratos internos y shell; despues descomposicion de vistas.
+3. Primero baseline y tests; despues estructura; despues descomposicion de vistas.
 4. Cada fase deja el repo ejecutable.
 5. Validacion dentro de Docker en cada PR.
 6. Cambiar lo minimo necesario por PR.
-7. Mantener Core-first: cualquier patron compartido que deje de ser Core-only debe evaluarse para sincronizacion posterior con SaaS.
+7. Core-first: cada fase termina con SaaS replication (ver spec).
 
 ## Alcance
+
 1. `core/frontend/src/App.vue`
 2. `core/frontend/src/router.ts`
 3. `core/frontend/src/views/*`
@@ -63,16 +98,19 @@ Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper 
 6. `core/frontend/src/lib/*`
 7. `core/frontend/src/stores/*`
 8. `core/frontend/src/components/*`
-9. `core/docs/roadmap/*` y docs frontend canonicas si cambia el contrato visual compartido
+9. `core/frontend/vite.config.ts` (thresholds de coverage)
+10. `core/docs/roadmap/*` y docs frontend canonicas si cambia el contrato visual compartido
 
 ## Fuera de alcance (por ahora)
-1. Rediseño funcional del producto.
+
+1. Rediseno funcional del producto.
 2. Cambios de contratos backend o payloads publicos.
 3. Reescritura total del frontend desde cero.
-4. Paridad automatica inmediata con SaaS para todo el refactor interno.
-5. Introduccion de nuevas capacidades de negocio fuera del alcance de mantenimiento/refactor.
+4. Implementar el shared package (solo preparar el terreno).
+5. Introduccion de nuevas capacidades de negocio.
 
 ## Arquitectura objetivo
+
 1. `domains/*` como unica capa de negocio del frontend.
 2. `views/*` como ensamblado de pagina:
    - sin acceso directo a HTTP
@@ -81,310 +119,330 @@ Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper 
 3. `styles/app.css` como fuente principal del contrato visual compartido.
 4. Utilidades cross-domain en una capa shared explicita y pequena.
 5. `index.ts` de cada dominio como frontera publica interna.
+6. Dominios autocontenidos sin dependencias de `@/stores/*` ni `@/components/*`
+   (requisito previo a extraccion como shared package).
 
-## Fase 0 - Baseline y reglas del refactor
-Objetivo: partir de una base limpia y con reglas explicitadas antes de mover estructura.
+---
+
+## Fase 0 — Baseline limpia y cobertura >= 80%
+
+Objetivo: partir de una base verde completa con red de seguridad real.
 
 ### 0.1 Entregables
-1. Roadmap canonico creado y versionado.
-2. Baseline de validacion documentada.
-3. Deuda de formato inicial resuelta en `frontend/src/styles/app.css`.
+
+1. Thresholds de coverage subidos a >= 80% en todas las metricas.
+2. Tests nuevos que cierran los gaps identificados.
+3. Formato de `app.css` corregido (verde en `format:check`).
+4. Baseline documentada en este roadmap.
 
 ### 0.2 Paso a paso recomendado
-1. Crear este documento y enlazarlo desde las tareas de frontend que dependan del refactor.
-2. Ejecutar y registrar baseline en Docker:
+
+1. Ejecutar y registrar baseline en Docker:
    - `docker compose exec frontend npm run lint`
    - `docker compose exec frontend npm run format:check`
    - `docker compose exec frontend npm run typecheck`
    - `docker compose exec frontend npm run test:unit`
-3. Corregir primero el formateo de `frontend/src/styles/app.css` para partir de verde completo.
-4. No mover vistas grandes hasta dejar cerrada esta baseline.
+   - `docker compose exec frontend npm run test:coverage`
+2. Subir thresholds en `vite.config.ts`: `statements: 80, lines: 80, functions: 80, branches: 80`
+3. Ejecutar `test:coverage` y analizar que areas fallan.
+4. Escribir tests unitarios por prioridad:
+   - Composables de dominio no cubiertos
+   - Utilidades sin tests
+   - Componentes criticos
+5. Corregir el formateo de `app.css`.
+6. SaaS Replication: mismos pasos en `frontend/` SaaS.
 
 ### 0.3 Criterio de salida
-1. El frontend Core queda verde en `lint`, `format:check`, `typecheck` y `test:unit`.
-2. La baseline y el orden de trabajo quedan documentados.
 
-## Fase 1 - Fronteras de arquitectura y capa legacy
-Objetivo: fijar limites claros entre dominios, vistas y utilidades compartidas.
+1. `lint`, `format:check`, `typecheck` y `test:unit` en verde.
+2. `test:coverage` pasa todos los thresholds >= 80%.
+3. Baseline documentada y actualizada en este roadmap.
+
+**Spec:** `core/docs/tasks/frontend-refactor/phase-0-baseline/frontend.md`
+
+---
+
+## Fase 1 — Fronteras de arquitectura y capa legacy
+
+Objetivo: fijar limites claros entre dominios y eliminar wrappers puente.
 
 ### 1.1 Entregables
-1. Convencion unica para utilidades shared.
-2. Eliminacion de wrappers puente innecesarios.
-3. Imports alineados a dominios/shared en archivos refactorizados.
+
+1. Eliminacion de wrappers puente (`stores/netWorth.ts`, `stores/people.ts`).
+2. `BaseModal.vue` movido a `domains/ui/`.
+3. `AppHeader.vue` movido a `domains/auth/components/`.
+4. Imports alineados a dominios en archivos refactorizados.
+5. `index.ts` de cada dominio revisado como frontera publica interna.
 
 ### 1.2 Paso a paso recomendado
-1. Decidir y documentar una sola capa shared para:
-   - cliente HTTP
-   - auth session
-   - format helpers
-   - error normalization
-2. Mantener `lib` solo si se redefine explicitamente como shared estable; si no, migrar a una ubicacion dedicada y reducirla.
-3. Eliminar dependencias nuevas hacia:
-   - `frontend/src/stores/*`
-   - `frontend/src/components/*`
-   - utilidades legacy sin frontera publica definida
-4. Migrar wrappers puente:
-   - reemplazar imports de `frontend/src/stores/netWorth.ts` por imports directos del dominio `net-worth`
-   - reemplazar imports de `frontend/src/stores/people.ts` por imports directos del dominio `people`
-   - reemplazar imports de `frontend/src/components/BaseModal.vue` y `frontend/src/components/AppHeader.vue` por sus dominios reales
+
+1. Migrar imports de `@/stores/netWorth` -> `@/domains/net-worth`.
+2. Migrar imports de `@/stores/people` -> `@/domains/people`.
+3. Mover `components/BaseModal.vue` -> `domains/ui/BaseModal.vue`; actualizar imports.
+4. Mover `components/AppHeader.vue` -> `domains/auth/components/AppHeader.vue`; actualizar imports.
 5. Borrar wrappers solo cuando no tengan referencias activas.
-6. Alinear `index.ts` de cada dominio para que resuma su interfaz publica interna.
+6. Revisar `index.ts` de cada dominio para que resuma su interfaz publica.
+7. Verificar que ningun dominio importa de `@/stores/*` ni `@/components/*` raiz.
+8. SaaS Replication.
 
 ### 1.3 Riesgos a cubrir
+
 1. Evitar churn de imports sin valor funcional.
 2. No mezclar en la misma PR migracion de wrappers y refactor de comportamiento.
+3. `AppHeader.vue` raiz puede tener logica diferente a la del dominio auth.
 
 ### 1.4 Criterio de salida
-1. Ninguna vista refactorizada importa desde wrappers legacy.
-2. `net-worth`, `people`, `auth`, `aux-data`, `accounting` y `data-input` exponen interfaces internas claras.
-3. La capa shared queda pequena y justificada.
 
-## Fase 2 - Shell global, router y composables de pagina
+1. 0 imports de `@/stores/netWorth`, `@/stores/people`, `@/components/BaseModal`, `@/components/AppHeader` raiz.
+2. Dominios no dependen de `@/stores/*` ni `@/components/*` raiz.
+3. Suite de tests en verde con cobertura >= 80%.
+
+**Spec:** `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md`
+
+---
+
+## Fase 2 — Shell global, router y componentes residuales
+
 Objetivo: adelgazar `App.vue` y dejar el wiring de navegacion testeable.
 
 ### 2.1 Entregables
+
 1. Shell global descompuesta en componentes/composables.
-2. `App.vue` reducido a ensamblador fino.
-3. Router con definicion mas consistente y facil de leer.
+2. `App.vue` reducido a ensamblador fino (< 150 lineas).
+3. Router con definicion mas consistente.
+4. Archivos residuales retirados.
 
 ### 2.2 Paso a paso recomendado
-1. Extraer desde `frontend/src/App.vue`:
-   - navegacion principal
-   - menu de cuenta
-   - control de sidebar
-   - listeners globales
-   - bloqueo de scroll
-2. Crear componentes/composables especificos de shell, sin mover logica de negocio de dominios a la shell.
-3. Revisar `frontend/src/router.ts` para:
-   - ordenar imports y definicion de rutas
-   - agregar `meta` solo si aporta a shell o navegacion
-   - mantener `registerAuthGuard(router)` desacoplado del wiring visual
-4. Verificar si `SettingsFxView.vue` y `SettingsIpcView.vue` siguen teniendo razon de existir; si no, retirarlos en una PR de limpieza controlada.
-5. Agregar o ajustar tests de shell/router si cambia la composicion.
+
+1. Extraer desde `App.vue`:
+   - navegacion principal, menu de cuenta, control de sidebar, listeners globales, bloqueo de scroll
+2. Crear composables de shell en `src/shell/` o `domains/shell/`.
+3. Limpiar `router.ts`: ordenar imports, meta solo donde aporta.
+4. Retirar `SettingsFxView.vue` y `SettingsIpcView.vue` (7 lineas cada una).
+5. Retirar `components/HelloWorld.vue` y `style.css`.
+6. Anadir/ajustar tests de shell y router.
+7. SaaS Replication.
 
 ### 2.3 Criterio de salida
+
 1. `App.vue` deja de concentrar logica de interaccion compleja.
 2. Shell y router tienen responsabilidades separadas.
-3. La navegacion actual sigue funcionando sin cambios de rutas publicas.
+3. Sin archivos residuales.
+4. Suite de tests en verde con cobertura >= 80%.
 
-## Fase 3 - Descomposicion de vistas monoliticas
+**Spec:** `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md`
+
+---
+
+## Fase 3 — Descomposicion de vistas monoliticas
+
 Objetivo: dividir las vistas grandes en composables de pagina, secciones y componentes de dominio.
 
-### 3.1 Orden recomendado
-1. `BudgetDashboardView.vue`
-2. `NetWorthView.vue`
-3. `DataInputView.vue`
-4. `GuidePhaseDetailView.vue`
-5. `AccountingMovementsView.vue`
+### 3.1 Orden recomendado (mayor a menor riesgo)
+
+1. `BudgetDashboardView.vue` (5,512 lineas) — **spec 3a**
+2. `NetWorthView.vue` (3,608 lineas) — **spec 3b**
+3. `DataInputView.vue` (2,742 lineas) — **spec 3c**
+4. `GuidePhaseDetailView.vue` (2,207 lineas) — **spec 3d**
+5. `AccountingMovementsView.vue` (2,263 lineas) — **spec 3e**
 
 ### 3.2 Regla de extraccion
-1. La vista conserva:
-   - composicion de pagina
-   - navegacion local
-   - wiring de secciones
-2. Los composables de pagina reciben:
-   - fetch
-   - mapping
-   - derivadas complejas
-   - side effects
-   - acciones de usuario
-3. Los componentes de seccion reciben:
-   - bloques reutilizables
-   - fragmentos grandes de template
-   - UI repetitiva con props claras
+
+La vista conserva: composicion de pagina, navegacion local, wiring de secciones.
+Los composables de pagina reciben: fetch, mapping, derivadas complejas, side effects, acciones.
+Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de template.
 
 ### 3.3 Extracciones minimas esperadas
-#### `BudgetDashboardView`
-1. Secciones separadas para:
-   - modo presupuesto anual
-   - modo cierre mensual
-   - ledger coverage
-   - check-ins de ingresos/gastos/liquidez
-   - sugerencias derivadas del ledger
-2. Composable de pagina para filtros, fetch y acciones.
 
-#### `NetWorthView`
-1. Secciones separadas para:
-   - filtros de ownership
-   - timeline
-   - analitica y ratios
-   - detalle de posicion
-   - actividad ledger contextual
-2. Reubicar calculos que hoy viven en la vista a composables del dominio/pagina.
+#### `BudgetDashboardView` (5,512 lineas)
 
-#### `DataInputView`
-1. Secciones separadas para:
-   - patrimonio
-   - ingresos
-   - gastos
-   - import/export portable
-   - ownership filters
-2. Reducir mezcla actual entre patrimonio, presupuestos y portabilidad en un solo archivo.
+1. Secciones: modo anual, modo cierre mensual, ledger coverage, check-ins, sugerencias ledger.
+2. Composable: filtros, fetch, acciones.
 
-#### `GuidePhaseDetailView` y `HomeView`
+#### `NetWorthView` (3,608 lineas)
+
+1. Secciones: filtros de ownership, timeline, analitica y ratios, detalle, actividad ledger.
+2. Reubicar calculos de la vista a composables del dominio/pagina.
+
+#### `DataInputView` (2,742 lineas)
+
+1. Secciones: patrimonio, ingresos, gastos, portable, ownership filters.
+2. Reducir mezcla entre patrimonio, presupuestos y portabilidad.
+
+#### `GuidePhaseDetailView` (2,207 lineas)
+
 1. Extraer scoring, diagnosticos y formatos compartidos a `domains/guide`.
-2. Evitar duplicacion de calculos entre ambas vistas.
+2. Eliminar duplicacion de calculos con `HomeView.vue`.
 
-#### `AccountingMovementsView`
-1. Separar:
-   - hero/filtros
-   - catalogo de cuentas
-   - balances
-   - quick-entry
-   - formulario manual avanzado
-2. Mantener esta vista como caso de extraccion controlada y no como rediseño.
+#### `AccountingMovementsView` (2,263 lineas)
+
+1. Separar: hero/filtros, catalogo de cuentas, balances, quick-entry, formulario manual avanzado.
+2. En Core: seccion unmapped categories (MoneyWiz). En SaaS: omitir.
 
 ### 3.4 Criterio de salida
-1. Ninguna vista principal mantiene miles de lineas mezclando datos, logica y template sin fronteras.
+
+1. Ninguna vista principal supera ~400 lineas.
 2. Los side effects de pagina viven en composables.
 3. La logica derivada compartida deja de duplicarse entre vistas.
+4. Cada composable extraido tiene tests con cobertura >= 80%.
 
-## Fase 4 - Refactor de CSS y contrato visual
+**Specs:**
+- `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3b-net-worth/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md`
+
+---
+
+## Fase 4 — Refactor de CSS y contrato visual
+
 Objetivo: reforzar el contrato visual compartido y reducir CSS ad hoc por pantalla.
 
 ### 4.1 Entregables
-1. `frontend/src/styles/app.css` reforzado como fuente principal de patrones compartidos.
+
+1. `app.css` (20,633 lineas) con patrones consolidados y organizados.
 2. Reduccion sustancial de `<style scoped>` en shell y vistas grandes.
-3. Estados loading/empty/error/success alineados con el contrato visual.
+3. Estados loading/empty/error/success estandarizados.
+4. Tokens CSS candidatos a `shared/styles/` documentados.
 
 ### 4.2 Paso a paso recomendado
+
 1. Consolidar en `app.css` patrones de:
-   - page shell
-   - section shell
-   - action bars
-   - state blocks
-   - filtros
-   - metric cards
-   - tablas/listas
-   - modales
+   page shell, section shell, action bars, state blocks, filtros, metric cards, tablas, modales.
 2. Revisar y reducir `<style scoped>` en:
-   - `frontend/src/App.vue`
-   - `frontend/src/views/BudgetDashboardView.vue`
-   - `frontend/src/views/NetWorthView.vue`
-   - `frontend/src/views/GuidePhaseDetailView.vue`
-   - `frontend/src/views/AccountingMovementsView.vue`
-   - `frontend/src/domains/net-worth/components/ItemForm.vue`
-3. Mover a shared styles cualquier patron usado en dos pantallas o mas.
-4. Mantener CSS local solo cuando exista una razon clara de aislamiento.
-5. Evaluar el destino de:
-   - `frontend/src/styles/guide-home.css`
-   - `frontend/src/styles/guide-score.css`
-   - `frontend/src/styles/data-input.css`
-6. Si un patron queda definitivamente compartido, actualizar tambien `docs/frontend/frontend-visual-contract.md`.
+   `App.vue`, `BudgetDashboardView`, `NetWorthView`, `GuidePhaseDetailView`, `AccountingMovementsView`,
+   `domains/net-worth/components/ItemForm.vue`.
+3. Mover a shared styles cualquier patron usado en >= 2 pantallas.
+4. Evaluar destino de: `guide-home.css`, `guide-score.css`, `data-input.css`.
+5. Actualizar `docs/frontend/frontend-visual-guide.md` y `docs/frontend/frontend-css-workflow.md`.
+6. SaaS Replication.
 
 ### 4.3 Criterio de salida
+
 1. Las vistas principales usan el contrato visual compartido.
-2. Disminuye claramente el CSS de pagina ad hoc.
+2. CSS de pagina ad hoc disminuye claramente.
 3. Los estados no felices quedan estandarizados.
 
-## Fase 5 - Contratos internos de dominio y APIs de frontend
-Objetivo: hacer que las vistas consuman dominios tipados en vez de utilidades sueltas.
+**Spec:** `core/docs/tasks/frontend-refactor/phase-4-css-contract/frontend.md`
+
+---
+
+## Fase 5 — Contratos internos de dominio
+
+Objetivo: vistas consumen APIs tipadas de dominio; 0 imports directos a `@/lib/api`.
 
 ### 5.1 Entregables
-1. Interfaces de dominio homogeneas.
-2. View-model composables para paginas que hoy mezclan fetch y UX.
-3. Menos reglas repetidas de parsing y manejo de error.
+
+1. Interfaces de dominio homogeneas (`api.ts`, `store.ts`, `composables.ts`, `models.ts`, `index.ts`).
+2. Composables de pagina donde hoy hay mezcla fetch/mapping/format/UI.
+3. 0 imports de `@/lib/api` ni `@/lib/errors` desde vistas refactorizadas.
+4. Dominios con HTTP client configurable (requisito para shared package).
 
 ### 5.2 Paso a paso recomendado
-1. Estandarizar por dominio, donde aplique:
-   - `api.ts`
-   - `store.ts`
-   - `composables.ts`
-   - `models.ts` o `types.ts`
-   - `index.ts`
-2. Prohibir acceso directo desde vistas a:
-   - `axios`
-   - clientes HTTP genericos
-   - normalizadores de error transversales sin pasar por el dominio
-3. Introducir composables de pagina o view-models donde hoy hay mezcla de:
-   - fetch
-   - mapping
-   - format
-   - reglas de UI
-4. Alinear dominios que todavia estan a medio migrar:
-   - `net-worth`
-   - `data-input`
-   - `guide`
-   - `aux-data`
-5. Mantener estables los contratos backend; solo se permiten mejoras internas de tipado o encapsulacion.
+
+1. Estandarizar estructura por dominio donde aplique.
+2. Prohibir acceso directo a `axios` o clientes HTTP genericos desde vistas.
+3. Introducir composables de pagina donde hoy hay mezcla de fetch/mapping/format/UI.
+4. Alinear dominios a medio migrar: `net-worth`, `data-input`, `guide`, `aux-data`.
+5. Limpiar `lib/` de re-exports vacios; mantener solo `api.ts`, `errors.ts`, `format.ts`.
+6. Documentar dominios exportables (para futuro shared package).
+7. SaaS Replication.
 
 ### 5.3 Criterio de salida
+
 1. Las vistas consumen APIs internas tipadas de dominio.
-2. Desaparece la necesidad de importar `@/lib/api` y `@/lib/errors` desde vistas refactorizadas.
+2. 0 imports de `@/lib/api` y `@/lib/errors` desde vistas refactorizadas.
 3. Las reglas de parsing/error dejan de repetirse pantalla a pantalla.
 
-## Fase 6 - Limpieza final y endurecimiento
-Objetivo: cerrar deuda residual y dejar una estructura comprensible para futuros cambios.
+**Spec:** `core/docs/tasks/frontend-refactor/phase-5-domain-contracts/frontend.md`
+
+---
+
+## Fase 6 — Limpieza final, hardening y documentacion de shared package
+
+Objetivo: cerrar deuda residual, 0 warnings conocidos, estructura comprensible y documentada.
 
 ### 6.1 Entregables
-1. Eliminacion de archivos residuales y aliases no usados.
-2. Warnings de tests revisados y resueltos cuando sean deuda del refactor.
-3. Documentacion final alineada.
+
+1. 0 wrappers o placeholders innecesarios.
+2. 0 warnings de arquitectura en la suite relevante.
+3. `core/docs/architecture/shared-package-candidates.md` creado.
+4. Documentacion frontend canonica actualizada.
 
 ### 6.2 Paso a paso recomendado
-1. Eliminar archivos placeholder o residuales si ya no tienen referencias:
-   - `frontend/src/components/HelloWorld.vue`
-   - `frontend/src/style.css`
-   - vistas de settings residuales si quedaron fuera de uso
-2. Revisar warning actual en tests:
-   - `frontend/src/domains/net-worth/__tests__/composables.spec.ts` muestra uso de `onMounted` fuera de instancia activa
-3. Corregir ese warning dentro de una fase de hardening, no mezclado con cambios funcionales.
-4. Completar tests de regresion sobre composables/componentes extraidos en fases 2-5.
-5. Actualizar este roadmap con el avance real.
-6. Si cambia el contrato visual compartido, actualizar:
-   - `docs/frontend/frontend-visual-contract.md`
-   - `docs/frontend/frontend-css-workflow.md`
-   - cualquier otra doc frontend canonica afectada
+
+1. Verificar que no quedan imports a `@/lib/api`, `@/lib/errors`, `@/stores/*` en vistas.
+2. Resolver warning de `onMounted` fuera de instancia activa en `net-worth/__tests__/composables.spec.ts`.
+3. Completar tests de regresion sobre composables/componentes extraidos en fases 2-5.
+4. Redactar `core/docs/architecture/shared-package-candidates.md`:
+   - Dominios ready: `net-worth`, `people`, `guide`, `aux-data`, `data-input`, `ui`
+   - No compartibles y por que: `auth`, `capabilities`, `lib/api.ts`
+   - Pasos siguientes para la extraccion (fuera del scope de este roadmap)
+5. Actualizar docs frontend canonicas.
+6. SaaS Replication.
 
 ### 6.3 Criterio de salida
+
 1. Sin wrappers o placeholders innecesarios.
-2. Sin warnings de arquitectura conocidos en la suite relevante.
+2. Sin warnings de arquitectura conocidos.
 3. Estructura del frontend legible para un nuevo colaborador.
+4. `shared-package-candidates.md` creado y enlazado.
+
+**Spec:** `core/docs/tasks/frontend-refactor/phase-6-hardening/frontend.md`
+
+---
 
 ## Reglas de interfaces y contratos
-1. No cambiar rutas publicas ni contratos backend durante el refactor, salvo correcciones internas de tipado.
+
+1. No cambiar rutas publicas ni contratos backend durante el refactor.
 2. La interfaz publica interna de cada dominio debe quedar resumida en su `index.ts`.
 3. Las vistas no deben importar directamente:
-   - `@/lib/api`
-   - `@/lib/errors`
-   - `@/stores/*`
-   - wrappers en `@/components/*`
-4. Si se mantiene una capa shared, debe documentarse exactamente que puede alojar:
-   - HTTP client
-   - auth session
-   - format helpers
-   - error normalization
-5. Cualquier patron visual reusable consolidado en `core/frontend/src/styles/app.css` debe evaluarse para sincronizacion con `frontend/` cuando deje de ser Core-only.
+   - `@/lib/api`, `@/lib/errors`, `@/stores/*`, wrappers en `@/components/*` raiz
+4. La capa shared puede alojar: HTTP client, auth session, format helpers, error normalization.
+5. Cualquier patron visual consolidado en `app.css` debe evaluarse para sincronizacion con SaaS.
 
 ## Validacion minima por fase
-1. Frontend Core:
-   - `docker compose exec frontend npm run lint`
-   - `docker compose exec frontend npm run format:check`
-   - `docker compose exec frontend npm run typecheck`
-   - `docker compose exec frontend npm run test:unit`
-2. Si una fase toca shell, router o composables de pagina, agregar/ajustar tests unitarios del area afectada.
-3. Si una fase toca patrones visuales compartidos, validar que los estados loading/empty/error/success sigan cubiertos.
+
+```bash
+# Core
+docker compose -f core/docker-compose.yml exec frontend npm run lint
+docker compose -f core/docker-compose.yml exec frontend npm run format:check
+docker compose -f core/docker-compose.yml exec frontend npm run typecheck
+docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
+# -> statements >=80%, lines >=80%, functions >=80%, branches >=80%
+
+# SaaS (al replicar)
+docker compose exec saas_frontend npm run lint
+docker compose exec saas_frontend npm run format:check
+docker compose exec saas_frontend npm run typecheck
+docker compose exec saas_frontend npm run test:coverage
+```
+
+## Orden recomendado de ejecucion
+
+1. Fase 0 (baseline + tests)
+2. Fase 1 (arch boundaries)
+3. Fase 2 (shell + router)
+4. Fase 3a (BudgetDashboardView)
+5. Fase 3b (NetWorthView)
+6. Fase 3c (DataInputView)
+7. Fase 3d (GuidePhaseDetailView)
+8. Fase 3e (AccountingMovementsView)
+9. Fase 4 (CSS)
+10. Fase 5 (domain contracts)
+11. Fase 6 (hardening + shared package doc)
 
 ## Entregables por PR
+
 1. Un objetivo claro por PR.
 2. Validacion Docker adjunta al cierre.
 3. Sin mezclar limpieza estructural y cambio funcional no relacionado.
 4. Commit final con Conventional Commits.
 
-## Orden recomendado de ejecucion
-1. Fase 0
-2. Fase 1
-3. Fase 2
-4. Fase 3 sobre `BudgetDashboardView`
-5. Fase 3 sobre `NetWorthView`
-6. Fase 3 sobre `DataInputView`
-7. Fase 3 sobre `GuidePhaseDetailView` y `HomeView`
-8. Fase 3 sobre `AccountingMovementsView`
-9. Fase 4
-10. Fase 5
-11. Fase 6
-
 ## Nota de trazabilidad
-1. Este roadmap define el refactor del frontend Core, no una iniciativa de nuevas capacidades.
-2. Si durante la ejecucion aparece una mejora UX reutilizable que cambie el contrato visual compartido, debe actualizarse primero la documentacion canonica afectada.
-3. Si una fase descubre deuda funcional real, esa deuda debe aislarse en una subtarea o PR separado para no desordenar el refactor.
+
+1. Este roadmap define el refactor del frontend Core.
+2. Para SaaS: ver `docs/roadmap/frontend-refactor-roadmap.md`.
+3. Si durante la ejecucion aparece una mejora UX reutilizable, actualizar primero la documentacion canonica.
+4. Si una fase descubre deuda funcional real, aislarla en una subtarea o PR separado.
