@@ -5,6 +5,7 @@ import hashlib
 import io
 import re
 import unicodedata
+import dataclasses
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -83,6 +84,14 @@ _MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
 # Cuando el importe es negativo, se tratan como investment_purchase.
 # Categorías de MoneyWiz que representan amortización/liquidación de deuda,
 # independientemente del signo del importe.
+# Aliases de descripción para el emparejamiento de deudas.
+# Mapea la descripción normalizada usada en la cuenta de liquidez a la descripción
+# normalizada del nombre de la cuenta de pasivo correspondiente.
+# Necesario cuando el usuario introduce variantes ortográficas en MoneyWiz.
+_MONEYWIZ_DEBT_DESCRIPTION_ALIASES: dict[str, str] = {
+    "ivi": "ibi",  # IVI (errata) → IBI (Impuesto sobre Bienes Inmuebles)
+}
+
 _MONEYWIZ_DEBT_PAYMENT_PATHS: frozenset[str] = frozenset(
     {
         "liquidacion credito",
@@ -104,6 +113,7 @@ _MONEYWIZ_INVESTMENT_PURCHASE_PATHS: frozenset[str] = frozenset(
         "pasivos > activos financieros > st criptos",
         "pasivos > activos financieros > dt criptos",
         "pasivos > activos financieros > spot act financieros",
+        "pasivos > activos financieros > st stocks",
     }
 )
 
@@ -181,6 +191,10 @@ class MoneyWizRow:
     warnings: list[str]
     errors: list[str]
     existing_transaction_id: int | None
+    member_tag: str = ""
+    principal_amount: Decimal | None = None
+    interest_amount: Decimal | None = None
+    mirror: bool = False
 
 
 def extract_moneywiz_csv_text(*, csv_text: str | None = None, file=None) -> str:
@@ -221,6 +235,8 @@ def commit_moneywiz_import(
     skipped_existing = 0
     seen: set[str] = set()
     for row in rows:
+        if row.mirror:
+            continue
         if row.fingerprint in seen:
             skipped_existing += 1
             continue
@@ -264,6 +280,228 @@ def _detect_delimiter(csv_text: str) -> str:
         return ";" if sample.count(";") >= sample.count(",") else ","
 
 
+def _resolve_investment_mirrors(
+    *,
+    user_id: int,
+    rows: list[MoneyWizRow],
+) -> list[MoneyWizRow]:
+    """Pairs 'Inversiones Gastos' rows (capital deployment) with their mirror
+    'Inversiones Ingresos' rows (investment-account credit side).
+
+    For each matched pair:
+    - Row A (Inversiones Gastos, amount < 0): upgraded to investment_purchase
+      with the real investment account name as counterparty.
+    - Row B (Inversiones Ingresos, amount > 0): marked mirror=True and skipped
+      during preview stats and commit.
+    """
+
+    def _inv_side(category_raw: str) -> str | None:
+        normalized = _normalize_lookup_text(category_raw)
+        if normalized.startswith("inversiones gastos"):
+            return "gastos"
+        if normalized.startswith("inversiones ingresos"):
+            return "ingresos"
+        return None
+
+    def _inv_subcategory(category_raw: str) -> str:
+        normalized = _normalize_lookup_text(category_raw)
+        for prefix in ("inversiones gastos > ", "inversiones ingresos > "):
+            if normalized.startswith(prefix):
+                return normalized[len(prefix):]
+        return ""
+
+    # Index Row-B candidates by (date, abs_amount, subcategory, description); first match wins.
+    ingresos_idx: dict[tuple, int] = {}
+    for i, row in enumerate(rows):
+        if _inv_side(row.category_raw) == "ingresos" and row.amount > ZERO:
+            key = (
+                row.booking_date,
+                row.amount.copy_abs(),
+                _inv_subcategory(row.category_raw),
+                _normalize_lookup_text(row.description),
+            )
+            ingresos_idx.setdefault(key, i)
+
+    mirrored: set[int] = set()
+    updated: dict[int, MoneyWizRow] = {}
+
+    for i, row in enumerate(rows):
+        if _inv_side(row.category_raw) != "gastos" or row.amount >= ZERO:
+            continue
+        key = (
+            row.booking_date,
+            row.amount.copy_abs(),
+            _inv_subcategory(row.category_raw),
+            _normalize_lookup_text(row.description),
+        )
+        j = ingresos_idx.get(key)
+        if j is None or j in mirrored:
+            continue
+
+        row_b = rows[j]
+        new_flow_family, new_cat_key, new_subcat_key, cls_warnings = _classify_row(
+            movement_type="investment_purchase",
+            category_raw=row.category_raw,
+            description=row.description,
+        )
+        new_warnings = [
+            w for w in row.warnings if "se creara una cuenta provisional" not in w.lower()
+        ] + cls_warnings
+        new_fingerprint = _build_fingerprint(
+            booking_date=row.booking_date,
+            description=row.description,
+            memo=row.memo,
+            category_raw=row.category_raw,
+            account_name=row.account_name,
+            counterparty_name=row_b.account_name,
+            currency=row.currency,
+            amount=row.amount,
+            movement_type="investment_purchase",
+            flow_family=new_flow_family,
+            category_key=new_cat_key,
+            subcategory_key=new_subcat_key,
+        )
+        new_existing_id = _find_existing_transaction(user_id=user_id, fingerprint=new_fingerprint)
+        if new_existing_id is not None:
+            new_warnings.append("Esta fila ya fue importada anteriormente; se omitira en commit.")
+        updated[i] = dataclasses.replace(
+            row,
+            movement_type="investment_purchase",
+            counterparty_name=row_b.account_name,
+            flow_family=new_flow_family,
+            category_key=new_cat_key,
+            subcategory_key=new_subcat_key,
+            fingerprint=new_fingerprint,
+            warnings=new_warnings,
+            existing_transaction_id=new_existing_id,
+        )
+        mirrored.add(j)
+
+    # Pass 2b: pair sale mirrors.
+    # When an investment is sold, MoneyWiz records two rows with no Transferencias:
+    #   - Liquidity account: "Inversiones Gastos > X" with amount > 0 (sale proceeds coming in)
+    #   - Investment account: "Inversiones Ingresos > X" with amount < 0 (position decreasing)
+    # The liquidity side is reclassified as income by Pass 3; the investment side must be
+    # marked mirror=True so it is not committed as a phantom investment_purchase.
+    gastos_sale_idx: dict[tuple, int] = {}
+    for i, row in enumerate(rows):
+        if i in updated or i in mirrored:
+            continue
+        if _inv_side(row.category_raw) == "gastos" and row.amount > ZERO:
+            key = (
+                row.booking_date,
+                row.amount.copy_abs(),
+                _inv_subcategory(row.category_raw),
+                _normalize_lookup_text(row.description),
+            )
+            gastos_sale_idx.setdefault(key, i)
+
+    for i, row in enumerate(rows):
+        if i in updated or i in mirrored:
+            continue
+        if _inv_side(row.category_raw) != "ingresos" or row.amount >= ZERO:
+            continue
+        key = (
+            row.booking_date,
+            row.amount.copy_abs(),
+            _inv_subcategory(row.category_raw),
+            _normalize_lookup_text(row.description),
+        )
+        if gastos_sale_idx.get(key) is not None:
+            mirrored.add(i)
+
+    result = []
+    for i, row in enumerate(rows):
+        if i in updated:
+            result.append(updated[i])
+        elif i in mirrored:
+            result.append(dataclasses.replace(row, mirror=True))
+        else:
+            result.append(row)
+
+    # Pass 3: reclassify remaining investment_purchase rows that still have a
+    # synthetic NNN counterparty.  These are either portfolio revaluations
+    # (negative "Pasivos > Activos financieros" entries) or misclassified sales
+    # ("Inversiones Gastos" with positive amount).  None of them represent a
+    # real capital deployment between two accounts, so they must not create a
+    # phantom counterparty account.
+    _NNN_PREFIX = "MoneyWiz counterparty"
+    final: list[MoneyWizRow] = []
+    for row in result:
+        # Only reclassify investment_purchase rows that match one of two
+        # MoneyWiz-specific patterns that should never create a counterparty
+        # account:
+        #   a) "Pasivos > Activos financieros > ..." with negative amount:
+        #      these are portfolio value-adjustments (mark-to-market), not
+        #      capital deployments.
+        #   b) "Inversiones Gastos > ..." with positive amount: a positive
+        #      entry under a "gastos" category is a sale/return of capital,
+        #      not a purchase.
+        _is_pasivos_revaluation = _match_moneywiz_path_set(
+            row.category_raw, _MONEYWIZ_INVESTMENT_PURCHASE_PATHS
+        )
+        _is_inversiones_gastos_sale = (
+            _inv_side(row.category_raw) == "gastos" and row.amount > ZERO
+        )
+        if (
+            row.movement_type == "investment_purchase"
+            and row.counterparty_name.startswith(_NNN_PREFIX)
+            and not row.mirror
+            and (_is_pasivos_revaluation or _is_inversiones_gastos_sale)
+        ):
+            # Positive "Inversiones Gastos" = sale/return → income.
+            # Revaluations (mark-to-market adjustments) → revaluation.
+            if _is_inversiones_gastos_sale:
+                new_movement_type = "income"
+            else:
+                new_movement_type = "revaluation"
+            new_flow_family, new_cat_key, new_subcat_key, cls_warnings = _classify_row(
+                movement_type=new_movement_type,
+                category_raw=row.category_raw,
+                description=row.description,
+            )
+            new_warnings = [
+                w for w in row.warnings if "se creara una cuenta provisional" not in w.lower()
+            ] + cls_warnings
+            new_fingerprint = _build_fingerprint(
+                booking_date=row.booking_date,
+                description=row.description,
+                memo=row.memo,
+                category_raw=row.category_raw,
+                account_name=row.account_name,
+                counterparty_name="",
+                currency=row.currency,
+                amount=row.amount,
+                movement_type=new_movement_type,
+                flow_family=new_flow_family,
+                category_key=new_cat_key,
+                subcategory_key=new_subcat_key,
+            )
+            new_existing_id = _find_existing_transaction(
+                user_id=user_id, fingerprint=new_fingerprint
+            )
+            if new_existing_id is not None:
+                new_warnings.append(
+                    "Esta fila ya fue importada anteriormente; se omitira en commit."
+                )
+            final.append(
+                dataclasses.replace(
+                    row,
+                    movement_type=new_movement_type,
+                    counterparty_name="",
+                    flow_family=new_flow_family,
+                    category_key=new_cat_key,
+                    subcategory_key=new_subcat_key,
+                    fingerprint=new_fingerprint,
+                    warnings=new_warnings,
+                    existing_transaction_id=new_existing_id,
+                )
+            )
+        else:
+            final.append(row)
+    return final
+
+
 def _parse_moneywiz_rows(
     *,
     user_id: int,
@@ -291,7 +529,8 @@ def _parse_moneywiz_rows(
         else:
             seen[row.fingerprint] = row_number
         rows.append(row)
-    return rows
+    rows = _resolve_investment_mirrors(user_id=user_id, rows=rows)
+    return _resolve_debt_mirrors(user_id=user_id, rows=rows)
 
 
 def _is_account_summary_row(raw_row: dict[str, str | None]) -> bool:
@@ -304,6 +543,162 @@ def _is_account_summary_row(raw_row: dict[str, str | None]) -> bool:
         for f in ("amount", "amount_incomes", "amount_expenses", "credits", "debits")
     )
     return not has_date and not has_amount
+
+
+def _resolve_debt_mirrors(
+    *,
+    user_id: int,
+    rows: list[MoneyWizRow],
+) -> list[MoneyWizRow]:
+    """Pairs 'Liquidación Crédito' (liability-side) rows with their corresponding
+    cash-outflow (liquidity-side) rows, eliminating the double-count that would
+    arise from importing both independently.
+
+    For each matched pair:
+    - Row A (cash outflow, expense type, negative amount): reclassified as
+      debt_payment pointing to the liability account as counterparty.
+      principal_amount = abs(liquidacion_amount)
+      interest_amount  = abs(outflow_amount) - abs(liquidacion_amount)  (≥ 0)
+    - Row B (Liquidación Crédito, debt_payment type): marked mirror=True and skipped.
+
+    Unmatched Liquidación Crédito rows remain as debt_payment with the "Deuda: X"
+    synthetic counterparty generated in _resolve_counterparty_name.
+    """
+
+    # --- Step 1: Index Liquidación Crédito rows by (date, normalized_account_name).
+    # These are the liability-side entries: no explicit transfer, counterparty
+    # already resolved to "Deuda: <account_name>" by _resolve_counterparty_name.
+    liq_idx: dict[tuple, list[int]] = {}
+    for i, row in enumerate(rows):
+        if (
+            row.movement_type == "debt_payment"
+            and not row.mirror
+            and row.counterparty_name.startswith("Deuda: ")
+        ):
+            key = (row.booking_date, _normalize_lookup_text(row.account_name))
+            liq_idx.setdefault(key, []).append(i)
+
+    if not liq_idx:
+        return rows
+
+    mirrored: set[int] = set()
+    updated: dict[int, MoneyWizRow] = {}
+
+    # --- Step 2: For each cash-outflow expense row, try to find its matching
+    # Liquidación Crédito row by date + debt-account-name appearing in the
+    # outflow's description or category path.
+    for i, row in enumerate(rows):
+        if row.movement_type != "expense" or row.amount >= ZERO or row.mirror:
+            continue
+
+        norm_desc = _normalize_lookup_text(row.description)
+        canonical_desc = _MONEYWIZ_DEBT_DESCRIPTION_ALIASES.get(norm_desc, norm_desc)
+        combined_text = _normalize_lookup_text(f"{canonical_desc} {row.category_raw}")
+
+        matched_j: int | None = None
+        matched_liq_row: MoneyWizRow | None = None
+
+        for (liq_date, liq_account_norm), candidates in liq_idx.items():
+            if liq_date != row.booking_date:
+                continue
+            # Check that the debt account name (or any of its tokens) appears
+            # in the outflow's combined text.
+            tokens = [t for t in liq_account_norm.split() if len(t) > 2]
+            if liq_account_norm not in combined_text and not any(
+                t in combined_text for t in tokens
+            ):
+                continue
+            # Pick the first unmirrored candidate for this debt on this date.
+            for j in candidates:
+                if j not in mirrored:
+                    matched_j = j
+                    matched_liq_row = rows[j]
+                    break
+            if matched_j is not None:
+                break
+
+        if matched_j is None or matched_liq_row is None:
+            continue
+
+        principal = matched_liq_row.amount.copy_abs()
+        total = row.amount.copy_abs()
+        interest = (total - principal).copy_abs() if total > principal else ZERO
+
+        new_warnings = [
+            w for w in row.warnings if "provisional" not in w.lower()
+        ]
+        if interest > ZERO:
+            new_warnings.append(
+                f"Deuda con intereses: principal {principal} EUR, "
+                f"intereses {interest} EUR (total {total} EUR)."
+            )
+        new_warnings.append("La transferencia no usa clasificacion presupuestaria.")
+
+        new_fingerprint = _build_fingerprint(
+            booking_date=row.booking_date,
+            description=row.description,
+            memo=row.memo,
+            category_raw=row.category_raw,
+            account_name=row.account_name,
+            counterparty_name=matched_liq_row.account_name,
+            currency=row.currency,
+            amount=row.amount,
+            movement_type="debt_payment",
+            flow_family="",
+            category_key="",
+            subcategory_key="",
+        )
+        new_existing_id = _find_existing_transaction(user_id=user_id, fingerprint=new_fingerprint)
+        if new_existing_id is not None:
+            new_warnings.append("Esta fila ya fue importada anteriormente; se omitira en commit.")
+
+        updated[i] = dataclasses.replace(
+            row,
+            movement_type="debt_payment",
+            counterparty_name=matched_liq_row.account_name,
+            flow_family="",
+            category_key="",
+            subcategory_key="",
+            fingerprint=new_fingerprint,
+            warnings=new_warnings,
+            existing_transaction_id=new_existing_id,
+            principal_amount=principal,
+            interest_amount=interest,
+        )
+        mirrored.add(matched_j)
+
+    result = []
+    for i, row in enumerate(rows):
+        if i in updated:
+            result.append(updated[i])
+        elif i in mirrored:
+            result.append(dataclasses.replace(row, mirror=True))
+        else:
+            result.append(row)
+    return result
+
+
+def _parse_moneywiz_tags(raw: str) -> str:
+    """Parses the MoneyWiz 'Etiquetas' column into a normalized member_tag.
+
+    Returns 'pablo', 'ana', 'compartido', or '' if absent/unknown.
+    - 'Compartido; ' → 'compartido'
+    - 'Pablo; ' → 'pablo'
+    - 'Ana; ' → 'ana'
+    - Multiple tags including 'Compartido' → 'compartido'
+    - Multiple individual names → 'compartido'
+    """
+    if not raw:
+        return ""
+    parts = [_normalize_lookup_text(p) for p in raw.split(";") if p.strip()]
+    parts = [p for p in parts if p]
+    if not parts:
+        return ""
+    if "compartido" in parts:
+        return "compartido"
+    if len(parts) > 1:
+        return "compartido"
+    return parts[0]
 
 
 def _normalize_row(
@@ -321,6 +716,7 @@ def _normalize_row(
     category_raw = _clean_text(row.get("category"))
     account_raw = _clean_text(row.get("account"))
     transfers_raw = _clean_text(row.get("transfers"))
+    member_tag = _parse_moneywiz_tags(_clean_text(row.get("tags")))
     currency = _normalize_currency(
         row.get("currency") or row.get("account_currency") or row.get("currency_code")
     )
@@ -362,6 +758,7 @@ def _normalize_row(
         raw_name=transfers_raw,
         row_number=row_number,
         movement_type=movement_type,
+        account_name=account_name,
         description=description,
         category_raw=category_raw,
     )
@@ -407,6 +804,7 @@ def _normalize_row(
         warnings=warnings,
         errors=errors,
         existing_transaction_id=existing_transaction_id,
+        member_tag=member_tag,
     )
 
 
@@ -553,6 +951,10 @@ def _classify_row(
         )
     elif movement_type == "investment_purchase":
         warnings.append("La compra de inversion se importara sin clasificacion presupuestaria.")
+    elif movement_type == "revaluation":
+        warnings.append(
+            "La revalorizacion se importara como ajuste de valor sin clasificacion presupuestaria."
+        )
     elif movement_type == "transfer":
         warnings.append("La transferencia no usa clasificacion presupuestaria.")
 
@@ -657,11 +1059,17 @@ def _resolve_counterparty_name(
     raw_name: str,
     row_number: int,
     movement_type: str,
+    account_name: str,
     description: str,
     category_raw: str,
 ) -> str:
     if _clean_text(raw_name):
         return _clean_text(raw_name)
+    # For debt_payment rows without an explicit counterparty (typical in MoneyWiz liability
+    # accounts like Hipoteca, Ibi, etc.), derive a stable name from the source account so
+    # the user sees "Deuda: Hipoteca" instead of "MoneyWiz counterparty 379 liquidacion_credito".
+    if movement_type == "debt_payment" and account_name:
+        return f"Deuda: {account_name}"
     return _resolve_account_name(
         raw_name="",
         row_number=row_number,
@@ -751,6 +1159,7 @@ def _import_moneywiz_row(
             notes=row.memo,
             import_source="moneywiz",
             import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
             flow_family=row.flow_family,
             category_key=row.category_key,
             subcategory_key=row.subcategory_key,
@@ -778,6 +1187,7 @@ def _import_moneywiz_row(
             notes=row.memo,
             import_source="moneywiz",
             import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
             flow_family=row.flow_family,
             category_key=row.category_key,
             subcategory_key=row.subcategory_key,
@@ -805,6 +1215,7 @@ def _import_moneywiz_row(
             notes=row.memo,
             import_source="moneywiz",
             import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
         )
 
     if row.movement_type == "investment_purchase":
@@ -829,6 +1240,7 @@ def _import_moneywiz_row(
             notes=row.memo,
             import_source="moneywiz",
             import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
         )
 
     if row.movement_type == "debt_payment":
@@ -839,6 +1251,21 @@ def _import_moneywiz_row(
             name=row.counterparty_name,
             account_id_map=account_id_map,
         )
+        principal = row.principal_amount if row.principal_amount is not None else row.amount.copy_abs()
+        interest = row.interest_amount if row.interest_amount is not None else ZERO
+        interest_account = None
+        if interest > ZERO:
+            interest_account = get_or_create_system_account(
+                user_id=user.id,
+                account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+                currency=row.currency,
+                name=_system_counterparty_name(
+                    "expense",
+                    "consumption_expenses",
+                    "financial_commitments",
+                    row.category_raw,
+                ),
+            )
         return create_quick_transaction(
             user=user,
             movement_type="debt_payment",
@@ -849,13 +1276,43 @@ def _import_moneywiz_row(
             account=source_account,
             counterparty_account=target_account,
             liability_account=target_account,
-            principal_amount=row.amount.copy_abs(),
-            interest_amount=ZERO,
+            principal_amount=principal,
+            interest_amount=interest,
+            interest_account=interest_account,
+            flow_family="expense" if interest > ZERO else "",
+            category_key="consumption_expenses" if interest > ZERO else "",
+            subcategory_key="financial_commitments" if interest > ZERO else "",
             status=LedgerTransaction.Status.POSTED,
             origin=LedgerTransaction.Origin.IMPORT,
             notes=row.memo,
             import_source="moneywiz",
             import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
+        )
+
+    if row.movement_type == "revaluation":
+        return create_quick_transaction(
+            user=user,
+            movement_type="revaluation",
+            booking_date=row.booking_date,
+            value_date=row.booking_date,
+            description=row.description,
+            amount=row.amount.copy_abs(),
+            account=source_account,
+            counterparty_account=get_or_create_system_account(
+                user_id=user.id,
+                account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+                currency=row.currency,
+                name=_system_counterparty_name(
+                    "revaluation", row.category_key, row.subcategory_key, row.category_raw
+                ),
+            ),
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.IMPORT,
+            notes=row.memo,
+            import_source="moneywiz",
+            import_fingerprint=row.fingerprint,
+            member_tag=row.member_tag,
         )
 
     raise ValidationError(
@@ -916,16 +1373,22 @@ def _build_preview_payload(*, delimiter: str, rows: list[MoneyWizRow]) -> dict:
         "transfer": 0,
         "investment_purchase": 0,
         "debt_payment": 0,
+        "revaluation": 0,
         "fallback_classifications": 0,
         "auto_created_accounts": 0,
         "existing_rows": 0,
         "duplicate_rows": 0,
+        "mirror_rows": 0,
         "created_transactions": 0,
         "skipped_existing": 0,
     }
     warnings: list[str] = []
     payload_rows = []
     for row in rows:
+        if row.mirror:
+            stats["mirror_rows"] += 1
+            payload_rows.append(_serialize_row(row))
+            continue
         if row.movement_type in stats:
             stats[row.movement_type] += 1
         if row.existing_transaction_id is not None:
@@ -942,10 +1405,11 @@ def _build_preview_payload(*, delimiter: str, rows: list[MoneyWizRow]) -> dict:
     return {
         "delimiter": delimiter,
         "row_count": len(rows),
-        "valid_row_count": sum(1 for row in rows if not row.errors),
+        "valid_row_count": sum(1 for row in rows if not row.errors and not row.mirror),
         "error_row_count": sum(1 for row in rows if row.errors),
         "duplicate_row_count": stats["duplicate_rows"],
         "existing_row_count": stats["existing_rows"],
+        "mirror_row_count": stats["mirror_rows"],
         "warnings": _dedupe_preserve_order(warnings),
         "stats": stats,
         "detected_accounts": _build_detected_accounts(rows),
@@ -976,19 +1440,34 @@ def _build_unmapped_categories(rows: list[MoneyWizRow]) -> list[dict]:
 
 
 def _build_detected_accounts(rows: list[MoneyWizRow]) -> list[dict]:
-    detected: dict[tuple[str, str, str, str], dict] = {}
+    # Pre-pass: any account that appears as a debt_payment counterparty is
+    # definitely a liability — even if it also appears as a source account in
+    # its own rows (e.g. a credit card that has spending rows AND receives
+    # payments from a bank account).
+    known_liabilities: set[str] = {
+        row.counterparty_name
+        for row in rows
+        if not row.mirror and row.movement_type == "debt_payment" and row.counterparty_name
+    }
+
+    # Key is (name, account_type, currency).  Using the resolved account_type
+    # means a credit card that is both a source and a debt_payment counterparty
+    # collapses into a single LIABILITY entry instead of producing duplicates.
+    detected: dict[tuple[str, str, str], dict] = {}
     for row in rows:
-        source_key = (
-            row.account_name,
-            cast(str, LedgerAccount.AccountType.ASSET),
-            row.currency,
-            "source",
+        if row.mirror:
+            continue
+        src_account_type = (
+            cast(str, LedgerAccount.AccountType.LIABILITY)
+            if row.account_name in known_liabilities
+            else cast(str, LedgerAccount.AccountType.ASSET)
         )
+        source_key = (row.account_name, src_account_type, row.currency)
         detected.setdefault(
             source_key,
             {
                 "name": row.account_name,
-                "account_type": cast(str, LedgerAccount.AccountType.ASSET),
+                "account_type": src_account_type,
                 "currency": row.currency,
                 "role": "source",
                 "status": "existing_or_created",
@@ -999,7 +1478,6 @@ def _build_detected_accounts(rows: list[MoneyWizRow]) -> list[dict]:
                 row.counterparty_name,
                 cast(str, LedgerAccount.AccountType.ASSET),
                 row.currency,
-                "counterparty",
             )
             detected.setdefault(
                 target_key,
@@ -1016,7 +1494,6 @@ def _build_detected_accounts(rows: list[MoneyWizRow]) -> list[dict]:
                 row.counterparty_name,
                 cast(str, LedgerAccount.AccountType.LIABILITY),
                 row.currency,
-                "counterparty",
             )
             detected.setdefault(
                 target_key,
@@ -1048,8 +1525,10 @@ def _serialize_row(row: MoneyWizRow) -> dict:
         "subcategory_key": row.subcategory_key,
         "fingerprint": row.fingerprint,
         "existing_transaction_id": row.existing_transaction_id,
+        "member_tag": row.member_tag,
         "warnings": list(row.warnings),
         "errors": list(row.errors),
+        "mirror": row.mirror,
     }
 
 
@@ -1082,6 +1561,7 @@ def _canonical_header(value: str | None) -> str | None:
         "currency": {"currency", "currency code", "moneda"},
         "account_currency": {"account currency"},
         "currency_code": {"currency code"},
+        "tags": {"tags", "tag", "etiquetas", "etiqueta", "labels", "label"},
     }
     for canonical, options in aliases.items():
         if normalized in options:

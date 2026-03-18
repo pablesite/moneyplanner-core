@@ -37,12 +37,14 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
         required=False,
     )
     current_balance = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = LedgerAccount
         fields = [
             "id",
             "name",
+            "display_name",
             "account_type",
             "currency",
             "origin",
@@ -54,10 +56,17 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "current_balance", "created_at", "updated_at"]
+        read_only_fields = ["id", "display_name", "current_balance", "created_at", "updated_at"]
 
     def get_current_balance(self, obj: LedgerAccount) -> str:
         return str(get_account_balance(account=obj))
+
+    def get_display_name(self, obj: LedgerAccount) -> str:
+        if obj.asset_id and obj.asset and obj.asset.name:
+            return obj.asset.name
+        if obj.liability_id and obj.liability and obj.liability.name:
+            return obj.liability.name
+        return obj.name
 
     def validate_currency(self, value: str) -> str:
         normalized = normalize_currency_code(value)
@@ -305,7 +314,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
 class QuickLedgerTransactionSerializer(serializers.Serializer):
     movement_type = serializers.ChoiceField(
-        choices=["income", "expense", "transfer", "investment_purchase", "debt_payment"]
+        choices=["income", "expense", "transfer", "investment_purchase", "debt_payment", "revaluation"]
     )
     booking_date = serializers.DateField(default=timezone.localdate)
     value_date = serializers.DateField(default=timezone.localdate)
@@ -434,7 +443,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             and flow_family == LedgerEntry.FlowFamily.INCOME
         ):
             raise serializers.ValidationError({"flow_family": "No aplica a movimientos de gasto."})
-        if movement_type in {"transfer", "investment_purchase"} and (
+        if movement_type in {"transfer", "investment_purchase", "revaluation"} and (
             flow_family or category_key or subcategory_key
         ):
             raise serializers.ValidationError(
@@ -485,6 +494,14 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
+                annual_income_entry=annual_income_entry,
+                annual_expense_entry=annual_expense_entry,
+            )
+        elif movement_type == "revaluation":
+            self._validate_revaluation_movement(
+                attrs=attrs,
+                user_id=user.id,
+                account=account,
                 annual_income_entry=annual_income_entry,
                 annual_expense_entry=annual_expense_entry,
             )
@@ -802,6 +819,32 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                         "La compra de inversion exige la misma moneda en ambas cuentas."
                     )
                 }
+            )
+
+    def _validate_revaluation_movement(
+        self,
+        *,
+        attrs: dict,
+        user_id: int,
+        account: LedgerAccount,
+        annual_income_entry,
+        annual_expense_entry,
+    ) -> None:
+        if annual_income_entry is not None:
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "No aplica a revalorizaciones."}
+            )
+        if annual_expense_entry is not None:
+            raise serializers.ValidationError(
+                {"annual_expense_entry_id": "No aplica a revalorizaciones."}
+            )
+        # Revaluations adjust an asset account value directly; no counterparty required.
+        if attrs.get("counterparty_account") is None:
+            attrs["counterparty_account"] = get_or_create_system_account(
+                user_id=user_id,
+                account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+                currency=account.currency,
+                name="Revalorizaciones",
             )
 
     def _validate_debt_payment_movement(

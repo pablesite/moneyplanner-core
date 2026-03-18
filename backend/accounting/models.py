@@ -75,6 +75,7 @@ class LedgerTransaction(models.Model):
     notes = models.TextField(blank=True, default="")
     import_source = models.CharField(max_length=32, blank=True, default="")
     import_fingerprint = models.CharField(max_length=64, blank=True, default="")
+    member_tag = models.CharField(max_length=32, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
