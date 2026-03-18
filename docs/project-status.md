@@ -23,7 +23,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
-| Refactor backend — Phase 5 | Agente | DX docs: backend patterns guide, PR checklist, backlog de contribución. | `core/docs/tasks/backend-refactor/phase-5-dx-docs/backend.md` |
 
 | Refactor frontend — Fase 0 | Agente | Baseline limpia + cobertura ≥80%: subir thresholds, escribir tests gap, corregir formato app.css. | `core/docs/tasks/frontend-refactor/phase-0-baseline/frontend.md` |
 | Refactor frontend — Fase 1 | Agente | Fronteras de arquitectura: eliminar wrappers puente, mover BaseModal/AppHeader a dominios, alinear index.ts. | `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md` |
@@ -50,7 +49,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
-| Refactor backend Core | Media | 🔄 | Limpieza de lógica y deuda técnica en progreso. Fases 1, 2, 3 y 4 completadas (baseline de tests + particion de accounting + net_worth domain cleanup + boundary enforcement). Ver `roadmap/backend-refactor-roadmap.md` |
+| Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-refactor-roadmap.md`. |
 | Refactor frontend Core | Media | ⏸ | Estructura de componentes, extracción de lógica al backend; ver `roadmap/frontend-refactor-roadmap.md` |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
 | Importación de datos | Media | ✅ | MoneyWiz v1 corregido: aliases en español para cabeceras (Fecha, Cuentas, Importe, Moneda, etc.) y detección de filas de resumen de cuenta. Validado con CSV real. Excel sigue pendiente. |
@@ -86,7 +85,6 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Frontend refactor | 🔄 Planificado | `roadmap/frontend-refactor-roadmap.md`. 11 fases planificadas. Specs en `core/docs/tasks/frontend-refactor/`. BudgetDashboardView 5,512 líneas, NetWorthView 3,608 líneas. Coverage target ≥80%. |
-| Backend refactor | 🔄 En progreso | Fases 1, 2, 3 y 4 completadas y validadas en Docker (tests/ruff/mypy). Pendiente fase 5 (DX docs). Ver `roadmap/backend-refactor-roadmap.md`. |
 
 ---
 
