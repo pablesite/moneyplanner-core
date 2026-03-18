@@ -281,10 +281,12 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 
 ### 3.4 Criterio de salida
 
-1. Ninguna vista principal supera ~400 lineas.
-2. Los side effects de pagina viven en composables.
-3. La logica derivada compartida deja de duplicarse entre vistas.
-4. Cada composable extraido tiene tests con cobertura >= 80%.
+1. Las vistas principales quedan reducidas a wiring de pagina y composicion de secciones.
+2. Objetivo practico para vistas grandes en esta fase: ~600-900 lineas tras extraer
+   fetch, derivadas complejas y side effects de dominio.
+3. Los side effects de pagina viven en composables.
+4. La logica derivada compartida deja de duplicarse entre vistas.
+5. Cada composable extraido tiene tests con cobertura >= 80%.
 
 **Specs:**
 - `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md`
