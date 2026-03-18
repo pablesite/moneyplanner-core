@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
-from accounting.services import (
+from accounting.services_ledger import (
     ensure_net_worth_opening_balance_transaction,
     get_user_ledger_account,
 )

@@ -66,7 +66,7 @@ def _build_liquidity_monthly_summary_impl(
             asset, "accounting_account_id", None
         ):
             from accounting.models import LedgerTransaction
-            from accounting.services import get_user_ledger_account, has_account_entries
+            from accounting.services_ledger import get_user_ledger_account, has_account_entries
 
             accounting_account = get_user_ledger_account(
                 user_id=user.id,
