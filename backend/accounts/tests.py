@@ -37,6 +37,18 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertIn("users_total", response.data)
         self.assertIn("jwt_outstanding_tokens", response.data)
 
+    def test_token_login_rejects_invalid_credentials_with_unauthorized(self):
+        response = self.client.post(
+            "/api/auth/token/",
+            {"username": self.user.username, "password": "wrong-password"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"]["code"], "unauthorized")
+        self.assertIn("message", response.data["error"])
+        self.assertIn("details", response.data["error"])
+
     def test_link_token_requires_auth(self):
         response = self.client.get("/api/auth/link-token/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -110,6 +122,15 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(refreshed.id, settings_obj.id)
         self.assertEqual(refreshed.base_currency, "USD")
         self.assertEqual(refreshed.inflation_region, "ES-MD")
+
+    def test_settings_get_creates_row_on_demand(self):
+        UserSettings.objects.filter(user=self.user).delete()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/auth/settings/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["base_currency"], "EUR")
+        self.assertEqual(response.data["inflation_region"], "ES")
+        self.assertTrue(UserSettings.objects.filter(user=self.user).exists())
 
 
 @override_settings(

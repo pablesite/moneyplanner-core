@@ -12,8 +12,10 @@ from rest_framework.test import APITestCase
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services import (
     backfill_ledger_entry_classification,
+    build_account_balances_summary,
     build_budget_derived_suggestions,
     build_monthly_accounting_summary,
+    ensure_net_worth_opening_balance_transaction,
     get_account_balance,
 )
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
@@ -565,6 +567,234 @@ class AccountingServicesTests(TestCase):
         self.assertEqual(expense_sub["suggested_annual"], "200.00")
         self.assertEqual(expense_sub["observed_months"], 1)
 
+    def test_build_account_balances_summary_handles_multiple_accounts_and_foreign_currency(self):
+        euro_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja EUR",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        euro_income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos EUR",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        usd_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        usd_income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos USD",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="USD",
+        )
+
+        euro_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 3),
+            value_date=date(2026, 4, 3),
+            description="Ingreso EUR",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=euro_tx,
+            account=euro_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=euro_tx,
+            account=euro_income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+
+        usd_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 4),
+            value_date=date(2026, 4, 4),
+            description="Ingreso USD",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=usd_tx,
+            account=usd_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("250.00"),
+            currency="USD",
+        )
+        LedgerEntry.objects.create(
+            transaction=usd_tx,
+            account=usd_income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("250.00"),
+            currency="USD",
+        )
+
+        summary = build_account_balances_summary(
+            user_id=self.user.id,
+            fiscal_year=2026,
+            month=4,
+            account_type=LedgerAccount.AccountType.ASSET,
+        )
+
+        self.assertEqual(summary["filters"]["year"], 2026)
+        self.assertEqual(summary["filters"]["month"], 4)
+        self.assertEqual(summary["filters"]["account_type"], LedgerAccount.AccountType.ASSET)
+        self.assertEqual(summary["totals_by_account_type"]["asset"], "1250.00")
+        self.assertEqual(len(summary["accounts"]), 2)
+
+        accounts_by_id = {row["account_id"]: row for row in summary["accounts"]}
+        self.assertEqual(accounts_by_id[euro_cash.id]["currency"], "EUR")
+        self.assertEqual(accounts_by_id[euro_cash.id]["current_balance"], "1000.00000000")
+        self.assertEqual(accounts_by_id[euro_cash.id]["period_net_change"], "1000.00")
+        self.assertEqual(accounts_by_id[usd_cash.id]["currency"], "USD")
+        self.assertEqual(accounts_by_id[usd_cash.id]["current_balance"], "250.00000000")
+        self.assertEqual(accounts_by_id[usd_cash.id]["period_net_change"], "250.00")
+
+    def test_build_account_balances_summary_with_accounts_of_different_types(self):
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Tarjeta",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 5, 12),
+            value_date=date(2026, 5, 12),
+            description="Movimiento mixto",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=asset_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=liability_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("200.00"),
+            currency="EUR",
+        )
+
+        summary = build_account_balances_summary(
+            user_id=self.user.id,
+            fiscal_year=2026,
+            month=5,
+        )
+
+        accounts_by_id = {row["account_id"]: row for row in summary["accounts"]}
+        self.assertEqual(summary["totals_by_account_type"]["asset"], "500.00")
+        self.assertEqual(summary["totals_by_account_type"]["liability"], "200.00")
+        self.assertEqual(accounts_by_id[asset_account.id]["current_balance"], "500.00000000")
+        self.assertEqual(accounts_by_id[liability_account.id]["current_balance"], "200.00000000")
+
+    def test_build_account_balances_summary_includes_foreign_currency_accounts(self):
+        usd_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 6, 7),
+            value_date=date(2026, 6, 7),
+            description="Ingreso USD",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("125.00"),
+            currency="USD",
+        )
+
+        summary = build_account_balances_summary(
+            user_id=self.user.id,
+            fiscal_year=2026,
+            month=6,
+        )
+
+        self.assertEqual(len(summary["accounts"]), 1)
+        self.assertEqual(summary["accounts"][0]["currency"], "USD")
+        self.assertEqual(summary["accounts"][0]["current_balance"], "125.00000000")
+
+    def test_ensure_net_worth_opening_balance_transaction_creates_once_and_is_idempotent(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1234.56"),
+            is_active=True,
+        )
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta vivienda",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+
+        first_transaction = ensure_net_worth_opening_balance_transaction(
+            user=self.user,
+            account=account,
+            amount=Decimal("1234.56"),
+            booking_date=date(2026, 1, 15),
+            asset=asset,
+        )
+        second_transaction = ensure_net_worth_opening_balance_transaction(
+            user=self.user,
+            account=account,
+            amount=Decimal("1234.56"),
+            booking_date=date(2026, 1, 15),
+            asset=asset,
+        )
+
+        self.assertIsNotNone(first_transaction)
+        self.assertEqual(first_transaction.id, second_transaction.id)
+        self.assertEqual(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.SYSTEM,
+                notes=f"net_worth_opening_balance:asset:{asset.id}",
+            ).count(),
+            1,
+        )
+        self.assertEqual(LedgerEntry.objects.filter(transaction=first_transaction).count(), 2)
+        self.assertTrue(
+            LedgerEntry.objects.filter(transaction=first_transaction, account=account).exists()
+        )
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                user=self.user,
+                account_type=LedgerAccount.AccountType.EQUITY,
+                origin=LedgerAccount.Origin.SYSTEM,
+            ).exists()
+        )
+
 
 class AccountingApiTests(APITestCase):
     def setUp(self):
@@ -1112,6 +1342,65 @@ class AccountingApiTests(APITestCase):
             invalid_response.status_code, status.HTTP_400_BAD_REQUEST, invalid_response.data
         )
         self.assertIn("counterparty_account_id", invalid_response.data["error"]["details"])
+
+    def test_quick_entry_income_rejects_foreign_account_reference(self):
+        other_user = get_user_model().objects.create_user(
+            username="acct_foreign_income",
+            password="pass1234",
+        )
+        foreign_account = LedgerAccount.objects.create(
+            user=other_user,
+            name="Cuenta ajena",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "income",
+                "booking_date": "2026-04-07",
+                "value_date": "2026-04-07",
+                "description": "Ingreso con cuenta ajena",
+                "amount": "50.00",
+                "account_id": foreign_account.id,
+                "category_key": "salary",
+                "subcategory_key": "employee_salary",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("account_id", response.data["error"]["details"])
+
+    def test_quick_entry_transfer_rejects_foreign_counterparty_reference(self):
+        other_user = get_user_model().objects.create_user(
+            username="acct_foreign_transfer",
+            password="pass1234",
+        )
+        foreign_counterparty = LedgerAccount.objects.create(
+            user=other_user,
+            name="Ahorro ajeno",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-08",
+                "value_date": "2026-04-08",
+                "description": "Transferencia con contrapartida ajena",
+                "amount": "75.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": foreign_counterparty.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("counterparty_account_id", response.data["error"]["details"])
 
     def test_quick_entry_rejects_partial_functional_classification(self):
         response = self.client.post(
