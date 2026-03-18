@@ -312,7 +312,9 @@ def sync_ownership_link(
     def _sync_generated_commitments_if_needed() -> None:
         if target_type == OwnershipLink.TargetType.LIABILITY:
             from net_worth.models import Liability
-            from net_worth.services import sync_generated_budget_commitments_for_liability
+            from net_worth.services_liabilities_budget import (
+                sync_generated_budget_commitments_for_liability,
+            )
 
             liability = Liability.objects.filter(user=user, id=target_id).first()
             if liability is None:
@@ -322,7 +324,9 @@ def sync_ownership_link(
 
         if target_type == OwnershipLink.TargetType.ASSET:
             from net_worth.models import Asset
-            from net_worth.services import sync_generated_budget_commitments_for_asset
+            from net_worth.services_assets_budget import (
+                sync_generated_budget_commitments_for_asset,
+            )
 
             asset = Asset.objects.filter(user=user, id=target_id).first()
             if asset is None:

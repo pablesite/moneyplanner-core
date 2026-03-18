@@ -19,11 +19,9 @@ from ..models import (
     Liability,
     LiquidityMonthlyCheckin,
 )
-from ..services import (
-    create_snapshot_for_user,
-    get_effective_asset_amount,
-    get_effective_liability_amount,
-)
+from ..services_assets_core import get_effective_asset_amount
+from ..services_liabilities_core import get_effective_liability_amount
+from ..services_snapshots import create_snapshot_for_user
 
 
 class NetWorthApiTests(APITestCase):
@@ -465,7 +463,7 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(Decimal(response.data["effective_amount"]), Decimal("0"))
 
-    @patch("net_worth.services_assets.timezone.localdate", return_value=date(2026, 2, 1))
+    @patch("net_worth.services_assets_core.timezone.localdate", return_value=date(2026, 2, 1))
     def test_asset_create_returns_ipc_adjusted_effective_amount_for_furnishings(
         self, _mock_localdate
     ):
@@ -499,7 +497,7 @@ class NetWorthApiTests(APITestCase):
             Decimal("6000.00"),
         )
 
-    @patch("net_worth.services_assets.timezone.localdate", return_value=date(2056, 2, 1))
+    @patch("net_worth.services_assets_core.timezone.localdate", return_value=date(2056, 2, 1))
     def test_asset_create_returns_residual_floor_effective_amount_for_vehicle(
         self, _mock_localdate
     ):

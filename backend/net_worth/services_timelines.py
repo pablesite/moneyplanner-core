@@ -10,8 +10,8 @@ from core.services import convert_currency
 
 from .models import Asset, Liability
 from .services import calculate_totals, get_base_currency_for_user
-from .services_assets import get_effective_asset_amount
-from .services_liabilities import get_effective_liability_amount
+from .services_assets_core import get_effective_asset_amount
+from .services_liabilities_core import get_effective_liability_amount
 
 
 def _month_end_for(value: date) -> date:
