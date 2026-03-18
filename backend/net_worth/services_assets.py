@@ -82,7 +82,7 @@ class AccountingIntegrationState:
 
 def _get_accounting_asset_account(*, user_id: int, account_id: int | None):
     from accounting.models import LedgerAccount
-    from accounting.services import get_user_ledger_account
+    from accounting.services_ledger import get_user_ledger_account
 
     return get_user_ledger_account(
         user_id=user_id,
@@ -97,7 +97,7 @@ def ensure_asset_accounting_account(*, asset: Asset) -> str | None:
         return None
 
     from accounting.models import LedgerAccount
-    from accounting.services import normalize_currency_code
+    from accounting.services_ledger import normalize_currency_code
 
     normalized_currency = normalize_currency_code(asset.currency)
     if len(normalized_currency) != 3:
@@ -549,7 +549,7 @@ def _get_effective_accounting_asset_amount_or_none(
         return None
 
     from accounting.models import LedgerTransaction
-    from accounting.services import get_account_balance, has_account_entries
+    from accounting.services_ledger import get_account_balance, has_account_entries
 
     accounting_account = _get_accounting_asset_account(
         user_id=asset.user_id,

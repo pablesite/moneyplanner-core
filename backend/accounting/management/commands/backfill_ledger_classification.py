@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from accounting.services import backfill_ledger_entry_classification
+from accounting.services_budget import backfill_ledger_entry_classification
 
 
 class Command(BaseCommand):

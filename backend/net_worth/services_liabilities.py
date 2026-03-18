@@ -57,7 +57,7 @@ class AccountingIntegrationState:
 
 def _get_accounting_liability_account(*, user_id: int, account_id: int | None):
     from accounting.models import LedgerAccount
-    from accounting.services import get_user_ledger_account
+    from accounting.services_ledger import get_user_ledger_account
 
     return get_user_ledger_account(
         user_id=user_id,
@@ -72,7 +72,7 @@ def ensure_liability_accounting_account(*, liability: Liability) -> str | None:
         return None
 
     from accounting.models import LedgerAccount
-    from accounting.services import normalize_currency_code
+    from accounting.services_ledger import normalize_currency_code
 
     normalized_currency = normalize_currency_code(liability.currency)
     if len(normalized_currency) != 3:
@@ -580,7 +580,7 @@ def get_effective_liability_amount(
             return liability.amount
 
         from accounting.models import LedgerTransaction
-        from accounting.services import get_account_balance, has_account_entries
+        from accounting.services_ledger import get_account_balance, has_account_entries
 
         accounting_account = _get_accounting_liability_account(
             user_id=liability.user_id,
