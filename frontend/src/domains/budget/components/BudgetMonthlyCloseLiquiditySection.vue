@@ -42,6 +42,7 @@ defineProps<{
   selectedLiquidityMonthExecuted: number;
   selectedLiquidityMonthDeviation: number;
   liquidityAdjustAmounts: Record<number, string>;
+  setLiquidityAdjustAmount: (assetId: number, value: string) => void;
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   checkinStatusLabel: (status: 'confirmed' | 'adjusted' | 'skipped') => string;
@@ -200,10 +201,11 @@ defineProps<{
                     </button>
                   </div>
                   <input
-                    v-model="liquidityAdjustAmounts[row.asset_id]"
+                    :value="liquidityAdjustAmounts[row.asset_id] ?? ''"
                     inputmode="decimal"
                     class="input ui-data-field"
                     placeholder="Saldo real"
+                    @input="setLiquidityAdjustAmount(row.asset_id, ($event.target as HTMLInputElement).value)"
                     @focus="ensureLiquidityAdjustAmountPrefilled(row)"
                     @blur="onLiquidityAdjustAmountBlur(row)"
                     @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"

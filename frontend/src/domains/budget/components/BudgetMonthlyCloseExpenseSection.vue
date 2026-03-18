@@ -61,6 +61,7 @@ defineProps<{
   monthlyExpenseCoverageLabel: string;
   monthlyExpensePendingClassification: { amount: number; ambiguousRows: number };
   expenseAdjustAmounts: Record<number, string>;
+  setExpenseAdjustAmount: (entryId: number, value: string) => void;
   selectedExpenseMonthPlanned: number;
   selectedExpenseMonthExecuted: number;
   selectedExpenseMonthDeviation: number;
@@ -267,11 +268,12 @@ defineProps<{
                     </button>
                   </div>
                   <input
-                    v-model="expenseAdjustAmounts[row.entry.id]"
+                    :value="expenseAdjustAmounts[row.entry.id] ?? ''"
                     inputmode="decimal"
                     class="input ui-data-field"
                     :disabled="isLockedExecutionRow(row)"
                     placeholder="Importe ejecutado"
+                    @input="setExpenseAdjustAmount(row.entry.id, ($event.target as HTMLInputElement).value)"
                     @focus="ensureExpenseAdjustAmountPrefilled(row)"
                     @blur="onExpenseAdjustAmountBlur(row)"
                     @keydown.enter.prevent="saveExpenseCheckinFromInput(row)"

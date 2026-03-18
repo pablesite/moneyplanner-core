@@ -43,6 +43,7 @@ defineProps<{
   incomeExecutionError: string | null;
   incomeExecutionBusyEntryId: number | null;
   incomeAdjustAmounts: Record<number, string>;
+  setIncomeAdjustAmount: (entryId: number, value: string) => void;
   selectedIncomeMonthPlanned: number;
   selectedIncomeMonthExecuted: number;
   selectedIncomeMonthDeviation: number;
@@ -240,11 +241,12 @@ defineProps<{
                     </button>
                   </div>
                   <input
-                    v-model="incomeAdjustAmounts[row.entry.id]"
+                    :value="incomeAdjustAmounts[row.entry.id] ?? ''"
                     inputmode="decimal"
                     class="input ui-data-field"
                     :disabled="isLockedExecutionRow(row)"
                     placeholder="Importe ejecutado"
+                    @input="setIncomeAdjustAmount(row.entry.id, ($event.target as HTMLInputElement).value)"
                     @focus="ensureIncomeAdjustAmountPrefilled(row)"
                     @blur="onIncomeAdjustAmountBlur(row)"
                     @keydown.enter.prevent="saveIncomeCheckinFromInput(row)"
