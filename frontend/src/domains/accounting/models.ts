@@ -8,11 +8,13 @@ export type QuickLedgerMovementType =
   | 'expense'
   | 'transfer'
   | 'investment_purchase'
-  | 'debt_payment';
+  | 'debt_payment'
+  | 'revaluation';
 
 export type LedgerAccount = {
   id: number;
   name: string;
+  display_name: string;
   account_type: LedgerAccountType;
   currency: string;
   origin: LedgerAccountOrigin;

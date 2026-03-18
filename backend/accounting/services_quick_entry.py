@@ -27,6 +27,7 @@ def create_quick_transaction(
     notes: str = "",
     import_source: str = "",
     import_fingerprint: str = "",
+    member_tag: str = "",
     annual_income_entry=None,
     annual_expense_entry=None,
     flow_family: str = "",
@@ -65,6 +66,7 @@ def create_quick_transaction(
         notes=notes,
         import_source=import_source,
         import_fingerprint=import_fingerprint,
+        member_tag=member_tag,
     )
     for entry_data in payload:
         LedgerEntry.objects.create(transaction=transaction_row, **entry_data)
@@ -138,6 +140,27 @@ def _build_quick_entry_payload(
                 "amount": base_amount,
                 "currency": counterparty_account.currency,
                 "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+            },
+            {
+                "account": account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+        ]
+    if movement_type == "revaluation":
+        # Positive revaluation (gain): asset account DR, revaluation system account CR.
+        # Negative revaluation (loss): revaluation system account DR, asset account CR.
+        # The importer always passes abs(amount), so we use the original sign from the
+        # caller's perspective: here amount is already abs, so we model as a symmetric
+        # value adjustment.  Both sides use the same abs amount; the sign semantics are
+        # encoded in the account roles (asset vs. revaluation counter-account).
+        return [
+            {
+                "account": counterparty_account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": base_amount,
+                "currency": counterparty_account.currency,
             },
             {
                 "account": account,
