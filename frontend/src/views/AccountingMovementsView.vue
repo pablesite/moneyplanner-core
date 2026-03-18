@@ -313,23 +313,56 @@ function normalizeForMatch(name: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function significantWords(normalized: string): string[] {
+  return normalized.split(/[\s()]+/).filter((w) => w.length >= 3);
+}
+
+function fuzzyMatchScore(csvNorm: string, accNorm: string): number {
+  const csvWords = significantWords(csvNorm);
+  const accWords = significantWords(accNorm);
+  if (csvWords.length === 0 || accWords.length === 0) return 0;
+  // All words of the shorter name must appear in the longer name
+  const [shorter, longer] = csvWords.length <= accWords.length ? [csvWords, accNorm] : [accWords, csvNorm];
+  if (!shorter.every((w) => longer.includes(w))) return 0;
+  return shorter.length / Math.max(csvWords.length, accWords.length);
+}
+
+function autoMatchMoneyWizAccount(
+  detected: { name: string; account_type: string; role: string },
+): number | null {
+  const normalizedCsv = normalizeForMatch(detected.name);
+  // Search across asset + liability regardless of detected type (MoneyWiz may misclassify)
+  const candidates = accounts.value.filter(
+    (a) => a.account_type === 'asset' || a.account_type === 'liability',
+  );
+
+  // Pass 1: exact normalized match, unique winner only
+  const exactMatches = candidates.filter(
+    (a) => normalizeForMatch(a.display_name || a.name) === normalizedCsv,
+  );
+  if (exactMatches.length === 1) return exactMatches[0]!.id;
+  if (exactMatches.length > 1) return null; // ambiguous duplicates
+
+  // Pass 2: fuzzy word-score match, unique winner only
+  const scored = candidates
+    .map((a) => ({ a, score: fuzzyMatchScore(normalizedCsv, normalizeForMatch(a.display_name || a.name)) }))
+    .filter(({ score }) => score > 0)
+    .sort((x, y) => y.score - x.score);
+  if (scored.length === 0) return null;
+  const top = scored[0]!;
+  const second = scored[1];
+  // Accept only if the top candidate is clearly better than the second
+  if (!second || top.score > second.score) return top.a.id;
+  return null;
+}
+
 watch(moneyWizImportPreview, () => {
   const newMap: Record<string, number | null> = {};
   if (moneyWizImportPreview.value) {
     for (const detected of moneyWizImportPreview.value.detected_accounts) {
       if (/^moneywiz counterparty/i.test(detected.name)) continue;
-      const normalizedCsv = normalizeForMatch(detected.name);
-      const candidates = accounts.value.filter((a) =>
-        detected.role === 'source'
-          ? a.account_type === 'asset' || a.account_type === 'liability'
-          : a.account_type === detected.account_type,
-      );
-      const match = candidates.find(
-        (a) => normalizeForMatch(a.display_name || a.name) === normalizedCsv,
-      );
-      if (match) {
-        newMap[detected.name] = match.id;
-      }
+      const match = autoMatchMoneyWizAccount(detected);
+      if (match !== null) newMap[detected.name] = match;
     }
   }
   moneyWizAccountMap.value = newMap;
@@ -477,29 +510,16 @@ watch(availableManualPositionOptions, (options) => {
         </div>
       </div>
 
-      <div class="ui-action-bar">
-        <select
-          v-model="cuentasSelectedAccountId"
-          class="select ui-accounting-filter-select"
-        >
+      <div class="ui-accounting-filters ui-accounting-filters-3col">
+        <select v-model="cuentasSelectedAccountId" class="select">
           <option :value="null">Selecciona una cuenta...</option>
           <option v-for="account in operationalAccounts" :key="account.id" :value="account.id">
             {{ accountDisplayName(account) }}
             ({{ formatCompact(account.current_balance, account.currency) }})
           </option>
         </select>
-        <input
-          v-model="cuentasDateFrom"
-          type="date"
-          class="input ui-accounting-date-filter"
-          title="Desde"
-        />
-        <input
-          v-model="cuentasDateTo"
-          type="date"
-          class="input ui-accounting-date-filter"
-          title="Hasta"
-        />
+        <input v-model="cuentasDateFrom" type="date" class="input" title="Desde" placeholder="Desde" />
+        <input v-model="cuentasDateTo" type="date" class="input" title="Hasta" placeholder="Hasta" />
       </div>
 
       <div v-if="loading && !transactions.length" class="ui-state-block ui-state-loading">
@@ -581,33 +601,19 @@ watch(availableManualPositionOptions, (options) => {
         </div>
       </div>
 
-      <div class="ui-action-bar">
-        <input
-          v-model="activityFilters.query"
-          class="input ui-accounting-filter-input"
-          placeholder="Filtrar por texto"
-        />
-        <select v-model="activityFilters.kind" class="select ui-accounting-filter-select">
+      <div class="ui-accounting-filters ui-accounting-filters-4col">
+        <input v-model="activityFilters.query" class="input" placeholder="Buscar..." />
+        <select v-model="activityFilters.kind" class="select">
           <option value="all">Todos los tipos</option>
-          <option value="income">Solo ingresos</option>
-          <option value="expense">Solo gastos</option>
-          <option value="transfer">Solo transferencias</option>
-          <option value="investment_purchase">Solo compras de inversion</option>
-          <option value="debt_payment">Solo pagos de deuda</option>
-          <option value="revaluation">Solo revalorizaciones</option>
+          <option value="income">Ingresos</option>
+          <option value="expense">Gastos</option>
+          <option value="transfer">Transferencias</option>
+          <option value="investment_purchase">Inversión</option>
+          <option value="debt_payment">Pago deuda</option>
+          <option value="revaluation">Revalorizaciones</option>
         </select>
-        <input
-          v-model="todosDateFrom"
-          type="date"
-          class="input ui-accounting-date-filter"
-          title="Desde"
-        />
-        <input
-          v-model="todosDateTo"
-          type="date"
-          class="input ui-accounting-date-filter"
-          title="Hasta"
-        />
+        <input v-model="todosDateFrom" type="date" class="input" title="Desde" />
+        <input v-model="todosDateTo" type="date" class="input" title="Hasta" />
       </div>
 
       <div v-if="loading && !transactions.length" class="ui-state-block ui-state-loading">
@@ -1728,16 +1734,26 @@ watch(availableManualPositionOptions, (options) => {
   padding: 20px;
 }
 
-.ui-accounting-filter-input {
-  min-width: 200px;
-  flex: 1;
-  width: auto;
+/* ── Filter bar — single-row grid, never wraps ───────────────── */
+.ui-accounting-filters {
+  display: grid;
+  gap: 8px;
+  align-items: center;
 }
 
-.ui-accounting-filter-select {
-  min-width: 160px;
-  width: auto;
-  flex: 1;
+.ui-accounting-filters-3col {
+  grid-template-columns: 1fr 148px 148px;
+}
+
+.ui-accounting-filters-4col {
+  grid-template-columns: 1fr 148px 148px 148px;
+}
+
+@media (max-width: 640px) {
+  .ui-accounting-filters-3col,
+  .ui-accounting-filters-4col {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Ledger accordion — category level ──────────────────────── */
