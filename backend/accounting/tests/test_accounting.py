@@ -1306,6 +1306,129 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(summary.data["months"][3]["income_total"], "1500.00")
         self.assertEqual(summary.data["months"][3]["expense_total"], "120.00")
 
+    def test_quick_entry_expense_with_explicit_classification_updates_monthly_summary(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-05-04",
+                "value_date": "2026-05-04",
+                "description": "Compra clasificada",
+                "amount": "130.00",
+                "account_id": self.cash_account.id,
+                "flow_family": "expense",
+                "category_key": "consumption_expenses",
+                "subcategory_key": "living_expenses",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        expense_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] != self.cash_account.id
+        )
+        self.assertEqual(expense_entry["flow_family"], "expense")
+        self.assertEqual(expense_entry["category_key"], "consumption_expenses")
+        self.assertEqual(expense_entry["subcategory_key"], "living_expenses")
+
+        summary = self.client.get("/api/accounting/transactions/monthly-summary/?year=2026")
+        self.assertEqual(summary.status_code, status.HTTP_200_OK, summary.data)
+        self.assertEqual(summary.data["months"][4]["expense_total"], "130.00")
+
+    def test_ledger_entry_with_annual_expense_link_is_reflected_in_monthly_summary(self):
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Alquiler",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="housing_home",
+            amount_annual=Decimal("9600.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos legacy",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 6, 10),
+            value_date=date(2026, 6, 10),
+            description="Gasto legacy",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("80.00"),
+            currency="EUR",
+            annual_expense_entry=expense_plan,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("80.00"),
+            currency="EUR",
+        )
+
+        summary = build_monthly_accounting_summary(user_id=self.user.id, fiscal_year=2026)
+        self.assertEqual(summary["months"][5]["expense_total"], "80.00")
+
+    def test_backfill_ledger_entry_classification_preserves_monthly_summaries(self):
+        expense_plan = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Alquiler",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="housing_home",
+            amount_annual=Decimal("9600.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos legacy",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 7, 11),
+            value_date=date(2026, 7, 11),
+            description="Gasto legacy a clasificar",
+        )
+        entry = LedgerEntry.objects.create(
+            transaction=tx,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("95.00"),
+            currency="EUR",
+            annual_expense_entry=expense_plan,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("95.00"),
+            currency="EUR",
+        )
+
+        before = build_monthly_accounting_summary(user_id=self.user.id, fiscal_year=2026)
+        result = backfill_ledger_entry_classification(user_id=self.user.id)
+        entry.refresh_from_db()
+        after = build_monthly_accounting_summary(user_id=self.user.id, fiscal_year=2026)
+
+        self.assertEqual(result.scanned, 1)
+        self.assertEqual(result.updated, 1)
+        self.assertEqual(result.ambiguous, 0)
+        self.assertEqual(before, after)
+        self.assertEqual(entry.flow_family, LedgerEntry.FlowFamily.EXPENSE)
+        self.assertEqual(entry.category_key, "consumption_expenses")
+        self.assertEqual(entry.subcategory_key, "housing_home")
+
     def test_quick_entry_transfer_requires_different_liquidity_account(self):
         second_cash_account = LedgerAccount.objects.create(
             user=self.user,
