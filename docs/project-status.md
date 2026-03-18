@@ -28,7 +28,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 | Refactor frontend — Fase 1 | Agente | Fronteras de arquitectura: eliminar wrappers puente, mover BaseModal/AppHeader a dominios, alinear index.ts. | `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md` |
 | Refactor frontend — Fase 2 | Agente | Shell + router: adelgazar App.vue, crear composables de shell, limpiar router, retirar residuales. | `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md` |
 | Refactor frontend — Fase 3a | Agente | Descomponer BudgetDashboardView (5,512 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md` |
-| Refactor frontend — Fase 3b | Agente | Descomponer NetWorthView (3,608 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3b-net-worth/frontend.md` |
 | Refactor frontend — Fase 3c | Agente | Descomponer DataInputView (2,742 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md` |
 | Refactor frontend — Fase 3d | Agente | Descomponer GuidePhaseDetailView (2,207 líneas), extraer lógica compartida con HomeView. | `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md` |
 | Refactor frontend — Fase 3e | Agente | Descomponer AccountingMovementsView (2,263 líneas) en secciones controladas. | `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md` |
@@ -84,7 +83,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Frontend refactor | 🔄 Planificado | `roadmap/frontend-refactor-roadmap.md`. 11 fases planificadas. Specs en `core/docs/tasks/frontend-refactor/`. BudgetDashboardView 5,512 líneas, NetWorthView 3,608 líneas. Coverage target ≥80%. |
+| Frontend refactor | 🔄 Planificado | `roadmap/frontend-refactor-roadmap.md`. Fase 3b (NetWorthView) completada; siguientes cortes abiertos en 3a/3c/3d/3e. El gate global de coverage ≥80% sigue pendiente en Fase 0. |
 
 ---
 
