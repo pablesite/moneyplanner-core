@@ -73,14 +73,16 @@ type ActivityFilter =
   | 'expense'
   | 'transfer'
   | 'investment_purchase'
-  | 'debt_payment';
+  | 'debt_payment'
+  | 'revaluation';
 type EditableActivityKind =
   | 'income'
   | 'expense'
   | 'transfer'
   | 'investment_purchase'
   | 'debt_payment'
-  | 'balance_adjustment';
+  | 'balance_adjustment'
+  | 'revaluation';
 type ClassificationActivityKind = 'income' | 'expense';
 type CounterpartyEditableKind = 'transfer' | 'investment_purchase' | 'debt_payment';
 
@@ -166,6 +168,7 @@ export function useAccountingPage() {
     annual_income_entry_id: null as number | null,
     annual_expense_entry_id: null as number | null,
     notes: '',
+    revaluation_new_value: '',
   });
   const lastQuickClassification = reactive<
     Record<'income' | 'expense' | 'debt_payment', LastQuickClassification>
@@ -367,6 +370,24 @@ export function useAccountingPage() {
         account.asset_id != null,
     ),
   );
+  const revaluationAccountOptions = computed(() =>
+    accounts.value.filter(
+      (account) => account.account_type === 'asset' && account.asset_id != null,
+    ),
+  );
+  const revaluationCurrentBalance = computed((): number | null => {
+    if (quickEntryForm.movement_type !== 'revaluation') return null;
+    if (quickEntryForm.account_id == null) return null;
+    const account = accountMap.value.get(quickEntryForm.account_id);
+    return account != null ? toNumber(account.current_balance) : null;
+  });
+  const revaluationDelta = computed((): number | null => {
+    const raw = quickEntryForm.revaluation_new_value.trim();
+    if (!raw) return null;
+    const currentBalance = revaluationCurrentBalance.value;
+    if (currentBalance == null) return null;
+    return round2(toNumber(raw) - currentBalance);
+  });
   const liabilityCounterpartyOptions = computed(() =>
     accounts.value.filter(
       (account) => account.account_type === 'liability' && account.liability_id != null,
@@ -390,6 +411,11 @@ export function useAccountingPage() {
   const quickEntryReady = computed(() => {
     if (!quickEntryForm.description.trim()) return false;
     if (!quickEntryForm.booking_date || !quickEntryForm.value_date) return false;
+    if (quickEntryForm.movement_type === 'revaluation') {
+      if (quickEntryForm.account_id == null) return false;
+      const delta = revaluationDelta.value;
+      return delta != null && Math.abs(delta) >= 0.005;
+    }
     const amountValue = toNumber(quickEntryForm.amount);
     if (amountValue <= 0) return false;
     if (quickEntryForm.account_id == null) return false;
@@ -474,6 +500,7 @@ export function useAccountingPage() {
     { value: 'transfer', label: 'Transferencia' },
     { value: 'investment_purchase', label: 'Compra inversion' },
     { value: 'debt_payment', label: 'Pago deuda' },
+    { value: 'revaluation', label: 'Revalorizacion' },
   ];
   const editMovementTypeOptions: { value: EditableActivityKind; label: string }[] = [
     { value: 'income', label: 'Ingreso' },
@@ -482,6 +509,7 @@ export function useAccountingPage() {
     { value: 'investment_purchase', label: 'Inversion' },
     { value: 'debt_payment', label: 'Deuda' },
     { value: 'balance_adjustment', label: 'Ajuste' },
+    { value: 'revaluation', label: 'Revalorizacion' },
   ];
   const editAccountOptions = computed(() =>
     accounts.value
@@ -598,6 +626,7 @@ export function useAccountingPage() {
       quickEntryForm.principal_amount = '';
       quickEntryForm.interest_amount = '';
       quickEntryForm.flow_family = '';
+      quickEntryForm.revaluation_new_value = '';
       if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
       if (movementType !== 'expense' && movementType !== 'debt_payment') {
         quickEntryForm.annual_expense_entry_id = null;
@@ -781,6 +810,110 @@ export function useAccountingPage() {
     }),
   );
 
+  // ── Tab state & per-account/all-movements pagination ──────────────
+  type MovementsTab = 'cuentas' | 'todos' | 'estadisticas';
+  const activeTab = ref<MovementsTab>('cuentas');
+
+  const MOVEMENTS_PAGE_SIZE = 50;
+  const cuentasSelectedAccountId = ref<number | null>(null);
+  const cuentasDateFrom = ref('');
+  const cuentasDateTo = ref('');
+  const cuentasVisibleCount = ref(MOVEMENTS_PAGE_SIZE);
+
+  const todosDateFrom = ref('');
+  const todosDateTo = ref('');
+  const todosVisibleCount = ref(MOVEMENTS_PAGE_SIZE);
+
+  function signedImpact(accountType: string, side: 'debit' | 'credit', amount: string): number {
+    const value = toNumber(amount);
+    if (value === 0) return 0;
+    const increasesOnDebit = accountType === 'asset' || accountType === 'expense';
+    return (increasesOnDebit ? side === 'debit' : side === 'credit') ? value : -value;
+  }
+
+  function impactTone(value: number): 'positive' | 'negative' | 'neutral' {
+    if (value > 0) return 'positive';
+    if (value < 0) return 'negative';
+    return 'neutral';
+  }
+
+  const cuentasSelectedAccount = computed(() =>
+    cuentasSelectedAccountId.value != null
+      ? accounts.value.find((a) => a.id === cuentasSelectedAccountId.value) ?? null
+      : null,
+  );
+
+  const cuentasRawTransactions = computed(() => {
+    if (cuentasSelectedAccountId.value === null) return [];
+    const accountId = cuentasSelectedAccountId.value;
+    const account = cuentasSelectedAccount.value;
+    if (!account) return [];
+    return transactions.value
+      .filter(
+        (t) =>
+          t.entries.some((e) => e.account_id === accountId) &&
+          (!cuentasDateFrom.value || t.booking_date >= cuentasDateFrom.value) &&
+          (!cuentasDateTo.value || t.booking_date <= cuentasDateTo.value),
+      )
+      .map((t) => {
+        const impactValue = t.entries
+          .filter((e) => e.account_id === accountId)
+          .reduce((sum, e) => sum + signedImpact(account.account_type, e.side, e.amount), 0);
+        return { ...t, impactValue, tone: impactTone(impactValue) };
+      });
+  });
+
+  const cuentasVisibleTransactions = computed(() =>
+    cuentasRawTransactions.value.slice(0, cuentasVisibleCount.value),
+  );
+
+  const cuentasHasMore = computed(
+    () => cuentasVisibleCount.value < cuentasRawTransactions.value.length,
+  );
+
+  function loadMoreCuentas() {
+    cuentasVisibleCount.value += MOVEMENTS_PAGE_SIZE;
+  }
+
+  watch(cuentasSelectedAccountId, () => {
+    cuentasVisibleCount.value = MOVEMENTS_PAGE_SIZE;
+  });
+
+  watch([cuentasDateFrom, cuentasDateTo], () => {
+    cuentasVisibleCount.value = MOVEMENTS_PAGE_SIZE;
+  });
+
+  const todosRawTransactions = computed(() =>
+    filteredTransactions.value.filter(
+      (t) =>
+        (!todosDateFrom.value || t.booking_date >= todosDateFrom.value) &&
+        (!todosDateTo.value || t.booking_date <= todosDateTo.value),
+    ),
+  );
+
+  const todosVisibleTransactions = computed(() =>
+    todosRawTransactions.value.slice(0, todosVisibleCount.value),
+  );
+
+  const todosHasMore = computed(
+    () => todosVisibleCount.value < todosRawTransactions.value.length,
+  );
+
+  function loadMoreTodos() {
+    todosVisibleCount.value += MOVEMENTS_PAGE_SIZE;
+  }
+
+  watch([activityFilters, todosDateFrom, todosDateTo], () => {
+    todosVisibleCount.value = MOVEMENTS_PAGE_SIZE;
+  });
+
+  function transactionMainAmount(t: (typeof transactions.value)[0]): number {
+    const debitTotal = t.entries
+      .filter((e) => e.side === 'debit')
+      .reduce((sum, e) => sum + toNumber(e.amount), 0);
+    return debitTotal;
+  }
+
   function resetAccountForm() {
     accountForm.name = '';
     accountForm.account_type = 'asset';
@@ -834,6 +967,7 @@ export function useAccountingPage() {
     quickEntryForm.annual_income_entry_id = null;
     quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
+    quickEntryForm.revaluation_new_value = '';
   }
   function resetEditTransactionForm() {
     editTransactionId.value = null;
@@ -860,6 +994,7 @@ export function useAccountingPage() {
     if (detected === 'expense') return 'expense';
     if (detected === 'investment_purchase') return 'investment_purchase';
     if (detected === 'debt_payment') return 'debt_payment';
+    if (detected === 'revaluation') return 'revaluation';
     return 'transfer';
   }
 
@@ -869,6 +1004,7 @@ export function useAccountingPage() {
     if (kind === 'transfer') return 'Transferencia';
     if (kind === 'investment_purchase') return 'Inversion';
     if (kind === 'debt_payment') return 'Deuda';
+    if (kind === 'revaluation') return 'Revalorizacion';
     return 'Ajuste';
   }
 
@@ -1057,7 +1193,7 @@ export function useAccountingPage() {
       setAccount(debitEntry, counterpartyAccountId);
       return nextEntries;
     }
-    if (kind === 'balance_adjustment') {
+    if (kind === 'balance_adjustment' || kind === 'revaluation') {
       return nextEntries;
     }
     setAccount(creditEntry, accountId);
@@ -1222,6 +1358,10 @@ export function useAccountingPage() {
     parsedAmount: number,
     selectedAccount: LedgerAccount,
   ): Promise<PersistedTransactionEntry[] | null> {
+    if (editTransactionForm.kind === 'revaluation') {
+      // For revaluation edits just rescale the existing entries to the new amount.
+      return scaleEntriesToAmount(editTransactionPersistedEntries.value, round2(parsedAmount));
+    }
     if (editTransactionForm.kind === 'balance_adjustment') {
       const targetBalance = round2(parsedAmount);
       const currentBalance = round2(toNumber(selectedAccount.current_balance));
@@ -1298,6 +1438,17 @@ export function useAccountingPage() {
     if (hasAssetPositionLink) return 'investment_purchase';
     if (assetEntries.length >= 2) return 'transfer';
 
+    // Revaluation: one entry is an investment account (asset with asset_id linked),
+    // the other is a non-asset system account (equity or expense counterparty).
+    const hasInvestmentAccountEntry = transaction.entries.some(
+      (entry) => (accountMap.value.get(entry.account_id)?.asset_id ?? null) != null,
+    );
+    const hasNonAssetEntry = transaction.entries.some((entry) => {
+      const acctType = accountMap.value.get(entry.account_id)?.account_type;
+      return acctType === 'equity' || acctType === 'expense';
+    });
+    if (hasInvestmentAccountEntry && hasNonAssetEntry) return 'revaluation';
+
     return 'other';
   }
 
@@ -1308,6 +1459,7 @@ export function useAccountingPage() {
     if (kind === 'transfer') return 'Transferencia';
     if (kind === 'investment_purchase') return 'Compra inversion';
     if (kind === 'debt_payment') return 'Pago deuda';
+    if (kind === 'revaluation') return 'Revalorizacion';
     return 'Asiento';
   }
 
@@ -1344,7 +1496,7 @@ export function useAccountingPage() {
       incomeStore.loadAll(selectedYear.value),
       expenseStore.loadAll(selectedYear.value),
     ]);
-    await store.setPeriod(selectedYear.value, selectedMonth.value);
+    await store.setStatsYear(selectedYear.value);
   }
 
   async function refreshManualPositionOptions() {
@@ -1577,7 +1729,58 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento contable eliminado.';
   }
 
+  async function submitRevaluationEntry() {
+    successMessage.value = null;
+    const delta = revaluationDelta.value;
+    if (delta == null || Math.abs(delta) < 0.005) {
+      store.error = 'El valor nuevo no genera una variacion suficiente respecto al saldo actual.';
+      return;
+    }
+    if (quickEntryForm.account_id == null) {
+      store.error = 'Selecciona la cuenta de inversion.';
+      return;
+    }
+    const investmentAccount = accountMap.value.get(quickEntryForm.account_id);
+    if (!investmentAccount) {
+      store.error = 'La cuenta seleccionada no existe.';
+      return;
+    }
+    const counterpartyId = await ensureAdjustmentCounterpartyAccountId(investmentAccount.currency);
+    if (counterpartyId == null) {
+      store.error = 'No hay cuenta de contrapartida para registrar la revalorizacion.';
+      return;
+    }
+    const counterpartyAccount = accountMap.value.get(counterpartyId);
+    if (!counterpartyAccount) {
+      store.error = 'No se pudo resolver la cuenta de contrapartida.';
+      return;
+    }
+    const entries = buildBalanceAdjustmentEntries(delta, investmentAccount, counterpartyAccount);
+    const payload: LedgerTransactionWritePayload = {
+      booking_date: quickEntryForm.booking_date,
+      value_date: quickEntryForm.value_date,
+      description: quickEntryForm.description.trim(),
+      status: 'posted',
+      origin: 'manual',
+      notes: quickEntryForm.notes.trim(),
+      entries: entries.map((entry) => ({
+        account_id: entry.account_id,
+        side: entry.side,
+        amount: entry.amount,
+        currency: entry.currency,
+        notes: '',
+      })),
+    };
+    await store.createTransaction(payload);
+    resetQuickEntryForm();
+    successMessage.value = 'Revalorizacion registrada.';
+  }
+
   async function submitQuickEntry() {
+    if (quickEntryForm.movement_type === 'revaluation') {
+      await submitRevaluationEntry();
+      return;
+    }
     successMessage.value = null;
     const payload: QuickLedgerTransactionWritePayload = {
       movement_type: quickEntryForm.movement_type,
@@ -1740,6 +1943,9 @@ export function useAccountingPage() {
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
     debtInterestOptions,
+    revaluationAccountOptions,
+    revaluationCurrentBalance,
+    revaluationDelta,
     quickEntryReady,
     editEntryReady,
     debitTotal,
@@ -1747,6 +1953,22 @@ export function useAccountingPage() {
     transactionBalanced,
     summaryRows,
     filteredTransactions,
+    activeTab,
+    cuentasSelectedAccountId,
+    cuentasSelectedAccount,
+    cuentasDateFrom,
+    cuentasDateTo,
+    cuentasRawTransactions,
+    cuentasVisibleTransactions,
+    cuentasHasMore,
+    loadMoreCuentas,
+    todosDateFrom,
+    todosDateTo,
+    todosRawTransactions,
+    todosVisibleTransactions,
+    todosHasMore,
+    loadMoreTodos,
+    transactionMainAmount,
     addEntry,
     activityKindLabel,
     liquidityBalanceDeltaTone,
