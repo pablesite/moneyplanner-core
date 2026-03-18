@@ -136,6 +136,8 @@ def _parse_moneywiz_rows(
     rows: list[MoneyWizRow] = []
     seen: dict[str, int] = {}
     for row_number, raw_row in enumerate(reader, start=2):
+        if _is_account_summary_row(raw_row):
+            continue
         row = _normalize_row(
             user_id=user_id,
             row_number=row_number,
@@ -149,6 +151,18 @@ def _parse_moneywiz_rows(
             seen[row.fingerprint] = row_number
         rows.append(row)
     return rows
+
+
+def _is_account_summary_row(raw_row: dict[str, str | None]) -> bool:
+    """Detecta filas de cabecera de cuenta (ej. MoneyWiz), que tienen nombre/saldo
+    pero no tienen fecha ni importe de transacción. Se saltan silenciosamente."""
+    normalized = _normalize_headers(raw_row)
+    has_date = bool(normalized.get("date"))
+    has_amount = any(
+        normalized.get(f)
+        for f in ("amount", "amount_incomes", "amount_expenses", "credits", "debits")
+    )
+    return not has_date and not has_amount
 
 
 def _normalize_row(
@@ -837,18 +851,18 @@ def _normalize_headers(raw_row: dict[str, str | None]) -> dict[str, str]:
 def _canonical_header(value: str | None) -> str | None:
     normalized = _normalize_lookup_text(value or "")
     aliases = {
-        "date": {"date", "booking date", "transaction date", "booking_date"},
-        "description": {"description", "payee", "name"},
-        "memo": {"memo", "note", "notes"},
-        "category": {"category", "categories"},
-        "account": {"account", "account name", "from account"},
-        "transfers": {"transfers", "transfer", "transfer account", "to"},
-        "amount": {"amount"},
+        "date": {"date", "booking date", "transaction date", "booking_date", "fecha"},
+        "description": {"description", "payee", "name", "descripcion", "beneficiario"},
+        "memo": {"memo", "note", "notes", "memoria"},
+        "category": {"category", "categories", "categoria"},
+        "account": {"account", "account name", "from account", "cuentas"},
+        "transfers": {"transfers", "transfer", "transfer account", "to", "transferencias"},
+        "amount": {"amount", "importe"},
         "amount_expenses": {"amount expenses", "amount (expenses)", "amount expense"},
         "amount_incomes": {"amount incomes", "amount (incomes)", "amount income"},
         "credits": {"credits", "credit"},
         "debits": {"debits", "debit"},
-        "currency": {"currency", "currency code"},
+        "currency": {"currency", "currency code", "moneda"},
         "account_currency": {"account currency"},
         "currency_code": {"currency code"},
     }
