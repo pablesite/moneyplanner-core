@@ -470,23 +470,17 @@ def _infer_movement_type(
     ):
         return "investment_purchase"
     # Categorías que fuerzan un tipo concreto independientemente del signo del importe.
-    normalized_category_parts = [_normalize_lookup_text(p) for p in category_raw.split(">")]
-    normalized_category_parts = [p for p in normalized_category_parts if p]
-    for length in range(len(normalized_category_parts), 0, -1):
-        candidate = " > ".join(normalized_category_parts[:length])
-        if candidate in _MONEYWIZ_DEBT_PAYMENT_PATHS:
-            return "debt_payment"
-        if candidate in _MONEYWIZ_INCOME_PATHS_ALWAYS:
-            return "income"
+    if _match_moneywiz_path_set(category_raw, _MONEYWIZ_DEBT_PAYMENT_PATHS):
+        return "debt_payment"
+    if _match_moneywiz_path_set(category_raw, _MONEYWIZ_INCOME_PATHS_ALWAYS):
+        return "income"
 
     if row.get("amount_expenses") or row.get("debits") or amount < ZERO:
         # Categorías de "Pasivos > Activos financieros" que representan compra de
-        # activos financieros (dinero de liquidez → inversión). Se tratan como
-        # investment_purchase aunque el CSV las venga como débito/gasto.
-        for length in range(len(normalized_category_parts), 0, -1):
-            candidate = " > ".join(normalized_category_parts[:length])
-            if candidate in _MONEYWIZ_INVESTMENT_PURCHASE_PATHS:
-                return "investment_purchase"
+        # activos financieros (dinero de liquidez → inversión) aunque el CSV los
+        # exporte como débito.
+        if _match_moneywiz_path_set(category_raw, _MONEYWIZ_INVESTMENT_PURCHASE_PATHS):
+            return "investment_purchase"
         return "expense"
     return "income"
 
@@ -503,6 +497,16 @@ def _lookup_moneywiz_path(
         if key in path_map:
             return path_map[key]
     return None
+
+
+def _match_moneywiz_path_set(category_raw: str, path_set: frozenset[str]) -> bool:
+    """Returns True if any prefix of the category path is in path_set."""
+    parts = [_normalize_lookup_text(p) for p in category_raw.split(">")]
+    parts = [p for p in parts if p]
+    for length in range(len(parts), 0, -1):
+        if " > ".join(parts[:length]) in path_set:
+            return True
+    return False
 
 
 def _classify_row(
