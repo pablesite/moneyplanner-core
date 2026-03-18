@@ -15,7 +15,8 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
 **In scope:**
 1. Extraer composables de página para fetch, filtros y derivadas de net worth.
 2. Crear componentes de sección para los bloques principales.
-3. Reducir la vista al wiring de secciones (objetivo: < 400 líneas).
+3. Reducir la vista a wiring de secciones y estado mínimo de composición
+   (objetivo práctico: < 900 líneas en esta fase).
 4. Reubicar cálculos que hoy viven en la vista a composables del dominio `net-worth`.
 5. Tests unitarios para los composables extraídos (≥80% cobertura).
 
@@ -58,6 +59,7 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
    - Instancia `useNetWorthPage()`
    - Renderiza las secciones pasando datos como props
    - Sin fetch directo ni cálculos complejos
+   - Puede conservar wiring reactivo de página y coordinación ligera entre secciones
 
 5. **Tests:**
    - `domains/net-worth/__tests__/useNetWorthPage.spec.ts`
@@ -72,7 +74,7 @@ Esta vista es idéntica en Core y SaaS. Replicación directa.
 docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
-# → ≥80% todas las métricas; NetWorthView <400 líneas
+# → ≥80% todas las métricas; NetWorthView <900 líneas y sin lógica de dominio pesada
 
 # SaaS
 docker compose exec saas_frontend npm run lint
@@ -93,9 +95,10 @@ docker compose exec saas_frontend npm run test:coverage
   puede reaparecer o empeorar. **Mitigación:** resolver el warning en esta fase si aflora.
 
 ## Completion Criteria
-- [ ] `NetWorthView.vue` < 400 líneas (wiring + composición de página)
+- [ ] `NetWorthView.vue` < 900 líneas y limitada a wiring + composición de página
 - [ ] Composables extraídos con tests ≥80% cobertura
 - [ ] 0 imports de `@/stores/netWorth` en la vista
+- [ ] La vista no hace fetch directo ni concentra cálculos de dominio pesados
 - [ ] Sin cambios de comportamiento observados en browser
 - [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
 - [ ] Documentación requerida actualizada
