@@ -149,7 +149,7 @@ _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     "deudores > prestamo personal": ("other_income", "misc"),
     "deudores": ("other_income", "misc"),
     # Ganancias de capital
-    "ganancias de capital > ventas activos": ("capital_gains", "sale_financial_assets"),
+    "ganancias de capital > ventas activos": ("capital_gains", "sale_personal_asset"),
     "ganancias de capital": ("capital_gains", "other_capital_gains"),
 }
 
