@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BudgetHeroSection from '@/domains/budget/components/BudgetHeroSection.vue';
+import BudgetMonthlyCloseExpenseSection from '@/domains/budget/components/BudgetMonthlyCloseExpenseSection.vue';
 import BudgetMonthlyCloseIncomeSection from '@/domains/budget/components/BudgetMonthlyCloseIncomeSection.vue';
 import BudgetMonthlyCloseLiquiditySection from '@/domains/budget/components/BudgetMonthlyCloseLiquiditySection.vue';
 import BudgetMonthlyCloseResultSection from '@/domains/budget/components/BudgetMonthlyCloseResultSection.vue';
@@ -2392,262 +2393,35 @@ watch(
     <div v-if="!isMonthlyCloseView && liquidityExecutionError" class="alert mt-3">
       {{ liquidityExecutionError }}
     </div>
-
-    <section
-      v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'expense'"
-      class="card ui-pro-panel ui-budget-checkin mt-3"
-    >
-      <div class="ui-budget-checkin-header">
-        <div>
-          <div v-if="isMonthlyCloseView" class="ui-monthly-close-step-headline">
-            <button
-              type="button"
-              class="btn ui-monthly-close-step-nav-btn"
-              @click="goToPreviousMonthlyCloseStep()"
-            >
-              ←
-            </button>
-            <h2 class="ui-budget-checkin-title">Paso 3 · Check-in mensual de gastos</h2>
-            <button
-              type="button"
-              class="btn ui-monthly-close-step-nav-btn"
-              @click="goToNextMonthlyCloseStep()"
-            >
-              →
-            </button>
-          </div>
-          <h2 v-else class="ui-budget-checkin-title">Check-in mensual de gastos</h2>
-          <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-            Ledger categorizado por taxonomia compartida y fallback legacy explicito solo cuando
-            falte esa clasificacion.
-          </p>
-          <p class="ui-budget-checkin-subtitle">
-            Cierre mensual rápido de `Gastos` (14C v1). `Ingresos` se integrará después con el mismo
-            patrón.
-          </p>
-        </div>
-        <div v-if="!isMonthlyCloseView" class="ui-budget-checkin-controls">
-          <label>
-            <span>Mes</span>
-            <select
-              v-model="selectedExecutionMonth"
-              class="select ui-data-field"
-              :disabled="expenseExecutionLoading"
-            >
-              <option v-for="(label, index) in monthLabels" :key="label" :value="index + 1">
-                {{ label }}
-              </option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div v-if="expenseMonthlySummary" class="ui-budget-checkin-summary-grid">
-        <article class="ui-budget-checkin-kpi">
-          <span>Previsto mes</span>
-          <strong>{{ formatMoney(selectedExpenseMonthPlanned) }} €</strong>
-        </article>
-        <article class="ui-budget-checkin-kpi">
-          <span>Ejecutado mes</span>
-          <strong>{{ formatMoney(selectedExpenseMonthExecuted) }} €</strong>
-        </article>
-        <article
-          class="ui-budget-checkin-kpi"
-          :class="{
-            'ui-budget-checkin-kpi-danger': selectedExpenseMonthDeviation > 0,
-            'ui-budget-checkin-kpi-good': selectedExpenseMonthDeviation < 0,
-          }"
-        >
-          <span>Desviación del mes</span>
-          <strong>
-            {{ selectedExpenseMonthDeviation > 0 ? '+' : ''
-            }}{{ formatMoney(selectedExpenseMonthDeviation) }} €
-          </strong>
-        </article>
-        <article class="ui-budget-checkin-kpi">
-          <span>Completitud</span>
-          <strong>{{ formatPercent(monthlyExpenseCoverageSummary.ratio, 0) }}</strong>
-        </article>
-      </div>
-
-      <div class="ui-budget-checkin-list">
-        <div v-if="expenseExecutionLoading" class="subtle">Cargando check-ins mensuales...</div>
-        <div v-else-if="!groupedMonthlyExpenseExecutionEntries.length" class="subtle">
-          No hay gastos previstos para este mes con los filtros actuales.
-        </div>
-        <div v-else class="ui-budget-checkin-groups-box">
-          <div class="ui-budget-execution-note">
-            <div class="ui-budget-execution-note-main">
-              <strong>Cobertura del mes</strong>
-              <span>
-                {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger categorizado ·
-                {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
-                {{ monthlyExpenseCoverageSummary.pending }} pendientes
-              </span>
-              <small class="ui-budget-execution-note-detail">
-                {{ monthlyExpenseCoverageDetail }}
-              </small>
-            </div>
-            <span class="ui-budget-execution-badge">{{ monthlyExpenseCoverageLabel }}</span>
-          </div>
-          <div
-            v-if="monthlyExpensePendingClassification.amount > 0"
-            class="ui-state-block ui-state-error"
-          >
-            <strong>Pendiente clasificar</strong>
-            <span>
-              {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del ledger no se
-              puede alinear automaticamente con el presupuesto de este mes.
-            </span>
-            <small v-if="monthlyExpensePendingClassification.ambiguousRows > 0">
-              {{ monthlyExpensePendingClassification.ambiguousRows }} lineas comparten la misma
-              subcategoria y requieren revision manual.
-            </small>
-          </div>
-          <details
-            v-for="group in groupedMonthlyExpenseExecutionEntries"
-            :key="`expense-checkin-group-${group.categoryKey}`"
-            class="ui-budget-checkin-group"
-            open
-          >
-            <summary class="ui-budget-checkin-group-summary">
-              <div class="ui-budget-checkin-group-title-wrap">
-                <strong class="ui-budget-checkin-group-title">{{ group.categoryLabel }}</strong>
-                <span class="ui-budget-checkin-group-meta">
-                  {{ group.rows.length }} líneas · {{ Math.round(group.completionRatio * 100) }} %
-                  completitud
-                </span>
-              </div>
-              <div class="ui-budget-checkin-group-kpis">
-                <span>P {{ formatMoney(group.plannedTotal) }} €</span>
-                <span>E {{ formatMoney(group.executedTotal) }} €</span>
-                <span
-                  :class="{
-                    'ui-budget-checkin-group-dev-pos': group.deviation > 0,
-                    'ui-budget-checkin-group-dev-neg': group.deviation < 0,
-                  }"
-                >
-                  D {{ group.deviation > 0 ? '+' : '' }}{{ formatMoney(group.deviation) }} €
-                </span>
-              </div>
-            </summary>
-
-            <div class="ui-budget-checkin-group-rows">
-              <article
-                v-for="row in group.rows"
-                :key="`expense-checkin-${row.entry.id}`"
-                class="ui-budget-checkin-row"
-              >
-                <div class="ui-budget-checkin-row-main">
-                  <div
-                    v-if="row.executionSource !== 'none'"
-                    class="ui-budget-execution-chip"
-                    :class="{
-                      'ui-budget-execution-chip-ledger':
-                        row.executionOrigin === 'categorized_ledger',
-                    }"
-                  >
-                    {{ executionSourceLabel(row.executionOrigin) }}
-                  </div>
-                  <div class="ui-budget-checkin-row-title" :title="expenseCheckinRowSummary(row)">
-                    {{ expenseCheckinRowSummary(row) }}
-                    <span class="ui-budget-checkin-row-planned">
-                      (Previsto {{ formatMoney(row.planned) }} €)
-                    </span>
-                    <template v-if="row.entry.expenseType === 'one_off'"> · Puntual</template>
-                  </div>
-                  <div
-                    v-if="
-                      row.executionOrigin === 'categorized_ledger' ||
-                      row.executionOrigin === 'legacy_ledger' ||
-                      row.executionOrigin === 'ambiguous_taxonomy'
-                    "
-                    class="ui-budget-checkin-row-state"
-                  >
-                    <strong>{{ executionSourceLabel(row.executionOrigin) }}</strong>
-                    <template v-if="row.executed != null"
-                      >({{ formatMoney(row.executed) }} EUR)</template
-                    >
-                    <span
-                      v-if="
-                        row.executionOrigin === 'categorized_ledger' ||
-                        row.executionOrigin === 'legacy_ledger'
-                      "
-                      class="ui-budget-checkin-row-lock-note"
-                      >Edicion legacy bloqueada</span
-                    >
-                    <span v-else class="ui-budget-checkin-row-lock-note">
-                      Varias lineas comparten esta subcategoria.
-                    </span>
-                  </div>
-                  <div v-if="row.checkin" class="ui-budget-checkin-row-state">
-                    <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
-                    <template v-if="row.checkin.status !== 'skipped' && row.executed != null">
-                      ({{ formatMoney(row.executed) }} €)
-                    </template>
-                  </div>
-                </div>
-
-                <div class="ui-budget-checkin-row-actions">
-                  <div class="ui-budget-checkin-adjust">
-                    <div class="ui-budget-checkin-quick-actions">
-                      <button
-                        type="button"
-                        class="btn ui-budget-checkin-mini-btn"
-                        :disabled="
-                          isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
-                        "
-                        title="Poner importe ejecutado a 0"
-                        @click="resetExpenseCheckinDraftValue(row, 'zero')"
-                      >
-                        Borrar
-                      </button>
-                      <button
-                        type="button"
-                        class="btn ui-budget-checkin-mini-btn"
-                        :disabled="
-                          isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
-                        "
-                        title="Restaurar importe previsto del mes"
-                        @click="resetExpenseCheckinDraftValue(row, 'planned')"
-                      >
-                        Previsto
-                      </button>
-                    </div>
-                    <input
-                      v-model="expenseAdjustAmounts[row.entry.id]"
-                      inputmode="decimal"
-                      class="input ui-data-field"
-                      :disabled="isLockedExecutionRow(row)"
-                      placeholder="Importe ejecutado"
-                      @focus="ensureExpenseAdjustAmountPrefilled(row)"
-                      @blur="onExpenseAdjustAmountBlur(row)"
-                      @keydown.enter.prevent="saveExpenseCheckinFromInput(row)"
-                    />
-                  </div>
-                  <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
-                    <input
-                      type="checkbox"
-                      :checked="row.executionSource !== 'none'"
-                      :disabled="
-                        isLockedExecutionRow(row) || expenseExecutionBusyEntryId === row.entry.id
-                      "
-                      aria-label="Confirmar check-in del mes"
-                      @change="
-                        onExpenseCheckinCheckboxToggle(
-                          row,
-                          Boolean(($event.target as HTMLInputElement).checked),
-                        )
-                      "
-                    />
-                  </label>
-                </div>
-              </article>
-            </div>
-          </details>
-        </div>
-      </div>
-    </section>
+    <BudgetMonthlyCloseExpenseSection
+      :is-monthly-close-view="isMonthlyCloseView"
+      :active-monthly-close-step="activeMonthlyCloseStep"
+      :expense-monthly-summary="expenseMonthlySummary"
+      :expense-execution-loading="expenseExecutionLoading"
+      :expense-execution-busy-entry-id="expenseExecutionBusyEntryId"
+      :grouped-monthly-expense-execution-entries="groupedMonthlyExpenseExecutionEntries"
+      :monthly-expense-coverage-summary="monthlyExpenseCoverageSummary"
+      :monthly-expense-coverage-detail="monthlyExpenseCoverageDetail"
+      :monthly-expense-coverage-label="monthlyExpenseCoverageLabel"
+      :monthly-expense-pending-classification="monthlyExpensePendingClassification"
+      :expense-adjust-amounts="expenseAdjustAmounts"
+      :selected-expense-month-planned="selectedExpenseMonthPlanned"
+      :selected-expense-month-executed="selectedExpenseMonthExecuted"
+      :selected-expense-month-deviation="selectedExpenseMonthDeviation"
+      :format-money="formatMoney"
+      :format-percent="formatPercent"
+      :execution-source-label="executionSourceLabel"
+      :expense-checkin-row-summary="expenseCheckinRowSummary"
+      :checkin-status-label="checkinStatusLabel"
+      :is-locked-execution-row="isLockedExecutionRow"
+      :go-to-previous-monthly-close-step="goToPreviousMonthlyCloseStep"
+      :go-to-next-monthly-close-step="goToNextMonthlyCloseStep"
+      :reset-expense-checkin-draft-value="resetExpenseCheckinDraftValue"
+      :ensure-expense-adjust-amount-prefilled="ensureExpenseAdjustAmountPrefilled"
+      :on-expense-adjust-amount-blur="onExpenseAdjustAmountBlur"
+      :save-expense-checkin-from-input="saveExpenseCheckinFromInput"
+      :on-expense-checkin-checkbox-toggle="onExpenseCheckinCheckboxToggle"
+    />
 
     <BudgetMonthlyCloseLiquiditySection
       :is-monthly-close-view="isMonthlyCloseView"
