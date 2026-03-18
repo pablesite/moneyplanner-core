@@ -78,6 +78,18 @@ _MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
     "acreedores": ("consumption_expenses", "financial_commitments"),
 }
 
+# Subcategorías de "Pasivos > Activos financieros" que en MoneyWiz representan
+# compras de activos (dinero saliendo de liquidez hacia inversión), no ingresos.
+# Cuando el importe es negativo, se tratan como investment_purchase.
+_MONEYWIZ_INVESTMENT_PURCHASE_PATHS: frozenset[str] = frozenset(
+    {
+        "pasivos > activos financieros > fondos",
+        "pasivos > activos financieros > st criptos",
+        "pasivos > activos financieros > dt criptos",
+        "pasivos > activos financieros > spot act financieros",
+    }
+)
+
 _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     # Salarios
     "salarios": ("salary", "employee_salary"),
@@ -429,6 +441,15 @@ def _infer_movement_type(
     ):
         return "investment_purchase"
     if row.get("amount_expenses") or row.get("debits") or amount < ZERO:
+        # Categorías de "Pasivos > Activos financieros" que representan compra de
+        # activos financieros (dinero de liquidez → inversión). Se tratan como
+        # investment_purchase aunque el CSV las venga como débito/gasto.
+        normalized_category_parts = [_normalize_lookup_text(p) for p in category_raw.split(">")]
+        normalized_category_parts = [p for p in normalized_category_parts if p]
+        for length in range(len(normalized_category_parts), 0, -1):
+            candidate = " > ".join(normalized_category_parts[:length])
+            if candidate in _MONEYWIZ_INVESTMENT_PURCHASE_PATHS:
+                return "investment_purchase"
         return "expense"
     return "income"
 
