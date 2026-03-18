@@ -89,6 +89,15 @@ _MONEYWIZ_DEBT_PAYMENT_PATHS: frozenset[str] = frozenset(
     }
 )
 
+# Categorías de MoneyWiz que representan compra de inversión con independencia
+# del signo del importe. "Inversiones Gastos" siempre es una salida de liquidez
+# hacia un activo de inversión, aunque el CSV lo exporte con importe positivo.
+_MONEYWIZ_INVESTMENT_PURCHASE_PATHS_ALWAYS: frozenset[str] = frozenset(
+    {
+        "inversiones gastos",
+    }
+)
+
 _MONEYWIZ_INVESTMENT_PURCHASE_PATHS: frozenset[str] = frozenset(
     {
         "pasivos > activos financieros > fondos",
@@ -448,13 +457,15 @@ def _infer_movement_type(
         )
     ):
         return "investment_purchase"
-    # Categorías que representan amortización de deuda (independiente del signo).
+    # Categorías que fuerzan un tipo concreto independientemente del signo del importe.
     normalized_category_parts = [_normalize_lookup_text(p) for p in category_raw.split(">")]
     normalized_category_parts = [p for p in normalized_category_parts if p]
     for length in range(len(normalized_category_parts), 0, -1):
         candidate = " > ".join(normalized_category_parts[:length])
         if candidate in _MONEYWIZ_DEBT_PAYMENT_PATHS:
             return "debt_payment"
+        if candidate in _MONEYWIZ_INVESTMENT_PURCHASE_PATHS_ALWAYS:
+            return "investment_purchase"
 
     if row.get("amount_expenses") or row.get("debits") or amount < ZERO:
         # Categorías de "Pasivos > Activos financieros" que representan compra de
