@@ -32,12 +32,16 @@ from .serializers import (
     NetWorthSnapshotSerializer,
 )
 from .services import (
-    delete_generated_budget_commitments_for_asset,
-    delete_generated_budget_commitments_for_liability,
     get_financed_asset_queryset_for_user,
     get_base_currency_for_user,
     get_liquidity_asset_queryset_for_user,
+)
+from .services_assets_budget import (
+    delete_generated_budget_commitments_for_asset,
     sync_generated_budget_commitments_for_asset,
+)
+from .services_liabilities_budget import (
+    delete_generated_budget_commitments_for_liability,
     sync_generated_budget_commitments_for_liability,
 )
 from .services_liquidity import (

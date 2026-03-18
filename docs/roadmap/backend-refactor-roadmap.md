@@ -11,7 +11,7 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 |------|--------|------|--------|
 | 1 | Test coverage baseline (≥80% por app) | `core/docs/tasks/backend-refactor/terminados/phase-1-test-coverage-baseline/backend.md` | ✅ |
 | 2 | Particion `accounting/services.py` | `core/docs/tasks/backend-refactor/terminados/phase-2-accounting-services-partition/backend.md` | Completada |
-| 3 | net_worth domain cleanup | `core/docs/tasks/backend-refactor/phase-3-net-worth-domain-cleanup/backend.md` | ⚪ |
+| 3 | net_worth domain cleanup | `core/docs/tasks/backend-refactor/terminados/phase-3-net-worth-domain-cleanup/backend.md` | Completada |
 | 4 | Boundary enforcement cross-domain | `core/docs/tasks/backend-refactor/phase-4-boundary-enforcement/backend.md` | ⚪ |
 | 5 | DX docs y guía de contribución | `core/docs/tasks/backend-refactor/phase-5-dx-docs/backend.md` | ⚪ |
 
@@ -20,9 +20,9 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 | Archivo | Líneas | Riesgo | Acción |
 |---------|--------|--------|--------|
 | `accounting/services_*.py` + `services.py` facade | 920 aprox. (5 m�dulos + facade) | Medio | Fase 2 completada: partici�n aplicada y facade de compatibilidad mantenida |
-| `net_worth/services_assets.py` | 1,232 | Alto | Fase 3: partir en _core + _budget |
-| `net_worth/services_liabilities.py` | 1,053 | Alto | Fase 3: partir en _core + _budget |
-| `net_worth/services.py` (facade) | 204 | Medio | Fase 3: adelgazar a ≤80 líneas |
+| `net_worth/services_assets_core.py` + `services_assets_budget.py` | 1082 aprox. | Medio | Fase 3 completada: particion por subdominio aplicada |
+| `net_worth/services_liabilities_core.py` + `services_liabilities_budget.py` | 935 aprox. | Medio | Fase 3 completada: particion por subdominio aplicada |
+| `net_worth/services.py` (facade) | 63 | Bajo | Fase 3 completada: facade residual y minima |
 | `net_worth/tests/test_*.py` (7 ficheros) | 4,509 | Medio | Fase 1 completada: suite dividida por dominio |
 | `budget/test_services.py` | 43 | Alto | Fase 1: expandir a ≥300 líneas |
 | `core/tests.py` | 715 | Medio | Fase 1: añadir unit tests portable_data/market_data |
@@ -396,5 +396,6 @@ Ejecutar dentro de contenedores. No usar `docker compose down -v`.
 3. Los boundaries entre ejecucion, plan y patrimonio quedan mas claros.
 4. Los hotspots reales quedan protegidos con tests y decisiones trazables.
 5. Otra persona puede continuar el trabajo sin depender de contexto oral.
+
 
 

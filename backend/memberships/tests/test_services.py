@@ -115,7 +115,7 @@ class MembershipsServicesTests(TestCase):
             ).exists()
         )
 
-    @patch("net_worth.services.sync_generated_budget_commitments_for_asset")
+    @patch("net_worth.services_assets_budget.sync_generated_budget_commitments_for_asset")
     def test_sync_ownership_link_for_asset_triggers_budget_sync_side_effect(self, sync_mock):
         member = FamilyMember.objects.create(
             user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
@@ -147,7 +147,7 @@ class MembershipsServicesTests(TestCase):
         self.assertEqual(result, {"ok": True, "ownership_id": ownership.id})
         sync_mock.assert_called_once()
 
-    @patch("net_worth.services.sync_generated_budget_commitments_for_liability")
+    @patch("net_worth.services_liabilities_budget.sync_generated_budget_commitments_for_liability")
     def test_sync_ownership_link_for_liability_triggers_budget_sync_side_effect(self, sync_mock):
         member = FamilyMember.objects.create(
             user=self.user, name="Pablo", role=FamilyMember.Role.ADULT

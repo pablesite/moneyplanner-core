@@ -22,37 +22,41 @@ from ..models import (
 )
 from ..services import (
     NetWorthTotals,
-    build_net_worth_summary,
     calculate_totals,
-    create_asset_for_user,
-    create_liability_for_user,
-    create_or_update_snapshot_from_current,
-    create_snapshot_for_user,
-    estimate_liability_monthly_payment_simple,
-    estimate_liability_outstanding_amount_simple,
     get_base_currency_for_user,
-    get_effective_asset_amount,
-    get_effective_liability_amount,
-    get_investment_asset_events_delta,
-    get_liability_events_delta,
-    get_liquidity_asset_events_delta,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
     get_inflation_region_for_user,
+)
+from ..services_assets_core import (
+    AccountingIntegrationState as AssetAccountingIntegrationState,
+    create_asset_for_user,
+    ensure_asset_accounting_account,
     get_amount_base_value,
-    infer_liability_is_asset_backed,
-    serialize_net_worth_summary,
+    get_effective_asset_amount,
+    get_investment_asset_events_delta,
+    get_liquidity_asset_events_delta,
     validate_asset_payload,
+)
+from ..services_liabilities_core import (
+    AccountingIntegrationState as LiabilityAccountingIntegrationState,
+    create_liability_for_user,
+    ensure_liability_accounting_account,
+    estimate_liability_monthly_payment_simple,
+    estimate_liability_outstanding_amount_simple,
+    get_effective_liability_amount,
+    get_liability_events_delta,
+    infer_liability_is_asset_backed,
     validate_liability_payload,
+)
+from ..services_snapshots import (
+    create_or_update_snapshot_from_current,
+    create_snapshot_for_user,
     validate_snapshot_payload,
 )
-from ..services_assets import (
-    AccountingIntegrationState as AssetAccountingIntegrationState,
-    ensure_asset_accounting_account,
-)
-from ..services_liabilities import (
-    AccountingIntegrationState as LiabilityAccountingIntegrationState,
-    ensure_liability_accounting_account,
+from ..services_summaries import (
+    build_net_worth_summary,
+    serialize_net_worth_summary,
 )
 from ..services_timelines import (
     build_asset_timeline,
@@ -520,7 +524,7 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(value, Decimal("10.00"))
 
-    @patch("net_worth.services_assets.convert_currency", return_value=Decimal("90.50"))
+    @patch("net_worth.services_assets_core.convert_currency", return_value=Decimal("90.50"))
     def test_get_amount_base_value_success(self, _convert_mock):
         value = get_amount_base_value(
             amount=Decimal("100.00"),
@@ -530,7 +534,7 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(value, "90.50")
 
-    @patch("net_worth.services_assets.convert_currency", side_effect=Exception("fx error"))
+    @patch("net_worth.services_assets_core.convert_currency", side_effect=Exception("fx error"))
     def test_get_amount_base_value_returns_none_on_conversion_error(self, _convert_mock):
         value = get_amount_base_value(
             amount=Decimal("100.00"),

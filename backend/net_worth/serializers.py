@@ -18,7 +18,7 @@ from .models import (
     LiquidityMonthlyCheckin,
     NetWorthSnapshot,
 )
-from .services_assets import (
+from .services_assets_core import (
     AccountingIntegrationState as AssetAccountingIntegrationState,
     RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES,
     create_asset_for_user,
@@ -31,7 +31,7 @@ from .services_assets import (
     validate_liquidity_asset_event_payload,
     validate_asset_payload,
 )
-from .services_liabilities import (
+from .services_liabilities_core import (
     AccountingIntegrationState as LiabilityAccountingIntegrationState,
     create_liability_for_user,
     ensure_liability_accounting_account,
