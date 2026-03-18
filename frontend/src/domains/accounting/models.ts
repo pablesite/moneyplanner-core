@@ -226,6 +226,14 @@ export type MoneyWizImportPreviewRow = {
   errors: string[];
 };
 
+export type MoneyWizUnmappedCategory = {
+  category_raw: string;
+  movement_type: 'income' | 'expense';
+  fallback_category_key: string;
+  fallback_subcategory_key: string;
+  row_count: number;
+};
+
 export type MoneyWizImportPreview = {
   delimiter: string;
   row_count: number;
@@ -236,6 +244,7 @@ export type MoneyWizImportPreview = {
   warnings: string[];
   stats: MoneyWizImportStats;
   detected_accounts: MoneyWizImportDetectedAccount[];
+  unmapped_categories: MoneyWizUnmappedCategory[];
   rows: MoneyWizImportPreviewRow[];
 };
 

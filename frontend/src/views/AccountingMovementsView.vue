@@ -1121,7 +1121,7 @@ watch(availableManualPositionOptions, (options) => {
             {{
               moneyWizImportFile
                 ? `Archivo listo: ${moneyWizImportFile.name}`
-                : 'Acepta el CSV exportado desde MoneyWiz con cabeceras en ingles.'
+                : 'Acepta el CSV exportado desde MoneyWiz (cabeceras en español o inglés).'
             }}
           </p>
         </div>
@@ -1169,6 +1169,32 @@ watch(availableManualPositionOptions, (options) => {
                 </li>
               </ul>
             </div>
+          </div>
+
+          <div
+            v-if="moneyWizImportPreview.unmapped_categories?.length"
+            class="ui-state-block ui-state-empty"
+          >
+            <strong
+              >Categorías sin mapeo automático
+              ({{ moneyWizImportPreview.unmapped_categories.length }})</strong
+            >
+            <p class="subtle">
+              Estas categorías de MoneyWiz no tienen equivalencia exacta. Se importarán con la
+              clasificación de fallback indicada. Revisa si es correcta antes de confirmar.
+            </p>
+            <ul class="ui-accounting-import-list">
+              <li
+                v-for="uc in moneyWizImportPreview.unmapped_categories"
+                :key="`${uc.movement_type}-${uc.category_raw}`"
+              >
+                <span class="subtle">{{ uc.category_raw }}</span>
+                <span class="ui-accounting-inline-note">
+                  → {{ uc.fallback_category_key }}/{{ uc.fallback_subcategory_key }}
+                  ({{ uc.row_count }} {{ uc.row_count === 1 ? 'fila' : 'filas' }})
+                </span>
+              </li>
+            </ul>
           </div>
 
           <div v-if="moneyWizPreviewWarnings.length" class="ui-state-block ui-state-empty">
