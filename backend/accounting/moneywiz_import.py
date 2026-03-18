@@ -203,7 +203,9 @@ def build_moneywiz_import_preview(*, user, csv_text: str) -> dict:
 
 
 @transaction.atomic
-def commit_moneywiz_import(*, user, csv_text: str) -> dict:
+def commit_moneywiz_import(
+    *, user, csv_text: str, account_id_map: dict[str, int] | None = None
+) -> dict:
     delimiter, normalized_csv_text = _prepare_csv_text(csv_text)
     rows = _parse_moneywiz_rows(
         user_id=user.id,
@@ -226,7 +228,7 @@ def commit_moneywiz_import(*, user, csv_text: str) -> dict:
         if row.existing_transaction_id is not None:
             skipped_existing += 1
             continue
-        created = _import_moneywiz_row(user=user, row=row)
+        created = _import_moneywiz_row(user=user, row=row, account_id_map=account_id_map)
         created_ids.append(created.id)
 
     preview = _build_preview_payload(delimiter=delimiter, rows=rows)
@@ -717,12 +719,15 @@ def _find_existing_transaction(*, user_id: int, fingerprint: str) -> int | None:
     return transaction_row.id if transaction_row is not None else None
 
 
-def _import_moneywiz_row(*, user, row: MoneyWizRow) -> LedgerTransaction:
+def _import_moneywiz_row(
+    *, user, row: MoneyWizRow, account_id_map: dict[str, int] | None = None
+) -> LedgerTransaction:
     source_account = _get_or_create_moneywiz_account(
         user=user,
         account_type=cast(str, LedgerAccount.AccountType.ASSET),
         currency=row.currency,
         name=row.account_name,
+        account_id_map=account_id_map,
     )
     if row.movement_type == "income":
         return create_quick_transaction(
@@ -784,6 +789,7 @@ def _import_moneywiz_row(*, user, row: MoneyWizRow) -> LedgerTransaction:
             account_type=cast(str, LedgerAccount.AccountType.ASSET),
             currency=row.currency,
             name=row.counterparty_name,
+            account_id_map=account_id_map,
         )
         return create_quick_transaction(
             user=user,
@@ -807,6 +813,7 @@ def _import_moneywiz_row(*, user, row: MoneyWizRow) -> LedgerTransaction:
             account_type=cast(str, LedgerAccount.AccountType.ASSET),
             currency=row.currency,
             name=row.counterparty_name,
+            account_id_map=account_id_map,
         )
         return create_quick_transaction(
             user=user,
@@ -830,6 +837,7 @@ def _import_moneywiz_row(*, user, row: MoneyWizRow) -> LedgerTransaction:
             account_type=cast(str, LedgerAccount.AccountType.LIABILITY),
             currency=row.currency,
             name=row.counterparty_name,
+            account_id_map=account_id_map,
         )
         return create_quick_transaction(
             user=user,
@@ -861,7 +869,14 @@ def _get_or_create_moneywiz_account(
     account_type: str,
     currency: str,
     name: str,
+    account_id_map: dict[str, int] | None = None,
 ) -> LedgerAccount:
+    # If the user mapped this CSV account name to an existing account ID, use it directly.
+    if account_id_map and name in account_id_map:
+        mapped = LedgerAccount.objects.filter(user=user, id=account_id_map[name]).first()
+        if mapped is not None:
+            return mapped
+
     normalized_name = _clean_text(name) or "Imported MoneyWiz account"
     normalized_currency = _normalize_currency(currency)
     account = LedgerAccount.objects.filter(

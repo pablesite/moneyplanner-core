@@ -1651,7 +1651,7 @@ export function useAccountingPage() {
     return preview;
   }
 
-  async function commitMoneyWizImport() {
+  async function commitMoneyWizImport(accountIdMap: Record<string, number> = {}) {
     if (!moneyWizImportFile.value) {
       store.error = 'Selecciona antes un CSV exportado desde MoneyWiz.';
       return null;
@@ -1665,7 +1665,7 @@ export function useAccountingPage() {
       return null;
     }
     successMessage.value = null;
-    const result = await store.commitMoneyWizImport(moneyWizImportFile.value);
+    const result = await store.commitMoneyWizImport(moneyWizImportFile.value, accountIdMap);
     successMessage.value =
       result.created_count > 0
         ? `Importacion MoneyWiz completada: ${result.created_count} movimientos nuevos.`

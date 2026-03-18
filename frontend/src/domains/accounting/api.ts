@@ -71,9 +71,12 @@ export const coreAccountingApi = {
       },
     );
   },
-  commitMoneyWizImport(file: File) {
+  commitMoneyWizImport(file: File, accountIdMap: Record<string, number> = {}) {
     const formData = new FormData();
     formData.append('file', file);
+    if (Object.keys(accountIdMap).length > 0) {
+      formData.append('account_id_map', JSON.stringify(accountIdMap));
+    }
     return coreApi.post<MoneyWizImportCommit>(
       '/api/accounting/transactions/import-moneywiz/commit/',
       formData,

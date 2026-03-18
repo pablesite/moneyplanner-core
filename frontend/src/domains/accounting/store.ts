@@ -178,11 +178,11 @@ export const useAccountingStore = defineStore('accounting', {
       }
     },
 
-    async commitMoneyWizImport(file: File) {
+    async commitMoneyWizImport(file: File, accountIdMap: Record<string, number> = {}) {
       this.importCommitLoading = true;
       this.error = null;
       try {
-        const response = await coreAccountingApi.commitMoneyWizImport(file);
+        const response = await coreAccountingApi.commitMoneyWizImport(file, accountIdMap);
         this.moneyWizImportCommitResult = response.data;
         this.moneyWizImportPreview = response.data.preview;
         await this.refreshAll();

@@ -1,3 +1,5 @@
+import json
+
 from django.db.models import Prefetch
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -179,9 +181,17 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             csv_text=request.data.get("csv_text"),
             file=request.FILES.get("file"),
         )
+        account_id_map: dict[str, int] = {}
+        raw_map = request.data.get("account_id_map")
+        if raw_map:
+            try:
+                account_id_map = json.loads(raw_map)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
         payload = commit_moneywiz_import(
             user=request.user,
             csv_text=csv_text,
+            account_id_map=account_id_map or None,
         )
         return Response(payload, status=status.HTTP_201_CREATED)
 

@@ -418,12 +418,28 @@ const moneyWizCanCommit = computed(
     moneyWizImportPreview.value.error_row_count === 0,
 );
 
+const moneyWizAccountMap = ref<Record<string, number | null>>({});
+
+watch(moneyWizImportPreview, () => {
+  moneyWizAccountMap.value = {};
+});
+
+function updateMoneyWizAccountMap(csvName: string, value: string) {
+  moneyWizAccountMap.value[csvName] = value ? Number(value) : null;
+}
+
 async function previewMoneyWizImportFromModal() {
   await previewMoneyWizImport();
 }
 
 async function commitMoneyWizImportFromModal() {
-  const result = await commitMoneyWizImport();
+  const accountIdMap: Record<string, number> = {};
+  for (const [csvName, accountId] of Object.entries(moneyWizAccountMap.value)) {
+    if (accountId != null) {
+      accountIdMap[csvName] = accountId;
+    }
+  }
+  const result = await commitMoneyWizImport(accountIdMap);
   if (result) {
     showMoneyWizImportModal.value = false;
   }
@@ -1160,14 +1176,41 @@ watch(availableManualPositionOptions, (options) => {
 
             <div class="ui-accounting-import-card">
               <h3>Cuentas detectadas</h3>
-              <ul class="ui-accounting-import-list">
-                <li
-                  v-for="account in moneyWizImportPreview.detected_accounts.slice(0, 6)"
+              <p class="subtle">
+                Asocia cada cuenta del CSV a una cuenta existente para evitar duplicados.
+              </p>
+              <div class="ui-accounting-account-map">
+                <div
+                  v-for="account in moneyWizImportPreview.detected_accounts"
                   :key="`${account.role}-${account.account_type}-${account.name}`"
+                  class="ui-accounting-account-map-row"
                 >
-                  {{ account.name }} · {{ account.account_type }}
-                </li>
-              </ul>
+                  <span class="ui-accounting-account-map-csv">{{ account.name }}</span>
+                  <span class="ui-accounting-account-map-arrow">→</span>
+                  <select
+                    class="ui-accounting-account-map-select"
+                    :value="moneyWizAccountMap[account.name] ?? ''"
+                    @change="
+                      (e) =>
+                        updateMoneyWizAccountMap(
+                          account.name,
+                          (e.target as HTMLSelectElement).value,
+                        )
+                    "
+                  >
+                    <option value="">Nueva cuenta</option>
+                    <option
+                      v-for="existing in accounts.filter(
+                        (a) => a.account_type === account.account_type,
+                      )"
+                      :key="existing.id"
+                      :value="existing.id"
+                    >
+                      {{ existing.name }}
+                    </option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2144,6 +2187,35 @@ watch(availableManualPositionOptions, (options) => {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.ui-accounting-account-map {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-accounting-account-map-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-accounting-account-map-csv {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-accounting-account-map-arrow {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+.ui-accounting-account-map-select {
+  width: 100%;
+  font-size: 0.85rem;
 }
 
 .ui-accounting-activation-list {
