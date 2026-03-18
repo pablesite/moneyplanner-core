@@ -83,7 +83,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Frontend refactor | 🔄 Planificado | `roadmap/frontend-refactor-roadmap.md`. Fase 3b (NetWorthView) completada; siguientes cortes abiertos en 3a/3c/3d/3e. El gate global de coverage ≥80% sigue pendiente en Fase 0. |
+| Frontend refactor | ?? Planificado | `roadmap/frontend-refactor-roadmap.md`. Fase 3b (NetWorthView) completada a nivel estructural; siguientes cortes abiertos en 3a/3c/3d/3e. La baseline global de coverage sigue pendiente en Fase 0. |
 
 ---
 
@@ -96,3 +96,5 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
+
+

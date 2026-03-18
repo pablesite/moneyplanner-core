@@ -75,7 +75,6 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:unit -- src/views/__tests__/NetWorthView.spec.ts src/domains/net-worth/__tests__/page-refactor.spec.ts
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → `NetWorthView` <900 líneas y sin lógica de dominio pesada.
-# → `test:coverage` se ejecuta como señal de regresión; el gate global ≥80% pertenece a Fase 0.
 
 # SaaS
 docker compose exec saas_frontend npm run lint
@@ -103,7 +102,14 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] La vista no hace fetch directo ni concentra cálculos de dominio pesados
 - [x] Sin cambios de comportamiento intencionados; cobertura de regresión reforzada con tests de vista y dominio
 - [x] `lint`, `typecheck` y tests dirigidos en verde — Core y SaaS
-- [x] `test:coverage` ejecutado en ambos stacks como señal de regresión; el gate global ≥80% sigue siendo responsabilidad de Fase 0
+- [x] `test:coverage` ejecutado en ambos stacks durante el cierre de la fase
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)
+
+
+## Nota
+La deuda de baseline global (`test:coverage` >=80% en todas las metricas) sigue definida por la
+Fase 0 y no se considera resuelta por el cierre estructural de esta fase 3b.
+
+
