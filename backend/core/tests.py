@@ -546,6 +546,15 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
         self.assertEqual(UserSettings.objects.get(user=self.user).base_currency, "USD")
 
+    def test_portable_import_rejects_clearly_invalid_payload_with_validation_error(self):
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+
     def test_portable_import_replace_is_atomic_on_validation_error(self):
         Asset.objects.create(
             user=self.user,
@@ -652,6 +661,15 @@ class CoreApiTests(APITestCase):
         response = self.client.get("/api/core/market-data/status/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.data["error"]["code"], "unauthorized")
+
+    def test_market_data_status_returns_empty_states_when_no_sync_state_exists(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/core/market-data/status/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("datasets", response.data)
+        self.assertEqual(response.data["datasets"]["fx"]["states"], [])
+        self.assertEqual(response.data["datasets"]["inflation"]["states"], [])
 
     def test_fx_rates_create_and_list(self):
         self.client.force_authenticate(user=self.user)
