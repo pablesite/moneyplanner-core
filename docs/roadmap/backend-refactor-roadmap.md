@@ -13,7 +13,7 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 | 2 | Particion `accounting/services.py` | `core/docs/tasks/backend-refactor/terminados/phase-2-accounting-services-partition/backend.md` | Completada |
 | 3 | net_worth domain cleanup | `core/docs/tasks/backend-refactor/terminados/phase-3-net-worth-domain-cleanup/backend.md` | Completada |
 | 4 | Boundary enforcement cross-domain | `core/docs/tasks/backend-refactor/terminados/phase-4-boundary-enforcement/backend.md` | Completada |
-| 5 | DX docs y guía de contribución | `core/docs/tasks/backend-refactor/phase-5-dx-docs/backend.md` | ⚪ |
+| 5 | DX docs y guia de contribucion | `core/docs/tasks/backend-refactor/terminados/phase-5-dx-docs/backend.md` | Completada |
 
 ### Boundaries estabilizados (Phase 4)
 
@@ -363,6 +363,28 @@ Objetivo: facilitar que otra persona continue el refactor sin contexto tribal.
 1. El roadmap se puede usar como handoff operativo.
 2. Hay tareas pequenas, trazables y seguras para siguientes PRs.
 
+### Backlog de contribucion (post-refactor)
+1. Exponer `GET /api/accounting/accounts/{id}/balance-history/` con filtros por rango.
+2. Anadir paginacion y orden explicito a `GET /api/accounting/transactions/`.
+3. Anadir filtro por fecha de referencia en `GET /api/net_worth/assets/`.
+4. Crear tests de rendimiento para `build_monthly_accounting_summary` con volumen alto de entries.
+5. Medir y documentar baseline de latencia para endpoints criticos de `accounting`, `budget` y `net_worth`.
+6. Revisar oportunidades de particion adicional en hotspots que superen umbral de complejidad acordado.
+
+### Cierre formal del refactor estructural
+Fecha de cierre: 2026-03-18
+Version Core de referencia: 0.23.1
+
+Resumen por fase:
+1. Fase 1: baseline de cobertura y reorganizacion de suites por dominio.
+2. Fase 2: particion de `accounting/services.py` con facade de compatibilidad.
+3. Fase 3: limpieza de dominio `net_worth` y separacion por submodulos.
+4. Fase 4: boundaries cross-domain estabilizados y atomicidad reforzada.
+5. Fase 5: documentacion DX (checklist PR, patrones backend y backlog publicable).
+
+Estado final:
+1. Refactor estructural backend completado.
+2. Continuidad definida mediante backlog acotado y documentacion de handoff.
 ## Secuencia de ejecucion recomendada
 1. Actualizar y mantener el baseline documental del backend real.
 2. Endurecer boundaries `accounting` / `budget` / `net_worth`.
@@ -422,4 +444,7 @@ Ejecutar dentro de contenedores. No usar `docker compose down -v`.
 3. Los boundaries entre ejecucion, plan y patrimonio quedan mas claros.
 4. Los hotspots reales quedan protegidos con tests y decisiones trazables.
 5. Otra persona puede continuar el trabajo sin depender de contexto oral.
+
+
+
 
