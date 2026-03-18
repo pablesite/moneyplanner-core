@@ -35,7 +35,7 @@ _MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
     "gastos > corrientes > ropa": ("consumption_expenses", "leisure_lifestyle"),
     "gastos > corrientes > cuidado personal": ("consumption_expenses", "health_wellbeing"),
     "gastos > corrientes > gestion": ("consumption_expenses", "other_consumption_expenses"),
-    "gastos > corrientes > noia": ("consumption_expenses", "leisure_lifestyle"),
+    "gastos > corrientes > noia": ("consumption_expenses", "family_childcare"),
     "gastos > corrientes": ("consumption_expenses", "other_consumption_expenses"),
     # Gastos > otros grupos
     "gastos > deporte": ("consumption_expenses", "health_wellbeing"),
@@ -47,7 +47,7 @@ _MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
     "gastos > ocio": ("consumption_expenses", "leisure_lifestyle"),
     "gastos > regalos": ("consumption_expenses", "gifts_donations"),
     "gastos > formacion": ("consumption_expenses", "education_growth"),
-    "gastos > side projects": ("consumption_expenses", "other_consumption_expenses"),
+    "gastos > side projects": ("consumption_expenses", "education_growth"),
     "gastos > global ana": ("consumption_expenses", "other_consumption_expenses"),
     "gastos > otro general": ("consumption_expenses", "other_consumption_expenses"),
     "gastos": ("consumption_expenses", "other_consumption_expenses"),
@@ -68,14 +68,14 @@ _MONEYWIZ_EXPENSE_PATH: dict[str, tuple[str, str]] = {
     "inmobiliario > comunidad": ("consumption_expenses", "housing_home"),
     "inmobiliario > seguro vivienda": ("consumption_expenses", "housing_home"),
     "inmobiliario > obras": ("real_estate_assets", "property_improvements"),
-    "inmobiliario > atrio": ("real_estate_assets", "property_purchase"),
-    "inmobiliario > nueva vivienda": ("real_estate_assets", "property_purchase"),
+    "inmobiliario > atrio": ("financial_investments", "other_financial_investments"),
+    "inmobiliario > nueva vivienda": ("financial_investments", "other_financial_investments"),
     "inmobiliario": ("real_estate_assets", "other_real_estate_assets"),
     # Mobiliario
     "mobiliario > vehiculos": ("consumption_expenses", "transport_mobility"),
     "mobiliario": ("tangible_assets", "other_tangible_assets"),
     # Acreedores
-    "acreedores": ("consumption_expenses", "financial_commitments"),
+    "acreedores": ("consumption_expenses", "other_consumption_expenses"),
 }
 
 # Subcategorías de "Pasivos > Activos financieros" que en MoneyWiz representan
@@ -116,9 +116,9 @@ _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     # rescate). Mismo criterio que Inversiones Ingresos; deposito incluye principal+intereses
     # sin separar (pendiente modelar la separación).
     "inversiones gastos > fondos": ("capital_gains", "sale_financial_assets"),
-    "inversiones gastos > crowdlending": ("passive_income", "p2p_lending"),
+    "inversiones gastos > crowdlending": ("capital_gains", "sale_financial_assets"),
     "inversiones gastos > roboadvisor": ("capital_gains", "sale_financial_assets"),
-    "inversiones gastos > plan de pensiones": ("passive_income", "other_passive"),
+    "inversiones gastos > plan de pensiones": ("capital_gains", "sale_financial_assets"),
     "inversiones gastos > st criptos": ("capital_gains", "sale_financial_assets"),
     "inversiones gastos > st stocks": ("capital_gains", "sale_financial_assets"),
     "inversiones gastos > crowdfunding inm": ("capital_gains", "other_capital_gains"),
@@ -145,7 +145,7 @@ _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     "pasivos > declaracion de la renta": ("other_income", "tax_refund"),
     "pasivos": ("other_income", "misc"),
     # Deudores
-    "deudores > devoluciones": ("other_income", "tax_refund"),
+    "deudores > devoluciones": ("transfers_support", "other_transfers_support"),
     "deudores > prestamo personal": ("other_income", "misc"),
     "deudores": ("other_income", "misc"),
     # Ganancias de capital
