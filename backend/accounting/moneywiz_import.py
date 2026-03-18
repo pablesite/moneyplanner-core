@@ -112,9 +112,18 @@ _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     "inversiones ingresos > crowdfunding inm": ("capital_gains", "other_capital_gains"),
     "inversiones ingresos > deposito": ("passive_income", "interest_income"),
     "inversiones ingresos": ("passive_income", "other_passive"),
-    # Inversiones Gastos con importe positivo = depósito vencido que retorna a liquidez.
-    # Se trata como realización de activo financiero (principal + intereses sin separar).
+    # Inversiones Gastos con importe positivo = realización del activo (venta, vencimiento,
+    # rescate). Mismo criterio que Inversiones Ingresos; deposito incluye principal+intereses
+    # sin separar (pendiente modelar la separación).
+    "inversiones gastos > fondos": ("capital_gains", "sale_financial_assets"),
+    "inversiones gastos > crowdlending": ("passive_income", "p2p_lending"),
+    "inversiones gastos > roboadvisor": ("capital_gains", "sale_financial_assets"),
+    "inversiones gastos > plan de pensiones": ("passive_income", "other_passive"),
+    "inversiones gastos > st criptos": ("capital_gains", "sale_financial_assets"),
+    "inversiones gastos > st stocks": ("capital_gains", "sale_financial_assets"),
+    "inversiones gastos > crowdfunding inm": ("capital_gains", "other_capital_gains"),
     "inversiones gastos > deposito": ("capital_gains", "sale_financial_assets"),
+    "inversiones gastos": ("capital_gains", "sale_financial_assets"),
     # Pasivos > Activos financieros
     "pasivos > activos financieros > dividendos": ("passive_income", "dividends"),
     "pasivos > activos financieros > crowdlending": ("passive_income", "p2p_lending"),
