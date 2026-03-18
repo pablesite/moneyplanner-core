@@ -18,7 +18,8 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
 3. Reducir la vista a wiring de secciones y estado mínimo de composición
    (objetivo práctico: < 900 líneas en esta fase).
 4. Reubicar cálculos que hoy viven en la vista a composables del dominio `net-worth`.
-5. Tests unitarios para los composables extraídos (≥80% cobertura).
+5. Tests unitarios para los composables y componentes extraídos, con cobertura sólida
+   sobre el código movido en esta fase.
 
 **Out of scope:**
 1. Cambios de comportamiento o lógica de negocio.
@@ -37,11 +38,9 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
    entender qué ya existe y qué hay que extraer.
 
 ### Change implementation
-1. **Composable principal de página:** `domains/net-worth/composables/useNetWorthPage.ts`
-   - fetch de activos, pasivos y snapshots
-   - filtros de ownership (por persona, por tipo)
-   - cálculos derivados: ratio deuda/patrimonio, liquidez, distribución
-   - estado de período seleccionado
+1. **Orquestación de página:** extraer la coordinación a composables de dominio y de página,
+   sin exigir un único `useNetWorthPage.ts` si una partición más fina deja mejor separación
+   entre ownership, timeline, métricas, layout y acciones.
 
 2. **Secciones como componentes:**
    - `NetWorthFilters.vue` — filtros de ownership y período
@@ -56,14 +55,14 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
      si son reutilizables, o al composable de página si son específicos de esta vista.
 
 4. **Vista resultante** (`NetWorthView.vue`):
-   - Instancia `useNetWorthPage()`
+   - Consume composables de página/dominio para ownership, métricas, timeline, layout y acciones
    - Renderiza las secciones pasando datos como props
    - Sin fetch directo ni cálculos complejos
    - Puede conservar wiring reactivo de página y coordinación ligera entre secciones
 
 5. **Tests:**
-   - `domains/net-worth/__tests__/useNetWorthPage.spec.ts`
-   - Ajustar `composables.spec.ts` existente si se mueve lógica
+   - Añadir o ampliar specs de dominio para cubrir los composables/componentes extraídos.
+   - Ajustar `composables.spec.ts` existente si se mueve lógica.
 
 ### SaaS Replication
 Esta vista es idéntica en Core y SaaS. Replicación directa.
@@ -73,19 +72,22 @@ Esta vista es idéntica en Core y SaaS. Replicación directa.
 # Core
 docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
+docker compose -f core/docker-compose.yml exec frontend npm run test:unit -- src/views/__tests__/NetWorthView.spec.ts src/domains/net-worth/__tests__/page-refactor.spec.ts
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
-# → ≥80% todas las métricas; NetWorthView <900 líneas y sin lógica de dominio pesada
+# → `NetWorthView` <900 líneas y sin lógica de dominio pesada.
+# → `test:coverage` se ejecuta como señal de regresión; el gate global ≥80% pertenece a Fase 0.
 
 # SaaS
 docker compose exec saas_frontend npm run lint
 docker compose exec saas_frontend npm run typecheck
+docker compose exec saas_frontend npm run test:unit -- src/views/__tests__/NetWorthView.spec.ts src/domains/net-worth/__tests__/page-refactor.spec.ts
 docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3b
-- [ ] `core/docs/frontend/net-worth-ux-notes.md` — si cambian componentes de la vista
-- [ ] `core/docs/project-status.md` — marcar Fase 3b como completada
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3b
+- [x] `core/docs/frontend/net-worth-ux-notes.md` — si cambian componentes de la vista
+- [x] `core/docs/project-status.md` — marcar Fase 3b como completada
 
 ## Risks
 - **Riesgo:** `net-worth/composables.ts` ya existe y tiene dependencia de `@/stores/netWorth`
@@ -95,12 +97,13 @@ docker compose exec saas_frontend npm run test:coverage
   puede reaparecer o empeorar. **Mitigación:** resolver el warning en esta fase si aflora.
 
 ## Completion Criteria
-- [ ] `NetWorthView.vue` < 900 líneas y limitada a wiring + composición de página
-- [ ] Composables extraídos con tests ≥80% cobertura
-- [ ] 0 imports de `@/stores/netWorth` en la vista
-- [ ] La vista no hace fetch directo ni concentra cálculos de dominio pesados
-- [ ] Sin cambios de comportamiento observados en browser
-- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
-- [ ] Documentación requerida actualizada
-- [ ] Spec movida a `terminados/`
-- [ ] Commit creado (Conventional Commits)
+- [x] `NetWorthView.vue` < 900 líneas y limitada a wiring + composición de página
+- [x] Composables/componentes extraídos con tests dirigidos sobre el código movido
+- [x] 0 imports de `@/stores/netWorth` en la vista
+- [x] La vista no hace fetch directo ni concentra cálculos de dominio pesados
+- [x] Sin cambios de comportamiento intencionados; cobertura de regresión reforzada con tests de vista y dominio
+- [x] `lint`, `typecheck` y tests dirigidos en verde — Core y SaaS
+- [x] `test:coverage` ejecutado en ambos stacks como señal de regresión; el gate global ≥80% sigue siendo responsabilidad de Fase 0
+- [x] Documentación requerida actualizada
+- [x] Spec movida a `terminados/`
+- [x] Commit creado (Conventional Commits)

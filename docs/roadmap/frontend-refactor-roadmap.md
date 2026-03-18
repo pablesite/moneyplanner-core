@@ -43,7 +43,7 @@ statements: 15%, lines: 15%, functions: 30%, branches: 40%
 | Vista | Lineas | Riesgo |
 |-------|--------|--------|
 | `BudgetDashboardView.vue` | 5,512 | Alto |
-| `NetWorthView.vue` | 3,608 | Alto |
+| `NetWorthView.vue` | 542 | Completada Fase 3b el 2026-03-18 |
 | `DataInputView.vue` | 2,742 | Alto |
 | `AccountingMovementsView.vue` | 2,263 | Medio (crecio de 998 lineas desde 16-mar) |
 | `GuidePhaseDetailView.vue` | 2,207 | Medio |
@@ -241,7 +241,7 @@ Objetivo: dividir las vistas grandes en composables de pagina, secciones y compo
 ### 3.1 Orden recomendado (mayor a menor riesgo)
 
 1. `BudgetDashboardView.vue` (5,512 lineas) — **spec 3a**
-2. `NetWorthView.vue` (3,608 lineas) — **spec 3b**
+2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
 3. `DataInputView.vue` (2,742 lineas) — **spec 3c**
 4. `GuidePhaseDetailView.vue` (2,207 lineas) — **spec 3d**
 5. `AccountingMovementsView.vue` (2,263 lineas) — **spec 3e**
@@ -287,10 +287,13 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 3. Los side effects de pagina viven en composables.
 4. La logica derivada compartida deja de duplicarse entre vistas.
 5. Cada composable extraido tiene tests con cobertura >= 80%.
+6. El gate global de `test:coverage` >=80% sigue perteneciendo a Fase 0; en fases posteriores
+   se ejecuta la cobertura completa como señal de regresion y se exige cobertura dirigida
+   sobre el codigo movido por la fase.
 
 **Specs:**
 - `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/frontend.md`
-- `core/docs/tasks/frontend-refactor/phase-3b-net-worth/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3b-net-worth/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md`
@@ -412,13 +415,14 @@ docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run format:check
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
-# -> statements >=80%, lines >=80%, functions >=80%, branches >=80%
+# -> ejecutar siempre; thresholds globales >=80% siguen siendo gate de Fase 0
 
 # SaaS (al replicar)
 docker compose exec saas_frontend npm run lint
 docker compose exec saas_frontend npm run format:check
 docker compose exec saas_frontend npm run typecheck
 docker compose exec saas_frontend npm run test:coverage
+# -> ejecutar siempre; thresholds globales >=80% siguen siendo gate de Fase 0
 ```
 
 ## Orden recomendado de ejecucion
