@@ -14,9 +14,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 ### En curso
 
-| Módulo | Tipo | Descripción | Spec |
-|--------|------|-------------|------|
-| Cierre mensual — modo dual | Agente | Modelo MonthlyClose, distribución inteligente, API REST, bloqueo de checkins. Backend-only. | `core/docs/tasks/monthly-close/dual-mode-backend.md` |
+_(ninguna)_
 
 ### Siguiente tarea disponible
 
@@ -26,7 +24,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 |--------|------|-------------|------|
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
 
-| Refactor frontend — Fase 2 | Agente | Shell + router: adelgazar App.vue, crear composables de shell, limpiar router, retirar residuales. | `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md` |
 | Refactor frontend — Fase 3c | Agente | Descomponer DataInputView (2,742 líneas) en composables + secciones. | `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md` |
 | Refactor frontend — Fase 3d | Agente | Descomponer GuidePhaseDetailView (2,207 líneas), extraer lógica compartida con HomeView. | `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md` |
 | Refactor frontend — Fase 3e | Agente | Descomponer AccountingMovementsView (2,263 líneas) en secciones controladas. | `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md` |
@@ -43,7 +40,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
 | Presupuesto — migración y UX | Alta | ⚪ | Migrar ingresos/gastos previstos desde Introducción de Datos; conectar con valores reales del cierre; mejorar visualización |
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
-| Cierre mensual — modo dual | Alta | 🔄 | Flujo adaptativo (sin selección de modo): MonthlyClose model, distribución inteligente, API REST. Spec: `core/docs/tasks/monthly-close/dual-mode-backend.md` |
+| Cierre mensual — modo dual | Alta | ✅ | Backend completo: MonthlyClose model, distribución inteligente, API REST, bloqueo de checkins. Frontend pendiente. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
@@ -82,7 +79,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Frontend refactor | ?? Planificado | `roadmap/frontend-refactor-roadmap.md`. Fases 0 (baseline), 1 (arch boundaries), 3a (BudgetDashboardView) y 3b (NetWorthView) cerradas; siguientes cortes abiertos en 2/3c/3d/3e/4/5/6. |
+| Frontend refactor | ?? Planificado | `roadmap/frontend-refactor-roadmap.md`. Fases 0 (baseline), 1 (arch boundaries), 2 (shell+router), 3a (BudgetDashboardView) y 3b (NetWorthView) cerradas; siguientes cortes abiertos en 3c/3d/3e/4/5/6. |
 
 ---
 

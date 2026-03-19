@@ -1,6 +1,7 @@
 from django.db.models import Q, Sum
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -10,6 +11,7 @@ from .models import (
     AnnualExpenseMonthlyCheckin,
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
+    MonthlyClose,
 )
 from .query_params import (
     parse_optional_int_query_param,
@@ -25,6 +27,20 @@ from .services import (
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
 )
+
+
+def _assert_monthly_close_not_finalized(*, user, fiscal_year: int, month: int) -> None:
+    """Raises 409 if a MonthlyClose FINALIZED or LOCKED exists for this period."""
+    if MonthlyClose.objects.filter(
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        status__in=[MonthlyClose.Status.FINALIZED, MonthlyClose.Status.LOCKED],
+    ).exists():
+        raise PermissionDenied(
+            "El cierre mensual de este periodo está finalizado o bloqueado. "
+            "Reabre el cierre antes de modificar los checkins."
+        )
 
 
 class AnnualEntrySummaryMixin:
@@ -145,6 +161,12 @@ class AnnualExpenseMonthlyCheckinViewSet(viewsets.ModelViewSet):
         return queryset.order_by("-fiscal_year", "-month", "-updated_at")
 
     def perform_create(self, serializer):
+        fiscal_year = serializer.validated_data.get("fiscal_year")
+        month = serializer.validated_data.get("month")
+        if fiscal_year and month:
+            _assert_monthly_close_not_finalized(
+                user=self.request.user, fiscal_year=fiscal_year, month=month
+            )
         status_value = serializer.validated_data.get("status")
         confirmed_at = resolve_confirmed_at(
             current_confirmed_at=None,
@@ -154,6 +176,11 @@ class AnnualExpenseMonthlyCheckinViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user, confirmed_at=confirmed_at)
 
     def perform_update(self, serializer):
+        fiscal_year = serializer.instance.fiscal_year
+        month = serializer.instance.month
+        _assert_monthly_close_not_finalized(
+            user=self.request.user, fiscal_year=fiscal_year, month=month
+        )
         status_value = serializer.validated_data.get("status", serializer.instance.status)
         confirmed_at = resolve_confirmed_at(
             current_confirmed_at=serializer.instance.confirmed_at,
@@ -183,6 +210,12 @@ class AnnualIncomeMonthlyCheckinViewSet(viewsets.ModelViewSet):
         return queryset.order_by("-fiscal_year", "-month", "-updated_at")
 
     def perform_create(self, serializer):
+        fiscal_year = serializer.validated_data.get("fiscal_year")
+        month = serializer.validated_data.get("month")
+        if fiscal_year and month:
+            _assert_monthly_close_not_finalized(
+                user=self.request.user, fiscal_year=fiscal_year, month=month
+            )
         status_value = serializer.validated_data.get("status")
         confirmed_at = resolve_confirmed_at(
             current_confirmed_at=None,
@@ -192,6 +225,11 @@ class AnnualIncomeMonthlyCheckinViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user, confirmed_at=confirmed_at)
 
     def perform_update(self, serializer):
+        fiscal_year = serializer.instance.fiscal_year
+        month = serializer.instance.month
+        _assert_monthly_close_not_finalized(
+            user=self.request.user, fiscal_year=fiscal_year, month=month
+        )
         status_value = serializer.validated_data.get("status", serializer.instance.status)
         confirmed_at = resolve_confirmed_at(
             current_confirmed_at=serializer.instance.confirmed_at,

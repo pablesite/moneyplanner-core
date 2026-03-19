@@ -57,6 +57,23 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 4. Sync coverage and operational status are tracked in `MarketDataSyncState`.
 5. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
 
+## Monthly Close Data Model
+
+`MonthlyClose` (app `budget`) is a lifecycle wrapper over the three monthly checkin models:
+- `AnnualIncomeMonthlyCheckin` (budget)
+- `AnnualExpenseMonthlyCheckin` (budget)
+- `LiquidityMonthlyCheckin` (net_worth)
+
+Each `MonthlyClose` is unique per `(user, fiscal_year, month)`. Lifecycle: `draft → finalized → locked`, with reopening (`finalized → draft`). The three checkin models now support status `estimated` to distinguish algorithmically suggested distributions from manually entered data.
+
+Key services in `budget/services_monthly_close.py`:
+- `compute_monthly_close_state` — orchestrates the 3 summary builders, detects coverage, computes delta liquidity, generates suggestions
+- `compute_smart_distribution` — proportional distribution of residual net cashflow across uncovered entries
+- `apply_distribution_to_checkins` — persists suggestions as checkins with `status=estimated`
+- `finalize_monthly_close / reopen_monthly_close / lock_monthly_close` — lifecycle transitions with `select_for_update`
+
+Checkin writes (create + update) in `budget/views.py` and `net_worth/views.py` are blocked with `403` if a `MonthlyClose` with status `finalized` or `locked` exists for that period.
+
 ## Related Documents
 1. `../../README.md`
 2. `../../CONTRIBUTING.md`
