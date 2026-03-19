@@ -1939,8 +1939,75 @@ class NetWorthApiTests(APITestCase):
         rows = {row["asset_name"]: row for row in response.data["rows"]}
         self.assertEqual(rows["Cuenta ledger"]["executed_closing_balance"], "950.00")
         self.assertEqual(rows["Cuenta ledger"]["coverage_source"], "ledger")
+        self.assertTrue(rows["Cuenta ledger"]["ledger_available"])
         self.assertEqual(rows["Cuenta fallback"]["executed_closing_balance"], "780.00")
         self.assertEqual(rows["Cuenta fallback"]["coverage_source"], "checkin")
+        self.assertFalse(rows["Cuenta fallback"]["ledger_available"])
+
+    def test_liquidity_monthly_summary_allows_manual_override_on_ledger_covered_asset(self):
+        ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta operativa override",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos override",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        ledger_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta ledger override",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=ledger_account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 27),
+            value_date=date(2026, 2, 27),
+            description="Cobro fin de mes override",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=ledger_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("950.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("950.00"),
+            currency="EUR",
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=ledger_asset,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.ADJUSTED,
+            closing_balance_real=Decimal("910.00"),
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        rows = {row["asset_name"]: row for row in response.data["rows"]}
+        self.assertEqual(rows["Cuenta ledger override"]["coverage_source"], "checkin")
+        self.assertTrue(rows["Cuenta ledger override"]["ledger_available"])
+        self.assertEqual(rows["Cuenta ledger override"]["executed_closing_balance"], "910.00")
+        self.assertEqual(response.data["ledger_rows_confirmed"], 0)
+        self.assertEqual(response.data["fallback_rows_confirmed"], 1)
+        self.assertTrue(response.data["has_ledger_data"])
 
     def test_liquidity_checkin_update_does_not_trigger_liability_sync_and_updates_row(self):
         bank = Asset.objects.create(

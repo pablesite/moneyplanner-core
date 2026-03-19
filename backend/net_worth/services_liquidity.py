@@ -55,6 +55,7 @@ def _build_liquidity_monthly_summary_impl(
     executed_total_base = Decimal("0")
     checked_count = 0
     ledger_count = 0
+    ledger_available_count = 0
     fallback_count = 0
 
     for asset in liquid_assets:
@@ -82,7 +83,12 @@ def _build_liquidity_monthly_summary_impl(
                     status=cast(str, LedgerTransaction.Status.POSTED),
                 )
             )
-        if ledger_covered:
+        if ledger_covered and checkin is not None:
+            executed_native = checkin.closing_balance_real
+            coverage_source = "checkin"
+            fallback_count += 1
+            checked_count += 1
+        elif ledger_covered:
             executed_native = effective_native
             coverage_source = "ledger"
             ledger_count += 1
@@ -95,6 +101,8 @@ def _build_liquidity_monthly_summary_impl(
         else:
             executed_native = None
             coverage_source = "none"
+        if ledger_covered:
+            ledger_available_count += 1
 
         planned_base = convert_currency(
             planned_native, asset.currency, base_currency, date=summary_date
@@ -112,7 +120,8 @@ def _build_liquidity_monthly_summary_impl(
         )
 
         planned_total_base += planned_base
-        executed_total_base += effective_base
+        if executed_base is not None:
+            executed_total_base += executed_base
 
         rows.append(
             {
@@ -134,6 +143,7 @@ def _build_liquidity_monthly_summary_impl(
                 "effective_closing_balance_base": serialize_money_fn(effective_base),
                 "deviation_base": serialize_money_fn(deviation_base),
                 "coverage_source": coverage_source,
+                "ledger_available": ledger_covered,
                 "checkin": (
                     {
                         "id": checkin.id,
@@ -170,7 +180,7 @@ def _build_liquidity_monthly_summary_impl(
         "coverage_expected": len(rows),
         "ledger_rows_confirmed": ledger_count,
         "fallback_rows_confirmed": fallback_count,
-        "has_ledger_data": ledger_count > 0,
+        "has_ledger_data": ledger_available_count > 0,
         "rows": rows,
     }
 
