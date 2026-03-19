@@ -51,6 +51,38 @@ const annualIncomeGroups = computed(() => unref(page.annualIncomeGroups) ?? []);
 const annualExpenseEntries = computed(() => unref(page.annualExpenseEntries) ?? []);
 const filteredAnnualExpenseEntries = computed(() => unref(page.filteredAnnualExpenseEntries) ?? []);
 const annualExpenseGroups = computed(() => unref(page.annualExpenseGroups) ?? []);
+const incomeModalTitle = computed(() => String(unref(page.incomeModalTitle) ?? ''));
+const expenseModalTitle = computed(() => String(unref(page.expenseModalTitle) ?? ''));
+const incomeSubmitLabel = computed(() => String(unref(page.incomeSubmitLabel) ?? ''));
+const expenseSubmitLabel = computed(() => String(unref(page.expenseSubmitLabel) ?? ''));
+const annualSubcategoryOptions = computed(() => unref(page.annualSubcategoryOptions) ?? []);
+const annualExpenseSubcategoryOptions = computed(
+  () => unref(page.annualExpenseSubcategoryOptions) ?? [],
+);
+const showOwnerField = computed(() => Boolean(unref(page.showOwnerField)));
+const ownerOptions = computed(() => unref(page.ownerOptions) ?? []);
+const incomeTimeProfileOptions = computed(() => unref(page.incomeTimeProfileOptions) ?? []);
+const incomeCashflowRoleOptions = computed(() => unref(page.incomeCashflowRoleOptions) ?? []);
+const annualEventGroupOptions = computed(() => unref(page.annualEventGroupOptions) ?? []);
+const incomeAmountInputPlaceholder = computed(() =>
+  String(unref(page.incomeAmountInputPlaceholder) ?? ''),
+);
+const expenseAmountInputPlaceholder = computed(() =>
+  String(unref(page.expenseAmountInputPlaceholder) ?? ''),
+);
+const expenseBulkEditHint = computed(() => String(unref(page.expenseBulkEditHint) ?? ''));
+const expenseTimeProfileOptions = computed(() => unref(page.expenseTimeProfileOptions) ?? []);
+const filteredExpenseCashflowRoleOptions = computed(
+  () => unref(page.filteredExpenseCashflowRoleOptions) ?? [],
+);
+const showExpenseCashflowRoleField = computed(() =>
+  Boolean(unref(page.showExpenseCashflowRoleField)),
+);
+const editingSystemGeneratedLiabilityExpense = computed(() =>
+  Boolean(unref(page.editingSystemGeneratedLiabilityExpense)),
+);
+const annualIncomeForm = computed(() => unref(page.annualIncomeForm) ?? {});
+const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
 </script>
 
 <template>
@@ -443,21 +475,21 @@ const annualExpenseGroups = computed(() => unref(page.annualExpenseGroups) ?? []
 
   <AnnualEntryModalForm
     :open="showIncomeModalModel"
-    :title="page.incomeModalTitle"
-    :form="page.annualIncomeForm"
+    :title="incomeModalTitle"
+    :form="annualIncomeForm"
     :loading="page.annualIncomeLoading"
-    :submit-label="page.incomeSubmitLabel"
+    :submit-label="incomeSubmitLabel"
     :category-options="page.incomeCategories"
-    :subcategory-options="page.annualSubcategoryOptions"
-    :show-owner-field="page.showOwnerField"
-    :owner-options="page.ownerOptions"
-    :time-profile-options="page.incomeTimeProfileOptions"
-    :cashflow-role-options="page.incomeCashflowRoleOptions"
+    :subcategory-options="annualSubcategoryOptions"
+    :show-owner-field="showOwnerField"
+    :owner-options="ownerOptions"
+    :time-profile-options="incomeTimeProfileOptions"
+    :cashflow-role-options="incomeCashflowRoleOptions"
     :show-cashflow-role-field="false"
-    :event-group-options="page.annualEventGroupOptions"
+    :event-group-options="annualEventGroupOptions"
     event-group-datalist-id="income-event-groups"
     name-placeholder="Concepto (ej: CTN, Regalos Pablo)"
-    :amount-placeholder="page.incomeAmountInputPlaceholder"
+    :amount-placeholder="incomeAmountInputPlaceholder"
     @patch="page.patchAnnualIncomeForm"
     @close="page.closeIncomeModal"
     @submit="page.submitAnnualIncome"
@@ -465,25 +497,25 @@ const annualExpenseGroups = computed(() => unref(page.annualExpenseGroups) ?? []
 
   <AnnualEntryModalForm
     :open="showExpenseModalModel"
-    :title="page.expenseModalTitle"
-    :form="page.annualExpenseForm"
+    :title="expenseModalTitle"
+    :form="annualExpenseForm"
     :loading="page.annualExpenseLoading"
-    :submit-label="page.expenseSubmitLabel"
+    :submit-label="expenseSubmitLabel"
     :category-options="page.expenseCategories"
-    :subcategory-options="page.annualExpenseSubcategoryOptions"
-    :show-owner-field="page.showOwnerField"
-    :owner-options="page.ownerOptions"
-    :time-profile-options="page.expenseTimeProfileOptions"
+    :subcategory-options="annualExpenseSubcategoryOptions"
+    :show-owner-field="showOwnerField"
+    :owner-options="ownerOptions"
+    :time-profile-options="expenseTimeProfileOptions"
     time-profile-field-label="Tipo de salida"
-    :cashflow-role-options="page.filteredExpenseCashflowRoleOptions"
-    :show-cashflow-role-field="page.showExpenseCashflowRoleField"
-    :show-event-group-field="!page.editingSystemGeneratedLiabilityExpense"
-    :show-term-end-year-field="!page.editingSystemGeneratedLiabilityExpense"
-    :event-group-options="page.annualEventGroupOptions"
+    :cashflow-role-options="filteredExpenseCashflowRoleOptions"
+    :show-cashflow-role-field="showExpenseCashflowRoleField"
+    :show-event-group-field="!editingSystemGeneratedLiabilityExpense"
+    :show-term-end-year-field="!editingSystemGeneratedLiabilityExpense"
+    :event-group-options="annualEventGroupOptions"
     event-group-datalist-id="expense-event-groups"
     name-placeholder="Concepto (ej: Alimentacion, Hipoteca)"
-    :amount-placeholder="page.expenseAmountInputPlaceholder"
-    :notes-placeholder="page.expenseBulkEditHint"
+    :amount-placeholder="expenseAmountInputPlaceholder"
+    :notes-placeholder="expenseBulkEditHint"
     @patch="page.patchAnnualExpenseForm"
     @close="page.closeExpenseModal"
     @submit="page.submitAnnualExpense"
