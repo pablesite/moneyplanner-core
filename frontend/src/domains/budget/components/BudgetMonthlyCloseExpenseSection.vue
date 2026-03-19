@@ -238,7 +238,8 @@ defineProps<{
                   <span
                     v-if="row.checkin?.status === 'estimated'"
                     class="ui-budget-checkin-estimated-badge"
-                  >Estimado</span>
+                    >Estimado</span
+                  >
                   {{ expenseCheckinRowSummary(row) }}
                   <span class="ui-budget-checkin-row-planned">
                     (Previsto {{ formatMoney(row.planned) }} EUR)

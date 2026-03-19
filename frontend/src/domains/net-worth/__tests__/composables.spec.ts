@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, reactive } from 'vue';
+import { defineComponent } from 'vue';
+import { mount } from '@vue/test-utils';
 import { useNetWorthViewState } from '@/domains/net-worth/composables';
 import type { Asset, Liability, Summary } from '@/domains/net-worth/models';
 
@@ -75,16 +77,24 @@ describe('useNetWorthViewState (core)', () => {
     });
     mocks.useNetWorthStore.mockReturnValue(store);
 
-    const state = useNetWorthViewState();
-    state.showAssetModal.value = true;
+    const Harness = defineComponent({
+      setup() {
+        return useNetWorthViewState();
+      },
+      template: '<div />',
+    });
+    const wrapper = mount(Harness);
+    const state = wrapper.vm;
+    await wrapper.vm.$nextTick();
+    state.showAssetModal = true;
     await state.submitAsset({ name: 'A' });
     expect(store.createAsset).toHaveBeenCalledWith({ name: 'A' });
-    expect(state.showAssetModal.value).toBe(false);
+    expect(state.showAssetModal).toBe(false);
 
-    state.showLiabilityModal.value = true;
+    state.showLiabilityModal = true;
     await state.submitLiability({ name: 'L' });
     expect(store.createLiability).toHaveBeenCalledWith({ name: 'L' });
-    expect(state.showLiabilityModal.value).toBe(false);
+    expect(state.showLiabilityModal).toBe(false);
 
     state.confirmDeleteSnapshot(7);
     expect(store.deleteSnapshot).toHaveBeenCalledWith(7);
@@ -126,21 +136,28 @@ describe('useNetWorthViewState (core)', () => {
     });
     mocks.useNetWorthStore.mockReturnValue(store);
 
-    const state = useNetWorthViewState();
+    const Harness = defineComponent({
+      setup() {
+        return useNetWorthViewState();
+      },
+      template: '<div />',
+    });
+    const wrapper = mount(Harness);
+    const state = wrapper.vm;
 
     expect(state.prettyError()).toBe('boom');
     expect(state.canShowReal()).toBe(true);
-    state.valueMode.value = 'real';
+    state.valueMode = 'real';
     expect(state.unitLabel()).toBe('EUR (2025-01)');
     expect(state.modeLabel()).toContain('2025-01');
-    expect(state.realBaseLabel.value).toBe('Base: 2025-01');
-    expect(state.summaryAssets.value).toBe('900');
-    expect(state.summaryAssetBackedLiabilities.value).toBe('80');
-    expect(state.summaryUnbackedLiabilities.value).toBe('40');
-    expect(state.byCategoryKeys.value).toEqual(['cash', 'mortgage']);
-    expect(state.byCategoryLabels.value).toEqual(['Liquidez', 'Hipoteca']);
-    expect(state.byCategoryAssets.value).toEqual([9, 0]);
-    expect(state.byCategoryLiabilities.value).toEqual([0, 4]);
+    expect(state.realBaseLabel).toBe('Base: 2025-01');
+    expect(state.summaryAssets).toBe('900');
+    expect(state.summaryAssetBackedLiabilities).toBe('80');
+    expect(state.summaryUnbackedLiabilities).toBe('40');
+    expect(state.byCategoryKeys).toEqual(['cash', 'mortgage']);
+    expect(state.byCategoryLabels).toEqual(['Liquidez', 'Hipoteca']);
+    expect(state.byCategoryAssets).toEqual([9, 0]);
+    expect(state.byCategoryLiabilities).toEqual([0, 4]);
 
     const asset = makeItem({
       financed_asset_ref: 33,
@@ -150,26 +167,26 @@ describe('useNetWorthViewState (core)', () => {
       building_annual_depreciation_percent: '1',
     });
     state.openEdit(asset, 'asset');
-    expect(state.showEditModal.value).toBe(true);
-    expect(state.editTitle.value).toBe('Editar activo');
-    expect(state.editInitial.value?.amount).toBe('1000.5');
-    expect(state.editInitial.value?.financed_asset_id).toBe(33);
-    expect(state.editInitial.value?.valuation_model).toBe('real_estate_auto');
-    expect(state.editInitial.value?.land_value_share_percent).toBe('42.3');
-    expect(state.editInitial.value?.land_annual_appreciation_percent).toBe('3');
-    expect(state.editInitial.value?.building_annual_depreciation_percent).toBe('1');
+    expect(state.showEditModal).toBe(true);
+    expect(state.editTitle).toBe('Editar activo');
+    expect(state.editInitial?.amount).toBe('1000.5');
+    expect(state.editInitial?.financed_asset_id).toBe(33);
+    expect(state.editInitial?.valuation_model).toBe('real_estate_auto');
+    expect(state.editInitial?.land_value_share_percent).toBe('42.3');
+    expect(state.editInitial?.land_annual_appreciation_percent).toBe('3');
+    expect(state.editInitial?.building_annual_depreciation_percent).toBe('1');
     await state.submitEdit({ name: 'edited', financed_asset_id: 99 });
     expect(store.updateAsset).toHaveBeenCalledWith(1, { name: 'edited' });
-    expect(state.showEditModal.value).toBe(false);
+    expect(state.showEditModal).toBe(false);
 
     const liability = makeItem({ id: 2, name: 'Liability' }) as Liability;
     state.openEdit(liability, 'liability');
-    expect(state.editTitle.value).toBe('Editar pasivo');
+    expect(state.editTitle).toBe('Editar pasivo');
     await state.submitEdit({ name: 'L2', financed_asset_id: 88 });
     expect(store.updateLiability).toHaveBeenCalledWith(2, { name: 'L2', financed_asset_id: 88 });
 
     store.baseCurrency = 'USD';
     await nextTick();
-    expect(state.valueMode.value).toBe('nominal');
+    expect(state.valueMode).toBe('nominal');
   });
 });

@@ -168,17 +168,3 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
     </div>
   </div>
 </template>
-
-<style scoped>
-.ui-nw-timeline-chart-card {
-  position: relative;
-}
-
-.ui-nw-timeline-chart-canvas {
-  height: 240px;
-}
-
-.ui-nw-timeline-chart-canvas-expanded {
-  height: 420px;
-}
-</style>

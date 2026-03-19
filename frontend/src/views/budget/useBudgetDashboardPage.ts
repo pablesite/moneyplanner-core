@@ -102,6 +102,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     executed_closing_balance_base: string | null;
     effective_closing_balance_base: string;
     deviation_base: string;
+    coverage_source?: 'ledger' | 'checkin' | 'none';
     checkin: LiquidityMonthlyCheckinApiItem | null;
   };
 
@@ -795,7 +796,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const monthlyLiquidityExecutionRows = computed(() =>
     (liquidityMonthlySummary.value?.rows ?? []).map((row) => {
       const planned = toNumberOrZero(row.planned_closing_balance);
-      const executed = row.checkin ? toNumberOrZero(row.executed_closing_balance) : null;
+      const executed =
+        row.executed_closing_balance != null ? toNumberOrZero(row.executed_closing_balance) : null;
       return { ...row, planned, executed };
     }),
   );

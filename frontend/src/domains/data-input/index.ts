@@ -17,5 +17,6 @@ export {
 export * from './incomeTaxonomy';
 export * from './expenseTaxonomy';
 export * from './useDataInputFilters';
+export * from './pageApi';
 export { default as AmountPeriodCurrencyRow } from './components/AmountPeriodCurrencyRow.vue';
 export { default as AnnualEntryModalForm } from './components/AnnualEntryModalForm.vue';

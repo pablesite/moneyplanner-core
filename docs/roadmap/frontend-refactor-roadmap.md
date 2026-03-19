@@ -50,6 +50,8 @@ Con la suite actual en verde, `test:coverage` reporta:
 
 Fase 0 cerrada: todos los thresholds de coverage (`>=80%`) pasan en Core y SaaS.
 La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6.
+Fases 4, 5 y 6 cerradas el 2026-03-19: CSS contract, domain contracts y hardening completados,
+con `core/docs/architecture/shared-package-candidates.md` creado y las specs archivadas en `terminados/`.
 
 ### Hotspots de tamano actuales
 
@@ -80,12 +82,15 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 - riesgo medio: `AccountingMovementsView` (crecio x2.3), `styles/app.css`
 - riesgo bajo: `App.vue` (Fase 2 cerrada), `lib/` re-exports
 
-### Candidatos a shared package Core/SaaS (identificados, no ejecutar aun)
+### Candidatos a shared package Core/SaaS
+
+Documentados en `core/docs/architecture/shared-package-candidates.md`.
 
 Los siguientes dominios son identicos en ambos frontends:
 `net-worth`, `people`, `guide`, `aux-data`, `data-input`, `ui`
 No compartibles: `auth` (URLs distintas), `capabilities` (planes distintos), `lib/api.ts`
-La Fase 5 prepara los dominios para que sean inyectables; la Fase 6 documenta la extraccion.
+La Fase 5 preparo los dominios para que sean inyectables; la Fase 6 dejo documentada la
+extraccion y sus limites.
 
 ## Principios de trabajo (obligatorios)
 
@@ -335,7 +340,7 @@ Objetivo: reforzar el contrato visual compartido y reducir CSS ad hoc por pantal
 2. CSS de pagina ad hoc disminuye claramente.
 3. Los estados no felices quedan estandarizados.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-4-css-contract/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-4-css-contract/terminados/frontend.md`
 
 ---
 
@@ -366,7 +371,7 @@ Objetivo: vistas consumen APIs tipadas de dominio; 0 imports directos a `@/lib/a
 2. 0 imports de `@/lib/api` y `@/lib/errors` desde vistas refactorizadas.
 3. Las reglas de parsing/error dejan de repetirse pantalla a pantalla.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-5-domain-contracts/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-5-domain-contracts/terminados/frontend.md`
 
 ---
 
@@ -400,7 +405,7 @@ Objetivo: cerrar deuda residual, 0 warnings conocidos, estructura comprensible y
 3. Estructura del frontend legible para un nuevo colaborador.
 4. `shared-package-candidates.md` creado y enlazado.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-6-hardening/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-6-hardening/terminados/frontend.md`
 
 ---
 

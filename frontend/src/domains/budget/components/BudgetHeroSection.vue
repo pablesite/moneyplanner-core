@@ -72,7 +72,8 @@ const closeStatusLabel = computed(() => {
             v-if="closeStatus"
             class="ui-monthly-close-status-badge"
             :class="`ui-monthly-close-status-badge-${closeStatus}`"
-          >{{ closeStatusLabel }}</span>
+            >{{ closeStatusLabel }}</span
+          >
         </div>
         <p class="ui-budget-subtitle">
           Empieza por la liquidez real, luego confirma ingresos y gastos, y termina revisando el
