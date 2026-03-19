@@ -45,6 +45,12 @@ const showExpenseModalModel = computed({
 
 const fiscalYearOptions = computed(() => unref(page.fiscalYearOptions) ?? []);
 const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFilterOptions) ?? []);
+const annualIncomeEntries = computed(() => unref(page.annualIncomeEntries) ?? []);
+const filteredAnnualIncomeEntries = computed(() => unref(page.filteredAnnualIncomeEntries) ?? []);
+const annualIncomeGroups = computed(() => unref(page.annualIncomeGroups) ?? []);
+const annualExpenseEntries = computed(() => unref(page.annualExpenseEntries) ?? []);
+const filteredAnnualExpenseEntries = computed(() => unref(page.filteredAnnualExpenseEntries) ?? []);
+const annualExpenseGroups = computed(() => unref(page.annualExpenseGroups) ?? []);
 </script>
 
 <template>
@@ -132,12 +138,12 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
         {{ page.annualIncomeApiError }}
       </div>
 
-      <div v-if="!page.annualIncomeEntries.length && !page.annualIncomeLoading" class="subtle mt-3">
+      <div v-if="!annualIncomeEntries.length && !page.annualIncomeLoading" class="subtle mt-3">
         No hay ingresos anuales todavia.
       </div>
 
       <div
-        v-else-if="!page.filteredAnnualIncomeEntries.length && !page.annualIncomeLoading"
+        v-else-if="!filteredAnnualIncomeEntries.length && !page.annualIncomeLoading"
         class="subtle mt-3"
       >
         No hay ingresos con este filtro.
@@ -145,7 +151,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
 
       <div v-else class="mt-3 grid gap-4">
         <section
-          v-for="group in page.annualIncomeGroups"
+          v-for="group in annualIncomeGroups"
           :key="group.category"
           class="nw-cat-block"
           :class="page.incomeCategoryClass(group.category)"
@@ -153,7 +159,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
           <div class="nw-cat-header">
             <div class="nw-cat-left">
               <div>{{ group.label }}</div>
-              <span class="badge">{{ group.entries.length }}</span>
+              <span class="badge">{{ group.entries?.length ?? 0 }}</span>
             </div>
             <div class="nw-cat-right">
               <div class="nw-cat-total">
@@ -192,7 +198,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
 
           <div v-if="page.isIncomeGroupExpanded(group.category)" class="subcat-list">
             <div
-              v-for="subgroup in group.subgroups"
+              v-for="subgroup in group.subgroups ?? []"
               :key="`${group.category}:${subgroup.subcategory}`"
               class="nw-subcat-block"
             >
@@ -207,7 +213,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
               </div>
 
               <ul class="list list-plain nw-subcat-items">
-                <li v-for="entry in subgroup.entries" :key="entry.id">
+                <li v-for="entry in subgroup.entries ?? []" :key="entry.id">
                   <div class="nw-item-row income-item-row">
                     <div class="nw-item-main">
                       <div class="nw-item-name income-item-name">
@@ -290,15 +296,12 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
         {{ page.annualExpenseApiError }}
       </div>
 
-      <div
-        v-if="!page.annualExpenseEntries.length && !page.annualExpenseLoading"
-        class="subtle mt-3"
-      >
+      <div v-if="!annualExpenseEntries.length && !page.annualExpenseLoading" class="subtle mt-3">
         No hay salidas anuales todavia.
       </div>
 
       <div
-        v-else-if="!page.filteredAnnualExpenseEntries.length && !page.annualExpenseLoading"
+        v-else-if="!filteredAnnualExpenseEntries.length && !page.annualExpenseLoading"
         class="subtle mt-3"
       >
         No hay salidas con este filtro.
@@ -306,7 +309,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
 
       <div v-else class="mt-3 grid gap-4">
         <section
-          v-for="group in page.annualExpenseGroups"
+          v-for="group in annualExpenseGroups"
           :key="group.category"
           class="nw-cat-block"
           :class="page.expenseCategoryClass(group.category)"
@@ -314,7 +317,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
           <div class="nw-cat-header">
             <div class="nw-cat-left">
               <div>{{ group.label }}</div>
-              <span class="badge">{{ group.entries.length }}</span>
+              <span class="badge">{{ group.entries?.length ?? 0 }}</span>
             </div>
             <div class="nw-cat-right">
               <div class="nw-cat-total">
@@ -353,7 +356,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
 
           <div v-if="page.isExpenseGroupExpanded(group.category)" class="subcat-list">
             <div
-              v-for="subgroup in group.subgroups"
+              v-for="subgroup in group.subgroups ?? []"
               :key="`${group.category}:${subgroup.subcategory}`"
               class="nw-subcat-block"
             >
@@ -368,7 +371,7 @@ const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFi
               </div>
 
               <ul class="list list-plain nw-subcat-items">
-                <li v-for="entry in subgroup.entries" :key="entry.id">
+                <li v-for="entry in subgroup.entries ?? []" :key="entry.id">
                   <div class="nw-item-row income-item-row">
                     <div class="nw-item-main">
                       <div class="nw-item-name income-item-name">
