@@ -79,7 +79,7 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3e
+- [ ] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 3e
 - [ ] `core/docs/frontend/accounting-movements-ux-notes.md` — si cambia la composición de la vista
 - [ ] `core/docs/project-status.md` — marcar Fase 3e como completada
 
@@ -98,3 +98,4 @@ docker compose exec saas_frontend npm run test:coverage
 - [ ] Documentación requerida actualizada
 - [ ] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
+

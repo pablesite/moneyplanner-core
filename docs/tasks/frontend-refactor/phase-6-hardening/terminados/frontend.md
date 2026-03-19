@@ -63,7 +63,7 @@ extraídos y documenta los dominios listos para extracción como shared package.
    - `docs/frontend/frontend-visual-guide.md` — si quedan actualizaciones pendientes
    - `docs/frontend/frontend-css-workflow.md` — workflow final post-refactor
    - `docs/frontend/domain-map.md` (SaaS) — si cambió la estructura de dominios
-   - `core/docs/roadmap/frontend-refactor-roadmap.md` — marcar todas las fases completadas
+   - `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — marcar todas las fases completadas
 
 ### SaaS Replication
 Aplicar los mismos pasos en `frontend/` SaaS.
@@ -95,7 +95,7 @@ docker compose exec saas_frontend npm run test:coverage
 
 ## Required Documentation Updates
 - [x] `core/docs/architecture/shared-package-candidates.md` — **crear**
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — marcar todas las fases completadas
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — marcar todas las fases completadas
 - [x] `docs/frontend/frontend-visual-guide.md` — si hay actualizaciones pendientes
 - [x] `docs/frontend/frontend-css-workflow.md` — workflow post-refactor
 - [x] `docs/frontend/domain-map.md` — actualizar si cambió estructura de dominios
@@ -118,3 +118,4 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] Roadmap Core marcado como completado en todas las fases
 - [x] Spec movida a `terminados/`
 - [x] Commit final creado (Conventional Commits)
+

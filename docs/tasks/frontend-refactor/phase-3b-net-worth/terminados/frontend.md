@@ -84,7 +84,7 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3b
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 3b
 - [x] `core/docs/frontend/net-worth-ux-notes.md` — si cambian componentes de la vista
 - [x] `core/docs/project-status.md` — marcar Fase 3b como completada
 
@@ -111,5 +111,6 @@ docker compose exec saas_frontend npm run test:coverage
 ## Nota
 La deuda de baseline global (`test:coverage` >=80% en todas las metricas) sigue definida por la
 Fase 0 y no se considera resuelta por el cierre estructural de esta fase 3b.
+
 
 

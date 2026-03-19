@@ -84,7 +84,7 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar baseline con suite count real y resultado de coverage
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar baseline con suite count real y resultado de coverage
 - [x] `core/docs/project-status.md` — marcar Fase 0 como completada
 
 ## Risks
@@ -131,3 +131,4 @@ Para poder fijar thresholds globales `>=80` sin mezclar trabajo de fases posteri
 coverage varias superficies legacy/monolíticas que tienen task dedicada en fases 2-6 (shell completo,
 vistas monolíticas y composables de dominio grandes). Esto mantiene la red de seguridad de la baseline
 en el código activo y deja el hardening profundo para las fases de refactor correspondientes.
+

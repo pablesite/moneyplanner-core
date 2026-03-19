@@ -38,7 +38,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
-| Refactor frontend Core | Media | ✅ | Roadmap estructural completado; ver `roadmap/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
+| Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
 | Importación de datos | Media | ✅ | MoneyWiz v1 corregido: aliases en español para cabeceras (Fecha, Cuentas, Importe, Moneda, etc.) y detección de filas de resumen de cuenta. Validado con CSV real. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
@@ -84,5 +84,6 @@ _(ninguna tarea aparcada en este momento)_
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
+
 
 

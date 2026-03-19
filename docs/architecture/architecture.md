@@ -64,6 +64,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 - `AnnualExpenseMonthlyCheckin` (budget)
 - `LiquidityMonthlyCheckin` (net_worth)
 
+For liquidity rows covered by accounting ledger, monthly close uses ledger as default execution source. A user can create a manual liquidity checkin for the same month/asset to temporarily override ledger for reconciliation purposes; deleting that checkin restores ledger as source.
+
 Each `MonthlyClose` is unique per `(user, fiscal_year, month)`. Lifecycle: `draft → finalized → locked`, with reopening (`finalized → draft`). The three checkin models now support status `estimated` to distinguish algorithmically suggested distributions from manually entered data.
 
 Key services in `budget/services_monthly_close.py`:
