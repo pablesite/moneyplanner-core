@@ -81,4 +81,4 @@ Checkin writes (create + update) in `budget/views.py` and `net_worth/views.py` a
 4. `accounting-movements-architecture.md`
 5. `../operations/dev-setup.md`
 6. `../roadmap/community-roadmap.md`
-7. `../roadmap/backend-refactor-roadmap.md`
+7. `../roadmap/terminados/backend-refactor-roadmap.md`

@@ -9,7 +9,7 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
 3. `operations/dev-setup.md` -> local setup, validation, and troubleshooting
 4. `roadmap/product-roadmap.md` -> product evolution roadmap by module
 5. `roadmap/community-roadmap.md` -> high-level future areas and ideas (public-facing)
-6. `roadmap/backend-refactor-roadmap.md` -> backend maintainability roadmap
+6. `roadmap/terminados/backend-refactor-roadmap.md` -> completed backend structural refactor roadmap
 7. `roadmap/terminados/accounting-category-budget-separation-roadmap.md` -> completed roadmap for the accounting/budget boundary (all 5 phases done)
 8. `roadmap/frontend-refactor-roadmap.md` -> frontend maintainability roadmap
 9. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
@@ -25,7 +25,7 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
    - portable import
 3. `roadmap/`
    - community roadmap
-   - backend refactor roadmap
+   - backend maintainability backlog + completed structural roadmap
    - active execution roadmaps
    - `terminados/` for completed roadmaps
 4. `frontend/`
