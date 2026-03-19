@@ -103,6 +103,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     effective_closing_balance_base: string;
     deviation_base: string;
     coverage_source?: 'ledger' | 'checkin' | 'none';
+    ledger_available?: boolean;
     checkin: LiquidityMonthlyCheckinApiItem | null;
   };
 
@@ -2386,6 +2387,23 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     await upsertLiquidityCheckin(row, status);
   }
 
+  async function unlockLiquidityLedgerRow(
+    row: (typeof monthlyLiquidityExecutionRows.value)[number],
+  ): Promise<void> {
+    if (!row.ledger_available || row.coverage_source !== 'ledger') return;
+    const seed = row.executed ?? row.planned;
+    liquidityAdjustAmounts.value[row.asset_id] = seed.toFixed(2);
+    const status = amountsEqualCents(seed, row.planned) ? 'confirmed' : 'adjusted';
+    await upsertLiquidityCheckin(row, status);
+  }
+
+  async function relockLiquidityLedgerRow(
+    row: (typeof monthlyLiquidityExecutionRows.value)[number],
+  ): Promise<void> {
+    if (!row.ledger_available || row.coverage_source === 'ledger') return;
+    await clearLiquidityCheckin(row);
+  }
+
   async function onLiquidityCheckinCheckboxToggle(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
     checked: boolean,
@@ -2713,6 +2731,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     resetLiquidityCheckinDraftValue,
     upsertLiquidityCheckin,
     saveLiquidityCheckinFromInput,
+    unlockLiquidityLedgerRow,
+    relockLiquidityLedgerRow,
     onLiquidityCheckinCheckboxToggle,
     onLiquidityAdjustAmountBlur,
   };
