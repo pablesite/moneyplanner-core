@@ -14,7 +14,9 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 ### En curso
 
-_(ninguna)_
+| Módulo | Tipo | Descripción | Spec |
+|--------|------|-------------|------|
+| Cierre mensual — modo dual (frontend) | Agente | Integración del frontend con API unificada de cierre: fetch unificado, distribución inteligente, ciclo de vida, mirror Core↔SaaS. | `core/docs/tasks/monthly-close/dual-mode-frontend.md` |
 
 ### Siguiente tarea disponible
 
@@ -24,7 +26,6 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 |--------|------|-------------|------|
 | Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
 
-| Refactor frontend — Fase 3d | Agente | Descomponer GuidePhaseDetailView (2,207 líneas), extraer lógica compartida con HomeView. | `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md` |
 | Refactor frontend — Fase 3e | Agente | Descomponer AccountingMovementsView (2,263 líneas) en secciones controladas. | `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md` |
 | Refactor frontend — Fase 4 | Agente | CSS contract: consolidar app.css (20K líneas), reducir style scoped, estandarizar estados. | `core/docs/tasks/frontend-refactor/phase-4-css-contract/frontend.md` |
 | Refactor frontend — Fase 5 | Agente | Contratos internos de dominio: estandarizar estructura, 0 imports @/lib/api desde vistas. | `core/docs/tasks/frontend-refactor/phase-5-domain-contracts/frontend.md` |
@@ -44,7 +45,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
-| Refactor frontend Core | Media | ⏸ | Roadmap aparcado salvo petición explícita. Fases 1 (arch boundaries), 3a (BudgetDashboardView) y 3b (NetWorthView) cerradas a nivel estructural; ver `roadmap/frontend-refactor-roadmap.md`. |
+| Refactor frontend Core | Media | ⏸ | Roadmap aparcado salvo petición explícita. Fases 0, 1, 2, 3a, 3b, 3c y 3d cerradas a nivel estructural; ver `roadmap/frontend-refactor-roadmap.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
 | Importación de datos | Media | ✅ | MoneyWiz v1 corregido: aliases en español para cabeceras (Fecha, Cuentas, Importe, Moneda, etc.) y detección de filas de resumen de cuenta. Validado con CSV real. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
@@ -78,7 +79,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Frontend refactor | ?? Planificado | `roadmap/frontend-refactor-roadmap.md`. Fases 0 (baseline), 1 (arch boundaries), 2 (shell+router), 3a (BudgetDashboardView), 3b (NetWorthView) y 3c (DataInputView) cerradas; siguientes cortes abiertos en 3d/3e/4/5/6. |
+| Frontend refactor | ?? Planificado | `roadmap/frontend-refactor-roadmap.md`. Fases 0 (baseline), 1 (arch boundaries), 2 (shell+router), 3a (BudgetDashboardView), 3b (NetWorthView), 3c (DataInputView) y 3d (GuidePhaseDetailView) cerradas; siguientes cortes abiertos en 3e/4/5/6. |
 
 ---
 

@@ -75,8 +75,8 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3d
-- [ ] `core/docs/project-status.md` — marcar Fase 3d como completada
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3d
+- [x] `core/docs/project-status.md` — marcar Fase 3d como completada
 
 ## Risks
 - **Riesgo:** `HomeView.vue` y `GuidePhaseDetailView.vue` pueden compartir estado reactivo
@@ -84,11 +84,11 @@ docker compose exec saas_frontend npm run test:coverage
   mover lógica; no crear dependencias circulares entre dominio y vista.
 
 ## Completion Criteria
-- [ ] `GuidePhaseDetailView.vue` < 400 líneas
-- [ ] 0 duplicación de cálculos entre GuidePhaseDetailView y HomeView
-- [ ] Composables extraídos con tests ≥80% cobertura
+- [x] `GuidePhaseDetailView.vue` < 400 líneas
+- [x] 0 duplicación de cálculos entre GuidePhaseDetailView y HomeView
+- [x] Composables extraídos con tests ≥80% cobertura
 - [ ] Sin cambios de comportamiento observados en browser
-- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
-- [ ] Documentación requerida actualizada
-- [ ] Spec movida a `terminados/`
+- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] Documentación requerida actualizada
+- [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
