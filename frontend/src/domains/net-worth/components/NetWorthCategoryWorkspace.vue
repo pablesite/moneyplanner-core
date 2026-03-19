@@ -65,7 +65,9 @@ defineProps<{
           <button
             class="icon-btn ui-nw-category-add-btn"
             type="button"
-            :aria-label="selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo'"
+            :aria-label="
+              selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo'
+            "
             :title="selectedTimelineCategoryType === 'liability' ? 'Nuevo pasivo' : 'Nuevo activo'"
             @click="openCreateModal(selectedTimelineCategoryType, selectedTimelineCategory)"
           >
@@ -80,7 +82,11 @@ defineProps<{
       <span class="ui-nw-position-select-label">
         {{ selectedTimelineCategoryType === 'liability' ? 'Pasivo concreto' : 'Activo concreto' }}
       </span>
-      <select class="input ui-nw-position-select-input" :value="selectedPositionId ?? ''" @change="onPositionSelection">
+      <select
+        class="input ui-nw-position-select-input"
+        :value="selectedPositionId ?? ''"
+        @change="onPositionSelection"
+      >
         <option value="">Categoria completa</option>
         <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
           {{ row.name }}
@@ -96,7 +102,10 @@ defineProps<{
         v-for="row in categoryWorkspaceRows"
         :key="`${row.type}-${row.id}`"
         class="ui-nw-category-item"
-        :class="{ 'ui-nw-category-item-active': selectedPositionType === row.type && selectedPositionId === row.id }"
+        :class="{
+          'ui-nw-category-item-active':
+            selectedPositionType === row.type && selectedPositionId === row.id,
+        }"
       >
         <button class="ui-nw-category-item-main" type="button" @click="selectPosition(row)">
           <div class="ui-nw-category-selection-label">

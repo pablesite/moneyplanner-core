@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   useNetWorthStore: vi.fn(),
 }));
 
-vi.mock('@/stores/netWorth', () => ({
+vi.mock('@/domains/net-worth/store', () => ({
   useNetWorthStore: mocks.useNetWorthStore,
 }));
 

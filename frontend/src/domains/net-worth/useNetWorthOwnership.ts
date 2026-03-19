@@ -59,7 +59,11 @@ export function useNetWorthOwnership(params: {
   const ownershipOptions = computed<OwnershipOption[]>(() => {
     const options = new Map<number, OwnershipOption>();
     for (const ownership of params.ownerships.value ?? []) {
-      if (ownership.kind === 'individual' && ownership.member?.id && ownership.member.name?.trim()) {
+      if (
+        ownership.kind === 'individual' &&
+        ownership.member?.id &&
+        ownership.member.name?.trim()
+      ) {
         options.set(ownership.member.id, {
           value: ownership.member.id,
           label: ownership.member.name.trim(),

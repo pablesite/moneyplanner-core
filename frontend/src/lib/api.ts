@@ -5,7 +5,7 @@ import {
   getRefreshToken,
   setAccessToken,
   setRefreshToken,
-} from '@/lib/authSession';
+} from '@/domains/auth/session';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const coreBaseURL = import.meta.env.VITE_CORE_API_BASE_URL || baseURL;

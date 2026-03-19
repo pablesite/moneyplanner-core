@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { authApi } from '@/domains/auth';
-import { toApiErrorMessage } from '@/lib/errors';
+import { authApi, toAuthErrorMessage } from '@/domains/auth';
 
 const route = useRoute();
 
@@ -22,7 +21,7 @@ async function load() {
     const res = await authApi.validateSession();
     baseCurrency.value = res.data?.base_currency ?? '';
   } catch (e: unknown) {
-    error.value = toApiErrorMessage(e);
+    error.value = toAuthErrorMessage(e);
   } finally {
     loading.value = false;
   }

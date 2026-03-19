@@ -113,7 +113,9 @@ export function useNetWorthPageMetrics(params: {
 }) {
   const categoryLabelMap = computed(() => {
     const entries = new Map<string, string>();
-    params.assetCategories.forEach((category) => entries.set(`asset:${category.value}`, category.label));
+    params.assetCategories.forEach((category) =>
+      entries.set(`asset:${category.value}`, category.label),
+    );
     params.liabilityCategories.forEach((category) =>
       entries.set(`liability:${category.value}`, category.label),
     );
@@ -169,8 +171,7 @@ export function useNetWorthPageMetrics(params: {
 
   const assetPositionRows = computed<PositionRow[]>(() =>
     allAssetPositionRows.value.filter((asset) =>
-      params.selectedTimelineCategory.value &&
-      params.selectedTimelineCategoryType.value === 'asset'
+      params.selectedTimelineCategory.value && params.selectedTimelineCategoryType.value === 'asset'
         ? asset.category === params.selectedTimelineCategory.value
         : true,
     ),
@@ -211,7 +212,9 @@ export function useNetWorthPageMetrics(params: {
     ),
   );
 
-  const filteredAssetCategoryTotals = computed(() => buildCategoryTotals(allAssetPositionRows.value));
+  const filteredAssetCategoryTotals = computed(() =>
+    buildCategoryTotals(allAssetPositionRows.value),
+  );
   const filteredLiabilityCategoryTotals = computed(() =>
     buildCategoryTotals(allLiabilityPositionRows.value),
   );
@@ -232,7 +235,9 @@ export function useNetWorthPageMetrics(params: {
 
   const effectiveCategoryAssets = computed(() => {
     if (params.ownershipFilter.value === 'all') return params.byCategoryAssets.value;
-    return effectiveCategoryKeys.value.map((key) => filteredAssetCategoryTotals.value.get(key) ?? 0);
+    return effectiveCategoryKeys.value.map(
+      (key) => filteredAssetCategoryTotals.value.get(key) ?? 0,
+    );
   });
 
   const effectiveCategoryLiabilities = computed(() => {
@@ -242,7 +247,9 @@ export function useNetWorthPageMetrics(params: {
     );
   });
 
-  const filteredAssetCategoryCounts = computed(() => buildCategoryCounts(allAssetPositionRows.value));
+  const filteredAssetCategoryCounts = computed(() =>
+    buildCategoryCounts(allAssetPositionRows.value),
+  );
   const filteredLiabilityCategoryCounts = computed(() =>
     buildCategoryCounts(allLiabilityPositionRows.value),
   );
@@ -393,7 +400,8 @@ export function useNetWorthPageMetrics(params: {
     params.positionTimelineRowsSource.value.map((row) => ({
       date: row.date,
       label: formatMonthYearLabel(row.date),
-      value: toNumber(row.value_base || row.value) * (selectedPosition.value?.ownershipFraction ?? 1),
+      value:
+        toNumber(row.value_base || row.value) * (selectedPosition.value?.ownershipFraction ?? 1),
     })),
   );
 
