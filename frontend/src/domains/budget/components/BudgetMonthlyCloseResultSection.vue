@@ -1,5 +1,6 @@
 <script setup lang="ts">
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
+type MonthlyCloseStatus = 'draft' | 'finalized' | 'locked';
 type ResultTone = 'positive' | 'warning' | 'negative' | 'neutral';
 type ResultSeverity = 'ok' | 'watch' | 'alert';
 
@@ -64,10 +65,18 @@ defineProps<{
   monthlyExpenseExecutionEntries: Array<{ entry: { id: number } }>;
   monthlyIncomeResultBreakdown: ResultBreakdownGroup[];
   monthlyExpenseResultBreakdown: ResultBreakdownGroup[];
+  closeStatus?: MonthlyCloseStatus;
+  isCloseLocked?: boolean;
+  monthlyCloseActionBusy?: boolean;
+  hasDistributionSuggestion?: boolean;
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   formatSignedMoney: (value: number, decimals?: number) => string;
   goToPreviousMonthlyCloseStep: () => void;
+  onFinalizeClose?: () => void | Promise<void>;
+  onReopenClose?: () => void | Promise<void>;
+  onLockClose?: () => void | Promise<void>;
+  onApplyDistribution?: () => void | Promise<void>;
 }>();
 </script>
 
@@ -79,7 +88,11 @@ defineProps<{
     <div class="ui-budget-checkin-header">
       <div>
         <div class="ui-monthly-close-step-headline">
-          <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToPreviousMonthlyCloseStep()">
+          <button
+            type="button"
+            class="btn ui-monthly-close-step-nav-btn"
+            @click="goToPreviousMonthlyCloseStep()"
+          >
             &larr;
           </button>
           <h2 class="ui-budget-checkin-title">Paso 4 - Resultado</h2>
@@ -114,7 +127,8 @@ defineProps<{
       >
         <span>Residual contable</span>
         <strong>
-          {{ selectedMonthlyCloseResidual > 0 ? '+' : '' }}{{ formatMoney(selectedMonthlyCloseResidual) }} EUR
+          {{ selectedMonthlyCloseResidual > 0 ? '+' : ''
+          }}{{ formatMoney(selectedMonthlyCloseResidual) }} EUR
         </strong>
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -132,7 +146,8 @@ defineProps<{
       <article class="ui-budget-checkin-kpi">
         <span>Desviacion liquidez</span>
         <strong>
-          {{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
+          {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
+          }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
         </strong>
       </article>
     </div>
@@ -161,7 +176,9 @@ defineProps<{
               <div class="ui-budget-recon-flow-label">{{ row.label }}</div>
               <div v-if="row.meta" class="ui-budget-recon-flow-meta">{{ row.meta }}</div>
             </div>
-            <strong class="ui-budget-recon-flow-value">{{ formatSignedMoney(row.amount) }} EUR</strong>
+            <strong class="ui-budget-recon-flow-value"
+              >{{ formatSignedMoney(row.amount) }} EUR</strong
+            >
           </div>
         </div>
       </section>
@@ -169,7 +186,10 @@ defineProps<{
       <section class="ui-budget-result-card">
         <div class="ui-budget-result-card-head">
           <h3 class="ui-budget-result-card-title">Ajuste de conciliacion</h3>
-          <div class="ui-budget-result-badge" :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`">
+          <div
+            class="ui-budget-result-badge"
+            :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`"
+          >
             {{ selectedMonthlyResidualSeverityLabel }}
           </div>
         </div>
@@ -244,7 +264,9 @@ defineProps<{
       <section class="ui-budget-result-card">
         <div class="ui-budget-result-card-head">
           <h3 class="ui-budget-result-card-title">Ingresos ejecutados (detalle del mes)</h3>
-          <div class="ui-budget-result-card-meta">{{ monthlyIncomeExecutionEntries.length }} lineas</div>
+          <div class="ui-budget-result-card-meta">
+            {{ monthlyIncomeExecutionEntries.length }} lineas
+          </div>
         </div>
         <div v-if="!monthlyIncomeResultBreakdown.length" class="subtle">
           No hay ingresos ejecutables para este mes.
@@ -278,7 +300,11 @@ defineProps<{
               </div>
             </div>
             <div class="ui-budget-result-breakdown-rows">
-              <div v-for="row in group.rows.slice(0, 5)" :key="row.key" class="ui-budget-result-breakdown-row">
+              <div
+                v-for="row in group.rows.slice(0, 5)"
+                :key="row.key"
+                class="ui-budget-result-breakdown-row"
+              >
                 <span class="ui-budget-result-breakdown-name">{{ row.subcategoryLabel }}</span>
                 <span>{{ formatMoney(row.executedTotal) }} EUR</span>
                 <span>{{ formatPercent(row.shareOfExecuted, 0) }}</span>
@@ -302,7 +328,9 @@ defineProps<{
       <section class="ui-budget-result-card">
         <div class="ui-budget-result-card-head">
           <h3 class="ui-budget-result-card-title">Gastos ejecutados (detalle del mes)</h3>
-          <div class="ui-budget-result-card-meta">{{ monthlyExpenseExecutionEntries.length }} lineas</div>
+          <div class="ui-budget-result-card-meta">
+            {{ monthlyExpenseExecutionEntries.length }} lineas
+          </div>
         </div>
         <div v-if="!monthlyExpenseResultBreakdown.length" class="subtle">
           No hay gastos ejecutables para este mes.
@@ -336,7 +364,11 @@ defineProps<{
               </div>
             </div>
             <div class="ui-budget-result-breakdown-rows">
-              <div v-for="row in group.rows.slice(0, 5)" :key="row.key" class="ui-budget-result-breakdown-row">
+              <div
+                v-for="row in group.rows.slice(0, 5)"
+                :key="row.key"
+                class="ui-budget-result-breakdown-row"
+              >
                 <span class="ui-budget-result-breakdown-name">{{ row.subcategoryLabel }}</span>
                 <span>{{ formatMoney(row.executedTotal) }} EUR</span>
                 <span>{{ formatPercent(row.shareOfExecuted, 0) }}</span>
@@ -356,6 +388,50 @@ defineProps<{
           </article>
         </div>
       </section>
+    </div>
+
+    <div v-if="closeStatus" class="ui-monthly-close-actions">
+      <template v-if="closeStatus === 'locked'">
+        <span class="ui-monthly-close-locked-banner" style="flex: 1">Este mes está bloqueado.</span>
+      </template>
+      <template v-else-if="closeStatus === 'finalized'">
+        <button
+          type="button"
+          class="btn"
+          :disabled="monthlyCloseActionBusy"
+          @click="onReopenClose && onReopenClose()"
+        >
+          Reabrir cierre
+        </button>
+        <button
+          type="button"
+          class="btn"
+          style="color: rgba(255, 140, 140, 0.95); border-color: rgba(255, 92, 92, 0.3)"
+          :disabled="monthlyCloseActionBusy"
+          @click="onLockClose && onLockClose()"
+        >
+          Bloquear
+        </button>
+      </template>
+      <template v-else>
+        <button
+          type="button"
+          class="btn"
+          :disabled="monthlyCloseActionBusy"
+          @click="onFinalizeClose && onFinalizeClose()"
+        >
+          Finalizar cierre
+        </button>
+        <button
+          v-if="hasDistributionSuggestion"
+          type="button"
+          class="btn"
+          :disabled="monthlyCloseActionBusy"
+          @click="onApplyDistribution && onApplyDistribution()"
+        >
+          Aplicar distribución
+        </button>
+      </template>
     </div>
   </section>
 </template>

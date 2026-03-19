@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import BudgetAnnualSection from '@/domains/budget/components/BudgetAnnualSection.vue';
-import BudgetHeroSection from '@/domains/budget/components/BudgetHeroSection.vue';
-import BudgetMonthlyCloseExpenseSection from '@/domains/budget/components/BudgetMonthlyCloseExpenseSection.vue';
-import BudgetMonthlyCloseIncomeSection from '@/domains/budget/components/BudgetMonthlyCloseIncomeSection.vue';
-import BudgetMonthlyCloseLiquiditySection from '@/domains/budget/components/BudgetMonthlyCloseLiquiditySection.vue';
-import BudgetMonthlyCloseResultSection from '@/domains/budget/components/BudgetMonthlyCloseResultSection.vue';
+import {
+  BudgetAnnualSection,
+  BudgetHeroSection,
+  BudgetMonthlyCloseExpenseSection,
+  BudgetMonthlyCloseIncomeSection,
+  BudgetMonthlyCloseLiquiditySection,
+  BudgetMonthlyCloseResultSection,
+  budgetApi,
+  toBudgetErrorMessage,
+  getMonthlyClose,
+  patchMonthlyClose,
+  finalizeMonthlyClose,
+  reopenMonthlyClose,
+  lockMonthlyClose,
+  type MonthlyCloseStateResponse,
+} from '@/domains/budget';
 import '@/domains/budget/styles/dashboard.css';
 import {
   coreAccountingApi,
@@ -15,8 +25,6 @@ import {
   type LedgerEntry,
   type MonthlyAccountingSummary,
 } from '@/domains/accounting';
-import { coreApi } from '@/lib/api';
-import { toApiErrorMessage } from '@/lib/errors';
 import {
   expenseCategories,
   expenseSubcategories,
@@ -63,7 +71,7 @@ type ExpenseMonthlyCheckinApiItem = {
   annual_expense_entry_id: number;
   fiscal_year: number;
   month: number;
-  status: 'confirmed' | 'adjusted' | 'skipped';
+  status: 'confirmed' | 'adjusted' | 'skipped' | 'estimated';
   executed_amount: string | null;
   note: string;
   confirmed_at: string | null;
@@ -76,7 +84,7 @@ type IncomeMonthlyCheckinApiItem = {
   annual_income_entry_id: number;
   fiscal_year: number;
   month: number;
-  status: 'confirmed' | 'adjusted' | 'skipped';
+  status: 'confirmed' | 'adjusted' | 'skipped' | 'estimated';
   executed_amount: string | null;
   note: string;
   confirmed_at: string | null;
@@ -263,6 +271,10 @@ const liquidityExecutionBusyAssetId = ref<number | null>(null);
 const liquidityExecutionError = ref<string | null>(null);
 const liquidityAdjustAmounts = ref<Record<number, string>>({});
 const activeMonthlyCloseStep = ref<MonthlyCloseStepId>('liq');
+const monthlyCloseData = ref<MonthlyCloseStateResponse | null>(null);
+const monthlyCloseLoading = ref(false);
+const monthlyCloseError = ref<string | null>(null);
+const monthlyCloseActionBusy = ref(false);
 
 const incomeCategoryLabels = new Map(
   incomeCategories.map((row) => [row.value, row.label] as const),
@@ -925,7 +937,7 @@ function buildMonthlyResultBreakdown<
   TRow extends {
     entry: TEntry;
     planned: number;
-    checkin: { status: 'confirmed' | 'adjusted' | 'skipped' } | null;
+    checkin: { status: 'confirmed' | 'adjusted' | 'skipped' | 'estimated' } | null;
     executed: number | null;
     executionSource: BudgetExecutionSource;
   },
@@ -1472,7 +1484,7 @@ async function refreshAccountingExecutionData(): Promise<void> {
       (transaction) => transaction.entries,
     );
   } catch (e: unknown) {
-    accountingExecutionError.value = toApiErrorMessage(e);
+    accountingExecutionError.value = toBudgetErrorMessage(e);
     accountingMonthlySummary.value = null;
     accountingPostedEntries.value = [];
   } finally {
@@ -1487,7 +1499,7 @@ async function refreshBudgetSuggestionData(): Promise<void> {
     const response = await coreAccountingApi.getBudgetSuggestions(fiscalYear.value, 2);
     budgetSuggestions.value = response.data ?? null;
   } catch (e: unknown) {
-    budgetSuggestionsError.value = toApiErrorMessage(e);
+    budgetSuggestionsError.value = toBudgetErrorMessage(e);
     budgetSuggestions.value = null;
   } finally {
     budgetSuggestionsLoading.value = false;
@@ -1755,6 +1767,16 @@ const hasAnyPlannedData = computed(
   () => plannedIncomeTotal.value > 0 || plannedExpenseTotal.value > 0,
 );
 
+const closeStatus = computed(() => monthlyCloseData.value?.monthly_close.status ?? null);
+const isCloseLocked = computed(
+  () => closeStatus.value === 'finalized' || closeStatus.value === 'locked',
+);
+const hasDistributionSuggestion = computed(() => {
+  const s = monthlyCloseData.value?.suggestions;
+  if (!s) return false;
+  return Object.keys(s.income).length > 0 || Object.keys(s.expense).length > 0;
+});
+
 const activeViewSummary = computed(
   () =>
     `Ingresos: ${viewModeLabel(incomeViewMode.value)} · Gastos: ${viewModeLabel(expenseViewMode.value)}`,
@@ -1766,7 +1788,7 @@ async function refreshBudgetData(year = fiscalYear.value): Promise<void> {
 
 async function loadIncomeCheckinsForSelectedMonth(): Promise<void> {
   try {
-    const response = await coreApi.get<IncomeMonthlyCheckinApiItem[]>(
+    const response = await budgetApi.get<IncomeMonthlyCheckinApiItem[]>(
       '/api/budget/annual-income-checkins/',
       {
         params: { year: fiscalYear.value, month: selectedExecutionMonth.value },
@@ -1776,7 +1798,7 @@ async function loadIncomeCheckinsForSelectedMonth(): Promise<void> {
     for (const row of response.data ?? []) nextMap[row.annual_income_entry_id] = row;
     incomeCheckinsByEntryId.value = nextMap;
   } catch (e: unknown) {
-    incomeExecutionError.value = toApiErrorMessage(e);
+    incomeExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
@@ -1786,7 +1808,7 @@ function incomeEntryMonthKey(entryId: number, month: number): string {
 
 async function loadIncomeCheckinsForYear(): Promise<void> {
   try {
-    const response = await coreApi.get<IncomeMonthlyCheckinApiItem[]>(
+    const response = await budgetApi.get<IncomeMonthlyCheckinApiItem[]>(
       '/api/budget/annual-income-checkins/',
       {
         params: { year: fiscalYear.value },
@@ -1798,19 +1820,19 @@ async function loadIncomeCheckinsForYear(): Promise<void> {
     }
     incomeCheckinsByEntryMonth.value = nextMap;
   } catch (e: unknown) {
-    incomeExecutionError.value = toApiErrorMessage(e);
+    incomeExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
 async function loadIncomeExecutionSummary(year = fiscalYear.value): Promise<void> {
   try {
-    const response = await coreApi.get<IncomeMonthlySummaryResponse>(
+    const response = await budgetApi.get<IncomeMonthlySummaryResponse>(
       '/api/budget/annual-income/monthly-summary/',
       { params: { year } },
     );
     incomeMonthlySummary.value = response.data ?? null;
   } catch (e: unknown) {
-    incomeExecutionError.value = toApiErrorMessage(e);
+    incomeExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
@@ -1830,19 +1852,19 @@ async function refreshIncomeExecutionData(): Promise<void> {
 
 async function loadExpenseExecutionSummary(year = fiscalYear.value): Promise<void> {
   try {
-    const response = await coreApi.get<ExpenseMonthlySummaryResponse>(
+    const response = await budgetApi.get<ExpenseMonthlySummaryResponse>(
       '/api/budget/annual-expense/monthly-summary/',
       { params: { year } },
     );
     expenseMonthlySummary.value = response.data ?? null;
   } catch (e: unknown) {
-    expenseExecutionError.value = toApiErrorMessage(e);
+    expenseExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
 async function loadExpenseCheckinsForSelectedMonth(): Promise<void> {
   try {
-    const response = await coreApi.get<ExpenseMonthlyCheckinApiItem[]>(
+    const response = await budgetApi.get<ExpenseMonthlyCheckinApiItem[]>(
       '/api/budget/annual-expense-checkins/',
       {
         params: { year: fiscalYear.value, month: selectedExecutionMonth.value },
@@ -1854,7 +1876,7 @@ async function loadExpenseCheckinsForSelectedMonth(): Promise<void> {
     }
     expenseCheckinsByEntryId.value = nextMap;
   } catch (e: unknown) {
-    expenseExecutionError.value = toApiErrorMessage(e);
+    expenseExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
@@ -1897,6 +1919,7 @@ function checkinStatusLabel(
 ): string {
   if (status === 'confirmed') return 'Confirmado';
   if (status === 'adjusted') return 'Ajustado';
+  if (status === 'estimated') return 'Estimado';
   return 'No ocurrió';
 }
 
@@ -1931,10 +1954,10 @@ async function clearIncomeCheckin(
   incomeExecutionBusyEntryId.value = row.entry.id;
   incomeExecutionError.value = null;
   try {
-    await coreApi.delete(`/api/budget/annual-income-checkins/${existing.id}/`);
+    await budgetApi.delete(`/api/budget/annual-income-checkins/${existing.id}/`);
     await refreshIncomeExecutionData();
   } catch (e: unknown) {
-    incomeExecutionError.value = toApiErrorMessage(e);
+    incomeExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     incomeExecutionBusyEntryId.value = null;
   }
@@ -1962,11 +1985,11 @@ async function upsertIncomeCheckin(
     };
     const existing = incomeCheckinsByEntryId.value[row.entry.id];
     if (existing)
-      await coreApi.patch(`/api/budget/annual-income-checkins/${existing.id}/`, payload);
-    else await coreApi.post('/api/budget/annual-income-checkins/', payload);
+      await budgetApi.patch(`/api/budget/annual-income-checkins/${existing.id}/`, payload);
+    else await budgetApi.post('/api/budget/annual-income-checkins/', payload);
     await refreshIncomeExecutionData();
   } catch (e: unknown) {
-    incomeExecutionError.value = toApiErrorMessage(e);
+    incomeExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     incomeExecutionBusyEntryId.value = null;
   }
@@ -2056,10 +2079,10 @@ async function clearExpenseCheckin(
   expenseExecutionBusyEntryId.value = row.entry.id;
   expenseExecutionError.value = null;
   try {
-    await coreApi.delete(`/api/budget/annual-expense-checkins/${existing.id}/`);
+    await budgetApi.delete(`/api/budget/annual-expense-checkins/${existing.id}/`);
     await refreshExpenseExecutionData();
   } catch (e: unknown) {
-    expenseExecutionError.value = toApiErrorMessage(e);
+    expenseExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     expenseExecutionBusyEntryId.value = null;
   }
@@ -2140,13 +2163,13 @@ async function upsertExpenseCheckin(
     };
 
     if (existing) {
-      await coreApi.patch(`/api/budget/annual-expense-checkins/${existing.id}/`, payload);
+      await budgetApi.patch(`/api/budget/annual-expense-checkins/${existing.id}/`, payload);
     } else {
-      await coreApi.post('/api/budget/annual-expense-checkins/', payload);
+      await budgetApi.post('/api/budget/annual-expense-checkins/', payload);
     }
     await refreshExpenseExecutionData();
   } catch (e: unknown) {
-    expenseExecutionError.value = toApiErrorMessage(e);
+    expenseExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     expenseExecutionBusyEntryId.value = null;
   }
@@ -2183,13 +2206,13 @@ function ensureLiquidityAdjustAmountPrefilled(
 
 async function loadLiquidityExecutionSummary(): Promise<void> {
   try {
-    const response = await coreApi.get<LiquidityMonthlySummaryResponse>(
+    const response = await budgetApi.get<LiquidityMonthlySummaryResponse>(
       '/api/net-worth/liquidity/monthly-summary/',
       { params: { year: fiscalYear.value, month: selectedExecutionMonth.value } },
     );
     liquidityMonthlySummary.value = response.data ?? null;
   } catch (e: unknown) {
-    liquidityExecutionError.value = toApiErrorMessage(e);
+    liquidityExecutionError.value = toBudgetErrorMessage(e);
   }
 }
 
@@ -2203,6 +2226,74 @@ async function refreshLiquidityExecutionData(): Promise<void> {
   }
 }
 
+async function refreshMonthlyCloseData(): Promise<void> {
+  if (!isMonthlyCloseView.value) return;
+  monthlyCloseLoading.value = true;
+  monthlyCloseError.value = null;
+  try {
+    monthlyCloseData.value = await getMonthlyClose(fiscalYear.value, selectedExecutionMonth.value);
+  } catch (e: unknown) {
+    monthlyCloseError.value = toBudgetErrorMessage(e);
+  } finally {
+    monthlyCloseLoading.value = false;
+  }
+}
+
+async function handleFinalizeClose(): Promise<void> {
+  monthlyCloseActionBusy.value = true;
+  monthlyCloseError.value = null;
+  try {
+    await finalizeMonthlyClose(fiscalYear.value, selectedExecutionMonth.value);
+    await refreshMonthlyCloseData();
+  } catch (e: unknown) {
+    monthlyCloseError.value = toBudgetErrorMessage(e);
+  } finally {
+    monthlyCloseActionBusy.value = false;
+  }
+}
+
+async function handleReopenClose(): Promise<void> {
+  monthlyCloseActionBusy.value = true;
+  monthlyCloseError.value = null;
+  try {
+    await reopenMonthlyClose(fiscalYear.value, selectedExecutionMonth.value);
+    await refreshMonthlyCloseData();
+  } catch (e: unknown) {
+    monthlyCloseError.value = toBudgetErrorMessage(e);
+  } finally {
+    monthlyCloseActionBusy.value = false;
+  }
+}
+
+async function handleLockClose(): Promise<void> {
+  monthlyCloseActionBusy.value = true;
+  monthlyCloseError.value = null;
+  try {
+    await lockMonthlyClose(fiscalYear.value, selectedExecutionMonth.value);
+    await refreshMonthlyCloseData();
+  } catch (e: unknown) {
+    monthlyCloseError.value = toBudgetErrorMessage(e);
+  } finally {
+    monthlyCloseActionBusy.value = false;
+  }
+}
+
+async function handleApplyDistribution(): Promise<void> {
+  monthlyCloseActionBusy.value = true;
+  monthlyCloseError.value = null;
+  try {
+    await patchMonthlyClose(fiscalYear.value, selectedExecutionMonth.value, {
+      accept_suggestions: true,
+    });
+    await refreshMonthlyCloseData();
+    await Promise.all([refreshIncomeExecutionData(), refreshExpenseExecutionData()]);
+  } catch (e: unknown) {
+    monthlyCloseError.value = toBudgetErrorMessage(e);
+  } finally {
+    monthlyCloseActionBusy.value = false;
+  }
+}
+
 async function clearLiquidityCheckin(
   row: (typeof monthlyLiquidityExecutionRows.value)[number],
 ): Promise<void> {
@@ -2210,10 +2301,10 @@ async function clearLiquidityCheckin(
   liquidityExecutionBusyAssetId.value = row.asset_id;
   liquidityExecutionError.value = null;
   try {
-    await coreApi.delete(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`);
+    await budgetApi.delete(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`);
     await refreshLiquidityExecutionData();
   } catch (e: unknown) {
-    liquidityExecutionError.value = toApiErrorMessage(e);
+    liquidityExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     liquidityExecutionBusyAssetId.value = null;
   }
@@ -2265,13 +2356,13 @@ async function upsertLiquidityCheckin(
       closing_balance_real: parsedAdjusted.toFixed(2),
     };
     if (row.checkin) {
-      await coreApi.patch(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`, payload);
+      await budgetApi.patch(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`, payload);
     } else {
-      await coreApi.post('/api/net-worth/liquidity-checkins/', payload);
+      await budgetApi.post('/api/net-worth/liquidity-checkins/', payload);
     }
     await refreshLiquidityExecutionData();
   } catch (e: unknown) {
-    liquidityExecutionError.value = toApiErrorMessage(e);
+    liquidityExecutionError.value = toBudgetErrorMessage(e);
   } finally {
     liquidityExecutionBusyAssetId.value = null;
   }
@@ -2337,6 +2428,24 @@ watch(
   { immediate: true },
 );
 
+watch(monthlyCloseData, (data: MonthlyCloseStateResponse | null) => {
+  if (!data?.has_gaps) return;
+  for (const entryIdStr of Object.keys(data.suggestions.income)) {
+    const entryId = Number(entryIdStr);
+    const amount = data.suggestions.income[entryIdStr];
+    if (amount !== undefined && !incomeAdjustAmounts.value[entryId]) {
+      incomeAdjustAmounts.value = { ...incomeAdjustAmounts.value, [entryId]: amount };
+    }
+  }
+  for (const entryIdStr of Object.keys(data.suggestions.expense)) {
+    const entryId = Number(entryIdStr);
+    const amount = data.suggestions.expense[entryIdStr];
+    if (amount !== undefined && !expenseAdjustAmounts.value[entryId]) {
+      expenseAdjustAmounts.value = { ...expenseAdjustAmounts.value, [entryId]: amount };
+    }
+  }
+});
+
 watch(
   fiscalYear,
   (year) => {
@@ -2347,6 +2456,7 @@ watch(
       refreshIncomeExecutionData(),
       refreshExpenseExecutionData(),
       refreshLiquidityExecutionData(),
+      refreshMonthlyCloseData(),
     ]);
   },
   { immediate: true },
@@ -2358,6 +2468,7 @@ watch(selectedExecutionMonth, () => {
     loadIncomeCheckinsForSelectedMonth(),
     loadExpenseCheckinsForSelectedMonth(),
     refreshLiquidityExecutionData(),
+    refreshMonthlyCloseData(),
   ]);
 });
 
@@ -2401,6 +2512,7 @@ watch(
       :format-money="formatMoney"
       :format-percent="formatPercent"
       :view-mode-label="viewModeLabel"
+      :close-status="closeStatus ?? undefined"
       :set-active-monthly-close-step="setActiveMonthlyCloseStep"
       :update-selected-execution-month="updateSelectedExecutionMonth"
       :select-ownership-filter-option="selectOwnershipFilterOption"
@@ -2415,9 +2527,13 @@ watch(
     <div v-if="!isMonthlyCloseView && liquidityExecutionError" class="alert mt-3">
       {{ liquidityExecutionError }}
     </div>
+    <div v-if="isMonthlyCloseView && monthlyCloseError" class="alert mt-3">
+      {{ monthlyCloseError }}
+    </div>
     <BudgetMonthlyCloseExpenseSection
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"
+      :is-close-locked="isCloseLocked"
       :expense-monthly-summary="expenseMonthlySummary"
       :expense-execution-loading="expenseExecutionLoading"
       :expense-execution-busy-entry-id="expenseExecutionBusyEntryId"
@@ -2449,6 +2565,7 @@ watch(
     <BudgetMonthlyCloseLiquiditySection
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"
+      :is-close-locked="isCloseLocked"
       :previous-monthly-close-step="previousMonthlyCloseStep"
       :month-labels="monthLabels"
       :selected-execution-month="selectedExecutionMonth"
@@ -2477,6 +2594,7 @@ watch(
     <BudgetMonthlyCloseIncomeSection
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"
+      :is-close-locked="isCloseLocked"
       :monthly-income-execution-entries="monthlyIncomeExecutionEntries"
       :income-execution-loading="incomeExecutionLoading"
       :income-execution-error="incomeExecutionError"
@@ -2533,6 +2651,14 @@ watch(
       :format-percent="formatPercent"
       :format-signed-money="formatSignedMoney"
       :go-to-previous-monthly-close-step="goToPreviousMonthlyCloseStep"
+      :close-status="closeStatus ?? undefined"
+      :is-close-locked="isCloseLocked"
+      :monthly-close-action-busy="monthlyCloseActionBusy"
+      :has-distribution-suggestion="hasDistributionSuggestion"
+      :on-finalize-close="handleFinalizeClose"
+      :on-reopen-close="handleReopenClose"
+      :on-lock-close="handleLockClose"
+      :on-apply-distribution="handleApplyDistribution"
     />
     <BudgetAnnualSection
       :is-monthly-close-view="isMonthlyCloseView"
@@ -2558,4 +2684,3 @@ watch(
     />
   </div>
 </template>
-

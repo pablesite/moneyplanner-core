@@ -14,9 +14,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 ### En curso
 
-| Módulo | Tipo | Descripción | Spec |
-|--------|------|-------------|------|
-| Cierre mensual — modo dual (frontend) | Agente | Integración del frontend con API unificada de cierre: fetch unificado, distribución inteligente, ciclo de vida, mirror Core↔SaaS. | `core/docs/tasks/monthly-close/dual-mode-frontend.md` |
+_(ninguna tarea activa en este momento)_
 
 ### Siguiente tarea disponible
 
@@ -39,7 +37,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
 | Presupuesto — migración y UX | Alta | ⚪ | Migrar ingresos/gastos previstos desde Introducción de Datos; conectar con valores reales del cierre; mejorar visualización |
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
-| Cierre mensual — modo dual | Alta | ✅ | Backend completo: MonthlyClose model, distribución inteligente, API REST, bloqueo de checkins. Frontend pendiente. |
+| Cierre mensual — modo dual | Alta | ✅ | Backend + Frontend completos: API unificada, distribución inteligente, ciclo de vida (finalizar/reabrir/bloquear), mirror Core↔SaaS. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |

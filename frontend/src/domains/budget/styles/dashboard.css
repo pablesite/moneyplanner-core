@@ -1452,6 +1452,77 @@
   }
 }
 
+.ui-monthly-close-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.ui-monthly-close-status-badge-draft {
+  border-color: rgba(110, 209, 255, 0.28);
+  background: rgba(110, 209, 255, 0.08);
+  color: rgba(180, 235, 255, 0.92);
+}
+
+.ui-monthly-close-status-badge-finalized {
+  border-color: rgba(97, 216, 155, 0.28);
+  background: rgba(44, 196, 129, 0.08);
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-monthly-close-status-badge-locked {
+  border-color: rgba(255, 191, 66, 0.28);
+  background: rgba(255, 191, 66, 0.08);
+  color: rgba(255, 221, 135, 0.95);
+}
+
+.ui-budget-checkin-row-estimated {
+  border-style: dashed;
+  border-color: rgba(110, 209, 255, 0.22);
+  background: rgba(110, 209, 255, 0.03);
+}
+
+.ui-budget-checkin-estimated-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  border: 1px dashed rgba(110, 209, 255, 0.32);
+  background: rgba(110, 209, 255, 0.08);
+  color: rgba(180, 235, 255, 0.9);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.ui-monthly-close-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ui-monthly-close-locked-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 191, 66, 0.2);
+  background: rgba(255, 191, 66, 0.06);
+  color: rgba(255, 221, 135, 0.9);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 720px) {
   .ui-budget-hero-header,
   .ui-budget-section-header,
@@ -1522,4 +1593,3 @@
     padding-top: 5px;
   }
 }
-
