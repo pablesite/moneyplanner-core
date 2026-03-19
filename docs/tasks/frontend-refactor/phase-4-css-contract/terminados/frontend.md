@@ -90,10 +90,10 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `docs/frontend/frontend-visual-guide.md` — actualizar con patrones consolidados
-- [ ] `docs/frontend/frontend-css-workflow.md` — actualizar workflow si cambia la estructura de CSS
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 4
-- [ ] `core/docs/project-status.md` — marcar Fase 4 como completada
+- [x] `docs/frontend/frontend-visual-guide.md` — actualizar con patrones consolidados
+- [x] `docs/frontend/frontend-css-workflow.md` — actualizar workflow si cambia la estructura de CSS
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 4
+- [x] `core/docs/project-status.md` — marcar Fase 4 como completada
 
 ## Risks
 - **Riesgo:** mover CSS de `<style scoped>` a `app.css` puede crear colisiones de clase si hay
@@ -103,11 +103,11 @@ docker compose exec saas_frontend npm run test:coverage
   **Mitigación:** antes de consolidar, organizar `app.css` por secciones con comentarios claros.
 
 ## Completion Criteria
-- [ ] Patrones de page shell, section shell, state blocks consolidados en `app.css`
-- [ ] `<style scoped>` reducido en las vistas principales
-- [ ] `guide-home.css`, `guide-score.css`, `data-input.css` con decisión tomada y ejecutada
-- [ ] Tokens candidatos a shared package documentados en el roadmap
-- [ ] Docs frontend canónicas actualizadas
-- [ ] `lint`, `format:check`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
-- [ ] Spec movida a `terminados/`
-- [ ] Commit creado (Conventional Commits)
+- [x] Patrones de page shell, section shell, state blocks consolidados en `app.css`
+- [x] `<style scoped>` reducido en las vistas principales
+- [x] `guide-home.css`, `guide-score.css`, `data-input.css` con decisión tomada y ejecutada
+- [x] Tokens candidatos a shared package documentados en el roadmap
+- [x] Docs frontend canónicas actualizadas
+- [x] `lint`, `format:check`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] Spec movida a `terminados/`
+- [x] Commit creado (Conventional Commits)
