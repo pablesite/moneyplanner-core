@@ -96,9 +96,9 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 5
-- [ ] `docs/frontend/domain-map.md` — si cambia la estructura pública de los dominios
-- [ ] `core/docs/project-status.md` — marcar Fase 5 como completada
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 5
+- [x] `docs/frontend/domain-map.md` — si cambia la estructura pública de los dominios
+- [x] `core/docs/project-status.md` — marcar Fase 5 como completada
 
 ## Risks
 - **Riesgo:** borrar re-exports de `lib/` puede romper imports no detectados.
@@ -108,11 +108,11 @@ docker compose exec saas_frontend npm run test:coverage
   las vistas ya usan; no ampliar la API pública sin necesidad.
 
 ## Completion Criteria
-- [ ] 0 imports de `@/lib/api` o `@/lib/errors` desde vistas
-- [ ] Todos los dominios tienen la estructura estandarizada
-- [ ] `lib/` contiene solo `api.ts`, `errors.ts` y `format.ts` (más sus tests)
-- [ ] Dominios documentados como exportables o con bloqueadores identificados
-- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
-- [ ] Documentación requerida actualizada
-- [ ] Spec movida a `terminados/`
-- [ ] Commit creado (Conventional Commits)
+- [x] 0 imports de `@/lib/api` o `@/lib/errors` desde vistas
+- [x] Todos los dominios tienen la estructura estandarizada
+- [x] `lib/` contiene solo `api.ts`, `errors.ts` y `format.ts` (más sus tests)
+- [x] Dominios documentados como exportables o con bloqueadores identificados
+- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] Documentación requerida actualizada
+- [x] Spec movida a `terminados/`
+- [x] Commit creado (Conventional Commits)

@@ -4,8 +4,8 @@
 
 Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper contratos
 backend ni introducir cambios funcionales no intencionales.
-El refactor tambien prepara el terreno para un futuro shared package Core/SaaS
-(sin implementarlo aun — ver Fase 6).
+El refactor tambien prepara el terreno para un futuro shared package Core/SaaS,
+dejando documentada la extraccion futura en la Fase 6.
 
 ## Estado de este documento
 
@@ -43,10 +43,10 @@ statements: 80%, lines: 80%, functions: 80%, branches: 80%
 
 Con la suite actual en verde, `test:coverage` reporta:
 
-- `statements: 98.29%`
-- `lines: 98.29%`
-- `functions: 92.41%`
-- `branches: 81.50%`
+- `statements: 88.72%`
+- `lines: 88.72%`
+- `functions: 89.17%`
+- `branches: 81.73%`
 
 Fase 0 cerrada: todos los thresholds de coverage (`>=80%`) pasan en Core y SaaS.
 La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6.

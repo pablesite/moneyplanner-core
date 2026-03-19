@@ -2,15 +2,17 @@
 
 _Fecha de cierre documental: 2026-03-19_
 
-Este documento resume los dominios del frontend Core/SaaS que ya estan preparados, o
-cerca de estarlo, para una futura extraccion como shared package. No implementa nada: solo
-deja constancia de que quedo listo, que no y cuales son los siguientes pasos.
+Este documento resume los dominios del frontend Core/SaaS que ya estan preparados para una
+futura extraccion como shared package. No implementa nada: solo deja constancia de que
+quedo listo, que no y cuales son los siguientes pasos.
 
 ## Contexto
 
 El refactor frontend quedo cerrado en Core y replicado en SaaS. La Fase 6 dejo como
 salida documental este mapa de candidatos, para evitar que la decision de comparticion se
-pierda dentro del roadmap.
+pierda dentro del roadmap. Ver tambien:
+- `core/docs/roadmap/frontend-refactor-roadmap.md`
+- `docs/roadmap/frontend-refactor-roadmap.md`
 
 ## Candidatos preparados
 
@@ -44,4 +46,3 @@ pierda dentro del roadmap.
 1. Elegir un dominio con bajo riesgo y alta reutilizacion para la primera extraccion real.
 2. Definir la forma del paquete compartido solo cuando exista una necesidad funcional clara.
 3. Mantener este documento como referencia canonica hasta que la extraccion empiece.
-

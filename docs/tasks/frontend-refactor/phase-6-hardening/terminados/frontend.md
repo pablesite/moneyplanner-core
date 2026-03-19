@@ -94,13 +94,13 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/shared-package-candidates.md` — **crear**
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — marcar todas las fases completadas
-- [ ] `docs/frontend/frontend-visual-guide.md` — si hay actualizaciones pendientes
-- [ ] `docs/frontend/frontend-css-workflow.md` — workflow post-refactor
-- [ ] `docs/frontend/domain-map.md` — actualizar si cambió estructura de dominios
-- [ ] `core/docs/project-status.md` — marcar Fase 6 y refactor frontend como completado
-- [ ] `docs/project-status.md` — actualizar estado refactor frontend SaaS
+- [x] `core/docs/architecture/shared-package-candidates.md` — **crear**
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — marcar todas las fases completadas
+- [x] `docs/frontend/frontend-visual-guide.md` — si hay actualizaciones pendientes
+- [x] `docs/frontend/frontend-css-workflow.md` — workflow post-refactor
+- [x] `docs/frontend/domain-map.md` — actualizar si cambió estructura de dominios
+- [x] `core/docs/project-status.md` — marcar Fase 6 y refactor frontend como completado
+- [x] `docs/project-status.md` — actualizar estado refactor frontend SaaS
 
 ## Risks
 - **Riesgo:** warnings residuales en tests de terceros o librería que no se pueden resolver.
@@ -110,11 +110,11 @@ docker compose exec saas_frontend npm run test:coverage
   visuales no testeables; documentar qué se ignora en este fichero de spec.
 
 ## Completion Criteria
-- [ ] 0 imports legacy en vistas y dominios
-- [ ] 0 warnings de arquitectura en la suite de tests
-- [ ] `test:coverage` ≥80% en todas las métricas — Core y SaaS
-- [ ] `core/docs/architecture/shared-package-candidates.md` creado
-- [ ] Toda la documentación canónica actualizada
-- [ ] Roadmap Core marcado como completado en todas las fases
-- [ ] Spec movida a `terminados/`
-- [ ] Commit final creado (Conventional Commits)
+- [x] 0 imports legacy en vistas y dominios
+- [x] 0 warnings de arquitectura en la suite de tests
+- [x] `test:coverage` ≥80% en todas las métricas — Core y SaaS
+- [x] `core/docs/architecture/shared-package-candidates.md` creado
+- [x] Toda la documentación canónica actualizada
+- [x] Roadmap Core marcado como completado en todas las fases
+- [x] Spec movida a `terminados/`
+- [x] Commit final creado (Conventional Commits)
