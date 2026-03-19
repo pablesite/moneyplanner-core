@@ -47,17 +47,12 @@ describe('useAccountingStore', () => {
 
     await store.refreshAll();
 
-    expect(coreAccountingApi.getTransactions).toHaveBeenCalledWith({ year: 2026, month: 3 });
-    expect(coreAccountingApi.getAccountBalances).toHaveBeenCalledWith({
-      year: 2026,
-      month: 3,
-      account_type: 'asset',
-      status: 'posted',
-    });
+    expect(coreAccountingApi.getTransactions).toHaveBeenCalledWith();
+    expect(coreAccountingApi.getAccountBalances).not.toHaveBeenCalled();
     expect(store.accounts).toHaveLength(1);
     expect(store.transactions).toHaveLength(1);
     expect(store.monthlySummary?.fiscal_year).toBe(2026);
-    expect(store.accountBalancesSummary?.totals_by_account_type.asset).toBe('2100.00');
+    expect(store.accountBalancesSummary).toBeNull();
   });
 
   it('creates a transaction and reloads data', async () => {
@@ -116,8 +111,7 @@ describe('useAccountingStore', () => {
     });
 
     expect(coreAccountingApi.createQuickEntry).toHaveBeenCalled();
-    expect(coreAccountingApi.getAccountBalances).toHaveBeenCalled();
-    expect(store.accountBalancesSummary?.totals_by_account_type.asset).toBe('500.00');
+    expect(coreAccountingApi.getTransactions).toHaveBeenCalled();
   });
 
   it('stores MoneyWiz preview and commit results', async () => {
@@ -191,6 +185,6 @@ describe('useAccountingStore', () => {
 
     expect(store.moneyWizImportPreview?.row_count).toBe(2);
     expect(store.moneyWizImportCommitResult?.created_count).toBe(2);
-    expect(coreAccountingApi.commitMoneyWizImport).toHaveBeenCalledWith(file);
+    expect(coreAccountingApi.commitMoneyWizImport).toHaveBeenCalledWith(file, {});
   });
 });
