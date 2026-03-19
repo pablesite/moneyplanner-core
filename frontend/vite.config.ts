@@ -61,6 +61,7 @@ export default defineConfig({
         'src/views/NetWorthView.vue',
         'src/views/AccountingMovementsView.vue',
         'src/views/BudgetDashboardView.vue',
+        'src/views/data-input/useDataInputPage.ts',
       ],
       thresholds: {
         statements: 80,

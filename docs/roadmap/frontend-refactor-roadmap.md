@@ -57,10 +57,10 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 |-------|--------|--------|
 | `BudgetDashboardView.vue` | 5,512 | Alto |
 | `NetWorthView.vue` | 542 | Completada Fase 3b el 2026-03-18 |
-| `DataInputView.vue` | 2,742 | Alto |
+| `DataInputView.vue` | 16 | Completada Fase 3c el 2026-03-19 |
 | `AccountingMovementsView.vue` | 2,263 | Medio (crecio de 998 lineas desde 16-mar) |
 | `GuidePhaseDetailView.vue` | 2,207 | Medio |
-| `App.vue` | ~492 | Medio |
+| `App.vue` | 13 | Completada Fase 2 el 2026-03-19 |
 
 ### Deuda estructural visible
 
@@ -72,17 +72,13 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 - Vistas importan directamente `@/lib/api` y `@/lib/errors`
 - `lib/` tiene ~8 ficheros que son re-exports vacios de dominios
 - `frontend/src/styles/app.css`: 20,633 lineas — el fichero mas grande del frontend
-- Archivos residuales:
-  - `frontend/src/components/HelloWorld.vue`
-  - `frontend/src/views/SettingsFxView.vue` (7 lineas)
-  - `frontend/src/views/SettingsIpcView.vue` (7 lineas)
-  - `frontend/src/style.css`
+- Fase 2 cerrada: shell extraida a `src/shell/` y residuales retirados (`HelloWorld.vue`, `SettingsFxView.vue`, `SettingsIpcView.vue`, `style.css`)
 
 ### Lectura de riesgo (actualizada)
 
-- riesgo alto: `BudgetDashboardView`, `NetWorthView`, `DataInputView`
-- riesgo medio: `AccountingMovementsView` (crecio x2.3), `GuidePhaseDetailView`, `App.vue`, `styles/app.css`
-- riesgo bajo: `lib/` re-exports, wrappers puente, residuales
+- riesgo alto: `BudgetDashboardView`, `NetWorthView`
+- riesgo medio: `AccountingMovementsView` (crecio x2.3), `GuidePhaseDetailView`, `styles/app.css`
+- riesgo bajo: `App.vue` (Fase 2 cerrada), `lib/` re-exports
 
 ### Candidatos a shared package Core/SaaS (identificados, no ejecutar aun)
 
@@ -243,7 +239,7 @@ Objetivo: adelgazar `App.vue` y dejar el wiring de navegacion testeable.
 3. Sin archivos residuales.
 4. Suite de tests en verde con cobertura >= 80%.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-2-shell-router/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-2-shell-router/terminados/frontend.md`
 
 ---
 
@@ -255,7 +251,7 @@ Objetivo: dividir las vistas grandes en composables de pagina, secciones y compo
 
 1. `BudgetDashboardView.vue` (5,512 lineas al inicio, 2,362 tras cierre) — **spec 3a completada**
 2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
-3. `DataInputView.vue` (2,742 lineas) — **spec 3c**
+3. `DataInputView.vue` (2,742 lineas al inicio, 16 tras cierre) — **spec 3c completada**
 4. `GuidePhaseDetailView.vue` (2,207 lineas) — **spec 3d**
 5. `AccountingMovementsView.vue` (2,263 lineas) — **spec 3e**
 
@@ -277,7 +273,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 1. Secciones: filtros de ownership, timeline, analitica y ratios, detalle, actividad ledger.
 2. Reubicar calculos de la vista a composables del dominio/pagina.
 
-#### `DataInputView` (2,742 lineas)
+#### `DataInputView` (2,742 lineas al inicio, 16 tras cierre)
 
 1. Secciones: patrimonio, ingresos, gastos, portable, ownership filters.
 2. Reducir mezcla entre patrimonio, presupuestos y portabilidad.
@@ -304,7 +300,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 **Specs:**
 - `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3b-net-worth/terminados/frontend.md`
-- `core/docs/tasks/frontend-refactor/phase-3c-data-input/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3c-data-input/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md`
 

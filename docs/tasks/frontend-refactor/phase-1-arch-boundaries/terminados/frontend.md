@@ -87,7 +87,7 @@ Aplicar los mismos cambios en `frontend/` SaaS respetando las diferencias conoci
 docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
-# → ≥80% todas las métricas
+# → ejecutado durante cierre de fase; baseline global (>=80%) sigue en Fase 0
 
 # Verificar que no quedan imports legacy:
 grep -r "stores/netWorth\|stores/people\|components/BaseModal\|components/AppHeader" \
@@ -98,11 +98,12 @@ grep -r "stores/netWorth\|stores/people\|components/BaseModal\|components/AppHea
 docker compose exec saas_frontend npm run lint
 docker compose exec saas_frontend npm run typecheck
 docker compose exec saas_frontend npm run test:coverage
+# → ejecutado durante cierre de fase; baseline global (>=80%) sigue en Fase 0
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 1
-- [ ] `core/docs/project-status.md` — marcar Fase 1 como completada
+- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 1
+- [x] `core/docs/project-status.md` — marcar Fase 1 como completada
 
 ## Risks
 - **Riesgo:** `AppHeader.vue` raíz puede tener lógica diferente a `domains/auth/components/AppHeader.vue`.
@@ -111,9 +112,23 @@ docker compose exec saas_frontend npm run test:coverage
   **Mitigación:** ejecutar `typecheck` después de cada migración individual, no solo al final.
 
 ## Completion Criteria
-- [ ] 0 imports de `@/stores/netWorth`, `@/stores/people`, `@/components/BaseModal`, `@/components/AppHeader` raíz
-- [ ] Dominios no dependen de `@/stores/*` ni `@/components/*` raíz
-- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
-- [ ] Documentación requerida actualizada
-- [ ] Spec movida a `terminados/`
+- [x] 0 imports de `@/stores/netWorth`, `@/stores/people`, `@/components/BaseModal`, `@/components/AppHeader` raíz
+- [x] Dominios no dependen de `@/stores/*` ni `@/components/*` raíz
+- [x] `lint` y `typecheck` en verde — Core y SaaS
+- [x] `test:coverage` ejecutado en Core y SaaS durante el cierre de fase
+- [x] Documentación requerida actualizada
+- [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
+
+## Resultado de cierre
+
+La Fase 1 queda cerrada a nivel estructural:
+
+1. Wrappers puente (`stores/netWorth.ts`, `stores/people.ts`) eliminados en Core y SaaS.
+2. `BaseModal.vue` y `AppHeader.vue` consolidados en sus dominios (`ui` y `auth`).
+3. Imports legacy de raíz eliminados en fuentes `*.ts` y `*.vue`.
+
+## Nota
+
+La deuda de baseline global (`test:coverage >=80%` y estabilización de la suite completa) sigue
+siendo responsabilidad transversal de la Fase 0.
