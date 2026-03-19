@@ -31,7 +31,7 @@ Convenciones:
 
 ## CIERRE DEL MES / AÑO
 
-> Backend modo dual implementado (2026-03-19). Frontend pendiente (otro agente).
+> Backend modo dual implementado (2026-03-19). Frontend integrado (2026-03-19) — spec: `core/docs/tasks/monthly-close/terminados/dual-mode-frontend.md`.
 
 ### Modos de cierre — decisiones tomadas
 - **Sin selección explícita de modo.** El sistema detecta automáticamente cobertura (ledger / checkin / ninguna) y adapta lo que muestra y sugiere.
@@ -57,8 +57,23 @@ Convenciones:
 - `POST /api/budget/monthly-close/{year}/{month}/reopen/` — FINALIZED → DRAFT
 - `POST /api/budget/monthly-close/{year}/{month}/lock/` — FINALIZED → LOCKED
 
-### Pendiente
-- Frontend: wizard adaptativo que consuma los nuevos endpoints.
+### Frontend integrado ✅
+- Fetch unificado (`getMonthlyClose`) en modo cierre; `types.ts` + `api.ts` en dominio budget.
+- Distribución inteligente: inputs pre-rellenados con sugerencias del backend para entradas sin cobertura.
+- Ciclo de vida UI: badge status (draft/finalized/locked), botones finalizar/reabrir/bloquear en ResultSection.
+- Estado locked: inputs deshabilitados con banner informativo cuando cierre FINALIZED/LOCKED.
+- Badge "Estimado" para checkins con status `estimated`.
+- Mirror Core ↔ SaaS completado.
+
+### Vista de resultados
+- Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.
+- Mostrar solo insights relevantes; añadir gráficas explicables (ingresos/gastos ejecutados con detalle desplegable).
+
+### Cierre del año
+- Replicar la lógica del cierre mensual para el cierre anual.
+
+### Transferencias de ownership al cierre
+- `(Privado - Futuro)` Añadir lógica para calcular qué transferencia corresponde a cada miembro de la familia al cerrar el mes.
 
 ### Vista de resultados
 - Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.

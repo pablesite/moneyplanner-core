@@ -578,4 +578,3 @@ const {
     <div v-if="store.loading" class="ui-status-line">Cargando...</div>
   </div>
 </template>
-

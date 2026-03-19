@@ -839,7 +839,7 @@ export function useAccountingPage() {
 
   const cuentasSelectedAccount = computed(() =>
     cuentasSelectedAccountId.value != null
-      ? accounts.value.find((a) => a.id === cuentasSelectedAccountId.value) ?? null
+      ? (accounts.value.find((a) => a.id === cuentasSelectedAccountId.value) ?? null)
       : null,
   );
 
@@ -895,9 +895,7 @@ export function useAccountingPage() {
     todosRawTransactions.value.slice(0, todosVisibleCount.value),
   );
 
-  const todosHasMore = computed(
-    () => todosVisibleCount.value < todosRawTransactions.value.length,
-  );
+  const todosHasMore = computed(() => todosVisibleCount.value < todosRawTransactions.value.length);
 
   function loadMoreTodos() {
     todosVisibleCount.value += MOVEMENTS_PAGE_SIZE;

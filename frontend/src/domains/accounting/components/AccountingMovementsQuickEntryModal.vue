@@ -1,0 +1,340 @@
+<script setup lang="ts">
+/* eslint-disable vue/no-mutating-props */
+import { type PropType } from 'vue';
+import BaseModal from '@/domains/ui/components/BaseModal.vue';
+
+defineProps({
+  page: {
+    type: Object as PropType<any>,
+    required: true,
+  },
+});
+</script>
+
+<template>
+  <BaseModal
+    :open="page.showQuickEntryModal"
+    title="Registrar movimiento diario"
+    panel-class="max-w-[920px]"
+    @close="page.showQuickEntryModal = false"
+  >
+    <div class="ui-accounting-modal-copy">
+      <p class="ui-page-eyebrow">Alta rapida</p>
+      <p class="subtle">
+        La fecha de contabilizacion manda en el libro y la fecha valor indica cuando impacta
+        realmente en saldo.
+      </p>
+    </div>
+
+    <div v-if="!page.liquidityAccounts.length" class="ui-accounting-inline-note">
+      Necesitas al menos una cuenta de liquidez para registrar movimientos de alta rapida.
+    </div>
+
+    <form
+      class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form"
+      @submit.prevent="page.submitQuickEntryFromModal"
+    >
+      <div class="ui-accounting-segmented">
+        <button
+          v-for="option in page.quickMovementTypeOptions"
+          :key="option.value"
+          type="button"
+          class="btn ui-accounting-segmented-btn"
+          :class="{
+            'ui-accounting-segmented-btn-active':
+              page.quickEntryForm.movement_type === option.value,
+          }"
+          @click="page.quickEntryForm.movement_type = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+
+      <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+        <input
+          v-model="page.quickEntryForm.description"
+          class="input"
+          placeholder="Nomina marzo, compra semanal, mover a ahorro..."
+          required
+        />
+
+        <label class="ui-accounting-field">
+          <span>Fecha contabilizacion</span>
+          <input v-model="page.quickEntryForm.booking_date" type="date" class="input" required />
+        </label>
+
+        <label class="ui-accounting-field">
+          <span>Fecha valor</span>
+          <input v-model="page.quickEntryForm.value_date" type="date" class="input" required />
+        </label>
+      </div>
+
+      <p class="ui-accounting-inline-note">
+        Normalmente coinciden. Si el banco liquida despues, usa una fecha valor posterior.
+      </p>
+
+      <template v-if="page.quickEntryForm.movement_type === 'revaluation'">
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <select v-model="page.quickEntryForm.account_id" class="select" required>
+            <option :value="null">Cuenta de inversion</option>
+            <option
+              v-for="account in page.revaluationAccountOptions"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ page.accountDisplayName(account) }} / {{ account.currency }}
+            </option>
+          </select>
+
+          <input
+            v-model="page.quickEntryForm.revaluation_new_value"
+            class="input"
+            inputmode="decimal"
+            placeholder="Nuevo valor total del activo"
+            required
+          />
+        </div>
+
+        <p class="ui-accounting-inline-note">
+          <template v-if="page.revaluationCurrentBalance != null">
+            Saldo actual:
+            <strong>{{ page.revaluationCurrentBalance.toFixed(2) }}</strong
+            >.
+            <template v-if="page.revaluationDelta != null">
+              Revalorizacion:
+              <strong
+                :class="
+                  page.revaluationDelta > 0
+                    ? 'ui-accounting-tone-positive'
+                    : page.revaluationDelta < 0
+                      ? 'ui-accounting-tone-negative'
+                      : ''
+                "
+              >
+                {{ page.revaluationDelta >= 0 ? '+' : '' }}{{ page.revaluationDelta.toFixed(2) }}
+              </strong>
+            </template>
+          </template>
+          <template v-else> Selecciona la cuenta de inversion para ver el saldo actual. </template>
+        </p>
+      </template>
+
+      <div
+        v-else
+        class="ui-accounting-form-grid"
+        :class="
+          page.quickEntryForm.movement_type === 'transfer' ||
+          page.quickEntryForm.movement_type === 'investment_purchase' ||
+          page.quickEntryForm.movement_type === 'debt_payment'
+            ? 'ui-accounting-form-grid-wide'
+            : 'ui-accounting-form-grid-edit-simple'
+        "
+      >
+        <select v-model="page.quickEntryForm.account_id" class="select" required>
+          <option :value="null">Cuenta de liquidez</option>
+          <option v-for="account in page.liquidityAccounts" :key="account.id" :value="account.id">
+            {{ account.name }} / {{ account.currency }}
+          </option>
+        </select>
+
+        <input
+          v-model="page.quickEntryForm.amount"
+          class="input"
+          inputmode="decimal"
+          placeholder="0.00"
+          required
+        />
+
+        <select
+          v-if="page.quickEntryForm.movement_type === 'transfer'"
+          v-model="page.quickEntryForm.counterparty_account_id"
+          class="select"
+          required
+        >
+          <option :value="null">Cuenta destino</option>
+          <option
+            v-for="account in page.transferCounterpartyOptions"
+            :key="account.id"
+            :value="account.id"
+          >
+            {{ account.name }} / {{ account.currency }}
+          </option>
+        </select>
+
+        <select
+          v-else-if="page.quickEntryForm.movement_type === 'investment_purchase'"
+          v-model="page.quickEntryForm.counterparty_account_id"
+          class="select"
+          required
+        >
+          <option :value="null">Cuenta de inversion</option>
+          <option
+            v-for="account in page.investmentCounterpartyOptions"
+            :key="account.id"
+            :value="account.id"
+          >
+            {{ account.name }} / {{ account.currency }}
+          </option>
+        </select>
+
+        <select
+          v-else-if="page.quickEntryForm.movement_type === 'debt_payment'"
+          v-model="page.quickEntryForm.liability_account_id"
+          class="select"
+          required
+        >
+          <option :value="null">Cuenta de pasivo</option>
+          <option
+            v-for="account in page.liabilityCounterpartyOptions"
+            :key="account.id"
+            :value="account.id"
+          >
+            {{ account.name }} / {{ account.currency }}
+          </option>
+        </select>
+      </div>
+
+      <div
+        v-if="page.quickEntryNeedsClassification"
+        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+      >
+        <select v-model="page.quickEntryForm.category_key" class="select" required>
+          <option value="">Categoria</option>
+          <option
+            v-for="category in page.quickCategoryOptions"
+            :key="category.value"
+            :value="category.value"
+          >
+            {{ category.label }}
+          </option>
+        </select>
+
+        <select v-model="page.quickEntryForm.subcategory_key" class="select" required>
+          <option value="">Subcategoria</option>
+          <option
+            v-for="subcategory in page.quickSubcategoryOptions"
+            :key="subcategory.value"
+            :value="subcategory.value"
+          >
+            {{ subcategory.label }}
+          </option>
+        </select>
+      </div>
+
+      <details
+        v-if="page.quickEntryNeedsClassification"
+        class="ui-accounting-annual-link"
+        :open="
+          page.quickEntryForm.annual_income_entry_id != null ||
+          page.quickEntryForm.annual_expense_entry_id != null
+        "
+      >
+        <summary>
+          {{
+            page.hasCompatibleAnnualPlanOptions
+              ? 'Alinear con una linea del plan (opcional)'
+              : 'Sin lineas anuales compatibles para esta clasificacion'
+          }}
+        </summary>
+        <p class="ui-accounting-inline-note">
+          Usa este enlace solo si quieres relacionar el movimiento con una fila concreta del
+          presupuesto anual. La clasificacion principal ya queda guardada en el ledger.
+        </p>
+
+        <select
+          v-if="page.quickEntryForm.movement_type === 'income'"
+          v-model="page.quickEntryForm.annual_income_entry_id"
+          class="select"
+          :disabled="!page.annualIncomeOptionsCompatible.length"
+        >
+          <option :value="null">Sin vincular al plan anual</option>
+          <option
+            v-for="entry in page.annualIncomeOptionsCompatible"
+            :key="entry.id"
+            :value="entry.id"
+          >
+            {{ entry.name }}
+          </option>
+        </select>
+
+        <select
+          v-else
+          v-model="page.quickEntryForm.annual_expense_entry_id"
+          class="select"
+          :disabled="!page.annualExpenseOptionsCompatible.length"
+        >
+          <option :value="null">Sin vincular al plan anual</option>
+          <option
+            v-for="entry in page.annualExpenseOptionsCompatible"
+            :key="entry.id"
+            :value="entry.id"
+          >
+            {{ entry.name }}
+          </option>
+        </select>
+      </details>
+
+      <div
+        v-if="page.quickEntryForm.movement_type === 'debt_payment'"
+        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+      >
+        <input
+          v-model="page.quickEntryForm.principal_amount"
+          class="input"
+          inputmode="decimal"
+          placeholder="Principal (ej: 300.00)"
+          required
+        />
+        <input
+          v-model="page.quickEntryForm.interest_amount"
+          class="input"
+          inputmode="decimal"
+          placeholder="Interes (ej: 30.00, 0 si no aplica)"
+          required
+        />
+        <select v-model="page.quickEntryForm.interest_account_id" class="select">
+          <option :value="null">Cuenta de gasto por intereses (si aplica)</option>
+          <option v-for="account in page.debtInterestOptions" :key="account.id" :value="account.id">
+            {{ account.name }} / {{ account.currency }}
+          </option>
+        </select>
+      </div>
+
+      <textarea
+        v-model="page.quickEntryForm.notes"
+        class="textarea"
+        rows="2"
+        placeholder="Nota opcional para el movimiento"
+      />
+
+      <div class="ui-accounting-submit-row">
+        <p class="subtle">
+          {{
+            page.quickEntryForm.movement_type === 'transfer'
+              ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
+              : page.quickEntryForm.movement_type === 'investment_purchase'
+                ? 'La compra registra salida de liquidez y alta en la cuenta de inversion.'
+                : page.quickEntryForm.movement_type === 'debt_payment'
+                  ? 'El pago separa principal e intereses; total = principal + interes.'
+                  : 'El backend genera la contrapartida contable y registra categoria/subcategoria como clasificacion primaria.'
+          }}
+        </p>
+        <button
+          class="btn btn-primary"
+          type="submit"
+          :disabled="page.transactionCreationLoading || !page.quickEntryReady"
+        >
+          {{ page.transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento rapido' }}
+        </button>
+      </div>
+
+      <p
+        v-if="!page.quickEntryReady && !page.transactionCreationLoading"
+        class="ui-accounting-inline-note"
+      >
+        Completa descripcion, fechas, importe y cuenta de liquidez. Cada tipo puede requerir
+        cuentas, clasificacion funcional y desglose adicionales.
+      </p>
+    </form>
+  </BaseModal>
+</template>

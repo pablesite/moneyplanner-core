@@ -123,7 +123,11 @@ export function useNetWorthPageActions<
     params.customTimelineWindow.value = null;
     await Promise.all([
       params.store.fetchPositionTimeline(row.type, row.id),
-      params.store.fetchPositionActivity(row.type, row.id, row.type === 'asset' ? row.category : null),
+      params.store.fetchPositionActivity(
+        row.type,
+        row.id,
+        row.type === 'asset' ? row.category : null,
+      ),
       params.loadAccountingActivity(row),
     ]);
   }

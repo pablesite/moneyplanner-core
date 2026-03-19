@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, watch } from 'vue';
-import { useNetWorthStore } from '@/stores/netWorth';
+import { useNetWorthStore } from '@/domains/net-worth/store';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
 import type { Asset, Liability, NetWorthWritePayload, Summary } from '@/domains/net-worth/models';
 

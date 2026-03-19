@@ -138,7 +138,11 @@ defineProps<{
 
         <div class="ui-nw-timeline-toolbar-actions">
           <span class="ui-nw-timeline-range-caption">{{ timelineRangeCaption }}</span>
-          <button class="ui-nw-timeline-expand-button" type="button" @click="setTimelineExpanded(true)">
+          <button
+            class="ui-nw-timeline-expand-button"
+            type="button"
+            @click="setTimelineExpanded(true)"
+          >
             Expandir
           </button>
         </div>
@@ -157,7 +161,11 @@ defineProps<{
       </div>
 
       <div class="ui-nw-timeline-points">
-        <div v-for="row in timelineChartRows.slice(-6)" :key="row.date" class="ui-nw-timeline-point">
+        <div
+          v-for="row in timelineChartRows.slice(-6)"
+          :key="row.date"
+          class="ui-nw-timeline-point"
+        >
           <span>{{ row.label }}</span>
           <strong>{{ formatNumber(row.value, 0) }}</strong>
         </div>

@@ -84,12 +84,18 @@ defineProps<{
             </span>
           </button>
 
-          <div class="ui-budget-filter-segment" role="tablist" :aria-label="`Filtro de ${section.title}`">
+          <div
+            class="ui-budget-filter-segment"
+            role="tablist"
+            :aria-label="`Filtro de ${section.title}`"
+          >
             <button
               type="button"
               class="ui-budget-filter-btn"
               :class="{ 'ui-budget-filter-btn-active': section.filterMode === 'all' }"
-              @click="section.id === 'income' ? updateIncomeViewMode('all') : updateExpenseViewMode('all')"
+              @click="
+                section.id === 'income' ? updateIncomeViewMode('all') : updateExpenseViewMode('all')
+              "
             >
               Todos
             </button>
@@ -110,7 +116,9 @@ defineProps<{
               class="ui-budget-filter-btn"
               :class="{ 'ui-budget-filter-btn-active': section.filterMode === 'one_off' }"
               @click="
-                section.id === 'income' ? updateIncomeViewMode('one_off') : updateExpenseViewMode('one_off')
+                section.id === 'income'
+                  ? updateIncomeViewMode('one_off')
+                  : updateExpenseViewMode('one_off')
               "
             >
               Puntuales
@@ -217,7 +225,11 @@ defineProps<{
     </div>
 
     <div v-if="section.groups.length && isSectionExpanded(section.id)" class="ui-budget-groups">
-      <article v-for="group in section.groups" :key="`${section.id}-${group.categoryKey}`" class="ui-budget-group">
+      <article
+        v-for="group in section.groups"
+        :key="`${section.id}-${group.categoryKey}`"
+        class="ui-budget-group"
+      >
         <header class="ui-budget-group-header">
           <div class="ui-budget-group-title-wrap">
             <div class="ui-budget-group-kicker">Categoria</div>
@@ -233,11 +245,15 @@ defineProps<{
               :aria-label="`Ejecucion YTD categoria ${group.categoryLabel}`"
             >
               <div class="ui-budget-inline-progress-labels">
-                <span>Previsto vs Ejecutado acumulado (YTD hasta {{ selectedExecutionMonthLabel }})</span>
+                <span
+                  >Previsto vs Ejecutado acumulado (YTD hasta
+                  {{ selectedExecutionMonthLabel }})</span
+                >
                 <span>
                   {{
                     formatPercent(
-                      budgetCategoryActualExecution(section.id, group.categoryKey)?.completionRatio ?? null,
+                      budgetCategoryActualExecution(section.id, group.categoryKey)
+                        ?.completionRatio ?? null,
                       0,
                     )
                   }}
@@ -271,7 +287,11 @@ defineProps<{
               </div>
             </div>
 
-            <div v-else class="ui-budget-inline-progress" aria-label="Placeholder ejecucion categoria">
+            <div
+              v-else
+              class="ui-budget-inline-progress"
+              aria-label="Placeholder ejecucion categoria"
+            >
               <div class="ui-budget-inline-progress-labels">
                 <span>Previsto vs Ejecutado</span>
                 <span>
@@ -280,7 +300,12 @@ defineProps<{
                     class="ui-budget-inline-progress-preview-pill"
                     :class="`ui-budget-inline-progress-preview-pill-${executionPreview(section.id, `group:${group.categoryKey}`).tone}`"
                   >
-                    {{ formatPercent(executionPreview(section.id, `group:${group.categoryKey}`).ratio, 0) }}
+                    {{
+                      formatPercent(
+                        executionPreview(section.id, `group:${group.categoryKey}`).ratio,
+                        0,
+                      )
+                    }}
                   </span>
                 </span>
               </div>
@@ -288,7 +313,9 @@ defineProps<{
                 <div
                   class="ui-budget-inline-progress-fill"
                   :class="`ui-budget-inline-progress-fill-${executionPreview(section.id, `group:${group.categoryKey}`).tone}`"
-                  :style="{ width: `${executionPreview(section.id, `group:${group.categoryKey}`).widthPct}%` }"
+                  :style="{
+                    width: `${executionPreview(section.id, `group:${group.categoryKey}`).widthPct}%`,
+                  }"
                 />
                 <span
                   v-if="executionPreview(section.id, `group:${group.categoryKey}`).overflow"
@@ -335,7 +362,8 @@ defineProps<{
                   YTD hasta {{ selectedExecutionMonthLabel }} - completitud
                   {{
                     formatPercent(
-                      budgetSubcategoryActualExecution(section.id, row.key)?.completionRatio ?? null,
+                      budgetSubcategoryActualExecution(section.id, row.key)?.completionRatio ??
+                        null,
                       0,
                     )
                   }}
@@ -361,7 +389,9 @@ defineProps<{
                   <div
                     class="ui-budget-inline-progress-fill"
                     :class="`ui-budget-inline-progress-fill-${executionPreview(section.id, `row:${row.key}`).tone}`"
-                    :style="{ width: `${executionPreview(section.id, `row:${row.key}`).widthPct}%` }"
+                    :style="{
+                      width: `${executionPreview(section.id, `row:${row.key}`).widthPct}%`,
+                    }"
                   />
                   <span
                     v-if="executionPreview(section.id, `row:${row.key}`).overflow"
@@ -382,7 +412,11 @@ defineProps<{
 
             <div class="ui-budget-row-metrics">
               <div class="ui-budget-row-metric">
-                <span>{{ budgetSubcategoryActualExecution(section.id, row.key) ? 'Previsto YTD' : 'Previsto' }}</span>
+                <span>{{
+                  budgetSubcategoryActualExecution(section.id, row.key)
+                    ? 'Previsto YTD'
+                    : 'Previsto'
+                }}</span>
                 <strong>
                   {{
                     budgetSubcategoryActualExecution(section.id, row.key)
@@ -392,7 +426,11 @@ defineProps<{
                 </strong>
               </div>
               <div class="ui-budget-row-metric">
-                <span>{{ budgetSubcategoryActualExecution(section.id, row.key) ? 'Ejecutado YTD' : 'Ejecutado' }}</span>
+                <span>{{
+                  budgetSubcategoryActualExecution(section.id, row.key)
+                    ? 'Ejecutado YTD'
+                    : 'Ejecutado'
+                }}</span>
                 <strong
                   class="ui-budget-pending-text"
                   :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? executionPreview(section.id, `row:${row.key}`).tone}`"
@@ -405,7 +443,11 @@ defineProps<{
                 </strong>
               </div>
               <div class="ui-budget-row-metric">
-                <span>{{ budgetSubcategoryActualExecution(section.id, row.key) ? 'Desviacion YTD' : 'Desviacion' }}</span>
+                <span>{{
+                  budgetSubcategoryActualExecution(section.id, row.key)
+                    ? 'Desviacion YTD'
+                    : 'Desviacion'
+                }}</span>
                 <strong
                   class="ui-budget-pending-text"
                   :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? executionPreview(section.id, `row:${row.key}`).tone}`"
@@ -427,8 +469,8 @@ defineProps<{
       v-else-if="section.groups.length && !isSectionExpanded(section.id)"
       class="ui-budget-detail-collapsed-note"
     >
-      Vista compacta activa. Se muestran resumen y evolucion ejecutada. Pulsa en `Ver detalle`
-      para desplegar categorias y subcategorias.
+      Vista compacta activa. Se muestran resumen y evolucion ejecutada. Pulsa en `Ver detalle` para
+      desplegar categorias y subcategorias.
     </div>
 
     <div v-else class="subtle">

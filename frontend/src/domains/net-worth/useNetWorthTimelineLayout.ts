@@ -8,7 +8,10 @@ import {
   type ComputedRef,
   type Ref,
 } from 'vue';
-import type { DisplayedTimelinePoint, PositionRow } from '@/domains/net-worth/useNetWorthPageMetrics';
+import type {
+  DisplayedTimelinePoint,
+  PositionRow,
+} from '@/domains/net-worth/useNetWorthPageMetrics';
 
 export function useNetWorthTimelineLayout(params: {
   showCategoryWorkspace: ComputedRef<boolean>;
