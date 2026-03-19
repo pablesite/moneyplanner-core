@@ -51,6 +51,15 @@ const annualIncomeGroups = computed(() => unref(page.annualIncomeGroups) ?? []);
 const annualExpenseEntries = computed(() => unref(page.annualExpenseEntries) ?? []);
 const filteredAnnualExpenseEntries = computed(() => unref(page.filteredAnnualExpenseEntries) ?? []);
 const annualExpenseGroups = computed(() => unref(page.annualExpenseGroups) ?? []);
+const annualBalanceTotal = computed(() => Number(unref(page.annualBalanceTotal) ?? 0));
+const filteredAnnualIncomeTotal = computed(() =>
+  Number(unref(page.filteredAnnualIncomeTotal) ?? 0),
+);
+const filteredAnnualExpenseTotal = computed(() =>
+  Number(unref(page.filteredAnnualExpenseTotal) ?? 0),
+);
+const annualIncomeLoading = computed(() => Boolean(unref(page.annualIncomeLoading)));
+const annualExpenseLoading = computed(() => Boolean(unref(page.annualExpenseLoading)));
 const incomeModalTitle = computed(() => String(unref(page.incomeModalTitle) ?? ''));
 const expenseModalTitle = computed(() => String(unref(page.expenseModalTitle) ?? ''));
 const incomeSubmitLabel = computed(() => String(unref(page.incomeSubmitLabel) ?? ''));
@@ -133,7 +142,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </div>
         <div class="nw-list-header-right ui-flow-air-right">
           <div class="nw-list-total-inline ui-flow-air-total">
-            {{ page.formatMoneyAmount(page.annualBalanceTotal, 'EUR') }}
+            {{ page.formatMoneyAmount(annualBalanceTotal, 'EUR') }}
           </div>
           <div class="nw-list-total-details">Balance del ejercicio {{ page.fiscalYear }}</div>
         </div>
@@ -147,13 +156,13 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </div>
         <div class="nw-list-header-right">
           <div class="nw-list-total-inline">
-            {{ page.formatMoneyAmount(page.filteredAnnualIncomeTotal, 'EUR') }}
+            {{ page.formatMoneyAmount(filteredAnnualIncomeTotal, 'EUR') }}
           </div>
           <button
             class="btn btn-primary btn-sm nw-list-add-icon-only"
             type="button"
             aria-label="Anadir ingreso"
-            :disabled="page.annualIncomeLoading"
+            :disabled="annualIncomeLoading"
             @click="() => page.openIncomeModal()"
           >
             <span class="btn-icon">+</span>
@@ -170,12 +179,12 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         {{ page.annualIncomeApiError }}
       </div>
 
-      <div v-if="!annualIncomeEntries.length && !page.annualIncomeLoading" class="subtle mt-3">
+      <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
         No hay ingresos anuales todavia.
       </div>
 
       <div
-        v-else-if="!filteredAnnualIncomeEntries.length && !page.annualIncomeLoading"
+        v-else-if="!filteredAnnualIncomeEntries.length && !annualIncomeLoading"
         class="subtle mt-3"
       >
         No hay ingresos con este filtro.
@@ -271,7 +280,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
                       <button
                         class="icon-btn"
                         title="Editar"
-                        :disabled="page.annualIncomeLoading"
+                        :disabled="annualIncomeLoading"
                         @click="() => page.openIncomeModal(entry)"
                       >
                         &#9998;
@@ -279,7 +288,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
                       <button
                         class="icon-btn"
                         title="Eliminar"
-                        :disabled="page.annualIncomeLoading"
+                        :disabled="annualIncomeLoading"
                         @click="page.removeAnnualIncome(entry.id)"
                       >
                         &#128465;
@@ -293,9 +302,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </section>
       </div>
 
-      <div v-if="page.annualIncomeLoading" class="ui-status-line mt-2">
-        Cargando ingresos anuales...
-      </div>
+      <div v-if="annualIncomeLoading" class="ui-status-line mt-2">Cargando ingresos anuales...</div>
     </article>
 
     <article class="card ui-pro-panel">
@@ -305,13 +312,13 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </div>
         <div class="nw-list-header-right">
           <div class="nw-list-total-inline">
-            {{ page.formatMoneyAmount(page.filteredAnnualExpenseTotal, 'EUR') }}
+            {{ page.formatMoneyAmount(filteredAnnualExpenseTotal, 'EUR') }}
           </div>
           <button
             class="btn btn-primary btn-sm nw-list-add-icon-only"
             type="button"
             aria-label="Anadir salida"
-            :disabled="page.annualExpenseLoading"
+            :disabled="annualExpenseLoading"
             @click="() => page.openExpenseModal()"
           >
             <span class="btn-icon">+</span>
@@ -328,12 +335,12 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         {{ page.annualExpenseApiError }}
       </div>
 
-      <div v-if="!annualExpenseEntries.length && !page.annualExpenseLoading" class="subtle mt-3">
+      <div v-if="!annualExpenseEntries.length && !annualExpenseLoading" class="subtle mt-3">
         No hay salidas anuales todavia.
       </div>
 
       <div
-        v-else-if="!filteredAnnualExpenseEntries.length && !page.annualExpenseLoading"
+        v-else-if="!filteredAnnualExpenseEntries.length && !annualExpenseLoading"
         class="subtle mt-3"
       >
         No hay salidas con este filtro.
@@ -445,7 +452,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
                       <button
                         class="icon-btn"
                         title="Editar"
-                        :disabled="page.annualExpenseLoading"
+                        :disabled="annualExpenseLoading"
                         @click="() => page.openExpenseModal(entry)"
                       >
                         &#9998;
@@ -453,7 +460,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
                       <button
                         class="icon-btn"
                         title="Eliminar"
-                        :disabled="page.annualExpenseLoading"
+                        :disabled="annualExpenseLoading"
                         @click="page.removeAnnualExpense(entry.id)"
                       >
                         &#128465;
@@ -467,9 +474,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </section>
       </div>
 
-      <div v-if="page.annualExpenseLoading" class="ui-status-line mt-2">
-        Cargando salidas anuales...
-      </div>
+      <div v-if="annualExpenseLoading" class="ui-status-line mt-2">Cargando salidas anuales...</div>
     </article>
   </div>
 
@@ -477,7 +482,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
     :open="showIncomeModalModel"
     :title="incomeModalTitle"
     :form="annualIncomeForm"
-    :loading="page.annualIncomeLoading"
+    :loading="annualIncomeLoading"
     :submit-label="incomeSubmitLabel"
     :category-options="page.incomeCategories"
     :subcategory-options="annualSubcategoryOptions"
@@ -499,7 +504,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
     :open="showExpenseModalModel"
     :title="expenseModalTitle"
     :form="annualExpenseForm"
-    :loading="page.annualExpenseLoading"
+    :loading="annualExpenseLoading"
     :submit-label="expenseSubmitLabel"
     :category-options="page.expenseCategories"
     :subcategory-options="annualExpenseSubcategoryOptions"
