@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, unref } from 'vue';
 import { AnnualEntryModalForm } from '@/domains/data-input';
 
 const props = defineProps<{
@@ -42,6 +42,9 @@ const showExpenseModalModel = computed({
     page.showExpenseModal.value = value;
   },
 });
+
+const fiscalYearOptions = computed(() => unref(page.fiscalYearOptions) ?? []);
+const globalOwnershipFilterOptions = computed(() => unref(page.globalOwnershipFilterOptions) ?? []);
 </script>
 
 <template>
@@ -58,7 +61,7 @@ const showExpenseModalModel = computed({
               class="select nw-select-sm ui-flow-air-year-select"
               aria-label="Ejercicio"
             >
-              <option v-for="year in page.fiscalYearOptions" :key="year" :value="year">
+              <option v-for="year in fiscalYearOptions" :key="year" :value="year">
                 {{ year }}
               </option>
             </select>
@@ -81,7 +84,7 @@ const showExpenseModalModel = computed({
               <option value="all">Todos los miembros</option>
               <option value="unassigned">Sin asignar</option>
               <option
-                v-for="option in page.globalOwnershipFilterOptions"
+                v-for="option in globalOwnershipFilterOptions"
                 :key="`global-owner-${option.id}`"
                 :value="option.id"
               >
