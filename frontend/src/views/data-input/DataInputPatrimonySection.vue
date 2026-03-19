@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, unref } from 'vue';
 import { BaseModal } from '@/domains/ui';
 import { ItemForm, ItemList } from '@/domains/net-worth';
 
@@ -52,13 +52,25 @@ const showEditModalModel = computed({
 });
 
 const hasGeneratedLiabilityExpenseEntry = computed(() => {
-  const review = page.generatedLiabilityExpenseReview.value;
+  const review = unref(page.generatedLiabilityExpenseReview);
   if (!review) return false;
-  return page.annualExpenseEntries.value.some(
+  return (unref(page.annualExpenseEntries) ?? []).some(
     (entry: { sourceLiabilityId: number | null; isSystemGenerated: boolean }) =>
       entry.sourceLiabilityId === review.liabilityId && entry.isSystemGenerated,
   );
 });
+
+const netAssetsBase = computed(() => unref(page.netAssetsBase) ?? 0);
+const netAssetsCurrency = computed(() => unref(page.netAssetsCurrency) ?? 'EUR');
+const visibleAssets = computed(() => unref(page.visibleAssets) ?? []);
+const visibleLiabilities = computed(() => unref(page.visibleLiabilities) ?? []);
+const activeAssets = computed(() => unref(page.activeAssets) ?? []);
+const generatedLiabilityExpenseReview = computed(
+  () => unref(page.generatedLiabilityExpenseReview) ?? null,
+);
+const generatedLiabilityExpenseEntries = computed(
+  () => generatedLiabilityExpenseReview.value?.entries ?? [],
+);
 </script>
 
 <template>
@@ -75,7 +87,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
         </div>
         <div class="nw-list-header-right ui-balance-air-right">
           <div class="nw-list-total-inline ui-balance-air-total">
-            {{ page.formatMoneyAmount(page.netAssetsBase, page.netAssetsCurrency) }}
+            {{ page.formatMoneyAmount(netAssetsBase, netAssetsCurrency) }}
           </div>
           <div class="nw-list-total-details">Neto (activos - pasivos)</div>
         </div>
@@ -86,7 +98,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
       <ItemList
         v-model:ownership-filter-value="assetOwnershipFilterModel"
         title="Activos"
-        :items="page.visibleAssets"
+        :items="visibleAssets"
         :show-archived="page.visibilityFilterMode !== 'active'"
         :show-ownership-filter="false"
         :categories="page.assetCategories"
@@ -106,7 +118,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
       <ItemList
         v-model:ownership-filter-value="liabilityOwnershipFilterModel"
         title="Pasivos"
-        :items="page.visibleLiabilities"
+        :items="visibleLiabilities"
         :show-archived="page.visibilityFilterMode !== 'active'"
         :show-ownership-filter="false"
         :categories="page.liabilityCategories"
@@ -114,7 +126,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
         :category-totals-base="page.store.summary?.liabilities_by_category ?? {}"
         :total-base="page.store.summary?.total_liabilities ?? '0'"
         v-bind="page.itemListProps"
-        :assets="page.activeAssets"
+        :assets="activeAssets"
         :on-update="page.updateLiabilityAndShowExpenseReview"
         :on-archive="page.store.archiveLiability"
         :on-delete="page.deleteLiabilityAndReloadExpenses"
@@ -158,7 +170,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
       :title="page.generatedLiabilityExpenseReviewTitle"
       @close="page.closeGeneratedLiabilityExpenseModal"
     >
-      <div v-if="page.generatedLiabilityExpenseReview" class="grid gap-3">
+      <div v-if="generatedLiabilityExpenseReview" class="grid gap-3">
         <div
           v-if="page.generatedLiabilityExpenseReviewChangeMessage"
           class="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white/90"
@@ -169,14 +181,14 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
           class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90"
         >
           Se han generado gastos recurrentes en
-          {{ page.generatedLiabilityExpenseReview.entries.length }}
+          {{ generatedLiabilityExpenseEntries.length }}
           anualidades para este pasivo. Revisalos y confirma que la clasificacion
           (categoria/subcategoria/naturaleza) es correcta.
         </div>
 
         <div class="grid gap-2">
           <div
-            v-for="entry in page.generatedLiabilityExpenseReview.entries"
+            v-for="entry in generatedLiabilityExpenseEntries"
             :key="entry.id"
             class="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
           >
@@ -211,7 +223,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
           <button
             class="btn"
             type="button"
-            :disabled="!page.generatedLiabilityExpenseReview.entries.length"
+            :disabled="!generatedLiabilityExpenseEntries.length"
             @click="page.openGeneratedExpenseBulkEdit"
           >
             Editar todos los ejercicios
@@ -242,7 +254,7 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
         :categories="page.editCategories"
         :subcategories="page.editKind === 'asset' ? page.assetSubcategories : undefined"
         v-bind="page.itemFormProps"
-        :assets="page.editKind === 'liability' ? page.activeAssets : []"
+        :assets="page.editKind === 'liability' ? activeAssets : []"
         :show-financed-asset="page.editKind === 'liability'"
         :allow-negative="page.editKind === 'asset'"
         mode="edit"
