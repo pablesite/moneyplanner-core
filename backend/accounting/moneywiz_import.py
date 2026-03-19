@@ -307,7 +307,7 @@ def _resolve_investment_mirrors(
         normalized = _normalize_lookup_text(category_raw)
         for prefix in ("inversiones gastos > ", "inversiones ingresos > "):
             if normalized.startswith(prefix):
-                return normalized[len(prefix):]
+                return normalized[len(prefix) :]
         return ""
 
     # Index Row-B candidates by (date, abs_amount, subcategory, description); first match wins.
@@ -440,9 +440,7 @@ def _resolve_investment_mirrors(
         _is_pasivos_revaluation = _match_moneywiz_path_set(
             row.category_raw, _MONEYWIZ_INVESTMENT_PURCHASE_PATHS
         )
-        _is_inversiones_gastos_sale = (
-            _inv_side(row.category_raw) == "gastos" and row.amount > ZERO
-        )
+        _is_inversiones_gastos_sale = _inv_side(row.category_raw) == "gastos" and row.amount > ZERO
         if (
             row.movement_type == "investment_purchase"
             and row.counterparty_name.startswith(_NNN_PREFIX)
@@ -624,9 +622,7 @@ def _resolve_debt_mirrors(
         total = row.amount.copy_abs()
         interest = (total - principal).copy_abs() if total > principal else ZERO
 
-        new_warnings = [
-            w for w in row.warnings if "provisional" not in w.lower()
-        ]
+        new_warnings = [w for w in row.warnings if "provisional" not in w.lower()]
         if interest > ZERO:
             new_warnings.append(
                 f"Deuda con intereses: principal {principal} EUR, "
@@ -1251,7 +1247,9 @@ def _import_moneywiz_row(
             name=row.counterparty_name,
             account_id_map=account_id_map,
         )
-        principal = row.principal_amount if row.principal_amount is not None else row.amount.copy_abs()
+        principal = (
+            row.principal_amount if row.principal_amount is not None else row.amount.copy_abs()
+        )
         interest = row.interest_amount if row.interest_amount is not None else ZERO
         interest_account = None
         if interest > ZERO:

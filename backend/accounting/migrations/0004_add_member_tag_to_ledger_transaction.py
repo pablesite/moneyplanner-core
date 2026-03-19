@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounting', '0003_ledgertransaction_import_fingerprint_and_more'),
+        ("accounting", "0003_ledgertransaction_import_fingerprint_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='member_tag',
-            field=models.CharField(blank=True, default='', max_length=32),
+            model_name="ledgertransaction",
+            name="member_tag",
+            field=models.CharField(blank=True, default="", max_length=32),
         ),
     ]

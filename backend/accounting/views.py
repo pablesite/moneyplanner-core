@@ -35,7 +35,9 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
     serializer_class = LedgerAccountSerializer
 
     def get_queryset(self):
-        queryset = LedgerAccount.objects.filter(user=self.request.user).select_related("asset", "liability")
+        queryset = LedgerAccount.objects.filter(user=self.request.user).select_related(
+            "asset", "liability"
+        )
         account_type = self.request.query_params.get("account_type")
         is_active = self.request.query_params.get("is_active")
         if account_type:
