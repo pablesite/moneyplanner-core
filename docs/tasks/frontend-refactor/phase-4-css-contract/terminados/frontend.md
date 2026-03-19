@@ -92,7 +92,7 @@ docker compose exec saas_frontend npm run test:coverage
 ## Required Documentation Updates
 - [x] `docs/frontend/frontend-visual-guide.md` — actualizar con patrones consolidados
 - [x] `docs/frontend/frontend-css-workflow.md` — actualizar workflow si cambia la estructura de CSS
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 4
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 4
 - [x] `core/docs/project-status.md` — marcar Fase 4 como completada
 
 ## Risks
@@ -111,3 +111,4 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] `lint`, `format:check`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)
+

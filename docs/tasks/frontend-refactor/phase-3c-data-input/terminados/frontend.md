@@ -42,7 +42,7 @@ Nota de coverage:
 - `views/data-input/useDataInputPage.ts` se excluye temporalmente en `vite.config.ts` para mantener la baseline global de coverage mientras el hardening fino de composables monoliticos se aborda en fases posteriores del roadmap.
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` - estado Fase 3c actualizado
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` - estado Fase 3c actualizado
 - [x] `core/docs/project-status.md` - Fase 3c marcada como completada
 - [x] `docs/roadmap/frontend-refactor-roadmap.md` - espejo SaaS actualizado
 
@@ -54,3 +54,4 @@ Nota de coverage:
 - [x] Documentacion requerida actualizada
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
+

@@ -54,7 +54,7 @@ Checks estructurales:
 3. `HelloWorld`, `SettingsFxView`, `SettingsIpcView` y `style.css` eliminados en ambos stacks.
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` - estado Fase 2 actualizado
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` - estado Fase 2 actualizado
 - [x] `core/docs/project-status.md` - Fase 2 marcada como completada
 - [x] `docs/roadmap/frontend-refactor-roadmap.md` - espejo SaaS actualizado
 
@@ -66,3 +66,4 @@ Checks estructurales:
 - [x] Documentacion requerida actualizada
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
+

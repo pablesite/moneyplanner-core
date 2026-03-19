@@ -11,7 +11,7 @@ quedo listo, que no y cuales son los siguientes pasos.
 El refactor frontend quedo cerrado en Core y replicado en SaaS. La Fase 6 dejo como
 salida documental este mapa de candidatos, para evitar que la decision de comparticion se
 pierda dentro del roadmap. Ver tambien:
-- `core/docs/roadmap/frontend-refactor-roadmap.md`
+- `core/docs/roadmap/terminados/frontend-refactor-roadmap.md`
 - `docs/roadmap/frontend-refactor-roadmap.md`
 
 ## Candidatos preparados
@@ -46,3 +46,4 @@ pierda dentro del roadmap. Ver tambien:
 1. Elegir un dominio con bajo riesgo y alta reutilizacion para la primera extraccion real.
 2. Definir la forma del paquete compartido solo cuando exista una necesidad funcional clara.
 3. Mantener este documento como referencia canonica hasta que la extraccion empiece.
+

@@ -71,7 +71,7 @@ docker compose exec saas_frontend npm run test:unit -- src/views/__tests__/Budge
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 3a
+- [ ] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 3a
 - [ ] `core/docs/project-status.md` — marcar Fase 3a como completada
 
 ## Risks
@@ -97,3 +97,4 @@ La fase 3a se considera completada a nivel estructural:
 1. `BudgetDashboardView.vue` dejó de concentrar el CSS propio del dominio y los bloques grandes de template.
 2. El dashboard anual y las cuatro etapas del cierre mensual quedaron encapsulados en componentes del dominio.
 3. La cobertura global `>=80%` sigue siendo una responsabilidad transversal de la Fase 0 y no se redefine aquí.
+

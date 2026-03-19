@@ -102,7 +102,7 @@ docker compose exec saas_frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/frontend-refactor-roadmap.md` — actualizar estado Fase 1
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 1
 - [x] `core/docs/project-status.md` — marcar Fase 1 como completada
 
 ## Risks
@@ -132,3 +132,4 @@ La Fase 1 queda cerrada a nivel estructural:
 
 La deuda de baseline global (`test:coverage >=80%` y estabilización de la suite completa) sigue
 siendo responsabilidad transversal de la Fase 0.
+
