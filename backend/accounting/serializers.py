@@ -314,7 +314,14 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
 class QuickLedgerTransactionSerializer(serializers.Serializer):
     movement_type = serializers.ChoiceField(
-        choices=["income", "expense", "transfer", "investment_purchase", "debt_payment", "revaluation"]
+        choices=[
+            "income",
+            "expense",
+            "transfer",
+            "investment_purchase",
+            "debt_payment",
+            "revaluation",
+        ]
     )
     booking_date = serializers.DateField(default=timezone.localdate)
     value_date = serializers.DateField(default=timezone.localdate)
