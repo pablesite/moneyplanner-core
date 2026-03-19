@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 type BudgetEntryViewMode = 'all' | 'recurrent' | 'one_off';
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
+type MonthlyCloseStatus = 'draft' | 'finalized' | 'locked';
 
-defineProps<{
+const props = defineProps<{
   isMonthlyCloseView: boolean;
   monthLabels: string[];
   selectedExecutionMonth: number;
@@ -43,11 +46,19 @@ defineProps<{
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   viewModeLabel: (mode: BudgetEntryViewMode) => string;
+  closeStatus?: MonthlyCloseStatus;
   setActiveMonthlyCloseStep: (step: MonthlyCloseStepId) => void;
   updateSelectedExecutionMonth: (value: number) => void;
   selectOwnershipFilterOption: (value: string, event: Event) => void;
   selectFiscalYearOption: (year: number, event: Event) => void;
 }>();
+
+const closeStatusLabel = computed(() => {
+  if (props.closeStatus === 'finalized') return 'Finalizado';
+  if (props.closeStatus === 'locked') return 'Bloqueado';
+  if (props.closeStatus === 'draft') return 'Borrador';
+  return null;
+});
 </script>
 
 <template>
@@ -55,7 +66,14 @@ defineProps<{
     <div class="ui-budget-hero-header">
       <div>
         <p class="ui-pro-kicker">Cierre mensual</p>
-        <h1 class="ui-budget-title">Flujo de cierre mensual</h1>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+          <h1 class="ui-budget-title" style="margin: 0">Flujo de cierre mensual</h1>
+          <span
+            v-if="closeStatus"
+            class="ui-monthly-close-status-badge"
+            :class="`ui-monthly-close-status-badge-${closeStatus}`"
+          >{{ closeStatusLabel }}</span>
+        </div>
         <p class="ui-budget-subtitle">
           Empieza por la liquidez real, luego confirma ingresos y gastos, y termina revisando el
           residual contable.
@@ -67,9 +85,15 @@ defineProps<{
           <select
             :value="selectedExecutionMonth"
             class="select ui-data-field"
-            @change="updateSelectedExecutionMonth(Number(($event.target as HTMLSelectElement).value))"
+            @change="
+              updateSelectedExecutionMonth(Number(($event.target as HTMLSelectElement).value))
+            "
           >
-            <option v-for="(label, index) in monthLabels" :key="`close-${label}`" :value="index + 1">
+            <option
+              v-for="(label, index) in monthLabels"
+              :key="`close-${label}`"
+              :value="index + 1"
+            >
               {{ label }}
             </option>
           </select>
@@ -126,7 +150,9 @@ defineProps<{
                 :key="ownerOption.value"
                 type="button"
                 class="ui-select-popover-option"
-                :class="{ 'ui-select-popover-option-active': ownershipFilter === ownerOption.value }"
+                :class="{
+                  'ui-select-popover-option-active': ownershipFilter === ownerOption.value,
+                }"
                 @click="selectOwnershipFilterOption(ownerOption.value, $event)"
               >
                 {{ ownerOption.label }}
@@ -163,16 +189,23 @@ defineProps<{
       <div class="ui-budget-suggestions-head">
         <div>
           <strong>Sugerencias desde historico ledger</strong>
-          <p>Referencia orientativa para plan anual. El presupuesto sigue siendo editable y manual.</p>
+          <p>
+            Referencia orientativa para plan anual. El presupuesto sigue siendo editable y manual.
+          </p>
         </div>
-        <span class="ui-budget-pill">{{ budgetSuggestions?.window_months ?? 0 }} meses observados</span>
+        <span class="ui-budget-pill"
+          >{{ budgetSuggestions?.window_months ?? 0 }} meses observados</span
+        >
       </div>
 
       <div v-if="budgetSuggestionsLoading" class="subtle">Calculando sugerencias...</div>
       <div v-else-if="budgetSuggestionsError" class="subtle text-red-400">
         {{ budgetSuggestionsError }}
       </div>
-      <div v-else-if="!incomeBudgetSuggestions.length && !expenseBudgetSuggestions.length" class="subtle">
+      <div
+        v-else-if="!incomeBudgetSuggestions.length && !expenseBudgetSuggestions.length"
+        class="subtle"
+      >
         Sin cobertura ledger por subcategoria para sugerir ajustes todavia.
       </div>
       <div v-else class="ui-budget-suggestions-grid">
@@ -224,7 +257,9 @@ defineProps<{
 
       <article
         class="ui-budget-kpi"
-        :class="plannedBalanceTotal >= 0 ? 'ui-budget-kpi-balance-good' : 'ui-budget-kpi-balance-bad'"
+        :class="
+          plannedBalanceTotal >= 0 ? 'ui-budget-kpi-balance-good' : 'ui-budget-kpi-balance-bad'
+        "
       >
         <div class="ui-budget-kpi-label">Saldo anual previsto</div>
         <div class="ui-budget-kpi-value">{{ formatMoney(plannedBalanceTotal) }} EUR</div>

@@ -31,6 +31,7 @@ type LiquidityRow = {
 defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
+  isCloseLocked?: boolean;
   previousMonthlyCloseStep: MonthlyCloseStepId | null;
   monthLabels: string[];
   selectedExecutionMonth: number;
@@ -50,7 +51,10 @@ defineProps<{
   goToPreviousMonthlyCloseStep: () => void;
   goToNextMonthlyCloseStep: () => void;
   updateSelectedExecutionMonth: (value: number) => void;
-  resetLiquidityCheckinDraftValue: (row: LiquidityRow, mode: LiquidityResetMode) => void | Promise<void>;
+  resetLiquidityCheckinDraftValue: (
+    row: LiquidityRow,
+    mode: LiquidityResetMode,
+  ) => void | Promise<void>;
   ensureLiquidityAdjustAmountPrefilled: (row: LiquidityRow) => void;
   onLiquidityAdjustAmountBlur: (row: LiquidityRow) => void | Promise<void>;
   saveLiquidityCheckinFromInput: (row: LiquidityRow) => void | Promise<void>;
@@ -75,7 +79,11 @@ defineProps<{
             ←
           </button>
           <h2 class="ui-budget-checkin-title">Paso 1 · Cierre de liquidez</h2>
-          <button type="button" class="btn ui-monthly-close-step-nav-btn" @click="goToNextMonthlyCloseStep()">
+          <button
+            type="button"
+            class="btn ui-monthly-close-step-nav-btn"
+            @click="goToNextMonthlyCloseStep()"
+          >
             →
           </button>
         </div>
@@ -91,7 +99,9 @@ defineProps<{
             :value="selectedExecutionMonth"
             class="select ui-data-field"
             :disabled="liquidityExecutionLoading"
-            @change="updateSelectedExecutionMonth(Number(($event.target as HTMLSelectElement).value))"
+            @change="
+              updateSelectedExecutionMonth(Number(($event.target as HTMLSelectElement).value))
+            "
           >
             <option v-for="(label, index) in monthLabels" :key="`liq-${label}`" :value="index + 1">
               {{ label }}
@@ -119,13 +129,18 @@ defineProps<{
       >
         <span>Desviacion liquidez</span>
         <strong>
-          {{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+          {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
+          }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
         </strong>
       </article>
       <article class="ui-budget-checkin-kpi">
         <span>Completitud</span>
         <strong>{{ formatPercent(liquidityMonthlySummary.completion_ratio ?? null, 0) }}</strong>
       </article>
+    </div>
+
+    <div v-if="isCloseLocked" class="ui-monthly-close-locked-banner">
+      Este mes está finalizado. Reabre el cierre para editar.
     </div>
 
     <div class="ui-budget-checkin-list">
@@ -140,7 +155,8 @@ defineProps<{
               <strong class="ui-budget-checkin-group-title">Activos liquidos</strong>
               <span class="ui-budget-checkin-group-meta">
                 {{ monthlyLiquidityExecutionRows.length }} cuentas ·
-                {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }} completitud
+                {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }}
+                completitud
               </span>
             </div>
             <div class="ui-budget-checkin-group-kpis">
@@ -152,7 +168,8 @@ defineProps<{
                   'ui-budget-checkin-group-dev-neg': selectedLiquidityMonthDeviation < 0,
                 }"
               >
-                D {{ selectedLiquidityMonthDeviation > 0 ? '+' : '' }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+                D {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
+                }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
               </span>
             </div>
           </div>
@@ -167,13 +184,15 @@ defineProps<{
                 <div class="ui-budget-checkin-row-title" :title="liquidityCheckinRowSummary(row)">
                   {{ liquidityCheckinRowSummary(row) }}
                   <span class="ui-budget-checkin-row-planned">
-                    (Referencia {{ formatMoney(row.planned) }} {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    (Referencia {{ formatMoney(row.planned) }}
+                    {{ row.currency === 'EUR' ? '€' : row.currency }})
                   </span>
                 </div>
                 <div v-if="row.checkin" class="ui-budget-checkin-row-state">
                   <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
                   <template v-if="row.executed != null">
-                    ({{ formatMoney(row.executed) }} {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    ({{ formatMoney(row.executed) }}
+                    {{ row.currency === 'EUR' ? '€' : row.currency }})
                   </template>
                 </div>
               </div>
@@ -184,7 +203,7 @@ defineProps<{
                     <button
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
-                      :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                      :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
                       title="Poner saldo real a 0"
                       @click="resetLiquidityCheckinDraftValue(row, 'zero')"
                     >
@@ -193,7 +212,7 @@ defineProps<{
                     <button
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
-                      :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                      :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
                       title="Restaurar saldo de referencia"
                       @click="resetLiquidityCheckinDraftValue(row, 'planned')"
                     >
@@ -204,8 +223,14 @@ defineProps<{
                     :value="liquidityAdjustAmounts[row.asset_id] ?? ''"
                     inputmode="decimal"
                     class="input ui-data-field"
+                    :disabled="isCloseLocked"
                     placeholder="Saldo real"
-                    @input="setLiquidityAdjustAmount(row.asset_id, ($event.target as HTMLInputElement).value)"
+                    @input="
+                      setLiquidityAdjustAmount(
+                        row.asset_id,
+                        ($event.target as HTMLInputElement).value,
+                      )
+                    "
                     @focus="ensureLiquidityAdjustAmountPrefilled(row)"
                     @blur="onLiquidityAdjustAmountBlur(row)"
                     @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
@@ -215,7 +240,7 @@ defineProps<{
                   <input
                     type="checkbox"
                     :checked="!!row.checkin"
-                    :disabled="liquidityExecutionBusyAssetId === row.asset_id"
+                    :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
                     aria-label="Confirmar cierre de liquidez"
                     @change="
                       onLiquidityCheckinCheckboxToggle(
