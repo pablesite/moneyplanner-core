@@ -6,6 +6,7 @@ import { mount } from '@vue/test-utils';
 import { useAccountingPage } from '../composables';
 import { useAccountingStore } from '../store';
 import { coreAccountingApi } from '../api';
+import { coreNetWorthApi } from '@/domains/net-worth/api';
 
 const loadAnnualIncome = vi.fn();
 const loadAnnualExpense = vi.fn();
@@ -22,6 +23,15 @@ vi.mock('../api', () => ({
     createQuickEntry: vi.fn(),
     previewMoneyWizImport: vi.fn(),
     commitMoneyWizImport: vi.fn(),
+  },
+}));
+
+vi.mock('@/domains/net-worth/api', () => ({
+  coreNetWorthApi: {
+    getAssets: vi.fn(),
+    getLiabilities: vi.fn(),
+    updateAsset: vi.fn(),
+    updateLiability: vi.fn(),
   },
 }));
 
@@ -74,11 +84,17 @@ function seedRefreshResponses() {
   } as never);
 }
 
+function seedNetWorthResponses() {
+  vi.mocked(coreNetWorthApi.getAssets).mockResolvedValue({ data: [] } as never);
+  vi.mocked(coreNetWorthApi.getLiabilities).mockResolvedValue({ data: [] } as never);
+}
+
 describe('useAccountingPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
     seedRefreshResponses();
+    seedNetWorthResponses();
   });
 
   it('omits annual plan ids from quick-entry payload when the movement is not linked', async () => {

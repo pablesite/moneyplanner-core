@@ -67,7 +67,11 @@ void props;
       </div>
     </template>
     <div v-else class="ui-guide-summary-grid">
-      <article v-for="summaryCard in summaryCards" :key="summaryCard.id" class="ui-guide-summary-card">
+      <article
+        v-for="summaryCard in summaryCards"
+        :key="summaryCard.id"
+        class="ui-guide-summary-card"
+      >
         <div class="ui-guide-summary-label">{{ summaryCard.label }}</div>
         <div class="ui-guide-summary-value">{{ summaryCard.valueText }}</div>
       </article>

@@ -66,7 +66,9 @@ void props;
               </p>
             </div>
             <div
-              v-if="section.id === 'cashflow-extraordinary' && extraordinaryEventGroupOptions.length"
+              v-if="
+                section.id === 'cashflow-extraordinary' && extraordinaryEventGroupOptions.length
+              "
               class="ui-guide-section-filter"
             >
               <span class="ui-guide-section-filter-label">Evento</span>
@@ -81,7 +83,11 @@ void props;
                     >v</span
                   >
                 </summary>
-                <div class="ui-select-popover-menu ui-guide-event-filter-menu" role="listbox" aria-label="Evento">
+                <div
+                  class="ui-select-popover-menu ui-guide-event-filter-menu"
+                  role="listbox"
+                  aria-label="Evento"
+                >
                   <button
                     type="button"
                     class="ui-select-popover-option ui-guide-event-filter-option"
@@ -110,12 +116,21 @@ void props;
               </details>
             </div>
           </div>
-          <div class="ui-guide-summary-grid" :class="`ui-guide-summary-grid-cols-${section.columns}`">
-            <article v-for="summaryCard in section.cards" :key="summaryCard.id" class="ui-guide-summary-card">
+          <div
+            class="ui-guide-summary-grid"
+            :class="`ui-guide-summary-grid-cols-${section.columns}`"
+          >
+            <article
+              v-for="summaryCard in section.cards"
+              :key="summaryCard.id"
+              class="ui-guide-summary-card"
+            >
               <div class="ui-guide-summary-label">{{ summaryCard.label }}</div>
               <div
                 class="ui-guide-summary-value"
-                :class="summaryCard.valueTone ? `ui-guide-summary-value-${summaryCard.valueTone}` : ''"
+                :class="
+                  summaryCard.valueTone ? `ui-guide-summary-value-${summaryCard.valueTone}` : ''
+                "
               >
                 {{ summaryCard.valueText }}
               </div>
@@ -131,7 +146,11 @@ void props;
         v-if="phase2DistributionInfoCards.length"
         class="ui-guide-score-grid ui-guide-score-grid-cols-1 ui-guide-context-score-grid"
       >
-        <article v-for="card in phase2DistributionInfoCards" :key="card.id" class="ui-guide-score-card">
+        <article
+          v-for="card in phase2DistributionInfoCards"
+          :key="card.id"
+          class="ui-guide-score-card"
+        >
           <div class="ui-guide-score-card-head">
             <h3 class="ui-guide-score-card-title">{{ card.title }}</h3>
           </div>

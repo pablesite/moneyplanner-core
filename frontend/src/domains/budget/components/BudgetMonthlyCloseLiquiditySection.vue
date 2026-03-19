@@ -10,6 +10,7 @@ type LiquidityRow = {
   planned: number;
   executed: number | null;
   currency: string;
+  coverage_source?: 'ledger' | 'checkin' | 'none';
   planned_closing_balance: string;
   executed_closing_balance: string | null;
   effective_closing_balance: string;
@@ -188,7 +189,14 @@ defineProps<{
                     {{ row.currency === 'EUR' ? '€' : row.currency }})
                   </span>
                 </div>
-                <div v-if="row.checkin" class="ui-budget-checkin-row-state">
+                <div v-if="row.coverage_source === 'ledger'" class="ui-budget-checkin-row-state">
+                  <strong>Ledger</strong>
+                  <template v-if="row.executed != null">
+                    ({{ formatMoney(row.executed) }}
+                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                  </template>
+                </div>
+                <div v-else-if="row.checkin" class="ui-budget-checkin-row-state">
                   <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
@@ -198,7 +206,12 @@ defineProps<{
               </div>
 
               <div class="ui-budget-checkin-row-actions">
-                <div class="ui-budget-checkin-adjust">
+                <div v-if="row.coverage_source === 'ledger'" class="ui-budget-checkin-adjust">
+                  <span class="ui-budget-checkin-ledger-lock" title="Cubierto por ledger contable">
+                    🔒 Ledger
+                  </span>
+                </div>
+                <div v-else class="ui-budget-checkin-adjust">
                   <div class="ui-budget-checkin-quick-actions">
                     <button
                       type="button"
@@ -239,8 +252,12 @@ defineProps<{
                 <label class="ui-budget-checkin-confirm" title="Confirmar cierre de liquidez">
                   <input
                     type="checkbox"
-                    :checked="!!row.checkin"
-                    :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
+                    :checked="row.coverage_source === 'ledger' || !!row.checkin"
+                    :disabled="
+                      isCloseLocked ||
+                      row.coverage_source === 'ledger' ||
+                      liquidityExecutionBusyAssetId === row.asset_id
+                    "
                     aria-label="Confirmar cierre de liquidez"
                     @change="
                       onLiquidityCheckinCheckboxToggle(

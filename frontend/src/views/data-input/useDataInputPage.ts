@@ -1,6 +1,4 @@
 ﻿import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { coreApi } from '@/lib/api';
-import { toApiErrorMessage } from '@/lib/errors';
 import {
   type Ownership,
   useNetWorthViewExtensions,
@@ -43,6 +41,7 @@ import {
   toPortableLiabilityRecord,
   toPortableOwnershipRecord,
 } from '@/domains/data-input/portableBundle';
+import { dataInputPageApi, toApiErrorMessage } from '@/domains/data-input/pageApi';
 
 export function useDataInputPage() {
   const {
@@ -1746,7 +1745,7 @@ export function useDataInputPage() {
     ) {
       try {
         for (const id of bulkEditingGeneratedExpenseIds.value) {
-          await coreApi.patch(`/api/budget/annual-expense/${id}/`, {
+          await dataInputPageApi.patch(`/api/budget/annual-expense/${id}/`, {
             name: draft.name,
             category: draft.category,
             subcategory: draft.subcategory,
@@ -1884,7 +1883,7 @@ export function useDataInputPage() {
 
   async function ensurePortableDataAppVersion(): Promise<string> {
     if (portableDataAppVersion.value) return portableDataAppVersion.value;
-    const response = await coreApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
+    const response = await dataInputPageApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
     portableDataAppVersion.value = response.data.app_version;
     return portableDataAppVersion.value;
   }
@@ -1906,15 +1905,15 @@ export function useDataInputPage() {
         ownershipsRes,
         linksRes,
       ] = await Promise.all([
-        coreApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
-        coreApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
-        coreApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
-        coreApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-        coreApi.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
-        coreApi.get<PortableSettingsRecord>('/api/auth/settings/'),
-        coreApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
-        coreApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
-        coreApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+        dataInputPageApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+        dataInputPageApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
+        dataInputPageApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+        dataInputPageApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+        dataInputPageApi.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
+        dataInputPageApi.get<PortableSettingsRecord>('/api/auth/settings/'),
+        dataInputPageApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+        dataInputPageApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+        dataInputPageApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
       ]);
 
       const payload: PortableDataBundle = {
@@ -2001,7 +2000,7 @@ export function useDataInputPage() {
 
       setDataImportBusyState(importMode);
 
-      const response = await coreApi.post<PortableImportResponse>(
+      const response = await dataInputPageApi.post<PortableImportResponse>(
         '/api/core/portable-data/import/',
         {
           mode: importMode,
