@@ -80,6 +80,18 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 2. `frontend/src/views/BudgetDashboardView.vue`
 3. `frontend/src/views/NetWorthView.vue`
 
+## View composition after refactor phase 3e (2026-03-19)
+1. `AccountingMovementsView.vue` now acts as a thin page orchestrator.
+2. Page state/fetch logic is centralized in `domains/accounting/useAccountingMovementsPage.ts`.
+3. Main sections are split into focused components:
+   - `AccountingMovementsHero.vue`
+   - `AccountingAccountCatalog.vue`
+   - `AccountingMovementsAllTransactions.vue`
+   - `AccountingBalances.vue`
+4. Accounting view styles are moved to `domains/accounting/styles/movements.css`.
+5. Core keeps MoneyWiz unmapped categories support through `AccountingMovementsMoneyWizModal`.
+6. SaaS mirrors the same structure but keeps the existing behavior difference (no unmapped section UI).
+
 ## Shared scenarios that must stay consistent
 1. Manual income to a liquidity account
 2. Manual expense from a liquidity account
