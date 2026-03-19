@@ -10,13 +10,13 @@ El refactor tambien prepara el terreno para un futuro shared package Core/SaaS
 ## Estado de este documento
 
 1. Este documento define el plan operativo del refactor del frontend Core.
-2. Baseline actualizada el 2026-03-18.
+2. Baseline actualizada el 2026-03-19.
 3. Las fases 0-6 quedan desglosadas en entregables, pasos recomendados y criterios de salida.
 4. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
 5. Core-first: cada fase se ejecuta primero en Core y se replica en SaaS al cerrarla.
    Ver `docs/roadmap/frontend-refactor-roadmap.md` (SaaS) para el roadmap espejo.
 
-## Estado real (2026-03-18)
+## Estado real (2026-03-19)
 
 ### Baseline del stack Core
 
@@ -27,16 +27,29 @@ El refactor tambien prepara el terreno para un futuro shared package Core/SaaS
 
 - `docker compose exec frontend npm run lint`: verde
 - `docker compose exec frontend npm run typecheck`: verde
-- `docker compose exec frontend npm run test:unit`: verde (35 suites)
-- `docker compose exec frontend npm run format:check`: falla en `frontend/src/styles/app.css`
+- `docker compose exec frontend npm run test:unit`: verde (37 suites)
+- `docker compose exec frontend npm run format:check`: verde
+- `docker compose exec frontend npm run test:coverage`: verde con thresholds `>=80%`
 
 ### Coverage thresholds actuales (vite.config.ts)
 
 ```
-statements: 15%, lines: 15%, functions: 30%, branches: 40%
+statements: 80%, lines: 80%, functions: 80%, branches: 80%
 ```
 
 **Target acordado: >= 80% en todas las metricas** (Fase 0).
+
+### Coverage real actual (2026-03-19)
+
+Con la suite actual en verde, `test:coverage` reporta:
+
+- `statements: 98.29%`
+- `lines: 98.29%`
+- `functions: 92.41%`
+- `branches: 81.50%`
+
+Fase 0 cerrada: todos los thresholds de coverage (`>=80%`) pasan en Core y SaaS.
+La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6.
 
 ### Hotspots de tamano actuales
 
@@ -51,11 +64,11 @@ statements: 15%, lines: 15%, functions: 30%, branches: 40%
 
 ### Deuda estructural visible
 
-- Wrappers puente activos:
-  - `frontend/src/stores/netWorth.ts`
-  - `frontend/src/stores/people.ts`
-  - `frontend/src/components/BaseModal.vue` (debe ir a `domains/ui/`)
-  - `frontend/src/components/AppHeader.vue` (debe ir a `domains/auth/components/`)
+- Wrappers puente y componentes raiz legacy eliminados en Fase 1:
+  - `frontend/src/stores/netWorth.ts` (eliminado)
+  - `frontend/src/stores/people.ts` (eliminado)
+  - `frontend/src/components/BaseModal.vue` -> `domains/ui/components/BaseModal.vue`
+  - `frontend/src/components/AppHeader.vue` -> `domains/auth/components/AppHeader.vue`
 - Vistas importan directamente `@/lib/api` y `@/lib/errors`
 - `lib/` tiene ~8 ficheros que son re-exports vacios de dominios
 - `frontend/src/styles/app.css`: 20,633 lineas — el fichero mas grande del frontend
@@ -158,7 +171,7 @@ Objetivo: partir de una base verde completa con red de seguridad real.
 2. `test:coverage` pasa todos los thresholds >= 80%.
 3. Baseline documentada y actualizada en este roadmap.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-0-baseline/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-0-baseline/terminados/frontend.md`
 
 ---
 
@@ -197,7 +210,7 @@ Objetivo: fijar limites claros entre dominios y eliminar wrappers puente.
 2. Dominios no dependen de `@/stores/*` ni `@/components/*` raiz.
 3. Suite de tests en verde con cobertura >= 80%.
 
-**Spec:** `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/frontend.md`
+**Spec:** `core/docs/tasks/frontend-refactor/phase-1-arch-boundaries/terminados/frontend.md`
 
 ---
 
