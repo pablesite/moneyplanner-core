@@ -51,3 +51,7 @@ export function findGuidePhaseById(id: number): GuidePhase | null {
 export function getActiveGuidePhase(): GuidePhase {
   return guidePhases.find((phase) => phase.progress < 100) ?? guidePhases[guidePhases.length - 1]!;
 }
+
+export function guidePhaseDetailTo(phaseId: number): string {
+  return `/guia/fases/${phaseId}`;
+}

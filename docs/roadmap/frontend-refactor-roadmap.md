@@ -59,7 +59,7 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 | `NetWorthView.vue` | 542 | Completada Fase 3b el 2026-03-18 |
 | `DataInputView.vue` | 16 | Completada Fase 3c el 2026-03-19 |
 | `AccountingMovementsView.vue` | 2,263 | Medio (crecio de 998 lineas desde 16-mar) |
-| `GuidePhaseDetailView.vue` | 2,207 | Medio |
+| `GuidePhaseDetailView.vue` | 111 | Completada Fase 3d el 2026-03-19 |
 | `App.vue` | 13 | Completada Fase 2 el 2026-03-19 |
 
 ### Deuda estructural visible
@@ -77,7 +77,7 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 ### Lectura de riesgo (actualizada)
 
 - riesgo alto: `BudgetDashboardView`, `NetWorthView`
-- riesgo medio: `AccountingMovementsView` (crecio x2.3), `GuidePhaseDetailView`, `styles/app.css`
+- riesgo medio: `AccountingMovementsView` (crecio x2.3), `styles/app.css`
 - riesgo bajo: `App.vue` (Fase 2 cerrada), `lib/` re-exports
 
 ### Candidatos a shared package Core/SaaS (identificados, no ejecutar aun)
@@ -252,7 +252,7 @@ Objetivo: dividir las vistas grandes en composables de pagina, secciones y compo
 1. `BudgetDashboardView.vue` (5,512 lineas al inicio, 2,362 tras cierre) — **spec 3a completada**
 2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
 3. `DataInputView.vue` (2,742 lineas al inicio, 16 tras cierre) — **spec 3c completada**
-4. `GuidePhaseDetailView.vue` (2,207 lineas) — **spec 3d**
+4. `GuidePhaseDetailView.vue` (2,207 lineas al inicio, 111 tras cierre) — **spec 3d completada**
 5. `AccountingMovementsView.vue` (2,263 lineas) — **spec 3e**
 
 ### 3.2 Regla de extraccion
@@ -278,7 +278,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 1. Secciones: patrimonio, ingresos, gastos, portable, ownership filters.
 2. Reducir mezcla entre patrimonio, presupuestos y portabilidad.
 
-#### `GuidePhaseDetailView` (2,207 lineas)
+#### `GuidePhaseDetailView` (2,207 lineas al inicio, 111 tras cierre)
 
 1. Extraer scoring, diagnosticos y formatos compartidos a `domains/guide`.
 2. Eliminar duplicacion de calculos con `HomeView.vue`.
@@ -301,7 +301,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 - `core/docs/tasks/frontend-refactor/phase-3a-budget-dashboard/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3b-net-worth/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3c-data-input/terminados/frontend.md`
-- `core/docs/tasks/frontend-refactor/phase-3d-guide-view/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3d-guide-view/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md`
 
 ---
