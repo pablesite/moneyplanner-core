@@ -71,6 +71,17 @@ const generatedLiabilityExpenseReview = computed(
 const generatedLiabilityExpenseEntries = computed(
   () => generatedLiabilityExpenseReview.value?.entries ?? [],
 );
+const generatedLiabilityExpenseReviewTitle = computed(() =>
+  String(unref(page.generatedLiabilityExpenseReviewTitle) ?? ''),
+);
+const generatedLiabilityExpenseReviewChangeMessage = computed(
+  () => unref(page.generatedLiabilityExpenseReviewChangeMessage) ?? '',
+);
+const editTitle = computed(() => String(unref(page.editTitle) ?? ''));
+const editInitial = computed(() => unref(page.editInitial) ?? null);
+const editCategories = computed(() => unref(page.editCategories) ?? []);
+const editAssetSubcategories = computed(() => unref(page.assetSubcategories) ?? []);
+const itemFormProps = computed(() => unref(page.itemFormProps) ?? {});
 </script>
 
 <template>
@@ -167,15 +178,15 @@ const generatedLiabilityExpenseEntries = computed(
 
     <BaseModal
       :open="showGeneratedLiabilityExpenseModalModel"
-      :title="page.generatedLiabilityExpenseReviewTitle"
+      :title="generatedLiabilityExpenseReviewTitle"
       @close="page.closeGeneratedLiabilityExpenseModal"
     >
       <div v-if="generatedLiabilityExpenseReview" class="grid gap-3">
         <div
-          v-if="page.generatedLiabilityExpenseReviewChangeMessage"
+          v-if="generatedLiabilityExpenseReviewChangeMessage"
           class="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white/90"
         >
-          {{ page.generatedLiabilityExpenseReviewChangeMessage }}
+          {{ generatedLiabilityExpenseReviewChangeMessage }}
         </div>
         <div
           class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90"
@@ -247,18 +258,18 @@ const generatedLiabilityExpenseEntries = computed(
       </div>
     </BaseModal>
 
-    <BaseModal :open="showEditModalModel" :title="page.editTitle" @close="page.closeEdit">
+    <BaseModal :open="showEditModalModel" :title="editTitle" @close="page.closeEdit">
       <ItemForm
-        v-if="page.editInitial"
-        :title="page.editTitle"
-        :categories="page.editCategories"
-        :subcategories="page.editKind === 'asset' ? page.assetSubcategories : undefined"
-        v-bind="page.itemFormProps"
+        v-if="editInitial"
+        :title="editTitle"
+        :categories="editCategories"
+        :subcategories="page.editKind === 'asset' ? editAssetSubcategories : undefined"
+        v-bind="itemFormProps"
         :assets="page.editKind === 'liability' ? activeAssets : []"
         :show-financed-asset="page.editKind === 'liability'"
         :allow-negative="page.editKind === 'asset'"
         mode="edit"
-        :initial="page.editInitial"
+        :initial="editInitial"
         :on-submit="page.submitEditWithExpenseReview"
         :on-cancel="page.closeEdit"
       />
