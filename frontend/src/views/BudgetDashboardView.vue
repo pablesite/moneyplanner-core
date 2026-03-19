@@ -149,6 +149,8 @@ const {
   handleApplyDistribution,
   resetLiquidityCheckinDraftValue,
   saveLiquidityCheckinFromInput,
+  unlockLiquidityLedgerRow,
+  relockLiquidityLedgerRow,
   onLiquidityCheckinCheckboxToggle,
   onLiquidityAdjustAmountBlur,
 } = useBudgetDashboardPage(computed(() => props.mode));
@@ -262,6 +264,8 @@ const {
       :ensure-liquidity-adjust-amount-prefilled="ensureLiquidityAdjustAmountPrefilled"
       :on-liquidity-adjust-amount-blur="onLiquidityAdjustAmountBlur"
       :save-liquidity-checkin-from-input="saveLiquidityCheckinFromInput"
+      :unlock-liquidity-ledger-row="unlockLiquidityLedgerRow"
+      :relock-liquidity-ledger-row="relockLiquidityLedgerRow"
       :on-liquidity-checkin-checkbox-toggle="onLiquidityCheckinCheckboxToggle"
     />
     <BudgetMonthlyCloseIncomeSection

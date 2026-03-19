@@ -11,6 +11,7 @@ type LiquidityRow = {
   executed: number | null;
   currency: string;
   coverage_source?: 'ledger' | 'checkin' | 'none';
+  ledger_available?: boolean;
   planned_closing_balance: string;
   executed_closing_balance: string | null;
   effective_closing_balance: string;
@@ -59,6 +60,8 @@ defineProps<{
   ensureLiquidityAdjustAmountPrefilled: (row: LiquidityRow) => void;
   onLiquidityAdjustAmountBlur: (row: LiquidityRow) => void | Promise<void>;
   saveLiquidityCheckinFromInput: (row: LiquidityRow) => void | Promise<void>;
+  unlockLiquidityLedgerRow: (row: LiquidityRow) => void | Promise<void>;
+  relockLiquidityLedgerRow: (row: LiquidityRow) => void | Promise<void>;
   onLiquidityCheckinCheckboxToggle: (row: LiquidityRow, checked: boolean) => void | Promise<void>;
 }>();
 </script>
@@ -189,8 +192,21 @@ defineProps<{
                     {{ row.currency === 'EUR' ? '€' : row.currency }})
                   </span>
                 </div>
-                <div v-if="row.coverage_source === 'ledger'" class="ui-budget-checkin-row-state">
+                <div
+                  v-if="row.ledger_available && row.coverage_source === 'ledger'"
+                  class="ui-budget-checkin-row-state"
+                >
                   <strong>Ledger</strong>
+                  <template v-if="row.executed != null">
+                    ({{ formatMoney(row.executed) }}
+                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                  </template>
+                </div>
+                <div
+                  v-else-if="row.ledger_available && row.checkin"
+                  class="ui-budget-checkin-row-state"
+                >
+                  <strong>Manual (override ledger)</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
                     {{ row.currency === 'EUR' ? '€' : row.currency }})
@@ -206,10 +222,19 @@ defineProps<{
               </div>
 
               <div class="ui-budget-checkin-row-actions">
-                <div v-if="row.coverage_source === 'ledger'" class="ui-budget-checkin-adjust">
-                  <span class="ui-budget-checkin-ledger-lock" title="Cubierto por ledger contable">
+                <div
+                  v-if="row.ledger_available && row.coverage_source === 'ledger'"
+                  class="ui-budget-checkin-adjust"
+                >
+                  <button
+                    type="button"
+                    class="btn ui-budget-checkin-mini-btn"
+                    :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
+                    title="Abrir candado y ajustar manualmente esta cuenta"
+                    @click="unlockLiquidityLedgerRow(row)"
+                  >
                     🔒 Ledger
-                  </span>
+                  </button>
                 </div>
                 <div v-else class="ui-budget-checkin-adjust">
                   <div class="ui-budget-checkin-quick-actions">
@@ -230,6 +255,16 @@ defineProps<{
                       @click="resetLiquidityCheckinDraftValue(row, 'planned')"
                     >
                       Referencia
+                    </button>
+                    <button
+                      v-if="row.ledger_available"
+                      type="button"
+                      class="btn ui-budget-checkin-mini-btn"
+                      :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
+                      title="Volver a bloquear y usar el saldo del ledger"
+                      @click="relockLiquidityLedgerRow(row)"
+                    >
+                      🔓 Manual
                     </button>
                   </div>
                   <input
@@ -252,10 +287,10 @@ defineProps<{
                 <label class="ui-budget-checkin-confirm" title="Confirmar cierre de liquidez">
                   <input
                     type="checkbox"
-                    :checked="row.coverage_source === 'ledger' || !!row.checkin"
+                    :checked="!!row.checkin"
                     :disabled="
                       isCloseLocked ||
-                      row.coverage_source === 'ledger' ||
+                      (row.ledger_available && row.coverage_source === 'ledger') ||
                       liquidityExecutionBusyAssetId === row.asset_id
                     "
                     aria-label="Confirmar cierre de liquidez"
