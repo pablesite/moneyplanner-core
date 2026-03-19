@@ -623,6 +623,7 @@ class LiquidityMonthlyCheckin(models.Model):
     class Status(models.TextChoices):
         CONFIRMED = "confirmed", "Confirmado"
         ADJUSTED = "adjusted", "Ajustado"
+        ESTIMATED = "estimated", "Estimado"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

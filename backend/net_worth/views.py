@@ -135,6 +135,22 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         return Response(timeline)
 
 
+def _assert_liquidity_monthly_close_not_finalized(*, user, fiscal_year: int, month: int) -> None:
+    from budget.models import MonthlyClose
+    from rest_framework.exceptions import PermissionDenied
+
+    if MonthlyClose.objects.filter(
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        status__in=[MonthlyClose.Status.FINALIZED, MonthlyClose.Status.LOCKED],
+    ).exists():
+        raise PermissionDenied(
+            "El cierre mensual de este periodo está finalizado o bloqueado. "
+            "Reabre el cierre antes de modificar los checkins."
+        )
+
+
 class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LiquidityMonthlyCheckinSerializer
@@ -147,7 +163,21 @@ class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelView
         )
         return ctx
 
+    def perform_create(self, serializer):
+        fiscal_year = serializer.validated_data.get("fiscal_year")
+        month = serializer.validated_data.get("month")
+        if fiscal_year and month:
+            _assert_liquidity_monthly_close_not_finalized(
+                user=self.request.user, fiscal_year=fiscal_year, month=month
+            )
+        serializer.save()
+
     def perform_update(self, serializer):
+        fiscal_year = serializer.instance.fiscal_year
+        month = serializer.instance.month
+        _assert_liquidity_monthly_close_not_finalized(
+            user=self.request.user, fiscal_year=fiscal_year, month=month
+        )
         serializer.save()
 
 

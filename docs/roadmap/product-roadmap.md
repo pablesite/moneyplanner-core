@@ -31,20 +31,34 @@ Convenciones:
 
 ## CIERRE DEL MES / AÑO
 
-> Considerar renombrar este módulo para que refleje mejor su función (ej. "Revisión mensual" o "Seguimiento mensual").
+> Backend modo dual implementado (2026-03-19). Frontend pendiente (otro agente).
 
-### Modos de cierre
-- Integrar dos modos de trabajo:
-  - **Manual:** input directo de saldos por el usuario.
-  - **Automático:** cierre basado en datos de contabilidad (movimientos del período).
-- Diseñar UX para elegir el modo activo y, si aplica, combinar ambos (manual como ajuste sobre el automático).
+### Modos de cierre — decisiones tomadas
+- **Sin selección explícita de modo.** El sistema detecta automáticamente cobertura (ledger / checkin / ninguna) y adapta lo que muestra y sugiere.
+- Tres perfiles de usuario servidos con un único flujo adaptativo:
+  - **Power user:** registra movimientos → cierre = verificación + sign-off
+  - **Casual user:** introduce saldos bancarios → sistema sugiere distribución proporcional al presupuesto
+  - **Mixto:** registra algunos movimientos → sistema completa los huecos
+- `MonthlyClose` es el lifecycle wrapper sobre los checkins existentes. Ciclo de vida: DRAFT → FINALIZED → LOCKED, con reapertura (FINALIZED → DRAFT).
+- Status `estimated` añadido a los 3 modelos de checkin para distinguir distribuciones algorítmicas de datos manuales.
+
+### Algoritmo de distribución inteligente
+- Usa presupuesto como prior; resta movimientos conocidos (ledger + checkins existentes); distribuye el residual proporcional entre entradas sin cobertura.
+- Si hay datos de liquidez: residual = delta_liquidez - (ingresos_conocidos - gastos_conocidos). Si no: usa importe presupuestado directamente.
 
 ### Integración con movimientos
-- Decidir si la introducción de ingresos/gastos sirve tanto para el día a día como para el presupuesto, o sólo para uno de ellos.
-- La vista de detalle del cierre debería autocompletar:
-  - El líquido de cada activo de liquidez.
-  - Los totales por categoría de ingreso y gasto a partir de los movimientos contables.
-  - A partir de ahí, ajustes manuales para movimientos no anotados.
+- La vista de detalle del cierre autocompletará desde ledger y checkins existentes.
+- A partir de ahí, ajustes manuales o aceptar sugerencias (endpoint PATCH accept_suggestions=true).
+
+### API (implementada)
+- `GET /api/budget/monthly-close/{year}/{month}/` — estado completo + sugerencias
+- `PATCH /api/budget/monthly-close/{year}/{month}/` — actualizar notas / aceptar sugerencias
+- `POST /api/budget/monthly-close/{year}/{month}/finalize/` — DRAFT → FINALIZED
+- `POST /api/budget/monthly-close/{year}/{month}/reopen/` — FINALIZED → DRAFT
+- `POST /api/budget/monthly-close/{year}/{month}/lock/` — FINALIZED → LOCKED
+
+### Pendiente
+- Frontend: wizard adaptativo que consuma los nuevos endpoints.
 
 ### Vista de resultados
 - Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.

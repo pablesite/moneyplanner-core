@@ -185,6 +185,7 @@ class AnnualExpenseMonthlyCheckin(models.Model):
         CONFIRMED = "confirmed", "Confirmado"
         ADJUSTED = "adjusted", "Ajustado"
         SKIPPED = "skipped", "No ocurrido"
+        ESTIMATED = "estimated", "Estimado"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -232,6 +233,7 @@ class AnnualIncomeMonthlyCheckin(models.Model):
         CONFIRMED = "confirmed", "Confirmado"
         ADJUSTED = "adjusted", "Ajustado"
         SKIPPED = "skipped", "No ocurrido"
+        ESTIMATED = "estimated", "Estimado"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -271,4 +273,54 @@ class AnnualIncomeMonthlyCheckin(models.Model):
             "AnnualIncomeMonthlyCheckin("
             f"user={self.user_id}, entry={self.annual_income_entry_id}, "
             f"year={self.fiscal_year}, month={self.month}, status={self.status})"
+        )
+
+
+class MonthlyClose(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Borrador"
+        FINALIZED = "finalized", "Finalizado"
+        LOCKED = "locked", "Bloqueado"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="monthly_closes",
+    )
+    fiscal_year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    income_total_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    expense_total_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    liquidity_total_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "core_monthlyclose"
+        ordering = ["-fiscal_year", "-month"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "fiscal_year", "month"],
+                name="budget_mc_unique_user_year_month",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "fiscal_year", "month"], name="budget_mc_user_ym_idx"),
+            models.Index(fields=["user", "status"], name="budget_mc_user_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"MonthlyClose(user={self.user_id}, "
+            f"{self.fiscal_year}-{self.month:02d}, status={self.status})"
         )
