@@ -1,0 +1,760 @@
+/* -- Hero panel ------------------------------------------------ */
+.ui-accounting-hero-panel {
+  display: grid;
+  gap: 20px;
+  padding: 20px;
+}
+
+.ui-accounting-hero-title {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Right cluster: period bar stacked above action buttons, right-aligned */
+.ui-accounting-hero-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .ui-accounting-hero-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
+/* Period selector � compact context indicator, not an action */
+.ui-period-bar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+
+.ui-accounting-period-bar {
+  padding: 6px 10px;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.ui-period-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ui-period-select {
+  min-width: 120px;
+  height: 38px;
+  padding-top: 0;
+  padding-bottom: 0;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Primary CTA � more visual weight than secondary actions */
+.ui-accounting-cta {
+  padding: 10px 22px;
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Net balance hero number � larger than the shared kpi-value */
+.ui-accounting-hero-panel .ui-kpi-card-primary .ui-kpi-value {
+  font-size: 2rem;
+}
+
+/* Saldo neto KPI in header � single wide card */
+.ui-accounting-net-kpi .ui-kpi-card-primary {
+  max-width: 360px;
+}
+
+/* Force 12-month cashflow in one row � override shared minmax(88px) */
+.ui-accounting-hero-panel .ui-cashflow-strip {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* Estad�sticas tab cashflow strip */
+.ui-section-card .ui-cashflow-strip {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* Active month highlight in cashflow strip */
+.ui-cashflow-month-active {
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.07);
+}
+
+/* 2-column KPI strip (Activos + Pasivos only) */
+.ui-kpi-strip-2col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* -- Filter bar � single-row grid, never wraps ----------------- */
+.ui-accounting-filters {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.ui-accounting-filters-3col {
+  grid-template-columns: 1fr 148px 148px;
+}
+
+.ui-accounting-filters-4col {
+  grid-template-columns: 1fr 148px 148px 148px;
+}
+
+@media (max-width: 640px) {
+  .ui-accounting-filters-3col,
+  .ui-accounting-filters-4col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Account list in "Todos" movements */
+.ui-entry-accounts {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* -- Ledger panel ---------------------------------------------- */
+.ui-accounting-ledger-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.ui-accounting-filter-input {
+  min-width: 200px;
+  flex: 1;
+  width: auto;
+}
+
+.ui-accounting-filter-select {
+  min-width: 160px;
+  width: auto;
+  flex: 1;
+}
+
+/* -- Ledger accordion � category level ------------------------ */
+.ui-ledger-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-ledger-category {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.ui-ledger-category-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ui-ledger-category-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* -- Subcategory label (non-interactive divider) --------------- */
+.ui-ledger-subcategory-label {
+  padding: 6px 16px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+/* -- Account level --------------------------------------------- */
+.ui-ledger-account {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Alias kept for test compatibility */
+.ui-accounting-account-timeline {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.ui-ledger-account-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ui-ledger-account-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-ledger-account-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.ui-ledger-account-meta-stretch {
+  flex: 1;
+}
+
+.ui-ledger-account-chips {
+  gap: 6px;
+}
+
+.ui-ledger-account-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ui-ledger-account-name {
+  color: rgba(245, 250, 255, 0.92);
+}
+
+.ui-ledger-movs-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ui-ledger-account-balance {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-ledger-account-body {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ui-ledger-empty {
+  margin: 10px;
+  font-size: 0.82rem;
+  padding: 10px 14px;
+}
+
+/* -- Entry list ------------------------------------------------ */
+.ui-entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ui-entry-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.ui-entry-row + .ui-entry-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ui-entry-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ui-entry-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.ui-entry-body {
+  display: grid;
+  gap: 4px;
+}
+
+.ui-entry-desc {
+  font-size: 0.88rem;
+}
+
+.ui-entry-tags {
+  gap: 6px;
+}
+
+.ui-entry-status {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.ui-entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* -- Balance delta � kept for test compatibility --------------- */
+.ui-accounting-balance-delta {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ui-accounting-balance-delta-positive {
+  color: #8cf0d0;
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.2);
+}
+
+.ui-accounting-balance-delta-negative {
+  color: #ffb3b3;
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.ui-accounting-balance-delta-neutral {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ui-accounting-entry-action-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 0.84rem;
+}
+
+/* -- Technical accounts ---------------------------------------- */
+.ui-ledger-technical {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+}
+
+.ui-ledger-technical > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.ui-ledger-technical-group {
+  margin-top: 12px;
+}
+
+.ui-ledger-technical-head {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+}
+
+/* -- Modal forms ----------------------------------------------- */
+.ui-accounting-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ui-accounting-form-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-form-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ui-accounting-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-form-grid-wide {
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+}
+
+.ui-accounting-form-grid-edit-simple {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+/* 3-column row for booking_date + value_date + time in edit modal */
+.ui-accounting-form-grid-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.75fr;
+  gap: 10px;
+}
+
+.ui-accounting-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-accounting-field span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.66);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ui-accounting-inline-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.82rem;
+}
+
+.ui-accounting-form-grid > .ui-accounting-inline-note,
+.ui-accounting-form-grid-wide > .ui-accounting-inline-note {
+  align-self: center;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.76rem;
+}
+
+.ui-accounting-edit-readonly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-edit-readonly div {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-edit-readonly span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.ui-accounting-modal-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ui-accounting-modal-copy .subtle,
+.ui-accounting-modal-copy .ui-page-eyebrow {
+  margin: 0;
+}
+
+.ui-accounting-modal-form {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.ui-accounting-edit-form {
+  gap: 14px;
+}
+
+.ui-accounting-edit-amount-wrap {
+  position: relative;
+}
+
+.ui-accounting-edit-amount-wrap small {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.ui-accounting-edit-amount-wrap .input {
+  padding-right: 56px;
+}
+
+/* Segmented movement type selector � full-width tabs, no wrapping */
+.ui-accounting-segmented {
+  display: flex;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 8px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn:last-child {
+  border-right: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+  border-right-color: rgba(255, 255, 255, 0.08);
+  transform: none;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn.ui-accounting-segmented-btn-active {
+  background: rgba(45, 212, 191, 0.1);
+  color: rgba(45, 212, 191, 0.95);
+  font-weight: 600;
+}
+
+.ui-accounting-annual-link {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-annual-link summary {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.84rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-accounting-annual-link summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-accounting-annual-link summary::before {
+  content: '�';
+  display: inline-block;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.18s;
+  flex-shrink: 0;
+}
+
+.ui-accounting-annual-link[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.ui-accounting-import-dropzone,
+.ui-accounting-import-summary,
+.ui-accounting-import-card {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-accounting-import-dropzone,
+.ui-accounting-import-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+}
+
+.ui-accounting-import-kpis,
+.ui-accounting-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-import-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-accounting-import-kpi {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ui-accounting-import-kpi span {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ui-accounting-import-kpi strong {
+  font-size: 1.1rem;
+}
+
+.ui-accounting-import-list,
+.ui-accounting-import-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ui-accounting-import-row {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  padding: 10px 12px;
+}
+
+.ui-accounting-import-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-activation-list {
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-activation-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.ui-accounting-activation-option + .ui-accounting-activation-option {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ui-accounting-activation-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-accounting-activation-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.ui-accounting-activation-meta small {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.76rem;
+}
+
+.ui-accounting-inline-actions,
+.ui-accounting-submit-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-entry-editor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+}
+
+.ui-accounting-advanced {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.ui-accounting-advanced-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.84rem;
+}
+
+/* -- Responsive ------------------------------------------------ */
+@media (max-width: 900px) {
+  .ui-period-bar {
+    flex-wrap: wrap;
+  }
+
+  .ui-accounting-hero-right {
+    align-items: flex-start;
+  }
+
+  .ui-accounting-hero-panel .ui-cashflow-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .ui-entry-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+
+  .ui-entry-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .ui-accounting-form-grid,
+  .ui-accounting-form-grid-wide,
+  .ui-accounting-form-grid-edit-simple,
+  .ui-accounting-form-grid-dates,
+  .ui-accounting-entry-editor-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-edit-readonly {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-import-kpis,
+  .ui-accounting-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-accounting-advanced-summary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

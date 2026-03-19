@@ -58,7 +58,7 @@ La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6
 | `BudgetDashboardView.vue` | 5,512 | Alto |
 | `NetWorthView.vue` | 542 | Completada Fase 3b el 2026-03-18 |
 | `DataInputView.vue` | 16 | Completada Fase 3c el 2026-03-19 |
-| `AccountingMovementsView.vue` | 2,263 | Medio (crecio de 998 lineas desde 16-mar) |
+| `AccountingMovementsView.vue` | 51 | Completada Fase 3e el 2026-03-19 |
 | `GuidePhaseDetailView.vue` | 111 | Completada Fase 3d el 2026-03-19 |
 | `App.vue` | 13 | Completada Fase 2 el 2026-03-19 |
 
@@ -253,7 +253,7 @@ Objetivo: dividir las vistas grandes en composables de pagina, secciones y compo
 2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
 3. `DataInputView.vue` (2,742 lineas al inicio, 16 tras cierre) — **spec 3c completada**
 4. `GuidePhaseDetailView.vue` (2,207 lineas al inicio, 111 tras cierre) — **spec 3d completada**
-5. `AccountingMovementsView.vue` (2,263 lineas) — **spec 3e**
+5. `AccountingMovementsView.vue` (2,263 lineas al inicio, 51 tras cierre) — **spec 3e completada**
 
 ### 3.2 Regla de extraccion
 
@@ -302,7 +302,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 - `core/docs/tasks/frontend-refactor/phase-3b-net-worth/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3c-data-input/terminados/frontend.md`
 - `core/docs/tasks/frontend-refactor/phase-3d-guide-view/terminados/frontend.md`
-- `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/frontend.md`
+- `core/docs/tasks/frontend-refactor/phase-3e-accounting-movements/terminados/frontend.md`
 
 ---
 
