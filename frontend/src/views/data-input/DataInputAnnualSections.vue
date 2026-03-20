@@ -60,6 +60,22 @@ const filteredAnnualExpenseTotal = computed(() =>
 );
 const annualIncomeLoading = computed(() => Boolean(unref(page.annualIncomeLoading)));
 const annualExpenseLoading = computed(() => Boolean(unref(page.annualExpenseLoading)));
+const annualIncomeError = computed(() => {
+  const error = unref(page.annualIncomeError);
+  return error ? String(error) : null;
+});
+const annualIncomeApiError = computed(() => {
+  const error = unref(page.annualIncomeApiError);
+  return error ? String(error) : null;
+});
+const annualExpenseError = computed(() => {
+  const error = unref(page.annualExpenseError);
+  return error ? String(error) : null;
+});
+const annualExpenseApiError = computed(() => {
+  const error = unref(page.annualExpenseApiError);
+  return error ? String(error) : null;
+});
 const incomeModalTitle = computed(() => String(unref(page.incomeModalTitle) ?? ''));
 const expenseModalTitle = computed(() => String(unref(page.expenseModalTitle) ?? ''));
 const incomeSubmitLabel = computed(() => String(unref(page.incomeSubmitLabel) ?? ''));
@@ -174,9 +190,9 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         <div class="nw-list-total-details">Total anual</div>
       </div>
 
-      <div v-if="page.annualIncomeError" class="alert mt-3">{{ page.annualIncomeError }}</div>
-      <div v-else-if="page.annualIncomeApiError" class="alert mt-3">
-        {{ page.annualIncomeApiError }}
+      <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
+      <div v-else-if="annualIncomeApiError" class="alert mt-3">
+        {{ annualIncomeApiError }}
       </div>
 
       <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
@@ -330,9 +346,9 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         <div class="nw-list-total-details">Total anual</div>
       </div>
 
-      <div v-if="page.annualExpenseError" class="alert mt-3">{{ page.annualExpenseError }}</div>
-      <div v-else-if="page.annualExpenseApiError" class="alert mt-3">
-        {{ page.annualExpenseApiError }}
+      <div v-if="annualExpenseError" class="alert mt-3">{{ annualExpenseError }}</div>
+      <div v-else-if="annualExpenseApiError" class="alert mt-3">
+        {{ annualExpenseApiError }}
       </div>
 
       <div v-if="!annualExpenseEntries.length && !annualExpenseLoading" class="subtle mt-3">

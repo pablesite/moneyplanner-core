@@ -1,11 +1,35 @@
 <script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue';
+import { computed, unref, type ComponentPublicInstance } from 'vue';
 
 const props = defineProps<{
   page: any;
 }>();
 
 const page = props.page;
+
+const dataInputCheckTitle = computed(() => String(unref(page.dataInputCheckTitle) ?? ''));
+const dataInputSummary = computed(() => String(unref(page.dataInputSummary) ?? ''));
+const dataTransferUiBusy = computed(() => Boolean(unref(page.dataTransferUiBusy)));
+const dataTransferStatus = computed(() => {
+  const status = unref(page.dataTransferStatus);
+  return status ? String(status) : null;
+});
+const dataTransferError = computed(() => {
+  const error = unref(page.dataTransferError);
+  return error ? String(error) : null;
+});
+const dataTransferToastMessage = computed(() => {
+  const message = unref(page.dataTransferToastMessage);
+  return message ? String(message) : null;
+});
+const dataTransferToastKind = computed(() =>
+  unref(page.dataTransferToastKind) === 'error' ? 'error' : 'success',
+);
+const dataTransferBusy = computed(() => Boolean(unref(page.dataTransferBusy)));
+const dataTransferBusyLabel = computed(() => {
+  const label = unref(page.dataTransferBusyLabel);
+  return label ? String(label) : null;
+});
 
 const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): void => {
   // Keep the hidden file input connected to the parent view.
@@ -17,9 +41,9 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
 <template>
   <section class="card ui-pro-panel grid gap-2.5">
     <p class="ui-pro-kicker">Introduccion de datos</p>
-    <h1 class="h1 m-0">{{ page.dataInputCheckTitle }}</h1>
+    <h1 class="h1 m-0">{{ dataInputCheckTitle }}</h1>
     <p class="subtle m-0">
-      {{ page.dataInputSummary }}
+      {{ dataInputSummary }}
     </p>
     <p class="subtle m-0">
       Gestiona aqui la base financiera anual: ingresos, gastos, activos y pasivos para el analisis
@@ -29,7 +53,7 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
       <button
         class="btn btn-ghost"
         type="button"
-        :disabled="page.dataTransferUiBusy"
+        :disabled="dataTransferUiBusy"
         @click="page.exportDataBundle"
       >
         Exportar datos
@@ -37,7 +61,7 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
       <button
         class="btn btn-primary"
         type="button"
-        :disabled="page.dataTransferUiBusy"
+        :disabled="dataTransferUiBusy"
         @click="page.triggerImportDialog('append')"
       >
         Importar datos
@@ -45,7 +69,7 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
       <button
         class="btn btn-ghost"
         type="button"
-        :disabled="page.dataTransferUiBusy"
+        :disabled="dataTransferUiBusy"
         @click="page.triggerImportDialog('replace')"
       >
         Reemplazar datos
@@ -58,8 +82,8 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
         @change="page.importDataFromFile"
       />
     </div>
-    <p v-if="page.dataTransferStatus" class="subtle m-0">{{ page.dataTransferStatus }}</p>
-    <p v-if="page.dataTransferError" class="alert m-0">{{ page.dataTransferError }}</p>
+    <p v-if="dataTransferStatus" class="subtle m-0">{{ dataTransferStatus }}</p>
+    <p v-if="dataTransferError" class="alert m-0">{{ dataTransferError }}</p>
   </section>
 
   <Transition
@@ -71,10 +95,10 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
     leave-to-class="-translate-y-2 opacity-0"
   >
     <div
-      v-if="page.dataTransferToastMessage"
+      v-if="dataTransferToastMessage"
       class="fixed right-4 top-4 z-[80] max-w-[min(92vw,560px)] rounded-xl px-4 py-3 text-sm shadow-2xl backdrop-blur"
       :class="
-        page.dataTransferToastKind === 'error'
+        dataTransferToastKind === 'error'
           ? 'border border-rose-300/30 bg-rose-950/90 text-rose-100'
           : 'border border-emerald-300/30 bg-emerald-950/90 text-emerald-100'
       "
@@ -84,15 +108,15 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
       <div class="flex items-start gap-2.5">
         <span
           class="mt-0.5 inline-block h-2.5 w-2.5 rounded-full"
-          :class="page.dataTransferToastKind === 'error' ? 'bg-rose-300' : 'bg-emerald-300'"
+          :class="dataTransferToastKind === 'error' ? 'bg-rose-300' : 'bg-emerald-300'"
         />
-        <span>{{ page.dataTransferToastMessage }}</span>
+        <span>{{ dataTransferToastMessage }}</span>
       </div>
     </div>
   </Transition>
 
   <div
-    v-if="page.dataTransferBusy"
+    v-if="dataTransferBusy"
     class="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 backdrop-blur-[2px]"
     role="status"
     aria-live="polite"
@@ -106,7 +130,7 @@ const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): vo
         />
         <div>
           <p class="m-0 text-sm font-medium text-white">
-            {{ page.dataTransferBusyLabel ?? 'Procesando datos...' }}
+            {{ dataTransferBusyLabel ?? 'Procesando datos...' }}
           </p>
           <p class="m-0 text-xs text-white/65">No cierres la pestaña hasta que termine.</p>
         </div>
