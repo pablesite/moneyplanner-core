@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
+import {
+  type AnnualExpenseEntry,
+  type AnnualIncomeEntry,
+  AnnualEntryModalForm,
+} from '@/domains/data-input';
+
 type BudgetSection = {
   id: 'income' | 'expense';
   title: string;
@@ -12,7 +19,22 @@ type BudgetSection = {
   groups: any[];
 };
 
-defineProps<{
+type BudgetRow = {
+  key: string;
+  categoryKey: string;
+  categoryLabel: string;
+  subcategoryKey: string;
+  subcategoryLabel: string;
+  plannedAnnual: number;
+  itemsCount: number;
+};
+
+type ContextPanel = {
+  sectionId: 'income' | 'expense';
+  row: BudgetRow;
+};
+
+const props = defineProps<{
   isMonthlyCloseView: boolean;
   hasAnyPlannedData: boolean;
   isLoading: boolean;
@@ -33,7 +55,96 @@ defineProps<{
   executionPreview: (...args: any[]) => any;
   updateIncomeViewMode: (mode: 'all' | 'recurrent' | 'one_off') => void;
   updateExpenseViewMode: (mode: 'all' | 'recurrent' | 'one_off') => void;
+  annualEntriesPage: any | null;
+  filteredIncomeEntries: AnnualIncomeEntry[];
+  filteredExpenseEntries: AnnualExpenseEntry[];
+  ownershipFilter: string;
+  selectedOwnershipFilterLabel: string;
 }>();
+
+const activeContext = ref<ContextPanel | null>(null);
+
+const contextIncomeEntries = computed(() => {
+  const context = activeContext.value;
+  if (!context || context.sectionId !== 'income') return [];
+  return props.filteredIncomeEntries.filter((entry) => {
+    if (entry.category !== context.row.categoryKey) return false;
+    if (entry.subcategory !== context.row.subcategoryKey) return false;
+    if (props.sections.find((section) => section.id === 'income')?.filterMode === 'recurrent') {
+      return entry.incomeType === 'recurrent';
+    }
+    if (props.sections.find((section) => section.id === 'income')?.filterMode === 'one_off') {
+      return entry.incomeType === 'one_off';
+    }
+    return true;
+  });
+});
+
+const contextExpenseEntries = computed(() => {
+  const context = activeContext.value;
+  if (!context || context.sectionId !== 'expense') return [];
+  return props.filteredExpenseEntries.filter((entry) => {
+    if (entry.category !== context.row.categoryKey) return false;
+    if (entry.subcategory !== context.row.subcategoryKey) return false;
+    if (props.sections.find((section) => section.id === 'expense')?.filterMode === 'recurrent') {
+      return entry.expenseType === 'recurrent';
+    }
+    if (props.sections.find((section) => section.id === 'expense')?.filterMode === 'one_off') {
+      return entry.expenseType === 'one_off';
+    }
+    return true;
+  });
+});
+
+function isContextOpen(sectionId: 'income' | 'expense', rowKey: string): boolean {
+  return activeContext.value?.sectionId === sectionId && activeContext.value?.row.key === rowKey;
+}
+
+function toggleContext(sectionId: 'income' | 'expense', row: BudgetRow): void {
+  if (isContextOpen(sectionId, row.key)) {
+    activeContext.value = null;
+    return;
+  }
+  activeContext.value = { sectionId, row };
+}
+
+function openCreateFromContext(): void {
+  const context = activeContext.value;
+  if (!context || !props.annualEntriesPage) return;
+  if (context.sectionId === 'income') {
+    props.annualEntriesPage.openIncomeModal();
+    props.annualEntriesPage.patchAnnualIncomeForm({
+      category: context.row.categoryKey,
+      subcategory: context.row.subcategoryKey,
+      owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+    });
+    return;
+  }
+  props.annualEntriesPage.openExpenseModal();
+  props.annualEntriesPage.patchAnnualExpenseForm({
+    category: context.row.categoryKey,
+    subcategory: context.row.subcategoryKey,
+    owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+  });
+}
+
+function openEditIncome(entry: AnnualIncomeEntry): void {
+  props.annualEntriesPage?.openIncomeModal(entry);
+}
+
+function openEditExpense(entry: AnnualExpenseEntry): void {
+  props.annualEntriesPage?.openExpenseModal(entry);
+}
+
+async function removeIncome(entry: AnnualIncomeEntry): Promise<void> {
+  if (!props.annualEntriesPage) return;
+  await props.annualEntriesPage.removeAnnualIncome(entry.id);
+}
+
+async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
+  if (!props.annualEntriesPage) return;
+  await props.annualEntriesPage.removeAnnualExpense(entry.id);
+}
 </script>
 
 <template>
@@ -404,6 +515,118 @@ defineProps<{
                   </span>
                 </div>
               </div>
+
+              <div class="ui-budget-row-actions">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  @click="toggleContext(section.id, row)"
+                >
+                  {{
+                    isContextOpen(section.id, row.key)
+                      ? 'Ocultar edicion'
+                      : 'Gestionar subcategoria'
+                  }}
+                </button>
+              </div>
+
+              <div v-if="isContextOpen(section.id, row.key)" class="ui-budget-context-panel">
+                <header class="ui-budget-context-panel-head">
+                  <div>
+                    <strong>{{ row.subcategoryLabel }}</strong>
+                    <p class="ui-budget-context-panel-subtitle">
+                      Alta, edicion y borrado sin salir del contexto de categoria.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    @click="openCreateFromContext"
+                  >
+                    Anadir
+                  </button>
+                </header>
+
+                <ul
+                  v-if="section.id === 'income' && contextIncomeEntries.length"
+                  class="ui-budget-context-list"
+                >
+                  <li v-for="entry in contextIncomeEntries" :key="`income-${entry.id}`">
+                    <div class="ui-budget-context-item">
+                      <div class="ui-budget-context-main">
+                        <strong>{{ entry.name }}</strong>
+                        <small>
+                          {{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
+                          <template v-if="entry.owner"> · {{ entry.owner }}</template>
+                        </small>
+                      </div>
+                      <div class="ui-budget-context-actions">
+                        <span class="ui-budget-context-amount"
+                          >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
+                        >
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Editar"
+                          @click="openEditIncome(entry)"
+                        >
+                          &#9998;
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Eliminar"
+                          @click="removeIncome(entry)"
+                        >
+                          &#128465;
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+
+                <ul
+                  v-else-if="section.id === 'expense' && contextExpenseEntries.length"
+                  class="ui-budget-context-list"
+                >
+                  <li v-for="entry in contextExpenseEntries" :key="`expense-${entry.id}`">
+                    <div class="ui-budget-context-item">
+                      <div class="ui-budget-context-main">
+                        <strong>{{ entry.name }}</strong>
+                        <small>
+                          {{ entry.expenseType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
+                          <template v-if="entry.owner"> · {{ entry.owner }}</template>
+                        </small>
+                      </div>
+                      <div class="ui-budget-context-actions">
+                        <span class="ui-budget-context-amount"
+                          >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
+                        >
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Editar"
+                          @click="openEditExpense(entry)"
+                        >
+                          &#9998;
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Eliminar"
+                          @click="removeExpense(entry)"
+                        >
+                          &#128465;
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+
+                <p v-else class="subtle mb-0">
+                  No hay registros con los filtros actuales para esta subcategoria.
+                </p>
+              </div>
             </div>
 
             <div class="ui-budget-row-metrics">
@@ -478,4 +701,54 @@ defineProps<{
   </section>
 
   <div v-if="isLoading" class="ui-status-line">Cargando presupuesto...</div>
+
+  <AnnualEntryModalForm
+    v-if="annualEntriesPage"
+    :open="annualEntriesPage.showIncomeModal.value"
+    :title="annualEntriesPage.incomeModalTitle.value"
+    :form="annualEntriesPage.annualIncomeForm"
+    :loading="annualEntriesPage.annualIncomeLoading.value"
+    :submit-label="annualEntriesPage.incomeSubmitLabel.value"
+    :category-options="annualEntriesPage.incomeCategories"
+    :subcategory-options="annualEntriesPage.annualSubcategoryOptions.value"
+    :show-owner-field="annualEntriesPage.showOwnerField.value"
+    :owner-options="annualEntriesPage.ownerOptions.value"
+    :time-profile-options="annualEntriesPage.incomeTimeProfileOptions.value"
+    :cashflow-role-options="annualEntriesPage.incomeCashflowRoleOptions"
+    :show-cashflow-role-field="false"
+    :event-group-options="annualEntriesPage.annualEventGroupOptions.value"
+    event-group-datalist-id="budget-income-event-groups"
+    name-placeholder="Concepto (ej: Nomina, Regalo)"
+    :amount-placeholder="annualEntriesPage.incomeAmountInputPlaceholder.value"
+    @patch="annualEntriesPage.patchAnnualIncomeForm"
+    @close="annualEntriesPage.closeIncomeModal"
+    @submit="annualEntriesPage.submitAnnualIncome"
+  />
+
+  <AnnualEntryModalForm
+    v-if="annualEntriesPage"
+    :open="annualEntriesPage.showExpenseModal.value"
+    :title="annualEntriesPage.expenseModalTitle.value"
+    :form="annualEntriesPage.annualExpenseForm"
+    :loading="annualEntriesPage.annualExpenseLoading.value"
+    :submit-label="annualEntriesPage.expenseSubmitLabel.value"
+    :category-options="annualEntriesPage.expenseCategories"
+    :subcategory-options="annualEntriesPage.annualExpenseSubcategoryOptions.value"
+    :show-owner-field="annualEntriesPage.showOwnerField.value"
+    :owner-options="annualEntriesPage.ownerOptions.value"
+    :time-profile-options="annualEntriesPage.expenseTimeProfileOptions"
+    time-profile-field-label="Tipo de salida"
+    :cashflow-role-options="annualEntriesPage.filteredExpenseCashflowRoleOptions.value"
+    :show-cashflow-role-field="annualEntriesPage.showExpenseCashflowRoleField.value"
+    :show-event-group-field="!annualEntriesPage.editingSystemGeneratedLiabilityExpense.value"
+    :show-term-end-year-field="!annualEntriesPage.editingSystemGeneratedLiabilityExpense.value"
+    :event-group-options="annualEntriesPage.annualEventGroupOptions.value"
+    event-group-datalist-id="budget-expense-event-groups"
+    name-placeholder="Concepto (ej: Alimentacion, Hipoteca)"
+    :amount-placeholder="annualEntriesPage.expenseAmountInputPlaceholder.value"
+    :notes-placeholder="annualEntriesPage.expenseBulkEditHint.value"
+    @patch="annualEntriesPage.patchAnnualExpenseForm"
+    @close="annualEntriesPage.closeExpenseModal"
+    @submit="annualEntriesPage.submitAnnualExpense"
+  />
 </template>

@@ -506,9 +506,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/patrimonio',
         },
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
         {
           id: 'budget',
@@ -523,9 +523,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/presupuesto',
         },
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
         {
           id: 'net-worth',
@@ -545,9 +545,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/presupuesto',
         },
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
       ],
       4: [
@@ -557,9 +557,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/patrimonio',
         },
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
         {
           id: 'budget',
@@ -579,9 +579,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/presupuesto',
         },
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
       ],
     };
@@ -589,9 +589,9 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
     return (
       actionsById[phaseValue.id] ?? [
         {
-          id: 'data-input',
-          label: 'Datos',
-          to: '/introduccion-datos',
+          id: 'account',
+          label: 'Cuenta',
+          to: '/account',
         },
         {
           id: 'budget',

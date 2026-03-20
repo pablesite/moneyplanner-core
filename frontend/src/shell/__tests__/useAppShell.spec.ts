@@ -41,7 +41,7 @@ describe('useAppShell', () => {
     const { shell, unmount } = mountShell();
 
     expect(shell.isLoginRoute.value).toBe(false);
-    expect(shell.navItems.value).toHaveLength(6);
+    expect(shell.navItems.value).toHaveLength(5);
     expect(shell.isNavItemActive(shell.navItems.value[0]!)).toBe(true);
 
     mocks.route.path = '/guia/fases/2';

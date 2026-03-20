@@ -22,7 +22,7 @@ Convenciones:
 ## PRESUPUESTO
 
 - ✅ Migración fase 1 completada (2026-03-20): formularios de ingresos/gastos previstos integrados en la vista de Presupuesto.
-- Integrar de forma eficiente la introducción de datos con la visualización por categorías del presupuesto, evitando dos bloques independientes (fase 2 UX).
+- ✅ Integración fase 2 completada (2026-03-20): introducción de datos y visualización por categorías unificadas en un único flujo contextual dentro de Presupuesto.
 - Conectar gastos definidos en el presupuesto con los valores reales del cierre y los movimientos contables del día a día (ahora son placeholders).
 - Revisar el estilo de la evolución ejecutada mensual: las barras son visualmente correctas pero no se distinguen bien las categorías.
 - Simplificar la interpretación del estado financiero: menos ruido visual, más claridad para el usuario final.
@@ -133,10 +133,11 @@ El coach (fases 1–4) está funcional. Pendiente antes de producción:
 
 ## MÓDULO INTRODUCCIÓN DE DATOS
 
-- **Eliminar el módulo completo** una vez migrado todo:
+- ✅ Retirado el módulo/ruta `/introduccion-datos` (2026-03-20).
+- Reubicación aplicada:
   - Formularios de ingresos/gastos previstos → Presupuesto.
   - Entradas relacionadas con activos/pasivos → Patrimonio.
-- Hacer esta migración antes del rediseño para no arrastrar deuda de UX.
+  - Portable data (export/import/replace) → Cuenta (`/account`).
 
 ---
 

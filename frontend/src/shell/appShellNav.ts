@@ -9,13 +9,6 @@ export type NavItem = {
 export const appShellNavItems: NavItem[] = [
   { id: 'home', icon: 'GU', label: 'Guia', hint: 'Plan paso a paso', to: '/' },
   {
-    id: 'data-input',
-    icon: 'IN',
-    label: 'Introduccion de datos',
-    hint: 'Ingresos, gastos, activos y pasivos',
-    to: '/introduccion-datos',
-  },
-  {
     id: 'net-worth',
     icon: 'PT',
     label: 'Patrimonio',

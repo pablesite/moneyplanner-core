@@ -22,7 +22,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 1. Net worth
 2. Budget and monthly close
 3. Accounting / daily movements
-4. Data input (transitional: patrimony + portable data; annual income/expense now managed in Budget)
+4. Account workspace (includes portable data transfer: export/import/replace)
 5. Financial guide v1
 6. Family and ownership
 7. Supporting product capabilities that belong to the Core domain baseline

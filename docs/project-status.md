@@ -27,8 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Presupuesto | Agente | Integrar en una sola experiencia la introducción de datos y la visualización por categorías (sin dos bloques independientes). | `core/docs/tasks/budget/phase-2-budget-category-integration/frontend.md` |
-| Introducción de Datos | Agente | Eliminar la vista/módulo una vez completada la migración funcional hacia Presupuesto y Patrimonio, moviendo portable data a Cuenta. | `core/docs/tasks/data-input/phase-1-module-removal/frontend.md` |
+| _(sin tareas Agente pendientes en este bloque)_ | — | Retirada de `Introducción de Datos` completada. | — |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -37,11 +36,11 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
-| Presupuesto — migración y UX | Alta | 🔄 | Fase 1 completada (CRUD anual en Presupuesto). Siguiente: integrar entrada de datos + visualización por categorías en un flujo único y cerrar consolidación UX v1. |
+| Presupuesto — migración y UX | Alta | 🔄 | Fase 1 y fase 2 completadas (CRUD anual + integración por categorías en un flujo único). Pendiente consolidación UX v1 final. |
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
-| Eliminar módulo Introducción de Datos | Alta | 🔄 | Ingresos/salidas ya migrados a Presupuesto; portable data disponible en Cuenta y revisión de gasto generado por pasivo disponible en Patrimonio. Pendiente retirar ruta/módulo legacy. |
+| Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
@@ -57,9 +56,9 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Base funcional implementada; en consolidación manual de detalles v1. |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
-| Data Input (entradas anuales) | 🔄 | En transición avanzada: ingresos/salidas migrados a Presupuesto; portable data ya disponible también en Cuenta y revisión de gasto generado por pasivo disponible en Patrimonio. Pendiente retirada de la ruta legacy. |
+| Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
 | Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista y ajuste de importación MoneyWiz para v1 final. |

@@ -37,6 +37,45 @@ const mockAccountingApi = vi.hoisted(() => ({
     },
   })),
 }));
+const mockDataInputPage = vi.hoisted(() => ({
+  fiscalYear: { value: new Date().getFullYear() },
+  showIncomeModal: { value: false },
+  showExpenseModal: { value: false },
+  incomeModalTitle: { value: 'Nuevo ingreso' },
+  expenseModalTitle: { value: 'Nuevo gasto' },
+  annualIncomeForm: {},
+  annualExpenseForm: {},
+  annualIncomeLoading: { value: false },
+  annualExpenseLoading: { value: false },
+  incomeSubmitLabel: { value: 'Guardar ingreso' },
+  expenseSubmitLabel: { value: 'Guardar gasto' },
+  incomeCategories: [{ value: 'salary', label: 'Salario' }],
+  expenseCategories: [{ value: 'consumption_expenses', label: 'Gastos' }],
+  annualSubcategoryOptions: { value: [{ value: 'employee_salary', label: 'Nomina' }] },
+  annualExpenseSubcategoryOptions: { value: [{ value: 'living_expenses', label: 'Alimentacion' }] },
+  showOwnerField: { value: false },
+  ownerOptions: { value: [] },
+  incomeTimeProfileOptions: { value: [{ value: 'structural_recurrent', label: 'Recurrente' }] },
+  incomeCashflowRoleOptions: [{ value: 'operating', label: 'Operativo' }],
+  annualEventGroupOptions: { value: [] },
+  incomeAmountInputPlaceholder: { value: 'Importe anual' },
+  expenseAmountInputPlaceholder: { value: 'Importe anual' },
+  expenseTimeProfileOptions: [{ value: 'structural_recurrent', label: 'Recurrente' }],
+  filteredExpenseCashflowRoleOptions: { value: [{ value: 'operating', label: 'Operativo' }] },
+  showExpenseCashflowRoleField: { value: true },
+  editingSystemGeneratedLiabilityExpense: { value: false },
+  expenseBulkEditHint: { value: '' },
+  openIncomeModal: vi.fn(),
+  openExpenseModal: vi.fn(),
+  patchAnnualIncomeForm: vi.fn(),
+  patchAnnualExpenseForm: vi.fn(),
+  closeIncomeModal: vi.fn(),
+  closeExpenseModal: vi.fn(),
+  submitAnnualIncome: vi.fn(),
+  submitAnnualExpense: vi.fn(),
+  removeAnnualIncome: vi.fn(async () => undefined),
+  removeAnnualExpense: vi.fn(async () => undefined),
+}));
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockUseRoute(),
@@ -62,8 +101,15 @@ vi.mock('@/domains/data-input', () => ({
   expenseSubcategories: [
     { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
   ],
+  AnnualEntryModalForm: defineComponent({
+    name: 'AnnualEntryModalForm',
+    template: '<div />',
+  }),
   useAnnualIncomeStore: () => mockIncomeStore,
   useAnnualExpenseStore: () => mockExpenseStore,
+}));
+vi.mock('@/views/data-input/useDataInputPage', () => ({
+  useDataInputPage: () => mockDataInputPage,
 }));
 
 function makeMonthlySummary(executed = '0.00') {
@@ -140,6 +186,19 @@ async function openMonthlyStep(wrapper: ReturnType<typeof mount>, label: string)
 function mountMonthlyCloseView() {
   return mount(BudgetDashboardView, {
     props: { mode: 'monthly-close' },
+    global: {
+      stubs: {
+        RouterLink: defineComponent({
+          name: 'RouterLink',
+          template: '<a><slot /></a>',
+        }),
+      },
+    },
+  });
+}
+
+function mountBudgetView() {
+  return mount(BudgetDashboardView, {
     global: {
       stubs: {
         RouterLink: defineComponent({
@@ -417,5 +476,47 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('Pendiente clasificar');
     expect(wrapper.text()).toContain('Nomina A');
     expect(wrapper.text()).toContain('Nomina B');
+  });
+
+  it('renders contextual management actions in budget detail rows', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 1,
+        name: 'Nomina',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 12000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 12000;
+    configureCoreApi();
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const toggleDetail = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ver detalle'));
+    await toggleDetail?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Gestionar subcategoria');
   });
 });
