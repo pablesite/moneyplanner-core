@@ -27,6 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
+| Presupuesto | Agente | Integrar en una sola experiencia la introducción de datos y la visualización por categorías (sin dos bloques independientes). | `core/docs/tasks/budget/phase-2-budget-category-integration/frontend.md` |
 | Introducción de Datos | Agente | Eliminar la vista/módulo una vez completada la migración funcional hacia Presupuesto y Patrimonio, moviendo portable data a Cuenta. | `core/docs/tasks/data-input/phase-1-module-removal/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
@@ -36,7 +37,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
-| Presupuesto — migración y UX | Alta | 🔄 | Migración fase 1 completada: altas/bajas de ingresos y gastos integradas en Presupuesto. Pendiente consolidación UX y retirada final del módulo Introducción de Datos. |
+| Presupuesto — migración y UX | Alta | 🔄 | Fase 1 completada (CRUD anual en Presupuesto). Siguiente: integrar entrada de datos + visualización por categorías en un flujo único y cerrar consolidación UX v1. |
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
