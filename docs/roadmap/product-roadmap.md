@@ -21,7 +21,7 @@ Convenciones:
 
 ## PRESUPUESTO
 
-- Migrar los formularios de ingresos/gastos previstos desde el módulo de Introducción de Datos directamente a la vista de presupuesto.
+- ✅ Migración fase 1 completada (2026-03-20): formularios de ingresos/gastos previstos integrados en la vista de Presupuesto.
 - Conectar gastos definidos en el presupuesto con los valores reales del cierre y los movimientos contables del día a día (ahora son placeholders).
 - Revisar el estilo de la evolución ejecutada mensual: las barras son visualmente correctas pero no se distinguen bien las categorías.
 - Simplificar la interpretación del estado financiero: menos ruido visual, más claridad para el usuario final.

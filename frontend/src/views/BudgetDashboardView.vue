@@ -8,6 +8,7 @@ import {
   BudgetMonthlyCloseLiquiditySection,
   BudgetMonthlyCloseResultSection,
 } from '@/domains/budget';
+import BudgetAnnualEntriesSection from './budget/BudgetAnnualEntriesSection.vue';
 
 import '@/domains/budget/styles/dashboard.css';
 import { type BudgetDashboardMode, useBudgetDashboardPage } from './budget/useBudgetDashboardPage';
@@ -205,6 +206,7 @@ const {
     <div v-if="isMonthlyCloseView && monthlyCloseError" class="alert mt-3">
       {{ monthlyCloseError }}
     </div>
+    <BudgetAnnualEntriesSection v-if="!isMonthlyCloseView" />
     <BudgetMonthlyCloseExpenseSection
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"

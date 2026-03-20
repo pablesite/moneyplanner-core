@@ -43,12 +43,8 @@ defineProps<{
   >
     <h2 class="mt-0">Sin presupuesto anual para {{ fiscalYear }}</h2>
     <p class="subtle mb-0">
-      Carga primero `Ingresos anuales` y `Gastos anuales` en `Introduccion de datos` para ver el
-      dashboard.
+      Usa el bloque `Balance anual` de esta misma vista para anadir ingresos y gastos previstos.
     </p>
-    <RouterLink class="ui-budget-empty-link" to="/introduccion-datos">
-      Ir a Introduccion de datos
-    </RouterLink>
   </section>
 
   <section
