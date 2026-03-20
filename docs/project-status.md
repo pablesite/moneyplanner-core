@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-19 | **Versión Core:** 0.23.1
+**Última revisión:** 2026-03-20 | **Versión Core:** 0.23.1
 
 ---
 
@@ -14,7 +14,12 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 ### En curso
 
-_(ninguna tarea activa en este momento)_
+| Módulo | Tipo | Descripción | Spec |
+|--------|------|-------------|------|
+| Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
+| Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
+| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. | Se define durante la revisión. |
+| Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
 
@@ -22,7 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Presupuesto | Manual | Revisión integral de experiencia de uso del módulo. | Se define durante la revisión. |
+| Introducción de Datos | Agente | Eliminar la vista/módulo una vez completada la migración funcional hacia Presupuesto y Patrimonio, moviendo portable data a Cuenta. | `core/docs/tasks/data-input/phase-1-module-removal/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -31,16 +36,16 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
-| Presupuesto — migración y UX | Alta | ⚪ | Migrar ingresos/gastos previstos desde Introducción de Datos; conectar con valores reales del cierre; mejorar visualización |
+| Presupuesto — migración y UX | Alta | 🔄 | Migración fase 1 completada: altas/bajas de ingresos y gastos integradas en Presupuesto. Pendiente consolidación UX y retirada final del módulo Introducción de Datos. |
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
-| Cierre mensual — modo dual | Alta | ✅ | Backend + Frontend completos: API unificada, distribución inteligente, ciclo de vida (finalizar/reabrir/bloquear), mirror Core↔SaaS. |
+| Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
-| Importación de datos | Media | ✅ | MoneyWiz v1 corregido: aliases en español para cabeceras (Fecha, Cuentas, Importe, Moneda, etc.) y detección de filas de resumen de cuenta. Validado con CSV real. Excel sigue pendiente. |
+| Importación de datos | Media | 🔄 | MoneyWiz v1 corregido y validado con CSV real; pendiente afinar reglas/casos borde para rematar movimientos v1. Excel sigue pendiente. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -51,12 +56,12 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Completo |
-| Cierre mensual | ✅ | Integrado con budget y accounting |
-| Data Input (entradas anuales) | ✅ | Completo |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Base funcional implementada; en consolidación manual de detalles v1. |
+| Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
+| Data Input (entradas anuales) | 🔄 | En transición: ingresos/salidas migrados a Presupuesto; la vista queda para patrimonio + portable data mientras se planifica su retirada completa. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista y ajuste de importación MoneyWiz para v1 final. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
@@ -84,6 +89,3 @@ _(ninguna tarea aparcada en este momento)_
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
-
-
-
