@@ -72,4 +72,4 @@ El roadmap de Core marca como siguiente tarea disponible mover la gestion anual 
 - [x] All validation commands pass
 - [x] All required documentation updates done
 - [x] Spec moved to `terminados/`
-- [ ] Commit created (Conventional Commits)
+- [x] Commit created (Conventional Commits)
