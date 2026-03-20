@@ -50,13 +50,13 @@ Una vez que `Presupuesto` absorba el CRUD anual de ingresos y gastos, `Introducc
   Ninguna ruta o CTA visible lleva a `/introduccion-datos`.
 
 ## Required Documentation Updates
-- [ ] `core/docs/project-status.md` — cerrar la tarea de eliminacion del modulo
-- [ ] `core/docs/roadmap/product-roadmap.md` — marcar `Modulo Introduccion de Datos` como migrado/eliminado
-- [ ] `core/docs/architecture/architecture.md` — retirar `Data input` del scope de modulos activos si deja de existir como modulo
-- [ ] `docs/project-status.md` — actualizar el espejo SaaS y la consolidacion funcional v1
-- [ ] `docs/frontend/domain-map.md` — eliminar la ruta `/introduccion-datos` y reflejar portable data en `account`
-- [ ] `docs/architecture/capabilities-matrix.md` — ajustar `core.dataInput` si pasa a legacy/compatibilidad
-- [ ] `core/docs/tasks/data-input/phase-1-module-removal/terminados/frontend.md` — mover la spec al cerrar la tarea
+- [x] `core/docs/project-status.md` — cerrar la tarea de eliminacion del modulo
+- [x] `core/docs/roadmap/product-roadmap.md` — marcar `Modulo Introduccion de Datos` como migrado/eliminado
+- [x] `core/docs/architecture/architecture.md` — retirar `Data input` del scope de modulos activos si deja de existir como modulo
+- [x] `docs/project-status.md` — actualizar el espejo SaaS y la consolidacion funcional v1
+- [x] `docs/frontend/domain-map.md` — eliminar la ruta `/introduccion-datos` y reflejar portable data en `account`
+- [x] `docs/architecture/capabilities-matrix.md` — ajustar `core.dataInput` si pasa a legacy/compatibilidad
+- [x] `core/docs/tasks/data-input/phase-1-module-removal/terminados/frontend.md` — mover la spec al cerrar la tarea
 
 ## Risks
 1. Romper portable data al moverlo a `/account` sin conservar bien el estado y los mensajes UX. Mitigacion: extraer el bloque con contrato estable y validar import/export manualmente.
@@ -64,10 +64,11 @@ Una vez que `Presupuesto` absorba el CRUD anual de ingresos y gastos, `Introducc
 3. Mezclar eliminacion de modulo con rediseno grande de cuenta. Mitigacion: limitar el cambio a alojar portable data de forma funcional.
 
 ## Completion Criteria
-- [ ] `Introduccion de Datos` deja de existir como modulo/ruta en Core y SaaS
-- [ ] Portable data funciona desde `/account`
-- [ ] Patrimonio queda como unico home de activos y pasivos
-- [ ] All validation commands pass
-- [ ] All required documentation updates done
-- [ ] Spec moved to `terminados/`
+- [x] `Introduccion de Datos` deja de existir como modulo/ruta en Core y SaaS
+- [x] Portable data funciona desde `/account`
+- [x] Patrimonio queda como unico home de activos y pasivos
+- [x] All validation commands pass
+- [x] All required documentation updates done
+- [x] Spec moved to `terminados/`
 - [ ] Commit created (Conventional Commits)
+

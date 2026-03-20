@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import {
   BudgetAnnualSection,
   BudgetHeroSection,
@@ -8,7 +8,7 @@ import {
   BudgetMonthlyCloseLiquiditySection,
   BudgetMonthlyCloseResultSection,
 } from '@/domains/budget';
-import BudgetAnnualEntriesSection from './budget/BudgetAnnualEntriesSection.vue';
+import { useDataInputPage } from './data-input/useDataInputPage';
 
 import '@/domains/budget/styles/dashboard.css';
 import { type BudgetDashboardMode, useBudgetDashboardPage } from './budget/useBudgetDashboardPage';
@@ -122,6 +122,8 @@ const {
   isSectionExpanded,
   toggleSectionExpanded,
   sections,
+  filteredIncomeEntries,
+  filteredExpenseEntries,
   incomeBudgetSuggestions,
   expenseBudgetSuggestions,
   hasAnyPlannedData,
@@ -155,6 +157,18 @@ const {
   onLiquidityCheckinCheckboxToggle,
   onLiquidityAdjustAmountBlur,
 } = useBudgetDashboardPage(computed(() => props.mode));
+
+const annualEntriesPage = props.mode === 'budget' ? useDataInputPage() : null;
+
+if (annualEntriesPage) {
+  watch(
+    fiscalYear,
+    (year) => {
+      annualEntriesPage.fiscalYear.value = year;
+    },
+    { immediate: true },
+  );
+}
 </script>
 
 <template>
@@ -206,7 +220,6 @@ const {
     <div v-if="isMonthlyCloseView && monthlyCloseError" class="alert mt-3">
       {{ monthlyCloseError }}
     </div>
-    <BudgetAnnualEntriesSection v-if="!isMonthlyCloseView" />
     <BudgetMonthlyCloseExpenseSection
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"
@@ -360,6 +373,11 @@ const {
       :execution-preview="executionPreview"
       :update-income-view-mode="updateIncomeViewMode"
       :update-expense-view-mode="updateExpenseViewMode"
+      :annual-entries-page="annualEntriesPage"
+      :filtered-income-entries="filteredIncomeEntries"
+      :filtered-expense-entries="filteredExpenseEntries"
+      :ownership-filter="ownershipFilter"
+      :selected-ownership-filter-label="selectedOwnershipFilterLabel"
     />
   </div>
 </template>
