@@ -41,7 +41,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
-| Eliminar módulo Introducción de Datos | Alta | ⚪ | Migrar TODO a Presupuesto y Patrimonio; eliminar módulo completo |
+| Eliminar módulo Introducción de Datos | Alta | 🔄 | Ingresos/salidas ya migrados a Presupuesto; portable data disponible en Cuenta y revisión de gasto generado por pasivo disponible en Patrimonio. Pendiente retirar ruta/módulo legacy. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
@@ -59,7 +59,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
 | Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Base funcional implementada; en consolidación manual de detalles v1. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
-| Data Input (entradas anuales) | 🔄 | En transición: ingresos/salidas migrados a Presupuesto; la vista queda para patrimonio + portable data mientras se planifica su retirada completa. |
+| Data Input (entradas anuales) | 🔄 | En transición avanzada: ingresos/salidas migrados a Presupuesto; portable data ya disponible también en Cuenta y revisión de gasto generado por pasivo disponible en Patrimonio. Pendiente retirada de la ruta legacy. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
 | Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista y ajuste de importación MoneyWiz para v1 final. |

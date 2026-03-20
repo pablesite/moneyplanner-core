@@ -10,6 +10,7 @@ import NetWorthHeroSection from '@/domains/net-worth/components/NetWorthHeroSect
 import NetWorthItemModals from '@/domains/net-worth/components/NetWorthItemModals.vue';
 import NetWorthSnapshotsSection from '@/domains/net-worth/components/NetWorthSnapshotsSection.vue';
 import NetWorthTimelineMain from '@/domains/net-worth/components/NetWorthTimelineMain.vue';
+import type { NetWorthWritePayload } from '@/domains/net-worth/models';
 import '@/domains/net-worth/net-worth-view.css';
 import { useNetWorthAccountingActivity } from '@/domains/net-worth/useNetWorthAccountingActivity';
 import { useNetWorthOwnership } from '@/domains/net-worth/useNetWorthOwnership';
@@ -22,6 +23,8 @@ import { useNetWorthPageActions } from '@/domains/net-worth/useNetWorthPageActio
 import { useNetWorthTimeline } from '@/domains/net-worth/useNetWorthTimeline';
 import { useNetWorthTimelineLayout } from '@/domains/net-worth/useNetWorthTimelineLayout';
 import { BaseModal } from '@/domains/ui';
+import { useAnnualExpenseStore } from '@/domains/data-input';
+import { toApiErrorMessage } from '@/lib/errors';
 
 const {
   store,
@@ -35,6 +38,7 @@ const {
   showAssetModal,
   showLiabilityModal,
   showEditModal,
+  editItem,
   editKind,
   formatMoney,
   unitLabel,
@@ -50,7 +54,6 @@ const {
   summaryAssetBackedLiabilities,
   summaryUnbackedLiabilities,
   submitAsset,
-  submitLiability,
   openEdit,
   closeEdit,
   editTitle,
@@ -58,6 +61,7 @@ const {
   editInitial,
   submitEdit,
 } = useNetWorthViewState();
+const annualExpenseStore = useAnnualExpenseStore('core');
 
 const { itemFormProps } = useNetWorthViewExtensions(store);
 
@@ -112,6 +116,169 @@ function formatPct(n: number | null, decimals = 0): string {
 
 function displayCurrencyUnit(currency: string | null | undefined): string {
   return currency === 'EUR' ? '€' : String(currency ?? '').trim();
+}
+
+type GeneratedLiabilityExpensePreview = {
+  id: number;
+  fiscalYear: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  amountAnnual: number;
+  currency: string;
+};
+
+const showGeneratedLiabilityExpenseModal = ref(false);
+const generatedLiabilityExpenseReview = ref<{
+  liabilityId: number;
+  liabilityName: string;
+  entries: GeneratedLiabilityExpensePreview[];
+} | null>(null);
+const generatedLiabilityExpenseReviewChangeMessage = ref<string | null>(null);
+const generatedLiabilityExpenseReviewTitle = computed(() =>
+  generatedLiabilityExpenseReview.value
+    ? `Gasto generado por pasivo: ${generatedLiabilityExpenseReview.value.liabilityName}`
+    : 'Gasto generado por pasivo',
+);
+
+function setGeneratedLiabilityExpenseReview(
+  liabilityId: number,
+  liabilityName: string,
+  entries: GeneratedLiabilityExpensePreview[],
+): void {
+  generatedLiabilityExpenseReview.value = {
+    liabilityId,
+    liabilityName,
+    entries: entries.map((entry) => ({ ...entry })),
+  };
+}
+
+function mapGeneratedExpenseEntries(
+  entries: Awaited<ReturnType<typeof annualExpenseStore.listBySourceLiability>>,
+): GeneratedLiabilityExpensePreview[] {
+  return entries
+    .filter((entry) => entry.isSystemGenerated && entry.sourceLiabilityId != null)
+    .sort((a, b) => a.fiscalYear - b.fiscalYear)
+    .map((entry) => ({
+      id: entry.id,
+      fiscalYear: entry.fiscalYear,
+      name: entry.name,
+      category: entry.category,
+      subcategory: entry.subcategory,
+      amountAnnual: entry.amountAnnual,
+      currency: entry.currency,
+    }));
+}
+
+function summarizeGeneratedLiabilityExpenseChanges(
+  beforeEntries: GeneratedLiabilityExpensePreview[],
+  afterEntries: GeneratedLiabilityExpensePreview[],
+): string | null {
+  const toYearTotals = (rows: GeneratedLiabilityExpensePreview[]) => {
+    const totals = new Map<number, number>();
+    for (const row of rows) {
+      totals.set(row.fiscalYear, (totals.get(row.fiscalYear) ?? 0) + Number(row.amountAnnual ?? 0));
+    }
+    return totals;
+  };
+  const beforeTotals = toYearTotals(beforeEntries);
+  const afterTotals = toYearTotals(afterEntries);
+  const years = Array.from(new Set([...beforeTotals.keys(), ...afterTotals.keys()])).sort(
+    (a, b) => a - b,
+  );
+  const changedYears: number[] = [];
+  for (const year of years) {
+    const before = beforeTotals.get(year) ?? 0;
+    const after = afterTotals.get(year) ?? 0;
+    if (Math.abs(before - after) > 0.009) changedYears.push(year);
+  }
+  const addedYears = years.filter(
+    (year) => (beforeTotals.get(year) ?? 0) <= 0 && (afterTotals.get(year) ?? 0) > 0,
+  );
+  const removedYears = years.filter(
+    (year) => (beforeTotals.get(year) ?? 0) > 0 && (afterTotals.get(year) ?? 0) <= 0,
+  );
+  if (!changedYears.length && !addedYears.length && !removedYears.length) return null;
+  const chunks: string[] = [];
+  if (changedYears.length) chunks.push(`Importes actualizados en: ${changedYears.join(', ')}`);
+  if (addedYears.length) chunks.push(`Nuevas anualidades: ${addedYears.join(', ')}`);
+  if (removedYears.length) chunks.push(`Anualidades eliminadas: ${removedYears.join(', ')}`);
+  return chunks.join(' | ');
+}
+
+function closeGeneratedLiabilityExpenseModal(): void {
+  showGeneratedLiabilityExpenseModal.value = false;
+  generatedLiabilityExpenseReview.value = null;
+  generatedLiabilityExpenseReviewChangeMessage.value = null;
+}
+
+function openGeneratedExpensesInBudget(): void {
+  closeGeneratedLiabilityExpenseModal();
+  window.location.assign('/presupuesto');
+}
+
+async function submitLiabilityWithExpenseReview(
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  const createdLiability = await store.createLiability(payload);
+  if (!createdLiability) return;
+  showLiabilityModal.value = false;
+  try {
+    const generatedEntries = await annualExpenseStore.listBySourceLiability(createdLiability.id);
+    const systemGeneratedEntries = mapGeneratedExpenseEntries(generatedEntries);
+    if (!systemGeneratedEntries.length) return;
+    generatedLiabilityExpenseReviewChangeMessage.value = null;
+    setGeneratedLiabilityExpenseReview(
+      createdLiability.id,
+      createdLiability.name,
+      systemGeneratedEntries,
+    );
+    showGeneratedLiabilityExpenseModal.value = true;
+  } catch (e: unknown) {
+    store.error = `Pasivo creado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
+  }
+}
+
+async function updateLiabilityAndShowExpenseReview(
+  id: number,
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  let beforeEntries: GeneratedLiabilityExpensePreview[] = [];
+  try {
+    beforeEntries = mapGeneratedExpenseEntries(await annualExpenseStore.listBySourceLiability(id));
+  } catch {
+    beforeEntries = [];
+  }
+  await store.updateLiability(id, payload);
+  if (store.error) return;
+  try {
+    const refreshedEntries = mapGeneratedExpenseEntries(
+      await annualExpenseStore.listBySourceLiability(id),
+    );
+    if (!refreshedEntries.length) return;
+    const liabilityName = store.liabilities.find((item) => item.id === id)?.name ?? 'Pasivo';
+    generatedLiabilityExpenseReviewChangeMessage.value = summarizeGeneratedLiabilityExpenseChanges(
+      beforeEntries,
+      refreshedEntries,
+    );
+    setGeneratedLiabilityExpenseReview(id, liabilityName, refreshedEntries);
+    showGeneratedLiabilityExpenseModal.value = true;
+  } catch (e: unknown) {
+    store.error = `Pasivo actualizado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
+  }
+}
+
+async function submitEditWithExpenseReview(
+  payload: NetWorthWritePayload & { ownership_id?: number | null },
+): Promise<void> {
+  const current = editItem.value;
+  if (!current || !editKind.value) return;
+  if (editKind.value === 'asset') {
+    await submitEdit(payload);
+    return;
+  }
+  await updateLiabilityAndShowExpenseReview(current.id, payload);
+  closeEdit();
 }
 
 const {
@@ -382,7 +549,7 @@ const {
   availablePositionRows,
   timelineWindow,
   submitAsset,
-  submitLiability,
+  submitLiability: submitLiabilityWithExpenseReview,
   resetAccountingActivity,
   loadAccountingActivity,
 });
@@ -569,11 +736,58 @@ const {
       :item-form-props="itemFormProps"
       :submit-asset-from-view="submitAssetFromView"
       :submit-liability-from-view="submitLiabilityFromView"
-      :submit-edit="submitEdit"
+      :submit-edit="submitEditWithExpenseReview"
       :close-edit="closeEdit"
       :on-close-asset-modal="closeAssetModal"
       :on-close-liability-modal="closeLiabilityModal"
     />
+
+    <BaseModal
+      :open="showGeneratedLiabilityExpenseModal"
+      :title="generatedLiabilityExpenseReviewTitle"
+      @close="closeGeneratedLiabilityExpenseModal"
+    >
+      <div v-if="generatedLiabilityExpenseReview" class="grid gap-3">
+        <div
+          v-if="generatedLiabilityExpenseReviewChangeMessage"
+          class="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white/90"
+        >
+          {{ generatedLiabilityExpenseReviewChangeMessage }}
+        </div>
+        <div
+          class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90"
+        >
+          Este pasivo generó gastos recurrentes en
+          {{ generatedLiabilityExpenseReview.entries.length }}
+          anualidades. Revisa su clasificación desde Presupuesto.
+        </div>
+        <div class="grid gap-2">
+          <div
+            v-for="entry in generatedLiabilityExpenseReview.entries"
+            :key="entry.id"
+            class="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-medium">Ejercicio {{ entry.fiscalYear }}</div>
+              <div class="text-sm text-white/90">
+                {{ formatNumber(entry.amountAnnual, 2) }} {{ entry.currency }}
+              </div>
+            </div>
+            <div class="mt-1 text-xs text-white/70">
+              {{ entry.name }} · {{ entry.category }} / {{ entry.subcategory }}
+            </div>
+          </div>
+        </div>
+        <div class="actions justify-end">
+          <button class="btn btn-ghost" type="button" @click="closeGeneratedLiabilityExpenseModal">
+            Cerrar
+          </button>
+          <button class="btn btn-primary" type="button" @click="openGeneratedExpensesInBudget">
+            Revisar en Presupuesto
+          </button>
+        </div>
+      </div>
+    </BaseModal>
 
     <div v-if="store.loading" class="ui-status-line">Cargando...</div>
   </div>
