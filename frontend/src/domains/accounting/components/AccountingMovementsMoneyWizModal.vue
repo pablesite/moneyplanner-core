@@ -18,6 +18,29 @@ const unmappedCategories = computed(
   () => props.page.moneyWizImportPreview?.unmapped_categories ?? [],
 );
 const accountOptions = computed(() => props.page.operationalAccounts ?? []);
+const linkedAccountOptions = computed(() =>
+  accountOptions.value
+    .filter((account: any) => account.asset_id != null || account.liability_id != null)
+    .slice()
+    .sort((left: any, right: any) =>
+      accountLabel(left).localeCompare(accountLabel(right), 'es', { sensitivity: 'base' }),
+    ),
+);
+const ledgerOnlyAccountOptions = computed(() =>
+  accountOptions.value
+    .filter((account: any) => account.asset_id == null && account.liability_id == null)
+    .slice()
+    .sort((left: any, right: any) =>
+      accountLabel(left).localeCompare(accountLabel(right), 'es', { sensitivity: 'base' }),
+    ),
+);
+
+function accountLabel(account: any): string {
+  if (typeof props.page.accountDisplayName === 'function') {
+    return props.page.accountDisplayName(account);
+  }
+  return account.display_name || account.name;
+}
 </script>
 
 <template>
@@ -115,13 +138,24 @@ const accountOptions = computed(() => props.page.operationalAccounts ?? []);
                   "
                 >
                   <option value="">Nueva cuenta</option>
-                  <option
-                    v-for="existing in accountOptions"
-                    :key="existing.id"
-                    :value="existing.id"
-                  >
-                    {{ existing.display_name || existing.name }}
-                  </option>
+                  <optgroup v-if="linkedAccountOptions.length" label="Activos/Pasivos vinculados">
+                    <option
+                      v-for="existing in linkedAccountOptions"
+                      :key="existing.id"
+                      :value="existing.id"
+                    >
+                      {{ accountLabel(existing) }} / {{ existing.currency }}
+                    </option>
+                  </optgroup>
+                  <optgroup v-if="ledgerOnlyAccountOptions.length" label="Solo contables (legacy)">
+                    <option
+                      v-for="existing in ledgerOnlyAccountOptions"
+                      :key="existing.id"
+                      :value="existing.id"
+                    >
+                      {{ accountLabel(existing) }} / {{ existing.currency }}
+                    </option>
+                  </optgroup>
                 </select>
               </div>
             </div>

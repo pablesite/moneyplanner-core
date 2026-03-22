@@ -527,8 +527,125 @@ def _parse_moneywiz_rows(
         else:
             seen[row.fingerprint] = row_number
         rows.append(row)
+    rows = _resolve_transfer_mirrors(rows=rows)
     rows = _resolve_investment_mirrors(user_id=user_id, rows=rows)
     return _resolve_debt_mirrors(user_id=user_id, rows=rows)
+
+
+def _resolve_transfer_mirrors(*, rows: list[MoneyWizRow]) -> list[MoneyWizRow]:
+    """Collapses mirrored transfer rows exported by MoneyWiz into a single movement.
+
+    Some exports include both sides of the same transfer as two rows:
+    - source account row (amount < 0, e.g. "Transferencia a X")
+    - target account row (amount > 0, e.g. "Transferencia de Y")
+
+    If both sides are present (same date/currency/absolute amount and swapped
+    source-counterparty names), keep the outflow row and mark the inflow row
+    as mirror=True so preview/commit do not duplicate the transaction.
+    """
+
+    def _key(row: MoneyWizRow) -> tuple:
+        return (
+            row.booking_date,
+            row.currency,
+            row.amount.copy_abs(),
+            _normalize_lookup_text(row.account_name),
+            _normalize_lookup_text(row.counterparty_name),
+        )
+
+    def _transfer_direction_hint(description: str) -> str:
+        normalized = _normalize_lookup_text(description)
+        if (
+            re.search(r"\btransferencia\s+a\b", normalized) is not None
+            or re.search(r"\btraspaso\s+a\b", normalized) is not None
+            or re.search(r"\btransfer\s+to\b", normalized) is not None
+        ):
+            return "to"
+        if (
+            re.search(r"\btransferencia\s+de\b", normalized) is not None
+            or re.search(r"\btraspaso\s+de\b", normalized) is not None
+            or re.search(r"\btransfer\s+from\b", normalized) is not None
+        ):
+            return "from"
+        return "unknown"
+
+    transfer_idx: dict[tuple, list[int]] = {}
+    for i, row in enumerate(rows):
+        if row.movement_type != "transfer" or row.mirror:
+            continue
+        if not row.account_name or not row.counterparty_name:
+            continue
+        transfer_idx.setdefault(_key(row), []).append(i)
+
+    mirrored: set[int] = set()
+    processed: set[int] = set()
+
+    for i, row in enumerate(rows):
+        if i in processed:
+            continue
+        if row.movement_type != "transfer" or row.mirror:
+            continue
+        if not row.account_name or not row.counterparty_name:
+            continue
+
+        key = _key(row)
+        reverse_key = (
+            row.booking_date,
+            row.currency,
+            row.amount.copy_abs(),
+            _normalize_lookup_text(row.counterparty_name),
+            _normalize_lookup_text(row.account_name),
+        )
+        if key == reverse_key:
+            # Self-transfer style row; nothing to pair.
+            continue
+
+        pair_index: int | None = None
+        for j in transfer_idx.get(reverse_key, []):
+            if j != i and j not in processed:
+                pair_index = j
+                break
+
+        if pair_index is None:
+            continue
+
+        other = rows[pair_index]
+        row_hint = _transfer_direction_hint(row.description)
+        other_hint = _transfer_direction_hint(other.description)
+
+        primary_index = i
+        mirror_index = pair_index
+        # Prefer explicit "transferencia a ..." row as canonical source -> target.
+        if row_hint == "to" and other_hint == "from":
+            primary_index = i
+            mirror_index = pair_index
+        elif row_hint == "from" and other_hint == "to":
+            primary_index = pair_index
+            mirror_index = i
+        elif row.amount < ZERO and other.amount > ZERO:
+            primary_index = i
+            mirror_index = pair_index
+        elif other.amount < ZERO and row.amount > ZERO:
+            primary_index = pair_index
+            mirror_index = i
+        elif pair_index < i:
+            primary_index = pair_index
+            mirror_index = i
+
+        processed.add(primary_index)
+        processed.add(mirror_index)
+        mirrored.add(mirror_index)
+
+    if not mirrored:
+        return rows
+
+    result: list[MoneyWizRow] = []
+    for i, row in enumerate(rows):
+        if i in mirrored:
+            result.append(dataclasses.replace(row, mirror=True))
+        else:
+            result.append(row)
+    return result
 
 
 def _is_account_summary_row(raw_row: dict[str, str | None]) -> bool:
@@ -595,6 +712,8 @@ def _resolve_debt_mirrors(
 
         matched_j: int | None = None
         matched_liq_row: MoneyWizRow | None = None
+        best_gap: Decimal | None = None
+        total = row.amount.copy_abs()
 
         for (liq_date, liq_account_norm), candidates in liq_idx.items():
             if liq_date != row.booking_date:
@@ -606,21 +725,25 @@ def _resolve_debt_mirrors(
                 t in combined_text for t in tokens
             ):
                 continue
-            # Pick the first unmirrored candidate for this debt on this date.
+            # Pick the closest unmirrored candidate whose principal does not
+            # exceed the observed cash outflow amount.
             for j in candidates:
                 if j not in mirrored:
-                    matched_j = j
-                    matched_liq_row = rows[j]
-                    break
-            if matched_j is not None:
-                break
+                    candidate = rows[j]
+                    principal_candidate = candidate.amount.copy_abs()
+                    if principal_candidate > total:
+                        continue
+                    gap = total - principal_candidate
+                    if best_gap is None or gap < best_gap:
+                        best_gap = gap
+                        matched_j = j
+                        matched_liq_row = candidate
 
         if matched_j is None or matched_liq_row is None:
             continue
 
         principal = matched_liq_row.amount.copy_abs()
-        total = row.amount.copy_abs()
-        interest = (total - principal).copy_abs() if total > principal else ZERO
+        interest = total - principal
 
         new_warnings = [w for w in row.warnings if "provisional" not in w.lower()]
         if interest > ZERO:
@@ -831,12 +954,22 @@ def _infer_movement_type(
     amount: Decimal,
 ) -> str:
     text = _normalize_lookup_text(f"{category_raw} {description}")
-    if transfers_raw:
+    has_category = bool(_clean_text(category_raw))
+    has_synthetic_transfer_token = _is_synthetic_transfer_token(transfers_raw)
+    if transfers_raw and not has_synthetic_transfer_token:
         return "transfer"
-    if "transfer" in text or "move" in text:
+    # If MoneyWiz exported a machine token in Transfers, do not re-classify
+    # as transfer from the description text (it commonly mirrors the same token).
+    # Also require an empty category for description-based transfer fallback:
+    # when a category exists (e.g. "Gastos > ..."), treat it as normal flow.
+    if (
+        (not has_synthetic_transfer_token)
+        and (not has_category)
+        and _looks_like_transfer_description(raw_description=description, normalized_text=text)
+    ):
         return "transfer"
     if any(
-        keyword in text
+        _contains_keyword(text, keyword)
         for keyword in (
             "loan",
             "mortgage",
@@ -847,14 +980,17 @@ def _infer_movement_type(
         )
     ):
         return "debt_payment"
+    # Common investment-income labels in MoneyWiz exports should not be
+    # interpreted as investment purchases just because they mention "stock".
+    if _contains_any_keyword(text, ("dividendo", "dividend", "coupon", "cupon")):
+        return "income"
     if any(
-        keyword in text
+        _contains_keyword(text, keyword)
         for keyword in (
             "investment",
             "invest",
             "etf",
             "fund",
-            "stock",
             "crypto",
             "real estate",
             "property",
@@ -879,6 +1015,43 @@ def _infer_movement_type(
             return "investment_purchase"
         return "expense"
     return "income"
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    """Matches whole words/phrases to avoid substring false positives.
+
+    Example: "myinvestor premium" should not match "invest".
+    """
+    pattern = rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])"
+    return re.search(pattern, text) is not None
+
+
+def _contains_any_keyword(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(_contains_keyword(text, keyword) for keyword in keywords)
+
+
+def _looks_like_transfer_description(*, raw_description: str, normalized_text: str) -> bool:
+    # Bank-export identifiers like "transfer_0049_xxx" are not reliable
+    # transfer signals and often represent ordinary expense/income rows.
+    raw_description_clean = (raw_description or "").strip().lower()
+    if re.search(r"\b(transfer|transferencia|traspaso|move)_[a-z0-9_]+", raw_description_clean):
+        return False
+    # Also ignore machine-like tags produced from "transfer_####" after normalization.
+    if re.search(r"\btransfer\s+\d{2,}\b", normalized_text) is not None:
+        return False
+    return (
+        re.search(r"\btransferencia\s+(a|de)\b", normalized_text) is not None
+        or re.search(r"\btransfer\s+(to|from)\b", normalized_text) is not None
+        or re.search(r"\bmove\s+(to|from)\b", normalized_text) is not None
+    )
+
+
+def _is_synthetic_transfer_token(value: str) -> bool:
+    cleaned = _clean_text(value).lower()
+    return (
+        re.search(r"^(transfer|transferencia|traspaso|move)_[a-z0-9_]+$", cleaned) is not None
+        or re.search(r"^(transfer|transferencia|traspaso|move)-[a-z0-9_-]+$", cleaned) is not None
+    )
 
 
 def _lookup_moneywiz_path(
@@ -1326,14 +1499,45 @@ def _get_or_create_moneywiz_account(
     name: str,
     account_id_map: dict[str, int] | None = None,
 ) -> LedgerAccount:
+    normalized_currency = _normalize_currency(currency)
     # If the user mapped this CSV account name to an existing account ID, use it directly.
     if account_id_map and name in account_id_map:
         mapped = LedgerAccount.objects.filter(user=user, id=account_id_map[name]).first()
-        if mapped is not None:
-            return mapped
+        if mapped is None:
+            raise ValidationError(
+                {
+                    "account_id_map": f"La cuenta mapeada para '{name}' no existe o no pertenece al usuario."
+                }
+            )
+        account_pair = {mapped.account_type, account_type}
+        asset_liability_pair = {
+            cast(str, LedgerAccount.AccountType.ASSET),
+            cast(str, LedgerAccount.AccountType.LIABILITY),
+        }
+        # MoneyWiz may represent debt accounts as operational sources in some rows;
+        # allow mapped asset/liability interchange while keeping strict checks for
+        # all other account-type combinations.
+        if mapped.account_type != account_type and account_pair != asset_liability_pair:
+            raise ValidationError(
+                {
+                    "account_id_map": (
+                        f"La cuenta mapeada para '{name}' debe ser de tipo "
+                        f"'{account_type}' y es '{mapped.account_type}'."
+                    )
+                }
+            )
+        if mapped.currency != normalized_currency:
+            raise ValidationError(
+                {
+                    "account_id_map": (
+                        f"La cuenta mapeada para '{name}' debe tener moneda "
+                        f"'{normalized_currency}' y es '{mapped.currency}'."
+                    )
+                }
+            )
+        return mapped
 
     normalized_name = _clean_text(name) or "Imported MoneyWiz account"
-    normalized_currency = _normalize_currency(currency)
     account = LedgerAccount.objects.filter(
         user=user,
         account_type=account_type,
