@@ -1,3 +1,4 @@
+import json
 from io import StringIO
 from datetime import date
 from decimal import Decimal
@@ -2036,3 +2037,268 @@ class MoneyWizImportAPITests(APITestCase):
         )
         self.assertEqual(imported_rows.count(), 5)
         self.assertTrue(imported_rows.exclude(import_fingerprint="").exists())
+
+    def test_moneywiz_preview_myinvestor_premium_is_not_investment_purchase(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;Myinvestor Premium;;Inversiones Gastos > Suscripciones;MyInvestor;;7,99;7,99;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["investment_purchase"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_transfer_token_without_transfers_column_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;transfer_0049_traspaso;;Gastos > Corrientes > Vivienda;Banco;;;25;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_traspaso_token_without_transfers_column_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;traspaso_de_ana;;Gastos > Corrientes > Vivienda;Banco;;;15;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_dividendos_stock_is_income(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;dividendos_stock;;Inversiones Ingresos > St Stocks;Broker;;; ;12,50\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["income"], 1)
+        self.assertEqual(response.data["stats"]["investment_purchase"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "income")
+
+    def test_moneywiz_preview_transferencia_token_without_transfers_column_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;transferencia_de_monedero_ana_a_;;Gastos > Corrientes > Vivienda;Banco;;;8,50;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_synthetic_token_in_transfers_column_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;Cuota;;Gastos > Corrientes > Vivienda;Banco;transferencia_de_monedero_ana_a_;;8,50;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_traspaso_de_text_without_transfers_column_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2018-03-31;Traspaso De Ana;;Otro;Monedero Personal;;200;;; \n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "income")
+
+    def test_moneywiz_preview_synthetic_transfers_token_does_not_fallback_to_description_transfer(
+        self,
+    ):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-03;Transferencia de Monedero Ana A;;Otro;Monedero Personal;transferencia_de_monedero_ana_a_;;8,50;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_preview_transfer_description_with_category_is_not_transfer(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2023-08-01;Transferencia de Monedero Ana a Ana Santander;;Gastos > Otro general;Monedero Ana;;;38,90;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["row_count"], 1)
+        self.assertEqual(response.data["stats"]["transfer"], 0)
+        self.assertEqual(response.data["stats"]["expense"], 1)
+        self.assertEqual(response.data["rows"][0]["movement_type"], "expense")
+
+    def test_moneywiz_commit_debt_mirror_does_not_pair_when_principal_exceeds_outflow(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-01-10;Liquidacion credito;;Liquidacion credito;Hipoteca;;;56,21;\n"
+            "2026-01-10;Pago hipoteca;;Gastos > Corrientes > Vivienda;Banco;;;42,69;\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        preview = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": upload},
+            format="multipart",
+        )
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        movement_types = [row["movement_type"] for row in preview.data["rows"]]
+        self.assertEqual(movement_types.count("debt_payment"), 1)
+        self.assertEqual(movement_types.count("expense"), 1)
+
+        upload_commit = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        commit = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": upload_commit},
+            format="multipart",
+        )
+        self.assertEqual(commit.status_code, status.HTTP_201_CREATED, commit.data)
+        self.assertEqual(commit.data["created_count"], 2)
+
+    def test_moneywiz_commit_rejects_account_map_with_currency_mismatch(self):
+        btc_asset = LedgerAccount.objects.create(
+            user=self.user,
+            name="Wallet BTC",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+        )
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes);Currency\n"
+            "2026-03-03;Ingreso wallet;;Pasivos > Activos financieros > Dividendos;Wallet BTC;;;58,48;;EUR\n"
+        ).encode("utf-8")
+        upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+
+        response = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {
+                "file": upload,
+                "account_id_map": json.dumps({"Wallet BTC": btc_asset.id}),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("account_id_map", response.data.get("error", {}).get("details", {}))
+
+    def test_moneywiz_transfer_mirror_rows_are_collapsed_into_one_transaction(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2023-11-28;Transferencia a MyInvestor Ahorro;;Transfer;Ana Santander;MyInvestor Ahorro;;;10000\n"
+            "2023-11-28;Transferencia de Ana Santander;;Transfer;MyInvestor Ahorro;Ana Santander;;10000;\n"
+        ).encode("utf-8")
+
+        preview_upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        preview = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": preview_upload},
+            format="multipart",
+        )
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        self.assertEqual(preview.data["row_count"], 2)
+        self.assertEqual(preview.data["stats"]["transfer"], 1)
+        self.assertEqual(preview.data["mirror_row_count"], 1)
+
+        commit_upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        commit = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": commit_upload},
+            format="multipart",
+        )
+        self.assertEqual(commit.status_code, status.HTTP_201_CREATED, commit.data)
+        self.assertEqual(commit.data["created_count"], 1)
+
+        tx = LedgerTransaction.objects.get(user=self.user)
+        self.assertEqual(tx.description, "Transferencia a MyInvestor Ahorro")

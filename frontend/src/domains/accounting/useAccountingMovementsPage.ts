@@ -339,7 +339,9 @@ export function useAccountingMovementsPage() {
     );
 
     // Pass 1: exact normalized match, unique winner only
-    const exactMatches = candidates.filter((a) => normalizeForMatch(a.name) === normalizedCsv);
+    const exactMatches = candidates.filter(
+      (a) => normalizeForMatch(accountDisplayName(a)) === normalizedCsv,
+    );
     if (exactMatches.length === 1) return exactMatches[0]!.id;
     if (exactMatches.length > 1) return null; // ambiguous duplicates
 
@@ -347,7 +349,7 @@ export function useAccountingMovementsPage() {
     const scored = candidates
       .map((a) => ({
         a,
-        score: fuzzyMatchScore(normalizedCsv, normalizeForMatch(a.name)),
+        score: fuzzyMatchScore(normalizedCsv, normalizeForMatch(accountDisplayName(a))),
       }))
       .filter(({ score }) => score > 0)
       .sort((x, y) => y.score - x.score);

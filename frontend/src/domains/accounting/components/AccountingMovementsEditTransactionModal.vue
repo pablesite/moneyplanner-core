@@ -1,14 +1,75 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-mutating-props */
-import { type PropType } from 'vue';
+import { computed, type PropType } from 'vue';
 import BaseModal from '@/domains/ui/components/BaseModal.vue';
 
-defineProps({
+const props = defineProps({
   page: {
     type: Object as PropType<any>,
     required: true,
   },
 });
+
+type AccountOption = {
+  id: number;
+  name: string;
+  currency: string;
+  account_type?: string;
+  asset_id?: number | null;
+  liability_id?: number | null;
+  display_name?: string;
+};
+
+type AccountGroup = {
+  key: string;
+  label: string;
+  accounts: AccountOption[];
+};
+
+function accountTypeLabel(accountType?: string): string {
+  if (accountType === 'asset') return 'Activos';
+  if (accountType === 'liability') return 'Pasivos';
+  if (accountType === 'equity') return 'Patrimonio neto';
+  if (accountType === 'income') return 'Ingresos';
+  if (accountType === 'expense') return 'Gastos';
+  return 'Otras cuentas';
+}
+
+function accountLabel(account: AccountOption): string {
+  if (typeof props.page.accountDisplayName === 'function') {
+    return props.page.accountDisplayName(account);
+  }
+  return account.display_name || account.name;
+}
+
+function groupAndSortAccounts(accounts: AccountOption[]): AccountGroup[] {
+  const order = ['asset', 'liability', 'equity', 'income', 'expense', 'other'];
+  const groups = new Map<string, AccountOption[]>();
+
+  for (const account of accounts) {
+    const key = account.account_type ?? 'other';
+    const existing = groups.get(key) ?? [];
+    existing.push(account);
+    groups.set(key, existing);
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([key, grouped]) => ({
+      key,
+      label: accountTypeLabel(key),
+      accounts: grouped
+        .slice()
+        .sort((left, right) =>
+          accountLabel(left).localeCompare(accountLabel(right), 'es', { sensitivity: 'base' }),
+        ),
+    }));
+}
+
+const editAccountGroups = computed(() => groupAndSortAccounts(props.page.editAccountOptions));
+const editCounterpartyGroups = computed(() =>
+  groupAndSortAccounts(props.page.editCounterpartyOptions),
+);
 </script>
 
 <template>
@@ -79,9 +140,11 @@ defineProps({
       >
         <select v-model="page.editTransactionForm.account_id" class="select" required>
           <option :value="null" disabled>Cuenta principal</option>
-          <option v-for="account in page.editAccountOptions" :key="account.id" :value="account.id">
-            {{ account.name }} / {{ account.currency }}
-          </option>
+          <optgroup v-for="group in editAccountGroups" :key="group.key" :label="group.label">
+            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+              {{ accountLabel(account) }} / {{ account.currency }}
+            </option>
+          </optgroup>
         </select>
 
         <input
@@ -105,13 +168,11 @@ defineProps({
           required
         >
           <option :value="null">{{ page.editCounterpartyLabel }}</option>
-          <option
-            v-for="account in page.editCounterpartyOptions"
-            :key="account.id"
-            :value="account.id"
-          >
-            {{ account.name }} / {{ account.currency }}
-          </option>
+          <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+              {{ accountLabel(account) }} / {{ account.currency }}
+            </option>
+          </optgroup>
         </select>
       </div>
       <p
