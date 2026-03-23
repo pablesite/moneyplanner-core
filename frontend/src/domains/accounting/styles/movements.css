@@ -832,6 +832,83 @@
   }
 }
 
+/* -- Unified tabs+content card --------------------------------- */
+.ui-accounting-unified-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ui-accounting-incard-tabs {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Strip inner section-card borders when nested inside unified card */
+.ui-accounting-unified-card > section.ui-section-card {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Account catalog header when account is selected */
+.ui-accounting-catalog-head {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ui-accounting-catalog-info {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+/* -- Activos / Pasivos section labels -------------------------- */
+.ui-catalog-section-label {
+  padding: 10px 16px 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ui-catalog-section-label-asset {
+  color: rgba(45, 212, 191, 0.65);
+}
+
+.ui-catalog-section-label-liability {
+  color: rgba(248, 113, 113, 0.65);
+}
+
+/* -- Group header color by position type ---------------------- */
+.ui-catalog-group-asset > .ui-catalog-group-header {
+  border-left: 3px solid rgba(45, 212, 191, 0.35);
+  color: rgba(45, 212, 191, 0.8);
+}
+
+.ui-catalog-group-asset > .ui-catalog-group-header:hover {
+  border-left-color: rgba(45, 212, 191, 0.6);
+  color: rgba(45, 212, 191, 0.95);
+}
+
+.ui-catalog-group-liability > .ui-catalog-group-header {
+  border-left: 3px solid rgba(248, 113, 113, 0.35);
+  color: rgba(248, 113, 113, 0.8);
+}
+
+.ui-catalog-group-liability > .ui-catalog-group-header:hover {
+  border-left-color: rgba(248, 113, 113, 0.6);
+  color: rgba(248, 113, 113, 0.95);
+}
+
+/* -- Account balance color by position type ------------------- */
+.ui-catalog-group-asset .ui-catalog-account-balance {
+  color: rgba(45, 212, 191, 0.7);
+}
+
+.ui-catalog-group-liability .ui-catalog-account-balance {
+  color: rgba(248, 113, 113, 0.7);
+}
+
 /* -- Account catalog accordion ---------------------------------- */
 .ui-catalog-groups {
   display: flex;

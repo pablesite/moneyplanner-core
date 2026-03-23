@@ -5,17 +5,17 @@ import type { AccountingMovementsPageState } from '@/domains/accounting/useAccou
 const props = defineProps<{ page: AccountingMovementsPageState }>();
 const state = props.page;
 
-const closedGroups = ref(new Set<string>());
+const openGroups = ref(new Set<string>());
 
 function toggleGroup(key: string) {
-  const next = new Set(closedGroups.value);
+  const next = new Set(openGroups.value);
   if (next.has(key)) next.delete(key);
   else next.add(key);
-  closedGroups.value = next;
+  openGroups.value = next;
 }
 
 function isGroupOpen(key: string) {
-  return !closedGroups.value.has(key);
+  return openGroups.value.has(key);
 }
 
 function movementStatusLabel(status: string): string {
@@ -32,17 +32,13 @@ function movementOriginLabel(origin: string): string {
 
 <template>
   <section class="ui-section-card">
-    <div class="ui-section-head">
-      <div class="ui-section-copy">
-        <h2 class="ui-section-title">Cuentas</h2>
-        <p v-if="state.cuentasSelectedAccount" class="ui-section-subtitle">
-          {{ state.cuentasVisibleTransactions.length }} de
-          {{ state.cuentasRawTransactions.length }} movimientos —
-          {{ state.accountDisplayName(state.cuentasSelectedAccount) }}
-        </p>
-        <p v-else class="ui-section-subtitle">Selecciona una cuenta para ver sus movimientos</p>
-      </div>
-      <div v-if="state.cuentasSelectedAccountId" class="ui-accounting-filters ui-accounting-filters-2col">
+    <div v-if="state.cuentasSelectedAccount" class="ui-section-head ui-accounting-catalog-head">
+      <p class="ui-section-subtitle ui-accounting-catalog-info">
+        {{ state.cuentasVisibleTransactions.length }} de
+        {{ state.cuentasRawTransactions.length }} movimientos —
+        {{ state.accountDisplayName(state.cuentasSelectedAccount) }}
+      </p>
+      <div class="ui-accounting-filters ui-accounting-filters-2col">
         <input v-model="state.cuentasDateFrom" type="date" class="input" title="Desde" />
         <input v-model="state.cuentasDateTo" type="date" class="input" title="Hasta" />
       </div>
@@ -54,10 +50,16 @@ function movementOriginLabel(origin: string): string {
     </div>
 
     <div v-else class="ui-catalog-groups">
+      <template v-for="(group, index) in state.groupedCuentasAccounts" :key="group.key">
+        <div
+          v-if="index === 0 || state.groupedCuentasAccounts[index - 1].positionType !== group.positionType"
+          class="ui-catalog-section-label"
+          :class="`ui-catalog-section-label-${group.positionType}`"
+        >
+          {{ group.positionType === 'asset' ? 'Activos' : 'Pasivos' }}
+        </div>
       <div
-        v-for="group in state.groupedCuentasAccounts"
-        :key="group.key"
-        class="ui-catalog-group"
+        :class="`ui-catalog-group ui-catalog-group-${group.positionType}`"
       >
         <button
           class="ui-catalog-group-header"
@@ -155,6 +157,7 @@ function movementOriginLabel(origin: string): string {
           </template>
         </div>
       </div>
+      </template>
     </div>
   </section>
 </template>

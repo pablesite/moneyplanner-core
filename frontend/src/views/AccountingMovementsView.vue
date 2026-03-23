@@ -17,36 +17,39 @@ const page = useAccountingMovementsPage();
   <div class="container ui-page-shell">
     <AccountingMovementsHero :page="page" />
 
-    <div class="ui-view-tabs">
-      <button
-        class="ui-view-tab"
-        :class="{ 'ui-view-tab-active': page.activeTab === 'cuentas' }"
-        type="button"
-        @click="page.activeTab = 'cuentas'"
-      >
-        Cuentas
-      </button>
-      <button
-        class="ui-view-tab"
-        :class="{ 'ui-view-tab-active': page.activeTab === 'todos' }"
-        type="button"
-        @click="page.activeTab = 'todos'"
-      >
-        Todos los movimientos
-      </button>
-      <button
-        class="ui-view-tab"
-        :class="{ 'ui-view-tab-active': page.activeTab === 'estadisticas' }"
-        type="button"
-        @click="page.activeTab = 'estadisticas'"
-      >
-        Estadisticas
-      </button>
+    <div class="ui-section-card ui-accounting-unified-card">
+      <div class="ui-accounting-incard-tabs">
+        <div class="ui-view-tabs">
+          <button
+            class="ui-view-tab"
+            :class="{ 'ui-view-tab-active': page.activeTab === 'cuentas' }"
+            type="button"
+            @click="page.activeTab = 'cuentas'"
+          >
+            Cuentas
+          </button>
+          <button
+            class="ui-view-tab"
+            :class="{ 'ui-view-tab-active': page.activeTab === 'todos' }"
+            type="button"
+            @click="page.activeTab = 'todos'"
+          >
+            Todos los movimientos
+          </button>
+          <button
+            class="ui-view-tab"
+            :class="{ 'ui-view-tab-active': page.activeTab === 'estadisticas' }"
+            type="button"
+            @click="page.activeTab = 'estadisticas'"
+          >
+            Estadisticas
+          </button>
+        </div>
+      </div>
+      <AccountingAccountCatalog v-if="page.activeTab === 'cuentas'" :page="page" />
+      <AccountingMovementsAllTransactions v-else-if="page.activeTab === 'todos'" :page="page" />
+      <AccountingBalances v-else-if="page.activeTab === 'estadisticas'" :page="page" />
     </div>
-
-    <AccountingAccountCatalog v-if="page.activeTab === 'cuentas'" :page="page" />
-    <AccountingMovementsAllTransactions v-else-if="page.activeTab === 'todos'" :page="page" />
-    <AccountingBalances v-else-if="page.activeTab === 'estadisticas'" :page="page" />
 
     <AccountingMovementsActivationModal :page="page" />
     <AccountingMovementsEditTransactionModal :page="page" />
