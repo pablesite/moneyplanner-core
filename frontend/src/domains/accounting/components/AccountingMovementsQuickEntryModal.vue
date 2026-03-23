@@ -191,7 +191,7 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
         class="ui-accounting-form-grid"
         :class="
           page.quickEntryForm.movement_type === 'transfer' ||
-          page.quickEntryForm.movement_type === 'investment_purchase' ||
+          page.quickEntryForm.movement_type === 'investment' ||
           page.quickEntryForm.movement_type === 'debt_payment'
             ? 'ui-accounting-form-grid-wide'
             : 'ui-accounting-form-grid-edit-simple'
@@ -229,7 +229,7 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
         </select>
 
         <select
-          v-else-if="page.quickEntryForm.movement_type === 'investment_purchase'"
+          v-else-if="page.quickEntryForm.movement_type === 'investment'"
           v-model="page.quickEntryForm.counterparty_account_id"
           class="select"
           required
@@ -255,6 +255,27 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
             </option>
           </optgroup>
         </select>
+      </div>
+      <div
+        v-if="page.quickEntryForm.movement_type === 'investment'"
+        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+      >
+        <select v-model="page.quickEntryForm.investment_direction" class="select">
+          <option value="inflow">Aporte (liquidez a inversion)</option>
+          <option value="outflow">Desinversion (inversion a liquidez)</option>
+        </select>
+        <input
+          v-model="page.quickEntryForm.realized_cost_basis"
+          class="input"
+          inputmode="decimal"
+          placeholder="Coste realizado (opcional)"
+        />
+        <input
+          v-model="page.quickEntryForm.realized_gain_loss"
+          class="input"
+          inputmode="decimal"
+          placeholder="Ganancia/perdida realizada (opcional)"
+        />
       </div>
 
       <div
@@ -377,8 +398,10 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           {{
             page.quickEntryForm.movement_type === 'transfer'
               ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
-              : page.quickEntryForm.movement_type === 'investment_purchase'
-                ? 'La compra registra salida de liquidez y alta en la cuenta de inversion.'
+              : page.quickEntryForm.movement_type === 'investment'
+                ? page.quickEntryForm.investment_direction === 'outflow'
+                  ? 'La desinversion acredita inversion y devuelve liquidez al activo de caja.'
+                  : 'El aporte acredita liquidez y registra el alta en la cuenta de inversion.'
                 : page.quickEntryForm.movement_type === 'debt_payment'
                   ? 'El pago separa principal e intereses; total = principal + interes.'
                   : 'El backend genera la contrapartida contable y registra categoria/subcategoria como clasificacion primaria.'

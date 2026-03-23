@@ -70,6 +70,9 @@ This leaves a gap:
 4. Investments
    - contributions, withdrawals, fees, and income should move toward transaction-driven activity
    - investment flows should be modeled as one bidirectional operation with explicit direction (`inflow` / `outflow`), not as unrelated income plus transfer shortcuts
+   - quick-entry keeps backwards compatibility with `investment_purchase` as legacy alias of investment `inflow`
+   - realized metadata (`realized_cost_basis`, `realized_gain_loss`) is optional and manual in this phase; Core stores it but does not auto-calculate lots or fiscal impact
+   - investment aggregates per asset account expose `investment_inflow_total`, `investment_outflow_total`, and `investment_net_contributed`
    - legacy investment events remain available until explicit replacement
 5. Debt and patrimonial purchases
    - debt payment transactions should model principal and cost separately

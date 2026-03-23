@@ -271,11 +271,25 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "notes",
             "import_source",
             "import_fingerprint",
+            "quick_entry_kind",
+            "investment_direction",
+            "realized_cost_basis",
+            "realized_gain_loss",
             "entries",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "import_source", "import_fingerprint", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "import_source",
+            "import_fingerprint",
+            "quick_entry_kind",
+            "investment_direction",
+            "realized_cost_basis",
+            "realized_gain_loss",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs: dict) -> dict:
         booking_date = attrs.get("booking_date", getattr(self.instance, "booking_date", None))
@@ -318,10 +332,16 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             "income",
             "expense",
             "transfer",
+            "investment",
             "investment_purchase",
             "debt_payment",
             "revaluation",
         ]
+    )
+    investment_direction = serializers.ChoiceField(
+        choices=LedgerTransaction.InvestmentDirection.choices,
+        allow_blank=True,
+        required=False,
     )
     booking_date = serializers.DateField(default=timezone.localdate)
     value_date = serializers.DateField(default=timezone.localdate)
@@ -356,6 +376,18 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         required=False,
     )
     interest_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
+    realized_cost_basis = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
+    realized_gain_loss = serializers.DecimalField(
         max_digits=20,
         decimal_places=8,
         allow_null=True,
@@ -402,6 +434,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         request = self.context["request"]
         user = request.user
         movement_type = attrs["movement_type"]
+        investment_direction = attrs.get("investment_direction", "")
         amount = attrs["amount"]
         account = attrs["account"]
         counterparty_account = attrs.get("counterparty_account")
@@ -414,6 +447,15 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         subcategory_key = attrs.get("subcategory_key", "")
         principal_amount = attrs.get("principal_amount")
         interest_amount = attrs.get("interest_amount")
+        realized_cost_basis = attrs.get("realized_cost_basis")
+        realized_gain_loss = attrs.get("realized_gain_loss")
+
+        movement_type, investment_direction = self._normalize_investment_payload(
+            movement_type=movement_type,
+            investment_direction=investment_direction,
+        )
+        attrs["movement_type"] = movement_type
+        attrs["investment_direction"] = investment_direction
 
         validate_booking_and_value_dates(
             booking_date=attrs["booking_date"],
@@ -450,12 +492,17 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             and flow_family == LedgerEntry.FlowFamily.INCOME
         ):
             raise serializers.ValidationError({"flow_family": "No aplica a movimientos de gasto."})
-        if movement_type in {"transfer", "investment_purchase", "revaluation"} and (
+        if movement_type in {"transfer", "investment", "revaluation"} and (
             flow_family or category_key or subcategory_key
         ):
             raise serializers.ValidationError(
-                {"flow_family": "No aplica a transferencias internas ni compras de inversion."}
+                {"flow_family": "No aplica a transferencias internas ni movimientos de inversion."}
             )
+        self._validate_investment_metadata(
+            movement_type=movement_type,
+            realized_cost_basis=realized_cost_basis,
+            realized_gain_loss=realized_gain_loss,
+        )
         self._validate_required_category_contract(
             movement_type=movement_type,
             category_key=category_key,
@@ -496,13 +543,14 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 annual_income_entry=annual_income_entry,
                 annual_expense_entry=annual_expense_entry,
             )
-        elif movement_type == "investment_purchase":
-            self._validate_investment_purchase_movement(
+        elif movement_type == "investment":
+            self._validate_investment_movement(
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
                 annual_income_entry=annual_income_entry,
                 annual_expense_entry=annual_expense_entry,
+                investment_direction=investment_direction,
             )
         elif movement_type == "revaluation":
             self._validate_revaluation_movement(
@@ -533,6 +581,47 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             interest_amount=interest_amount or Decimal("0"),
         )
         return attrs
+
+    def _normalize_investment_payload(
+        self,
+        *,
+        movement_type: str,
+        investment_direction: str,
+    ) -> tuple[str, str]:
+        if movement_type == "investment_purchase":
+            return (
+                cast(str, LedgerTransaction.QuickEntryKind.INVESTMENT),
+                cast(str, LedgerTransaction.InvestmentDirection.INFLOW),
+            )
+        if movement_type != "investment":
+            return movement_type, ""
+        if not investment_direction:
+            raise serializers.ValidationError(
+                {"investment_direction": "Indica si es aporte o desinversion."}
+            )
+        return movement_type, investment_direction
+
+    def _validate_investment_metadata(
+        self,
+        *,
+        movement_type: str,
+        realized_cost_basis: Decimal | None,
+        realized_gain_loss: Decimal | None,
+    ) -> None:
+        if movement_type == "investment":
+            if realized_cost_basis is not None and realized_cost_basis < 0:
+                raise serializers.ValidationError(
+                    {"realized_cost_basis": "Debe ser mayor o igual que cero."}
+                )
+            return
+        if realized_cost_basis is not None:
+            raise serializers.ValidationError(
+                {"realized_cost_basis": "Solo aplica a movimientos de inversion."}
+            )
+        if realized_gain_loss is not None:
+            raise serializers.ValidationError(
+                {"realized_gain_loss": "Solo aplica a movimientos de inversion."}
+            )
 
     def _infer_flow_family(self, *, movement_type: str, interest_amount: Decimal | None) -> str:
         if movement_type == "income":
@@ -788,7 +877,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 }
             )
 
-    def _validate_investment_purchase_movement(
+    def _validate_investment_movement(
         self,
         *,
         user_id: int,
@@ -796,14 +885,22 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         counterparty_account: LedgerAccount | None,
         annual_income_entry: AnnualIncomeEntry | None,
         annual_expense_entry: AnnualExpenseEntry | None,
+        investment_direction: str,
     ) -> None:
+        if investment_direction not in {
+            LedgerTransaction.InvestmentDirection.INFLOW,
+            LedgerTransaction.InvestmentDirection.OUTFLOW,
+        }:
+            raise serializers.ValidationError(
+                {"investment_direction": "Indica si es aporte o desinversion."}
+            )
         if annual_income_entry is not None:
             raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a compras de inversion."}
+                {"annual_income_entry_id": "No aplica a movimientos de inversion."}
             )
         if annual_expense_entry is not None:
             raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a compras de inversion."}
+                {"annual_expense_entry_id": "No aplica a movimientos de inversion."}
             )
         validate_counterparty_account_type(
             account=counterparty_account,
@@ -823,7 +920,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {
                     "counterparty_account_id": (
-                        "La compra de inversion exige la misma moneda en ambas cuentas."
+                        "El movimiento de inversion exige la misma moneda en ambas cuentas."
                     )
                 }
             )

@@ -41,6 +41,31 @@ function summarizeCounterparts(
   return `${names.slice(0, 2).join(' + ')} +${names.length - 2}`;
 }
 
+function resolveInvestmentDirection(
+  transaction: LedgerTransaction,
+  side: 'debit' | 'credit',
+  hasAssetLink: boolean,
+): 'inflow' | 'outflow' | null {
+  if (transaction.quick_entry_kind === 'investment') {
+    if (transaction.investment_direction === 'inflow' || transaction.investment_direction === 'outflow') {
+      return transaction.investment_direction;
+    }
+  }
+  if (!hasAssetLink) return null;
+  return side === 'debit' ? 'inflow' : 'outflow';
+}
+
+function resolveSideLabel(
+  transaction: LedgerTransaction,
+  side: 'debit' | 'credit',
+  hasAssetLink: boolean,
+): string {
+  const direction = resolveInvestmentDirection(transaction, side, hasAssetLink);
+  if (direction === 'inflow') return 'Aporte';
+  if (direction === 'outflow') return 'Desinversion';
+  return side === 'debit' ? 'Debe' : 'Haber';
+}
+
 export function useNetWorthAccountingActivity<TRow extends BasePositionRow>(params: {
   selectedPositionSource: ComputedRef<SourceItem | null>;
   sourceItemForRow: (row: TRow) => SourceItem | null;
@@ -108,7 +133,11 @@ export function useNetWorthAccountingActivity<TRow extends BasePositionRow>(para
               id: `accounting-${transaction.id}-${entry.id}`,
               date: transaction.booking_date,
               description: transaction.description,
-              sideLabel: entry.side === 'debit' ? 'Debe' : 'Haber',
+              sideLabel: resolveSideLabel(
+                transaction,
+                entry.side,
+                entry.asset_id != null,
+              ),
               amount: params.toNumber(entry.amount),
               currency: entry.currency,
               counterpartLabel: summarizeCounterparts(

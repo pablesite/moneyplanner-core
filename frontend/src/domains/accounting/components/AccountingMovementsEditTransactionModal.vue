@@ -184,6 +184,15 @@ const editCounterpartyGroups = computed(() =>
       <p v-else-if="page.editKindNeedsClassification" class="ui-accounting-inline-note">
         Selecciona categoria y subcategoria debajo.
       </p>
+      <div
+        v-if="page.editTransactionForm.kind === 'investment'"
+        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
+      >
+        <select v-model="page.editTransactionForm.investment_direction" class="select">
+          <option value="inflow">Aporte (liquidez a inversion)</option>
+          <option value="outflow">Desinversion (inversion a liquidez)</option>
+        </select>
+      </div>
       <p
         v-else-if="
           page.editTransactionForm.kind !== 'balance_adjustment' &&

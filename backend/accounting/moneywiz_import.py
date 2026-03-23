@@ -192,6 +192,7 @@ class MoneyWizRow:
     errors: list[str]
     existing_transaction_id: int | None
     member_tag: str = ""
+    movement_direction: str = ""
     principal_amount: Decimal | None = None
     interest_amount: Decimal | None = None
     mirror: bool = False
@@ -357,6 +358,7 @@ def _resolve_investment_mirrors(
             currency=row.currency,
             amount=row.amount,
             movement_type="investment_purchase",
+            movement_direction=cast(str, LedgerTransaction.InvestmentDirection.INFLOW),
             flow_family=new_flow_family,
             category_key=new_cat_key,
             subcategory_key=new_subcat_key,
@@ -367,6 +369,7 @@ def _resolve_investment_mirrors(
         updated[i] = dataclasses.replace(
             row,
             movement_type="investment_purchase",
+            movement_direction=cast(str, LedgerTransaction.InvestmentDirection.INFLOW),
             counterparty_name=row_b.account_name,
             flow_family=new_flow_family,
             category_key=new_cat_key,
@@ -407,8 +410,49 @@ def _resolve_investment_mirrors(
             _inv_subcategory(row.category_raw),
             _normalize_lookup_text(row.description),
         )
-        if gastos_sale_idx.get(key) is not None:
-            mirrored.add(i)
+        paired_gastos_idx = gastos_sale_idx.get(key)
+        if paired_gastos_idx is None:
+            continue
+        gastos_row = rows[paired_gastos_idx]
+        new_flow_family, new_cat_key, new_subcat_key, cls_warnings = _classify_row(
+            movement_type="investment_purchase",
+            category_raw=gastos_row.category_raw,
+            description=gastos_row.description,
+        )
+        new_warnings = [
+            w for w in gastos_row.warnings if "se creara una cuenta provisional" not in w.lower()
+        ] + cls_warnings
+        new_fingerprint = _build_fingerprint(
+            booking_date=gastos_row.booking_date,
+            description=gastos_row.description,
+            memo=gastos_row.memo,
+            category_raw=gastos_row.category_raw,
+            account_name=gastos_row.account_name,
+            counterparty_name=row.account_name,
+            currency=gastos_row.currency,
+            amount=gastos_row.amount,
+            movement_type="investment_purchase",
+            movement_direction=cast(str, LedgerTransaction.InvestmentDirection.OUTFLOW),
+            flow_family=new_flow_family,
+            category_key=new_cat_key,
+            subcategory_key=new_subcat_key,
+        )
+        new_existing_id = _find_existing_transaction(user_id=user_id, fingerprint=new_fingerprint)
+        if new_existing_id is not None:
+            new_warnings.append("Esta fila ya fue importada anteriormente; se omitira en commit.")
+        updated[paired_gastos_idx] = dataclasses.replace(
+            gastos_row,
+            movement_type="investment_purchase",
+            movement_direction=cast(str, LedgerTransaction.InvestmentDirection.OUTFLOW),
+            counterparty_name=row.account_name,
+            flow_family=new_flow_family,
+            category_key=new_cat_key,
+            subcategory_key=new_subcat_key,
+            fingerprint=new_fingerprint,
+            warnings=new_warnings,
+            existing_transaction_id=new_existing_id,
+        )
+        mirrored.add(i)
 
     result = []
     for i, row in enumerate(rows):
@@ -471,6 +515,7 @@ def _resolve_investment_mirrors(
                 currency=row.currency,
                 amount=row.amount,
                 movement_type=new_movement_type,
+                movement_direction="",
                 flow_family=new_flow_family,
                 category_key=new_cat_key,
                 subcategory_key=new_subcat_key,
@@ -486,6 +531,7 @@ def _resolve_investment_mirrors(
                 dataclasses.replace(
                     row,
                     movement_type=new_movement_type,
+                    movement_direction="",
                     counterparty_name="",
                     flow_family=new_flow_family,
                     category_key=new_cat_key,
@@ -763,6 +809,7 @@ def _resolve_debt_mirrors(
             currency=row.currency,
             amount=row.amount,
             movement_type="debt_payment",
+            movement_direction="",
             flow_family="",
             category_key="",
             subcategory_key="",
@@ -892,6 +939,15 @@ def _normalize_row(
         currency=currency,
         amount=amount,
         movement_type=movement_type,
+        movement_direction=(
+            cast(str, LedgerTransaction.InvestmentDirection.INFLOW)
+            if movement_type == "investment_purchase" and amount < ZERO
+            else (
+                cast(str, LedgerTransaction.InvestmentDirection.OUTFLOW)
+                if movement_type == "investment_purchase"
+                else ""
+            )
+        ),
         flow_family=flow_family,
         category_key=category_key,
         subcategory_key=subcategory_key,
@@ -924,6 +980,15 @@ def _normalize_row(
         errors=errors,
         existing_transaction_id=existing_transaction_id,
         member_tag=member_tag,
+        movement_direction=(
+            cast(str, LedgerTransaction.InvestmentDirection.INFLOW)
+            if movement_type == "investment_purchase" and amount < ZERO
+            else (
+                cast(str, LedgerTransaction.InvestmentDirection.OUTFLOW)
+                if movement_type == "investment_purchase"
+                else ""
+            )
+        ),
     )
 
 
@@ -1119,7 +1184,7 @@ def _classify_row(
             "El pago de deuda se importara como movimiento patrimonial sin desglose de intereses."
         )
     elif movement_type == "investment_purchase":
-        warnings.append("La compra de inversion se importara sin clasificacion presupuestaria.")
+        warnings.append("El movimiento de inversion se importara sin clasificacion presupuestaria.")
     elif movement_type == "revaluation":
         warnings.append(
             "La revalorizacion se importara como ajuste de valor sin clasificacion presupuestaria."
@@ -1260,6 +1325,7 @@ def _build_fingerprint(
     currency: str,
     amount: Decimal,
     movement_type: str,
+    movement_direction: str,
     flow_family: str,
     category_key: str,
     subcategory_key: str,
@@ -1275,6 +1341,7 @@ def _build_fingerprint(
             currency,
             _format_money(amount),
             movement_type,
+            movement_direction,
             flow_family,
             category_key,
             subcategory_key,
@@ -1398,6 +1465,11 @@ def _import_moneywiz_row(
         return create_quick_transaction(
             user=user,
             movement_type="investment_purchase",
+            investment_direction=(
+                row.movement_direction
+                if row.movement_direction in {"inflow", "outflow"}
+                else cast(str, LedgerTransaction.InvestmentDirection.INFLOW)
+            ),
             booking_date=row.booking_date,
             value_date=row.booking_date,
             description=row.description,
@@ -1722,6 +1794,7 @@ def _serialize_row(row: MoneyWizRow) -> dict:
         "currency": row.currency,
         "amount": _format_money(row.amount),
         "movement_type": row.movement_type,
+        "movement_direction": row.movement_direction,
         "flow_family": row.flow_family,
         "category_key": row.category_key,
         "subcategory_key": row.subcategory_key,

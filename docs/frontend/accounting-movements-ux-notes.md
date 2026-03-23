@@ -45,7 +45,9 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 ## Current quick-entry coverage (2026-03-15)
 1. `income`, `expense`, `transfer`
 2. `investment` with explicit `inflow` / `outflow` direction and liquidity-to-investment counterpart
-3. `debt_payment` with explicit `principal` + `interest` breakdown
+3. optional manual realized metadata for investment (`realized_cost_basis`, `realized_gain_loss`) without mandatory calculation
+4. `debt_payment` with explicit `principal` + `interest` breakdown
+5. edit flow supports changing investment direction while preserving a balanced entry
 
 ## Integration with current screens
 1. `DataInputView`

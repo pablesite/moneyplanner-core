@@ -744,6 +744,92 @@ class AccountingServicesTests(TestCase):
         self.assertEqual(summary["accounts"][0]["currency"], "USD")
         self.assertEqual(summary["accounts"][0]["current_balance"], "125.00000000")
 
+    def test_build_account_balances_summary_includes_investment_contributed_totals(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Cartera indexada",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta corriente",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker indexado",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+
+        tx_inflow = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 6, 1),
+            value_date=date(2026, 6, 1),
+            description="Aporte cartera",
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind="investment",
+            investment_direction="inflow",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_inflow,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_inflow,
+            account=cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+
+        tx_outflow = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 6, 20),
+            value_date=date(2026, 6, 20),
+            description="Desinversion parcial",
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind="investment",
+            investment_direction="outflow",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_outflow,
+            account=cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("200.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_outflow,
+            account=investment_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("200.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+
+        summary = build_account_balances_summary(
+            user_id=self.user.id,
+            fiscal_year=2026,
+            month=6,
+            account_type=LedgerAccount.AccountType.ASSET,
+        )
+        by_id = {row["account_id"]: row for row in summary["accounts"]}
+        investment_row = by_id[investment_account.id]
+        self.assertEqual(investment_row["investment_inflow_total"], "500.00")
+        self.assertEqual(investment_row["investment_outflow_total"], "200.00")
+        self.assertEqual(investment_row["investment_net_contributed"], "300.00")
+
     def test_ensure_net_worth_opening_balance_transaction_creates_once_and_is_idempotent(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -1590,6 +1676,76 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(debit_entry["side"], "debit")
         self.assertEqual(debit_entry["asset_id"], investment_asset.id)
 
+    def test_quick_entry_investment_outflow_reverses_entry_sides_and_persists_direction(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="ETF cartera",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("1500.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker principal",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "outflow",
+                "booking_date": "2026-04-14",
+                "value_date": "2026-04-14",
+                "description": "Desinversion parcial",
+                "amount": "180.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": investment_account.id,
+                "realized_cost_basis": "150.00",
+                "realized_gain_loss": "30.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["quick_entry_kind"], "investment")
+        self.assertEqual(response.data["investment_direction"], "outflow")
+        self.assertEqual(response.data["realized_cost_basis"], "150.00000000")
+        self.assertEqual(response.data["realized_gain_loss"], "30.00000000")
+        debit_entry = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == self.cash_account.id
+        )
+        credit_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == investment_account.id
+        )
+        self.assertEqual(debit_entry["side"], "debit")
+        self.assertEqual(credit_entry["side"], "credit")
+
+    def test_quick_entry_rejects_realized_metadata_outside_investment(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-21",
+                "value_date": "2026-04-21",
+                "description": "Compra semanal",
+                "amount": "55.00",
+                "account_id": self.cash_account.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "living_expenses",
+                "realized_gain_loss": "5.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("realized_gain_loss", response.data["error"]["details"])
+
     def test_quick_entry_debt_payment_creates_principal_and_interest_breakdown(self):
         expense_plan = AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -2302,3 +2458,49 @@ class MoneyWizImportAPITests(APITestCase):
 
         tx = LedgerTransaction.objects.get(user=self.user)
         self.assertEqual(tx.description, "Transferencia a MyInvestor Ahorro")
+
+    def test_moneywiz_investment_sale_mirror_collapses_into_investment_outflow(self):
+        csv_bytes = (
+            "sep=;\n"
+            "Date;Description;Memo;Category;Account;Transfers;Amount;Amount (Expenses);Amount (Incomes)\n"
+            "2026-03-15;Venta fondos indexados;;Inversiones Gastos > Fondos;Banco;;;;1000\n"
+            "2026-03-15;Venta fondos indexados;;Inversiones Ingresos > Fondos;Broker;;;1000;\n"
+        ).encode("utf-8")
+
+        preview_upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        preview = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/preview/",
+            {"file": preview_upload},
+            format="multipart",
+        )
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        self.assertEqual(preview.data["stats"]["investment_purchase"], 1)
+        self.assertEqual(preview.data["stats"]["income"], 0)
+        self.assertEqual(preview.data["mirror_row_count"], 1)
+        active_rows = [row for row in preview.data["rows"] if not row["mirror"]]
+        self.assertEqual(len(active_rows), 1)
+        self.assertEqual(active_rows[0]["movement_type"], "investment_purchase")
+        self.assertEqual(active_rows[0]["movement_direction"], "outflow")
+        self.assertEqual(active_rows[0]["counterparty_name"], "Broker")
+
+        commit_upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        commit = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": commit_upload},
+            format="multipart",
+        )
+        self.assertEqual(commit.status_code, status.HTTP_201_CREATED, commit.data)
+        self.assertEqual(commit.data["created_count"], 1)
+
+        tx = LedgerTransaction.objects.get(user=self.user)
+        self.assertEqual(tx.quick_entry_kind, "investment")
+        self.assertEqual(tx.investment_direction, "outflow")
+
+        second_upload = SimpleUploadedFile("moneywiz.csv", csv_bytes, content_type="text/csv")
+        second_commit = self.client.post(
+            "/api/accounting/transactions/import-moneywiz/commit/",
+            {"file": second_upload},
+            format="multipart",
+        )
+        self.assertEqual(second_commit.status_code, status.HTTP_201_CREATED, second_commit.data)
+        self.assertEqual(second_commit.data["created_count"], 0)
