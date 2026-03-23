@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from budget.query_params import parse_optional_int_query_param, parse_required_int_query_param
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
+from .pagination import paginate_transactions
 from .serializers import (
     LedgerAccountSerializer,
     LedgerEntrySerializer,
@@ -22,6 +23,7 @@ from .moneywiz_import import (
     extract_moneywiz_csv_text,
 )
 from .services import (
+    apply_transaction_list_filters,
     build_account_balances_summary,
     build_budget_derived_suggestions,
     build_monthly_accounting_summary,
@@ -123,7 +125,29 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(booking_date__month=month)
         if status_value:
             queryset = queryset.filter(status=status_value)
-        return queryset.order_by("-booking_date", "-created_at", "-id")
+        return queryset.order_by("-booking_date", "-id")
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        queryset = apply_transaction_list_filters(queryset, request.query_params)
+
+        page_size = parse_optional_int_query_param(request.query_params, "page_size") or 50
+        if page_size < 1 or page_size > 200:
+            raise ValidationError({"page_size": "Query param 'page_size' invalido (1-200)."})
+        cursor = (request.query_params.get("cursor") or "").strip() or None
+        rows, next_cursor, total_count = paginate_transactions(
+            queryset=queryset,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        serializer = self.get_serializer(rows, many=True)
+        return Response(
+            {
+                "results": serializer.data,
+                "next_cursor": next_cursor,
+                "total_count": total_count,
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="monthly-summary")
     def monthly_summary(self, request):

@@ -24,12 +24,9 @@ describe('useAccountingStore', () => {
     vi.clearAllMocks();
   });
 
-  it('refreshes accounts, transactions and monthly summary together', async () => {
+  it('refreshes accounts and monthly summary together', async () => {
     vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({
       data: [{ id: 1, name: 'Banco', is_active: true }],
-    } as never);
-    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({
-      data: [{ id: 2, description: 'Nomina' }],
     } as never);
     vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
       data: { fiscal_year: 2026, months: [] },
@@ -48,10 +45,9 @@ describe('useAccountingStore', () => {
 
     await store.refreshAll();
 
-    expect(coreAccountingApi.getTransactions).toHaveBeenCalledWith();
+    expect(coreAccountingApi.getTransactions).not.toHaveBeenCalled();
     expect(coreAccountingApi.getAccountBalances).not.toHaveBeenCalled();
     expect(store.accounts).toHaveLength(1);
-    expect(store.transactions).toHaveLength(1);
     expect(store.monthlySummary?.fiscal_year).toBe(2026);
     expect(store.accountBalancesSummary).toBeNull();
   });
@@ -59,7 +55,6 @@ describe('useAccountingStore', () => {
   it('creates a transaction and reloads data', async () => {
     vi.mocked(coreAccountingApi.createTransaction).mockResolvedValue({ data: {} } as never);
     vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({ data: [] } as never);
-    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
     vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
       data: { fiscal_year: 2026, months: [] },
     } as never);
@@ -83,13 +78,12 @@ describe('useAccountingStore', () => {
     });
 
     expect(coreAccountingApi.createTransaction).toHaveBeenCalled();
-    expect(coreAccountingApi.getTransactions).toHaveBeenCalled();
+    expect(coreAccountingApi.getTransactions).not.toHaveBeenCalled();
   });
 
   it('creates a quick entry and reloads balances', async () => {
     vi.mocked(coreAccountingApi.createQuickEntry).mockResolvedValue({ data: {} } as never);
     vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({ data: [] } as never);
-    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
     vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
       data: { fiscal_year: 2026, months: [] },
     } as never);
@@ -112,7 +106,7 @@ describe('useAccountingStore', () => {
     });
 
     expect(coreAccountingApi.createQuickEntry).toHaveBeenCalled();
-    expect(coreAccountingApi.getTransactions).toHaveBeenCalled();
+    expect(coreAccountingApi.getTransactions).not.toHaveBeenCalled();
   });
 
   it('stores MoneyWiz preview and commit results', async () => {
@@ -166,7 +160,6 @@ describe('useAccountingStore', () => {
       },
     } as never);
     vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({ data: [] } as never);
-    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
     vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
       data: { fiscal_year: 2026, months: [] },
     } as never);
@@ -204,6 +197,6 @@ describe('useAccountingStore', () => {
 
     expect(result.deleted_count).toBe(3);
     expect(coreAccountingApi.deleteImportedTransactions).toHaveBeenCalledTimes(1);
-    expect(coreAccountingApi.getTransactions).toHaveBeenCalled();
+    expect(coreAccountingApi.getTransactions).not.toHaveBeenCalled();
   });
 });

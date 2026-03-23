@@ -61,9 +61,16 @@ export type LedgerTransaction = {
   investment_direction: '' | InvestmentDirection;
   realized_cost_basis: string | null;
   realized_gain_loss: string | null;
+  activity_kind: string;
   entries: LedgerEntry[];
   created_at: string;
   updated_at: string;
+};
+
+export type PaginatedTransactionsResponse = {
+  results: LedgerTransaction[];
+  next_cursor: string | null;
+  total_count: number;
 };
 
 export type MonthlyAccountingSummaryMonth = {

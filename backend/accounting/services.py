@@ -38,6 +38,8 @@ from .services_summaries import (  # noqa: F401
     validate_budget_suggestion_filters,
 )
 from .services_transactions import (  # noqa: F401
+    apply_transaction_list_filters,
+    classify_transaction_activity_kind,
     validate_balance_summary_filters,
     validate_booking_and_value_dates,
     validate_transaction_entries,

@@ -12,6 +12,7 @@ from net_worth.models import Asset, Liability
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services import (
+    classify_transaction_activity_kind,
     create_quick_transaction,
     get_account_balance,
     get_or_create_system_account,
@@ -258,6 +259,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
 
 class LedgerTransactionSerializer(serializers.ModelSerializer):
     entries = LedgerEntrySerializer(many=True)
+    activity_kind = serializers.SerializerMethodField()
 
     class Meta:
         model = LedgerTransaction
@@ -275,6 +277,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "investment_direction",
             "realized_cost_basis",
             "realized_gain_loss",
+            "activity_kind",
             "entries",
             "created_at",
             "updated_at",
@@ -290,6 +293,9 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_activity_kind(self, obj: LedgerTransaction) -> str:
+        return classify_transaction_activity_kind(obj)
 
     def validate(self, attrs: dict) -> dict:
         booking_date = attrs.get("booking_date", getattr(self.instance, "booking_date", None))

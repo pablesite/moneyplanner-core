@@ -14,9 +14,7 @@ const props = defineProps({
   },
 });
 
-const isLoading = computed(
-  () => props.page.importPreviewLoading || props.page.importCommitLoading,
-);
+const isLoading = computed(() => props.page.importPreviewLoading || props.page.importCommitLoading);
 const loadingMessage = computed(() =>
   props.page.importPreviewLoading ? 'Preparando preview...' : 'Importando datos...',
 );

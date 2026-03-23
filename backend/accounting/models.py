@@ -116,6 +116,10 @@ class LedgerTransaction(models.Model):
         ]
         indexes = [
             models.Index(fields=["user", "booking_date"], name="acct_tx_user_book_idx"),
+            models.Index(
+                fields=["user", "-booking_date", "-id"],
+                name="acct_tx_user_book_id_desc",
+            ),
             models.Index(fields=["user", "value_date"], name="acct_tx_user_value_idx"),
             models.Index(fields=["user", "status"], name="acct_tx_user_status_idx"),
             models.Index(

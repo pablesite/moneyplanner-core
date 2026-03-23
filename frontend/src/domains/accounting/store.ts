@@ -4,8 +4,8 @@ import type {
   LedgerAccount,
   LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
-  LedgerTransaction,
   LedgerTransactionWritePayload,
+  PaginatedTransactionsResponse,
   MoneyWizImportCommit,
   MoneyWizImportPreview,
   MonthlyAccountingSummary,
@@ -22,7 +22,6 @@ export const useAccountingStore = defineStore('accounting', {
     importCommitLoading: false as boolean,
     error: null as string | null,
     accounts: [] as LedgerAccount[],
-    transactions: [] as LedgerTransaction[],
     monthlySummary: null as MonthlyAccountingSummary | null,
     accountBalancesSummary: null as LedgerAccountBalanceSummary | null,
     moneyWizImportPreview: null as MoneyWizImportPreview | null,
@@ -42,18 +41,41 @@ export const useAccountingStore = defineStore('accounting', {
       this.loading = true;
       this.error = null;
       try {
-        const [accountsRes, transactionsRes, summaryRes] = await Promise.all([
+        const [accountsRes, summaryRes] = await Promise.all([
           coreAccountingApi.getAccounts({ is_active: true }),
-          coreAccountingApi.getTransactions(),
           coreAccountingApi.getMonthlySummary(this.selectedYear),
         ]);
         this.accounts = accountsRes.data;
-        this.transactions = transactionsRes.data;
         this.monthlySummary = summaryRes.data;
       } catch (error: unknown) {
         this.error = toApiErrorMessage(error);
       } finally {
         this.loading = false;
+      }
+    },
+
+    async fetchTransactionsPage(
+      params?: {
+        year?: number;
+        month?: number;
+        status?: string;
+        cursor?: string;
+        page_size?: number;
+        date_from?: string;
+        date_to?: string;
+        account_id?: number;
+        query?: string;
+        kind?: string;
+      },
+      options?: { signal?: AbortSignal },
+    ): Promise<PaginatedTransactionsResponse> {
+      this.error = null;
+      try {
+        const response = await coreAccountingApi.getTransactions(params, options);
+        return response.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
       }
     },
 
