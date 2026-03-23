@@ -41,6 +41,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 1. Core exposes MoneyWiz import endpoints in `accounting` for preview and commit:
    - `POST /api/accounting/transactions/import-moneywiz/preview/`
    - `POST /api/accounting/transactions/import-moneywiz/commit/`
+   - `POST /api/accounting/transactions/delete-imported/` (maintenance cleanup for imported rows)
 2. The import flow is Core-owned and supports:
    - CSV parsing with optional `sep=` header
    - row fingerprint idempotency persisted on `LedgerTransaction`

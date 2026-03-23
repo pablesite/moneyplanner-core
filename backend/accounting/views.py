@@ -197,6 +197,20 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         )
         return Response(payload, status=status.HTTP_201_CREATED)
 
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="delete-imported",
+    )
+    def delete_imported(self, request):
+        queryset = LedgerTransaction.objects.filter(
+            user=request.user,
+            origin=LedgerTransaction.Origin.IMPORT,
+        )
+        deleted_count = queryset.count()
+        queryset.delete()
+        return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)
+
 
 class LedgerEntryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]

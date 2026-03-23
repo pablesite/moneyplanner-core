@@ -195,5 +195,20 @@ export const useAccountingStore = defineStore('accounting', {
         this.importCommitLoading = false;
       }
     },
+
+    async deleteImportedTransactions() {
+      this.transactionCreationLoading = true;
+      this.error = null;
+      try {
+        const response = await coreAccountingApi.deleteImportedTransactions();
+        await this.refreshAll();
+        return response.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
+      } finally {
+        this.transactionCreationLoading = false;
+      }
+    },
   },
 });
