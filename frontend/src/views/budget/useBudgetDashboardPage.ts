@@ -237,6 +237,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const expenseMonthlySummary = ref<ExpenseMonthlySummaryResponse | null>(null);
   const incomeMonthlySummary = ref<IncomeMonthlySummaryResponse | null>(null);
   const expenseCheckinsByEntryId = ref<Record<number, ExpenseMonthlyCheckinApiItem>>({});
+  const expenseCheckinsByEntryMonth = ref<Record<string, ExpenseMonthlyCheckinApiItem>>({});
   const expenseExecutionLoading = ref(false);
   const expenseExecutionBusyEntryId = ref<number | null>(null);
   const expenseExecutionError = ref<string | null>(null);
@@ -1159,6 +1160,56 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return map;
   });
 
+  const expenseYtdActualByCategory = computed(() => {
+    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const map = new Map<string, BudgetActualAggregateRow>();
+    for (const entry of filteredExpenseEntries.value) {
+      const categoryKey = entry.category;
+      let row = map.get(categoryKey);
+      if (!row) {
+        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
+        map.set(categoryKey, row);
+      }
+      for (let month = 1; month <= monthsCount; month++) {
+        const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
+        if (planned <= 0) continue;
+        row.planned += planned;
+        row.expectedCount += 1;
+        const checkin =
+          expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
+        if (!checkin) continue;
+        row.checkedCount += 1;
+        if (checkin.status !== 'skipped') row.executed += toNumberOrZero(checkin.executed_amount);
+      }
+    }
+    return map;
+  });
+
+  const expenseYtdActualBySubcategoryKey = computed(() => {
+    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const map = new Map<string, BudgetActualAggregateRow>();
+    for (const entry of filteredExpenseEntries.value) {
+      const key = `${entry.category}::${entry.subcategory}`;
+      let row = map.get(key);
+      if (!row) {
+        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
+        map.set(key, row);
+      }
+      for (let month = 1; month <= monthsCount; month++) {
+        const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
+        if (planned <= 0) continue;
+        row.planned += planned;
+        row.expectedCount += 1;
+        const checkin =
+          expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
+        if (!checkin) continue;
+        row.checkedCount += 1;
+        if (checkin.status !== 'skipped') row.executed += toNumberOrZero(checkin.executed_amount);
+      }
+    }
+    return map;
+  });
+
   type BudgetActualExecution = {
     planned: number;
     executed: number;
@@ -1194,30 +1245,54 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     sectionId: BudgetSectionModel['id'],
     categoryKey: string,
   ): BudgetActualExecution | null {
-    if (sectionId !== 'income') return null;
-    const row = incomeYtdActualByCategory.value.get(categoryKey);
-    if (!row) return null;
-    return buildActualExecution(
-      sectionId,
-      row.planned,
-      row.executed,
-      row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
-    );
+    if (sectionId === 'income') {
+      const row = incomeYtdActualByCategory.value.get(categoryKey);
+      if (!row) return null;
+      return buildActualExecution(
+        sectionId,
+        row.planned,
+        row.executed,
+        row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
+      );
+    }
+    if (sectionId === 'expense') {
+      const row = expenseYtdActualByCategory.value.get(categoryKey);
+      if (!row) return null;
+      return buildActualExecution(
+        sectionId,
+        row.planned,
+        row.executed,
+        row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
+      );
+    }
+    return null;
   }
 
   function budgetSubcategoryActualExecution(
     sectionId: BudgetSectionModel['id'],
     rowKey: string,
   ): BudgetActualExecution | null {
-    if (sectionId !== 'income') return null;
-    const row = incomeYtdActualBySubcategoryKey.value.get(rowKey);
-    if (!row) return null;
-    return buildActualExecution(
-      sectionId,
-      row.planned,
-      row.executed,
-      row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
-    );
+    if (sectionId === 'income') {
+      const row = incomeYtdActualBySubcategoryKey.value.get(rowKey);
+      if (!row) return null;
+      return buildActualExecution(
+        sectionId,
+        row.planned,
+        row.executed,
+        row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
+      );
+    }
+    if (sectionId === 'expense') {
+      const row = expenseYtdActualBySubcategoryKey.value.get(rowKey);
+      if (!row) return null;
+      return buildActualExecution(
+        sectionId,
+        row.planned,
+        row.executed,
+        row.expectedCount > 0 ? row.checkedCount / row.expectedCount : 0,
+      );
+    }
+    return null;
   }
 
   const selectedMonthlyExecutedVolume = computed(
@@ -1851,6 +1926,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return `${entryId}:${month}`;
   }
 
+  function expenseEntryMonthKey(entryId: number, month: number): string {
+    return `${entryId}:${month}`;
+  }
+
   async function loadIncomeCheckinsForYear(): Promise<void> {
     try {
       const response = await budgetApi.get<IncomeMonthlyCheckinApiItem[]>(
@@ -1925,11 +2004,31 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }
   }
 
+  async function loadExpenseCheckinsForYear(): Promise<void> {
+    try {
+      const response = await budgetApi.get<ExpenseMonthlyCheckinApiItem[]>(
+        '/api/budget/annual-expense-checkins/',
+        { params: { year: fiscalYear.value } },
+      );
+      const nextMap: Record<string, ExpenseMonthlyCheckinApiItem> = {};
+      for (const row of response.data ?? []) {
+        nextMap[expenseEntryMonthKey(row.annual_expense_entry_id, row.month)] = row;
+      }
+      expenseCheckinsByEntryMonth.value = nextMap;
+    } catch (e: unknown) {
+      expenseExecutionError.value = toBudgetErrorMessage(e);
+    }
+  }
+
   async function refreshExpenseExecutionData(): Promise<void> {
     expenseExecutionLoading.value = true;
     expenseExecutionError.value = null;
     try {
-      await Promise.all([loadExpenseExecutionSummary(), loadExpenseCheckinsForSelectedMonth()]);
+      await Promise.all([
+        loadExpenseExecutionSummary(),
+        loadExpenseCheckinsForSelectedMonth(),
+        loadExpenseCheckinsForYear(),
+      ]);
     } finally {
       expenseExecutionLoading.value = false;
     }
@@ -2564,6 +2663,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     expenseMonthlySummary,
     incomeMonthlySummary,
     expenseCheckinsByEntryId,
+    expenseCheckinsByEntryMonth,
     expenseExecutionLoading,
     expenseExecutionBusyEntryId,
     expenseExecutionError,
@@ -2737,6 +2837,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     refreshIncomeExecutionData,
     loadExpenseExecutionSummary,
     loadExpenseCheckinsForSelectedMonth,
+    loadExpenseCheckinsForYear,
     refreshExpenseExecutionData,
     suggestedExecutedAmountForRow,
     ensureExpenseAdjustAmountPrefilled,
