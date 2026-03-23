@@ -1679,3 +1679,27 @@
     flex-wrap: wrap;
   }
 }
+
+.ui-budget-detail-month-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 6px;
+  flex-wrap: wrap;
+}
+
+.ui-budget-detail-month-bar-label {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.ui-budget-detail-month-bar .ui-budget-filter-segment {
+  flex-wrap: wrap;
+}
+
+.ui-budget-detail-month-bar .ui-budget-filter-btn {
+  min-width: 36px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+}
