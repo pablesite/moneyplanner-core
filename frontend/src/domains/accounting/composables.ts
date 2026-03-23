@@ -48,6 +48,7 @@ type TransactionFormState = {
   currency: string;
   kind: EditableActivityKind;
   initial_kind: EditableActivityKind;
+  investment_direction: 'inflow' | 'outflow';
   category_key: string;
   subcategory_key: string;
   kind_label: string;
@@ -72,19 +73,19 @@ type ActivityFilter =
   | 'income'
   | 'expense'
   | 'transfer'
-  | 'investment_purchase'
+  | 'investment'
   | 'debt_payment'
   | 'revaluation';
 type EditableActivityKind =
   | 'income'
   | 'expense'
   | 'transfer'
-  | 'investment_purchase'
+  | 'investment'
   | 'debt_payment'
   | 'balance_adjustment'
   | 'revaluation';
 type ClassificationActivityKind = 'income' | 'expense';
-type CounterpartyEditableKind = 'transfer' | 'investment_purchase' | 'debt_payment';
+type CounterpartyEditableKind = 'transfer' | 'investment' | 'debt_payment';
 
 type LastQuickClassification = {
   category_key: string;
@@ -152,6 +153,7 @@ export function useAccountingPage() {
 
   const quickEntryForm = reactive({
     movement_type: 'expense' as QuickLedgerMovementType,
+    investment_direction: 'inflow' as 'inflow' | 'outflow',
     booking_date: new Date().toISOString().slice(0, 10),
     value_date: new Date().toISOString().slice(0, 10),
     description: '',
@@ -162,6 +164,8 @@ export function useAccountingPage() {
     interest_account_id: null as number | null,
     principal_amount: '',
     interest_amount: '',
+    realized_cost_basis: '',
+    realized_gain_loss: '',
     flow_family: '' as '' | 'income' | 'expense',
     category_key: '',
     subcategory_key: '',
@@ -224,6 +228,7 @@ export function useAccountingPage() {
     currency: 'EUR',
     kind: 'transfer',
     initial_kind: 'transfer',
+    investment_direction: 'inflow',
     category_key: '',
     subcategory_key: '',
     kind_label: '',
@@ -422,7 +427,7 @@ export function useAccountingPage() {
     if (quickEntryForm.movement_type === 'transfer') {
       return quickEntryForm.counterparty_account_id != null;
     }
-    if (quickEntryForm.movement_type === 'investment_purchase') {
+    if (quickEntryForm.movement_type === 'investment') {
       return quickEntryForm.counterparty_account_id != null;
     }
     if (quickEntryForm.movement_type === 'debt_payment') {
@@ -498,7 +503,7 @@ export function useAccountingPage() {
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
     { value: 'transfer', label: 'Transferencia' },
-    { value: 'investment_purchase', label: 'Compra inversion' },
+    { value: 'investment', label: 'Inversion' },
     { value: 'debt_payment', label: 'Pago deuda' },
     { value: 'revaluation', label: 'Revalorizacion' },
   ];
@@ -506,7 +511,7 @@ export function useAccountingPage() {
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
     { value: 'transfer', label: 'Transferencia' },
-    { value: 'investment_purchase', label: 'Inversion' },
+    { value: 'investment', label: 'Inversion' },
     { value: 'debt_payment', label: 'Deuda' },
     { value: 'balance_adjustment', label: 'Ajuste' },
     { value: 'revaluation', label: 'Revalorizacion' },
@@ -521,7 +526,7 @@ export function useAccountingPage() {
   }
 
   function isCounterpartyKind(kind: EditableActivityKind): kind is CounterpartyEditableKind {
-    return kind === 'transfer' || kind === 'investment_purchase' || kind === 'debt_payment';
+    return kind === 'transfer' || kind === 'investment' || kind === 'debt_payment';
   }
 
   const editKindNeedsClassification = computed(() =>
@@ -529,7 +534,7 @@ export function useAccountingPage() {
   );
   const editKindNeedsCounterparty = computed(() => isCounterpartyKind(editTransactionForm.kind));
   const editCounterpartyLabel = computed(() => {
-    if (editTransactionForm.kind === 'investment_purchase') return 'Cuenta de inversion';
+    if (editTransactionForm.kind === 'investment') return 'Cuenta de inversion';
     if (editTransactionForm.kind === 'debt_payment') return 'Cuenta de pasivo';
     return 'Contracuenta';
   });
@@ -543,7 +548,7 @@ export function useAccountingPage() {
     const baseOptions = editAccountOptions.value.filter(
       (account) => account.id !== editTransactionForm.account_id,
     );
-    if (editTransactionForm.kind === 'investment_purchase') {
+    if (editTransactionForm.kind === 'investment') {
       return baseOptions.filter(
         (account) => account.account_type === 'asset' && account.asset_id != null,
       );
@@ -558,7 +563,7 @@ export function useAccountingPage() {
   const editCounterpartyMissingHint = computed(() => {
     if (!editKindNeedsCounterparty.value) return '';
     if (editCounterpartyOptions.value.length > 0) return '';
-    if (editTransactionForm.kind === 'investment_purchase') {
+    if (editTransactionForm.kind === 'investment') {
       return 'No hay cuentas de inversion contables activas. Activa tracking contable en la posicion manual para poder usarla aqui.';
     }
     if (editTransactionForm.kind === 'debt_payment') {
@@ -625,8 +630,11 @@ export function useAccountingPage() {
       quickEntryForm.interest_account_id = null;
       quickEntryForm.principal_amount = '';
       quickEntryForm.interest_amount = '';
+      quickEntryForm.realized_cost_basis = '';
+      quickEntryForm.realized_gain_loss = '';
       quickEntryForm.flow_family = '';
       quickEntryForm.revaluation_new_value = '';
+      quickEntryForm.investment_direction = 'inflow';
       if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
       if (movementType !== 'expense' && movementType !== 'debt_payment') {
         quickEntryForm.annual_expense_entry_id = null;
@@ -688,6 +696,9 @@ export function useAccountingPage() {
       if (!isClassificationKind(kind)) {
         editTransactionForm.category_key = '';
         editTransactionForm.subcategory_key = '';
+      }
+      if (kind !== 'investment') {
+        editTransactionForm.investment_direction = 'inflow';
       }
       if (isCounterpartyKind(kind)) {
         if (
@@ -949,6 +960,7 @@ export function useAccountingPage() {
 
   function resetQuickEntryForm() {
     quickEntryForm.movement_type = 'expense';
+    quickEntryForm.investment_direction = 'inflow';
     quickEntryForm.booking_date = new Date().toISOString().slice(0, 10);
     quickEntryForm.value_date = quickEntryForm.booking_date;
     quickEntryForm.description = '';
@@ -959,6 +971,8 @@ export function useAccountingPage() {
     quickEntryForm.interest_account_id = null;
     quickEntryForm.principal_amount = '';
     quickEntryForm.interest_amount = '';
+    quickEntryForm.realized_cost_basis = '';
+    quickEntryForm.realized_gain_loss = '';
     quickEntryForm.flow_family = '';
     quickEntryForm.category_key = '';
     quickEntryForm.subcategory_key = '';
@@ -981,6 +995,7 @@ export function useAccountingPage() {
     editTransactionForm.currency = 'EUR';
     editTransactionForm.kind = 'transfer';
     editTransactionForm.initial_kind = 'transfer';
+    editTransactionForm.investment_direction = 'inflow';
     editTransactionForm.category_key = '';
     editTransactionForm.subcategory_key = '';
     editTransactionForm.kind_label = '';
@@ -990,7 +1005,7 @@ export function useAccountingPage() {
     const detected = getTransactionActivityKind(transaction);
     if (detected === 'income') return 'income';
     if (detected === 'expense') return 'expense';
-    if (detected === 'investment_purchase') return 'investment_purchase';
+    if (detected === 'investment') return 'investment';
     if (detected === 'debt_payment') return 'debt_payment';
     if (detected === 'revaluation') return 'revaluation';
     return 'transfer';
@@ -1000,7 +1015,7 @@ export function useAccountingPage() {
     if (kind === 'income') return 'Ingreso';
     if (kind === 'expense') return 'Gasto';
     if (kind === 'transfer') return 'Transferencia';
-    if (kind === 'investment_purchase') return 'Inversion';
+    if (kind === 'investment') return 'Inversion';
     if (kind === 'debt_payment') return 'Deuda';
     if (kind === 'revaluation') return 'Revalorizacion';
     return 'Ajuste';
@@ -1011,6 +1026,15 @@ export function useAccountingPage() {
       .filter((entry) => entry.side === 'debit')
       .reduce((sum, entry) => sum + toNumber(entry.amount), 0);
     return debitTotalValue.toFixed(2);
+  }
+
+  function getInvestmentDirection(transaction: LedgerTransaction): 'inflow' | 'outflow' {
+    if (transaction.investment_direction === 'inflow' || transaction.investment_direction === 'outflow') {
+      return transaction.investment_direction;
+    }
+    const investmentEntry = transaction.entries.find((entry) => entry.asset_id != null);
+    if (!investmentEntry) return 'inflow';
+    return investmentEntry.side === 'credit' ? 'outflow' : 'inflow';
   }
 
   function resolveEditAccountsForKind(
@@ -1041,6 +1065,19 @@ export function useAccountingPage() {
       return {
         accountId: creditEntry?.account_id ?? null,
         counterpartyAccountId: liabilityEntry?.account_id ?? null,
+      };
+    }
+    if (kind === 'investment') {
+      const direction = getInvestmentDirection(transaction);
+      if (direction === 'outflow') {
+        return {
+          accountId: debitEntry?.account_id ?? null,
+          counterpartyAccountId: creditEntry?.account_id ?? null,
+        };
+      }
+      return {
+        accountId: creditEntry?.account_id ?? null,
+        counterpartyAccountId: debitEntry?.account_id ?? null,
       };
     }
     return {
@@ -1096,6 +1133,7 @@ export function useAccountingPage() {
     );
     editTransactionForm.account_id = accountId;
     editTransactionForm.counterparty_account_id = counterpartyAccountId;
+    editTransactionForm.investment_direction = kind === 'investment' ? getInvestmentDirection(transaction) : 'inflow';
     editTransactionForm.category_key = primaryClassifiedEntry?.category_key ?? '';
     editTransactionForm.subcategory_key = primaryClassifiedEntry?.subcategory_key ?? '';
     editTransactionForm.kind_label = activityKindDisplay(kind);
@@ -1168,6 +1206,7 @@ export function useAccountingPage() {
     kind: EditableActivityKind,
     accountId: number,
     counterpartyAccountId: number | null,
+    investmentDirection: 'inflow' | 'outflow',
   ): PersistedTransactionEntry[] {
     const nextEntries = entries.map((entry) => ({ ...entry }));
     const debitEntry =
@@ -1189,6 +1228,16 @@ export function useAccountingPage() {
     if (kind === 'expense') {
       setAccount(creditEntry, accountId);
       setAccount(debitEntry, counterpartyAccountId);
+      return nextEntries;
+    }
+    if (kind === 'investment') {
+      if (investmentDirection === 'outflow') {
+        setAccount(debitEntry, accountId);
+        setAccount(creditEntry, counterpartyAccountId);
+      } else {
+        setAccount(creditEntry, accountId);
+        setAccount(debitEntry, counterpartyAccountId);
+      }
       return nextEntries;
     }
     if (kind === 'balance_adjustment' || kind === 'revaluation') {
@@ -1406,12 +1455,15 @@ export function useAccountingPage() {
       editTransactionForm.kind,
       editTransactionForm.account_id!,
       classificationCounterpartyAccountId,
+      editTransactionForm.investment_direction,
     );
   }
 
   function getTransactionActivityKind(
     transaction: LedgerTransaction,
   ): Exclude<ActivityFilter, 'all'> | 'other' {
+    if (transaction.quick_entry_kind === 'investment') return 'investment';
+    if (transaction.quick_entry_kind === 'investment_purchase') return 'investment';
     const hasIncomeClassified = transaction.entries.some((entry) => entry.flow_family === 'income');
     if (hasIncomeClassified) return 'income';
     const hasExpenseClassified = transaction.entries.some(
@@ -1433,7 +1485,7 @@ export function useAccountingPage() {
       (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
     );
     const hasAssetPositionLink = transaction.entries.some((entry) => entry.asset_id != null);
-    if (hasAssetPositionLink) return 'investment_purchase';
+    if (hasAssetPositionLink) return 'investment';
     if (assetEntries.length >= 2) return 'transfer';
 
     // Revaluation: one entry is an investment account (asset with asset_id linked),
@@ -1455,7 +1507,9 @@ export function useAccountingPage() {
     if (kind === 'income') return 'Ingreso';
     if (kind === 'expense') return 'Gasto';
     if (kind === 'transfer') return 'Transferencia';
-    if (kind === 'investment_purchase') return 'Compra inversion';
+    if (kind === 'investment') {
+      return getInvestmentDirection(transaction) === 'outflow' ? 'Desinversion' : 'Aporte inversion';
+    }
     if (kind === 'debt_payment') return 'Pago deuda';
     if (kind === 'revaluation') return 'Revalorizacion';
     return 'Asiento';
@@ -1811,8 +1865,17 @@ export function useAccountingPage() {
           ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
           : {}
         : {}),
-      ...(quickEntryForm.movement_type === 'investment_purchase'
-        ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
+      ...(quickEntryForm.movement_type === 'investment'
+        ? {
+            counterparty_account_id: quickEntryForm.counterparty_account_id,
+            investment_direction: quickEntryForm.investment_direction,
+            ...(quickEntryForm.realized_cost_basis.trim()
+              ? { realized_cost_basis: formatDecimalInput(quickEntryForm.realized_cost_basis) }
+              : {}),
+            ...(quickEntryForm.realized_gain_loss.trim()
+              ? { realized_gain_loss: formatDecimalInput(quickEntryForm.realized_gain_loss) }
+              : {}),
+          }
         : {}),
       ...(quickEntryForm.movement_type === 'debt_payment'
         ? {

@@ -75,7 +75,7 @@ def build_account_balances_summary(
 
     current_entries_queryset = LedgerEntry.objects.filter(
         transaction__user_id=user_id,
-    ).select_related("transaction")
+    ).select_related("transaction", "account")
     if account_type:
         current_entries_queryset = current_entries_queryset.filter(
             account__account_type=account_type
@@ -93,8 +93,12 @@ def build_account_balances_summary(
             transaction__booking_date__month=month
         )
 
-    current_totals_by_account = _group_balance_totals_by_account(list(current_entries_queryset))
-    period_totals_by_account = _group_balance_totals_by_account(list(period_entries_queryset))
+    current_entries = list(current_entries_queryset)
+    period_entries = list(period_entries_queryset)
+
+    current_totals_by_account = _group_balance_totals_by_account(current_entries)
+    period_totals_by_account = _group_balance_totals_by_account(period_entries)
+    investment_contributed_totals = _group_investment_contributed_by_account(current_entries)
 
     items: list[dict] = []
     totals_by_type: dict[str, Decimal] = defaultdict(lambda: ZERO)
@@ -110,6 +114,8 @@ def build_account_balances_summary(
             totals=period_totals,
         )
         totals_by_type[account.account_type] += current_balance
+        inflow_total, outflow_total = investment_contributed_totals.get(account.id, (ZERO, ZERO))
+        net_contributed = inflow_total - outflow_total
         items.append(
             {
                 "account_id": account.id,
@@ -121,6 +127,9 @@ def build_account_balances_summary(
                 "period_debit_total": serialize_decimal(period_totals.debit_total),
                 "period_credit_total": serialize_decimal(period_totals.credit_total),
                 "period_net_change": serialize_decimal(period_net_change),
+                "investment_inflow_total": serialize_decimal(inflow_total),
+                "investment_outflow_total": serialize_decimal(outflow_total),
+                "investment_net_contributed": serialize_decimal(net_contributed),
             }
         )
 
@@ -158,6 +167,25 @@ def _group_balance_totals_by_account(entries: list[LedgerEntry]) -> dict[int, Le
 
 def _build_period_keys(*, start_year: int, end_year: int) -> list[tuple[int, int]]:
     return [(year, month) for year in range(start_year, end_year + 1) for month in range(1, 13)]
+
+
+def _group_investment_contributed_by_account(
+    entries: list[LedgerEntry],
+) -> dict[int, tuple[Decimal, Decimal]]:
+    totals: dict[int, tuple[Decimal, Decimal]] = defaultdict(lambda: (ZERO, ZERO))
+    for entry in entries:
+        if entry.account.asset_id is None:
+            continue
+        tx_kind = str(getattr(entry.transaction, "quick_entry_kind", "") or "").strip()
+        if tx_kind and tx_kind != "investment":
+            continue
+        inflow_total, outflow_total = totals[entry.account_id]
+        if entry.side == LedgerEntry.Side.DEBIT:
+            inflow_total += entry.amount
+        elif entry.side == LedgerEntry.Side.CREDIT:
+            outflow_total += entry.amount
+        totals[entry.account_id] = (inflow_total, outflow_total)
+    return totals
 
 
 def _serialize_series(

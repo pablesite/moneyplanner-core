@@ -55,7 +55,7 @@ function accountTrail(transaction: LedgerTransaction): string {
         <option value="income">Ingresos</option>
         <option value="expense">Gastos</option>
         <option value="transfer">Transferencias</option>
-        <option value="investment_purchase">Inversion</option>
+        <option value="investment">Inversion</option>
         <option value="debt_payment">Pago deuda</option>
         <option value="revaluation">Revalorizaciones</option>
       </select>

@@ -64,6 +64,18 @@ class LedgerTransaction(models.Model):
         IMPORT = "import", "Importacion"
         SYSTEM = "system", "Sistema"
 
+    class QuickEntryKind(models.TextChoices):
+        INCOME = "income", "Ingreso"
+        EXPENSE = "expense", "Gasto"
+        TRANSFER = "transfer", "Transferencia"
+        INVESTMENT = "investment", "Inversion"
+        DEBT_PAYMENT = "debt_payment", "Pago deuda"
+        REVALUATION = "revaluation", "Revalorizacion"
+
+    class InvestmentDirection(models.TextChoices):
+        INFLOW = "inflow", "Aporte"
+        OUTFLOW = "outflow", "Desinversion"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ledger_transactions"
     )
@@ -76,6 +88,20 @@ class LedgerTransaction(models.Model):
     import_source = models.CharField(max_length=32, blank=True, default="")
     import_fingerprint = models.CharField(max_length=64, blank=True, default="")
     member_tag = models.CharField(max_length=32, blank=True, default="")
+    quick_entry_kind = models.CharField(max_length=24, blank=True, default="")
+    investment_direction = models.CharField(max_length=16, blank=True, default="")
+    realized_cost_basis = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+    )
+    realized_gain_loss = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

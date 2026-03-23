@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-20 | **Versión Core:** 0.23.1
+**Última revisión:** 2026-03-23 | **Versión Core:** 0.23.1
 
 ---
 
@@ -27,8 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Accounting — investment bidirectional flow | Agente | Definir el flujo bidireccional de inversión (`inflow` / `outflow`) en backend y frontend antes de adaptar el importador. | `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/backend.md` + `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/frontend.md` |
-| Importación MoneyWiz — investment outflows | Agente | Adaptar el importador MoneyWiz para detectar retiradas/desinversiones sin generar ingresos espejo duplicados. | `core/docs/tasks/accounting/phase-2-importer-investment-outflows/backend.md` + `core/docs/tasks/accounting/phase-2-importer-investment-outflows/qa.md` |
+| _(Sin tareas Agente inmediatas en cola)_ | — | Las tareas delegables de investment flow + importador outflows quedaron aplicadas; el foco inmediato vuelve a pulido manual de Movimientos v1. | — |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -46,7 +45,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
-| Importación de datos | Media | 🔄 | MoneyWiz v1 corregido y validado con CSV real; pendiente afinar reglas/casos borde para rematar movimientos v1. Excel sigue pendiente. |
+| Importación de datos | Media | 🔄 | MoneyWiz v1 corregido y validado con CSV real; retiradas/desinversiones de cartera se colapsan en `investment outflow` sin duplicar ingresos espejo. Pendiente afinar casos borde restantes y soporte Excel. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -62,7 +61,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista, definición del flujo bidireccional de inversión y ajuste de importación MoneyWiz para v1 final. |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Pendiente remate manual de vista para cierre v1. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
@@ -90,3 +89,4 @@ _(ninguna tarea aparcada en este momento)_
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
+
