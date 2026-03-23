@@ -33,8 +33,10 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 3. Transfer between accounts
    - explicit account-to-account flow
    - should not be represented as income plus expense
-4. Investment purchase from liquidity
-   - money leaves liquidity and lands in the investment counterpart
+4. Investment flow
+   - one visible investment type with direction selector: `Aporte` or `Desinversion`
+   - `Aporte`: money leaves liquidity and lands in the investment counterpart
+   - `Desinversion`: money leaves the investment counterpart and lands in liquidity
    - should remain understandable from both movement history and position detail
 5. Debt payment with principal and interest
    - one user action
@@ -42,7 +44,7 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 
 ## Current quick-entry coverage (2026-03-15)
 1. `income`, `expense`, `transfer`
-2. `investment_purchase` with liquidity-to-investment counterpart
+2. `investment` with explicit `inflow` / `outflow` direction and liquidity-to-investment counterpart
 3. `debt_payment` with explicit `principal` + `interest` breakdown
 
 ## Integration with current screens
@@ -96,7 +98,7 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 1. Manual income to a liquidity account
 2. Manual expense from a liquidity account
 3. Transfer between two liquidity accounts
-4. Investment purchase from liquidity
+4. Investment flow with aporte / desinversion
 5. Debt payment split into principal and interest
 6. Monthly close with full ledger coverage
 7. Monthly close with partial ledger coverage and legacy fallback

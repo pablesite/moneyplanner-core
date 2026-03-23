@@ -27,7 +27,8 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| _(sin tareas Agente pendientes en este bloque)_ | — | Retirada de `Introducción de Datos` completada. | — |
+| Accounting — investment bidirectional flow | Agente | Definir el flujo bidireccional de inversión (`inflow` / `outflow`) en backend y frontend antes de adaptar el importador. | `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/backend.md` + `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/frontend.md` |
+| Importación MoneyWiz — investment outflows | Agente | Adaptar el importador MoneyWiz para detectar retiradas/desinversiones sin generar ingresos espejo duplicados. | `core/docs/tasks/accounting/phase-2-importer-investment-outflows/backend.md` + `core/docs/tasks/accounting/phase-2-importer-investment-outflows/qa.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -61,7 +62,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista y ajuste de importación MoneyWiz para v1 final. |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas; pendiente remate manual de vista, definición del flujo bidireccional de inversión y ajuste de importación MoneyWiz para v1 final. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |

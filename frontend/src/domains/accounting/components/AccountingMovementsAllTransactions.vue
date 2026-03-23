@@ -63,8 +63,9 @@ function accountTrail(transaction: LedgerTransaction): string {
       <input v-model="state.todosDateTo" type="date" class="input" title="Hasta" />
     </div>
 
-    <div v-if="state.loading && !state.transactions.length" class="ui-state-block ui-state-loading">
-      Cargando movimientos...
+    <div v-if="state.loading && !state.transactions.length" class="ui-section-loading">
+      <div class="ui-import-spinner"></div>
+      <span>Cargando movimientos...</span>
     </div>
     <div v-else-if="!state.todosRawTransactions.length" class="ui-state-block ui-state-empty">
       Sin movimientos para los filtros actuales.
