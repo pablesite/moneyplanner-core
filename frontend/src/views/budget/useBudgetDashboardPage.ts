@@ -736,7 +736,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const rows = monthLabels.map((label, index) => {
       const month = index + 1;
       const summary = incomeSummaryByMonth.value.get(month);
-      const planned = toNumberOrZero(summary?.planned);
+      const planned = filteredIncomeEntries.value.reduce(
+        (sum, entry) => sum + monthlyPlannedAmountForIncomeEntry(entry, month),
+        0,
+      );
       const executed = toNumberOrZero(summary?.executed);
       return {
         month,
@@ -758,17 +761,16 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }));
   });
 
-  const incomeEvolutionBaseMonthly = computed(() => {
-    if (incomeMonthlySummary.value)
-      return toNumberOrZero(incomeMonthlySummary.value.planned_total) / 12;
-    return plannedIncomeTotal.value / 12;
-  });
+  const incomeEvolutionBaseMonthly = computed(() => plannedIncomeTotal.value / 12);
 
   const expenseEvolutionMonths = computed(() => {
     const rows = monthLabels.map((label, index) => {
       const month = index + 1;
       const summary = expenseSummaryByMonth.value.get(month);
-      const planned = toNumberOrZero(summary?.planned);
+      const planned = filteredExpenseEntries.value.reduce(
+        (sum, entry) => sum + monthlyPlannedAmountForExpenseEntry(entry, month),
+        0,
+      );
       const executed = toNumberOrZero(summary?.executed);
       return {
         month,
@@ -790,11 +792,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }));
   });
 
-  const expenseEvolutionBaseMonthly = computed(() => {
-    if (expenseMonthlySummary.value)
-      return toNumberOrZero(expenseMonthlySummary.value.planned_total) / 12;
-    return plannedExpenseTotal.value / 12;
-  });
+  const expenseEvolutionBaseMonthly = computed(() => plannedExpenseTotal.value / 12);
 
   const selectedLiquidityMonthPlanned = computed(() =>
     toNumberOrZero(liquidityMonthlySummary.value?.planned_total),
