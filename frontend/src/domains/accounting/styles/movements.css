@@ -370,6 +370,33 @@
   font-size: 0.84rem;
 }
 
+.ui-entry-action-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.ui-entry-action-edit {
+  color: rgba(240, 244, 255, 0.88);
+}
+
+.ui-entry-action-edit:hover:not(:disabled) {
+  border-color: rgba(147, 197, 253, 0.42);
+  background: rgba(147, 197, 253, 0.12);
+  color: rgba(219, 234, 254, 0.98);
+}
+
+.ui-entry-action-delete {
+  color: rgba(254, 202, 202, 0.94);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.ui-entry-action-delete:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.56);
+  background: rgba(248, 113, 113, 0.14);
+  color: rgba(254, 226, 226, 1);
+}
+
 .ui-entry-inline-btn {
   min-width: 72px;
   padding: 6px 10px;

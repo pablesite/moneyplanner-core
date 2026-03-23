@@ -262,7 +262,7 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
       >
         <select v-model="page.quickEntryForm.investment_direction" class="select">
           <option value="inflow">Aporte (liquidez a inversion)</option>
-          <option value="outflow">Desinversion (inversion a liquidez)</option>
+          <option value="outflow">Retirada inversion (inversion a liquidez)</option>
         </select>
         <input
           v-model="page.quickEntryForm.realized_cost_basis"

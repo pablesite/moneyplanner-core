@@ -61,6 +61,8 @@ const xTickStep = computed(() => {
   return Math.ceil(props.points.length / 6);
 });
 
+const hasNegativePoints = computed(() => props.points.some((point) => point.value < 0));
+
 const chartData = computed<ChartData<'line'>>(() => ({
   labels: props.points.map((point) => point.shortLabel),
   datasets: [
@@ -142,8 +144,8 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
       },
     },
     y: {
-      beginAtZero: props.yAxisMinZero,
-      min: props.yAxisMinZero ? 0 : undefined,
+      beginAtZero: props.yAxisMinZero && !hasNegativePoints.value,
+      min: props.yAxisMinZero && !hasNegativePoints.value ? 0 : undefined,
       grid: {
         color: 'rgba(148, 163, 184, 0.12)',
       },

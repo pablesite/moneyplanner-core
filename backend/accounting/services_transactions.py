@@ -185,9 +185,15 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             )
         )
     if kind == "debt_payment":
-        return queryset.filter(Exists(entry_subquery.filter(liability_id__isnull=False)))
+        return queryset.filter(
+            ~Q(origin=LedgerTransaction.Origin.SYSTEM),
+            ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION),
+            Exists(entry_subquery.filter(liability_id__isnull=False)),
+        )
     if kind == "investment_purchase":
         return queryset.filter(
+            ~Q(origin=LedgerTransaction.Origin.SYSTEM),
+            ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION),
             Exists(
                 entry_subquery.filter(
                     asset_id__isnull=False,
