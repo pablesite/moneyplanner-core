@@ -20,6 +20,7 @@ type Props = {
   showFinancedAsset?: boolean;
   allowNegative?: boolean;
   mode?: 'create' | 'edit';
+  submitError?: string | null;
   initial?: Partial<{
     name: string;
     category: string;
@@ -79,6 +80,7 @@ type PrimaryHomeImprovementDraft = {
 };
 
 const props = defineProps<Props>();
+const saving = ref(false);
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -1461,8 +1463,13 @@ async function submit() {
   if (!normalizedAmount || error) return;
   const payload = buildItemFormPayload(normalizedAmount);
 
-  await props.onSubmit(payload);
-  resetFormAfterSubmit();
+  saving.value = true;
+  try {
+    await props.onSubmit(payload);
+    resetFormAfterSubmit();
+  } finally {
+    saving.value = false;
+  }
 }
 
 watch(
@@ -2457,6 +2464,9 @@ watch(
       </div>
 
       <div class="ui-item-form-footer ui-item-form-field-span-2">
+        <div v-if="submitError" class="ui-form-help ui-form-help-error ui-item-form-submit-error">
+          {{ submitError }}
+        </div>
         <div class="ui-form-actions ui-item-form-actions">
           <button v-if="onCancel" class="btn ui-form-action-btn" type="button" @click="onCancel">
             Cancelar
@@ -2464,6 +2474,7 @@ watch(
           <button
             class="btn btn-primary ui-form-action-btn"
             :disabled="
+              saving ||
               !!requiredFieldsError ||
               !!amountError ||
               !!annualInterestError ||
@@ -2480,7 +2491,8 @@ watch(
             "
             @click="submit"
           >
-            {{ isEdit ? 'Guardar' : 'Crear' }}
+            <span v-if="saving" class="ui-item-form-btn-spinner" />
+            {{ saving ? 'Guardando...' : (isEdit ? 'Guardar' : 'Crear') }}
           </button>
         </div>
       </div>

@@ -60,6 +60,7 @@ const {
   editCategories,
   editInitial,
   submitEdit,
+  editError,
 } = useNetWorthViewState();
 const annualExpenseStore = useAnnualExpenseStore('core');
 
@@ -740,6 +741,7 @@ const {
       :close-edit="closeEdit"
       :on-close-asset-modal="closeAssetModal"
       :on-close-liability-modal="closeLiabilityModal"
+      :edit-error="editError"
     />
 
     <BaseModal

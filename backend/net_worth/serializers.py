@@ -382,11 +382,13 @@ class AssetSerializer(serializers.ModelSerializer):
         )
         if account is None:
             return
-        ensure_net_worth_opening_balance_transaction(
+        from decimal import Decimal
+
+        sync_net_worth_opening_balance_transaction(
             user=asset.user,
             account=account,
-            amount=get_effective_asset_amount(asset=asset, as_of_date=timezone.localdate()),
-            booking_date=timezone.localdate(),
+            amount=Decimal(asset.amount or 0),
+            booking_date=asset.start_date or timezone.localdate(),
             asset=asset,
         )
 
