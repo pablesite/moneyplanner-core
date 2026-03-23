@@ -71,7 +71,7 @@ describe('ItemForm (saas)', () => {
     await wrapper.find('input[placeholder="Ej: 24"]').setValue('24');
 
     const dateInputs = wrapper.findAll('input[type="date"]');
-    expect((dateInputs[1]!.element as HTMLInputElement).value).toBe('2026-09-05');
+    expect((dateInputs[2]!.element as HTMLInputElement).value).toBe('2026-09-05');
   });
 
   it('shows amount validation errors', async () => {
@@ -644,7 +644,7 @@ describe('ItemForm (saas)', () => {
     await cancellationToggle.setValue(true);
 
     const dateInputs = wrapper.findAll('input[type="date"]');
-    await dateInputs[2]!.setValue('2027-06-15');
+    await dateInputs[dateInputs.length - 1]!.setValue('2027-06-15');
     const cancellationDetails = wrapper
       .findAll('details')
       .find((details) => details.find('summary').text().includes('Prevision de cancelacion'))!;

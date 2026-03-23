@@ -34,7 +34,14 @@ export function useNetWorthTimelineLayout(params: {
       return;
     }
 
-    const nextHeight = params.timelineColumnRef.value?.offsetHeight ?? null;
+    const timelineColumn = params.timelineColumnRef.value;
+    if (!timelineColumn) {
+      timelineSidebarHeight.value = null;
+      return;
+    }
+
+    // Use intrinsic content height to avoid feedback loops with stretched grid rows.
+    const nextHeight = Math.ceil(timelineColumn.scrollHeight || timelineColumn.offsetHeight || 0);
     timelineSidebarHeight.value = nextHeight && nextHeight > 0 ? nextHeight : null;
   }
 

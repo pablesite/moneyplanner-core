@@ -288,6 +288,17 @@ export function useNetWorthTimeline(params: {
     return currentTimelineSeriesColor.value;
   });
 
+  const timelineYAxisStartsAtZero = computed(() => {
+    if (params.selectedPosition.value) return true;
+    if (params.selectedTimelineCategory.value) {
+      return (
+        params.selectedTimelineCategoryType.value === 'asset' ||
+        params.selectedTimelineCategoryType.value === 'liability'
+      );
+    }
+    return false;
+  });
+
   return {
     displayedTimelineLoading,
     visibleTimelineRows,
@@ -298,5 +309,6 @@ export function useNetWorthTimeline(params: {
     latestTimelineChartPoint,
     timelineSummaryLabel: displayedTimelineSummaryLabel,
     displayedTimelineSeriesColor,
+    timelineYAxisStartsAtZero,
   };
 }

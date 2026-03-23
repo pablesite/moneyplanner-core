@@ -70,6 +70,7 @@ defineProps<{
   displayedTimelineUnit: string;
   timelineSummaryLabel: string;
   displayedTimelineSeriesColor: string;
+  timelineYAxisStartsAtZero: boolean;
   formatNumber: (value: number, decimals?: number) => string;
   timelineChartRows: TimelineRow[];
   showAccountingActivityBlock: boolean;
@@ -157,6 +158,7 @@ defineProps<{
           :unit="displayedTimelineUnit"
           :series-label="timelineSummaryLabel"
           :series-color="displayedTimelineSeriesColor"
+          :y-axis-min-zero="timelineYAxisStartsAtZero"
         />
       </div>
 

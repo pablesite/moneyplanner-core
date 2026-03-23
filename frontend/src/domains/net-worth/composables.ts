@@ -118,6 +118,7 @@ function buildEditScheduleFields(item: Asset | Liability) {
     deposit_term_months: item.deposit_term_months ?? '',
     monthly_payment_amount: item.monthly_payment_amount ?? '',
     start_date: item.start_date ?? '',
+    payment_start_date: item.payment_start_date ?? item.start_date ?? '',
     expected_end_date: item.expected_end_date ?? '',
     term_months: item.term_months ?? '',
     rate_type: item.rate_type ?? 'fixed',

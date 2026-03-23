@@ -3,7 +3,6 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounting.services_ledger import (
-    ensure_net_worth_opening_balance_transaction,
     get_user_ledger_account,
     sync_net_worth_opening_balance_transaction,
 )
@@ -501,6 +500,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "accounting_integration_state",
             "currency",
             "start_date",
+            "payment_start_date",
             "expected_end_date",
             "term_months",
             "principal_amount",
@@ -547,6 +547,10 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "annual_interest_tae", getattr(self.instance, "annual_interest_tae", None)
         )
         start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        payment_start_date = attrs.get(
+            "payment_start_date",
+            getattr(self.instance, "payment_start_date", None),
+        )
         expected_end_date = attrs.get(
             "expected_end_date", getattr(self.instance, "expected_end_date", None)
         )
@@ -593,6 +597,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             category=category,
             annual_interest_tae=annual_interest_tae,
             start_date=start_date,
+            payment_start_date=payment_start_date,
             expected_end_date=expected_end_date,
             payment_frequency=payment_frequency,
             term_months=term_months,

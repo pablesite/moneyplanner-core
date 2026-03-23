@@ -39,6 +39,13 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 3. The category workspace also exposes direct creation actions for new assets or liabilities in that context.
 4. The selected position can show its own timeline plus events and checkpoints.
 
+## Liability form (loan grace period)
+1. Liability creation/edit now separates:
+   - `Fecha contratación préstamo` (`start_date`)
+   - `Fecha inicio pago` (`payment_start_date`, optional)
+2. When `payment_start_date` is set, the installment schedule is anchored to that date.
+3. When `payment_start_date` is empty, legacy behavior is preserved (first installment one period after `start_date`).
+
 ## UX principles of the current view
 1. Keep the main financial picture visible at the top.
 2. Let the user move from summary to category to position without losing context.

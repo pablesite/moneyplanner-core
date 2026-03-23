@@ -23,6 +23,7 @@ export type Asset = {
   accounting_integration_state?: 'linked' | 'auto_created' | 'needs_review' | null;
   currency: string;
   start_date?: string;
+  payment_start_date?: string | null;
   investment_contribution_mode?: 'one_time' | 'periodic_contribution';
   investment_contribution_frequency?: 'monthly' | 'weekly';
   investment_contribution_currency?: string | null;
