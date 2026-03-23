@@ -27,7 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| _(Sin tareas Agente inmediatas en cola)_ | — | Las tareas delegables de investment flow + importador outflows quedaron aplicadas; el foco inmediato vuelve a pulido manual de Movimientos v1. | — |
+| Movimientos — paginación servidor | Agente | Cursor pagination en el endpoint de transacciones + filtros server-side para eliminar la carga completa en frontend. | `core/docs/tasks/accounting/server-side-pagination/backend.md` + `core/docs/tasks/accounting/server-side-pagination/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
