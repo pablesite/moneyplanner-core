@@ -75,7 +75,6 @@ function formatPercent(n: number, decimals = 0) {
 }
 
 const assets = computed(() => Math.max(0, toNumber(props.totalAssets)));
-const liabilities = computed(() => Math.max(0, toNumber(props.totalLiabilities)));
 const net = computed(() => toNumber(props.netWorth));
 
 const backedRaw = computed(() => Math.max(0, toNumber(props.assetBackedLiabilities)));
@@ -99,22 +98,25 @@ function buildCategoryShares(
   labels: string[] | null | undefined,
   values: number[] | null | undefined,
   counts: number[] | null | undefined,
-  total: number,
 ) {
-  if (!keys?.length || !labels?.length || !values?.length || total <= 0)
-    return [] as CategoryShare[];
-  return labels
-    .map((label, index) => {
-      const value = Math.max(0, values[index] ?? 0);
-      return {
-        key: keys[index] ?? label,
-        label,
-        value,
-        share: total > 0 ? value / total : 0,
-        count: Math.max(0, counts?.[index] ?? 0),
-      };
-    })
-    .filter((item) => item.value > 0)
+  if (!keys?.length || !labels?.length || !values?.length) return [] as CategoryShare[];
+  const items = labels.map((label, index) => {
+    const value = Math.max(0, values[index] ?? 0);
+    return {
+      key: keys[index] ?? label,
+      label,
+      value,
+      share: 0,
+      count: Math.max(0, counts?.[index] ?? 0),
+    };
+  });
+  const positiveTotal = items.reduce((sum, item) => sum + item.value, 0);
+  return items
+    .map((item) => ({
+      ...item,
+      share: positiveTotal > 0 ? item.value / positiveTotal : 0,
+    }))
+    .filter((item) => item.value >= 0 && (item.value > 0 || item.count > 0))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 }
@@ -125,7 +127,6 @@ const assetComposition = computed(() =>
     props.categoryLabels,
     props.categoryAssets,
     props.categoryAssetCounts,
-    assets.value,
   ),
 );
 const liabilityComposition = computed(() =>
@@ -134,7 +135,6 @@ const liabilityComposition = computed(() =>
     props.categoryLabels,
     props.categoryLiabilities,
     props.categoryLiabilityCounts,
-    liabilities.value,
   ),
 );
 
