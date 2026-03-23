@@ -31,6 +31,7 @@ type Props = {
     deposit_term_months?: number | string | null;
     monthly_payment_amount?: string | null;
     start_date: string;
+    payment_start_date?: string | null;
     expected_end_date?: string | null;
     investment_contribution_mode?: 'one_time' | 'periodic_contribution';
     investment_contribution_frequency?: 'monthly' | 'weekly';
@@ -274,6 +275,7 @@ const form = reactive({
   deposit_term_months: '',
   monthly_payment_amount: '',
   start_date: todayIsoDate(),
+  payment_start_date: '',
   expected_end_date: '',
   investment_contribution_mode: 'one_time',
   investment_contribution_frequency: 'monthly',
@@ -866,10 +868,25 @@ function validatePrimaryHomeValuationFields(): string {
   return '';
 }
 
+function getLiabilityScheduleAnchorDate(): string {
+  const paymentStartDate = String(form.payment_start_date ?? '').trim();
+  if (paymentStartDate) return paymentStartDate;
+  return String(form.start_date ?? '').trim();
+}
+
+// eslint-disable-next-line complexity
 function validateLiabilityScheduleFields(): string {
   const hasTerm = String(form.term_months ?? '').trim().length > 0;
   const hasEndDate = String(form.expected_end_date ?? '').trim().length > 0;
   const paymentFrequency = String(form.payment_frequency ?? '').trim();
+  const scheduleAnchorDate = getLiabilityScheduleAnchorDate();
+  if (
+    String(form.payment_start_date ?? '').trim() &&
+    String(form.start_date ?? '').trim() &&
+    scheduleAnchorDate < String(form.start_date ?? '').trim()
+  ) {
+    return 'Fecha inicio pago debe ser >= fecha contratacion.';
+  }
   if (!hasTerm && !hasEndDate) return 'Indica cuotas o fecha fin (uno de los dos es obligatorio)';
   if (hasTerm) {
     const term = Number(String(form.term_months).trim());
@@ -878,18 +895,18 @@ function validateLiabilityScheduleFields(): string {
       return 'En frecuencia trimestral, el plazo se indica en meses y debe ser multiplo de 3 (ej: 12, 24).';
     }
   }
-  if (hasEndDate && form.start_date) {
+  if (hasEndDate) {
     const inferredMonths = monthsBetweenPreserveDayIso(
-      String(form.start_date),
+      scheduleAnchorDate,
       String(form.expected_end_date),
     );
     if (inferredMonths == null && !liabilityDatesError.value) {
       return 'La fecha fin no encaja con la fecha inicio y una cuota mensual exacta';
     }
   }
-  if (hasTerm && hasEndDate && form.start_date) {
+  if (hasTerm && hasEndDate) {
     const expectedFromTerm = addMonthsPreserveDayIso(
-      String(form.start_date),
+      scheduleAnchorDate,
       Number(String(form.term_months).trim()),
     );
     if (expectedFromTerm && expectedFromTerm !== String(form.expected_end_date)) {
@@ -1039,7 +1056,9 @@ function buildInvestmentPayload(normalizedAmount: string): Partial<ItemFormPaylo
 
 // eslint-disable-next-line complexity
 function buildLiabilityPayload(): Partial<ItemFormPayload> {
+  const paymentStartDate = String(form.payment_start_date ?? '').trim();
   return {
+    payment_start_date: isLiabilityForm.value && paymentStartDate ? paymentStartDate : undefined,
     term_months:
       showLiabilityAdvancedFields.value && String(form.term_months ?? '').trim()
         ? Number(String(form.term_months).trim())
@@ -1138,6 +1157,7 @@ function resetFormAfterSubmit(): void {
   form.deposit_term_months = '';
   form.monthly_payment_amount = '';
   form.start_date = todayIsoDate();
+  form.payment_start_date = '';
   form.expected_end_date = '';
   form.investment_contribution_mode = 'one_time';
   form.investment_contribution_frequency = 'monthly';
@@ -1220,6 +1240,7 @@ function populateFormFromInitial(initial: NonNullable<Props['initial']>): void {
     initial.deposit_term_months == null ? '' : String(initial.deposit_term_months);
   form.monthly_payment_amount = initial.monthly_payment_amount ?? '';
   form.start_date = initial.start_date ?? todayIsoDate();
+  form.payment_start_date = initial.payment_start_date ?? '';
   form.expected_end_date = initial.expected_end_date ?? '';
   form.investment_contribution_mode = initial.investment_contribution_mode ?? 'one_time';
   form.investment_contribution_frequency = initial.investment_contribution_frequency ?? 'monthly';
@@ -1399,8 +1420,16 @@ const primaryHomeValuationError = computed(() => {
 });
 const liabilityDatesError = computed(() => {
   if (!showLiabilityAdvancedFields.value) return '';
-  if (!form.expected_end_date || !form.start_date) return '';
-  return form.expected_end_date < form.start_date ? 'Fecha fin debe ser >= fecha inicio' : '';
+  const paymentStartDate = getLiabilityScheduleAnchorDate();
+  if (
+    String(form.start_date ?? '').trim() &&
+    paymentStartDate &&
+    paymentStartDate < String(form.start_date).trim()
+  ) {
+    return 'Fecha inicio pago debe ser >= fecha contratacion.';
+  }
+  if (!form.expected_end_date || !paymentStartDate) return '';
+  return form.expected_end_date < paymentStartDate ? 'Fecha fin debe ser >= fecha inicio pago' : '';
 });
 const liabilityScheduleError = computed(() => {
   if (!showLiabilityAdvancedFields.value) return '';
@@ -1411,7 +1440,8 @@ const cancellationForecastError = computed(() => {
   if (!form.cancellation_forecast_enabled) return '';
   const cancellationDate = String(form.cancellation_date ?? '').trim();
   if (!cancellationDate) return 'Indica la fecha prevista de cancelacion.';
-  if (String(form.start_date ?? '').trim() && cancellationDate < String(form.start_date).trim()) {
+  const referenceDate = getLiabilityScheduleAnchorDate() || String(form.start_date ?? '').trim();
+  if (referenceDate && cancellationDate < referenceDate) {
     return 'Fecha de cancelacion debe ser >= fecha inicio.';
   }
   const feeSanitized = sanitizeAmount(form.cancellation_fee_amount, maxDecimals.value);
@@ -1536,7 +1566,7 @@ watch(
       form.cancellation_date = '';
       form.cancellation_fee_amount = '';
     } else if (!String(form.cancellation_date ?? '').trim()) {
-      form.cancellation_date = String(form.start_date ?? '').trim() || todayIsoDate();
+      form.cancellation_date = getLiabilityScheduleAnchorDate() || todayIsoDate();
     }
   },
 );
@@ -1641,7 +1671,7 @@ watch(
 
 function syncExpectedEndDateFromTerm(): void {
   if (!showLiabilityAdvancedFields.value) return;
-  const startDate = String(form.start_date ?? '').trim();
+  const startDate = getLiabilityScheduleAnchorDate();
   const termRaw = String(form.term_months ?? '').trim();
   if (!startDate || !termRaw) return;
   const term = Number(termRaw);
@@ -1654,7 +1684,7 @@ function syncExpectedEndDateFromTerm(): void {
 
 function syncTermFromExpectedEndDate(): void {
   if (!showLiabilityAdvancedFields.value) return;
-  const startDate = String(form.start_date ?? '').trim();
+  const startDate = getLiabilityScheduleAnchorDate();
   const endDate = String(form.expected_end_date ?? '').trim();
   if (!startDate || !endDate) return;
   const inferredMonths = monthsBetweenPreserveDayIso(startDate, endDate);
@@ -1686,28 +1716,33 @@ function onLiabilityEndDateInput(): void {
   syncLinkedLiabilityScheduleField('end');
 }
 
+function onLiabilityPaymentStartDateInput(): void {
+  if (activeLiabilityFieldGroup.value === 'end') {
+    syncLinkedLiabilityScheduleField('end');
+    return;
+  }
+  syncLinkedLiabilityScheduleField('term');
+}
+
 function onFinancedAssetChange(): void {
   financedAssetManuallySelected.value = true;
   financedAssetAutoMatched.value = false;
 }
 
-watch(
-  () => form.start_date,
-  () => {
-    if (!showLiabilityAdvancedFields.value || syncingScheduleFields) return;
-    if (activeLiabilityFieldGroup.value === 'end') {
-      syncLinkedLiabilityScheduleField('end');
-      return;
-    }
-    if (String(form.term_months ?? '').trim()) {
-      syncLinkedLiabilityScheduleField('term');
-      return;
-    }
-    if (String(form.expected_end_date ?? '').trim()) {
-      syncLinkedLiabilityScheduleField('end');
-    }
-  },
-);
+watch([() => form.start_date, () => form.payment_start_date], () => {
+  if (!showLiabilityAdvancedFields.value || syncingScheduleFields) return;
+  if (activeLiabilityFieldGroup.value === 'end') {
+    syncLinkedLiabilityScheduleField('end');
+    return;
+  }
+  if (String(form.term_months ?? '').trim()) {
+    syncLinkedLiabilityScheduleField('term');
+    return;
+  }
+  if (String(form.expected_end_date ?? '').trim()) {
+    syncLinkedLiabilityScheduleField('end');
+  }
+});
 </script>
 
 <template>
@@ -1769,7 +1804,7 @@ watch(
 
       <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
         <span class="ui-item-form-label">{{
-          isLiabilityForm ? 'Fecha inicio préstamo' : 'Fecha inicio'
+          isLiabilityForm ? 'Fecha contratación préstamo' : 'Fecha inicio'
         }}</span>
         <input v-model="form.start_date" type="date" class="input ui-data-field" />
       </label>
@@ -2211,12 +2246,22 @@ watch(
           <div>
             <div class="ui-item-form-section-title">Calendario y condiciones</div>
             <div class="ui-item-form-section-subtitle">
-              Indica <strong>cuotas</strong> o <strong>fecha fin</strong>. Se calcula la otra.
+              Indica <strong>inicio de pago</strong>, y despues <strong>cuotas</strong> o
+              <strong>fecha fin</strong>. Se calcula la otra.
             </div>
           </div>
           <span class="badge">Requerido</span>
         </div>
         <div class="ui-item-form-inline-grid">
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Fecha inicio pago</span>
+            <input
+              v-model="form.payment_start_date"
+              type="date"
+              class="input ui-data-field"
+              @change="onLiabilityPaymentStartDateInput"
+            />
+          </label>
           <label class="ui-item-form-field">
             <span class="ui-item-form-label">Fecha fin</span>
             <input
@@ -2492,7 +2537,7 @@ watch(
             @click="submit"
           >
             <span v-if="saving" class="ui-item-form-btn-spinner" />
-            {{ saving ? 'Guardando...' : (isEdit ? 'Guardar' : 'Crear') }}
+            {{ saving ? 'Guardando...' : isEdit ? 'Guardar' : 'Crear' }}
           </button>
         </div>
       </div>

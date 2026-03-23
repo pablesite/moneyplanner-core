@@ -431,6 +431,14 @@ class Liability(models.Model):
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del pasivo.",
     )
+    payment_start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Fecha de la primera cuota. Si se deja vacia, se usa el comportamiento "
+            "legacy (primera cuota un periodo despues de start_date)."
+        ),
+    )
     expected_end_date = models.DateField(
         null=True,
         blank=True,

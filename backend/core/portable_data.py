@@ -208,6 +208,7 @@ def _build_liability_payload(
         "accounting_account_id": liability.get("accounting_account_id"),
         "currency": str(liability.get("currency", "EUR")).upper(),
         "start_date": liability.get("start_date"),
+        "payment_start_date": normalize_optional_text(liability.get("payment_start_date")),
         "expected_end_date": normalize_optional_text(liability.get("expected_end_date")),
         "term_months": liability.get("term_months"),
         "rate_type": normalize_optional_text(liability.get("rate_type")) or "fixed",

@@ -492,6 +492,7 @@ const {
   latestTimelineChartPoint,
   timelineSummaryLabel,
   displayedTimelineSeriesColor,
+  timelineYAxisStartsAtZero,
 } = useNetWorthTimeline({
   ownershipFilter,
   selectedPosition,
@@ -611,6 +612,7 @@ const {
               "
               :timeline-summary-label="timelineSummaryLabel"
               :displayed-timeline-series-color="displayedTimelineSeriesColor"
+              :timeline-y-axis-starts-at-zero="timelineYAxisStartsAtZero"
               :format-number="formatNumber"
               :timeline-chart-rows="timelineChartRows"
               :show-accounting-activity-block="showAccountingActivityBlock"
@@ -676,6 +678,7 @@ const {
                 :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
                 :series-label="timelineSummaryLabel"
                 :series-color="displayedTimelineSeriesColor"
+                :y-axis-min-zero="timelineYAxisStartsAtZero"
                 expanded
               />
             </div>

@@ -171,6 +171,7 @@ def validate_liability_payload(
     category: str | None,
     annual_interest_tae,
     start_date,
+    payment_start_date=None,
     expected_end_date,
     payment_frequency: str | None = None,
     term_months=None,
@@ -201,8 +202,14 @@ def validate_liability_payload(
             {"annual_interest_tae": "Requerido para hipoteca, prestamo personal y tarjeta."}
         )
 
-    if start_date and expected_end_date and expected_end_date < start_date:
-        raise DRFValidationError({"expected_end_date": "Debe ser igual o posterior a start_date."})
+    if start_date and payment_start_date and payment_start_date < start_date:
+        raise DRFValidationError({"payment_start_date": "Debe ser igual o posterior a start_date."})
+
+    schedule_anchor_date = payment_start_date or start_date
+    if schedule_anchor_date and expected_end_date and expected_end_date < schedule_anchor_date:
+        raise DRFValidationError(
+            {"expected_end_date": "Debe ser igual o posterior a payment_start_date."}
+        )
 
     if cancellation_forecast_enabled:
         if category != Liability.Category.MORTGAGE:
@@ -412,8 +419,13 @@ def _add_months_preserve_day(value: date, months: int) -> date:
 
 
 def get_liability_first_payment_date(
-    *, start_date: date, payment_frequency: str | None = None
+    *,
+    start_date: date,
+    payment_frequency: str | None = None,
+    payment_start_date: date | None = None,
 ) -> date:
+    if payment_start_date is not None:
+        return payment_start_date
     period_months = _liability_period_months(payment_frequency=payment_frequency) or 1
     return _add_months_preserve_day(start_date, period_months)
 
@@ -463,7 +475,9 @@ def build_liability_installment_schedule_simple(
         return []
     total_installments = term_months_int // period_months
     first_due = get_liability_first_payment_date(
-        start_date=liability.start_date, payment_frequency=liability.payment_frequency
+        start_date=liability.start_date,
+        payment_frequency=liability.payment_frequency,
+        payment_start_date=getattr(liability, "payment_start_date", None),
     )
 
     for idx in range(total_installments):

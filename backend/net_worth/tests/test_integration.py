@@ -399,6 +399,26 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(liability_res.data["start_date"], "2021-06-15")
+        self.assertIsNone(liability_res.data["payment_start_date"])
+
+    def test_liability_create_accepts_payment_start_date_after_contratacion(self):
+        liability_res = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Prestamo con carencia",
+                "category": Liability.Category.PERSONAL_LOAN,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2024-02-01",
+                "payment_start_date": "2024-09-21",
+                "annual_interest_tae": "5.20",
+                "amount": "12000.00",
+                "term_months": 24,
+            },
+            format="json",
+        )
+        self.assertEqual(liability_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(liability_res.data["payment_start_date"], "2024-09-21")
 
     def test_asset_create_no_longer_backfills_fx_history_inline(self):
         response = self.client.post(

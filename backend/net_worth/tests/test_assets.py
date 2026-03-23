@@ -495,6 +495,43 @@ class NetWorthServicesTests(TestCase):
         # quedan 7 cuotas -> 7000 con principal 24000 a 0%.
         self.assertEqual(outstanding, Decimal("7000.00000000"))
 
+    def test_validate_liability_payload_rejects_payment_start_date_before_start_date(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.PERSONAL_LOAN,
+                annual_interest_tae=Decimal("5.00"),
+                start_date=date(2024, 2, 1),
+                payment_start_date=date(2024, 1, 31),
+                expected_end_date=date(2026, 2, 1),
+            )
+
+    def test_estimate_liability_outstanding_amount_simple_uses_payment_start_date_when_present(
+        self,
+    ):
+        liability = Liability(
+            user=self.user,
+            name="ATRIO",
+            category=Liability.Category.OTHER,
+            currency="EUR",
+            start_date=date(2024, 2, 1),
+            payment_start_date=date(2024, 9, 21),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("24000.00"),
+            principal_amount=Decimal("24000.00"),
+            term_months=24,
+            rate_type=Liability.RateType.FIXED,
+            payment_frequency=Liability.PaymentFrequency.MONTHLY,
+            amortization_system=Liability.AmortizationSystem.FRENCH,
+            is_active=True,
+        )
+        outstanding = estimate_liability_outstanding_amount_simple(
+            liability=liability, as_of_date=date(2024, 10, 20)
+        )
+        # Primera cuota exactamente en 2024-09-21: a 2024-10-20 solo hay una cuota pagada.
+        self.assertEqual(outstanding, Decimal("23000.00000000"))
+
     def test_validate_snapshot_payload_computes_or_validates_net_worth(self):
         computed = validate_snapshot_payload(
             total_assets=Decimal("100.00"),
@@ -1451,7 +1488,9 @@ class NetWorthServicesTests(TestCase):
             description="Saldo inicial contable: Hipoteca",
             status=LedgerTransaction.Status.POSTED,
             origin=LedgerTransaction.Origin.SYSTEM,
-            notes=build_net_worth_opening_balance_note(position_kind="liability", position_id=liability.id),
+            notes=build_net_worth_opening_balance_note(
+                position_kind="liability", position_id=liability.id
+            ),
         )
         LedgerEntry.objects.create(
             transaction=opening_tx,

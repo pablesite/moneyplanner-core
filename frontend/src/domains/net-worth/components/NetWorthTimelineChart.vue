@@ -30,12 +30,14 @@ type Props = {
   ariaLabel?: string;
   seriesColor?: string;
   expanded?: boolean;
+  yAxisMinZero?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
   ariaLabel: 'Grafico de evolucion patrimonial',
   seriesColor: '#4cc3ff',
   expanded: false,
+  yAxisMinZero: false,
 });
 
 function formatNumber(n: number, decimals = 2): string {
@@ -140,6 +142,8 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
       },
     },
     y: {
+      beginAtZero: props.yAxisMinZero,
+      min: props.yAxisMinZero ? 0 : undefined,
       grid: {
         color: 'rgba(148, 163, 184, 0.12)',
       },
