@@ -8,6 +8,7 @@ from django.test import TestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+from accounting.services_ledger import build_net_worth_opening_balance_note
 from core.models import InflationIndex
 from ..models import (
     Asset,
@@ -1387,6 +1388,89 @@ class NetWorthServicesTests(TestCase):
         self.assertEqual(
             get_effective_liability_amount(liability=liability, as_of_date=date(2026, 2, 28)),
             Decimal("80000.00"),
+        )
+
+    def test_get_effective_liability_amount_anchors_to_opening_balance_when_present(self):
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Hipoteca contable",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=liability_account.id,
+            currency="EUR",
+            start_date=date(2024, 1, 1),
+            annual_interest_tae=Decimal("2.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+
+        historical_payment = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Pago historico importado",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_payment,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("900.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_payment,
+            account=asset_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("900.00"),
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial contable: Hipoteca",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=build_net_worth_opening_balance_note(position_kind="liability", position_id=liability.id),
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(
+            get_effective_liability_amount(liability=liability, as_of_date=date(2026, 3, 31)),
+            Decimal("1000.00"),
         )
 
     def test_get_liability_events_delta_applies_signs(self):

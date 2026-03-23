@@ -69,6 +69,7 @@ This leaves a gap:
    - liquidity monthly check-ins stay as fallback and reconciliation support during transition
 4. Investments
    - contributions, withdrawals, fees, and income should move toward transaction-driven activity
+   - investment flows should be modeled as one bidirectional operation with explicit direction (`inflow` / `outflow`), not as unrelated income plus transfer shortcuts
    - legacy investment events remain available until explicit replacement
 5. Debt and patrimonial purchases
    - debt payment transactions should model principal and cost separately
@@ -120,7 +121,7 @@ This leaves a gap:
    - support account-to-account transfers between liquidity accounts
    - keep transfer semantics explicit and balanced
 4. Investment and debt flows
-   - support investment purchases and withdrawals
+   - support bidirectional investment flows (`inflow` / `outflow`) between liquidity and investment accounts
    - support debt payments with principal and interest separation
 5. Budget-derived aggregates
    - expose historical monthly aggregates and suggestion-ready series for planning

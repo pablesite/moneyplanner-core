@@ -109,6 +109,10 @@
   align-items: center;
 }
 
+.ui-accounting-filters-2col {
+  grid-template-columns: 148px 148px;
+}
+
 .ui-accounting-filters-3col {
   grid-template-columns: 1fr 148px 148px;
 }
@@ -498,6 +502,52 @@
   border-top: 0;
 }
 
+.ui-import-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(11, 12, 16, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.ui-import-loading-overlay p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.01em;
+}
+
+.ui-import-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(45, 212, 191, 0.15);
+  border-top-color: #2dd4bf;
+  border-radius: 50%;
+  animation: ui-spin 0.75s linear infinite;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ui-section-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 16px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+}
+
 .ui-accounting-edit-form {
   gap: 14px;
 }
@@ -780,4 +830,136 @@
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* -- Account catalog accordion ---------------------------------- */
+.ui-catalog-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px 16px;
+}
+
+.ui-catalog-group {
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ui-catalog-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ui-catalog-group-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ui-catalog-group-label {
+  flex: 1;
+}
+
+.ui-catalog-group-count {
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 7px;
+  border-radius: 20px;
+}
+
+.ui-catalog-group-chevron {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.2s;
+  transform: rotate(-90deg);
+}
+
+.ui-catalog-group-chevron.open {
+  transform: rotate(0deg);
+}
+
+.ui-catalog-group-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-catalog-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 10px 20px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s;
+}
+
+.ui-catalog-account-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ui-catalog-account-row.selected {
+  background: rgba(0, 188, 167, 0.1);
+  border-left: 3px solid #00bca7;
+  color: #fff;
+}
+
+.ui-catalog-account-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-catalog-account-balance {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ui-catalog-account-row.selected .ui-catalog-account-balance {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ui-catalog-transactions {
+  padding: 0 0 8px 0;
+  border-top: 1px solid rgba(0, 188, 167, 0.2);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.ui-catalog-transactions .ui-entry-list {
+  padding: 0;
+}
+
+.ui-catalog-transactions .ui-load-more {
+  padding: 12px 14px;
+}
+
+.ui-catalog-transactions .ui-load-more-hint {
+  padding: 8px 14px;
+}
+
+.ui-catalog-transactions .ui-state-block {
+  padding: 24px 14px;
 }

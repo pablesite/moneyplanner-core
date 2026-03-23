@@ -46,7 +46,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - row fingerprint idempotency persisted on `LedgerTransaction`
    - safe fallback classification when MoneyWiz categories do not map exactly
    - automatic creation of missing operational ledger accounts
-3. The frontend workspace for accounting consumes this API directly in Core and mirrors the same flow in SaaS.
+3. The accounting movement contract is evolving from purchase-only investment support to a bidirectional investment flow with explicit direction (`inflow` / `outflow`), while preserving legacy compatibility for existing `investment_purchase` writers during transition.
+4. The frontend workspace for accounting consumes this API directly in Core and mirrors the same flow in SaaS.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

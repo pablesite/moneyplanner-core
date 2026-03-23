@@ -287,6 +287,55 @@ class NetWorthApiTests(APITestCase):
             ).exists()
         )
 
+    def test_liability_accounting_opening_balance_is_resynced_on_edit(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo manual",
+            category=Liability.Category.PERSONAL_LOAN,
+            tracking_mode=Liability.TrackingMode.MANUAL,
+            currency="EUR",
+            annual_interest_tae=Decimal("5.00"),
+            amount=Decimal("900.00"),
+            start_date=date(2026, 3, 18),
+            is_active=True,
+        )
+
+        to_accounting_res = self.client.patch(
+            f"/api/net-worth/liabilities/{liability.id}/",
+            {"tracking_mode": Liability.TrackingMode.ACCOUNTING},
+            format="json",
+        )
+        self.assertEqual(to_accounting_res.status_code, status.HTTP_200_OK, to_accounting_res.data)
+
+        opening_note = f"net_worth_opening_balance:liability:{liability.id}"
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=opening_note,
+        )
+        self.assertEqual(opening_tx.booking_date, date(2026, 3, 18))
+
+        update_res = self.client.patch(
+            f"/api/net-worth/liabilities/{liability.id}/",
+            {
+                "start_date": "2020-01-01",
+                "amount": "1200.00",
+            },
+            format="json",
+        )
+        self.assertEqual(update_res.status_code, status.HTTP_200_OK, update_res.data)
+
+        self.assertEqual(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.SYSTEM,
+                notes=opening_note,
+            ).count(),
+            1,
+        )
+        opening_tx.refresh_from_db()
+        self.assertEqual(opening_tx.booking_date, date(2020, 1, 1))
+
     def test_liability_create_rejects_missing_tae_for_mortgage(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",

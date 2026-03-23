@@ -38,6 +38,7 @@ export function useAccountingMovementsPage() {
     liquidityAccounts,
     availableManualPositionOptions,
     accountDisplayName,
+    accountPositionMetaByAccountId,
     hasAvailableManualPositions,
     annualIncomeOptionsCompatible,
     annualExpenseOptionsCompatible,
@@ -94,7 +95,7 @@ export function useAccountingMovementsPage() {
 
   function formatDate(isoDate: string): string {
     const d = new Date(isoDate + 'T00:00:00');
-    return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(d);
+    return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
   }
 
   function formatMoney(value: number, currency = 'EUR'): string {
@@ -157,6 +158,43 @@ export function useAccountingMovementsPage() {
       (type) => (accountsByType.value.get(type.value)?.length ?? 0) > 0,
     ),
   );
+  const groupedCuentasAccounts = computed(() => {
+    type Group = {
+      key: string;
+      label: string;
+      positionType: 'asset' | 'liability';
+      accounts: (typeof operationalAccounts.value)[number][];
+    };
+    const groups = new Map<string, Group>();
+    for (const account of operationalAccounts.value) {
+      const meta = accountPositionMetaByAccountId.value.get(account.id);
+      const posType: 'asset' | 'liability' =
+        (meta?.position_type as 'asset' | 'liability') ??
+        (account.account_type === 'asset' ? 'asset' : 'liability');
+      const category = meta?.category ?? 'other';
+      const key = `${posType}:${category}`;
+      if (!groups.has(key)) {
+        const labels =
+          posType === 'asset' ? assetActivationCategoryLabels : liabilityActivationCategoryLabels;
+        groups.set(key, { key, label: labels[category] ?? category, positionType: posType, accounts: [] });
+      }
+      groups.get(key)!.accounts.push(account);
+    }
+    for (const group of groups.values()) {
+      group.accounts.sort((a, b) =>
+        accountDisplayName(a).localeCompare(accountDisplayName(b), 'es', { sensitivity: 'base' }),
+      );
+    }
+    const allOrderedKeys = [
+      ...assetActivationCategoryOrder.map((k) => `asset:${k}`),
+      ...liabilityActivationCategoryOrder.map((k) => `liability:${k}`),
+    ];
+    const ordered = [
+      ...allOrderedKeys.filter((k) => groups.has(k)),
+      ...Array.from(groups.keys()).filter((k) => !allOrderedKeys.includes(k)),
+    ];
+    return ordered.filter((k) => groups.has(k)).map((k) => groups.get(k)!);
+  });
   function formatSignedMoney(value: number, currency = 'EUR'): string {
     if (value > 0) return `+${formatMoney(value, currency)}`;
     if (value < 0) return `-${formatMoney(Math.abs(value), currency)}`;
@@ -451,6 +489,7 @@ export function useAccountingMovementsPage() {
     liquidityAccounts,
     availableManualPositionOptions,
     accountDisplayName,
+    accountPositionMetaByAccountId,
     hasAvailableManualPositions,
     annualIncomeOptionsCompatible,
     annualExpenseOptionsCompatible,
@@ -468,6 +507,7 @@ export function useAccountingMovementsPage() {
     editEntryReady,
     summaryRows,
     activeTab,
+    groupedCuentasAccounts,
     cuentasSelectedAccountId,
     cuentasSelectedAccount,
     cuentasDateFrom,

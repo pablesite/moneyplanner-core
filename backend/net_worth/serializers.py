@@ -5,6 +5,7 @@ from rest_framework import serializers
 from accounting.services_ledger import (
     ensure_net_worth_opening_balance_transaction,
     get_user_ledger_account,
+    sync_net_worth_opening_balance_transaction,
 )
 from .models import (
     Asset,
@@ -681,13 +682,13 @@ class LiabilitySerializer(serializers.ModelSerializer):
         )
         if account is None:
             return
-        ensure_net_worth_opening_balance_transaction(
+        opening_date = liability.start_date or timezone.localdate()
+        opening_amount = liability.amount
+        sync_net_worth_opening_balance_transaction(
             user=liability.user,
             account=account,
-            amount=get_effective_liability_amount(
-                liability=liability, as_of_date=timezone.localdate()
-            ),
-            booking_date=timezone.localdate(),
+            amount=opening_amount,
+            booking_date=opening_date,
             liability=liability,
         )
 

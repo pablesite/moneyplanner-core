@@ -579,7 +579,14 @@ def get_effective_liability_amount(
             return liability.amount
 
         from accounting.models import LedgerTransaction
-        from accounting.services_ledger import get_account_balance, has_account_entries
+        from accounting.services_ledger import (
+            build_net_worth_opening_balance_note,
+            compute_account_balance_from_totals,
+            compute_entry_balance_totals,
+            get_account_entries,
+            get_account_balance,
+            has_account_entries,
+        )
 
         accounting_account = _get_accounting_liability_account(
             user_id=liability.user_id,
@@ -594,6 +601,38 @@ def get_effective_liability_amount(
                 status=cast(str, LedgerTransaction.Status.POSTED),
             )
         ):
+            posted_status = cast(str, LedgerTransaction.Status.POSTED)
+            opening_note = build_net_worth_opening_balance_note(
+                position_kind="liability",
+                position_id=liability.id,
+            )
+            opening_tx = (
+                LedgerTransaction.objects.filter(
+                    user_id=liability.user_id,
+                    status=posted_status,
+                    notes=opening_note,
+                    entries__account_id=accounting_account.id,
+                )
+                .distinct()
+                .order_by("-booking_date", "-id")
+                .first()
+            )
+            if opening_tx is not None and ref_date >= opening_tx.booking_date:
+                anchored_entries = get_account_entries(
+                    account=accounting_account,
+                    as_of_date=ref_date,
+                    status=posted_status,
+                ).filter(transaction__booking_date__gte=opening_tx.booking_date)
+                if anchored_entries.exists():
+                    totals = compute_entry_balance_totals(
+                        anchored_entries,
+                        account_id=accounting_account.id,
+                    )
+                    return compute_account_balance_from_totals(
+                        account_type=accounting_account.account_type,
+                        totals=totals,
+                    )
+
             return get_account_balance(
                 account=accounting_account,
                 as_of_date=ref_date,
