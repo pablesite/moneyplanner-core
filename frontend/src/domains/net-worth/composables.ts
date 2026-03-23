@@ -344,7 +344,17 @@ export function useNetWorthViewState() {
   });
 
   const byCategoryFiltered = computed<ByCategoryRow[]>(() => {
-    return filterByCategoryRows(byCategoryChart.value);
+    const rows = filterByCategoryRows(byCategoryChart.value);
+    const existingKeys = new Set(rows.map((r) => r.key));
+    const zeroCats = new Set(
+      store.liabilities
+        .filter((l) => l.is_active !== false && l.category && !existingKeys.has(l.category))
+        .map((l) => l.category),
+    );
+    for (const key of zeroCats) {
+      rows.push({ key, a: 0, l: 0 });
+    }
+    return rows;
   });
 
   const byCategoryLabels = computed(() =>
