@@ -190,7 +190,7 @@ const editCounterpartyGroups = computed(() =>
       >
         <select v-model="page.editTransactionForm.investment_direction" class="select">
           <option value="inflow">Aporte (liquidez a inversion)</option>
-          <option value="outflow">Desinversion (inversion a liquidez)</option>
+          <option value="outflow">Retirada inversion (inversion a liquidez)</option>
         </select>
       </div>
       <p

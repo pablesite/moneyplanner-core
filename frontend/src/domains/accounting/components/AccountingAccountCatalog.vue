@@ -28,6 +28,20 @@ function movementOriginLabel(origin: string): string {
   if (origin === 'system') return 'Sistema';
   return origin;
 }
+
+function typeBadgeVariant(movement: { activity_kind: string; investment_direction?: string }): string {
+  if (movement.activity_kind === 'income') return 'income';
+  if (movement.activity_kind === 'expense') return 'expense';
+  if (movement.activity_kind === 'transfer') return 'transfer';
+  if (movement.activity_kind === 'investment_purchase') {
+    return movement.investment_direction === 'outflow'
+      ? 'investment-outflow'
+      : 'investment-inflow';
+  }
+  if (movement.activity_kind === 'debt_payment') return 'debt-payment';
+  if (movement.activity_kind === 'revaluation') return 'revaluation';
+  return 'other';
+}
 </script>
 
 <template>
@@ -43,7 +57,10 @@ function movementOriginLabel(origin: string): string {
       </div>
     </div>
 
-    <div v-if="state.cuentasLoading" class="ui-section-loading">
+    <div
+      v-if="state.cuentasLoading && state.cuentasSelectedAccountId == null"
+      class="ui-section-loading"
+    >
       <div class="ui-import-spinner"></div>
       <span>Cargando cuentas...</span>
     </div>
@@ -103,7 +120,9 @@ function movementOriginLabel(origin: string): string {
                     <div class="ui-entry-body">
                       <strong class="ui-entry-desc">{{ movement.description }}</strong>
                       <div class="ui-action-bar ui-entry-meta">
-                        <span :class="`ui-type-badge ui-type-badge-${movement.tone}`">
+                        <span
+                          :class="`ui-type-badge ui-type-badge-${typeBadgeVariant(movement)}`"
+                        >
                           {{ state.activityKindLabel(movement) }}
                         </span>
                         <span class="ui-pro-chip ui-entry-chip">{{
@@ -128,18 +147,39 @@ function movementOriginLabel(origin: string): string {
                     <div class="ui-entry-actions">
                       <button
                         v-if="movement.origin !== 'system'"
-                        class="btn btn-ghost btn-sm ui-entry-inline-btn"
+                        class="icon-btn ui-accounting-entry-action-btn ui-entry-action-edit"
                         type="button"
                         title="Editar movimiento"
                         aria-label="Editar movimiento"
                         :disabled="state.transactionCreationLoading"
                         @click="state.openEditTransactionModal(movement.id)"
                       >
-                        Editar
+                        <svg
+                          class="ui-entry-action-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M12 20h9"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
                       </button>
                       <button
                         v-if="movement.origin !== 'system'"
-                        class="btn btn-ghost btn-sm ui-entry-inline-btn"
+                        class="icon-btn ui-accounting-entry-action-btn ui-entry-action-delete"
                         type="button"
                         title="Eliminar movimiento"
                         aria-label="Eliminar movimiento"
@@ -148,14 +188,54 @@ function movementOriginLabel(origin: string): string {
                           state.deleteTransactionFromTimeline(movement.id, movement.description)
                         "
                       >
-                        Eliminar
+                        <svg
+                          class="ui-entry-action-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M3 6h18"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M19 6l-1 14a1 1 0 0 1-1 .93H7a1 1 0 0 1-1-.93L5 6"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M10 11v6M14 11v6"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
                       </button>
                     </div>
                   </li>
                 </ul>
                 <div v-if="state.cuentasHasMore" class="ui-load-more">
-                  <button class="btn" type="button" @click="state.loadMoreCuentas">
-                    Cargar mas
+                  <button
+                    class="btn"
+                    type="button"
+                    :disabled="state.cuentasLoadingMore"
+                    @click="state.loadMoreCuentas"
+                  >
+                    {{ state.cuentasLoadingMore ? 'Cargando...' : 'Cargar mas' }}
                   </button>
                 </div>
                 <p v-else-if="state.cuentasTransactions.length" class="ui-load-more-hint">

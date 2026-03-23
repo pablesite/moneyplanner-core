@@ -1216,6 +1216,161 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(by_account.data["total_count"], 1)
         self.assertEqual(by_account.data["results"][0]["description"], "Transferencia ahorro")
 
+    def test_transactions_list_kind_investment_purchase_excludes_revaluation(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Cartera indexada",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker cartera",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto tecnico",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+        )
+        investment_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 17),
+            value_date=date(2026, 3, 17),
+            description="Aporte broker marzo",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("30.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("30.00"),
+            currency="EUR",
+        )
+
+        revaluation_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Revalorizacion cartera marzo",
+            origin=LedgerTransaction.Origin.SYSTEM,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("15.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("15.00"),
+            currency="EUR",
+        )
+
+        filtered = self.client.get("/api/accounting/transactions/?kind=investment_purchase")
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["total_count"], 1)
+        self.assertEqual(filtered.data["results"][0]["description"], "Aporte broker marzo")
+        self.assertEqual(filtered.data["results"][0]["activity_kind"], "investment_purchase")
+
+    def test_transactions_list_kind_debt_payment_excludes_revaluation(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca principal",
+            category=Liability.Category.MORTGAGE,
+            currency="EUR",
+            amount=Decimal("120000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo hipoteca",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto tecnico",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+        )
+
+        debt_payment_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 5),
+            value_date=date(2026, 3, 5),
+            description="Cuota hipoteca marzo",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.DEBT_PAYMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=debt_payment_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+            liability=liability,
+        )
+        LedgerEntry.objects.create(
+            transaction=debt_payment_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+
+        revaluation_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Revalorizacion pasivo marzo",
+            origin=LedgerTransaction.Origin.SYSTEM,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+            liability=liability,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+        )
+
+        filtered = self.client.get("/api/accounting/transactions/?kind=debt_payment")
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["total_count"], 1)
+        self.assertEqual(filtered.data["results"][0]["description"], "Cuota hipoteca marzo")
+        self.assertEqual(filtered.data["results"][0]["activity_kind"], "debt_payment")
+
     def test_monthly_summary_endpoint(self):
         expense_account = LedgerAccount.objects.create(
             user=self.user,
