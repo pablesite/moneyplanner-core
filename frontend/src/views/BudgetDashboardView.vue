@@ -76,6 +76,8 @@ const {
   selectedIncomeMonthCompletionRatio,
   incomeEvolutionMonths,
   incomeEvolutionBaseMonthly,
+  expenseEvolutionMonths,
+  expenseEvolutionBaseMonthly,
   selectedLiquidityMonthPlanned,
   selectedLiquidityMonthExecuted,
   selectedLiquidityMonthDeviation,
@@ -361,6 +363,8 @@ if (annualEntriesPage) {
       :month-labels="monthLabels"
       :income-evolution-months="incomeEvolutionMonths"
       :income-evolution-base-monthly="incomeEvolutionBaseMonthly"
+      :expense-evolution-months="expenseEvolutionMonths"
+      :expense-evolution-base-monthly="expenseEvolutionBaseMonthly"
       :selected-execution-month-label="selectedExecutionMonthLabel"
       :format-money="formatMoney"
       :format-compact-money="formatCompactMoney"

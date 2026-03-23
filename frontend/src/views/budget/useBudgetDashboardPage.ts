@@ -764,6 +764,38 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return plannedIncomeTotal.value / 12;
   });
 
+  const expenseEvolutionMonths = computed(() => {
+    const rows = monthLabels.map((label, index) => {
+      const month = index + 1;
+      const summary = expenseSummaryByMonth.value.get(month);
+      const planned = toNumberOrZero(summary?.planned);
+      const executed = toNumberOrZero(summary?.executed);
+      return {
+        month,
+        label,
+        planned,
+        executed,
+        hasExecuted: (summary?.checkins_confirmed ?? 0) > 0 || executed > 0,
+      };
+    });
+    const maxMonthAmount = Math.max(1, ...rows.map((row) => Math.max(row.planned, row.executed)));
+    const toHeightPct = (value: number) => {
+      if (value <= 0) return 0;
+      return Math.max(6, Math.min(100, (value / maxMonthAmount) * 100));
+    };
+    return rows.map((row) => ({
+      ...row,
+      planHeightPct: toHeightPct(row.planned),
+      execHeightPct: toHeightPct(row.executed),
+    }));
+  });
+
+  const expenseEvolutionBaseMonthly = computed(() => {
+    if (expenseMonthlySummary.value)
+      return toNumberOrZero(expenseMonthlySummary.value.planned_total) / 12;
+    return plannedExpenseTotal.value / 12;
+  });
+
   const selectedLiquidityMonthPlanned = computed(() =>
     toNumberOrZero(liquidityMonthlySummary.value?.planned_total),
   );
@@ -2626,6 +2658,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     selectedIncomeMonthCompletionRatio,
     incomeEvolutionMonths,
     incomeEvolutionBaseMonthly,
+    expenseEvolutionMonths,
+    expenseEvolutionBaseMonthly,
     selectedLiquidityMonthPlanned,
     selectedLiquidityMonthExecuted,
     selectedLiquidityMonthDeviation,

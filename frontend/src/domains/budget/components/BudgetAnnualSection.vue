@@ -43,6 +43,8 @@ const props = defineProps<{
   monthLabels: string[];
   incomeEvolutionMonths: any[];
   incomeEvolutionBaseMonthly: number;
+  expenseEvolutionMonths: any[];
+  expenseEvolutionBaseMonthly: number;
   selectedExecutionMonthLabel: string;
   formatMoney: (value: number, decimals?: number) => string;
   formatCompactMoney: (value: number, decimals?: number) => string;
@@ -249,13 +251,11 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             (ingresos recurrentes).
           </p>
           <p v-else>
-            Preparado para comparar `Previsto` vs `Ejecutado` por mes. Actualmente en modo
-            placeholder hasta implementar contabilidad.
+            Compara `Previsto` vs `Ejecutado` por mes usando los check-ins del cierre mensual
+            (gastos recurrentes).
           </p>
         </div>
-        <span class="ui-budget-pill">
-          {{ section.id === 'income' ? 'Cierre mensual activo' : 'Pendiente contabilidad' }}
-        </span>
+        <span class="ui-budget-pill">Cierre mensual activo</span>
       </div>
 
       <div
@@ -263,43 +263,33 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         :aria-label="
           section.id === 'income'
             ? 'Barras de evolucion de ingresos previsto vs ejecutado por mes'
-            : 'Placeholder de barras de evolucion'
+            : 'Barras de evolucion de gastos previsto vs ejecutado por mes'
         "
       >
         <div
-          v-for="point in section.id === 'income'
-            ? incomeEvolutionMonths
-            : monthLabels.map((label) => ({ label }))"
+          v-for="point in section.id === 'income' ? incomeEvolutionMonths : expenseEvolutionMonths"
           :key="`${section.id}-${point.label}`"
           class="ui-budget-month-col"
         >
           <div class="ui-budget-month-rail">
             <div
               class="ui-budget-month-plan"
-              :style="
-                section.id === 'income' && 'planHeightPct' in point
-                  ? { height: `${point.planHeightPct}%` }
-                  : undefined
-              "
+              :style="'planHeightPct' in point ? { height: `${point.planHeightPct}%` } : undefined"
               :title="
-                section.id === 'income' && 'planned' in point
+                'planned' in point
                   ? `Previsto ${point.label}: ${formatMoney(Number(point.planned))} EUR`
                   : undefined
               "
             />
             <div
               :class="
-                section.id === 'income' && 'hasExecuted' in point && point.hasExecuted
+                'hasExecuted' in point && point.hasExecuted
                   ? 'ui-budget-month-exec'
                   : 'ui-budget-month-exec-pending'
               "
-              :style="
-                section.id === 'income' && 'execHeightPct' in point
-                  ? { height: `${point.execHeightPct}%` }
-                  : undefined
-              "
+              :style="'execHeightPct' in point ? { height: `${point.execHeightPct}%` } : undefined"
               :title="
-                section.id === 'income' && 'executed' in point
+                'executed' in point
                   ? `Ejecutado ${point.label}: ${formatMoney(Number(point.executed))} EUR`
                   : undefined
               "
@@ -311,18 +301,17 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
       <div class="ui-budget-evolution-legend">
         <span><i class="ui-budget-legend-dot ui-budget-legend-plan" /> Previsto</span>
-        <span v-if="section.id === 'income'">
+        <span>
           <i class="ui-budget-legend-dot ui-budget-legend-exec-solid" /> Ejecutado
-        </span>
-        <span v-else>
-          <i class="ui-budget-legend-dot ui-budget-legend-exec" /> Ejecutado (pendiente)
         </span>
         <span>
           {{ section.id === 'income' ? 'Base recurrente mensual:' : 'Base mensual orientativa:' }}
           <strong>
             {{
               formatCompactMoney(
-                section.id === 'income' ? incomeEvolutionBaseMonthly : section.totalAnnual / 12,
+                section.id === 'income'
+                  ? incomeEvolutionBaseMonthly
+                  : expenseEvolutionBaseMonthly,
               )
             }}
             EUR
