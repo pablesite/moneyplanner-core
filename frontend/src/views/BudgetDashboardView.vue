@@ -92,6 +92,9 @@ const {
   monthlyIncomeResultBreakdown,
   monthlyExpenseResultBreakdown,
   selectedExecutionMonthLabel,
+  budgetDetailMonth,
+  budgetDetailMonthLabel,
+  updateBudgetDetailMonth,
   budgetCategoryActualExecution,
   budgetSubcategoryActualExecution,
   selectedMonthlyExecutedVolume,
@@ -366,6 +369,9 @@ if (annualEntriesPage) {
       :expense-evolution-months="expenseEvolutionMonths"
       :expense-evolution-base-monthly="expenseEvolutionBaseMonthly"
       :selected-execution-month-label="selectedExecutionMonthLabel"
+      :budget-detail-month="budgetDetailMonth"
+      :budget-detail-month-label="budgetDetailMonthLabel"
+      :update-budget-detail-month="updateBudgetDetailMonth"
       :format-money="formatMoney"
       :format-compact-money="formatCompactMoney"
       :format-percent="formatPercent"

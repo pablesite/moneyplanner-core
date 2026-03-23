@@ -46,6 +46,9 @@ const props = defineProps<{
   expenseEvolutionMonths: any[];
   expenseEvolutionBaseMonthly: number;
   selectedExecutionMonthLabel: string;
+  budgetDetailMonth: number;
+  budgetDetailMonthLabel: string;
+  updateBudgetDetailMonth: (month: number) => void;
   formatMoney: (value: number, decimals?: number) => string;
   formatCompactMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
@@ -321,6 +324,22 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     </div>
 
     <div v-if="section.groups.length && isSectionExpanded(section.id)" class="ui-budget-groups">
+      <div class="ui-budget-detail-month-bar">
+        <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
+        <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
+          <button
+            v-for="(label, i) in monthLabels"
+            :key="i"
+            type="button"
+            class="ui-budget-filter-btn"
+            :class="{ 'ui-budget-filter-btn-active': budgetDetailMonth === i + 1 }"
+            @click="updateBudgetDetailMonth(i + 1)"
+          >
+            {{ label }}
+          </button>
+        </div>
+      </div>
+
       <article
         v-for="group in section.groups"
         :key="`${section.id}-${group.categoryKey}`"
@@ -343,7 +362,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               <div class="ui-budget-inline-progress-labels">
                 <span
                   >Previsto vs Ejecutado acumulado (YTD hasta
-                  {{ selectedExecutionMonthLabel }})</span
+                  {{ budgetDetailMonthLabel }})</span
                 >
                 <span>
                   {{
@@ -455,7 +474,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   />
                 </div>
                 <div class="ui-budget-inline-progress-caption">
-                  YTD hasta {{ selectedExecutionMonthLabel }} - completitud
+                  YTD hasta {{ budgetDetailMonthLabel }} - completitud
                   {{
                     formatPercent(
                       budgetSubcategoryActualExecution(section.id, row.key)?.completionRatio ??

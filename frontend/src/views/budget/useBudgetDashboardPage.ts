@@ -218,6 +218,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const expenseViewMode = ref<BudgetEntryViewMode>('all');
   const incomeDetailsExpanded = ref(false);
   const expenseDetailsExpanded = ref(false);
+  const budgetDetailMonth = ref(new Date().getMonth() + 1);
   const currentCalendarYear = new Date().getFullYear();
   const monthLabels = [
     'Ene',
@@ -1099,6 +1100,14 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     () => monthLabels[selectedExecutionMonth.value - 1] ?? String(selectedExecutionMonth.value),
   );
 
+  const budgetDetailMonthLabel = computed(
+    () => monthLabels[budgetDetailMonth.value - 1] ?? String(budgetDetailMonth.value),
+  );
+
+  function updateBudgetDetailMonth(month: number): void {
+    budgetDetailMonth.value = month;
+  }
+
   type BudgetActualAggregateRow = {
     planned: number;
     executed: number;
@@ -1107,15 +1116,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   };
 
   const incomeYtdActualByCategory = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredIncomeEntries.value) {
       if (entry.incomeType === 'one_off') continue;
       const categoryKey = entry.category;
-      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(
-        entry,
-        selectedExecutionMonth.value,
-      );
+      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, budgetDetailMonth.value);
       let row = map.get(categoryKey);
       if (!row) {
         row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
@@ -1134,15 +1140,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const incomeYtdActualBySubcategoryKey = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredIncomeEntries.value) {
       if (entry.incomeType === 'one_off') continue;
       const key = `${entry.category}::${entry.subcategory}`;
-      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(
-        entry,
-        selectedExecutionMonth.value,
-      );
+      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, budgetDetailMonth.value);
       let row = map.get(key);
       if (!row) {
         row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
@@ -1161,7 +1164,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const expenseYtdActualByCategory = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredExpenseEntries.value) {
       const categoryKey = entry.category;
@@ -1175,8 +1178,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         if (planned <= 0) continue;
         row.planned += planned;
         row.expectedCount += 1;
-        const checkin =
-          expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
+        const checkin = expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
         if (!checkin) continue;
         row.checkedCount += 1;
         if (checkin.status !== 'skipped') row.executed += toNumberOrZero(checkin.executed_amount);
@@ -1186,7 +1188,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const expenseYtdActualBySubcategoryKey = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, selectedExecutionMonth.value));
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredExpenseEntries.value) {
       const key = `${entry.category}::${entry.subcategory}`;
@@ -1200,8 +1202,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         if (planned <= 0) continue;
         row.planned += planned;
         row.expectedCount += 1;
-        const checkin =
-          expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
+        const checkin = expenseCheckinsByEntryMonth.value[expenseEntryMonthKey(entry.id, month)];
         if (!checkin) continue;
         row.checkedCount += 1;
         if (checkin.status !== 'skipped') row.executed += toNumberOrZero(checkin.executed_amount);
@@ -2773,6 +2774,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     monthlyIncomeResultBreakdown,
     monthlyExpenseResultBreakdown,
     selectedExecutionMonthLabel,
+    budgetDetailMonth,
+    budgetDetailMonthLabel,
+    updateBudgetDetailMonth,
     incomeYtdActualByCategory,
     incomeYtdActualBySubcategoryKey,
     buildActualExecution,
