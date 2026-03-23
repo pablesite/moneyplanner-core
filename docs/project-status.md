@@ -29,6 +29,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 |--------|------|-------------|------|
 | Accounting — investment bidirectional flow | Agente | Definir el flujo bidireccional de inversión (`inflow` / `outflow`) en backend y frontend antes de adaptar el importador. | `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/backend.md` + `core/docs/tasks/accounting/phase-1-bidirectional-investment-flow/frontend.md` |
 | Importación MoneyWiz — investment outflows | Agente | Adaptar el importador MoneyWiz para detectar retiradas/desinversiones sin generar ingresos espejo duplicados. | `core/docs/tasks/accounting/phase-2-importer-investment-outflows/backend.md` + `core/docs/tasks/accounting/phase-2-importer-investment-outflows/qa.md` |
+| Movimientos — paginación servidor | Agente | Cursor pagination en el endpoint de transacciones + filtros server-side para eliminar la carga completa en frontend. | `core/docs/tasks/accounting/server-side-pagination/backend.md` + `core/docs/tasks/accounting/server-side-pagination/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
