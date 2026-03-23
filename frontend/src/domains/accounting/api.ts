@@ -7,12 +7,41 @@ import type {
   LedgerAccountWritePayload,
   LedgerEntry,
   LedgerTransaction,
+  PaginatedTransactionsResponse,
   LedgerTransactionWritePayload,
   MoneyWizImportCommit,
   MoneyWizImportPreview,
   MonthlyAccountingSummary,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
+
+function buildTransactionQueryParams(params?: {
+  year?: number;
+  month?: number;
+  status?: string;
+  cursor?: string;
+  page_size?: number;
+  date_from?: string;
+  date_to?: string;
+  account_id?: number;
+  query?: string;
+  kind?: string;
+}) {
+  if (!params) return undefined;
+  const queryParams = {
+    ...(params.year ? { year: params.year } : {}),
+    ...(params.month ? { month: params.month } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.cursor ? { cursor: params.cursor } : {}),
+    ...(params.page_size ? { page_size: params.page_size } : {}),
+    ...(params.date_from ? { date_from: params.date_from } : {}),
+    ...(params.date_to ? { date_to: params.date_to } : {}),
+    ...(params.account_id ? { account_id: params.account_id } : {}),
+    ...(params.query ? { query: params.query } : {}),
+    ...(params.kind ? { kind: params.kind } : {}),
+  };
+  return Object.keys(queryParams).length ? queryParams : undefined;
+}
 
 export const coreAccountingApi = {
   getAccounts(params?: { account_type?: string; is_active?: boolean }) {
@@ -37,16 +66,24 @@ export const coreAccountingApi = {
   updateAccount(id: number, payload: Partial<LedgerAccountWritePayload>) {
     return coreApi.patch<LedgerAccount>(`/api/accounting/accounts/${id}/`, payload);
   },
-  getTransactions(params?: { year?: number; month?: number; status?: string }) {
-    return coreApi.get<LedgerTransaction[]>('/api/accounting/transactions/', {
-      params:
-        params && (params.year || params.month || params.status)
-          ? {
-              ...(params.year ? { year: params.year } : {}),
-              ...(params.month ? { month: params.month } : {}),
-              ...(params.status ? { status: params.status } : {}),
-            }
-          : undefined,
+  getTransactions(
+    params?: {
+      year?: number;
+      month?: number;
+      status?: string;
+      cursor?: string;
+      page_size?: number;
+      date_from?: string;
+      date_to?: string;
+      account_id?: number;
+      query?: string;
+      kind?: string;
+    },
+    options?: { signal?: AbortSignal },
+  ) {
+    return coreApi.get<PaginatedTransactionsResponse>('/api/accounting/transactions/', {
+      params: buildTransactionQueryParams(params),
+      signal: options?.signal,
     });
   },
   createTransaction(payload: LedgerTransactionWritePayload) {

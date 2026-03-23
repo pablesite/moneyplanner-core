@@ -12,7 +12,6 @@ export function useAccountingMovementsPage() {
     error,
     successMessage,
     accounts,
-    transactions,
     moneyWizImportPreview,
     selectedYear,
     yearOptions,
@@ -61,14 +60,16 @@ export function useAccountingMovementsPage() {
     cuentasSelectedAccount,
     cuentasDateFrom,
     cuentasDateTo,
-    cuentasRawTransactions,
-    cuentasVisibleTransactions,
+    cuentasTransactions,
+    cuentasTotalCount,
+    cuentasLoading,
     cuentasHasMore,
     loadMoreCuentas,
     todosDateFrom,
     todosDateTo,
-    todosRawTransactions,
-    todosVisibleTransactions,
+    todosTransactions,
+    todosTotalCount,
+    todosLoading,
     todosHasMore,
     loadMoreTodos,
     transactionMainAmount,
@@ -97,7 +98,11 @@ export function useAccountingMovementsPage() {
 
   function formatDate(isoDate: string): string {
     const d = new Date(isoDate + 'T00:00:00');
-    return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+    return new Intl.DateTimeFormat('es-ES', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(d);
   }
 
   function formatMoney(value: number, currency = 'EUR'): string {
@@ -178,7 +183,12 @@ export function useAccountingMovementsPage() {
       if (!groups.has(key)) {
         const labels =
           posType === 'asset' ? assetActivationCategoryLabels : liabilityActivationCategoryLabels;
-        groups.set(key, { key, label: labels[category] ?? category, positionType: posType, accounts: [] });
+        groups.set(key, {
+          key,
+          label: labels[category] ?? category,
+          positionType: posType,
+          accounts: [],
+        });
       }
       groups.get(key)!.accounts.push(account);
     }
@@ -461,7 +471,6 @@ export function useAccountingMovementsPage() {
     error,
     successMessage,
     accounts,
-    transactions,
     moneyWizImportPreview,
     accountsByType,
     accountingAssetsTotal,
@@ -515,14 +524,16 @@ export function useAccountingMovementsPage() {
     cuentasSelectedAccount,
     cuentasDateFrom,
     cuentasDateTo,
-    cuentasRawTransactions,
-    cuentasVisibleTransactions,
+    cuentasTransactions,
+    cuentasTotalCount,
+    cuentasLoading,
     cuentasHasMore,
     loadMoreCuentas,
     todosDateFrom,
     todosDateTo,
-    todosRawTransactions,
-    todosVisibleTransactions,
+    todosTransactions,
+    todosTotalCount,
+    todosLoading,
     todosHasMore,
     loadMoreTodos,
     transactionMainAmount,

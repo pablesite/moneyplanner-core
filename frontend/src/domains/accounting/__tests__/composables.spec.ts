@@ -71,7 +71,9 @@ function seedRefreshResponses() {
       },
     ],
   } as never);
-  vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
+  vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({
+    data: { results: [], next_cursor: null, total_count: 0 },
+  } as never);
   vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
     data: { fiscal_year: 2026, months: [] },
   } as never);

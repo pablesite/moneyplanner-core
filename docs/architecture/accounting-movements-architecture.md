@@ -113,6 +113,19 @@ This leaves a gap:
    - historical closes must respect `as_of_date` instead of reading current live balances
    - precedence is explicit: use ledger first when the account link is valid and covered; fallback only when ledger coverage is unsafe or absent
 
+## Transactions list API contract
+1. `GET /api/accounting/transactions/` uses server-side cursor pagination with ordering `-booking_date, -id`.
+2. Response envelope is:
+   - `results`: serialized `LedgerTransaction[]`
+   - `next_cursor`: opaque cursor (`null` when there are no more rows)
+   - `total_count`: total rows for the active filter set (independent from current page)
+3. Supported query params:
+   - existing compatibility filters: `year`, `month`, `status`
+   - pagination: `cursor`, `page_size` (default `50`, max `200`)
+   - server-side filters: `query`, `kind`, `account_id`, `date_from`, `date_to`
+4. `LedgerTransaction` list payload includes `activity_kind` (read-only) resolved server-side from prefetched entries.
+5. Supported `kind` values: `income`, `expense`, `transfer`, `investment_purchase`, `debt_payment`, `revaluation`.
+
 ## Rollout phases
 1. Base module
    - create the `accounting` backend app and frontend domain

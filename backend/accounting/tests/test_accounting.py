@@ -1045,8 +1045,176 @@ class AccountingApiTests(APITestCase):
 
         self.assertEqual(accounts_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(accounts_res.data), 2)
-        self.assertEqual(len(transactions_res.data), 0)
+        self.assertEqual(len(transactions_res.data["results"]), 0)
+        self.assertEqual(transactions_res.data["total_count"], 0)
+        self.assertIsNone(transactions_res.data["next_cursor"])
         self.assertEqual(len(entries_res.data), 0)
+
+    def test_transactions_list_returns_cursor_envelope_and_activity_kind(self):
+        for booking_date, description in (
+            ("2026-02-10", "Nomina"),
+            ("2026-02-09", "Nomina extra"),
+            ("2026-02-08", "Nomina variable"),
+        ):
+            create_res = self.client.post(
+                "/api/accounting/transactions/",
+                {
+                    "booking_date": booking_date,
+                    "value_date": booking_date,
+                    "description": description,
+                    "status": "posted",
+                    "origin": "manual",
+                    "entries": [
+                        {
+                            "account_id": self.cash_account.id,
+                            "side": "debit",
+                            "amount": "100.00",
+                            "currency": "EUR",
+                        },
+                        {
+                            "account_id": self.income_account.id,
+                            "side": "credit",
+                            "amount": "100.00",
+                            "currency": "EUR",
+                            "flow_family": "income",
+                            "category_key": "salary",
+                            "subcategory_key": "employee_salary",
+                        },
+                    ],
+                },
+                format="json",
+            )
+            self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+
+        first_page = self.client.get("/api/accounting/transactions/?page_size=2")
+        self.assertEqual(first_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(first_page.data["results"]), 2)
+        self.assertEqual(first_page.data["total_count"], 3)
+        self.assertIsNotNone(first_page.data["next_cursor"])
+        self.assertTrue(all("activity_kind" in row for row in first_page.data["results"]))
+        self.assertTrue(all(row["activity_kind"] == "income" for row in first_page.data["results"]))
+
+        second_page = self.client.get(
+            f"/api/accounting/transactions/?page_size=2&cursor={first_page.data['next_cursor']}"
+        )
+        self.assertEqual(second_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(second_page.data["results"]), 1)
+        self.assertIsNone(second_page.data["next_cursor"])
+        first_page_ids = {row["id"] for row in first_page.data["results"]}
+        second_page_ids = {row["id"] for row in second_page.data["results"]}
+        self.assertTrue(first_page_ids.isdisjoint(second_page_ids))
+
+    def test_transactions_list_filters_support_combination(self):
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Supermercado",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        savings_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta ahorro",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        create_income = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2026-02-10",
+                "value_date": "2026-02-10",
+                "description": "Nomina febrero",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": self.cash_account.id,
+                        "side": "debit",
+                        "amount": "2000.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "2000.00",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "salary",
+                        "subcategory_key": "employee_salary",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create_income.status_code, status.HTTP_201_CREATED, create_income.data)
+        create_expense = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2026-02-09",
+                "value_date": "2026-02-09",
+                "description": "Compra supermercado",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": expense_account.id,
+                        "side": "debit",
+                        "amount": "120.00",
+                        "currency": "EUR",
+                        "flow_family": "expense",
+                        "category_key": "consumption_expenses",
+                        "subcategory_key": "housing_home",
+                    },
+                    {
+                        "account_id": self.cash_account.id,
+                        "side": "credit",
+                        "amount": "120.00",
+                        "currency": "EUR",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create_expense.status_code, status.HTTP_201_CREATED, create_expense.data)
+        create_transfer = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2026-02-08",
+                "value_date": "2026-02-08",
+                "description": "Transferencia ahorro",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": self.cash_account.id,
+                        "side": "credit",
+                        "amount": "300.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": savings_account.id,
+                        "side": "debit",
+                        "amount": "300.00",
+                        "currency": "EUR",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create_transfer.status_code, status.HTTP_201_CREATED, create_transfer.data)
+
+        filtered = self.client.get(
+            "/api/accounting/transactions/?kind=expense&query=super&date_from=2026-02-09&date_to=2026-02-10"
+        )
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["total_count"], 1)
+        self.assertEqual(filtered.data["results"][0]["activity_kind"], "expense")
+
+        by_account = self.client.get(
+            f"/api/accounting/transactions/?account_id={savings_account.id}"
+        )
+        self.assertEqual(by_account.status_code, status.HTTP_200_OK)
+        self.assertEqual(by_account.data["total_count"], 1)
+        self.assertEqual(by_account.data["results"][0]["description"], "Transferencia ahorro")
 
     def test_monthly_summary_endpoint(self):
         expense_account = LedgerAccount.objects.create(
@@ -1717,7 +1885,9 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.data["realized_cost_basis"], "150.00000000")
         self.assertEqual(response.data["realized_gain_loss"], "30.00000000")
         debit_entry = next(
-            entry for entry in response.data["entries"] if entry["account_id"] == self.cash_account.id
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == self.cash_account.id
         )
         credit_entry = next(
             entry

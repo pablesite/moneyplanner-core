@@ -38,8 +38,7 @@ function accountTrail(transaction: LedgerTransaction): string {
       <div class="ui-section-copy">
         <h2 class="ui-section-title">Todos los movimientos</h2>
         <p class="ui-section-subtitle">
-          {{ state.todosVisibleTransactions.length }} de
-          {{ state.todosRawTransactions.length }} movimientos
+          {{ state.todosTransactions.length }} de {{ state.todosTotalCount }} movimientos
         </p>
       </div>
     </div>
@@ -63,19 +62,15 @@ function accountTrail(transaction: LedgerTransaction): string {
       <input v-model="state.todosDateTo" type="date" class="input" title="Hasta" />
     </div>
 
-    <div v-if="state.loading && !state.transactions.length" class="ui-section-loading">
+    <div v-if="state.todosLoading" class="ui-section-loading">
       <div class="ui-import-spinner"></div>
       <span>Cargando movimientos...</span>
     </div>
-    <div v-else-if="!state.todosRawTransactions.length" class="ui-state-block ui-state-empty">
+    <div v-else-if="!state.todosTransactions.length" class="ui-state-block ui-state-empty">
       Sin movimientos para los filtros actuales.
     </div>
     <ul v-else class="ui-entry-list">
-      <li
-        v-for="transaction in state.todosVisibleTransactions"
-        :key="transaction.id"
-        class="ui-entry-row"
-      >
+      <li v-for="transaction in state.todosTransactions" :key="transaction.id" class="ui-entry-row">
         <span class="ui-entry-date">{{ state.formatDate(transaction.booking_date) }}</span>
         <div class="ui-entry-body">
           <strong class="ui-entry-desc">{{ transaction.description }}</strong>
@@ -128,7 +123,7 @@ function accountTrail(transaction: LedgerTransaction): string {
     <div v-if="state.todosHasMore" class="ui-load-more">
       <button class="btn" type="button" @click="state.loadMoreTodos">Cargar mas</button>
     </div>
-    <p v-else-if="state.todosRawTransactions.length" class="ui-load-more-hint">
+    <p v-else-if="state.todosTransactions.length" class="ui-load-more-hint">
       Todos los movimientos cargados
     </p>
   </section>

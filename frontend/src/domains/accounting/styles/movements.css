@@ -938,7 +938,9 @@
   text-transform: uppercase;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .ui-catalog-group-header:hover {

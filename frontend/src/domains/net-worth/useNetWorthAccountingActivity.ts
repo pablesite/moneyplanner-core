@@ -47,7 +47,10 @@ function resolveInvestmentDirection(
   hasAssetLink: boolean,
 ): 'inflow' | 'outflow' | null {
   if (transaction.quick_entry_kind === 'investment') {
-    if (transaction.investment_direction === 'inflow' || transaction.investment_direction === 'outflow') {
+    if (
+      transaction.investment_direction === 'inflow' ||
+      transaction.investment_direction === 'outflow'
+    ) {
       return transaction.investment_direction;
     }
   }
@@ -122,10 +125,18 @@ export function useNetWorthAccountingActivity<TRow extends BasePositionRow>(para
     accountingActivityLoading.value = true;
     accountingActivityError.value = null;
     try {
-      const response = await coreAccountingApi.getTransactions({
-        year: accountingActivityYear.value,
-      });
-      const relevantRows = response.data
+      const allTransactions: LedgerTransaction[] = [];
+      let cursor: string | undefined;
+      do {
+        const response = await coreAccountingApi.getTransactions({
+          year: accountingActivityYear.value,
+          page_size: 200,
+          cursor,
+        });
+        allTransactions.push(...(response.data.results ?? []));
+        cursor = response.data.next_cursor ?? undefined;
+      } while (cursor);
+      const relevantRows = allTransactions
         .flatMap((transaction) =>
           transaction.entries
             .filter((entry) => entry.account_id === source.accounting_account_id)
@@ -133,11 +144,7 @@ export function useNetWorthAccountingActivity<TRow extends BasePositionRow>(para
               id: `accounting-${transaction.id}-${entry.id}`,
               date: transaction.booking_date,
               description: transaction.description,
-              sideLabel: resolveSideLabel(
-                transaction,
-                entry.side,
-                entry.asset_id != null,
-              ),
+              sideLabel: resolveSideLabel(transaction, entry.side, entry.asset_id != null),
               amount: params.toNumber(entry.amount),
               currency: entry.currency,
               counterpartLabel: summarizeCounterparts(

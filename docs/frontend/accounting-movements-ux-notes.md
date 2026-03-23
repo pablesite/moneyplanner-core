@@ -96,6 +96,15 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 5. Core keeps MoneyWiz unmapped categories support through `AccountingMovementsMoneyWizModal`.
 6. SaaS mirrors the same structure but keeps the existing behavior difference (no unmapped section UI).
 
+## Server pagination UX (2026-03-23)
+1. The "Todos los movimientos" tab loads only the first page (`50`) on initial render.
+2. "Cargar mas" requests the next page using `next_cursor` and appends rows without resetting scroll context.
+3. Search input on "Todos" is debounced (`300ms`) before calling the backend.
+4. Filters `kind`, `date_from`, `date_to` (and account when set) are now server-side and reset pagination.
+5. The "N de M movimientos" label uses server `total_count` instead of local array length.
+6. "Cuentas" tab uses server pagination by `account_id`; per-row `impactValue` and `tone` are still computed client-side.
+7. Create/edit/delete/import mutations refresh current movement pages to keep visible data in sync.
+
 ## Shared scenarios that must stay consistent
 1. Manual income to a liquidity account
 2. Manual expense from a liquidity account

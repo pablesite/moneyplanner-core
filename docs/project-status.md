@@ -27,7 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| Movimientos — paginación servidor | Agente | Cursor pagination en el endpoint de transacciones + filtros server-side para eliminar la carga completa en frontend. | `core/docs/tasks/accounting/server-side-pagination/backend.md` + `core/docs/tasks/accounting/server-side-pagination/frontend.md` |
+| _(sin tareas Agente pendientes en este momento)_ | — | Pendiente definición de la siguiente task delegable. | — |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -61,7 +61,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Añadida limpieza masiva provisional de movimientos `origin=import` desde la vista de Movimientos (Core-only). Pendiente remate manual de vista para cierre v1. |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Añadida limpieza masiva provisional de movimientos `origin=import` desde la vista de Movimientos (Core-only). Pendiente remate manual de vista para cierre v1. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |

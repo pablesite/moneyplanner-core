@@ -1465,18 +1465,36 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     accountingExecutionLoading.value = true;
     accountingExecutionError.value = null;
     try {
+      const fetchAllTransactions = async (params: {
+        year: number;
+        month?: number;
+        status?: string;
+      }) => {
+        const allResults: typeof accountingPostedEntries.value = [];
+        let cursor: string | undefined;
+        do {
+          const response = await coreAccountingApi.getTransactions({
+            ...params,
+            page_size: 200,
+            cursor,
+          });
+          allResults.push(
+            ...(response.data.results ?? []).flatMap((transaction) => transaction.entries),
+          );
+          cursor = response.data.next_cursor ?? undefined;
+        } while (cursor);
+        return allResults;
+      };
       const [summaryResponse, transactionsResponse] = await Promise.all([
         coreAccountingApi.getMonthlySummary(fiscalYear.value),
-        coreAccountingApi.getTransactions({
+        fetchAllTransactions({
           year: fiscalYear.value,
           month: selectedExecutionMonth.value,
           status: 'posted',
         }),
       ]);
       accountingMonthlySummary.value = summaryResponse.data ?? null;
-      accountingPostedEntries.value = (transactionsResponse.data ?? []).flatMap(
-        (transaction) => transaction.entries,
-      );
+      accountingPostedEntries.value = transactionsResponse;
     } catch (e: unknown) {
       accountingExecutionError.value = toBudgetErrorMessage(e);
       accountingMonthlySummary.value = null;
