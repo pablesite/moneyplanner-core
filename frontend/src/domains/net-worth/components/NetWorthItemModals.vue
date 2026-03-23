@@ -38,6 +38,7 @@ defineProps<{
   closeEdit: () => void;
   onCloseAssetModal: () => void;
   onCloseLiabilityModal: () => void;
+  editError?: string | null;
 }>();
 </script>
 
@@ -82,6 +83,7 @@ defineProps<{
       :initial="editInitial"
       :on-submit="submitEdit"
       :on-cancel="closeEdit"
+      :submit-error="editError"
     />
   </BaseModal>
 </template>
