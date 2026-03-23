@@ -34,6 +34,16 @@ const state = props.page;
             Importar MoneyWiz
           </button>
           <button
+            class="btn"
+            type="button"
+            aria-label="Eliminar movimientos importados"
+            title="Eliminar movimientos importados"
+            :disabled="!state.hasImportedTransactions || state.transactionCreationLoading"
+            @click="state.deleteImportedTransactions"
+          >
+            Limpiar importados
+          </button>
+          <button
             class="btn btn-primary ui-accounting-cta"
             type="button"
             aria-label="Registrar movimiento diario"

@@ -1,6 +1,7 @@
 import { coreApi } from '@/lib/api';
 import type {
   BudgetDerivedSuggestions,
+  DeleteImportedTransactionsResult,
   LedgerAccount,
   LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
@@ -83,6 +84,11 @@ export const coreAccountingApi = {
       {
         headers: { 'Content-Type': 'multipart/form-data' },
       },
+    );
+  },
+  deleteImportedTransactions() {
+    return coreApi.post<DeleteImportedTransactionsResult>(
+      '/api/accounting/transactions/delete-imported/',
     );
   },
   getEntries(params?: {

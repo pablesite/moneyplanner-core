@@ -14,6 +14,7 @@ vi.mock('../api', () => ({
     createQuickEntry: vi.fn(),
     previewMoneyWizImport: vi.fn(),
     commitMoneyWizImport: vi.fn(),
+    deleteImportedTransactions: vi.fn(),
   },
 }));
 
@@ -186,5 +187,23 @@ describe('useAccountingStore', () => {
     expect(store.moneyWizImportPreview?.row_count).toBe(2);
     expect(store.moneyWizImportCommitResult?.created_count).toBe(2);
     expect(coreAccountingApi.commitMoneyWizImport).toHaveBeenCalledWith(file, {});
+  });
+
+  it('deletes imported transactions and refreshes data', async () => {
+    vi.mocked(coreAccountingApi.deleteImportedTransactions).mockResolvedValue({
+      data: { deleted_count: 3 },
+    } as never);
+    vi.mocked(coreAccountingApi.getAccounts).mockResolvedValue({ data: [] } as never);
+    vi.mocked(coreAccountingApi.getTransactions).mockResolvedValue({ data: [] } as never);
+    vi.mocked(coreAccountingApi.getMonthlySummary).mockResolvedValue({
+      data: { fiscal_year: 2026, months: [] },
+    } as never);
+
+    const store = useAccountingStore();
+    const result = await store.deleteImportedTransactions();
+
+    expect(result.deleted_count).toBe(3);
+    expect(coreAccountingApi.deleteImportedTransactions).toHaveBeenCalledTimes(1);
+    expect(coreAccountingApi.getTransactions).toHaveBeenCalled();
   });
 });

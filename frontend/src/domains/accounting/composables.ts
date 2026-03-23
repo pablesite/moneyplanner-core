@@ -820,6 +820,9 @@ export function useAccountingPage() {
       return true;
     }),
   );
+  const hasImportedTransactions = computed(() =>
+    transactions.value.some((transaction) => transaction.origin === 'import'),
+  );
 
   // ── Tab state & per-account/all-movements pagination ──────────────
   type MovementsTab = 'cuentas' | 'todos' | 'estadisticas';
@@ -1781,6 +1784,27 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento contable eliminado.';
   }
 
+  async function deleteImportedTransactions() {
+    if (!hasImportedTransactions.value) {
+      successMessage.value = 'No hay movimientos importados para eliminar.';
+      return;
+    }
+    successMessage.value = null;
+    if (
+      !confirm(
+        'Eliminar todos los movimientos importados?\n\n' +
+          'Solo se borraran movimientos con origen import. La accion es irreversible.',
+      )
+    ) {
+      return;
+    }
+    const result = await store.deleteImportedTransactions();
+    successMessage.value =
+      result.deleted_count > 0
+        ? `Limpieza completada: ${result.deleted_count} movimientos importados eliminados.`
+        : 'No habia movimientos importados para eliminar.';
+  }
+
   async function submitRevaluationEntry() {
     successMessage.value = null;
     const delta = revaluationDelta.value;
@@ -2014,6 +2038,7 @@ export function useAccountingPage() {
     transactionBalanced,
     summaryRows,
     filteredTransactions,
+    hasImportedTransactions,
     activeTab,
     cuentasSelectedAccountId,
     cuentasSelectedAccount,
@@ -2050,5 +2075,6 @@ export function useAccountingPage() {
     submitEditedTransaction,
     resetEditTransactionForm,
     deleteTransaction,
+    deleteImportedTransactions,
   };
 }

@@ -2194,6 +2194,75 @@ class MoneyWizImportAPITests(APITestCase):
         self.assertEqual(imported_rows.count(), 5)
         self.assertTrue(imported_rows.exclude(import_fingerprint="").exists())
 
+    def test_delete_imported_removes_only_import_transactions_of_authenticated_user(self):
+        LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 10),
+            value_date=date(2026, 4, 10),
+            description="Importado MoneyWiz",
+            origin=LedgerTransaction.Origin.IMPORT,
+            import_source="moneywiz",
+            import_fingerprint="fp-import-1",
+        )
+        LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 11),
+            value_date=date(2026, 4, 11),
+            description="Manual",
+            origin=LedgerTransaction.Origin.MANUAL,
+        )
+        other_user = get_user_model().objects.create_user(
+            username="moneywiz_other_user",
+            password="pass1234",
+        )
+        LedgerTransaction.objects.create(
+            user=other_user,
+            booking_date=date(2026, 4, 12),
+            value_date=date(2026, 4, 12),
+            description="Importado otro usuario",
+            origin=LedgerTransaction.Origin.IMPORT,
+            import_source="moneywiz",
+            import_fingerprint="fp-import-2",
+        )
+
+        response = self.client.post("/api/accounting/transactions/delete-imported/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["deleted_count"], 1)
+        self.assertFalse(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.IMPORT,
+            ).exists()
+        )
+        self.assertTrue(
+            LedgerTransaction.objects.filter(
+                user=self.user,
+                origin=LedgerTransaction.Origin.MANUAL,
+            ).exists()
+        )
+        self.assertTrue(
+            LedgerTransaction.objects.filter(
+                user=other_user,
+                origin=LedgerTransaction.Origin.IMPORT,
+            ).exists()
+        )
+
+    def test_delete_imported_returns_zero_when_user_has_no_import_transactions(self):
+        LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 11),
+            value_date=date(2026, 4, 11),
+            description="Manual",
+            origin=LedgerTransaction.Origin.MANUAL,
+        )
+
+        response = self.client.post("/api/accounting/transactions/delete-imported/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["deleted_count"], 0)
+        self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 1)
+
     def test_moneywiz_preview_myinvestor_premium_is_not_investment_purchase(self):
         csv_bytes = (
             "sep=;\n"

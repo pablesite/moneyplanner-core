@@ -285,3 +285,7 @@ export type MoneyWizImportCommit = {
   preview: MoneyWizImportPreview;
   created_transaction_ids: number[];
 };
+
+export type DeleteImportedTransactionsResult = {
+  deleted_count: number;
+};
