@@ -628,16 +628,18 @@ def get_effective_liability_amount(
                         anchored_entries,
                         account_id=accounting_account.id,
                     )
-                    return compute_account_balance_from_totals(
+                    raw = compute_account_balance_from_totals(
                         account_type=accounting_account.account_type,
                         totals=totals,
                     )
+                    return max(Decimal("0"), raw)
 
-            return get_account_balance(
+            raw = get_account_balance(
                 account=accounting_account,
                 as_of_date=ref_date,
                 status=cast(str, LedgerTransaction.Status.POSTED),
             )
+            return max(Decimal("0"), raw)
 
     valuation = (
         LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)
