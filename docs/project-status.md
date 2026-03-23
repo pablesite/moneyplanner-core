@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-23 | **Versión Core:** 0.23.1
+**Última revisión:** 2026-03-24 | **Versión Core:** 0.23.2
 
 ---
 
@@ -18,7 +18,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
-| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. | Se define durante la revisión. |
+| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 110 cuentas totales, 5 ya revisadas). | Se define durante la revisión. |
 | Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
@@ -56,7 +56,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
