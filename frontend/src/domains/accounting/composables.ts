@@ -671,7 +671,13 @@ export function useAccountingPage() {
     if (editTransactionForm.account_id == null) return false;
     const parsedAmount = Number(formatDecimalInput(editTransactionForm.amount));
     if (!Number.isFinite(parsedAmount)) return false;
-    if (editTransactionForm.kind !== 'balance_adjustment' && parsedAmount <= 0) return false;
+    if (
+      editTransactionForm.kind !== 'balance_adjustment' &&
+      editTransactionForm.kind !== 'revaluation' &&
+      parsedAmount <= 0
+    )
+      return false;
+    if (editTransactionForm.kind === 'revaluation' && parsedAmount === 0) return false;
     if (
       editKindNeedsCounterparty.value &&
       (editTransactionForm.counterparty_account_id == null ||
@@ -1614,8 +1620,16 @@ export function useAccountingPage() {
       store.error = 'Introduce un importe valido.';
       return null;
     }
-    if (editTransactionForm.kind !== 'balance_adjustment' && parsedAmount <= 0) {
+    if (
+      editTransactionForm.kind !== 'balance_adjustment' &&
+      editTransactionForm.kind !== 'revaluation' &&
+      parsedAmount <= 0
+    ) {
       store.error = 'El importe debe ser mayor que 0.';
+      return null;
+    }
+    if (editTransactionForm.kind === 'revaluation' && parsedAmount === 0) {
+      store.error = 'El importe de la revalorizacion no puede ser cero.';
       return null;
     }
     if (editKindNeedsClassification.value) {
@@ -1664,8 +1678,24 @@ export function useAccountingPage() {
     selectedAccount: LedgerAccount,
   ): Promise<PersistedTransactionEntry[] | null> {
     if (editTransactionForm.kind === 'revaluation') {
-      // For revaluation edits just rescale the existing entries to the new amount.
-      return scaleEntriesToAmount(editTransactionPersistedEntries.value, round2(parsedAmount));
+      // Rebuild entries from scratch so that sign changes (gain↔loss) correctly flip debit/credit sides.
+      const assetEntry = editTransactionPersistedEntries.value.find(
+        (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
+      );
+      const counterpartyEntry = editTransactionPersistedEntries.value.find(
+        (entry) => accountMap.value.get(entry.account_id)?.account_type !== 'asset',
+      );
+      const assetAccount = assetEntry ? accountMap.value.get(assetEntry.account_id) : undefined;
+      const counterpartyAccount = counterpartyEntry
+        ? accountMap.value.get(counterpartyEntry.account_id)
+        : undefined;
+      if (!assetAccount || !counterpartyAccount) {
+        return scaleEntriesToAmount(
+          editTransactionPersistedEntries.value,
+          round2(Math.abs(parsedAmount)),
+        );
+      }
+      return buildBalanceAdjustmentEntries(parsedAmount, assetAccount, counterpartyAccount);
     }
     if (editTransactionForm.kind === 'balance_adjustment') {
       const targetBalance = round2(parsedAmount);
@@ -2040,6 +2070,14 @@ export function useAccountingPage() {
     }
     successMessage.value = null;
     store.error = null;
+    const kindToQuickEntryKind: Record<string, string> = {
+      income: 'income',
+      expense: 'expense',
+      transfer: 'transfer',
+      investment: 'investment',
+      debt_payment: 'debt_payment',
+      revaluation: 'revaluation',
+    };
     const payload: LedgerTransactionWritePayload = {
       booking_date: editTransactionForm.booking_date,
       value_date: editTransactionForm.value_date,
@@ -2048,6 +2086,9 @@ export function useAccountingPage() {
       origin: 'manual',
       notes: editTransactionForm.notes.trim(),
       ownership_id: editTransactionForm.ownership_id,
+      quick_entry_kind: kindToQuickEntryKind[editTransactionForm.kind] ?? '',
+      investment_direction:
+        editTransactionForm.kind === 'investment' ? editTransactionForm.investment_direction : '',
       entries: payloadEntries.map((entry) => ({
         account_id: entry.account_id,
         side: entry.side,
@@ -2127,39 +2168,17 @@ export function useAccountingPage() {
       store.error = 'Selecciona la cuenta de inversion.';
       return;
     }
-    const investmentAccount = accountMap.value.get(quickEntryForm.account_id);
-    if (!investmentAccount) {
-      store.error = 'La cuenta seleccionada no existe.';
-      return;
-    }
-    const counterpartyId = await ensureAdjustmentCounterpartyAccountId(investmentAccount.currency);
-    if (counterpartyId == null) {
-      store.error = 'No hay cuenta de contrapartida para registrar la revalorizacion.';
-      return;
-    }
-    const counterpartyAccount = accountMap.value.get(counterpartyId);
-    if (!counterpartyAccount) {
-      store.error = 'No se pudo resolver la cuenta de contrapartida.';
-      return;
-    }
-    const entries = buildBalanceAdjustmentEntries(delta, investmentAccount, counterpartyAccount);
-    const payload: LedgerTransactionWritePayload = {
+    const payload: QuickLedgerTransactionWritePayload = {
+      movement_type: 'revaluation',
       booking_date: quickEntryForm.booking_date,
       value_date: quickEntryForm.value_date,
       description: quickEntryForm.description.trim(),
-      status: 'posted',
-      origin: 'manual',
-      notes: quickEntryForm.notes.trim(),
+      amount: delta.toFixed(2),
+      account_id: quickEntryForm.account_id,
       ownership_id: quickEntryForm.ownership_id,
-      entries: entries.map((entry) => ({
-        account_id: entry.account_id,
-        side: entry.side,
-        amount: entry.amount,
-        currency: entry.currency,
-        notes: '',
-      })),
+      notes: quickEntryForm.notes.trim(),
     };
-    await store.createTransaction(payload);
+    await store.createQuickEntry(payload);
     await reloadMovementPagesAfterMutation();
     resetQuickEntryForm();
     successMessage.value = 'Revalorizacion registrada.';

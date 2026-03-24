@@ -184,24 +184,27 @@ def _build_quick_entry_payload(
             },
         ]
     if movement_type == "revaluation":
-        # Positive revaluation (gain): asset account DR, revaluation system account CR.
-        # Negative revaluation (loss): revaluation system account DR, asset account CR.
-        # The importer always passes abs(amount), so we use the original sign from the
-        # caller's perspective: here amount is already abs, so we model as a symmetric
-        # value adjustment.  Both sides use the same abs amount; the sign semantics are
-        # encoded in the account roles (asset vs. revaluation counter-account).
+        # Positive amount (gain): asset DR / counterparty CR.
+        # Negative amount (loss): counterparty DR / asset CR.
+        abs_amount = abs(base_amount)
+        if base_amount >= 0:
+            asset_side = LedgerEntry.Side.DEBIT
+            counterparty_side = LedgerEntry.Side.CREDIT
+        else:
+            asset_side = LedgerEntry.Side.CREDIT
+            counterparty_side = LedgerEntry.Side.DEBIT
         return [
             {
-                "account": counterparty_account,
-                "side": LedgerEntry.Side.DEBIT,
-                "amount": base_amount,
-                "currency": counterparty_account.currency,
+                "account": account,
+                "side": asset_side,
+                "amount": abs_amount,
+                "currency": account.currency,
             },
             {
-                "account": account,
-                "side": LedgerEntry.Side.CREDIT,
-                "amount": base_amount,
-                "currency": account.currency,
+                "account": counterparty_account,
+                "side": counterparty_side,
+                "amount": abs_amount,
+                "currency": counterparty_account.currency,
             },
         ]
     if movement_type == "debt_payment":

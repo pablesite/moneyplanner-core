@@ -82,8 +82,20 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
     entries = list(transaction.entries.all())
     if transaction.origin == LedgerTransaction.Origin.SYSTEM:
         return "revaluation"
-    if transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.REVALUATION:
+    # If quick_entry_kind is explicitly set, trust it over entry-based heuristics.
+    qek = transaction.quick_entry_kind
+    if qek == LedgerTransaction.QuickEntryKind.REVALUATION:
         return "revaluation"
+    if qek == LedgerTransaction.QuickEntryKind.TRANSFER:
+        return "transfer"
+    if qek == LedgerTransaction.QuickEntryKind.INVESTMENT:
+        return "investment_purchase"
+    if qek == LedgerTransaction.QuickEntryKind.INCOME:
+        return "income"
+    if qek == LedgerTransaction.QuickEntryKind.EXPENSE:
+        return "expense"
+    if qek == LedgerTransaction.QuickEntryKind.DEBT_PAYMENT:
+        return "debt_payment"
 
     has_income = any(
         entry.flow_family == LedgerEntry.FlowFamily.INCOME

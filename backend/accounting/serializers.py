@@ -294,8 +294,6 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "id",
             "import_source",
             "import_fingerprint",
-            "quick_entry_kind",
-            "investment_direction",
             "realized_cost_basis",
             "realized_gain_loss",
             "created_at",
@@ -495,7 +493,8 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             booking_date=attrs["booking_date"],
             value_date=attrs["value_date"],
         )
-        validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
+        if movement_type not in {"transfer", "investment", "investment_purchase", "revaluation"}:
+            validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
 
         if annual_income_entry is not None and annual_income_entry.user_id != user.id:
             raise serializers.ValidationError(

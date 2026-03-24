@@ -177,6 +177,8 @@ export type LedgerTransactionWritePayload = {
   origin?: LedgerTransactionOrigin;
   notes?: string;
   ownership_id?: number | null;
+  quick_entry_kind?: string;
+  investment_direction?: string;
   entries: LedgerEntryWritePayload[];
 };
 
