@@ -323,7 +323,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       </div>
     </div>
 
-    <div v-if="section.groups.length && isSectionExpanded(section.id)" class="ui-budget-groups">
+    <div v-if="section.groups.length && isSectionExpanded(section.id)" class="ui-budget-detail-area">
       <div class="ui-budget-detail-month-bar">
         <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
         <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
@@ -340,6 +340,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         </div>
       </div>
 
+      <div class="ui-budget-groups">
       <article
         v-for="group in section.groups"
         :key="`${section.id}-${group.categoryKey}`"
@@ -690,6 +691,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           </li>
         </ul>
       </article>
+      </div>
     </div>
 
     <div
