@@ -1067,80 +1067,73 @@
 }
 
 .ui-budget-month-rail {
-  height: 96px;
+  height: 88px;
   width: 100%;
   min-width: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 6px 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 5px 4px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
-  gap: 4px;
+  gap: 3px;
 }
 
 .ui-budget-month-plan {
   height: 38%;
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(110, 209, 255, 0.28), rgba(110, 209, 255, 0.12));
-  border: 1px solid rgba(110, 209, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
   min-height: 3px;
 }
 
 .ui-budget-month-exec-pending {
   height: 22%;
-  border-radius: 6px;
-  border: 1px dashed rgba(255, 255, 255, 0.24);
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.08) 0 4px,
-    rgba(255, 255, 255, 0.02) 4px 8px
-  );
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
   min-height: 3px;
 }
 
 .ui-budget-month-exec {
   height: 22%;
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(110, 255, 214, 0.34), rgba(54, 211, 153, 0.16));
-  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 4px;
+  background: hsl(142 71% 45%);
   min-height: 3px;
 }
 
 .ui-budget-month-label {
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .ui-budget-evolution-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.74rem;
+  gap: 8px 14px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.72rem;
 }
 
 .ui-budget-legend-dot {
   display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
   margin-right: 5px;
   vertical-align: -1px;
 }
 
 .ui-budget-legend-plan {
-  background: rgba(110, 209, 255, 0.7);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .ui-budget-legend-exec {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px dashed rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
 }
 
 .ui-budget-legend-exec-solid {
-  background: rgba(94, 234, 212, 0.75);
+  background: hsl(142 71% 45%);
 }
 
 .ui-budget-detail-area {
@@ -1718,8 +1711,8 @@
   }
 
   .ui-budget-month-rail {
-    height: 82px;
-    padding: 5px 3px;
+    height: 72px;
+    padding: 4px 3px;
   }
 
   .ui-budget-row-metrics {
