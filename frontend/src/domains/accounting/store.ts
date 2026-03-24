@@ -66,6 +66,8 @@ export const useAccountingStore = defineStore('accounting', {
         account_id?: number;
         query?: string;
         kind?: string;
+        category_key?: string;
+        subcategory_key?: string;
       },
       options?: { signal?: AbortSignal },
     ): Promise<PaginatedTransactionsResponse> {

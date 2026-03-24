@@ -45,6 +45,8 @@ export function useAccountingMovementsPage() {
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    filterCategoryOptions,
+    filterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
@@ -217,6 +219,51 @@ export function useAccountingMovementsPage() {
     if (value > 0) return `+${formatMoney(value, currency)}`;
     if (value < 0) return `-${formatMoney(Math.abs(value), currency)}`;
     return formatMoney(0, currency);
+  }
+
+  type DatePreset = 'all' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year' | 'custom';
+  const datePresetOptions: { value: DatePreset; label: string }[] = [
+    { value: 'all', label: 'Período' },
+    { value: 'this_month', label: 'Este mes' },
+    { value: 'last_month', label: 'Mes anterior' },
+    { value: 'last_3_months', label: 'Últimos 3m' },
+    { value: 'this_year', label: 'Este año' },
+    { value: 'custom', label: 'Personalizado' },
+  ];
+  const todosDatePreset = ref<DatePreset>('all');
+
+  function applyDatePreset(preset: DatePreset) {
+    todosDatePreset.value = preset;
+    if (preset === 'custom') return;
+    const now = new Date();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    if (preset === 'all') {
+      todosDateFrom.value = '';
+      todosDateTo.value = '';
+      return;
+    }
+    if (preset === 'this_month') {
+      todosDateFrom.value = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+      todosDateTo.value = '';
+      return;
+    }
+    if (preset === 'last_month') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      todosDateFrom.value = fmt(first);
+      todosDateTo.value = fmt(last);
+      return;
+    }
+    if (preset === 'last_3_months') {
+      todosDateFrom.value = fmt(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+      todosDateTo.value = '';
+      return;
+    }
+    if (preset === 'this_year') {
+      todosDateFrom.value = fmt(new Date(now.getFullYear(), 0, 1));
+      todosDateTo.value = '';
+      return;
+    }
   }
 
   const showActivationModal = ref(false);
@@ -514,6 +561,8 @@ export function useAccountingMovementsPage() {
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    filterCategoryOptions,
+    filterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
@@ -539,6 +588,9 @@ export function useAccountingMovementsPage() {
     loadMoreCuentas,
     todosDateFrom,
     todosDateTo,
+    todosDatePreset,
+    datePresetOptions,
+    applyDatePreset,
     todosTransactions,
     todosTotalCount,
     todosLoading,

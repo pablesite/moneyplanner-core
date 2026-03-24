@@ -26,6 +26,8 @@ function buildTransactionQueryParams(params?: {
   account_id?: number;
   query?: string;
   kind?: string;
+  category_key?: string;
+  subcategory_key?: string;
 }) {
   if (!params) return undefined;
   const queryParams = {
@@ -39,6 +41,8 @@ function buildTransactionQueryParams(params?: {
     ...(params.account_id ? { account_id: params.account_id } : {}),
     ...(params.query ? { query: params.query } : {}),
     ...(params.kind ? { kind: params.kind } : {}),
+    ...(params.category_key ? { category_key: params.category_key } : {}),
+    ...(params.subcategory_key ? { subcategory_key: params.subcategory_key } : {}),
   };
   return Object.keys(queryParams).length ? queryParams : undefined;
 }
@@ -78,6 +82,8 @@ export const coreAccountingApi = {
       account_id?: number;
       query?: string;
       kind?: string;
+      category_key?: string;
+      subcategory_key?: string;
     },
     options?: { signal?: AbortSignal },
   ) {

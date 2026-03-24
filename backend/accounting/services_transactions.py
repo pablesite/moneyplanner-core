@@ -133,6 +133,8 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     account_id = (params.get("account_id") or "").strip()
     query = (params.get("query") or "").strip()
     kind = (params.get("kind") or "").strip()
+    category_key = (params.get("category_key") or "").strip()
+    subcategory_key = (params.get("subcategory_key") or "").strip()
 
     if date_from:
         parsed = parse_date(date_from)
@@ -158,6 +160,25 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             | Q(notes__icontains=query)
             | Q(entries__account__name__icontains=query)
         ).distinct()
+
+    if category_key:
+        queryset = queryset.filter(
+            Exists(
+                LedgerEntry.objects.filter(
+                    transaction_id=OuterRef("pk"),
+                    category_key=category_key,
+                )
+            )
+        )
+    if subcategory_key:
+        queryset = queryset.filter(
+            Exists(
+                LedgerEntry.objects.filter(
+                    transaction_id=OuterRef("pk"),
+                    subcategory_key=subcategory_key,
+                )
+            )
+        )
 
     if not kind:
         return queryset

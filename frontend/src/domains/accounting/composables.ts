@@ -193,6 +193,8 @@ export function useAccountingPage() {
     query: '',
     accountId: 'all',
     kind: 'all' as ActivityFilter,
+    categoryKey: '',
+    subcategoryKey: '',
   });
 
   let rowId = 0;
@@ -515,6 +517,21 @@ export function useAccountingPage() {
     }
     return [];
   });
+  const filterCategoryOptions = computed(() => {
+    if (activityFilters.kind === 'income') return incomeCategories;
+    if (activityFilters.kind === 'expense') return expenseCategories;
+    return [...incomeCategories, ...expenseCategories];
+  });
+
+  const filterSubcategoryOptions = computed(() => {
+    if (!activityFilters.categoryKey) return [];
+    const asIncome = incomeSubcategories.filter(
+      (row) => row.category === activityFilters.categoryKey,
+    );
+    if (asIncome.length) return asIncome;
+    return expenseSubcategories.filter((row) => row.category === activityFilters.categoryKey);
+  });
+
   const annualIncomeOptionsCompatible = computed<AnnualIncomeEntry[]>(() => {
     if (quickEntryForm.movement_type !== 'income') return [];
     if (!quickEntryForm.category_key || !quickEntryForm.subcategory_key) return [];
@@ -923,6 +940,8 @@ export function useAccountingPage() {
           account_id: Number.isFinite(accountParam ?? NaN) ? accountParam : undefined,
           date_from: todosDateFrom.value || undefined,
           date_to: todosDateTo.value || undefined,
+          category_key: activityFilters.categoryKey || undefined,
+          subcategory_key: activityFilters.subcategoryKey || undefined,
         },
         { signal: controller.signal },
       );
@@ -1011,9 +1030,31 @@ export function useAccountingPage() {
   });
 
   watch(
-    [() => activityFilters.kind, () => activityFilters.accountId, todosDateFrom, todosDateTo],
+    [
+      () => activityFilters.kind,
+      () => activityFilters.accountId,
+      () => activityFilters.categoryKey,
+      () => activityFilters.subcategoryKey,
+      todosDateFrom,
+      todosDateTo,
+    ],
     () => {
       void fetchTodosPage(true);
+    },
+  );
+
+  watch(
+    () => activityFilters.kind,
+    () => {
+      activityFilters.categoryKey = '';
+      activityFilters.subcategoryKey = '';
+    },
+  );
+
+  watch(
+    () => activityFilters.categoryKey,
+    () => {
+      activityFilters.subcategoryKey = '';
     },
   );
 
@@ -2220,6 +2261,8 @@ export function useAccountingPage() {
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    filterCategoryOptions,
+    filterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
