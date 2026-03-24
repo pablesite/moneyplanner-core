@@ -24,7 +24,10 @@ class FamilyMember(models.Model):
             models.Index(fields=["user", "role"]),
         ]
         constraints = [
-            models.UniqueConstraint(fields=["user", "name"], name="uniq_member_name_per_user"),
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                name="uniq_member_name_per_user_memberships",
+            ),
         ]
         ordering = ["role", "name"]
 
@@ -56,7 +59,7 @@ class Ownership(models.Model):
         indexes = [models.Index(fields=["user", "kind"])]
         constraints = [
             models.CheckConstraint(
-                name="ownership_individual_requires_member",
+                name="ownership_individual_requires_member_memberships",
                 condition=(
                     Q(kind="individual", member__isnull=False)
                     | Q(kind="shared", member__isnull=True)
@@ -83,7 +86,8 @@ class OwnershipSplit(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["ownership", "member"], name="uniq_split_member_per_ownership"
+                fields=["ownership", "member"],
+                name="uniq_split_member_per_ownership_memberships",
             ),
         ]
 

@@ -974,6 +974,39 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+.ui-budget-expense-coverage-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 420px;
+}
+
+.ui-budget-expense-coverage-kpi {
+  display: grid;
+  gap: 2px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.ui-budget-expense-coverage-kpi-label {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+.ui-budget-expense-coverage-kpi strong {
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.ui-budget-expense-coverage-kpi-alert {
+  border-color: rgba(255, 150, 110, 0.38);
+  background: rgba(255, 120, 84, 0.08);
+}
+
 .ui-budget-section-income .ui-budget-section-title {
   color: rgba(167, 255, 228, 0.98);
   text-shadow: 0 0 0 transparent;
@@ -1665,6 +1698,12 @@
 
   .ui-budget-section-header-side {
     justify-items: start;
+  }
+
+  .ui-budget-expense-coverage-kpis {
+    min-width: 0;
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .ui-budget-section-controls {

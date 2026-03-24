@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RemoveConstraint(
             model_name="ownership",
-            name="ownership_individual_requires_member",
+            name="ownership_individual_requires_member_memberships",
         ),
         migrations.RenameIndex(
             model_name="familymember",
@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                     models.Q(("kind", "shared"), ("member__isnull", True)),
                     _connector="OR",
                 ),
-                name="ownership_individual_requires_member",
+                name="ownership_individual_requires_member_memberships",
             ),
         ),
     ]

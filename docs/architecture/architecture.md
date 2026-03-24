@@ -37,6 +37,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
+## Budget Execution Coverage Contract
+1. `GET /api/budget/annual-expense/monthly-summary/?year=YYYY` is the canonical contract to explain budget coverage vs real execution for expenses.
+2. The payload distinguishes:
+   - `executed_budgeted_total`: real expense matched to budgeted annual lines
+   - `executed_unbudgeted_total`: real expense detected in ledger without annual budget line
+   - `executed_total`: full real expense (`budgeted + unbudgeted`)
+3. Monthly rows mirror the same split with `executed_budgeted`, `executed_unbudgeted`, and `executed_total`.
+4. The response includes `expense_execution_breakdown` by category/subcategory (with monthly detail), so Core and SaaS frontends can render unbudgeted execution visibility without duplicating backend rules.
+
 ## Public Import API
 1. Core exposes MoneyWiz import endpoints in `accounting` for preview and commit:
    - `POST /api/accounting/transactions/import-moneywiz/preview/`

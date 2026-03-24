@@ -131,6 +131,7 @@ const {
   filteredExpenseEntries,
   incomeBudgetSuggestions,
   expenseBudgetSuggestions,
+  expenseExecutionYtdTotals,
   hasAnyPlannedData,
   closeStatus,
   isCloseLocked,
@@ -380,6 +381,7 @@ if (annualEntriesPage) {
       :toggle-section-expanded="toggleSectionExpanded"
       :budget-category-actual-execution="budgetCategoryActualExecution"
       :budget-subcategory-actual-execution="budgetSubcategoryActualExecution"
+      :expense-execution-ytd-totals="expenseExecutionYtdTotals"
       :execution-preview="executionPreview"
       :update-income-view-mode="updateIncomeViewMode"
       :update-expense-view-mode="updateExpenseViewMode"

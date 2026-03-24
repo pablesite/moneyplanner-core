@@ -51,7 +51,8 @@ class Migration(migrations.Migration):
                 ],
                 "constraints": [
                     models.UniqueConstraint(
-                        fields=("user", "name"), name="uniq_member_name_per_user"
+                        fields=("user", "name"),
+                        name="uniq_member_name_per_user_memberships",
                     ),
                 ],
             },
@@ -102,7 +103,7 @@ class Migration(migrations.Migration):
                             ("kind", "individual"), ("member__isnull", False), _connector="OR"
                         )
                         | Q(("kind", "shared"), ("member__isnull", True), _connector="OR"),
-                        name="ownership_individual_requires_member",
+                        name="ownership_individual_requires_member_memberships",
                     ),
                 ],
             },
@@ -144,7 +145,8 @@ class Migration(migrations.Migration):
             options={
                 "constraints": [
                     models.UniqueConstraint(
-                        fields=("ownership", "member"), name="uniq_split_member_per_ownership"
+                        fields=("ownership", "member"),
+                        name="uniq_split_member_per_ownership_memberships",
                     ),
                 ],
             },
