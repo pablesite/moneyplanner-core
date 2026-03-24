@@ -1,4 +1,5 @@
 import type { Router } from 'vue-router';
+import axios from 'axios';
 import { authApi } from '@/domains/auth/api';
 import { clearAuthTokens, getAccessToken } from '@/domains/auth/session';
 
@@ -17,10 +18,14 @@ async function ensureAuthValid(): Promise<boolean> {
         authChecked = true;
         return true;
       })
-      .catch(() => {
-        clearAuthTokens();
+      .catch((error: unknown) => {
         authChecked = false;
-        return false;
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          clearAuthTokens();
+          return false;
+        }
+        return true;
       })
       .finally(() => {
         authCheckPromise = null;
