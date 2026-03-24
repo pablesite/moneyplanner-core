@@ -23,11 +23,11 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 ### Siguiente tarea disponible
 
-Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
+Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
 
-| Módulo | Tipo | Descripción | Spec |
+| Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
-| Presupuesto | Agente | Hacer visible en Presupuesto el gasto real fuera de presupuesto y la cobertura real por categoría/subcategoría, con contrato reusable para el espejo SaaS. | `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/backend.md` + `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/frontend.md` |
+| _(sin tareas Agente abiertas)_ | - | La fase 3 de Presupuesto (gasto fuera de presupuesto y cobertura real) se completo y quedo archivada en `terminados/`. | `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/terminados/backend.md` + `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/terminados/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
