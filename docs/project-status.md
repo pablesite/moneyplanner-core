@@ -56,7 +56,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). Resumen de gasto ampliado con cobertura canónica (`executed_budgeted` vs `executed_unbudgeted`) y visibilidad de subcategorías detectadas sin línea anual. |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). Resumen de ingresos y gasto ampliado con cobertura canónica (`executed_budgeted` vs `executed_unbudgeted`) y visibilidad de subcategorías detectadas sin línea anual. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
@@ -89,4 +89,3 @@ _(ninguna tarea aparcada en este momento)_
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
-

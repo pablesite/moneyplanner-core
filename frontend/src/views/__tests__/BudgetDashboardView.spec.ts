@@ -718,4 +718,250 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('Detectado en movimientos');
     expect(wrapper.text()).toContain('Anadir al presupuesto');
   });
+
+  it('shows unbudgeted income split and detected income rows', async () => {
+    configureCoreApi({
+      incomeSummary: {
+        fiscal_year: currentYear,
+        planned_total: '1200.00',
+        executed_total: '165.00',
+        executed_budgeted_total: '120.00',
+        executed_unbudgeted_total: '45.00',
+        pending_total: '0.00',
+        variance_total: '-1035.00',
+        completion_ratio: 1,
+        months_with_checkins: 0,
+        has_executed_data: true,
+        months: [
+          {
+            month: currentMonth,
+            planned: '100.00',
+            executed: '165.00',
+            executed_budgeted: '120.00',
+            executed_unbudgeted: '45.00',
+            executed_total: '165.00',
+            pending: '0.00',
+            completion_ratio: 1,
+            checkins_confirmed: 1,
+            checkins_expected: 1,
+          },
+        ],
+        income_execution_breakdown: {
+          categories: [
+            {
+              category: 'salary',
+              planned_total: '100.00',
+              executed_budgeted_total: '120.00',
+              executed_unbudgeted_total: '45.00',
+              executed_total: '165.00',
+              has_budgeted_lines: true,
+              has_unbudgeted_execution: true,
+              subcategories: [
+                {
+                  subcategory: 'employee_salary',
+                  planned_total: '100.00',
+                  executed_budgeted_total: '120.00',
+                  executed_unbudgeted_total: '0.00',
+                  executed_total: '120.00',
+                  has_budgeted_line: true,
+                  has_unbudgeted_execution: false,
+                  months: Array.from({ length: 12 }, (_, idx) => ({
+                    month: idx + 1,
+                    planned: idx + 1 === currentMonth ? '100.00' : '0.00',
+                    executed_budgeted: idx + 1 === currentMonth ? '120.00' : '0.00',
+                    executed_unbudgeted: '0.00',
+                    executed_total: idx + 1 === currentMonth ? '120.00' : '0.00',
+                  })),
+                },
+                {
+                  subcategory: 'social_benefits',
+                  planned_total: '0.00',
+                  executed_budgeted_total: '0.00',
+                  executed_unbudgeted_total: '45.00',
+                  executed_total: '45.00',
+                  has_budgeted_line: false,
+                  has_unbudgeted_execution: true,
+                  months: Array.from({ length: 12 }, (_, idx) => ({
+                    month: idx + 1,
+                    planned: '0.00',
+                    executed_budgeted: '0.00',
+                    executed_unbudgeted: idx + 1 === currentMonth ? '45.00' : '0.00',
+                    executed_total: idx + 1 === currentMonth ? '45.00' : '0.00',
+                  })),
+                },
+              ],
+            },
+          ],
+          executed_budgeted_total: '120.00',
+          executed_unbudgeted_total: '45.00',
+          executed_total: '165.00',
+        },
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const incomeSection = wrapper.find('.ui-budget-section-income');
+    expect(incomeSection.text()).toContain('En presupuesto (YTD)');
+    expect(incomeSection.text()).toContain('Fuera de presupuesto (YTD)');
+    expect(incomeSection.text()).toContain('45,00 EUR');
+
+    const toggleDetail = incomeSection
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ver detalle'));
+    await toggleDetail?.trigger('click');
+    await flushPromises();
+
+    expect(incomeSection.text()).toContain('Detectado en movimientos');
+    expect(incomeSection.text()).toContain('Anadir al presupuesto');
+  });
+
+  it('updates income evolution executed bars when switching recurrent/one-off filter', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 1,
+        name: 'Nomina',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 12000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+      {
+        id: 2,
+        name: 'Bonus',
+        category: 'salary',
+        subcategory: 'employee_salary',
+        owner: '',
+        incomeType: 'one_off',
+        timeProfile: 'non_structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: 1,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 1200,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 13200;
+    configureCoreApi();
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: {
+        results: [
+          {
+            id: 10,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-10`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-10`,
+            description: 'Nomina',
+            status: 'posted',
+            origin: 'manual',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 101,
+                account_id: 1,
+                account_name: 'Cuenta corriente',
+                side: 'credit',
+                amount: '1000.00',
+                currency: 'EUR',
+                flow_family: 'income',
+                category_key: null,
+                subcategory_key: null,
+                annual_income_entry_id: 1,
+                annual_expense_entry_id: null,
+                asset_id: null,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+          {
+            id: 11,
+            booking_date: `${currentYear}-01-15`,
+            value_date: `${currentYear}-01-15`,
+            description: 'Bonus puntual',
+            status: 'posted',
+            origin: 'manual',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 111,
+                account_id: 1,
+                account_name: 'Cuenta corriente',
+                side: 'credit',
+                amount: '1200.00',
+                currency: 'EUR',
+                flow_family: 'income',
+                category_key: null,
+                subcategory_key: null,
+                annual_income_entry_id: 2,
+                annual_expense_entry_id: null,
+                asset_id: null,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+        ],
+        next_cursor: null,
+        total_count: 2,
+      },
+    } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const incomeSection = wrapper.find('.ui-budget-section-income');
+    const incomeFilterButtons = () => incomeSection.findAll('.ui-budget-filter-segment button');
+    const januaryExec = () => {
+      const monthCols = incomeSection.findAll('.ui-budget-month-col');
+      const januaryCol = monthCols[0];
+      if (!januaryCol) throw new Error('Income January column not found');
+      return januaryCol.find('div[class^="ui-budget-month-exec"]');
+    };
+
+    await incomeFilterButtons()
+      .find((candidate) => candidate.text().includes('Recurrentes'))
+      ?.trigger('click');
+    await flushPromises();
+    expect(januaryExec().classes()).toContain('ui-budget-month-exec-pending');
+
+    await incomeFilterButtons()
+      .find((candidate) => candidate.text().includes('Puntuales'))
+      ?.trigger('click');
+    await flushPromises();
+    expect(januaryExec().classes()).toContain('ui-budget-month-exec');
+  });
 });

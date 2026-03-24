@@ -92,6 +92,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     months_with_checkins: number;
     has_executed_data: boolean;
     expense_execution_breakdown?: ExpenseExecutionBreakdown;
+    income_execution_breakdown?: ExpenseExecutionBreakdown;
   };
 
   type IncomeMonthlySummaryMonth = ExpenseMonthlySummaryMonth;
@@ -613,9 +614,11 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   function monthlyPlannedAmountForIncomeEntry(
     entry: (typeof incomeEntries.value)[number],
-    _month: number,
+    month: number,
   ): number {
-    if (entry.incomeType === 'one_off') return 0;
+    if (entry.incomeType === 'one_off') {
+      return entry.targetMonth === month ? toNumberOrZero(entry.amountAnnual) : 0;
+    }
     return toNumberOrZero(entry.amountAnnual) / 12;
   }
 
@@ -696,7 +699,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const incomeTaxonomyLineCountsByMonth = computed(() => {
     const map = new Map<string, number>();
     for (const entry of incomeEntries.value) {
-      if (entry.fiscalYear !== fiscalYear.value || entry.incomeType === 'one_off') continue;
+      if (entry.fiscalYear !== fiscalYear.value) continue;
       for (let month = 1; month <= 12; month++) {
         const planned = monthlyPlannedAmountForIncomeEntry(entry, month);
         if (planned <= 0) continue;
@@ -870,18 +873,25 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const incomeEvolutionMonths = computed(() => {
     const rows = monthLabels.map((label, index) => {
       const month = index + 1;
-      const summary = incomeSummaryByMonth.value.get(month);
       const planned = filteredIncomeEntries.value.reduce(
         (sum, entry) => sum + monthlyPlannedAmountForIncomeEntry(entry, month),
         0,
       );
-      const executed = toNumberOrZero(summary?.executed);
+      let executed = 0;
+      let checkinsConfirmed = 0;
+      for (const entry of filteredIncomeEntries.value) {
+        const checkin = incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
+        const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
+        if (resolution.executionSource === 'none') continue;
+        checkinsConfirmed += 1;
+        if (resolution.executed != null) executed += resolution.executed;
+      }
       return {
         month,
         label,
         planned,
         executed,
-        hasExecuted: (summary?.checkins_confirmed ?? 0) > 0 || executed > 0,
+        hasExecuted: checkinsConfirmed > 0 || executed > 0,
       };
     });
     const maxMonthAmount = Math.max(1, ...rows.map((row) => Math.max(row.planned, row.executed)));
@@ -1229,17 +1239,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredIncomeEntries.value) {
-      if (entry.incomeType === 'one_off') continue;
       const categoryKey = entry.category;
-      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, budgetDetailMonth.value);
       let row = map.get(categoryKey);
       if (!row) {
         row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
         map.set(categoryKey, row);
       }
-      row.planned += monthlyPlanned * monthsCount;
-      row.expectedCount += monthsCount;
       for (let month = 1; month <= monthsCount; month++) {
+        const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, month);
+        if (monthlyPlanned > 0) {
+          row.planned += monthlyPlanned;
+          row.expectedCount += 1;
+        }
         const checkin =
           incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
         const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
@@ -1247,6 +1258,21 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         row.checkedCount += 1;
         if (resolution.executed != null) row.executed += resolution.executed;
       }
+    }
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      let row = map.get(category.category);
+      if (!row) {
+        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
+        map.set(category.category, row);
+      }
+      for (const subcategory of category.subcategories) {
+        if (subcategory.has_budgeted_line) continue;
+        for (const monthRow of subcategory.months) {
+          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
+          row.executed += toNumberOrZero(monthRow.executed_unbudgeted);
+        }
+      }
+      if (row.executed > 0) row.checkedCount = Math.max(row.checkedCount, 1);
     }
     return map;
   });
@@ -1255,17 +1281,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const map = new Map<string, BudgetActualAggregateRow>();
     for (const entry of filteredIncomeEntries.value) {
-      if (entry.incomeType === 'one_off') continue;
       const key = `${entry.category}::${entry.subcategory}`;
-      const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, budgetDetailMonth.value);
       let row = map.get(key);
       if (!row) {
         row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
         map.set(key, row);
       }
-      row.planned += monthlyPlanned * monthsCount;
-      row.expectedCount += monthsCount;
       for (let month = 1; month <= monthsCount; month++) {
+        const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, month);
+        if (monthlyPlanned > 0) {
+          row.planned += monthlyPlanned;
+          row.expectedCount += 1;
+        }
         const checkin =
           incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
         const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
@@ -1274,11 +1301,30 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         if (resolution.executed != null) row.executed += resolution.executed;
       }
     }
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      for (const subcategory of category.subcategories) {
+        if (subcategory.has_budgeted_line) continue;
+        const key = `${category.category}::${subcategory.subcategory}`;
+        let row = map.get(key);
+        if (!row) {
+          row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
+          map.set(key, row);
+        }
+        for (const monthRow of subcategory.months) {
+          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
+          row.executed += toNumberOrZero(monthRow.executed_unbudgeted);
+        }
+        if (row.executed > 0) row.checkedCount = Math.max(row.checkedCount, 1);
+      }
+    }
     return map;
   });
 
   const expenseExecutionBreakdownCategories = computed(
     () => expenseMonthlySummary.value?.expense_execution_breakdown?.categories ?? [],
+  );
+  const incomeExecutionBreakdownCategories = computed(
+    () => incomeMonthlySummary.value?.income_execution_breakdown?.categories ?? [],
   );
 
   type ExpenseCoverageYtdAggregate = BudgetActualAggregateRow & {
@@ -1913,9 +1959,80 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       .sort((a, b) => b.plannedAnnual - a.plannedAnnual);
   }
 
-  const incomeGroups = computed(() =>
-    aggregateBudgetRows(filteredIncomeEntries.value, incomeCategoryLabels, incomeSubcategoryLabels),
-  );
+  const incomeGroups = computed(() => {
+    const groups = aggregateBudgetRows(
+      filteredIncomeEntries.value,
+      incomeCategoryLabels,
+      incomeSubcategoryLabels,
+    );
+    const groupsByCategory = new Map(groups.map((group) => [group.categoryKey, group]));
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
+
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      for (const subcategory of category.subcategories) {
+        if (subcategory.has_budgeted_line) continue;
+        let detectedExecutedYtd = 0;
+        for (const monthRow of subcategory.months) {
+          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
+          detectedExecutedYtd += toNumberOrZero(monthRow.executed_unbudgeted);
+        }
+        if (detectedExecutedYtd <= 0) continue;
+
+        const rowKey = `${category.category}::${subcategory.subcategory}`;
+        let group = groupsByCategory.get(category.category);
+        if (!group) {
+          group = {
+            categoryKey: category.category,
+            categoryLabel: incomeCategoryLabels.get(category.category as never) ?? category.category,
+            plannedAnnual: 0,
+            shareOfSection: 0,
+            rows: [],
+          };
+          groups.push(group);
+          groupsByCategory.set(category.category, group);
+        }
+        const exists = group.rows.some((row) => row.key === rowKey);
+        if (exists) continue;
+        group.rows.push({
+          key: rowKey,
+          categoryKey: category.category,
+          categoryLabel: incomeCategoryLabels.get(category.category as never) ?? category.category,
+          subcategoryKey: subcategory.subcategory,
+          subcategoryLabel:
+            incomeSubcategoryLabels.get(subcategory.subcategory) ?? subcategory.subcategory,
+          plannedAnnual: 0,
+          itemsCount: 0,
+          detectedUnbudgeted: true,
+          detectedExecutedYtd,
+        });
+      }
+    }
+
+    for (const group of groups) {
+      group.rows.sort((a, b) => {
+        const aDetected = a.detectedUnbudgeted ? 1 : 0;
+        const bDetected = b.detectedUnbudgeted ? 1 : 0;
+        if (aDetected !== bDetected) return bDetected - aDetected;
+        if (b.plannedAnnual !== a.plannedAnnual) return b.plannedAnnual - a.plannedAnnual;
+        const aDetectedAmount = a.detectedExecutedYtd ?? 0;
+        const bDetectedAmount = b.detectedExecutedYtd ?? 0;
+        if (bDetectedAmount !== aDetectedAmount) return bDetectedAmount - aDetectedAmount;
+        return a.subcategoryLabel.localeCompare(b.subcategoryLabel, 'es');
+      });
+      group.plannedAnnual = group.rows.reduce((sum, row) => sum + row.plannedAnnual, 0);
+    }
+    const sectionTotal = groups.reduce((sum, group) => sum + group.plannedAnnual, 0);
+    for (const group of groups) {
+      group.shareOfSection = sectionTotal > 0 ? group.plannedAnnual / sectionTotal : 0;
+    }
+    return groups.sort((a, b) => {
+      const aDetected = a.rows.some((row) => row.detectedUnbudgeted) ? 1 : 0;
+      const bDetected = b.rows.some((row) => row.detectedUnbudgeted) ? 1 : 0;
+      if (aDetected !== bDetected) return bDetected - aDetected;
+      if (b.plannedAnnual !== a.plannedAnnual) return b.plannedAnnual - a.plannedAnnual;
+      return a.categoryLabel.localeCompare(b.categoryLabel, 'es');
+    });
+  });
   const expenseGroups = computed(() => {
     const groups = aggregateBudgetRows(
       filteredExpenseEntries.value,
@@ -1995,6 +2112,28 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const expenseExecutionYtdTotals = computed(() => {
     const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
     const months = expenseMonthlySummary.value?.months ?? [];
+    let planned = 0;
+    let executedBudgeted = 0;
+    let executedUnbudgeted = 0;
+    let executedTotal = 0;
+    for (const month of months) {
+      if (month.month < 1 || month.month > monthsCount) continue;
+      planned += toNumberOrZero(month.planned);
+      executedBudgeted += toNumberOrZero(month.executed_budgeted ?? month.executed);
+      executedUnbudgeted += toNumberOrZero(month.executed_unbudgeted);
+      executedTotal += toNumberOrZero(month.executed_total ?? month.executed);
+    }
+    return {
+      planned,
+      executedBudgeted,
+      executedUnbudgeted,
+      executedTotal,
+    };
+  });
+
+  const incomeExecutionYtdTotals = computed(() => {
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
+    const months = incomeMonthlySummary.value?.months ?? [];
     let planned = 0;
     let executedBudgeted = 0;
     let executedUnbudgeted = 0;
@@ -3058,6 +3197,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     aggregateBudgetRows,
     incomeGroups,
     expenseGroups,
+    incomeExecutionYtdTotals,
     expenseExecutionYtdTotals,
     viewModeLabel,
     isSectionExpanded,

@@ -361,6 +361,47 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(month["executed"], "1000.00")
         self.assertEqual(month["fallback_confirmed"], 1)
 
+    def test_income_summary_includes_unbudgeted_subcategory_within_budgeted_category(self):
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        self._post_income_entry(
+            amount="120.00",
+            month=3,
+            category_key="salary",
+            subcategory_key="employee_salary",
+        )
+        self._post_income_entry(
+            amount="45.00",
+            month=3,
+            category_key="salary",
+            subcategory_key="social_benefits",
+        )
+
+        summary = build_income_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        self.assertEqual(summary["executed_budgeted_total"], "120.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "45.00")
+        month = next(row for row in summary["months"] if row["month"] == 3)
+        self.assertEqual(month["executed_budgeted"], "120.00")
+        self.assertEqual(month["executed_unbudgeted"], "45.00")
+        self.assertEqual(month["executed_total"], "165.00")
+
+        categories = {
+            row["category"]: row for row in summary["income_execution_breakdown"]["categories"]
+        }
+        salary = categories["salary"]
+        subcategories = {row["subcategory"]: row for row in salary["subcategories"]}
+        self.assertEqual(subcategories["employee_salary"]["has_budgeted_line"], True)
+        self.assertEqual(subcategories["social_benefits"]["has_budgeted_line"], False)
+        self.assertEqual(subcategories["social_benefits"]["executed_unbudgeted_total"], "45.00")
+
     def test_expense_summary_reports_mixed_coverage_with_ledger_and_fallback(self):
         expense = AnnualExpenseEntry.objects.create(
             user=self.user,
