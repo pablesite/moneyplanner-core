@@ -127,6 +127,16 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           required
         />
 
+        <select v-model="page.quickEntryForm.ownership_id" class="select">
+          <option
+            v-for="option in page.ownershipOptions"
+            :key="option.value == null ? 'none' : option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+
         <label class="ui-accounting-field">
           <span>Fecha contabilizacion</span>
           <input v-model="page.quickEntryForm.booking_date" type="date" class="input" required />

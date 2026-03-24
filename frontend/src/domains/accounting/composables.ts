@@ -15,6 +15,7 @@ import {
   type ExpenseCategoryKey,
   type IncomeCategoryKey,
 } from '@/domains/data-input';
+import { usePeopleStore, type OwnershipRead } from '@/domains/people/store';
 import type {
   LedgerAccount,
   LedgerAccountBalanceSummaryItem,
@@ -42,6 +43,7 @@ type TransactionFormState = {
   booking_time: string;
   description: string;
   notes: string;
+  ownership_id: number | null;
   account_id: number | null;
   counterparty_account_id: number | null;
   amount: string;
@@ -120,6 +122,7 @@ export function useAccountingPage() {
   const store = useAccountingStore();
   const incomeStore = useAnnualIncomeStore('core');
   const expenseStore = useAnnualExpenseStore('core');
+  const peopleStore = usePeopleStore();
   const {
     loading,
     accountCreationLoading,
@@ -160,6 +163,7 @@ export function useAccountingPage() {
     booking_date: new Date().toISOString().slice(0, 10),
     value_date: new Date().toISOString().slice(0, 10),
     description: '',
+    ownership_id: null as number | null,
     amount: '',
     account_id: null as number | null,
     counterparty_account_id: null as number | null,
@@ -225,6 +229,7 @@ export function useAccountingPage() {
     booking_time: '12:00',
     description: '',
     notes: '',
+    ownership_id: null,
     account_id: null,
     counterparty_account_id: null,
     amount: '',
@@ -279,6 +284,37 @@ export function useAccountingPage() {
     const currentYear = new Date().getFullYear();
     const values = new Set([currentYear - 1, currentYear, currentYear + 1, selectedYear.value]);
     return Array.from(values).sort((a, b) => b - a);
+  });
+  function ownershipLabel(ownership: OwnershipRead): string {
+    if (ownership.kind === 'individual') {
+      return ownership.member?.name?.trim() || `Titularidad #${ownership.id}`;
+    }
+    const parts = (ownership.splits ?? [])
+      .map((split) => {
+        const name = split.member?.name?.trim();
+        if (!name) return '';
+        const percent = String(split.percent ?? '').trim();
+        return percent ? `${name} ${percent}%` : name;
+      })
+      .filter(Boolean);
+    return parts.length ? `Compartido (${parts.join(' / ')})` : 'Compartido';
+  }
+  const ownershipById = computed(() => {
+    const map = new Map<number, OwnershipRead>();
+    for (const ownership of peopleStore.ownerships) {
+      map.set(ownership.id, ownership);
+    }
+    return map;
+  });
+  const ownershipOptions = computed(() => {
+    const options = peopleStore.ownerships
+      .slice()
+      .sort((left, right) => left.id - right.id)
+      .map((ownership) => ({
+        value: ownership.id,
+        label: ownershipLabel(ownership),
+      }));
+    return [{ value: null as number | null, label: 'Sin titularidad' }, ...options];
   });
 
   const accountMap = computed(
@@ -1039,6 +1075,7 @@ export function useAccountingPage() {
     quickEntryForm.booking_date = new Date().toISOString().slice(0, 10);
     quickEntryForm.value_date = quickEntryForm.booking_date;
     quickEntryForm.description = '';
+    quickEntryForm.ownership_id = null;
     quickEntryForm.amount = '';
     quickEntryForm.account_id = null;
     quickEntryForm.counterparty_account_id = null;
@@ -1064,6 +1101,7 @@ export function useAccountingPage() {
     editTransactionForm.booking_time = '12:00';
     editTransactionForm.description = '';
     editTransactionForm.notes = '';
+    editTransactionForm.ownership_id = null;
     editTransactionForm.account_id = null;
     editTransactionForm.counterparty_account_id = null;
     editTransactionForm.amount = '';
@@ -1192,6 +1230,7 @@ export function useAccountingPage() {
     editTransactionForm.booking_time = '12:00';
     editTransactionForm.description = transaction.description;
     editTransactionForm.notes = transaction.notes ?? '';
+    editTransactionForm.ownership_id = transaction.ownership_id ?? null;
     editTransactionForm.currency = transaction.entries[0]?.currency ?? 'EUR';
     editTransactionForm.amount = getTransactionEditAmount(transaction);
     const kind = toEditableKind(transaction);
@@ -1576,6 +1615,65 @@ export function useAccountingPage() {
     if (kind === 'revaluation') return 'Revalorizacion';
     return 'Asiento';
   }
+  function transactionOwnershipLabel(transaction: LedgerTransaction): string | null {
+    if (transaction.ownership_id == null) return null;
+    const ownership = ownershipById.value.get(transaction.ownership_id);
+    if (!ownership) return `Titularidad #${transaction.ownership_id}`;
+    return ownershipLabel(ownership);
+  }
+  function transactionClassificationLabel(transaction: LedgerTransaction): string | null {
+    const classifiedEntry =
+      transaction.entries.find(
+        (entry) => Boolean(entry.flow_family) && Boolean(entry.category_key) && Boolean(entry.subcategory_key),
+      ) ?? null;
+    if (!classifiedEntry) return null;
+    const categoryKey = classifiedEntry.category_key;
+    const subcategoryKey = classifiedEntry.subcategory_key;
+    if (classifiedEntry.flow_family === 'income') {
+      const categoryLabel = incomeCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
+      const subcategoryLabel =
+        incomeSubcategories.find((row) => row.category === categoryKey && row.value === subcategoryKey)?.label ??
+        subcategoryKey;
+      return `${categoryLabel} -> ${subcategoryLabel}`;
+    }
+    const categoryLabel = expenseCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
+    const subcategoryLabel =
+      expenseSubcategories.find((row) => row.category === categoryKey && row.value === subcategoryKey)?.label ??
+      subcategoryKey;
+    return `${categoryLabel} -> ${subcategoryLabel}`;
+  }
+  function transactionAccountTrailLabel(transaction: LedgerTransaction): string {
+    const operationalEntries = transaction.entries.filter((entry) => {
+      const account = accountMap.value.get(entry.account_id);
+      return account?.account_type === 'asset' || account?.account_type === 'liability';
+    });
+    if (!operationalEntries.length) {
+      return '-';
+    }
+    const uniqueDebit = Array.from(
+      new Set(
+        operationalEntries
+          .filter((entry) => entry.side === 'debit')
+          .map((entry) => entry.account_name.trim())
+          .filter((name) => name.length > 0),
+      ),
+    );
+    const uniqueCredit = Array.from(
+      new Set(
+        operationalEntries
+          .filter((entry) => entry.side === 'credit')
+          .map((entry) => entry.account_name.trim())
+          .filter((name) => name.length > 0),
+      ),
+    );
+    const kind = getTransactionActivityKind(transaction);
+    if (kind === 'income') return uniqueDebit.join(' + ') || uniqueCredit.join(' + ') || '-';
+    if (kind === 'expense') return uniqueCredit.join(' + ') || uniqueDebit.join(' + ') || '-';
+    const from = uniqueCredit.join(' + ');
+    const to = uniqueDebit.join(' + ');
+    if (from && to) return `${from} -> ${to}`;
+    return from || to || '-';
+  }
 
   function liquidityBalanceDeltaTone(
     row: Pick<LedgerAccountBalanceSummaryItem, 'account_type'> & { period_net_change: string },
@@ -1814,6 +1912,7 @@ export function useAccountingPage() {
       status: 'posted',
       origin: 'manual',
       notes: editTransactionForm.notes.trim(),
+      ownership_id: editTransactionForm.ownership_id,
       entries: payloadEntries.map((entry) => ({
         account_id: entry.account_id,
         side: entry.side,
@@ -1916,6 +2015,7 @@ export function useAccountingPage() {
       status: 'posted',
       origin: 'manual',
       notes: quickEntryForm.notes.trim(),
+      ownership_id: quickEntryForm.ownership_id,
       entries: entries.map((entry) => ({
         account_id: entry.account_id,
         side: entry.side,
@@ -1943,6 +2043,7 @@ export function useAccountingPage() {
       description: quickEntryForm.description.trim(),
       amount: formatDecimalInput(quickEntryForm.amount),
       account_id: quickEntryForm.account_id ?? 0,
+      ownership_id: quickEntryForm.ownership_id,
       notes: quickEntryForm.notes.trim(),
       status: 'posted',
       origin: 'manual',
@@ -2047,6 +2148,7 @@ export function useAccountingPage() {
         store.refreshAll(),
         incomeStore.loadAll(selectedYear.value),
         expenseStore.loadAll(selectedYear.value),
+        peopleStore.fetchOwnerships(),
         refreshManualPositionOptions(),
       ]);
       await fetchTodosPage(true);
@@ -2097,6 +2199,7 @@ export function useAccountingPage() {
     editSubcategoryOptions,
     accountForm,
     activationForm,
+    ownershipOptions,
     quickEntryForm,
     transactionForm,
     editTransactionId,
@@ -2153,6 +2256,9 @@ export function useAccountingPage() {
     transactionMainAmount,
     addEntry,
     activityKindLabel,
+    transactionOwnershipLabel,
+    transactionClassificationLabel,
+    transactionAccountTrailLabel,
     liquidityBalanceDeltaTone,
     removeEntry,
     reloadPeriod,

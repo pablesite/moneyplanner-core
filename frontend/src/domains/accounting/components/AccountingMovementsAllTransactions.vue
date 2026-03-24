@@ -45,33 +45,9 @@ function amountTone(transaction: LedgerTransaction): 'positive' | 'negative' | '
   return 'neutral';
 }
 
-function statusLabel(status: LedgerTransaction['status']): string {
-  return status === 'posted' ? 'Publicado' : 'Borrador';
-}
-
 function originLabel(origin: LedgerTransaction['origin']): string {
   if (origin === 'import') return 'Importado';
-  if (origin === 'manual') return 'Manual';
-  if (origin === 'system') return 'Sistema';
   return origin;
-}
-
-function accountTrail(transaction: LedgerTransaction): string {
-  const creditAccounts = transaction.entries
-    .filter((entry) => entry.side === 'credit')
-    .map((entry) => entry.account_name.trim())
-    .filter((name) => name.length > 0);
-  const debitAccounts = transaction.entries
-    .filter((entry) => entry.side === 'debit')
-    .map((entry) => entry.account_name.trim())
-    .filter((name) => name.length > 0);
-
-  const uniqueCredits = Array.from(new Set(creditAccounts));
-  const uniqueDebits = Array.from(new Set(debitAccounts));
-  if (uniqueCredits.length && uniqueDebits.length) {
-    return `${uniqueCredits.join(' + ')} -> ${uniqueDebits.join(' + ')}`;
-  }
-  return transaction.entries.map((entry) => entry.account_name).join(' -> ');
 }
 </script>
 
@@ -122,13 +98,21 @@ function accountTrail(transaction: LedgerTransaction): string {
               {{ state.activityKindLabel(transaction) }}
             </span>
             <span class="ui-pro-chip ui-entry-chip">
-              {{ statusLabel(transaction.status) }}
+              {{ state.transactionAccountTrailLabel(transaction) }}
             </span>
-            <span v-if="transaction.origin !== 'system'" class="ui-pro-chip ui-entry-chip">
+            <span
+              v-if="state.transactionOwnershipLabel(transaction)"
+              class="ui-pro-chip ui-entry-chip"
+            >
+              {{ state.transactionOwnershipLabel(transaction) }}
+            </span>
+            <span v-if="transaction.origin === 'import'" class="ui-pro-chip ui-entry-chip">
               {{ originLabel(transaction.origin) }}
             </span>
           </div>
-          <span class="ui-entry-accounts">{{ accountTrail(transaction) }}</span>
+          <span v-if="state.transactionClassificationLabel(transaction)" class="ui-entry-accounts">
+            {{ state.transactionClassificationLabel(transaction) }}
+          </span>
         </div>
         <span
           class="ui-accounting-balance-delta"

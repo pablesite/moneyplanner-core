@@ -138,6 +138,16 @@ const editCounterpartyGroups = computed(() =>
             : 'ui-accounting-form-grid-edit-simple'
         "
       >
+        <select v-model="page.editTransactionForm.ownership_id" class="select">
+          <option
+            v-for="option in page.ownershipOptions"
+            :key="option.value == null ? 'none' : option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+
         <select v-model="page.editTransactionForm.account_id" class="select" required>
           <option :value="null" disabled>Cuenta principal</option>
           <optgroup v-for="group in editAccountGroups" :key="group.key" :label="group.label">

@@ -88,6 +88,13 @@ class LedgerTransaction(models.Model):
     import_source = models.CharField(max_length=32, blank=True, default="")
     import_fingerprint = models.CharField(max_length=64, blank=True, default="")
     member_tag = models.CharField(max_length=32, blank=True, default="")
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_transactions",
+    )
     quick_entry_kind = models.CharField(max_length=24, blank=True, default="")
     investment_direction = models.CharField(max_length=16, blank=True, default="")
     realized_cost_basis = models.DecimalField(
