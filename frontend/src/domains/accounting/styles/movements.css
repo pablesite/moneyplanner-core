@@ -102,7 +102,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* -- Filter bar � single-row grid, never wraps ----------------- */
+/* -- Filter bar — single-row grid, never wraps ----------------- */
 .ui-accounting-filters {
   display: grid;
   gap: 8px;
@@ -121,10 +121,179 @@
   grid-template-columns: 1fr 148px 148px 148px;
 }
 
+.ui-accounting-filters-5col {
+  grid-template-columns: 1fr 148px 148px 148px auto;
+}
+
 @media (max-width: 640px) {
   .ui-accounting-filters-3col,
-  .ui-accounting-filters-4col {
+  .ui-accounting-filters-4col,
+  .ui-accounting-filters-5col {
     grid-template-columns: 1fr;
+  }
+}
+
+/* -- Floating filter bar — sticky, pill-shaped ------------------ */
+.ui-accounting-filters-floating {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  padding: 8px 14px;
+  background: rgba(18, 20, 28, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  margin: 0 4px 8px;
+}
+
+.ui-accounting-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ui-accounting-filters-row .input,
+.ui-accounting-filters-row .select {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.ui-accounting-filters-row .input:first-child {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.ui-accounting-filters-row .select {
+  min-width: 120px;
+}
+
+.ui-accounting-filters-row .input[type='date'] {
+  width: 138px;
+}
+
+/* Compact inputs inside floating bar */
+.ui-accounting-filters-floating .input,
+.ui-accounting-filters-floating .select {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ui-accounting-filters-floating .input:focus,
+.ui-accounting-filters-floating .select:focus {
+  border-color: rgba(110, 209, 255, 0.3);
+  box-shadow: 0 0 0 2px rgba(110, 209, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ui-accounting-filters-floating .input::placeholder {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.ui-accounting-filters-floating .select {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* Date preset dropdown */
+.ui-accounting-date-dropdown {
+  position: relative;
+}
+
+.ui-accounting-date-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ui-accounting-date-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ui-accounting-date-trigger-arrow {
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+
+.ui-accounting-date-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 160px;
+  padding: 4px;
+  background: rgba(18, 20, 28, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.ui-accounting-date-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ui-accounting-date-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.ui-accounting-date-menu-item-active {
+  background: rgba(110, 209, 255, 0.12);
+  color: #def6ff;
+}
+
+.ui-accounting-date-menu-custom {
+  display: grid;
+  gap: 6px;
+  padding: 6px 4px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 4px;
+}
+
+/* Result count label inside filter bar */
+.ui-accounting-filters-count {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .ui-accounting-filters-row .input:first-child {
+    flex: 1 1 100%;
+  }
+  .ui-accounting-filters-row .select {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+  }
+  .ui-accounting-filters-row .input[type='date'] {
+    flex: 1 1 calc(50% - 3px);
+    width: auto;
   }
 }
 
@@ -862,7 +1031,7 @@
 /* -- Unified tabs+content card --------------------------------- */
 .ui-accounting-unified-card {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ui-accounting-incard-tabs {

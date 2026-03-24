@@ -1,9 +1,38 @@
 <script setup lang="ts">
+import { ref, onBeforeUnmount } from 'vue';
 import type { LedgerTransaction } from '@/domains/accounting/models';
 import type { AccountingMovementsPageState } from '@/domains/accounting/useAccountingMovementsPage';
 
 const props = defineProps<{ page: AccountingMovementsPageState }>();
 const state = props.page;
+
+const dateDropdownOpen = ref(false);
+
+function toggleDateDropdown() {
+  dateDropdownOpen.value = !dateDropdownOpen.value;
+}
+
+function selectDatePreset(preset: (typeof state.datePresetOptions)[number]['value']) {
+  state.applyDatePreset(preset);
+  if (preset !== 'custom') {
+    dateDropdownOpen.value = false;
+  }
+}
+
+function closeDateDropdown(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.ui-accounting-date-dropdown')) {
+    dateDropdownOpen.value = false;
+  }
+}
+
+document.addEventListener('click', closeDateDropdown, true);
+onBeforeUnmount(() => document.removeEventListener('click', closeDateDropdown, true));
+
+const activeDateLabel = () => {
+  const opt = state.datePresetOptions.find((o) => o.value === state.todosDatePreset);
+  return opt?.label ?? 'Período';
+};
 
 function typeBadgeVariant(transaction: LedgerTransaction): string {
   if (transaction.activity_kind === 'income') return 'income';
@@ -53,32 +82,82 @@ function originLabel(origin: LedgerTransaction['origin']): string {
 
 <template>
   <section class="ui-section-card">
-    <div class="ui-section-head">
-      <div class="ui-section-copy">
-        <h2 class="ui-section-title">Todos los movimientos</h2>
-        <p class="ui-section-subtitle">
-          {{ state.todosTransactions.length }} de {{ state.todosTotalCount }} movimientos
-        </p>
+    <div class="ui-accounting-filters-floating">
+      <div class="ui-accounting-filters-row">
+        <input
+          v-model="state.activityFilters.query"
+          class="input"
+          placeholder="Buscar..."
+        />
+        <select v-model="state.activityFilters.kind" class="select">
+          <option value="all">Tipo</option>
+          <option value="income">Ingresos</option>
+          <option value="expense">Gastos</option>
+          <option value="transfer">Transferencias</option>
+          <option value="investment">Inversion</option>
+          <option value="debt_payment">Pago deuda</option>
+          <option value="revaluation">Revalorizaciones</option>
+        </select>
+        <select
+          v-if="state.activityFilters.kind === 'income' || state.activityFilters.kind === 'expense'"
+          v-model="state.activityFilters.categoryKey"
+          class="select"
+        >
+          <option value="">Categoría</option>
+          <option
+            v-for="cat in state.filterCategoryOptions"
+            :key="cat.value"
+            :value="cat.value"
+          >
+            {{ cat.label }}
+          </option>
+        </select>
+        <select
+          v-if="state.filterSubcategoryOptions.length"
+          v-model="state.activityFilters.subcategoryKey"
+          class="select"
+        >
+          <option value="">Subcategoria</option>
+          <option
+            v-for="sub in state.filterSubcategoryOptions"
+            :key="sub.value"
+            :value="sub.value"
+          >
+            {{ sub.label }}
+          </option>
+        </select>
+        <div class="ui-accounting-date-dropdown">
+          <button
+            type="button"
+            class="ui-accounting-date-trigger"
+            @click="toggleDateDropdown"
+          >
+            {{ activeDateLabel() }}
+            <span class="ui-accounting-date-trigger-arrow">▾</span>
+          </button>
+          <div v-if="dateDropdownOpen" class="ui-accounting-date-menu">
+            <button
+              v-for="preset in state.datePresetOptions"
+              :key="preset.value"
+              type="button"
+              class="ui-accounting-date-menu-item"
+              :class="{ 'ui-accounting-date-menu-item-active': state.todosDatePreset === preset.value }"
+              @click="selectDatePreset(preset.value)"
+            >
+              {{ preset.label }}
+            </button>
+            <template v-if="state.todosDatePreset === 'custom'">
+              <div class="ui-accounting-date-menu-custom">
+                <input v-model="state.todosDateFrom" type="date" class="input" title="Desde" />
+                <input v-model="state.todosDateTo" type="date" class="input" title="Hasta" />
+              </div>
+            </template>
+          </div>
+        </div>
+        <span class="ui-accounting-filters-count">
+          {{ state.todosTransactions.length }} de {{ state.todosTotalCount }}
+        </span>
       </div>
-    </div>
-
-    <div class="ui-accounting-filters ui-accounting-filters-4col">
-      <input
-        v-model="state.activityFilters.query"
-        class="input"
-        placeholder="Buscar descripcion, cuenta o categoria..."
-      />
-      <select v-model="state.activityFilters.kind" class="select">
-        <option value="all">Todos los tipos</option>
-        <option value="income">Ingresos</option>
-        <option value="expense">Gastos</option>
-        <option value="transfer">Transferencias</option>
-        <option value="investment">Inversion</option>
-        <option value="debt_payment">Pago deuda</option>
-        <option value="revaluation">Revalorizaciones</option>
-      </select>
-      <input v-model="state.todosDateFrom" type="date" class="input" title="Desde" />
-      <input v-model="state.todosDateTo" type="date" class="input" title="Hasta" />
     </div>
 
     <div v-if="state.todosLoading && !state.todosTransactions.length" class="ui-section-loading">
