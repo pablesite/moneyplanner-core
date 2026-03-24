@@ -229,6 +229,179 @@ def _resolve_coverage_mode(*, ledger_count: int, fallback_count: int) -> str:
     return "none"
 
 
+def _build_expense_execution_breakdown(
+    *,
+    planned_by_slot_month: dict[tuple[str, str, int], Decimal],
+    executed_budgeted_by_slot_month: dict[tuple[str, str, int], Decimal],
+    executed_unbudgeted_by_slot_month: dict[tuple[str, str, int], Decimal],
+) -> dict:
+    category_bucket: dict[str, dict[str, object]] = {}
+
+    def _ensure_category(category_key: str) -> dict[str, object]:
+        category = category_bucket.get(category_key)
+        if category is not None:
+            return category
+        category = {
+            "category": category_key,
+            "planned_total": Decimal("0.00"),
+            "executed_budgeted_total": Decimal("0.00"),
+            "executed_unbudgeted_total": Decimal("0.00"),
+            "subcategories": {},
+        }
+        category_bucket[category_key] = category
+        return category
+
+    def _ensure_subcategory(category: dict[str, object], subcategory_key: str) -> dict[str, object]:
+        subcategories = cast(dict[str, dict[str, object]], category["subcategories"])
+        subcategory = subcategories.get(subcategory_key)
+        if subcategory is not None:
+            return subcategory
+        subcategory = {
+            "subcategory": subcategory_key,
+            "planned_total": Decimal("0.00"),
+            "executed_budgeted_total": Decimal("0.00"),
+            "executed_unbudgeted_total": Decimal("0.00"),
+            "months": {
+                month: {
+                    "planned": Decimal("0.00"),
+                    "executed_budgeted": Decimal("0.00"),
+                    "executed_unbudgeted": Decimal("0.00"),
+                }
+                for month in range(1, 13)
+            },
+        }
+        subcategories[subcategory_key] = subcategory
+        return subcategory
+
+    all_keys = (
+        set(planned_by_slot_month)
+        | set(executed_budgeted_by_slot_month)
+        | set(executed_unbudgeted_by_slot_month)
+    )
+    for category_key, subcategory_key, month in sorted(all_keys):
+        planned = planned_by_slot_month.get((category_key, subcategory_key, month), Decimal("0.00"))
+        executed_budgeted = executed_budgeted_by_slot_month.get(
+            (category_key, subcategory_key, month), Decimal("0.00")
+        )
+        executed_unbudgeted = executed_unbudgeted_by_slot_month.get(
+            (category_key, subcategory_key, month), Decimal("0.00")
+        )
+        if planned == 0 and executed_budgeted == 0 and executed_unbudgeted == 0:
+            continue
+        category = _ensure_category(category_key)
+        subcategory = _ensure_subcategory(category, subcategory_key)
+
+        category["planned_total"] = cast(Decimal, category["planned_total"]) + planned
+        category["executed_budgeted_total"] = (
+            cast(Decimal, category["executed_budgeted_total"]) + executed_budgeted
+        )
+        category["executed_unbudgeted_total"] = (
+            cast(Decimal, category["executed_unbudgeted_total"]) + executed_unbudgeted
+        )
+        subcategory["planned_total"] = cast(Decimal, subcategory["planned_total"]) + planned
+        subcategory["executed_budgeted_total"] = (
+            cast(Decimal, subcategory["executed_budgeted_total"]) + executed_budgeted
+        )
+        subcategory["executed_unbudgeted_total"] = (
+            cast(Decimal, subcategory["executed_unbudgeted_total"]) + executed_unbudgeted
+        )
+        month_bucket = cast(dict[int, dict[str, Decimal]], subcategory["months"]).setdefault(
+            month,
+            {
+                "planned": Decimal("0.00"),
+                "executed_budgeted": Decimal("0.00"),
+                "executed_unbudgeted": Decimal("0.00"),
+            },
+        )
+        month_bucket["planned"] += planned
+        month_bucket["executed_budgeted"] += executed_budgeted
+        month_bucket["executed_unbudgeted"] += executed_unbudgeted
+
+    categories_payload = []
+    executed_budgeted_total = Decimal("0.00")
+    executed_unbudgeted_total = Decimal("0.00")
+    executed_total = Decimal("0.00")
+
+    for category in category_bucket.values():
+        subcategories = cast(dict[str, dict[str, object]], category["subcategories"])
+        category_subcategories = []
+        for subcategory in subcategories.values():
+            months_payload = []
+            for month in range(1, 13):
+                month_bucket = cast(dict[int, dict[str, Decimal]], subcategory["months"])[month]
+                month_planned = _round_money(month_bucket["planned"])
+                month_budgeted = _round_money(month_bucket["executed_budgeted"])
+                month_unbudgeted = _round_money(month_bucket["executed_unbudgeted"])
+                month_total = _round_money(month_budgeted + month_unbudgeted)
+                months_payload.append(
+                    {
+                        "month": month,
+                        "planned": str(month_planned),
+                        "executed_budgeted": str(month_budgeted),
+                        "executed_unbudgeted": str(month_unbudgeted),
+                        "executed_total": str(month_total),
+                    }
+                )
+            sub_planned = _round_money(cast(Decimal, subcategory["planned_total"]))
+            sub_budgeted = _round_money(cast(Decimal, subcategory["executed_budgeted_total"]))
+            sub_unbudgeted = _round_money(cast(Decimal, subcategory["executed_unbudgeted_total"]))
+            sub_total = _round_money(sub_budgeted + sub_unbudgeted)
+            category_subcategories.append(
+                {
+                    "subcategory": cast(str, subcategory["subcategory"]),
+                    "planned_total": str(sub_planned),
+                    "executed_budgeted_total": str(sub_budgeted),
+                    "executed_unbudgeted_total": str(sub_unbudgeted),
+                    "executed_total": str(sub_total),
+                    "has_budgeted_line": sub_planned > 0,
+                    "has_unbudgeted_execution": sub_unbudgeted > 0,
+                    "months": months_payload,
+                }
+            )
+        category_subcategories.sort(
+            key=lambda item: (
+                -Decimal(cast(str, item["executed_total"])),
+                -Decimal(cast(str, item["planned_total"])),
+                cast(str, item["subcategory"]),
+            )
+        )
+
+        cat_planned = _round_money(cast(Decimal, category["planned_total"]))
+        cat_budgeted = _round_money(cast(Decimal, category["executed_budgeted_total"]))
+        cat_unbudgeted = _round_money(cast(Decimal, category["executed_unbudgeted_total"]))
+        cat_total = _round_money(cat_budgeted + cat_unbudgeted)
+        executed_budgeted_total += cat_budgeted
+        executed_unbudgeted_total += cat_unbudgeted
+        executed_total += cat_total
+        categories_payload.append(
+            {
+                "category": cast(str, category["category"]),
+                "planned_total": str(cat_planned),
+                "executed_budgeted_total": str(cat_budgeted),
+                "executed_unbudgeted_total": str(cat_unbudgeted),
+                "executed_total": str(cat_total),
+                "has_budgeted_lines": cat_planned > 0,
+                "has_unbudgeted_execution": cat_unbudgeted > 0,
+                "subcategories": category_subcategories,
+            }
+        )
+
+    categories_payload.sort(
+        key=lambda item: (
+            -Decimal(cast(str, item["executed_total"])),
+            -Decimal(cast(str, item["planned_total"])),
+            cast(str, item["category"]),
+        )
+    )
+
+    return {
+        "categories": categories_payload,
+        "executed_budgeted_total": str(_round_money(executed_budgeted_total)),
+        "executed_unbudgeted_total": str(_round_money(executed_unbudgeted_total)),
+        "executed_total": str(_round_money(executed_total)),
+    }
+
+
 def expense_entry_applies_to_fiscal_year(*, entry: AnnualExpenseEntry, fiscal_year: int) -> bool:
     if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
         return entry.fiscal_year == fiscal_year
@@ -283,6 +456,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         )
         .order_by("id")
     )
+    entries_by_id = {entry.id: entry for entry in entries}
     checkins = list(
         AnnualExpenseMonthlyCheckin.objects.filter(
             user=user,
@@ -311,6 +485,12 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     fallback_entries_by_month = {month: 0 for month in range(1, 13)}
     planned_entry_amounts_by_key: dict[tuple[int, int], Decimal] = {}
     planned_slots: dict[tuple[str, str, int], dict[str, object]] = {}
+    planned_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
+    executed_budgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
 
     for entry in entries:
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
@@ -324,6 +504,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
                 slot = {"entry_ids": [], "month": month}
                 planned_slots[slot_key] = slot
             cast(list[int], slot["entry_ids"]).append(entry.id)
+            planned_by_slot_month[slot_key] += planned_amount
 
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
@@ -333,6 +514,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             ledger_entries_by_month[month] += len(entry_ids)
             confirmed_entries_by_month[month] += len(entry_ids)
             executed_by_month[month] += ledger_amount
+            executed_budgeted_by_slot_month[slot_key] += ledger_amount
             continue
         for entry_id in entry_ids:
             legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
@@ -340,6 +522,9 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
                 fallback_entries_by_month[month] += 1
                 confirmed_entries_by_month[month] += 1
                 executed_by_month[month] += legacy_ledger_amount
+                entry = entries_by_id[entry_id]
+                budget_key = (entry.category, entry.subcategory, month)
+                executed_budgeted_by_slot_month[budget_key] += legacy_ledger_amount
                 continue
             checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
@@ -350,11 +535,34 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             if checkin.status == AnnualExpenseMonthlyCheckin.Status.SKIPPED:
                 continue
             executed_amount = Decimal(checkin.executed_amount or 0)
-            executed_by_month[month] += _round_money(executed_amount)
+            resolved_executed = _round_money(executed_amount)
+            executed_by_month[month] += resolved_executed
+            entry = entries_by_id[entry_id]
+            budget_key = (entry.category, entry.subcategory, month)
+            executed_budgeted_by_slot_month[budget_key] += resolved_executed
+
+    executed_unbudgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
+    executed_unbudgeted_by_month = {month: Decimal("0.00") for month in range(1, 13)}
+    for slot_key, ledger_amount in categorized_ledger_by_key.items():
+        if slot_key in planned_slots:
+            continue
+        executed_unbudgeted_by_slot_month[slot_key] += ledger_amount
+        month = slot_key[2]
+        executed_unbudgeted_by_month[month] += ledger_amount
 
     planned_total = sum(planned_by_month.values(), Decimal("0.00"))
-    executed_total = sum(executed_by_month.values(), Decimal("0.00"))
+    executed_budgeted_total = sum(executed_by_month.values(), Decimal("0.00"))
+    executed_unbudgeted_total = sum(executed_unbudgeted_by_month.values(), Decimal("0.00"))
+    executed_total = executed_budgeted_total + executed_unbudgeted_total
     pending_total = sum(pending_by_month.values(), Decimal("0.00"))
+    unbudgeted_ledger_months = sum(
+        1 for amount in executed_unbudgeted_by_month.values() if amount != Decimal("0.00")
+    )
+    unbudgeted_ledger_slots_total = sum(
+        1 for amount in executed_unbudgeted_by_slot_month.values() if amount != Decimal("0.00")
+    )
 
     months_payload = []
     months_with_checkins = 0
@@ -379,14 +587,20 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             months_with_fallback += 1
         if ledger_count > 0:
             months_with_ledger += 1
-        if confirmed > 0:
+        month_unbudgeted = _round_money(executed_unbudgeted_by_month[month])
+        month_budgeted = _round_money(executed_by_month[month])
+        month_total = _round_money(month_budgeted + month_unbudgeted)
+        if confirmed > 0 or month_unbudgeted > 0:
             months_with_coverage += 1
         completion_ratio = 1.0 if expected == 0 else (confirmed / expected)
         months_payload.append(
             {
                 "month": month,
                 "planned": str(_round_money(planned_by_month[month])),
-                "executed": str(_round_money(executed_by_month[month])),
+                "executed": str(month_total),
+                "executed_budgeted": str(month_budgeted),
+                "executed_unbudgeted": str(month_unbudgeted),
+                "executed_total": str(month_total),
                 "pending": str(_round_money(pending_by_month[month])),
                 "completion_ratio": round(completion_ratio, 4),
                 "checkins_confirmed": confirmed,
@@ -403,25 +617,33 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     total_completion_ratio = (
         1.0 if expected_slots_total == 0 else round(confirmed_slots_total / expected_slots_total, 4)
     )
+    expense_execution_breakdown = _build_expense_execution_breakdown(
+        planned_by_slot_month=planned_by_slot_month,
+        executed_budgeted_by_slot_month=executed_budgeted_by_slot_month,
+        executed_unbudgeted_by_slot_month=executed_unbudgeted_by_slot_month,
+    )
 
     return {
         "fiscal_year": fiscal_year,
         "planned_total": str(_round_money(planned_total)),
         "executed_total": str(_round_money(executed_total)),
+        "executed_budgeted_total": str(_round_money(executed_budgeted_total)),
+        "executed_unbudgeted_total": str(_round_money(executed_unbudgeted_total)),
         "pending_total": str(_round_money(pending_total)),
         "variance_total": str(_round_money(executed_total - planned_total)),
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "months_with_ledger": months_with_ledger,
+        "months_with_ledger": months_with_ledger + unbudgeted_ledger_months,
         "months_with_fallback": months_with_fallback,
         "months_with_coverage": months_with_coverage,
-        "has_ledger_data": ledger_slots_total > 0,
-        "has_executed_data": confirmed_slots_total > 0,
+        "has_ledger_data": ledger_slots_total > 0 or unbudgeted_ledger_slots_total > 0,
+        "has_executed_data": confirmed_slots_total > 0 or unbudgeted_ledger_slots_total > 0,
         "coverage_mode": _resolve_coverage_mode(
-            ledger_count=ledger_slots_total,
+            ledger_count=ledger_slots_total + unbudgeted_ledger_slots_total,
             fallback_count=fallback_slots_total,
         ),
+        "expense_execution_breakdown": expense_execution_breakdown,
     }
 
 

@@ -52,6 +52,38 @@ docker compose exec backend python manage.py test core
 docker compose exec frontend npm run test:unit
 ```
 
+## Troubleshooting
+### Django test DB fails with duplicate constraint names
+Symptom examples during `python manage.py test`:
+- `relation "uniq_member_name_per_user" already exists`
+- `relation "ownership_individual_requires_member" already exists`
+- `relation "uniq_split_member_per_ownership" already exists`
+
+Root cause:
+1. Historical migrations created legacy `FamilyMember/Ownership` constraints in `net_worth`.
+2. The same constraint names were reused later in `memberships`.
+3. PostgreSQL constraint names are global enough to collide during clean test DB bootstrap.
+
+Fix implemented:
+1. `memberships` constraints were renamed to unique names:
+   - `uniq_member_name_per_user_memberships`
+   - `ownership_individual_requires_member_memberships`
+   - `uniq_split_member_per_ownership_memberships`
+2. A compatibility migration renames existing constraints in already-migrated databases:
+   - `backend/memberships/migrations/0005_rename_familymember_unique_constraint.py`
+
+Files involved:
+1. `backend/memberships/models.py`
+2. `backend/memberships/migrations/0001_initial.py`
+3. `backend/memberships/migrations/0002_remove_ownership_ownership_individual_requires_member_and_more.py`
+4. `backend/memberships/migrations/0005_rename_familymember_unique_constraint.py`
+
+Validation commands:
+```bash
+docker compose exec backend python manage.py migrate memberships
+docker compose exec backend python manage.py test budget accounting --keepdb
+```
+
 ## Related Operational Docs
 1. `market-data-sync.md`
 2. `portable-import.md`

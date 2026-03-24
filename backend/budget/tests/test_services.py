@@ -394,6 +394,90 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(summary["months_with_ledger"], 1)
         self.assertEqual(summary["months_with_fallback"], 1)
 
+    def test_expense_summary_includes_unbudgeted_subcategory_within_budgeted_category(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gastos hogar",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        self._post_expense_entry(
+            amount="120.00",
+            month=3,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
+        )
+        self._post_expense_entry(
+            amount="45.00",
+            month=3,
+            category_key="consumption_expenses",
+            subcategory_key="health_wellbeing",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        self.assertEqual(summary["executed_total"], "165.00")
+        self.assertEqual(summary["executed_budgeted_total"], "120.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "45.00")
+
+        months = {row["month"]: row for row in summary["months"]}
+        self.assertEqual(months[3]["executed_total"], "165.00")
+        self.assertEqual(months[3]["executed_budgeted"], "120.00")
+        self.assertEqual(months[3]["executed_unbudgeted"], "45.00")
+
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        consumption = categories["consumption_expenses"]
+        self.assertEqual(consumption["executed_total"], "165.00")
+        subcategories = {row["subcategory"]: row for row in consumption["subcategories"]}
+        self.assertEqual(subcategories["living_expenses"]["has_budgeted_line"], True)
+        self.assertEqual(subcategories["living_expenses"]["executed_unbudgeted_total"], "0.00")
+        self.assertEqual(subcategories["health_wellbeing"]["has_budgeted_line"], False)
+        self.assertEqual(subcategories["health_wellbeing"]["executed_unbudgeted_total"], "45.00")
+
+    def test_expense_summary_includes_fully_unbudgeted_category_without_double_counting(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gastos hogar",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        self._post_expense_entry(
+            amount="120.00",
+            month=3,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
+        )
+        self._post_expense_entry(
+            amount="380.00",
+            month=3,
+            category_key="financial_investments",
+            subcategory_key="crypto",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        self.assertEqual(summary["executed_total"], "500.00")
+        self.assertEqual(summary["executed_budgeted_total"], "120.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "380.00")
+        self.assertEqual(summary["coverage_mode"], "ledger")
+
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        investments = categories["financial_investments"]
+        self.assertEqual(investments["planned_total"], "0.00")
+        self.assertEqual(investments["executed_unbudgeted_total"], "380.00")
+        self.assertEqual(investments["has_budgeted_lines"], False)
+        self.assertEqual(investments["has_unbudgeted_execution"], True)
+
     def test_expense_summary_handles_user_without_fiscal_year_entries(self):
         AnnualExpenseEntry.objects.create(
             user=self.user,

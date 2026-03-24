@@ -27,7 +27,7 @@ Seleccionar según disponibilidad: ejecutar tareas **(Agente)** cuando haya capa
 
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
-| _(sin tareas Agente pendientes en este momento)_ | — | Pendiente definición de la siguiente task delegable. | — |
+| Presupuesto | Agente | Hacer visible en Presupuesto el gasto real fuera de presupuesto y la cobertura real por categoría/subcategoría, con contrato reusable para el espejo SaaS. | `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/backend.md` + `docs/tasks/budget/phase-3-unbudgeted-execution-visibility/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -56,7 +56,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). Resumen de gasto ampliado con cobertura canónica (`executed_budgeted` vs `executed_unbudgeted`) y visibilidad de subcategorías detectadas sin línea anual. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
