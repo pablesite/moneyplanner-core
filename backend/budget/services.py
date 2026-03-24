@@ -701,6 +701,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         )
         .order_by("id")
     )
+    entries_by_id = {entry.id: entry for entry in entries}
     checkins = list(
         AnnualIncomeMonthlyCheckin.objects.filter(user=user, fiscal_year=fiscal_year).only(
             "annual_income_entry_id", "month", "status", "executed_amount"
@@ -728,6 +729,12 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     fallback_entries_by_month = {month: 0 for month in range(1, 13)}
     planned_entry_amounts_by_key: dict[tuple[int, int], Decimal] = {}
     planned_slots: dict[tuple[str, str, int], dict[str, object]] = {}
+    planned_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
+    executed_budgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
 
     for entry in entries:
         distribution = planned_income_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
@@ -741,6 +748,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
                 slot = {"entry_ids": [], "month": month}
                 planned_slots[slot_key] = slot
             cast(list[int], slot["entry_ids"]).append(entry.id)
+            planned_by_slot_month[slot_key] += planned_amount
 
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
@@ -750,6 +758,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             ledger_entries_by_month[month] += len(entry_ids)
             confirmed_entries_by_month[month] += len(entry_ids)
             executed_by_month[month] += ledger_amount
+            executed_budgeted_by_slot_month[slot_key] += ledger_amount
             continue
         for entry_id in entry_ids:
             legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
@@ -757,6 +766,9 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
                 fallback_entries_by_month[month] += 1
                 confirmed_entries_by_month[month] += 1
                 executed_by_month[month] += legacy_ledger_amount
+                entry = entries_by_id[entry_id]
+                budget_key = (entry.category, entry.subcategory, month)
+                executed_budgeted_by_slot_month[budget_key] += legacy_ledger_amount
                 continue
             checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
@@ -767,11 +779,34 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             if checkin.status == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
                 continue
             executed_amount = Decimal(checkin.executed_amount or 0)
-            executed_by_month[month] += _round_money(executed_amount)
+            resolved_executed = _round_money(executed_amount)
+            executed_by_month[month] += resolved_executed
+            entry = entries_by_id[entry_id]
+            budget_key = (entry.category, entry.subcategory, month)
+            executed_budgeted_by_slot_month[budget_key] += resolved_executed
+
+    executed_unbudgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
+        lambda: Decimal("0.00")
+    )
+    executed_unbudgeted_by_month = {month: Decimal("0.00") for month in range(1, 13)}
+    for slot_key, ledger_amount in categorized_ledger_by_key.items():
+        if slot_key in planned_slots:
+            continue
+        executed_unbudgeted_by_slot_month[slot_key] += ledger_amount
+        month = slot_key[2]
+        executed_unbudgeted_by_month[month] += ledger_amount
 
     planned_total = sum(planned_by_month.values(), Decimal("0.00"))
-    executed_total = sum(executed_by_month.values(), Decimal("0.00"))
+    executed_budgeted_total = sum(executed_by_month.values(), Decimal("0.00"))
+    executed_unbudgeted_total = sum(executed_unbudgeted_by_month.values(), Decimal("0.00"))
+    executed_total = executed_budgeted_total + executed_unbudgeted_total
     pending_total = sum(pending_by_month.values(), Decimal("0.00"))
+    unbudgeted_ledger_months = sum(
+        1 for amount in executed_unbudgeted_by_month.values() if amount != Decimal("0.00")
+    )
+    unbudgeted_ledger_slots_total = sum(
+        1 for amount in executed_unbudgeted_by_slot_month.values() if amount != Decimal("0.00")
+    )
 
     months_payload = []
     months_with_checkins = 0
@@ -796,14 +831,20 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             months_with_fallback += 1
         if ledger_count > 0:
             months_with_ledger += 1
-        if confirmed > 0:
+        month_unbudgeted = _round_money(executed_unbudgeted_by_month[month])
+        month_budgeted = _round_money(executed_by_month[month])
+        month_total = _round_money(month_budgeted + month_unbudgeted)
+        if confirmed > 0 or month_unbudgeted > 0:
             months_with_coverage += 1
         completion_ratio = 1.0 if expected == 0 else (confirmed / expected)
         months_payload.append(
             {
                 "month": month,
                 "planned": str(_round_money(planned_by_month[month])),
-                "executed": str(_round_money(executed_by_month[month])),
+                "executed": str(month_total),
+                "executed_budgeted": str(month_budgeted),
+                "executed_unbudgeted": str(month_unbudgeted),
+                "executed_total": str(month_total),
                 "pending": str(_round_money(pending_by_month[month])),
                 "completion_ratio": round(completion_ratio, 4),
                 "checkins_confirmed": confirmed,
@@ -820,22 +861,30 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     total_completion_ratio = (
         1.0 if expected_slots_total == 0 else round(confirmed_slots_total / expected_slots_total, 4)
     )
+    income_execution_breakdown = _build_expense_execution_breakdown(
+        planned_by_slot_month=planned_by_slot_month,
+        executed_budgeted_by_slot_month=executed_budgeted_by_slot_month,
+        executed_unbudgeted_by_slot_month=executed_unbudgeted_by_slot_month,
+    )
     return {
         "fiscal_year": fiscal_year,
         "planned_total": str(_round_money(planned_total)),
         "executed_total": str(_round_money(executed_total)),
+        "executed_budgeted_total": str(_round_money(executed_budgeted_total)),
+        "executed_unbudgeted_total": str(_round_money(executed_unbudgeted_total)),
         "pending_total": str(_round_money(pending_total)),
         "variance_total": str(_round_money(executed_total - planned_total)),
         "months": months_payload,
         "completion_ratio": total_completion_ratio,
         "months_with_checkins": months_with_checkins,
-        "months_with_ledger": months_with_ledger,
+        "months_with_ledger": months_with_ledger + unbudgeted_ledger_months,
         "months_with_fallback": months_with_fallback,
         "months_with_coverage": months_with_coverage,
-        "has_ledger_data": ledger_slots_total > 0,
-        "has_executed_data": confirmed_slots_total > 0,
+        "has_ledger_data": ledger_slots_total > 0 or unbudgeted_ledger_slots_total > 0,
+        "has_executed_data": confirmed_slots_total > 0 or unbudgeted_ledger_slots_total > 0,
         "coverage_mode": _resolve_coverage_mode(
-            ledger_count=ledger_slots_total,
+            ledger_count=ledger_slots_total + unbudgeted_ledger_slots_total,
             fallback_count=fallback_slots_total,
         ),
+        "income_execution_breakdown": income_execution_breakdown,
     }

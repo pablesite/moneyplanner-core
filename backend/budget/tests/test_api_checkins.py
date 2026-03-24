@@ -661,3 +661,97 @@ class AnnualExpenseApiCheckinsTests(APITestCase):
         self.assertEqual(subcategories["living_expenses"]["has_budgeted_line"], True)
         self.assertEqual(subcategories["health_wellbeing"]["has_budgeted_line"], False)
         self.assertEqual(subcategories["health_wellbeing"]["executed_unbudgeted_total"], "40.00")
+
+    def test_income_monthly_summary_exposes_unbudgeted_execution_breakdown_contract(self):
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category="salary",
+            subcategory="employee_salary",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco ingresos",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+
+        tx_budgeted = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 10),
+            value_date=date(2026, 3, 10),
+            description="Ingreso presupuestado",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_budgeted,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_budgeted,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("120.00"),
+            currency="EUR",
+        )
+
+        tx_unbudgeted = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 20),
+            value_date=date(2026, 3, 20),
+            description="Ingreso no presupuestado",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_unbudgeted,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("40.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="social_benefits",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_unbudgeted,
+            account=cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("40.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["executed_total"], "160.00")
+        self.assertEqual(response.data["executed_budgeted_total"], "120.00")
+        self.assertEqual(response.data["executed_unbudgeted_total"], "40.00")
+
+        month = next(row for row in response.data["months"] if row["month"] == 3)
+        self.assertEqual(month["executed_total"], "160.00")
+        self.assertEqual(month["executed_budgeted"], "120.00")
+        self.assertEqual(month["executed_unbudgeted"], "40.00")
+
+        categories = {
+            row["category"]: row
+            for row in response.data["income_execution_breakdown"]["categories"]
+        }
+        subcategories = {row["subcategory"]: row for row in categories["salary"]["subcategories"]}
+        self.assertEqual(subcategories["employee_salary"]["has_budgeted_line"], True)
+        self.assertEqual(subcategories["social_benefits"]["has_budgeted_line"], False)
+        self.assertEqual(subcategories["social_benefits"]["executed_unbudgeted_total"], "40.00")

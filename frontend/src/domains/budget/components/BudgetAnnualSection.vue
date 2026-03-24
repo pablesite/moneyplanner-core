@@ -57,6 +57,12 @@ const props = defineProps<{
   toggleSectionExpanded: (sectionId: 'income' | 'expense') => void;
   budgetCategoryActualExecution: (...args: any[]) => any;
   budgetSubcategoryActualExecution: (...args: any[]) => any;
+  incomeExecutionYtdTotals: {
+    planned: number;
+    executedBudgeted: number;
+    executedUnbudgeted: number;
+    executedTotal: number;
+  };
   expenseExecutionYtdTotals: {
     planned: number;
     executedBudgeted: number;
@@ -274,6 +280,20 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             <strong>{{ formatMoney(expenseExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
           </div>
         </div>
+        <div v-else class="ui-budget-expense-coverage-kpis">
+          <div class="ui-budget-expense-coverage-kpi">
+            <span class="ui-budget-expense-coverage-kpi-label">Ejecutado real (YTD)</span>
+            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedTotal) }} EUR</strong>
+          </div>
+          <div class="ui-budget-expense-coverage-kpi">
+            <span class="ui-budget-expense-coverage-kpi-label">En presupuesto (YTD)</span>
+            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedBudgeted) }} EUR</strong>
+          </div>
+          <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
+            <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
+            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -283,11 +303,23 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           <h3>Evolucion ejecutada (barras)</h3>
           <p v-if="section.id === 'income'">
             Compara `Previsto` vs `Ejecutado` por mes usando los check-ins del cierre mensual
-            (ingresos recurrentes).
+            {{
+              section.filterMode === 'recurrent'
+                ? '(ingresos recurrentes).'
+                : section.filterMode === 'one_off'
+                  ? '(ingresos puntuales).'
+                  : '(todos los ingresos).'
+            }}
           </p>
           <p v-else>
             Compara `Previsto` vs `Ejecutado` por mes usando los check-ins del cierre mensual
-            (gastos recurrentes).
+            {{
+              section.filterMode === 'recurrent'
+                ? '(gastos recurrentes).'
+                : section.filterMode === 'one_off'
+                  ? '(gastos puntuales).'
+                  : '(todos los gastos).'
+            }}
           </p>
         </div>
         <span class="ui-budget-pill">Cierre mensual activo</span>
@@ -631,7 +663,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                       <p class="ui-budget-context-panel-subtitle">
                         {{
                           row.detectedUnbudgeted
-                            ? 'Subcategoria detectada desde movimientos. Convierte este gasto en linea anual.'
+                            ? 'Subcategoria detectada desde movimientos. Convierte este movimiento en linea anual.'
                             : 'Alta, edicion y borrado sin salir del contexto de categoria.'
                         }}
                       </p>
