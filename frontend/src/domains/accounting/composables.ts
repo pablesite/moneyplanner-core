@@ -196,6 +196,12 @@ export function useAccountingPage() {
     categoryKey: '',
     subcategoryKey: '',
   });
+  const cuentasFilters = reactive({
+    query: '',
+    kind: 'all' as ActivityFilter,
+    categoryKey: '',
+    subcategoryKey: '',
+  });
 
   let rowId = 0;
   const transactionForm = reactive({
@@ -517,20 +523,26 @@ export function useAccountingPage() {
     }
     return [];
   });
-  const filterCategoryOptions = computed(() => {
-    if (activityFilters.kind === 'income') return incomeCategories;
-    if (activityFilters.kind === 'expense') return expenseCategories;
+  function categoryOptionsByKind(kind: ActivityFilter) {
+    if (kind === 'income') return incomeCategories;
+    if (kind === 'expense') return expenseCategories;
     return [...incomeCategories, ...expenseCategories];
-  });
+  }
+  const filterCategoryOptions = computed(() => categoryOptionsByKind(activityFilters.kind));
+  const cuentasFilterCategoryOptions = computed(() => categoryOptionsByKind(cuentasFilters.kind));
 
-  const filterSubcategoryOptions = computed(() => {
-    if (!activityFilters.categoryKey) return [];
-    const asIncome = incomeSubcategories.filter(
-      (row) => row.category === activityFilters.categoryKey,
-    );
+  function subcategoryOptionsByCategory(categoryKey: string) {
+    if (!categoryKey) return [];
+    const asIncome = incomeSubcategories.filter((row) => row.category === categoryKey);
     if (asIncome.length) return asIncome;
-    return expenseSubcategories.filter((row) => row.category === activityFilters.categoryKey);
-  });
+    return expenseSubcategories.filter((row) => row.category === categoryKey);
+  }
+  const filterSubcategoryOptions = computed(() =>
+    subcategoryOptionsByCategory(activityFilters.categoryKey),
+  );
+  const cuentasFilterSubcategoryOptions = computed(() =>
+    subcategoryOptionsByCategory(cuentasFilters.categoryKey),
+  );
 
   const annualIncomeOptionsCompatible = computed<AnnualIncomeEntry[]>(() => {
     if (quickEntryForm.movement_type !== 'income') return [];
@@ -765,7 +777,8 @@ export function useAccountingPage() {
       }
       if (isCounterpartyKind(kind)) {
         if (!hasValidEditCounterpartySelection(kind)) {
-          editTransactionForm.counterparty_account_id = editCounterpartyOptions.value[0]?.id ?? null;
+          editTransactionForm.counterparty_account_id =
+            editCounterpartyOptions.value[0]?.id ?? null;
         }
         if (
           editTransactionForm.counterparty_account_id == null &&
@@ -883,6 +896,7 @@ export function useAccountingPage() {
   let todosAbortController: AbortController | null = null;
   let cuentasAbortController: AbortController | null = null;
   let todosSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let cuentasSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   const hasImportedTransactions = computed(() =>
     todosTransactions.value.some((transaction) => transaction.origin === 'import'),
   );
@@ -898,6 +912,36 @@ export function useAccountingPage() {
     if (value > 0) return 'positive';
     if (value < 0) return 'negative';
     return 'neutral';
+  }
+
+  function toApiKind(kind: ActivityFilter): string | undefined {
+    if (kind === 'all') return undefined;
+    if (kind === 'investment') return 'investment_purchase';
+    return kind;
+  }
+
+  function toApiAccountId(rawAccountId: string): number | undefined {
+    const parsed = rawAccountId === 'all' ? NaN : Number(rawAccountId);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  function isCanceledRequestError(error: unknown): boolean {
+    if ((error as { name?: string }).name === 'CanceledError') return true;
+    if ((error as { code?: string }).code === 'ERR_CANCELED') return true;
+    return false;
+  }
+
+  function toAccountTimelineRows(
+    rows: LedgerTransaction[],
+    accountId: number,
+    accountType: LedgerAccountType,
+  ): AccountTimelineTransaction[] {
+    return rows.map((transaction) => {
+      const impactValue = transaction.entries
+        .filter((entry) => entry.account_id === accountId)
+        .reduce((sum, entry) => sum + signedImpact(accountType, entry.side, entry.amount), 0);
+      return { ...transaction, impactValue, tone: impactTone(impactValue) };
+    });
   }
 
   const cuentasSelectedAccount = computed(() =>
@@ -923,21 +967,13 @@ export function useAccountingPage() {
     todosLoading.value = reset;
     todosLoadingMore.value = !reset;
     try {
-      const kindParam =
-        activityFilters.kind === 'all'
-          ? undefined
-          : activityFilters.kind === 'investment'
-            ? 'investment_purchase'
-            : activityFilters.kind;
-      const accountParam =
-        activityFilters.accountId === 'all' ? undefined : Number(activityFilters.accountId);
       const page = await store.fetchTransactionsPage(
         {
           page_size: MOVEMENTS_PAGE_SIZE,
           cursor: reset ? undefined : (todosNextCursor.value ?? undefined),
           query: activityFilters.query.trim() || undefined,
-          kind: kindParam,
-          account_id: Number.isFinite(accountParam ?? NaN) ? accountParam : undefined,
+          kind: toApiKind(activityFilters.kind),
+          account_id: toApiAccountId(activityFilters.accountId),
           date_from: todosDateFrom.value || undefined,
           date_to: todosDateTo.value || undefined,
           category_key: activityFilters.categoryKey || undefined,
@@ -949,8 +985,7 @@ export function useAccountingPage() {
       todosNextCursor.value = page.next_cursor;
       todosTotalCount.value = page.total_count;
     } catch (error: unknown) {
-      if ((error as { name?: string }).name === 'CanceledError') return;
-      if ((error as { code?: string }).code === 'ERR_CANCELED') return;
+      if (isCanceledRequestError(error)) return;
       throw error;
     } finally {
       todosLoading.value = false;
@@ -985,25 +1020,21 @@ export function useAccountingPage() {
           page_size: MOVEMENTS_PAGE_SIZE,
           cursor: reset ? undefined : (cuentasNextCursor.value ?? undefined),
           account_id: accountId,
+          query: cuentasFilters.query.trim() || undefined,
+          kind: toApiKind(cuentasFilters.kind),
           date_from: cuentasDateFrom.value || undefined,
           date_to: cuentasDateTo.value || undefined,
+          category_key: cuentasFilters.categoryKey || undefined,
+          subcategory_key: cuentasFilters.subcategoryKey || undefined,
         },
         { signal: controller.signal },
       );
-      const pageRows = page.results.map((transaction) => {
-        const impactValue = transaction.entries
-          .filter((entry) => entry.account_id === accountId)
-          .reduce((sum, entry) => {
-            return sum + signedImpact(account.account_type, entry.side, entry.amount);
-          }, 0);
-        return { ...transaction, impactValue, tone: impactTone(impactValue) };
-      });
+      const pageRows = toAccountTimelineRows(page.results, accountId, account.account_type);
       cuentasTransactions.value = reset ? pageRows : cuentasTransactions.value.concat(pageRows);
       cuentasNextCursor.value = page.next_cursor;
       cuentasTotalCount.value = page.total_count;
     } catch (error: unknown) {
-      if ((error as { name?: string }).name === 'CanceledError') return;
-      if ((error as { code?: string }).code === 'ERR_CANCELED') return;
+      if (isCanceledRequestError(error)) return;
       throw error;
     } finally {
       cuentasLoading.value = false;
@@ -1028,6 +1059,18 @@ export function useAccountingPage() {
       void fetchCuentasPage(true);
     }
   });
+  watch(
+    [
+      () => cuentasFilters.kind,
+      () => cuentasFilters.categoryKey,
+      () => cuentasFilters.subcategoryKey,
+    ],
+    () => {
+      if (cuentasSelectedAccountId.value != null) {
+        void fetchCuentasPage(true);
+      }
+    },
+  );
 
   watch(
     [
@@ -1050,11 +1093,24 @@ export function useAccountingPage() {
       activityFilters.subcategoryKey = '';
     },
   );
+  watch(
+    () => cuentasFilters.kind,
+    () => {
+      cuentasFilters.categoryKey = '';
+      cuentasFilters.subcategoryKey = '';
+    },
+  );
 
   watch(
     () => activityFilters.categoryKey,
     () => {
       activityFilters.subcategoryKey = '';
+    },
+  );
+  watch(
+    () => cuentasFilters.categoryKey,
+    () => {
+      cuentasFilters.subcategoryKey = '';
     },
   );
 
@@ -1064,6 +1120,17 @@ export function useAccountingPage() {
       if (todosSearchDebounceTimer) clearTimeout(todosSearchDebounceTimer);
       todosSearchDebounceTimer = setTimeout(() => {
         void fetchTodosPage(true);
+      }, 300);
+    },
+  );
+  watch(
+    () => cuentasFilters.query,
+    () => {
+      if (cuentasSearchDebounceTimer) clearTimeout(cuentasSearchDebounceTimer);
+      cuentasSearchDebounceTimer = setTimeout(() => {
+        if (cuentasSelectedAccountId.value != null) {
+          void fetchCuentasPage(true);
+        }
       }, 300);
     },
   );
@@ -1179,6 +1246,12 @@ export function useAccountingPage() {
     const debitTotalValue = transaction.entries
       .filter((entry) => entry.side === 'debit')
       .reduce((sum, entry) => sum + toNumber(entry.amount), 0);
+    if (transaction.activity_kind === 'revaluation') {
+      const assetEntry = transaction.entries.find(
+        (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
+      );
+      if (assetEntry?.side === 'credit') return (-debitTotalValue).toFixed(2);
+    }
     return debitTotalValue.toFixed(2);
   }
 
@@ -1235,6 +1308,16 @@ export function useAccountingPage() {
       return {
         accountId: creditEntry?.account_id ?? null,
         counterpartyAccountId: debitEntry?.account_id ?? null,
+      };
+    }
+    if (kind === 'revaluation') {
+      const assetEntry =
+        transaction.entries.find(
+          (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
+        ) ?? debitEntry;
+      return {
+        accountId: assetEntry?.account_id ?? null,
+        counterpartyAccountId: null,
       };
     }
     return {
@@ -1378,7 +1461,8 @@ export function useAccountingPage() {
       if (!targetAccount) return;
       entry.account_id = targetId;
       entry.currency = targetAccount.currency;
-      entry.asset_id = targetAccount.account_type === 'asset' ? (targetAccount.asset_id ?? null) : null;
+      entry.asset_id =
+        targetAccount.account_type === 'asset' ? (targetAccount.asset_id ?? null) : null;
       entry.liability_id =
         targetAccount.account_type === 'liability' ? (targetAccount.liability_id ?? null) : null;
     };
@@ -1555,7 +1639,10 @@ export function useAccountingPage() {
           : 'Selecciona una contracuenta distinta.';
       return null;
     }
-    if (editKindNeedsCounterparty.value && !hasValidEditCounterpartySelection(editTransactionForm.kind)) {
+    if (
+      editKindNeedsCounterparty.value &&
+      !hasValidEditCounterpartySelection(editTransactionForm.kind)
+    ) {
       store.error =
         editTransactionForm.kind === 'investment'
           ? 'Selecciona una cuenta de inversion contable valida.'
@@ -1665,22 +1752,29 @@ export function useAccountingPage() {
   function transactionClassificationLabel(transaction: LedgerTransaction): string | null {
     const classifiedEntry =
       transaction.entries.find(
-        (entry) => Boolean(entry.flow_family) && Boolean(entry.category_key) && Boolean(entry.subcategory_key),
+        (entry) =>
+          Boolean(entry.flow_family) &&
+          Boolean(entry.category_key) &&
+          Boolean(entry.subcategory_key),
       ) ?? null;
     if (!classifiedEntry) return null;
     const categoryKey = classifiedEntry.category_key;
     const subcategoryKey = classifiedEntry.subcategory_key;
     if (classifiedEntry.flow_family === 'income') {
-      const categoryLabel = incomeCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
+      const categoryLabel =
+        incomeCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
       const subcategoryLabel =
-        incomeSubcategories.find((row) => row.category === categoryKey && row.value === subcategoryKey)?.label ??
-        subcategoryKey;
+        incomeSubcategories.find(
+          (row) => row.category === categoryKey && row.value === subcategoryKey,
+        )?.label ?? subcategoryKey;
       return `${categoryLabel} -> ${subcategoryLabel}`;
     }
-    const categoryLabel = expenseCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
+    const categoryLabel =
+      expenseCategories.find((row) => row.value === categoryKey)?.label ?? categoryKey;
     const subcategoryLabel =
-      expenseSubcategories.find((row) => row.category === categoryKey && row.value === subcategoryKey)?.label ??
-      subcategoryKey;
+      expenseSubcategories.find(
+        (row) => row.category === categoryKey && row.value === subcategoryKey,
+      )?.label ?? subcategoryKey;
     return `${categoryLabel} -> ${subcategoryLabel}`;
   }
   function transactionAccountTrailLabel(transaction: LedgerTransaction): string {
@@ -2205,6 +2299,10 @@ export function useAccountingPage() {
       clearTimeout(todosSearchDebounceTimer);
       todosSearchDebounceTimer = null;
     }
+    if (cuentasSearchDebounceTimer) {
+      clearTimeout(cuentasSearchDebounceTimer);
+      cuentasSearchDebounceTimer = null;
+    }
   });
 
   return {
@@ -2246,6 +2344,7 @@ export function useAccountingPage() {
     editTransactionId,
     editTransactionForm,
     activityFilters,
+    cuentasFilters,
     moneyWizImportFile,
     liquidityAccounts,
     availableManualPositionOptions,
@@ -2263,6 +2362,8 @@ export function useAccountingPage() {
     quickSubcategoryOptions,
     filterCategoryOptions,
     filterSubcategoryOptions,
+    cuentasFilterCategoryOptions,
+    cuentasFilterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,

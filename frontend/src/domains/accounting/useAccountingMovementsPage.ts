@@ -35,6 +35,7 @@ export function useAccountingMovementsPage() {
     quickEntryForm,
     editTransactionForm,
     activityFilters,
+    cuentasFilters,
     liquidityAccounts,
     availableManualPositionOptions,
     accountDisplayName,
@@ -47,6 +48,8 @@ export function useAccountingMovementsPage() {
     quickSubcategoryOptions,
     filterCategoryOptions,
     filterSubcategoryOptions,
+    cuentasFilterCategoryOptions,
+    cuentasFilterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
@@ -231,6 +234,7 @@ export function useAccountingMovementsPage() {
     { value: 'custom', label: 'Personalizado' },
   ];
   const todosDatePreset = ref<DatePreset>('all');
+  const cuentasDatePreset = ref<DatePreset>('all');
 
   function applyDatePreset(preset: DatePreset) {
     todosDatePreset.value = preset;
@@ -262,6 +266,40 @@ export function useAccountingMovementsPage() {
     if (preset === 'this_year') {
       todosDateFrom.value = fmt(new Date(now.getFullYear(), 0, 1));
       todosDateTo.value = '';
+      return;
+    }
+  }
+
+  function applyCuentasDatePreset(preset: DatePreset) {
+    cuentasDatePreset.value = preset;
+    if (preset === 'custom') return;
+    const now = new Date();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    if (preset === 'all') {
+      cuentasDateFrom.value = '';
+      cuentasDateTo.value = '';
+      return;
+    }
+    if (preset === 'this_month') {
+      cuentasDateFrom.value = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
+      cuentasDateTo.value = '';
+      return;
+    }
+    if (preset === 'last_month') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      cuentasDateFrom.value = fmt(first);
+      cuentasDateTo.value = fmt(last);
+      return;
+    }
+    if (preset === 'last_3_months') {
+      cuentasDateFrom.value = fmt(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+      cuentasDateTo.value = '';
+      return;
+    }
+    if (preset === 'this_year') {
+      cuentasDateFrom.value = fmt(new Date(now.getFullYear(), 0, 1));
+      cuentasDateTo.value = '';
       return;
     }
   }
@@ -551,6 +589,7 @@ export function useAccountingMovementsPage() {
     quickEntryForm,
     editTransactionForm,
     activityFilters,
+    cuentasFilters,
     liquidityAccounts,
     availableManualPositionOptions,
     accountDisplayName,
@@ -563,6 +602,8 @@ export function useAccountingMovementsPage() {
     quickSubcategoryOptions,
     filterCategoryOptions,
     filterSubcategoryOptions,
+    cuentasFilterCategoryOptions,
+    cuentasFilterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     liabilityCounterpartyOptions,
@@ -580,6 +621,8 @@ export function useAccountingMovementsPage() {
     cuentasSelectedAccount,
     cuentasDateFrom,
     cuentasDateTo,
+    cuentasDatePreset,
+    applyCuentasDatePreset,
     cuentasTransactions,
     cuentasTotalCount,
     cuentasLoading,
