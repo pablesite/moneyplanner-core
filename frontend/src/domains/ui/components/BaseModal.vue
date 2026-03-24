@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue';
 
-defineProps<{
-  open: boolean;
-  title?: string;
-  panelClass?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    title?: string;
+    panelClass?: string;
+    closeOnBackdrop?: boolean;
+  }>(),
+  {
+    closeOnBackdrop: false,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -13,6 +19,11 @@ const emit = defineEmits<{
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close');
+}
+
+function onBackdropClick() {
+  if (!props.closeOnBackdrop) return;
+  emit('close');
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown));
@@ -24,7 +35,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
     <div
       v-if="open"
       class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-4 sm:p-5"
-      @click.self="emit('close')"
+      @click.self="onBackdropClick"
     >
       <div
         class="flex max-h-[calc(100vh-2rem)] w-full max-w-[720px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#121212fa] shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
