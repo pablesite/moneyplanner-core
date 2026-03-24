@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
+from memberships.models import Ownership
 from net_worth.models import Asset, Liability
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
@@ -260,6 +261,12 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
 class LedgerTransactionSerializer(serializers.ModelSerializer):
     entries = LedgerEntrySerializer(many=True)
     activity_kind = serializers.SerializerMethodField()
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = LedgerTransaction
@@ -273,6 +280,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "notes",
             "import_source",
             "import_fingerprint",
+            "ownership_id",
             "quick_entry_kind",
             "investment_direction",
             "realized_cost_basis",
@@ -298,6 +306,14 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         return classify_transaction_activity_kind(obj)
 
     def validate(self, attrs: dict) -> dict:
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        ownership = attrs.get("ownership", getattr(self.instance, "ownership", None))
+        if ownership is not None and user is not None and ownership.user_id != user.id:
+            raise serializers.ValidationError(
+                {"ownership_id": "La titularidad no pertenece al usuario autenticado."}
+            )
+
         booking_date = attrs.get("booking_date", getattr(self.instance, "booking_date", None))
         value_date = attrs.get("value_date", getattr(self.instance, "value_date", None))
         if booking_date is not None and value_date is not None:
@@ -356,6 +372,12 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     account_id = serializers.PrimaryKeyRelatedField(
         source="account",
         queryset=LedgerAccount.objects.select_related("asset"),
+    )
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        allow_null=True,
+        required=False,
     )
     counterparty_account_id = serializers.PrimaryKeyRelatedField(
         source="counterparty_account",
@@ -439,6 +461,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         request = self.context["request"]
         user = request.user
+        ownership = attrs.get("ownership")
         movement_type = attrs["movement_type"]
         investment_direction = attrs.get("investment_direction", "")
         amount = attrs["amount"]
@@ -455,6 +478,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         interest_amount = attrs.get("interest_amount")
         realized_cost_basis = attrs.get("realized_cost_basis")
         realized_gain_loss = attrs.get("realized_gain_loss")
+
+        if ownership is not None and ownership.user_id != user.id:
+            raise serializers.ValidationError(
+                {"ownership_id": "La titularidad no pertenece al usuario autenticado."}
+            )
 
         movement_type, investment_direction = self._normalize_investment_payload(
             movement_type=movement_type,

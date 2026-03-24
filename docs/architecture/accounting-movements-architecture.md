@@ -30,6 +30,7 @@ This leaves a gap:
 1. `LedgerTransaction`
    - user-owned transactional envelope
    - booking/value dates, description, status, origin, notes
+   - optional movement-level ownership link for individual/shared attribution
    - can represent simple flows, transfers, debt payments, and patrimonial purchases
 2. `LedgerEntry`
    - belongs to one `LedgerTransaction`

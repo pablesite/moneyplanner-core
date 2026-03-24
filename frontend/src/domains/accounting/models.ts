@@ -57,6 +57,7 @@ export type LedgerTransaction = {
   status: LedgerTransactionStatus;
   origin: LedgerTransactionOrigin;
   notes: string;
+  ownership_id: number | null;
   quick_entry_kind: '' | QuickLedgerMovementType;
   investment_direction: '' | InvestmentDirection;
   realized_cost_basis: string | null;
@@ -175,6 +176,7 @@ export type LedgerTransactionWritePayload = {
   status?: LedgerTransactionStatus;
   origin?: LedgerTransactionOrigin;
   notes?: string;
+  ownership_id?: number | null;
   entries: LedgerEntryWritePayload[];
 };
 
@@ -186,6 +188,7 @@ export type QuickLedgerTransactionWritePayload = {
   description: string;
   amount: string;
   account_id: number;
+  ownership_id?: number | null;
   flow_family?: '' | 'income' | 'expense';
   category_key?: string;
   subcategory_key?: string;

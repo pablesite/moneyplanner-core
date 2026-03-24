@@ -29,6 +29,7 @@ def create_quick_transaction(
     import_source: str = "",
     import_fingerprint: str = "",
     member_tag: str = "",
+    ownership=None,
     annual_income_entry=None,
     annual_expense_entry=None,
     flow_family: str = "",
@@ -77,6 +78,7 @@ def create_quick_transaction(
         import_source=import_source,
         import_fingerprint=import_fingerprint,
         member_tag=member_tag,
+        ownership=ownership,
         quick_entry_kind=normalized_movement_type,
         investment_direction=normalized_direction,
         realized_cost_basis=(
