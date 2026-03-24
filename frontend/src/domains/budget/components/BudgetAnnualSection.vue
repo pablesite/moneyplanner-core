@@ -68,6 +68,15 @@ const props = defineProps<{
 }>();
 
 const activeContext = ref<ContextPanel | null>(null);
+const expandedGroups = ref<Record<string, boolean>>({});
+
+function isGroupExpanded(categoryKey: string): boolean {
+  return !!expandedGroups.value[categoryKey];
+}
+
+function toggleGroup(categoryKey: string): void {
+  expandedGroups.value = { ...expandedGroups.value, [categoryKey]: !expandedGroups.value[categoryKey] };
+}
 
 const contextIncomeEntries = computed(() => {
   const context = activeContext.value;
@@ -346,7 +355,15 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         :key="`${section.id}-${group.categoryKey}`"
         class="ui-budget-group"
       >
-        <header class="ui-budget-group-header">
+        <header
+          class="ui-budget-group-header"
+          role="button"
+          tabindex="0"
+          :aria-expanded="isGroupExpanded(group.categoryKey)"
+          @click="toggleGroup(group.categoryKey)"
+          @keydown.enter.prevent="toggleGroup(group.categoryKey)"
+          @keydown.space.prevent="toggleGroup(group.categoryKey)"
+        >
           <div class="ui-budget-group-title-wrap">
             <div class="ui-budget-group-kicker">Categoria</div>
             <h3>{{ group.categoryLabel }}</h3>
@@ -442,10 +459,34 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             </div>
           </div>
 
-          <div class="ui-budget-group-amount">{{ formatMoney(group.plannedAnnual) }} EUR</div>
+          <div class="ui-budget-group-header-right">
+            <div class="ui-budget-group-amounts">
+              <template v-if="budgetCategoryActualExecution(section.id, group.categoryKey)">
+                <div class="ui-budget-group-amount-ytd">
+                  <span class="ui-budget-group-amount-label">Ejecutado YTD</span>
+                  <strong
+                    :class="`ui-budget-pending-text-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
+                  >
+                    {{ formatMoney(budgetCategoryActualExecution(section.id, group.categoryKey)?.executed ?? 0) }} EUR
+                  </strong>
+                </div>
+                <div class="ui-budget-group-amount-ytd">
+                  <span class="ui-budget-group-amount-label">Previsto YTD</span>
+                  <strong>{{ formatMoney(budgetCategoryActualExecution(section.id, group.categoryKey)?.planned ?? 0) }} EUR</strong>
+                </div>
+              </template>
+              <template v-else>
+                <div class="ui-budget-group-amount-ytd">
+                  <span class="ui-budget-group-amount-label">Previsto anual</span>
+                  <strong>{{ formatMoney(group.plannedAnnual) }} EUR</strong>
+                </div>
+              </template>
+            </div>
+            <span class="ui-budget-group-chevron" aria-hidden="true" />
+          </div>
         </header>
 
-        <ul class="ui-budget-rows">
+        <ul v-show="isGroupExpanded(group.categoryKey)" class="ui-budget-rows">
           <li v-for="row in group.rows" :key="row.key" class="ui-budget-row">
             <div class="ui-budget-row-main">
               <div class="ui-budget-row-kicker">Subcategoria</div>
