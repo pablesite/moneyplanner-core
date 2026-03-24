@@ -1143,9 +1143,14 @@
   background: rgba(94, 234, 212, 0.75);
 }
 
+.ui-budget-detail-area {
+  display: grid;
+  gap: 0;
+}
+
 .ui-budget-groups {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ui-budget-group {
@@ -1160,48 +1165,44 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.01);
 }
 
 .ui-budget-group-title-wrap {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
   min-width: 0;
 }
 
 .ui-budget-group-kicker {
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
+  display: none;
 }
 
 .ui-budget-group-header h3 {
   margin: 0;
-  font-size: 1.18rem;
+  font-size: 1rem;
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .ui-budget-group-header p {
-  margin: 0;
+  margin: 1px 0 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 .ui-budget-inline-progress {
   display: grid;
-  gap: 4px;
-  margin-top: 8px;
+  gap: 3px;
+  margin-top: 4px;
 }
 
 .ui-budget-inline-progress-row {
-  margin-top: 6px;
+  margin-top: 3px;
   max-width: 340px;
 }
 
@@ -1334,7 +1335,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  padding: 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.01);
 }
@@ -1349,28 +1350,24 @@
 }
 
 .ui-budget-row-kicker {
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 2px;
+  display: none;
 }
 
 .ui-budget-row-title {
   font-weight: 600;
-  font-size: 0.96rem;
+  font-size: 0.88rem;
   color: rgba(255, 255, 255, 0.96);
   letter-spacing: -0.01em;
 }
 
 .ui-budget-row-meta {
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
 }
 
 .ui-budget-row-actions {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .ui-budget-context-panel {
@@ -1681,11 +1678,17 @@
 }
 
 .ui-budget-detail-month-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0 6px;
+  padding: 8px 0;
   flex-wrap: wrap;
+  background: #0b0c10;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 8px;
 }
 
 .ui-budget-detail-month-bar-label {
