@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 import type { AccountingMovementsPageState } from '@/domains/accounting/useAccountingMovementsPage';
 
 const props = defineProps<{ page: AccountingMovementsPageState }>();
 const state = props.page;
 
 const openGroups = ref(new Set<string>());
+const dateDropdownOpen = ref(false);
 
 function toggleGroup(key: string) {
   const next = new Set(openGroups.value);
@@ -18,19 +19,46 @@ function isGroupOpen(key: string) {
   return openGroups.value.has(key);
 }
 
+function toggleDateDropdown() {
+  dateDropdownOpen.value = !dateDropdownOpen.value;
+}
+
+function selectDatePreset(preset: (typeof state.datePresetOptions)[number]['value']) {
+  state.applyCuentasDatePreset(preset);
+  if (preset !== 'custom') {
+    dateDropdownOpen.value = false;
+  }
+}
+
+function closeDateDropdown(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.ui-accounting-date-dropdown')) {
+    dateDropdownOpen.value = false;
+  }
+}
+
+document.addEventListener('click', closeDateDropdown, true);
+onBeforeUnmount(() => document.removeEventListener('click', closeDateDropdown, true));
+
+const activeDateLabel = () => {
+  const opt = state.datePresetOptions.find((o) => o.value === state.cuentasDatePreset);
+  return opt?.label ?? 'Período';
+};
+
 function movementOriginLabel(origin: string): string {
   if (origin === 'import') return 'Importado';
   return origin;
 }
 
-function typeBadgeVariant(movement: { activity_kind: string; investment_direction?: string }): string {
+function typeBadgeVariant(movement: {
+  activity_kind: string;
+  investment_direction?: string;
+}): string {
   if (movement.activity_kind === 'income') return 'income';
   if (movement.activity_kind === 'expense') return 'expense';
   if (movement.activity_kind === 'transfer') return 'transfer';
   if (movement.activity_kind === 'investment_purchase') {
-    return movement.investment_direction === 'outflow'
-      ? 'investment-outflow'
-      : 'investment-inflow';
+    return movement.investment_direction === 'outflow' ? 'investment-outflow' : 'investment-inflow';
   }
   if (movement.activity_kind === 'debt_payment') return 'debt-payment';
   if (movement.activity_kind === 'revaluation') return 'revaluation';
@@ -42,12 +70,79 @@ function typeBadgeVariant(movement: { activity_kind: string; investment_directio
   <section class="ui-section-card">
     <div v-if="state.cuentasSelectedAccount" class="ui-section-head ui-accounting-catalog-head">
       <p class="ui-section-subtitle ui-accounting-catalog-info">
-        {{ state.cuentasTransactions.length }} de {{ state.cuentasTotalCount }} movimientos —
-        {{ state.accountDisplayName(state.cuentasSelectedAccount) }}
+        Movimientos — {{ state.accountDisplayName(state.cuentasSelectedAccount) }}
       </p>
-      <div class="ui-accounting-filters ui-accounting-filters-2col">
-        <input v-model="state.cuentasDateFrom" type="date" class="input" title="Desde" />
-        <input v-model="state.cuentasDateTo" type="date" class="input" title="Hasta" />
+    </div>
+
+    <div v-if="state.cuentasSelectedAccount" class="ui-accounting-filters-floating">
+      <div class="ui-accounting-filters-row">
+        <input v-model="state.cuentasFilters.query" class="input" placeholder="Buscar..." />
+        <select v-model="state.cuentasFilters.kind" class="select">
+          <option value="all">Tipo</option>
+          <option value="income">Ingresos</option>
+          <option value="expense">Gastos</option>
+          <option value="transfer">Transferencias</option>
+          <option value="investment">Inversion</option>
+          <option value="debt_payment">Pago deuda</option>
+          <option value="revaluation">Revalorizaciones</option>
+        </select>
+        <select
+          v-if="state.cuentasFilters.kind === 'income' || state.cuentasFilters.kind === 'expense'"
+          v-model="state.cuentasFilters.categoryKey"
+          class="select"
+        >
+          <option value="">Categoría</option>
+          <option
+            v-for="cat in state.cuentasFilterCategoryOptions"
+            :key="cat.value"
+            :value="cat.value"
+          >
+            {{ cat.label }}
+          </option>
+        </select>
+        <select
+          v-if="state.cuentasFilterSubcategoryOptions.length"
+          v-model="state.cuentasFilters.subcategoryKey"
+          class="select"
+        >
+          <option value="">Subcategoría</option>
+          <option
+            v-for="sub in state.cuentasFilterSubcategoryOptions"
+            :key="sub.value"
+            :value="sub.value"
+          >
+            {{ sub.label }}
+          </option>
+        </select>
+        <div class="ui-accounting-date-dropdown">
+          <button type="button" class="ui-accounting-date-trigger" @click="toggleDateDropdown">
+            {{ activeDateLabel() }}
+            <span class="ui-accounting-date-trigger-arrow">▾</span>
+          </button>
+          <div v-if="dateDropdownOpen" class="ui-accounting-date-menu">
+            <button
+              v-for="preset in state.datePresetOptions"
+              :key="preset.value"
+              type="button"
+              class="ui-accounting-date-menu-item"
+              :class="{
+                'ui-accounting-date-menu-item-active': state.cuentasDatePreset === preset.value,
+              }"
+              @click="selectDatePreset(preset.value)"
+            >
+              {{ preset.label }}
+            </button>
+            <template v-if="state.cuentasDatePreset === 'custom'">
+              <div class="ui-accounting-date-menu-custom">
+                <input v-model="state.cuentasDateFrom" type="date" class="input" title="Desde" />
+                <input v-model="state.cuentasDateTo" type="date" class="input" title="Hasta" />
+              </div>
+            </template>
+          </div>
+        </div>
+        <span class="ui-accounting-filters-count">
+          {{ state.cuentasTransactions.length }} de {{ state.cuentasTotalCount }}
+        </span>
       </div>
     </div>
 
@@ -114,9 +209,7 @@ function typeBadgeVariant(movement: { activity_kind: string; investment_directio
                     <div class="ui-entry-body">
                       <strong class="ui-entry-desc">{{ movement.description }}</strong>
                       <div class="ui-action-bar ui-entry-meta">
-                        <span
-                          :class="`ui-type-badge ui-type-badge-${typeBadgeVariant(movement)}`"
-                        >
+                        <span :class="`ui-type-badge ui-type-badge-${typeBadgeVariant(movement)}`">
                           {{ state.activityKindLabel(movement) }}
                         </span>
                         <span class="ui-pro-chip ui-entry-chip">
