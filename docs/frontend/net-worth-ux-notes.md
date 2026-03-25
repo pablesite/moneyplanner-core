@@ -5,29 +5,58 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 
 ## Current layout
 1. The view starts with a hero section that combines:
-   - a prominent donut summary
-   - the main net-worth summary
-   - top-level asset and liability totals
-2. The timeline workspace sits directly below the hero.
+   - a donut by asset category (up to 5 slices + one red slice for liabilities)
+   - the main net-worth summary (net worth value, delta indicator, KPI metrics)
+   - asset and liability totals in side stat cards
+2. The timeline workspace sits directly below the hero in a second card.
 3. Category exploration and position drilldown happen in the same visual workspace as the timeline.
 
-## Hero behavior
-1. The donut is part of the main header, not a secondary block.
-2. The main summary prioritizes:
-   - net worth
-   - liquid coverage
-   - equity ratio
-   - total assets
-   - total liabilities
-3. The header also includes the ownership filter and settings controls.
+## Hero layout (post-redesign)
+1. The hero is a single outer card (`ui-nw-hero-shell`). There are no inner cards — donut and summary live directly on the card surface.
+2. Layout: two-column grid (donut column 300 px wide, summary fills remaining space), separated by a subtle vertical line.
+3. On ≤1024 px the separator switches to horizontal and the donut legend collapses below the chart.
+4. The topbar ("PATRIMONIO" kicker + refresh button) is fused into the same card row above the hero grid, eliminating dead vertical space.
+5. The settings popover (gear icon) lives in the summary head alongside the ownership selector — not in the topbar.
+
+## Donut (NetWorthDonut.vue)
+1. Shows slices per asset category (up to 5, ordered by value) + one red slice for liabilities.
+2. Color palette per category:
+   - Liquidez → sky blue
+   - Inversiones → teal
+   - Inmuebles → amber
+   - Bienes/mobiliario → violet
+   - Otros → green
+   - Pasivos → red
+3. Tooltip shows value + percentage over total assets (same criterion as the user's Excel).
+4. Legend is displayed to the right of the donut (flex row) inside the hero, saving vertical height.
+5. Falls back to equity/backed/unbacked mode if no category data is available.
+
+## Summary section
+1. The main summary prioritizes:
+   - net worth (large value)
+   - monthly delta indicator (absolute + %) immediately below the value
+   - liquid coverage (KPI metric)
+   - equity ratio (KPI metric)
+   - total assets (stat card)
+   - total liabilities (stat card)
+2. The "Balance actual" badge sits at the top of the summary head.
+3. The ownership filter and settings gear are grouped in the summary head controls.
+
+## Monthly delta indicator
+1. Appears below the main net-worth value when the global timeline is active (no category selected).
+2. Shows the change between the last two monthly timeline points:
+   - Format: `+29.998 € este mes (+13,4%)`
+   - Green badge when positive, red badge when negative.
+3. Hidden when a category is selected (timeline reflects category, not global net worth).
+4. Hidden when there are fewer than two timeline data points.
 
 ## Ownership filter
-1. The ownership filter lives in the header beside the main context controls.
+1. The ownership filter lives in the summary head beside the settings gear.
 2. In nominal mode it filters by person and prorates shared ownership.
 3. In real/IPC mode the ownership filter is disabled.
 
 ## Composition and timeline
-1. Category selection starts from the composition panel.
+1. Category selection starts from the composition panel in the timeline sidebar.
 2. Clicking the active category again resets the view to the global net-worth series.
 3. When no category is selected, the timeline shows the overall net-worth series.
 4. When a category is selected, the workspace switches to that category context.
@@ -62,3 +91,5 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
    - `frontend/src/domains/net-worth/components/NetWorthItemModals.vue`
 4. La coordinación de ownership, métricas, timeline, layout y acciones vive en composables
    del dominio `net-worth`, manteniendo el comportamiento UX sin rediseño funcional.
+5. El cálculo del delta mensual (`monthlyDelta`) se hace en `NetWorthView.vue` a partir de
+   los dos últimos puntos de `timelineRows`, y se pasa como prop a `NetWorthHeroSection`.

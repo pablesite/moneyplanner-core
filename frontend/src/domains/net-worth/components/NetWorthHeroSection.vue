@@ -57,6 +57,7 @@ const props = defineProps<{
   formatNumber: (value: number, decimals?: number) => string;
   formatPct: (value: number | null, decimals?: number) => string;
   resetTimelineSelection: () => void;
+  monthlyDelta?: { value: number; pct: number | null } | null;
   categoryKeys?: string[];
   categoryLabels?: string[];
   categoryAssets?: number[];
@@ -188,6 +189,18 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
                   {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
                 </div>
               </button>
+              <div
+                v-if="monthlyDelta"
+                class="ui-nw-hero-delta"
+                :class="{
+                  'ui-nw-hero-delta-pos': monthlyDelta.value > 0,
+                  'ui-nw-hero-delta-neg': monthlyDelta.value < 0,
+                  'ui-nw-hero-delta-zero': monthlyDelta.value === 0,
+                }"
+              >
+                <span>{{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatNumber(monthlyDelta.value, 0) }} {{ heroUnitLabel }} este mes</span>
+                <span v-if="monthlyDelta.pct !== null">({{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatPct(monthlyDelta.pct, 1) }})</span>
+              </div>
               <div class="ui-nw-hero-metrics">
                 <div class="ui-nw-hero-metric">
                   <span class="ui-nw-hero-metric-label">Cobertura liquida</span>

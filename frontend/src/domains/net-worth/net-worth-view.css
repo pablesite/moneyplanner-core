@@ -327,6 +327,36 @@
   color: rgba(245, 251, 255, 0.96);
 }
 
+.ui-nw-hero-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 8px;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.ui-nw-hero-delta-pos {
+  color: rgba(52, 211, 153, 0.95);
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.ui-nw-hero-delta-neg {
+  color: rgba(248, 113, 113, 0.95);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.18);
+}
+
+.ui-nw-hero-delta-zero {
+  color: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .ui-nw-category-workspace {
   margin-top: 0;
   padding: 18px;
