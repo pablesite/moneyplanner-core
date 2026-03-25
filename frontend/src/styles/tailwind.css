@@ -119,7 +119,7 @@
   }
 
   .nw-donut-comp-block {
-    @apply rounded-xl border border-white/10 bg-white/[0.02] p-2.5;
+    @apply p-2.5;
   }
 
   .nw-donut-comp-title {

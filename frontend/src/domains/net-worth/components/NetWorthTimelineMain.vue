@@ -160,9 +160,8 @@ defineProps<{
           :series-color="displayedTimelineSeriesColor"
           :y-axis-min-zero="timelineYAxisStartsAtZero"
         />
+        <NetWorthDeltaChart :rows="timelineChartRows" :unit="displayedTimelineUnit" />
       </div>
-
-      <NetWorthDeltaChart :rows="timelineChartRows" :unit="displayedTimelineUnit" />
 
       <div class="ui-nw-timeline-points">
         <div
@@ -171,7 +170,7 @@ defineProps<{
           class="ui-nw-timeline-point"
         >
           <span>{{ row.label }}</span>
-          <strong>{{ formatNumber(row.value, 0) }}</strong>
+          <strong>{{ formatNumber(row.value, 0) }} {{ displayedTimelineUnit }}</strong>
         </div>
       </div>
     </div>
