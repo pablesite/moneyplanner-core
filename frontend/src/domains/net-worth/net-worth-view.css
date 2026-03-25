@@ -887,6 +887,26 @@
   color: #fff;
 }
 
+.ui-nw-delta-chart {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ui-nw-delta-chart-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.ui-nw-delta-chart-canvas {
+  position: relative;
+  height: 96px;
+}
+
 .ui-nw-timeline-modal {
   display: grid;
   gap: 1rem;
