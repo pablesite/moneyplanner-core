@@ -118,120 +118,112 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
         </div>
         <article class="ui-nw-hero-summary">
           <div class="ui-nw-hero-summary-head">
-            <div class="ui-nw-hero-badge">Balance actual</div>
+            <div class="ui-nw-hero-title">Patrimonio neto</div>
             <div class="ui-nw-hero-summary-controls">
-            <label class="ui-nw-hero-context" data-test="ownership-filter">
-              <span class="ui-nw-hero-context-label">Titularidad</span>
-              <details
-                class="ui-select-popover ui-nw-hero-context-popover"
-                :class="{ 'opacity-60': ownershipFilterDisabled }"
-              >
-                <summary
-                  class="ui-select-popover-trigger ui-nw-hero-context-trigger"
-                  :aria-disabled="ownershipFilterDisabled"
-                  @click="ownershipFilterDisabled ? $event.preventDefault() : undefined"
+              <label class="ui-nw-hero-context" data-test="ownership-filter">
+                <span class="ui-nw-hero-context-label">Titularidad</span>
+                <details
+                  class="ui-select-popover ui-nw-hero-context-popover"
+                  :class="{ 'opacity-60': ownershipFilterDisabled }"
                 >
-                  <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
-                  <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
-                </summary>
-                <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
-                  <button
-                    type="button"
-                    class="ui-select-popover-option"
-                    :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
-                    data-test="ownership-filter-option-all"
-                    :disabled="ownershipFilterDisabled"
-                    @click="selectOwnershipFilterOption('all', $event)"
+                  <summary
+                    class="ui-select-popover-trigger ui-nw-hero-context-trigger"
+                    :aria-disabled="ownershipFilterDisabled"
+                    @click="ownershipFilterDisabled ? $event.preventDefault() : undefined"
                   >
-                    Todos
-                  </button>
-                  <button
-                    v-for="option in ownershipOptions"
-                    :key="String(option.value)"
-                    type="button"
-                    class="ui-select-popover-option"
-                    :class="{ 'ui-select-popover-option-active': ownershipFilter === option.value }"
-                    :data-test="`ownership-filter-option-${String(option.value)}`"
-                    :disabled="ownershipFilterDisabled"
-                    @click="selectOwnershipFilterOption(option.value, $event)"
-                  >
-                    {{ option.label }}
-                  </button>
-                </div>
-              </details>
-            </label>
-            <div class="ui-nw-toolbar ui-nw-toolbar-inline">
-              <SettingsPopover
-                :loading="store.loading"
-                :base-currency="store.baseCurrency ?? 'EUR'"
-                :currencies="currencies"
-                :inflation-region="store.inflationRegion ?? 'ES'"
-                :inflation-regions="inflationRegions"
-                :value-mode="valueMode"
-                :can-show-real="canShowReal"
-                :mode-help="modeLabel"
-                :real-base-label="realBaseLabel"
-                :show-refresh="false"
-                :icon-only="true"
-                @update:base-currency="store.updateBaseCurrency"
-                @update:inflation-region="store.updateInflationRegion"
-                @update:value-mode="setValueMode"
-                @refresh="store.refreshAll()"
-              />
-            </div>
+                    <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
+                    <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
+                  </summary>
+                  <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                    <button
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                      data-test="ownership-filter-option-all"
+                      :disabled="ownershipFilterDisabled"
+                      @click="selectOwnershipFilterOption('all', $event)"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      v-for="option in ownershipOptions"
+                      :key="String(option.value)"
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{ 'ui-select-popover-option-active': ownershipFilter === option.value }"
+                      :data-test="`ownership-filter-option-${String(option.value)}`"
+                      :disabled="ownershipFilterDisabled"
+                      @click="selectOwnershipFilterOption(option.value, $event)"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </details>
+              </label>
+              <div class="ui-nw-toolbar ui-nw-toolbar-inline">
+                <SettingsPopover
+                  :loading="store.loading"
+                  :base-currency="store.baseCurrency ?? 'EUR'"
+                  :currencies="currencies"
+                  :inflation-region="store.inflationRegion ?? 'ES'"
+                  :inflation-regions="inflationRegions"
+                  :value-mode="valueMode"
+                  :can-show-real="canShowReal"
+                  :mode-help="modeLabel"
+                  :real-base-label="realBaseLabel"
+                  :show-refresh="false"
+                  :icon-only="true"
+                  @update:base-currency="store.updateBaseCurrency"
+                  @update:inflation-region="store.updateInflationRegion"
+                  @update:value-mode="setValueMode"
+                  @refresh="store.refreshAll()"
+                />
+              </div>
             </div>
           </div>
           <div class="ui-nw-hero-summary-body">
-            <div class="ui-nw-hero-primary">
-              <div class="ui-nw-hero-title">Patrimonio neto</div>
-              <button class="ui-nw-hero-value-button" type="button" @click="resetTimelineSelection">
-                <div class="ui-nw-hero-value">
-                  {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
-                </div>
-              </button>
-              <div
-                v-if="monthlyDelta"
-                class="ui-nw-hero-delta"
-                :class="{
-                  'ui-nw-hero-delta-pos': monthlyDelta.value > 0,
-                  'ui-nw-hero-delta-neg': monthlyDelta.value < 0,
-                  'ui-nw-hero-delta-zero': monthlyDelta.value === 0,
-                }"
-              >
-                <span>{{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatNumber(monthlyDelta.value, 0) }} {{ heroUnitLabel }}</span>
-                <span v-if="monthlyDelta.pct !== null">({{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatPct(monthlyDelta.pct, 1) }})</span>
-                <span class="ui-nw-hero-delta-range">{{ monthlyDelta.prevLabel }} → {{ monthlyDelta.lastLabel }}</span>
+            <button class="ui-nw-hero-value-button" type="button" @click="resetTimelineSelection">
+              <div class="ui-nw-hero-value">
+                {{ formatNumber(analysis.netWorth, 2) }} {{ heroUnitLabel }}
               </div>
-              <div class="ui-nw-hero-metrics">
-                <div class="ui-nw-hero-metric">
-                  <span class="ui-nw-hero-metric-label">Cobertura liquida</span>
-                  <strong class="ui-nw-hero-metric-value">
-                    {{ formatPct(analysis.liquidityToDebtRatio, 0) }}
-                  </strong>
-                </div>
-                <div class="ui-nw-hero-metric">
-                  <span class="ui-nw-hero-metric-label">Capital propio</span>
-                  <strong class="ui-nw-hero-metric-value">
-                    {{ formatPct(analysis.equityRatio, 0) }}
-                  </strong>
-                </div>
-              </div>
+            </button>
+            <div
+              v-if="monthlyDelta"
+              class="ui-nw-hero-delta"
+              :class="{
+                'ui-nw-hero-delta-pos': monthlyDelta.value > 0,
+                'ui-nw-hero-delta-neg': monthlyDelta.value < 0,
+                'ui-nw-hero-delta-zero': monthlyDelta.value === 0,
+              }"
+            >
+              <span>{{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatNumber(monthlyDelta.value, 0) }} {{ heroUnitLabel }}</span>
+              <span v-if="monthlyDelta.pct !== null">({{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatPct(monthlyDelta.pct, 1) }})</span>
+              <span class="ui-nw-hero-delta-range">{{ monthlyDelta.prevLabel }} → {{ monthlyDelta.lastLabel }}</span>
             </div>
-
-            <div class="ui-nw-hero-side">
-              <div class="ui-nw-hero-stats">
-                <div class="ui-nw-hero-stat ui-nw-hero-stat-assets">
-                  <span class="ui-nw-hero-stat-label">Activos</span>
-                  <strong class="ui-nw-hero-stat-value">
-                    {{ formatNumber(analysis.assets, 2) }} {{ heroUnitLabel }}
-                  </strong>
-                </div>
-                <div class="ui-nw-hero-stat ui-nw-hero-stat-liabilities">
-                  <span class="ui-nw-hero-stat-label">Pasivos</span>
-                  <strong class="ui-nw-hero-stat-value">
-                    {{ formatNumber(analysis.liabilities, 2) }} {{ heroUnitLabel }}
-                  </strong>
-                </div>
+            <div class="ui-nw-hero-bottom-row">
+              <div class="ui-nw-hero-stat ui-nw-hero-stat-assets">
+                <span class="ui-nw-hero-stat-label">Activos</span>
+                <strong class="ui-nw-hero-stat-value">
+                  {{ formatNumber(analysis.assets, 2) }} {{ heroUnitLabel }}
+                </strong>
+              </div>
+              <div class="ui-nw-hero-stat ui-nw-hero-stat-liabilities">
+                <span class="ui-nw-hero-stat-label">Pasivos</span>
+                <strong class="ui-nw-hero-stat-value">
+                  {{ formatNumber(analysis.liabilities, 2) }} {{ heroUnitLabel }}
+                </strong>
+              </div>
+              <div class="ui-nw-hero-stat">
+                <span class="ui-nw-hero-stat-label">Cobertura liquida</span>
+                <strong class="ui-nw-hero-stat-value">
+                  {{ formatPct(analysis.liquidityToDebtRatio, 0) }}
+                </strong>
+              </div>
+              <div class="ui-nw-hero-stat">
+                <span class="ui-nw-hero-stat-label">Capital propio</span>
+                <strong class="ui-nw-hero-stat-value">
+                  {{ formatPct(analysis.equityRatio, 0) }}
+                </strong>
               </div>
             </div>
           </div>

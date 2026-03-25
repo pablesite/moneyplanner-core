@@ -148,10 +148,16 @@
 
 .ui-nw-hero-summary-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-  gap: 16px;
-  align-items: start;
+  gap: 6px;
+  align-content: start;
   min-height: 0;
+}
+
+.ui-nw-hero-bottom-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .ui-nw-hero-primary {
@@ -1224,8 +1230,8 @@
     max-width: none;
   }
 
-  .ui-nw-hero-summary-body {
-    grid-template-columns: 1fr;
+  .ui-nw-hero-bottom-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ui-nw-hero-summary {
@@ -1236,10 +1242,6 @@
 
   .ui-nw-hero-value {
     white-space: normal;
-  }
-
-  .ui-nw-hero-side {
-    grid-template-rows: auto auto;
   }
 
   .ui-nw-hero-timeline {
