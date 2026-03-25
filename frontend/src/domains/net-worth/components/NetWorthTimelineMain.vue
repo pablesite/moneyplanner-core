@@ -162,6 +162,8 @@ defineProps<{
         />
       </div>
 
+      <NetWorthDeltaChart :rows="visibleTimelineRows" :unit="displayedTimelineUnit" />
+
       <div class="ui-nw-timeline-points">
         <div
           v-for="row in timelineChartRows.slice(-6)"
@@ -172,8 +174,6 @@ defineProps<{
           <strong>{{ formatNumber(row.value, 0) }}</strong>
         </div>
       </div>
-
-      <NetWorthDeltaChart :rows="visibleTimelineRows" :unit="displayedTimelineUnit" />
     </div>
 
     <div v-if="selectedPosition" class="ui-nw-position-activity">
