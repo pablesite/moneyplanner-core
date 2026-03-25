@@ -92,26 +92,6 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
           <span class="icon" aria-hidden="true">&#8635;</span>
         </button>
       </div>
-
-      <div class="ui-pro-toolbar ui-nw-toolbar">
-        <SettingsPopover
-          :loading="store.loading"
-          :base-currency="store.baseCurrency ?? 'EUR'"
-          :currencies="currencies"
-          :inflation-region="store.inflationRegion ?? 'ES'"
-          :inflation-regions="inflationRegions"
-          :value-mode="valueMode"
-          :can-show-real="canShowReal"
-          :mode-help="modeLabel"
-          :real-base-label="realBaseLabel"
-          :show-refresh="false"
-          :icon-only="true"
-          @update:base-currency="store.updateBaseCurrency"
-          @update:inflation-region="store.updateInflationRegion"
-          @update:value-mode="setValueMode"
-          @refresh="store.refreshAll()"
-        />
-      </div>
     </div>
 
     <div class="ui-nw-hero">
@@ -138,6 +118,7 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
         <article class="ui-nw-hero-summary">
           <div class="ui-nw-hero-summary-head">
             <div class="ui-nw-hero-badge">Balance actual</div>
+            <div class="ui-nw-hero-summary-controls">
             <label class="ui-nw-hero-context" data-test="ownership-filter">
               <span class="ui-nw-hero-context-label">Titularidad</span>
               <details
@@ -178,6 +159,26 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
                 </div>
               </details>
             </label>
+            <div class="ui-nw-toolbar ui-nw-toolbar-inline">
+              <SettingsPopover
+                :loading="store.loading"
+                :base-currency="store.baseCurrency ?? 'EUR'"
+                :currencies="currencies"
+                :inflation-region="store.inflationRegion ?? 'ES'"
+                :inflation-regions="inflationRegions"
+                :value-mode="valueMode"
+                :can-show-real="canShowReal"
+                :mode-help="modeLabel"
+                :real-base-label="realBaseLabel"
+                :show-refresh="false"
+                :icon-only="true"
+                @update:base-currency="store.updateBaseCurrency"
+                @update:inflation-region="store.updateInflationRegion"
+                @update:value-mode="setValueMode"
+                @refresh="store.refreshAll()"
+              />
+            </div>
+            </div>
           </div>
           <div class="ui-nw-hero-summary-body">
             <div class="ui-nw-hero-primary">
