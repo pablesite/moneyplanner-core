@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NetWorthDonut, NetWorthTimelineChart } from '@/domains/net-worth';
+import { NetWorthDeltaChart, NetWorthDonut, NetWorthTimelineChart } from '@/domains/net-worth';
 import type { NetWorthTimelineChartPoint } from './NetWorthTimelineChart.vue';
 
 type CategoryType = 'asset' | 'liability';
@@ -172,6 +172,8 @@ defineProps<{
           <strong>{{ formatNumber(row.value, 0) }}</strong>
         </div>
       </div>
+
+      <NetWorthDeltaChart :rows="visibleTimelineRows" :unit="displayedTimelineUnit" />
     </div>
 
     <div v-if="selectedPosition" class="ui-nw-position-activity">
