@@ -1,15 +1,21 @@
-# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
+﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-25 (sesion 3)
+Ultima actualizacion: 2026-03-25 (sesion 7)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
 
+## Patron preferido para cuentas de inversion
+- Revalorizaciones: concepto `Revalorizacion`.
+- Aportaciones normales: concepto `Inversion`.
+- Aportaciones de cashback: concepto `Inversion (Cashback)`.
+- Ownership en aportaciones: usar `ownership_id=1 (Pablo)` cuando aplique.
+
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
-- `Total cuentas`: 110.
-- `Revisadas`: 11.
-- `Pendientes`: 99.
+- `Total cuentas`: 106.
+- `Revisadas`: 16.
+- `Pendientes`: 90.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -23,6 +29,11 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `424` - `ING Health Care` (activo de inversion / fondo ING)
 - `459` - `ING Renta Fija` (activo de inversion / fondo ING)
 - `460` - `ING S&P` (activo de inversion / fondo ING)
+- `477` - `Fondo Monetario ING` (activo de inversion / fondo)
+- `479` - `ETF MSCI World` (activo de inversion / ETF)
+- `480` - `ETF REIT Real Global Real State` (activo de inversion / ETF REIT)
+- `482` - `Cartera Ahorro MyInvestor` (activo de inversion / roboadvisor)
+- `483` - `Cartera Ahorro MyInvestor (Compartida)` (activo de inversion / roboadvisor)
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
@@ -31,17 +42,22 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Reserva Atrio` (deuda): sin limpieza adicional pendiente detectada.
 - `Reserva Atrio Residencial` (activo): sin limpieza adicional pendiente detectada.
 - `Cartera Metal`: limpio. 27 aportes (investment_purchase inflow desde MyInvestor), 172 revalorizaciones, 1 transferencia de traspaso desde Fondo ING PIMCO.
-- `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). ⚠️ Pendiente: 2 "Fondos" (50€ ago-22 y 80€ sep-22) con contrapartida virtual — origen probable en cuenta ING de fondos aún no incorporada al sistema. Revisar cuando se cree esa cuenta.
+- `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). âš ï¸ Pendiente: 2 "Fondos" (50â‚¬ ago-22 y 80â‚¬ sep-22) con contrapartida virtual â€” origen probable en cuenta ING de fondos aÃºn no incorporada al sistema. Revisar cuando se cree esa cuenta.
 - `ING 10/90` (id=425): revisado. Aportes con `ownership_id=1 (Pablo)`. Cuenta obsoleta sin movimientos `id=473` eliminada.
 - `ING Health Care` (id=424): revisado. Ingresos reclasificados a revalorizacion/aporte segun caso; revalorizaciones sin categoria ni ownership; aportes con concepto `Inversion` y `ownership_id=1`. Cuenta obsoleta sin movimientos `id=472` eliminada.
 - `ING Renta Fija` (id=459): revisado. Ingresos convertidos a aportes de inversion desde `ING (id=5)`; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=474` eliminada.
 - `ING S&P` (id=460): revisado. Ingresos convertidos a aportes de inversion; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=475` eliminada.
+- `Fondo Monetario ING` (id=477): revisado. Movimientos migrados desde cuenta obsoleta `id=450`; ingresos convertidos a revalorizacion; revalorizaciones y transferencias sin ownership; concepto canonico `Revalorizacion`.
+- `ETF MSCI World` (id=479): revisado. Movimientos migrados desde cuenta obsoleta `id=441`; cashback mensual normalizado a aporte de inversion desde `TradeRepublic (id=25)` con espejo de ingreso `Cashback` en TradeRepublic; conceptos normalizados (`Inversion`, `Inversion (Cashback)`, `Revalorizacion`). Conteo aplicado con patron habitual: `Revalorizacion=24`, `Inversion=29`, `Inversion (Cashback)=7`, y `ownership_id=1 (Pablo)` en las 36 aportaciones.
+- `ETF REIT Real Global Real State` (id=480): revisado. Movimientos migrados desde cuenta obsoleta `id=440` (15 movimientos) y cuenta obsoleta eliminada. Activo vinculado en la cuenta nueva (`asset_id=157`). Conceptos normalizados: `Inversion=9` (8 inflow + 1 outflow) y `Revalorizacion=6`. Ownership ajustado: revalorizaciones sin ownership; el resto se mantiene.
+- `Cartera Ahorro MyInvestor` (id=482): revisado. Movimientos migrados desde cuenta obsoleta `id=435` (70 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
+- `Cartera Ahorro MyInvestor (Compartida)` (id=483): revisado. Movimientos migrados desde cuenta obsoleta `id=464` (72 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
-Estrategia: primero cuentas satélite (más independientes), al final las cuentas corrientes gordas (dependen de que el resto esté limpio).
+Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
 
-### Grupo 6 — MoneyWiz (cuentas virtuales, revisión final)
-`origin=system`. Invisibles en la app. Revisar al final, una vez que todas las cuentas reales estén limpias.
+### Grupo 6 â€” MoneyWiz (cuentas virtuales, revisiÃ³n final)
+`origin=system`. Invisibles en la app. Revisar al final, una vez que todas las cuentas reales estÃ©n limpias.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
@@ -65,38 +81,39 @@ Estrategia: primero cuentas satélite (más independientes), al final las cuenta
 | 98 | 455 | MoneyWiz revaluation: Pasivos > Activos financieros > ST Criptos | expense |
 | 90 | 436 | MoneyWiz expense: financial_investments/roboadvisor | expense |
 
-### Grupo 1 — Inversión (fondos, brokers, roboadvisors)
-Satélites de inversión. Contrapartidas suelen ser MyInvestor/TradeRepublic ↔ liquidez.
+### Grupo 1 â€” InversiÃ³n (fondos, brokers, roboadvisors)
+SatÃ©lites de inversiÃ³n. Contrapartidas suelen ser MyInvestor/TradeRepublic â†” liquidez.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
 | 468 | 19 | MyInvestor | asset |
-| 409 | 25 | TradeRepublic | asset |
+| 430 | 25 | TradeRepublic | asset |
 | 324 | 33 | MyInv. Indexado Global (MSCI) | asset |
-| 149 | 416 | Cuenta NARANJA | asset |
-| 137 | 18 | MyInvestor | asset |
+| 152 | 476 | Cuenta Naranja | asset |
+| 138 | 18 | MyInvestor | asset |
 | 129 | 447 | ST Stocks | asset |
 | 81 | 40 | ViaInvest | asset |
 
-### Grupo 2 — Cripto
-Satélites cripto. Contrapartidas suelen ser Spot Binance ↔ liquidez.
+### Grupo 2 â€” Cripto
+SatÃ©lites cripto. Contrapartidas suelen ser Spot Binance â†” liquidez.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 277 | 421 | ST Criptos | asset |
+| 110 | 26 | Bitcoin | asset |
 | 246 | 22 | Spot Binance | asset |
 | 174 | 445 | DT Bots Cripto | asset |
 
-### Grupo 3 — Pasivos satélite (préstamos y tarjeta)
-Pequeños pasivos independientes. Contrapartidas ya conocidas.
+### Grupo 3 â€” Pasivos satÃ©lite (prÃ©stamos y tarjeta)
+PequeÃ±os pasivos independientes. Contrapartidas ya conocidas.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
+| 71 | 481 | Tarjeta ING | liability |
 | 128 | 45 | Hipoteca Palmito | liability |
 | 107 | 41 | Tarjeta ECI | liability |
 
-### Grupo 4 — Cuentas corrientes (dejar para el final)
-Las más gordas y con más dependencias cruzadas. Revisar una vez que los grupos anteriores estén limpios.
+### Grupo 4 â€” Cuentas corrientes (dejar para el final)
+Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los grupos anteriores estÃ©n limpios.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
@@ -110,10 +127,11 @@ Las más gordas y con más dependencias cruzadas. Revisar una vez que los grupos
 | 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
-- ⚠️ **Cuenta ING de fondos sin monitorizar**: Fondo ING PIMCO tiene 2 aportes (50€ ago-22 y 80€ sep-22) cuyo origen es probablemente una cuenta ING de gestión de fondos que aún no está en el sistema. Crear ese activo/cuenta cuando se pueda y vincular esas transacciones.
+- ⚠️ **Bitcoin (id=26) a medio curar**: se han quitado manualmente revalorizaciones y se migro historico desde ST Criptos para trabajar en BTC. Pendiente chequeo integral de coherencia (saldo final BTC, contrapartidas y timeline) antes de cerrarlo como revisado.
+- âš ï¸ **Cuenta ING de fondos sin monitorizar**: Fondo ING PIMCO tiene 2 aportes (50â‚¬ ago-22 y 80â‚¬ sep-22) cuyo origen es probablemente una cuenta ING de gestiÃ³n de fondos que aÃºn no estÃ¡ en el sistema. Crear ese activo/cuenta cuando se pueda y vincular esas transacciones.
 
 ## Como continuar manana
-1. Seguir los grupos en orden: Inversión → Cripto → Pasivos satélite → Cuentas corrientes → MoneyWiz virtuales (al final).
+1. Seguir los grupos en orden: Inversion -> Cripto (terminar primero el chequeo de Bitcoin) -> Pasivos satelite -> Cuentas corrientes -> MoneyWiz virtuales (al final).
 2. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),

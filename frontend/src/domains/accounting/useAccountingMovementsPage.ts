@@ -117,11 +117,13 @@ export function useAccountingMovementsPage() {
   }
 
   function formatMoney(value: number, currency = 'EUR'): string {
+    const normalizedCurrency = currency.trim().toUpperCase();
+    const isBtc = normalizedCurrency === 'BTC';
     return new Intl.NumberFormat('es-ES', {
       style: 'currency',
-      currency,
-      minimumFractionDigits: currency === 'EUR' ? 2 : undefined,
-      maximumFractionDigits: 2,
+      currency: normalizedCurrency,
+      minimumFractionDigits: isBtc ? 6 : normalizedCurrency === 'EUR' ? 2 : undefined,
+      maximumFractionDigits: isBtc ? 8 : 2,
     }).format(value);
   }
 
