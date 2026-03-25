@@ -82,9 +82,9 @@
 
 .ui-nw-hero-main {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
+  grid-template-columns: 215px minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
 }
 
 .ui-nw-hero-donut {
@@ -93,35 +93,30 @@
 }
 
 .ui-nw-hero-donut-frame {
-  height: 184px;
-  border-radius: 20px;
-  border: 1px solid rgba(92, 192, 255, 0.14);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(92, 192, 255, 0.18), transparent 54%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
-  padding: 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 16px 4px 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -24px 60px rgba(0, 0, 0, 0.16);
+}
+
+.ui-nw-hero-donut-frame .nw-donut-wrap-chart-only .nw-donut-chart {
+  width: min(185px, 100%);
+  height: 185px;
 }
 
 .ui-nw-hero-summary {
-  height: 184px;
-  border-radius: 20px;
-  border: 1px solid rgba(45, 212, 191, 0.18);
-  background:
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 32%),
-    linear-gradient(135deg, rgba(6, 28, 39, 0.94), rgba(7, 23, 34, 0.98)), rgba(7, 14, 26, 0.94);
-  padding: 14px 18px;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 0 4px 24px;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 12px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 20px 50px rgba(0, 0, 0, 0.18);
 }
 
 .ui-nw-hero-summary-head {
@@ -1138,8 +1133,9 @@
   }
 
   .ui-nw-hero-summary {
-    height: auto;
-    padding: 18px;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    padding: 18px 0 0;
   }
 
   .ui-nw-hero-value {
@@ -1148,10 +1144,6 @@
 
   .ui-nw-hero-side {
     grid-template-rows: auto auto;
-  }
-
-  .ui-nw-hero-donut-frame {
-    height: 200px;
   }
 
   .ui-nw-hero-timeline {
