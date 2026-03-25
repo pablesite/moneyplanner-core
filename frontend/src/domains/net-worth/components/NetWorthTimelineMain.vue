@@ -162,7 +162,7 @@ defineProps<{
         />
       </div>
 
-      <NetWorthDeltaChart :rows="visibleTimelineRows" :unit="displayedTimelineUnit" />
+      <NetWorthDeltaChart :rows="timelineChartRows" :unit="displayedTimelineUnit" />
 
       <div class="ui-nw-timeline-points">
         <div
