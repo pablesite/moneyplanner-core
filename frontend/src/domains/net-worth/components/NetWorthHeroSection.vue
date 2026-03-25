@@ -81,18 +81,7 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
 <template>
   <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">
     <div class="ui-nw-topbar">
-      <div class="ui-nw-topbar-actions">
-        <p class="ui-pro-kicker ui-nw-topbar-kicker">Patrimonio</p>
-        <button
-          class="icon-btn ui-nw-topbar-action disabled:cursor-not-allowed disabled:opacity-50"
-          type="button"
-          :disabled="store.loading"
-          aria-label="Refrescar"
-          @click="store.refreshAll()"
-        >
-          <span class="icon" aria-hidden="true">&#8635;</span>
-        </button>
-      </div>
+      <p class="ui-pro-kicker ui-nw-topbar-kicker">Patrimonio</p>
     </div>
 
     <div class="ui-nw-hero">
