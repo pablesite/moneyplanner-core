@@ -349,6 +349,17 @@ const timelineRows = computed<TimelinePoint[]>(() =>
   })),
 );
 
+const monthlyDelta = computed<{ value: number; pct: number | null } | null>(() => {
+  if (selectedTimelineCategory.value !== null) return null;
+  const rows = timelineRows.value;
+  const last = rows[rows.length - 1];
+  const prev = rows[rows.length - 2];
+  if (!last || !prev) return null;
+  const value = last.netWorth - prev.netWorth;
+  const pct = prev.netWorth !== 0 ? value / Math.abs(prev.netWorth) : null;
+  return { value, pct };
+});
+
 const {
   selectedCategoryLabel,
   allAssetPositionRows,
@@ -581,6 +592,7 @@ const {
       :category-liabilities="effectiveCategoryLiabilities"
       :category-asset-counts="effectiveCategoryAssetCounts"
       :category-liability-counts="effectiveCategoryLiabilityCounts"
+      :monthly-delta="monthlyDelta"
     />
 
     <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">
