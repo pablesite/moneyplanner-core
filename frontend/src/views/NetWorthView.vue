@@ -701,18 +701,20 @@ const {
                 </label>
               </div>
 
-              <NetWorthTimelineChart
-                :points="timelineChartPoints"
-                :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
-                :series-label="timelineSummaryLabel"
-                :series-color="displayedTimelineSeriesColor"
-                :y-axis-min-zero="timelineYAxisStartsAtZero"
-                expanded
-              />
-              <NetWorthDeltaChart
-                :rows="timelineChartRows"
-                :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
-              />
+              <div class="ui-nw-timeline-chart-shell">
+                <NetWorthTimelineChart
+                  :points="timelineChartPoints"
+                  :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
+                  :series-label="timelineSummaryLabel"
+                  :series-color="displayedTimelineSeriesColor"
+                  :y-axis-min-zero="timelineYAxisStartsAtZero"
+                  expanded
+                />
+                <NetWorthDeltaChart
+                  :rows="timelineChartRows"
+                  :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
+                />
+              </div>
             </div>
           </BaseModal>
 
