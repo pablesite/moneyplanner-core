@@ -108,10 +108,10 @@ defineProps<{
     />
   </div>
 
-  <div v-if="displayedTimelineLoading && visibleTimelineRows.length === 0" class="subtle">
-    Cargando evolucion...
-  </div>
-  <div v-else-if="visibleTimelineRows.length === 0" class="subtle">
+  <div
+    v-if="visibleTimelineRows.length === 0 && !displayedTimelineLoading"
+    class="subtle"
+  >
     {{
       selectedPosition
         ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
