@@ -13,6 +13,15 @@ import {
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+const CATEGORY_COLORS: string[] = [
+  'rgba(56, 189, 248, 0.92)',
+  'rgba(45, 212, 191, 0.92)',
+  'rgba(251, 146, 60, 0.92)',
+  'rgba(167, 139, 250, 0.92)',
+  'rgba(74, 222, 128, 0.92)',
+];
+const LIABILITY_SLICE_COLOR = 'rgba(244, 63, 94, 0.88)';
+
 type Props = {
   totalAssets: string | number | null | undefined;
   totalLiabilities: string | number | null | undefined;
@@ -138,17 +147,37 @@ const liabilityComposition = computed(() =>
   ),
 );
 
+type ChartSlice = { label: string; value: number; color: string };
+
+const chartSlices = computed<ChartSlice[]>(() => {
+  const categories = assetComposition.value;
+  if (categories.length > 0) {
+    const slices: ChartSlice[] = categories.slice(0, 5).map((cat, i) => ({
+      label: cat.label,
+      value: cat.value,
+      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] ?? CATEGORY_COLORS[0] ?? '',
+    }));
+    const liab = toNumber(props.totalLiabilities);
+    if (liab > 0) {
+      slices.push({ label: 'Pasivos', value: liab, color: LIABILITY_SLICE_COLOR });
+    }
+    return slices;
+  }
+  // Fallback: equity / backed / unbacked
+  return [
+    { label: 'Capital propio (neto)', value: equitySlice.value, color: 'rgba(92, 192, 255, 0.9)' },
+    { label: 'Activos con deuda', value: backedSlice.value, color: 'rgba(255, 99, 132, 0.85)' },
+    { label: 'Deuda sin activo', value: unbackedSlice.value, color: 'rgba(255, 140, 110, 0.85)' },
+  ].filter((s) => s.value > 0);
+});
+
 const data = computed<ChartData<'doughnut'>>(() => ({
-  labels: ['Capital propio (neto)', 'Activos financiados con deuda', 'Deuda sin activo'],
+  labels: chartSlices.value.map((s) => s.label),
   datasets: [
     {
-      data: [equitySlice.value, backedSlice.value, unbackedSlice.value],
-      backgroundColor: [
-        'rgba(92, 192, 255, 0.9)',
-        'rgba(255, 99, 132, 0.85)',
-        'rgba(255, 140, 110, 0.85)',
-      ],
-      borderColor: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)'],
+      data: chartSlices.value.map((s) => s.value),
+      backgroundColor: chartSlices.value.map((s) => s.color),
+      borderColor: 'rgba(0,0,0,0)',
       borderWidth: 0,
       hoverOffset: 6,
       spacing: 2,
@@ -220,6 +249,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
   >
     <div v-if="hasChart" class="nw-donut-chart">
       <Doughnut :data="data" :options="options" :plugins="[centerTextPlugin]" />
+    </div>
+    <div v-if="hasChart && chartSlices.length" class="nw-donut-legend">
+      <span v-for="slice in chartSlices" :key="slice.label" class="nw-donut-legend-item">
+        <span class="nw-donut-legend-dot" :style="{ background: slice.color }" />
+        <span class="nw-donut-legend-label">{{ slice.label }}</span>
+      </span>
     </div>
 
     <div v-if="hasSide" class="nw-donut-side">
