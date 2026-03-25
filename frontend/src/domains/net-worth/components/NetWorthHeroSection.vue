@@ -57,7 +57,7 @@ const props = defineProps<{
   formatNumber: (value: number, decimals?: number) => string;
   formatPct: (value: number | null, decimals?: number) => string;
   resetTimelineSelection: () => void;
-  monthlyDelta?: { value: number; pct: number | null } | null;
+  monthlyDelta?: { value: number; pct: number | null; lastLabel: string; prevLabel: string } | null;
   categoryKeys?: string[];
   categoryLabels?: string[];
   categoryAssets?: number[];
@@ -198,8 +198,9 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
                   'ui-nw-hero-delta-zero': monthlyDelta.value === 0,
                 }"
               >
-                <span>{{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatNumber(monthlyDelta.value, 0) }} {{ heroUnitLabel }} este mes</span>
+                <span>{{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatNumber(monthlyDelta.value, 0) }} {{ heroUnitLabel }}</span>
                 <span v-if="monthlyDelta.pct !== null">({{ monthlyDelta.value > 0 ? '+' : '' }}{{ formatPct(monthlyDelta.pct, 1) }})</span>
+                <span class="ui-nw-hero-delta-range">{{ monthlyDelta.prevLabel }} → {{ monthlyDelta.lastLabel }}</span>
               </div>
               <div class="ui-nw-hero-metrics">
                 <div class="ui-nw-hero-metric">
