@@ -43,12 +43,14 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 3. The ownership filter and settings gear are grouped in the summary head controls.
 
 ## Monthly delta indicator
-1. Appears below the main net-worth value when the global timeline is active (no category selected).
-2. Shows the change between the last two monthly timeline points:
+1. Appears below the main net-worth value at all times (independent of category selection).
+2. Shows the change between the last two monthly points of the **global** timeline:
    - Format: `+29.998 € este mes (+13,4%)`
-   - Green badge when positive, red badge when negative.
-3. Hidden when a category is selected (timeline reflects category, not global net worth).
-4. Hidden when there are fewer than two timeline data points.
+   - Green badge when positive, red badge when negative, grey when zero.
+3. When a category is selected, `store.timeline` is overwritten with category data, but the
+   delta is computed from `globalTimelineRows` — a ref that caches the last known global
+   timeline and only updates when no category is active.
+4. Hidden only when there are fewer than two global timeline data points.
 
 ## Ownership filter
 1. The ownership filter lives in the summary head beside the settings gear.
