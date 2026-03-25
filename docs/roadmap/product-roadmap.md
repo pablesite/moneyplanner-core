@@ -15,7 +15,6 @@ Convenciones:
 - Revisar si añadir más gráficas: evolución temporal o gráfico de quesito (donut de distribución).
 - **UX — Asistente para meter activos más fácilmente.** Formulario/flujo ultrasencillo de alta de activos.
 - Validar consistencia global de datos y KPIs (activos, pasivos, liquidez neta).
-- Evaluar eliminación del sistema de snapshots si resulta legacy/redundante.
 
 ---
 

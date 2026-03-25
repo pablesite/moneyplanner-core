@@ -37,7 +37,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 |------|-----------|--------|-------------|
 | Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
 | Presupuesto — migración y UX | Alta | 🔄 | Fase 1 y fase 2 completadas (CRUD anual + integración por categorías en un flujo único). Pendiente consolidación UX v1 final. |
-| Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs, evaluar snapshots legacy |
+| Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
@@ -55,7 +55,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Net Worth (activos, pasivos, liquidez, snapshots) | ✅ | Completo |
+| Net Worth (activos, pasivos, liquidez) | ✅ | Completo. Snapshots eliminados (legacy — reemplazados por la timeline dinámica). |
 | Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). Resumen de ingresos y gasto ampliado con cobertura canónica (`executed_budgeted` vs `executed_unbudgeted`) y visibilidad de subcategorías detectadas sin línea anual. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |

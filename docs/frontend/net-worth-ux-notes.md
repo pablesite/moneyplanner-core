@@ -59,7 +59,6 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
    - `frontend/src/domains/net-worth/components/NetWorthHeroSection.vue`
    - `frontend/src/domains/net-worth/components/NetWorthTimelineMain.vue`
    - `frontend/src/domains/net-worth/components/NetWorthCategoryWorkspace.vue`
-   - `frontend/src/domains/net-worth/components/NetWorthSnapshotsSection.vue`
    - `frontend/src/domains/net-worth/components/NetWorthItemModals.vue`
 4. La coordinación de ownership, métricas, timeline, layout y acciones vive en composables
    del dominio `net-worth`, manteniendo el comportamiento UX sin rediseño funcional.
