@@ -1,6 +1,6 @@
 # Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-24 (sesión 2)
+Ultima actualizacion: 2026-03-25 (sesion 3)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -8,8 +8,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 110.
-- `Revisadas`: 7.
-- `Pendientes`: 103.
+- `Revisadas`: 11.
+- `Pendientes`: 99.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -19,6 +19,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `36` - `Reserva Atrio Residencial` (activo de inversion)
 - `14` - `Cartera Metal` (activo de inversion / roboadvisor)
 - `470` - `Fondo ING PIMCO GIS Commodity` (activo de inversion)
+- `425` - `ING 10/90` (activo de inversion / fondo ING)
+- `424` - `ING Health Care` (activo de inversion / fondo ING)
+- `459` - `ING Renta Fija` (activo de inversion / fondo ING)
+- `460` - `ING S&P` (activo de inversion / fondo ING)
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
@@ -28,6 +32,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Reserva Atrio Residencial` (activo): sin limpieza adicional pendiente detectada.
 - `Cartera Metal`: limpio. 27 aportes (investment_purchase inflow desde MyInvestor), 172 revalorizaciones, 1 transferencia de traspaso desde Fondo ING PIMCO.
 - `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). ⚠️ Pendiente: 2 "Fondos" (50€ ago-22 y 80€ sep-22) con contrapartida virtual — origen probable en cuenta ING de fondos aún no incorporada al sistema. Revisar cuando se cree esa cuenta.
+- `ING 10/90` (id=425): revisado. Aportes con `ownership_id=1 (Pablo)`. Cuenta obsoleta sin movimientos `id=473` eliminada.
+- `ING Health Care` (id=424): revisado. Ingresos reclasificados a revalorizacion/aporte segun caso; revalorizaciones sin categoria ni ownership; aportes con concepto `Inversion` y `ownership_id=1`. Cuenta obsoleta sin movimientos `id=472` eliminada.
+- `ING Renta Fija` (id=459): revisado. Ingresos convertidos a aportes de inversion desde `ING (id=5)`; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=474` eliminada.
+- `ING S&P` (id=460): revisado. Ingresos convertidos a aportes de inversion; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=475` eliminada.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satélite (más independientes), al final las cuentas corrientes gordas (dependen de que el resto esté limpio).

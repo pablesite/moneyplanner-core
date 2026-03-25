@@ -70,6 +70,29 @@ const editAccountGroups = computed(() => groupAndSortAccounts(props.page.editAcc
 const editCounterpartyGroups = computed(() =>
   groupAndSortAccounts(props.page.editCounterpartyOptions),
 );
+const isInvestmentOutflow = computed(
+  () =>
+    props.page.editTransactionForm.kind === 'investment' &&
+    props.page.editTransactionForm.investment_direction === 'outflow',
+);
+const editPrimaryAccountLabel = computed(() => {
+  if (props.page.editTransactionForm.kind === 'investment') {
+    return isInvestmentOutflow.value ? 'Cuenta destino (liquidez)' : 'Cuenta origen (liquidez)';
+  }
+  return 'Cuenta principal';
+});
+const editCounterpartyAccountLabel = computed(() => {
+  if (props.page.editTransactionForm.kind === 'investment') {
+    return isInvestmentOutflow.value ? 'Cuenta origen (inversion)' : 'Cuenta destino (inversion)';
+  }
+  return props.page.editCounterpartyLabel;
+});
+const investmentFlowHint = computed(() => {
+  if (props.page.editTransactionForm.kind !== 'investment') return '';
+  return isInvestmentOutflow.value
+    ? 'Primero eliges de que inversion sale el dinero y luego a que liquidez llega.'
+    : 'Primero eliges de que liquidez sale el dinero y luego a que inversion llega.';
+});
 </script>
 
 <template>
@@ -138,53 +161,115 @@ const editCounterpartyGroups = computed(() =>
             : 'ui-accounting-form-grid-edit-simple'
         "
       >
-        <select v-model="page.editTransactionForm.ownership_id" class="select">
-          <option
-            v-for="option in page.ownershipOptions"
-            :key="option.value == null ? 'none' : option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-
-        <select v-model="page.editTransactionForm.account_id" class="select" required>
-          <option :value="null" disabled>Cuenta principal</option>
-          <optgroup v-for="group in editAccountGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
+        <label class="ui-accounting-field">
+          <span>Titularidad</span>
+          <select v-model="page.editTransactionForm.ownership_id" class="select">
+            <option
+              v-for="option in page.ownershipOptions"
+              :key="option.value == null ? 'none' : option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
             </option>
-          </optgroup>
-        </select>
+          </select>
+        </label>
 
-        <input
-          v-model="page.editTransactionForm.amount"
-          class="input"
-          inputmode="decimal"
-          :placeholder="
-            page.editTransactionForm.kind === 'balance_adjustment'
-              ? 'Saldo objetivo'
-              : page.editTransactionForm.kind === 'revaluation'
-                ? 'Importe revalorizacion'
-                : '0.00'
+        <label
+          v-if="
+            page.editKindNeedsCounterparty &&
+            page.editTransactionForm.kind === 'investment' &&
+            isInvestmentOutflow
           "
-          required
-        />
-
-        <select
-          v-if="page.editKindNeedsCounterparty"
-          v-model="page.editTransactionForm.counterparty_account_id"
-          class="select"
-          required
+          class="ui-accounting-field"
         >
-          <option :value="null">{{ page.editCounterpartyLabel }}</option>
-          <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
-            </option>
-          </optgroup>
-        </select>
+          <span>{{ editCounterpartyAccountLabel }}</span>
+          <select
+            v-model="page.editTransactionForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">{{ editCounterpartyAccountLabel }}</option>
+            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                {{ accountLabel(account) }} / {{ account.currency }}
+              </option>
+            </optgroup>
+          </select>
+        </label>
+
+        <label class="ui-accounting-field">
+          <span>{{ editPrimaryAccountLabel }}</span>
+          <select v-model="page.editTransactionForm.account_id" class="select" required>
+            <option :value="null" disabled>{{ editPrimaryAccountLabel }}</option>
+            <optgroup v-for="group in editAccountGroups" :key="group.key" :label="group.label">
+              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                {{ accountLabel(account) }} / {{ account.currency }}
+              </option>
+            </optgroup>
+          </select>
+        </label>
+
+        <label class="ui-accounting-field">
+          <span>Importe</span>
+          <input
+            v-model="page.editTransactionForm.amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="
+              page.editTransactionForm.kind === 'balance_adjustment'
+                ? 'Saldo objetivo'
+                : page.editTransactionForm.kind === 'revaluation'
+                  ? 'Importe revalorizacion'
+                  : '0.00'
+            "
+            required
+          />
+        </label>
+
+        <label
+          v-if="page.editKindNeedsCounterparty && page.editTransactionForm.kind !== 'investment'"
+          class="ui-accounting-field"
+        >
+          <span>{{ page.editCounterpartyLabel }}</span>
+          <select
+            v-model="page.editTransactionForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">{{ page.editCounterpartyLabel }}</option>
+            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                {{ accountLabel(account) }} / {{ account.currency }}
+              </option>
+            </optgroup>
+          </select>
+        </label>
+        <label
+          v-if="
+            page.editKindNeedsCounterparty &&
+            page.editTransactionForm.kind === 'investment' &&
+            !isInvestmentOutflow
+          "
+          class="ui-accounting-field"
+        >
+          <span>{{ editCounterpartyAccountLabel }}</span>
+          <select
+            v-model="page.editTransactionForm.counterparty_account_id"
+            class="select"
+            required
+          >
+            <option :value="null">{{ editCounterpartyAccountLabel }}</option>
+            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                {{ accountLabel(account) }} / {{ account.currency }}
+              </option>
+            </optgroup>
+          </select>
+        </label>
       </div>
+      <p v-if="page.editTransactionForm.kind === 'investment'" class="ui-accounting-inline-note">
+        {{ investmentFlowHint }}
+      </p>
       <p
         v-if="page.editKindNeedsCounterparty && !page.editCounterpartyOptions.length"
         class="ui-accounting-inline-note"
@@ -199,8 +284,8 @@ const editCounterpartyGroups = computed(() =>
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
         <select v-model="page.editTransactionForm.investment_direction" class="select">
-          <option value="inflow">Aporte (liquidez a inversion)</option>
-          <option value="outflow">Retirada inversion (inversion a liquidez)</option>
+          <option value="inflow">Aporte (desde liquidez hacia inversion)</option>
+          <option value="outflow">Retirada (desde inversion hacia liquidez)</option>
         </select>
       </div>
       <p

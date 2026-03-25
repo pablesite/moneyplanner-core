@@ -18,7 +18,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
-| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 110 cuentas totales, 5 ya revisadas). | Se define durante la revisión. |
+| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 110 cuentas totales, 11 ya revisadas). | Se define durante la revisión. |
 | Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
