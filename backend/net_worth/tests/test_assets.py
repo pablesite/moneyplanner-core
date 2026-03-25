@@ -50,11 +50,6 @@ from ..services_liabilities_core import (
     infer_liability_is_asset_backed,
     validate_liability_payload,
 )
-from ..services_snapshots import (
-    create_or_update_snapshot_from_current,
-    create_snapshot_for_user,
-    validate_snapshot_payload,
-)
 from ..services_summaries import (
     build_net_worth_summary,
     serialize_net_worth_summary,
@@ -532,36 +527,6 @@ class NetWorthServicesTests(TestCase):
         # Primera cuota exactamente en 2024-09-21: a 2024-10-20 solo hay una cuota pagada.
         self.assertEqual(outstanding, Decimal("23000.00000000"))
 
-    def test_validate_snapshot_payload_computes_or_validates_net_worth(self):
-        computed = validate_snapshot_payload(
-            total_assets=Decimal("100.00"),
-            total_liabilities=Decimal("30.00"),
-            net_worth=None,
-        )
-        self.assertEqual(computed, Decimal("70.00"))
-
-        valid = validate_snapshot_payload(
-            total_assets=Decimal("100.00"),
-            total_liabilities=Decimal("30.00"),
-            net_worth=Decimal("70.00"),
-        )
-        self.assertEqual(valid, Decimal("70.00"))
-
-        with self.assertRaises(ValidationError):
-            validate_snapshot_payload(
-                total_assets=Decimal("100.00"),
-                total_liabilities=Decimal("30.00"),
-                net_worth=Decimal("80.00"),
-            )
-
-    def test_validate_snapshot_payload_returns_net_worth_when_totals_missing(self):
-        value = validate_snapshot_payload(
-            total_assets=None,
-            total_liabilities=Decimal("30.00"),
-            net_worth=Decimal("10.00"),
-        )
-        self.assertEqual(value, Decimal("10.00"))
-
     @patch("net_worth.services_assets_core.convert_currency", return_value=Decimal("90.50"))
     def test_get_amount_base_value_success(self, _convert_mock):
         value = get_amount_base_value(
@@ -621,7 +586,7 @@ class NetWorthServicesTests(TestCase):
         self.assertEqual(payload["inflation_base_period"], "2026-01-01")
         self.assertEqual(payload["assets_by_category"]["cash"], "50.00")
 
-    def test_create_asset_liability_snapshot_and_financed_queryset(self):
+    def test_create_asset_liability_and_financed_queryset(self):
         asset = create_asset_for_user(
             user=self.user,
             validated_data={
@@ -644,20 +609,9 @@ class NetWorthServicesTests(TestCase):
                 "financed_asset": asset,
             },
         )
-        snapshot = create_snapshot_for_user(
-            user=self.user,
-            validated_data={
-                "snapshot_date": date(2026, 2, 18),
-                "base_currency": "EUR",
-                "total_assets": Decimal("100.00"),
-                "total_liabilities": Decimal("50.00"),
-                "net_worth": Decimal("50.00"),
-            },
-        )
         financed_qs = get_financed_asset_queryset_for_user(user=self.user)
 
         self.assertEqual(liability.financed_asset_id, asset.id)
-        self.assertEqual(snapshot.net_worth, Decimal("50.00"))
         self.assertEqual(financed_qs.count(), 1)
 
     def test_calculate_totals_groups_assets_and_liabilities(self):
@@ -1659,31 +1613,6 @@ class NetWorthServicesTests(TestCase):
             index=Decimal("100.0000"),
         )
         self.assertEqual(get_inflation_base_period(region="ES"), date(2026, 1, 1))
-
-    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
-    @patch(
-        "net_worth.services.calculate_totals",
-        return_value=NetWorthTotals(
-            total_assets=Decimal("100.00"),
-            total_liabilities=Decimal("40.00"),
-            liabilities_asset_backed=Decimal("40.00"),
-            liabilities_unbacked=Decimal("0.00"),
-            assets_by_category={"cash": Decimal("100.00")},
-            assets_by_subcategory={"cash:bank_account": Decimal("100.00")},
-            liabilities_by_category={"mortgage": Decimal("40.00")},
-        ),
-    )
-    @patch("net_worth.services.get_base_currency_for_user", return_value="EUR")
-    def test_create_or_update_snapshot_from_current_upserts_snapshot(
-        self, _base_mock, _totals_mock, _date_mock
-    ):
-        snapshot, created = create_or_update_snapshot_from_current(user=self.user)
-        self.assertTrue(created)
-        self.assertEqual(snapshot.net_worth, Decimal("60.00"))
-
-        snapshot_2, created_2 = create_or_update_snapshot_from_current(user=self.user)
-        self.assertFalse(created_2)
-        self.assertEqual(snapshot_2.id, snapshot.id)
 
     @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
     @patch(

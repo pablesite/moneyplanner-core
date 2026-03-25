@@ -11,7 +11,6 @@ from .views import (
     LiquidityAssetEventViewSet,
     LiquidityMonthlyCheckinViewSet,
     LiquidityMonthlySummaryAPIView,
-    NetWorthSnapshotViewSet,
     NetWorthSummaryAPIView,
     NetWorthTimelineAPIView,
 )
@@ -27,8 +26,6 @@ router.register(r"liquidity-events", LiquidityAssetEventViewSet, basename="liqui
 router.register(
     r"liquidity-checkins", LiquidityMonthlyCheckinViewSet, basename="liquidity-checkins"
 )
-router.register(r"snapshots", NetWorthSnapshotViewSet, basename="snapshots")
-
 urlpatterns = [
     path("", include(router.urls)),
     path("summary/", NetWorthSummaryAPIView.as_view(), name="net-worth-summary"),

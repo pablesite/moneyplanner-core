@@ -12,16 +12,12 @@ from ..models import (
 from ..serializers import (
     AssetSerializer,
     AssetValuationSerializer,
-    EmptySerializer,
     InvestmentAssetEventSerializer,
     LiabilitySerializer,
     LiabilityEventSerializer,
     LiabilityValuationSerializer,
     LiquidityAssetEventSerializer,
-    NetWorthSnapshotSerializer,
 )
-from ..views import NetWorthSnapshotViewSet
-
 
 class NetWorthSerializerUnitTests(TestCase):
     def setUp(self):
@@ -64,33 +60,6 @@ class NetWorthSerializerUnitTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("deposit_term_months", serializer.errors)
-
-    def test_snapshot_serializer_validate_and_create(self):
-        serializer = NetWorthSnapshotSerializer(
-            data={
-                "snapshot_date": "2026-02-18",
-                "base_currency": "EUR",
-                "total_assets": "100.00",
-                "total_liabilities": "30.00",
-                "net_worth": "70.00",
-            },
-            context={"request": self.request},
-        )
-        self.assertTrue(serializer.is_valid(), serializer.errors)
-        snapshot = serializer.save()
-        self.assertEqual(snapshot.user_id, self.user.id)
-
-        invalid = NetWorthSnapshotSerializer(
-            data={
-                "snapshot_date": "2026-02-19",
-                "base_currency": "EUR",
-                "total_assets": "100.00",
-                "total_liabilities": "30.00",
-                "net_worth": "75.00",
-            },
-            context={"request": self.request},
-        )
-        self.assertFalse(invalid.is_valid())
 
     def test_liability_serializer_context_queryset_and_validate(self):
         asset = Asset.objects.create(
@@ -281,7 +250,3 @@ class NetWorthSerializerUnitTests(TestCase):
         valuation = serializer.save()
         self.assertEqual(valuation.user_id, self.user.id)
 
-    def test_snapshot_viewset_serializer_class_switch(self):
-        view = NetWorthSnapshotViewSet()
-        view.action = "from_current"
-        self.assertIs(view.get_serializer_class(), EmptySerializer)

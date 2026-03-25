@@ -1,4 +1,3 @@
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -16,7 +15,6 @@ from .models import (
     LiabilityValuation,
     LiquidityAssetEvent,
     LiquidityMonthlyCheckin,
-    NetWorthSnapshot,
 )
 from .services_assets_core import (
     AccountingIntegrationState as AssetAccountingIntegrationState,
@@ -42,8 +40,6 @@ from .services_liabilities_core import (
     validate_liability_event_payload,
     validate_liability_payload,
 )
-from .services_snapshots import create_snapshot_for_user, validate_snapshot_payload
-
 
 class EmptySerializer(serializers.Serializer):
     pass
@@ -430,39 +426,6 @@ class AssetSerializer(serializers.ModelSerializer):
             if improvement_id not in seen_ids:
                 current.delete()
 
-
-class NetWorthSnapshotSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = NetWorthSnapshot
-        fields = [
-            "id",
-            "snapshot_date",
-            "base_currency",
-            "total_assets",
-            "total_liabilities",
-            "net_worth",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
-
-    def validate(self, attrs):
-        total_assets = attrs.get("total_assets")
-        total_liabilities = attrs.get("total_liabilities")
-        net_worth = attrs.get("net_worth")
-
-        try:
-            attrs["net_worth"] = validate_snapshot_payload(
-                total_assets=total_assets,
-                total_liabilities=total_liabilities,
-                net_worth=net_worth,
-            )
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError(exc.message_dict) from exc
-        return attrs
-
-    def create(self, validated_data):
-        request = self.context["request"]
-        return create_snapshot_for_user(user=request.user, validated_data=validated_data)
 
 
 class AssetMiniSerializer(serializers.ModelSerializer):

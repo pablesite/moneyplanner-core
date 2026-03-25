@@ -12,7 +12,6 @@ import type {
   Ownership,
   PositionTimeline,
   Settings,
-  Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
 import type { OwnershipLink } from '@/domains/net-worth/ownership';
@@ -33,9 +32,6 @@ export const coreNetWorthApi = {
   },
   getLiabilities() {
     return coreApi.get<Liability[]>('/api/net-worth/liabilities/');
-  },
-  getSnapshots() {
-    return coreApi.get<Snapshot[]>('/api/net-worth/snapshots/');
   },
   getTimeline(params?: { asset_category?: string | null; liability_category?: string | null }) {
     return coreApi.get<NetWorthTimeline>('/api/net-worth/timeline/', {
@@ -70,12 +66,6 @@ export const coreNetWorthApi = {
   },
   getLiabilityEvents() {
     return coreApi.get<LiabilityEvent[]>('/api/net-worth/liability-events/');
-  },
-  createSnapshotFromCurrent() {
-    return coreApi.post<Snapshot>('/api/net-worth/snapshots/from-current/');
-  },
-  deleteSnapshot(id: number) {
-    return coreApi.delete(`/api/net-worth/snapshots/${id}/`);
   },
   createAsset(payload: NetWorthWritePayload) {
     return coreApi.post<Asset>('/api/net-worth/assets/', payload);

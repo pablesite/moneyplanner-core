@@ -71,7 +71,6 @@ describe('useNetWorthViewState (core)', () => {
       refreshAll: vi.fn(async () => undefined),
       createAsset: vi.fn(async () => undefined),
       createLiability: vi.fn(async () => undefined),
-      deleteSnapshot: vi.fn(async () => undefined),
       updateAsset: vi.fn(async () => undefined),
       updateLiability: vi.fn(async () => undefined),
     });
@@ -95,9 +94,6 @@ describe('useNetWorthViewState (core)', () => {
     await state.submitLiability({ name: 'L' });
     expect(store.createLiability).toHaveBeenCalledWith({ name: 'L' });
     expect(state.showLiabilityModal).toBe(false);
-
-    state.confirmDeleteSnapshot(7);
-    expect(store.deleteSnapshot).toHaveBeenCalledWith(7);
   });
 
   it('reacts to mode changes, computes labels, edit payloads and error messages', async () => {

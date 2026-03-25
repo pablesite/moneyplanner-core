@@ -260,13 +260,6 @@ export function useNetWorthViewState() {
     editKind.value = null;
   }
 
-  function confirmDeleteSnapshot(id: number) {
-    if (store.loading) return;
-    if (confirm('Eliminar este snapshot?')) {
-      store.deleteSnapshot(id);
-    }
-  }
-
   const editTitle = computed(() =>
     editKind.value === 'liability' ? 'Editar pasivo' : 'Editar activo',
   );
@@ -408,7 +401,6 @@ export function useNetWorthViewState() {
     submitLiability,
     openEdit,
     closeEdit,
-    confirmDeleteSnapshot,
     editTitle,
     editCategories,
     editInitial,
