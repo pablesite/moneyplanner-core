@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import {
+  NetWorthDeltaChart,
   NetWorthTimelineChart,
   useNetWorthViewExtensions,
   useNetWorthViewState,
@@ -707,6 +708,10 @@ const {
                 :series-color="displayedTimelineSeriesColor"
                 :y-axis-min-zero="timelineYAxisStartsAtZero"
                 expanded
+              />
+              <NetWorthDeltaChart
+                :rows="visibleTimelineRows"
+                :unit="displayCurrencyUnit(store.timeline?.base_currency ?? unitLabel())"
               />
             </div>
           </BaseModal>
