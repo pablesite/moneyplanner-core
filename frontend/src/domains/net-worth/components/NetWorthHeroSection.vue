@@ -57,6 +57,12 @@ const props = defineProps<{
   formatNumber: (value: number, decimals?: number) => string;
   formatPct: (value: number | null, decimals?: number) => string;
   resetTimelineSelection: () => void;
+  categoryKeys?: string[];
+  categoryLabels?: string[];
+  categoryAssets?: number[];
+  categoryLiabilities?: number[];
+  categoryAssetCounts?: number[];
+  categoryLiabilityCounts?: number[];
 }>();
 
 function closePopoverFromClick(event: Event): void {
@@ -73,9 +79,9 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
 
 <template>
   <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">
-    <p class="ui-pro-kicker">Patrimonio</p>
-    <div class="ui-nw-topbar mt-1">
+    <div class="ui-nw-topbar">
       <div class="ui-nw-topbar-actions">
+        <p class="ui-pro-kicker ui-nw-topbar-kicker">Patrimonio</p>
         <button
           class="icon-btn ui-nw-topbar-action disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
@@ -108,7 +114,7 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
       </div>
     </div>
 
-    <div class="ui-nw-hero mt-2">
+    <div class="ui-nw-hero">
       <div class="ui-nw-hero-main">
         <div class="ui-nw-hero-donut">
           <div class="ui-nw-hero-donut-frame">
@@ -120,6 +126,12 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
               :net-worth="analysis.netWorth"
               :unit="heroUnitLabel"
               :show-composition="false"
+              :category-keys="props.categoryKeys"
+              :category-labels="props.categoryLabels"
+              :category-assets="props.categoryAssets"
+              :category-liabilities="props.categoryLiabilities"
+              :category-asset-counts="props.categoryAssetCounts"
+              :category-liability-counts="props.categoryLiabilityCounts"
             />
           </div>
         </div>

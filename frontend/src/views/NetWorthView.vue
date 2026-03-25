@@ -575,6 +575,12 @@ const {
       :format-number="formatNumber"
       :format-pct="formatPct"
       :reset-timeline-selection="resetTimelineSelection"
+      :category-keys="effectiveCategoryKeys"
+      :category-labels="effectiveCategoryLabels"
+      :category-assets="effectiveCategoryAssets"
+      :category-liabilities="effectiveCategoryLiabilities"
+      :category-asset-counts="effectiveCategoryAssetCounts"
+      :category-liability-counts="effectiveCategoryLiabilityCounts"
     />
 
     <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">

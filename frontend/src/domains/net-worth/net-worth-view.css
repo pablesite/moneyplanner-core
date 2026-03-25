@@ -16,7 +16,7 @@
   position: relative;
   z-index: 12;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
@@ -26,6 +26,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.ui-nw-topbar-kicker {
+  margin: 0;
 }
 
 .ui-nw-topbar-action {
