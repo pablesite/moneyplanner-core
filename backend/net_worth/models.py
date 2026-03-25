@@ -600,32 +600,6 @@ class Liability(models.Model):
         return f"{self.user_id} - {self.name} ({self.amount} {self.currency})"
 
 
-class NetWorthSnapshot(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_worth_snapshots"
-    )
-    snapshot_date = models.DateField(default=timezone.now)
-
-    base_currency = models.CharField(max_length=3, default="EUR")
-
-    total_assets = models.DecimalField(max_digits=14, decimal_places=2)
-    total_liabilities = models.DecimalField(max_digits=14, decimal_places=2)
-    net_worth = models.DecimalField(max_digits=14, decimal_places=2)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        indexes = [models.Index(fields=["user", "snapshot_date"])]
-        ordering = ["-snapshot_date", "-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "snapshot_date"], name="unique_snapshot_per_user_and_date"
-            )
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.user_id} - {self.snapshot_date} - {self.net_worth}"
-
 
 class LiquidityMonthlyCheckin(models.Model):
     class Status(models.TextChoices):

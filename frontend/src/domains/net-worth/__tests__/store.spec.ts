@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
     getSummary: vi.fn(),
     getAssets: vi.fn(),
     getLiabilities: vi.fn(),
-    getSnapshots: vi.fn(),
     getTimeline: vi.fn(),
     getAssetTimeline: vi.fn(),
     getLiabilityTimeline: vi.fn(),
@@ -16,8 +15,6 @@ const mocks = vi.hoisted(() => ({
     getInvestmentEvents: vi.fn(),
     getLiquidityEvents: vi.fn(),
     getLiabilityEvents: vi.fn(),
-    createSnapshotFromCurrent: vi.fn(),
-    deleteSnapshot: vi.fn(),
     createAsset: vi.fn(),
     updateAsset: vi.fn(),
     deleteAsset: vi.fn(),
@@ -61,7 +58,6 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [{ id: 1 }] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [{ id: 2 }] });
-    mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [{ id: 3 }] });
     mocks.coreNetWorthApi.getTimeline.mockResolvedValue({
       data: { rows: [], base_currency: 'EUR' },
     });
@@ -72,18 +68,7 @@ describe('net worth store (core)', () => {
     expect(store.baseCurrency).toBe('EUR');
     expect(store.assets).toEqual([{ id: 1, ownership_ref: null }]);
     expect(store.liabilities).toEqual([{ id: 2, ownership_ref: null }]);
-    expect(store.snapshots).toEqual([{ id: 3 }]);
     expect(store.timeline).toEqual({ rows: [], base_currency: 'EUR' });
-    expect(store.loading).toBe(false);
-  });
-
-  it('handles snapshot creation errors and resets loading', async () => {
-    mocks.coreNetWorthApi.createSnapshotFromCurrent.mockRejectedValue(new Error('boom'));
-    const store = useNetWorthStore();
-
-    await store.createTodaySnapshot();
-
-    expect(store.error).toBe('mapped-error');
     expect(store.loading).toBe(false);
   });
 
@@ -105,7 +90,6 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
-    mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getTimeline.mockResolvedValue({ data: { rows: [] } });
     const store = useNetWorthStore();
 
@@ -132,24 +116,6 @@ describe('net worth store (core)', () => {
     expect(mocks.coreNetWorthApi.deleteLiability).toHaveBeenCalledWith(22);
   });
 
-  it('deletes snapshots and maps delete errors', async () => {
-    mocks.coreNetWorthApi.deleteSnapshot.mockResolvedValue({});
-    mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
-    mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
-    mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
-    mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [] });
-    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({ data: { rows: [] } });
-    const store = useNetWorthStore();
-
-    await store.deleteSnapshot(5);
-    expect(mocks.coreNetWorthApi.deleteSnapshot).toHaveBeenCalledWith(5);
-    expect(store.loading).toBe(false);
-
-    mocks.coreNetWorthApi.deleteSnapshot.mockRejectedValueOnce(new Error('boom'));
-    await store.deleteSnapshot(6);
-    expect(store.error).toBe('mapped-error');
-  });
-
   it('fetches settings and updates base currency', async () => {
     mocks.coreNetWorthApi.getSettings.mockResolvedValue({
       data: { base_currency: 'USD', inflation_region: 'ES' },
@@ -160,7 +126,6 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
-    mocks.coreNetWorthApi.getSnapshots.mockResolvedValue({ data: [] });
     const store = useNetWorthStore();
 
     await store.fetchSettings();

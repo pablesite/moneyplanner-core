@@ -1,6 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from rest_framework import mixins, status, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -17,19 +17,16 @@ from .models import (
     LiabilityValuation,
     LiquidityAssetEvent,
     LiquidityMonthlyCheckin,
-    NetWorthSnapshot,
 )
 from .serializers import (
     AssetSerializer,
     AssetValuationSerializer,
-    EmptySerializer,
     InvestmentAssetEventSerializer,
     LiabilitySerializer,
     LiabilityEventSerializer,
     LiabilityValuationSerializer,
     LiquidityAssetEventSerializer,
     LiquidityMonthlyCheckinSerializer,
-    NetWorthSnapshotSerializer,
 )
 from .services import (
     get_financed_asset_queryset_for_user,
@@ -48,10 +45,6 @@ from .services_liquidity import (
     build_liquidity_monthly_summary,
     parse_liquidity_monthly_summary_period,
 )
-from .services_snapshots import (
-    create_or_update_snapshot_from_current,
-)
-from .services_snapshot_api import import_snapshots_bulk_from_request
 from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
 from .services_timelines import (
     build_asset_timeline,
@@ -245,47 +238,6 @@ class LiabilityValuationViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         ctx["liability_queryset"] = Liability.objects.filter(user=self.request.user, is_active=True)
         return ctx
 
-
-class NetWorthSnapshotViewSet(
-    UserScopedQuerySetMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet
-):
-    """
-    Read-only snapshots. Creation/update only through from-current.
-    """
-
-    permission_classes = [IsAuthenticated]
-    serializer_class = NetWorthSnapshotSerializer
-    queryset = NetWorthSnapshot.objects.all()
-
-    def get_serializer_class(self):
-        if self.action == "from_current":
-            return EmptySerializer
-        return super().get_serializer_class()
-
-    @action(detail=False, methods=["post"], url_path="from-current")
-    def from_current(self, request):
-        try:
-            snapshot, created = create_or_update_snapshot_from_current(user=request.user)
-        except ValidationError as exc:
-            raise_api_validation_error(exc)
-
-        data = NetWorthSnapshotSerializer(snapshot).data
-        return Response(
-            {"created": created, "snapshot": data},
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
-
-    @action(detail=False, methods=["post"], url_path="import-bulk")
-    def import_bulk(self, request):
-        result = import_snapshots_bulk_from_request(
-            user=request.user,
-            request_data=request.data,
-            request=request,
-        )
-        return Response(
-            result,
-            status=status.HTTP_200_OK,
-        )
 
 
 class NetWorthSummaryAPIView(APIView):

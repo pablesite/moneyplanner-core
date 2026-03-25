@@ -16,11 +16,10 @@ import type {
   Ownership,
   PositionTimeline,
   Settings,
-  Snapshot,
   Summary,
 } from '@/domains/net-worth/models';
 
-export type { Asset, Liability, Ownership, Snapshot, Summary } from '@/domains/net-worth/models';
+export type { Asset, Liability, Ownership, Summary } from '@/domains/net-worth/models';
 
 type OwnershipAwarePayload = NetWorthWritePayload & { ownership_id?: number | null };
 
@@ -35,7 +34,6 @@ export const useNetWorthStore = defineStore('netWorth', {
     summary: null as Summary | null,
     assets: [] as Asset[],
     liabilities: [] as Liability[],
-    snapshots: [] as Snapshot[],
     timeline: null as NetWorthTimeline | null,
     timelineLoading: false as boolean,
     timelineCategoryFilter: null as string | null,
@@ -63,11 +61,10 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        const [summaryRes, assetsRes, liabilitiesRes, snapshotsRes] = await Promise.all([
+        const [summaryRes, assetsRes, liabilitiesRes] = await Promise.all([
           coreNetWorthApi.getSummary(),
           coreNetWorthApi.getAssets(),
           coreNetWorthApi.getLiabilities(),
-          coreNetWorthApi.getSnapshots(),
         ]);
         const [ownershipsRes, linksRes] = await Promise.all([
           premiumOwnershipApi.getOwnerships(),
@@ -80,7 +77,6 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.baseCurrency = summaryRes.data.base_currency;
         this.assets = attachOwnershipRef(assetsRes.data, assetOwnership);
         this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
-        this.snapshots = snapshotsRes.data;
         this.ownerships = ownershipsRes.data;
         await this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
       } catch (e: unknown) {
@@ -175,30 +171,6 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-    async createTodaySnapshot() {
-      this.loading = true;
-      this.error = null;
-      try {
-        await coreNetWorthApi.createSnapshotFromCurrent();
-        await this.refreshAll();
-      } catch (e: unknown) {
-        this.error = toApiErrorMessage(e);
-        this.loading = false;
-      }
-    },
-
-    async deleteSnapshot(id: number) {
-      this.loading = true;
-      this.error = null;
-      try {
-        await coreNetWorthApi.deleteSnapshot(id);
-        await this.refreshAll();
-      } catch (e: unknown) {
-        this.error = toApiErrorMessage(e);
-      } finally {
-        this.loading = false;
-      }
-    },
 
     async createAsset(
       payload: OwnershipAwarePayload & {

@@ -3,7 +3,6 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -22,7 +21,6 @@ from ..models import (
 from ..services_assets_budget import sync_generated_budget_commitments_for_asset
 from ..services_assets_core import get_effective_asset_amount
 from ..services_liabilities_core import get_effective_liability_amount
-from ..services_snapshots import create_snapshot_for_user
 
 
 class NetWorthApiTests(APITestCase):
@@ -1791,26 +1789,6 @@ class NetWorthApiTests(APITestCase):
             [2024, 2025],
         )
 
-    def test_snapshot_from_current_and_delete(self):
-        Asset.objects.create(
-            user=self.user,
-            name="Cuenta",
-            category=Asset.Category.CASH,
-            subcategory=Asset.Subcategory.BANK_ACCOUNT,
-            currency="EUR",
-            amount=Decimal("100.00"),
-            is_active=True,
-        )
-        create_res = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
-        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
-        snapshot_id = create_res.data["snapshot"]["id"]
-
-        update_res = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
-        self.assertEqual(update_res.status_code, status.HTTP_200_OK)
-
-        delete_res = self.client.delete(f"/api/net-worth/snapshots/{snapshot_id}/")
-        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)
-
     def test_summary_returns_200_without_real_values_when_inflation_is_missing(self):
         response = self.client.get("/api/net-worth/summary/")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
@@ -2164,79 +2142,7 @@ class NetWorthApiTests(APITestCase):
             "year y month deben ser enteros.",
         )
 
-    def test_snapshot_import_bulk_requires_json_array_with_canonical_error_shape(self):
-        response = self.client.post(
-            "/api/net-worth/snapshots/import-bulk/",
-            {"snapshot_date": "2026-02-18"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-        self.assertEqual(response.data["error"]["code"], "validation_error")
-        self.assertEqual(
-            response.data["error"]["details"]["detail"],
-            "Expected a JSON array of snapshots.",
-        )
-
-    def test_snapshot_import_bulk_upserts_and_returns_counts(self):
-        first_import = self.client.post(
-            "/api/net-worth/snapshots/import-bulk/",
-            [
-                {
-                    "snapshot_date": "2026-02-18",
-                    "base_currency": "EUR",
-                    "total_assets": "100.00",
-                    "total_liabilities": "40.00",
-                    "net_worth": "60.00",
-                },
-                {
-                    "snapshot_date": "2026-02-19",
-                    "base_currency": "EUR",
-                    "total_assets": "110.00",
-                    "total_liabilities": "45.00",
-                    "net_worth": "65.00",
-                },
-            ],
-            format="json",
-        )
-        self.assertEqual(first_import.status_code, status.HTTP_200_OK, first_import.data)
-        self.assertTrue(first_import.data["ok"])
-        self.assertEqual(first_import.data["created"], 2)
-        self.assertEqual(first_import.data["updated"], 0)
-        self.assertEqual(len(first_import.data["snapshots"]), 2)
-
-        second_import = self.client.post(
-            "/api/net-worth/snapshots/import-bulk/",
-            [
-                {
-                    "snapshot_date": "2026-02-19",
-                    "base_currency": "EUR",
-                    "total_assets": "120.00",
-                    "total_liabilities": "50.00",
-                    "net_worth": "70.00",
-                },
-                {
-                    "snapshot_date": "2026-02-20",
-                    "base_currency": "EUR",
-                    "total_assets": "130.00",
-                    "total_liabilities": "55.00",
-                    "net_worth": "75.00",
-                },
-            ],
-            format="json",
-        )
-        self.assertEqual(second_import.status_code, status.HTTP_200_OK, second_import.data)
-        self.assertTrue(second_import.data["ok"])
-        self.assertEqual(second_import.data["created"], 1)
-        self.assertEqual(second_import.data["updated"], 1)
-
-        list_res = self.client.get("/api/net-worth/snapshots/")
-        self.assertEqual(list_res.status_code, status.HTTP_200_OK, list_res.data)
-        self.assertEqual(len(list_res.data), 3)
-        by_date = {row["snapshot_date"]: row for row in list_res.data}
-        self.assertEqual(by_date["2026-02-19"]["total_assets"], "120.00")
-        self.assertEqual(by_date["2026-02-19"]["net_worth"], "70.00")
-
-    def test_assets_liabilities_and_snapshots_lists_are_user_scoped(self):
+    def test_assets_and_liabilities_lists_are_user_scoped(self):
         other_user = get_user_model().objects.create_user(username="nw_other", password="pass1234")
 
         Asset.objects.create(
@@ -2257,16 +2163,6 @@ class NetWorthApiTests(APITestCase):
             amount=Decimal("1.00"),
             is_active=True,
         )
-        create_snapshot_for_user(
-            user=other_user,
-            validated_data={
-                "snapshot_date": date(2026, 2, 1),
-                "base_currency": "EUR",
-                "total_assets": Decimal("1.00"),
-                "total_liabilities": Decimal("1.00"),
-                "net_worth": Decimal("0.00"),
-            },
-        )
 
         own_asset = Asset.objects.create(
             user=self.user,
@@ -2286,16 +2182,6 @@ class NetWorthApiTests(APITestCase):
             amount=Decimal("10.00"),
             is_active=True,
         )
-        own_snapshot = create_snapshot_for_user(
-            user=self.user,
-            validated_data={
-                "snapshot_date": date(2026, 2, 2),
-                "base_currency": "EUR",
-                "total_assets": Decimal("100.00"),
-                "total_liabilities": Decimal("10.00"),
-                "net_worth": Decimal("90.00"),
-            },
-        )
 
         assets_res = self.client.get("/api/net-worth/assets/")
         self.assertEqual(assets_res.status_code, status.HTTP_200_OK, assets_res.data)
@@ -2304,10 +2190,6 @@ class NetWorthApiTests(APITestCase):
         liabilities_res = self.client.get("/api/net-worth/liabilities/")
         self.assertEqual(liabilities_res.status_code, status.HTTP_200_OK, liabilities_res.data)
         self.assertEqual([row["id"] for row in liabilities_res.data], [own_liability.id])
-
-        snapshots_res = self.client.get("/api/net-worth/snapshots/")
-        self.assertEqual(snapshots_res.status_code, status.HTTP_200_OK, snapshots_res.data)
-        self.assertEqual([row["id"] for row in snapshots_res.data], [own_snapshot.id])
 
     def test_asset_valuation_create_and_asset_timeline_endpoint(self):
         asset = Asset.objects.create(
@@ -2547,11 +2429,3 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(len(response.data["rows"]), 2)
         self.assertEqual(response.data["rows"][0]["total_assets"], "1000.00")
 
-    @patch(
-        "net_worth.views.create_or_update_snapshot_from_current", side_effect=ValidationError("x")
-    )
-    def test_snapshot_from_current_returns_400_on_validation_error(self, _mock_create):
-        response = self.client.post("/api/net-worth/snapshots/from-current/", format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"]["code"], "validation_error")
-        self.assertEqual(response.data["error"]["details"]["detail"], "x")

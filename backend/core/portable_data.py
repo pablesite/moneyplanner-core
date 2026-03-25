@@ -14,10 +14,9 @@ from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySe
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from memberships.serializers import FamilyMemberSerializer, OwnershipWriteSerializer
 from memberships.services import sync_ownership_link
-from net_worth.models import Asset, Liability, NetWorthSnapshot
-from net_worth.serializers import AssetSerializer, LiabilitySerializer, NetWorthSnapshotSerializer
+from net_worth.models import Asset, Liability
+from net_worth.serializers import AssetSerializer, LiabilitySerializer
 from net_worth.services import get_base_currency_for_user, get_financed_asset_queryset_for_user
-from net_worth.services_snapshots import import_snapshots_bulk_for_user
 
 
 def get_current_portable_app_version() -> str:
@@ -102,9 +101,6 @@ class PortableImportRequestSerializer(serializers.Serializer):
                     f"El archivo no contiene la coleccion esperada: {key}."
                 )
 
-        snapshots = data.get("snapshots", [])
-        if snapshots is not None and not isinstance(snapshots, list):
-            raise serializers.ValidationError("La coleccion `snapshots` debe ser una lista.")
 
         premium = value.get("premium")
         if premium is not None:
@@ -309,7 +305,6 @@ def _clear_existing_portable_core_data(*, user) -> None:
         user=user,
         target_type__in=[OwnershipLink.TargetType.ASSET, OwnershipLink.TargetType.LIABILITY],
     ).delete()
-    NetWorthSnapshot.objects.filter(user=user).delete()
     AnnualIncomeEntry.objects.filter(user=user).delete()
     AnnualExpenseEntry.objects.filter(user=user).delete()
     Liability.objects.filter(user=user).delete()
@@ -461,9 +456,9 @@ def _import_annual_expense(
     return len(annual_expense)
 
 
-def _import_settings_and_snapshots(
+def _import_settings(
     *, context: PortableImportContext, bundle: dict[str, Any]
-) -> int:
+) -> None:
     settings_payload = bundle.get("settings")
     if isinstance(settings_payload, dict) and normalize_optional_text(
         settings_payload.get("base_currency")
@@ -474,28 +469,6 @@ def _import_settings_and_snapshots(
         )
     else:
         get_or_create_user_settings(user=context.user)
-
-    snapshots = bundle.get("data", {}).get("snapshots", []) or []
-    if not snapshots:
-        return 0
-
-    serializer = NetWorthSnapshotSerializer(
-        data=[
-            {
-                "snapshot_date": row.get("snapshot_date"),
-                "base_currency": row.get("base_currency"),
-                "total_assets": row.get("total_assets"),
-                "total_liabilities": row.get("total_liabilities"),
-                "net_worth": row.get("net_worth"),
-            }
-            for row in snapshots
-        ],
-        many=True,
-        context={"request": context.request},
-    )
-    serializer.is_valid(raise_exception=True)
-    import_snapshots_bulk_for_user(user=context.user, rows=list(serializer.validated_data))
-    return len(snapshots)
 
 
 def _import_ownership_links(
@@ -556,7 +529,7 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
         expense_count = _import_annual_expense(
             context=context, annual_expense=list(data["annual_expense"])
         )
-        snapshot_count = _import_settings_and_snapshots(context=context, bundle=bundle)
+        _import_settings(context=context, bundle=bundle)
         ownership_link_count = _import_ownership_links(
             context=context,
             premium=premium,
@@ -580,7 +553,6 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             "annual_expense": expense_count,
             "assets": len(data["assets"]),
             "liabilities": len(data["liabilities"]),
-            "snapshots": snapshot_count,
             "family_members": len(premium["family_members"]) if premium is not None else 0,
             "ownerships": len(premium["ownerships"]) if premium is not None else 0,
             "ownership_links": ownership_link_count,

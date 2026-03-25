@@ -21,13 +21,11 @@ type Props = {
 
   // acciones
   showRefresh?: boolean; // por defecto true
-  showSnapshot?: boolean; // por defecto true
   iconOnly?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
   showRefresh: true,
-  showSnapshot: true,
   iconOnly: false,
 });
 
@@ -35,7 +33,6 @@ const emit = defineEmits<{
   (e: 'update:baseCurrency', value: string): void;
   (e: 'update:inflationRegion', value: string): void;
   (e: 'update:valueMode', value: 'nominal' | 'real'): void;
-  (e: 'snapshot'): void;
   (e: 'refresh'): void;
 }>();
 
@@ -116,7 +113,7 @@ function onSelectInflationRegion(e: Event) {
               {{ c.label }}
             </option>
           </select>
-          <div class="nw-settings-hint">Totales y snapshots en esta moneda</div>
+          <div class="nw-settings-hint">Moneda base para totales</div>
         </div>
       </div>
 
@@ -164,16 +161,6 @@ function onSelectInflationRegion(e: Event) {
       </div>
 
       <div class="nw-settings-block nw-settings-actions">
-        <button
-          v-if="showSnapshot"
-          class="btn btn-primary"
-          type="button"
-          :disabled="loading"
-          @click="emit('snapshot')"
-        >
-          Guardar snapshot
-        </button>
-
         <button
           v-if="showRefresh"
           class="btn"

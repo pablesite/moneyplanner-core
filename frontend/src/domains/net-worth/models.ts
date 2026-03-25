@@ -69,16 +69,6 @@ export type Asset = {
 
 export type Liability = Asset;
 
-export type Snapshot = {
-  id: number;
-  snapshot_date: string;
-  base_currency: string;
-  total_assets: string;
-  total_liabilities: string;
-  net_worth: string;
-  created_at: string;
-};
-
 export type Summary = {
   base_currency: string;
 

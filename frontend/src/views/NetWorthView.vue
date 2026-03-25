@@ -8,7 +8,6 @@ import {
 import NetWorthCategoryWorkspace from '@/domains/net-worth/components/NetWorthCategoryWorkspace.vue';
 import NetWorthHeroSection from '@/domains/net-worth/components/NetWorthHeroSection.vue';
 import NetWorthItemModals from '@/domains/net-worth/components/NetWorthItemModals.vue';
-import NetWorthSnapshotsSection from '@/domains/net-worth/components/NetWorthSnapshotsSection.vue';
 import NetWorthTimelineMain from '@/domains/net-worth/components/NetWorthTimelineMain.vue';
 import type { NetWorthWritePayload } from '@/domains/net-worth/models';
 import '@/domains/net-worth/net-worth-view.css';
@@ -34,13 +33,11 @@ const {
   liabilityCategories,
   prettyError,
   canShowReal,
-  confirmDeleteSnapshot,
   showAssetModal,
   showLiabilityModal,
   showEditModal,
   editItem,
   editKind,
-  formatMoney,
   unitLabel,
   modeLabel,
   realBaseLabel,
@@ -715,14 +712,6 @@ const {
     <div v-if="store.error" class="alert mt-3">
       {{ prettyError() }}
     </div>
-    <NetWorthSnapshotsSection
-      :snapshots="store.snapshots"
-      :loading="store.loading"
-      :format-money="formatMoney"
-      :display-currency-unit="displayCurrencyUnit"
-      :confirm-delete-snapshot="confirmDeleteSnapshot"
-    />
-
     <NetWorthItemModals
       :show-asset-modal="showAssetModal"
       :show-liability-modal="showLiabilityModal"

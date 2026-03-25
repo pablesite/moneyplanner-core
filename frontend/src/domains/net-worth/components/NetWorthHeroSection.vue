@@ -34,7 +34,6 @@ type StoreLike = {
   baseCurrency?: string | null;
   inflationRegion?: string | null;
   refreshAll: () => void;
-  createTodaySnapshot: () => void;
   updateBaseCurrency: (value: string) => void;
   updateInflationRegion: (value: string) => void;
 };
@@ -86,16 +85,6 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
         >
           <span class="icon" aria-hidden="true">&#8635;</span>
         </button>
-        <button
-          class="icon-btn ui-nw-topbar-action disabled:cursor-not-allowed disabled:opacity-50"
-          type="button"
-          :disabled="store.loading"
-          aria-label="Guardar snapshot"
-          title="Guardar snapshot"
-          @click="store.createTodaySnapshot()"
-        >
-          <span class="icon" aria-hidden="true">&#128190;</span>
-        </button>
       </div>
 
       <div class="ui-pro-toolbar ui-nw-toolbar">
@@ -110,12 +99,10 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
           :mode-help="modeLabel"
           :real-base-label="realBaseLabel"
           :show-refresh="false"
-          :show-snapshot="false"
           :icon-only="true"
           @update:base-currency="store.updateBaseCurrency"
           @update:inflation-region="store.updateInflationRegion"
           @update:value-mode="setValueMode"
-          @snapshot="store.createTodaySnapshot()"
           @refresh="store.refreshAll()"
         />
       </div>
