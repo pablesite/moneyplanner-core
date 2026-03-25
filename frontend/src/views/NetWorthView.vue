@@ -349,9 +349,21 @@ const timelineRows = computed<TimelinePoint[]>(() =>
   })),
 );
 
+// Guardamos los últimos datos del timeline global (sin filtro de categoría).
+// Cuando se selecciona una categoría, store.timeline se sobreescribe con datos
+// de esa categoría, pero el hero siempre muestra el patrimonio global — por eso
+// necesitamos conservar el último estado global para calcular el delta correctamente.
+const globalTimelineRows = ref<TimelinePoint[]>([]);
+watch(
+  [timelineRows, selectedTimelineCategory],
+  ([rows, cat]) => {
+    if (cat === null) globalTimelineRows.value = rows;
+  },
+  { immediate: true },
+);
+
 const monthlyDelta = computed<{ value: number; pct: number | null } | null>(() => {
-  if (selectedTimelineCategory.value !== null) return null;
-  const rows = timelineRows.value;
+  const rows = globalTimelineRows.value;
   const last = rows[rows.length - 1];
   const prev = rows[rows.length - 2];
   if (!last || !prev) return null;
