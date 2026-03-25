@@ -118,6 +118,16 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function currencyDecimals(currency: string): number {
+  return currency.trim().toUpperCase() === 'BTC' ? 8 : 2;
+}
+
+function roundByCurrency(value: number, currency: string): number {
+  const decimals = currencyDecimals(currency);
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
 export function useAccountingPage() {
   const store = useAccountingStore();
   const incomeStore = useAnnualIncomeStore('core');
@@ -1249,6 +1259,8 @@ export function useAccountingPage() {
   }
 
   function getTransactionEditAmount(transaction: LedgerTransaction): string {
+    const displayCurrency = transaction.entries[0]?.currency ?? 'EUR';
+    const decimals = currencyDecimals(displayCurrency);
     const debitTotalValue = transaction.entries
       .filter((entry) => entry.side === 'debit')
       .reduce((sum, entry) => sum + toNumber(entry.amount), 0);
@@ -1256,9 +1268,9 @@ export function useAccountingPage() {
       const assetEntry = transaction.entries.find(
         (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
       );
-      if (assetEntry?.side === 'credit') return (-debitTotalValue).toFixed(2);
+      if (assetEntry?.side === 'credit') return (-debitTotalValue).toFixed(decimals);
     }
-    return debitTotalValue.toFixed(2);
+    return debitTotalValue.toFixed(decimals);
   }
 
   function getInvestmentDirection(transaction: LedgerTransaction): 'inflow' | 'outflow' {
@@ -1390,7 +1402,9 @@ export function useAccountingPage() {
   function scaleEntriesToAmount(
     entries: PersistedTransactionEntry[],
     targetAmount: number,
+    currency: string,
   ): PersistedTransactionEntry[] {
+    const decimals = currencyDecimals(currency);
     const scaled = entries.map((entry) => ({ ...entry }));
     const debitIndexes = scaled
       .map((entry, index) => (entry.side === 'debit' ? index : -1))
@@ -1404,16 +1418,18 @@ export function useAccountingPage() {
     );
     if (currentDebitTotal <= 0) return scaled;
     const factor = targetAmount / currentDebitTotal;
-    const round2 = (value: number) => Math.round(value * 100) / 100;
+    const roundForCurrency = (value: number) => roundByCurrency(value, currency);
     const applySide = (indexes: number[]) => {
       if (!indexes.length) return;
       let allocated = 0;
       indexes.forEach((index, position) => {
         const currentValue = toNumber(scaled[index]!.amount);
         const isLast = position === indexes.length - 1;
-        const nextValue = isLast ? round2(targetAmount - allocated) : round2(currentValue * factor);
-        allocated = round2(allocated + nextValue);
-        scaled[index]!.amount = nextValue.toFixed(2);
+        const nextValue = isLast
+          ? roundForCurrency(targetAmount - allocated)
+          : roundForCurrency(currentValue * factor);
+        allocated = roundForCurrency(allocated + nextValue);
+        scaled[index]!.amount = nextValue.toFixed(decimals);
       });
     };
     applySide(debitIndexes);
@@ -1590,7 +1606,8 @@ export function useAccountingPage() {
   ): PersistedTransactionEntry[] {
     const targetSide = accountDeltaSide(targetAccount.account_type, amount);
     const counterpartySide = targetSide === 'debit' ? 'credit' : 'debit';
-    const absoluteAmount = Math.abs(round2(amount)).toFixed(2);
+    const decimals = currencyDecimals(targetAccount.currency);
+    const absoluteAmount = Math.abs(roundByCurrency(amount, targetAccount.currency)).toFixed(decimals);
     const makeEntry = (
       account: LedgerAccount,
       side: LedgerEntrySide,
@@ -1679,23 +1696,31 @@ export function useAccountingPage() {
   ): Promise<PersistedTransactionEntry[] | null> {
     if (editTransactionForm.kind === 'revaluation') {
       // Rebuild entries from scratch so that sign changes (gain↔loss) correctly flip debit/credit sides.
-      const assetEntry = editTransactionPersistedEntries.value.find(
-        (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
-      );
+      // Use the currently selected account, not the persisted asset account, so account changes are applied.
       const counterpartyEntry = editTransactionPersistedEntries.value.find(
-        (entry) => accountMap.value.get(entry.account_id)?.account_type !== 'asset',
+        (entry) =>
+          entry.account_id !== selectedAccount.id &&
+          accountMap.value.get(entry.account_id)?.account_type !== 'asset',
       );
-      const assetAccount = assetEntry ? accountMap.value.get(assetEntry.account_id) : undefined;
       const counterpartyAccount = counterpartyEntry
         ? accountMap.value.get(counterpartyEntry.account_id)
         : undefined;
-      if (!assetAccount || !counterpartyAccount) {
-        return scaleEntriesToAmount(
+      if (!counterpartyAccount) {
+        const scaled = scaleEntriesToAmount(
           editTransactionPersistedEntries.value,
-          round2(Math.abs(parsedAmount)),
+          roundByCurrency(Math.abs(parsedAmount), selectedAccount.currency),
+          selectedAccount.currency,
         );
+        const firstEntry = scaled[0] ?? null;
+        if (firstEntry) {
+          firstEntry.account_id = selectedAccount.id;
+          firstEntry.currency = selectedAccount.currency;
+          firstEntry.asset_id = selectedAccount.asset_id ?? null;
+          firstEntry.liability_id = null;
+        }
+        return scaled;
       }
-      return buildBalanceAdjustmentEntries(parsedAmount, assetAccount, counterpartyAccount);
+      return buildBalanceAdjustmentEntries(parsedAmount, selectedAccount, counterpartyAccount);
     }
     if (editTransactionForm.kind === 'balance_adjustment') {
       const targetBalance = round2(parsedAmount);
@@ -1717,7 +1742,7 @@ export function useAccountingPage() {
       }
       return buildBalanceAdjustmentEntries(delta, selectedAccount, counterpartyAccount);
     }
-    const editedAmount = round2(parsedAmount);
+    const editedAmount = roundByCurrency(parsedAmount, selectedAccount.currency);
     const classificationCounterpartyAccountId = editKindNeedsCounterparty.value
       ? editTransactionForm.counterparty_account_id
       : await ensureClassificationCounterpartyAccountId(
@@ -1728,7 +1753,11 @@ export function useAccountingPage() {
       store.error = 'No hay cuenta contable de contrapartida para ese tipo y moneda.';
       return null;
     }
-    const scaledEntries = scaleEntriesToAmount(editTransactionPersistedEntries.value, editedAmount);
+    const scaledEntries = scaleEntriesToAmount(
+      editTransactionPersistedEntries.value,
+      editedAmount,
+      selectedAccount.currency,
+    );
     const kindAdjustedEntries =
       editTransactionForm.kind === editTransactionForm.initial_kind
         ? scaledEntries
@@ -2015,9 +2044,22 @@ export function useAccountingPage() {
   }
 
   async function reloadMovementPagesAfterMutation(): Promise<void> {
+    const previousTodosLoaded = todosTransactions.value.length;
+    const previousCuentasLoaded = cuentasTransactions.value.length;
+    const hasSelectedAccount = cuentasSelectedAccountId.value != null;
+
     await fetchTodosPage(true);
-    if (cuentasSelectedAccountId.value != null) {
-      await fetchCuentasPage(true);
+    const desiredTodos = Math.min(previousTodosLoaded, todosTotalCount.value);
+    while (todosHasMore.value && todosTransactions.value.length < desiredTodos) {
+      await fetchTodosPage(false);
+    }
+
+    if (!hasSelectedAccount) return;
+
+    await fetchCuentasPage(true);
+    const desiredCuentas = Math.min(previousCuentasLoaded, cuentasTotalCount.value);
+    while (cuentasHasMore.value && cuentasTransactions.value.length < desiredCuentas) {
+      await fetchCuentasPage(false);
     }
   }
 
@@ -2106,13 +2148,21 @@ export function useAccountingPage() {
     };
     try {
       await store.updateTransaction(editTransactionId.value, payload);
-      await reloadMovementPagesAfterMutation();
-      resetEditTransactionForm();
-      successMessage.value = 'Movimiento contable actualizado.';
-      return true;
     } catch {
       return false;
     }
+    try {
+      await reloadMovementPagesAfterMutation();
+    } catch {
+      // El guardado ya se aplico; si falla el refresh no bloqueamos el cierre del modal.
+      if (!store.error) {
+        store.error =
+          'Movimiento guardado, pero no se pudo refrescar el listado. Recarga la vista si no ves el cambio.';
+      }
+    }
+    resetEditTransactionForm();
+    successMessage.value = 'Movimiento contable actualizado.';
+    return true;
   }
 
   async function deleteTransaction(transactionId: number, transactionDescription: string) {

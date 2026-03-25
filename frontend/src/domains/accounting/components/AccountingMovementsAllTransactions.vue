@@ -164,8 +164,12 @@ function originLabel(origin: LedgerTransaction['origin']): string {
       <div class="ui-import-spinner"></div>
       <span>Cargando movimientos...</span>
     </div>
-    <div v-else-if="!state.todosTransactions.length" class="ui-state-block ui-state-empty">
-      Sin movimientos para los filtros actuales.
+    <div
+      v-else-if="!state.todosTransactions.length"
+      class="ui-state-block ui-state-empty ui-accounting-empty-state"
+    >
+      <p class="ui-state-title">Sin movimientos para estos filtros</p>
+      <p class="ui-state-hint">Prueba otro periodo o ajusta la búsqueda para ver actividad.</p>
     </div>
     <ul v-else class="ui-entry-list">
       <li v-for="transaction in state.todosTransactions" :key="transaction.id" class="ui-entry-row">

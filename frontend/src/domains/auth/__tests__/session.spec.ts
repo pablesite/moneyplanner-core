@@ -26,4 +26,15 @@ describe('auth session tokens', () => {
     expect(getAccessToken()).toBeNull();
     expect(getRefreshToken()).toBeNull();
   });
+
+  it('reads latest tokens after external localStorage changes', () => {
+    setAccessToken('a1');
+    setRefreshToken('r1');
+
+    localStorage.setItem('access_token', 'a2');
+    localStorage.setItem('refresh_token', 'r2');
+
+    expect(getAccessToken()).toBe('a2');
+    expect(getRefreshToken()).toBe('r2');
+  });
 });

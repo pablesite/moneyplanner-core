@@ -196,8 +196,14 @@ function typeBadgeVariant(movement: {
                 v-if="state.cuentasSelectedAccountId === account.id"
                 class="ui-catalog-transactions"
               >
-                <div v-if="!state.cuentasTransactions.length" class="ui-state-block ui-state-empty">
-                  Sin movimientos para los filtros actuales.
+                <div
+                  v-if="!state.cuentasTransactions.length"
+                  class="ui-state-block ui-state-empty ui-accounting-empty-state"
+                >
+                  <p class="ui-state-title">Sin movimientos para estos filtros</p>
+                  <p class="ui-state-hint">
+                    Prueba otro periodo o ajusta la búsqueda para ver actividad.
+                  </p>
                 </div>
                 <ul v-else class="ui-entry-list">
                   <li
