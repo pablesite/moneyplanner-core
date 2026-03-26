@@ -584,7 +584,7 @@ def estimate_liability_outstanding_amount_simple(
 
 
 def get_effective_liability_amount(
-    *, liability: Liability, as_of_date: date | None = None
+    *, liability: Liability, as_of_date: date | None = None, position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
@@ -655,21 +655,29 @@ def get_effective_liability_amount(
             )
             return max(Decimal("0"), raw)
 
-    valuation = (
-        LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)
-        .order_by("-valuation_date", "-updated_at", "-id")
-        .first()
-    )
+    if position_cache is not None:
+        cached_vals = position_cache.liability_valuations.get(liability.id, [])
+        valuation = next(
+            (v for v in cached_vals if v.valuation_date <= ref_date), None,
+        )
+    else:
+        valuation = (
+            LiabilityValuation.objects.filter(liability=liability, valuation_date__lte=ref_date)
+            .order_by("-valuation_date", "-updated_at", "-id")
+            .first()
+        )
     if valuation is not None:
         return Decimal(valuation.value) + get_liability_events_delta(
             liability=liability,
             from_date=valuation.valuation_date,
             as_of_date=ref_date,
+            position_cache=position_cache,
         )
     if liability.category == Liability.Category.CREDIT_CARD:
         return Decimal(liability.amount) + get_liability_events_delta(
             liability=liability,
             as_of_date=ref_date,
+            position_cache=position_cache,
         )
     estimated = estimate_liability_outstanding_amount_simple(
         liability=liability, as_of_date=ref_date
@@ -707,12 +715,20 @@ def get_liability_events_delta(
     liability: Liability,
     from_date: date | None = None,
     as_of_date: date | None = None,
+    position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     delta = Decimal("0")
-    events = LiabilityEvent.objects.filter(liability=liability, event_date__lte=ref_date)
-    if from_date is not None:
-        events = events.filter(event_date__gt=from_date)
+    if position_cache is not None:
+        all_events = position_cache.liability_events.get(liability.id, [])
+        events = [
+            e for e in all_events
+            if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
+        ]
+    else:
+        events = LiabilityEvent.objects.filter(liability=liability, event_date__lte=ref_date)
+        if from_date is not None:
+            events = events.filter(event_date__gt=from_date)
     for event in events:
         amount = Decimal(event.amount)
         if event.event_type in (

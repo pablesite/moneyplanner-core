@@ -193,6 +193,114 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
     raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
 
 
+# ---------------------------------------------------------------------------
+# Bulk FX cache for timeline-style loops
+# ---------------------------------------------------------------------------
+
+def build_fx_cache(currencies: set[str]) -> dict[tuple[str, str], list[tuple[date, Decimal]]]:
+    """
+    Bulk-load all FxRate rows involving the given currencies into an in-memory
+    lookup.  Returns ``{(from, to): [(rate_date, rate), ...]}`` sorted
+    descending by ``rate_date`` so that a linear scan finds the latest rate
+    <= a target date quickly.
+    """
+    if not currencies:
+        return {}
+    rows = (
+        FxRate.objects
+        .filter(from_currency__in=currencies, to_currency__in=currencies)
+        .order_by("from_currency", "to_currency", "-rate_date")
+        .values_list("from_currency", "to_currency", "rate_date", "rate")
+    )
+    cache: dict[tuple[str, str], list[tuple[date, Decimal]]] = {}
+    for from_c, to_c, rd, rate in rows:
+        cache.setdefault((from_c, to_c), []).append((rd, Decimal(rate)))
+    return cache
+
+
+def _cache_lookup(
+    cache: dict[tuple[str, str], list[tuple[date, Decimal]]],
+    from_c: str,
+    to_c: str,
+    rate_date: date,
+) -> Decimal | None:
+    """Return the latest rate <= *rate_date* from the cache, or ``None``."""
+    entries = cache.get((from_c, to_c))
+    if not entries:
+        return None
+    # entries are sorted descending by date
+    for rd, rate in entries:
+        if rd <= rate_date:
+            return rate
+    return None
+
+
+def convert_currency_cached(
+    amount: Decimal,
+    from_currency: str,
+    to_currency: str,
+    *,
+    rate_date: date,
+    fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]],
+) -> Decimal:
+    """Like ``convert_currency`` but resolves rates from *fx_cache*."""
+    if amount is None:
+        raise ValidationError("Amount is required.")
+
+    from_c = (from_currency or "").upper().strip()
+    to_c = (to_currency or "").upper().strip()
+
+    if len(from_c) != 3 or len(to_c) != 3:
+        raise ValidationError("Invalid currency code.")
+
+    if from_c == to_c:
+        return _quantize_2(Decimal(amount))
+
+    amount = Decimal(amount)
+
+    # 1) Direct
+    rate = _cache_lookup(fx_cache, from_c, to_c, rate_date)
+    if rate is not None:
+        return _quantize_2(amount * rate)
+
+    # 2) Inverse
+    rate = _cache_lookup(fx_cache, to_c, from_c, rate_date)
+    if rate is not None:
+        if rate == 0:
+            raise ValidationError(f"Invalid FX rate: {to_c}->{from_c} is 0.")
+        return _quantize_2(amount / rate)
+
+    # 3) Triangulation via pivot
+    pivot = (os.getenv("FX_PIVOT", "USD") or "USD").upper().strip()
+    if pivot in (from_c, to_c):
+        raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
+
+    leg1 = _cache_lookup(fx_cache, from_c, pivot, rate_date)
+    leg1_inv = None if leg1 is not None else _cache_lookup(fx_cache, pivot, from_c, rate_date)
+
+    leg2 = _cache_lookup(fx_cache, pivot, to_c, rate_date)
+    leg2_inv = None if leg2 is not None else _cache_lookup(fx_cache, to_c, pivot, rate_date)
+
+    if (leg1 is not None or leg1_inv is not None) and (leg2 is not None or leg2_inv is not None):
+        if leg1 is not None:
+            factor1 = leg1
+        else:
+            if leg1_inv == 0:
+                raise ValidationError(f"Invalid FX rate: {pivot}->{from_c} is 0.")
+            factor1 = Decimal("1") / leg1_inv
+
+        if leg2 is not None:
+            factor2 = leg2
+        else:
+            if leg2_inv == 0:
+                raise ValidationError(f"Invalid FX rate: {to_c}->{pivot} is 0.")
+            factor2 = Decimal("1") / leg2_inv
+
+        return _quantize_2(amount * factor1 * factor2)
+
+    raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
+
+
 def get_latest_inflation_period(region: str = InflationIndex.Region.ES):
     row = InflationIndex.objects.filter(region=region).order_by("-period").first()
     if not row:

@@ -50,6 +50,9 @@ describe('net worth store (core)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    mocks.coreNetWorthApi.getSettings.mockResolvedValue({
+      data: { base_currency: 'EUR', inflation_region: 'ES' },
+    });
     mocks.premiumOwnershipApi.getOwnerships.mockResolvedValue({ data: [] });
     mocks.premiumOwnershipApi.getOwnershipLinks.mockResolvedValue({ data: [] });
   });
@@ -68,8 +71,9 @@ describe('net worth store (core)', () => {
     expect(store.baseCurrency).toBe('EUR');
     expect(store.assets).toEqual([{ id: 1, ownership_ref: null }]);
     expect(store.liabilities).toEqual([{ id: 2, ownership_ref: null }]);
-    expect(store.timeline).toEqual({ rows: [], base_currency: 'EUR' });
     expect(store.loading).toBe(false);
+    // Timeline loads independently (fire-and-forget) — flush microtasks
+    await vi.waitFor(() => expect(store.timeline).toEqual({ rows: [], base_currency: 'EUR' }));
   });
 
   it('maps refresh errors', async () => {
@@ -120,18 +124,24 @@ describe('net worth store (core)', () => {
     mocks.coreNetWorthApi.getSettings.mockResolvedValue({
       data: { base_currency: 'USD', inflation_region: 'ES' },
     });
-    mocks.coreNetWorthApi.updateSettings.mockResolvedValue({
-      data: { base_currency: 'EUR', inflation_region: 'ES-MD' },
-    });
-    mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
+    mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'USD' } });
     mocks.coreNetWorthApi.getAssets.mockResolvedValue({ data: [] });
     mocks.coreNetWorthApi.getLiabilities.mockResolvedValue({ data: [] });
+    mocks.coreNetWorthApi.getTimeline.mockResolvedValue({ data: { rows: [] } });
     const store = useNetWorthStore();
 
     await store.fetchSettings();
     expect(store.baseCurrency).toBe('USD');
     expect(store.inflationRegion).toBe('ES');
 
+    // After updateBaseCurrency, refreshAll re-fetches settings from the server
+    mocks.coreNetWorthApi.updateSettings.mockResolvedValue({
+      data: { base_currency: 'EUR', inflation_region: 'ES' },
+    });
+    mocks.coreNetWorthApi.getSettings.mockResolvedValue({
+      data: { base_currency: 'EUR', inflation_region: 'ES' },
+    });
+    mocks.coreNetWorthApi.getSummary.mockResolvedValue({ data: { base_currency: 'EUR' } });
     await store.updateBaseCurrency('EUR');
     expect(mocks.coreNetWorthApi.updateSettings).toHaveBeenCalledWith({
       base_currency: 'EUR',
@@ -139,6 +149,12 @@ describe('net worth store (core)', () => {
     });
     expect(store.baseCurrency).toBe('EUR');
 
+    mocks.coreNetWorthApi.updateSettings.mockResolvedValue({
+      data: { base_currency: 'EUR', inflation_region: 'ES-MD' },
+    });
+    mocks.coreNetWorthApi.getSettings.mockResolvedValue({
+      data: { base_currency: 'EUR', inflation_region: 'ES-MD' },
+    });
     await store.updateInflationRegion('ES-MD');
     expect(mocks.coreNetWorthApi.updateSettings).toHaveBeenLastCalledWith({
       base_currency: 'EUR',
