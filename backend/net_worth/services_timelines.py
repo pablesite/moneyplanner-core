@@ -1,17 +1,76 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from core.services import convert_currency
+from core.services import build_fx_cache, convert_currency_cached
 
-from .models import Asset, Liability
+from .models import (
+    Asset,
+    AssetValuation,
+    InvestmentAssetEvent,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
+)
 from .services import calculate_totals, get_base_currency_for_user
 from .services_assets_core import get_effective_asset_amount
 from .services_liabilities_core import get_effective_liability_amount
+
+
+@dataclass
+class PositionDataCache:
+    """In-memory cache of position-level data for timeline builds."""
+
+    asset_valuations: dict[int, list] = field(default_factory=dict)
+    investment_events: dict[int, list] = field(default_factory=dict)
+    liquidity_events: dict[int, list] = field(default_factory=dict)
+    liquidity_checkins: dict[int, list] = field(default_factory=dict)
+    liability_valuations: dict[int, list] = field(default_factory=dict)
+    liability_events: dict[int, list] = field(default_factory=dict)
+
+
+def _build_position_data_cache(
+    assets: list[Asset], liabilities: list[Liability],
+) -> PositionDataCache:
+    cache = PositionDataCache()
+    asset_ids = [a.id for a in assets]
+    liability_ids = [li.id for li in liabilities]
+
+    # AssetValuation grouped by asset_id, sorted desc
+    if asset_ids:
+        for v in AssetValuation.objects.filter(asset_id__in=asset_ids).order_by(
+            "-valuation_date", "-updated_at", "-id"
+        ):
+            cache.asset_valuations.setdefault(v.asset_id, []).append(v)
+
+        for e in InvestmentAssetEvent.objects.filter(asset_id__in=asset_ids):
+            cache.investment_events.setdefault(e.asset_id, []).append(e)
+
+        for e in LiquidityAssetEvent.objects.filter(asset_id__in=asset_ids):
+            cache.liquidity_events.setdefault(e.asset_id, []).append(e)
+
+        for c in LiquidityMonthlyCheckin.objects.filter(asset_id__in=asset_ids).order_by(
+            "-fiscal_year", "-month", "-updated_at", "-id"
+        ):
+            cache.liquidity_checkins.setdefault(c.asset_id, []).append(c)
+
+    if liability_ids:
+        for v in LiabilityValuation.objects.filter(liability_id__in=liability_ids).order_by(
+            "-valuation_date", "-updated_at", "-id"
+        ):
+            cache.liability_valuations.setdefault(v.liability_id, []).append(v)
+
+        for e in LiabilityEvent.objects.filter(liability_id__in=liability_ids):
+            cache.liability_events.setdefault(e.liability_id, []).append(e)
+
+    return cache
 
 
 def _month_end_for(value: date) -> date:
@@ -108,6 +167,13 @@ def build_net_worth_timeline(
         liability_dates=[liability.start_date for liability in liabilities],
     )
 
+    # Bulk-load FX rates and position data for all involved positions
+    currencies = {base_currency}
+    currencies.update(a.currency for a in assets)
+    currencies.update(li.currency for li in liabilities)
+    fx_cache = build_fx_cache(currencies)
+    pos_cache = _build_position_data_cache(assets, liabilities)
+
     rows: list[dict[str, object]] = []
     for point_date in _iter_month_ends(start_date=timeline_start_date, end_date=timeline_end_date):
         active_assets = [asset for asset in assets if asset.start_date <= point_date]
@@ -119,6 +185,8 @@ def build_net_worth_timeline(
             liabilities_qs=active_liabilities,
             base_currency=base_currency,
             as_of_date=point_date,
+            fx_cache=fx_cache,
+            position_cache=pos_cache,
         )
         rows.append(
             {
@@ -147,10 +215,14 @@ def build_net_worth_timeline(
 def build_asset_timeline(*, asset: Asset, end_date: date | None = None) -> dict[str, object]:
     base_currency = get_base_currency_for_user(user=asset.user)
     timeline_end_date = end_date or timezone.localdate()
+    fx_cache = build_fx_cache({base_currency, asset.currency})
     rows: list[dict[str, object]] = []
     for point_date in _iter_month_ends(start_date=asset.start_date, end_date=timeline_end_date):
         native_value = get_effective_asset_amount(asset=asset, as_of_date=point_date)
-        base_value = convert_currency(native_value, asset.currency, base_currency, date=point_date)
+        base_value = convert_currency_cached(
+            native_value, asset.currency, base_currency,
+            rate_date=point_date, fx_cache=fx_cache,
+        )
         rows.append(
             {
                 "date": point_date.isoformat(),
@@ -173,11 +245,13 @@ def build_liability_timeline(
 ) -> dict[str, object]:
     base_currency = get_base_currency_for_user(user=liability.user)
     timeline_end_date = end_date or timezone.localdate()
+    fx_cache = build_fx_cache({base_currency, liability.currency})
     rows: list[dict[str, object]] = []
     for point_date in _iter_month_ends(start_date=liability.start_date, end_date=timeline_end_date):
         native_value = get_effective_liability_amount(liability=liability, as_of_date=point_date)
-        base_value = convert_currency(
-            native_value, liability.currency, base_currency, date=point_date
+        base_value = convert_currency_cached(
+            native_value, liability.currency, base_currency,
+            rate_date=point_date, fx_cache=fx_cache,
         )
         rows.append(
             {

@@ -5,12 +5,16 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone as _timezone
 
 from accounts.models import UserSettings
 from core.models import InflationIndex
-from core.services import adjust_for_inflation as _core_adjust_for_inflation, convert_currency
+from core.services import (
+    adjust_for_inflation as _core_adjust_for_inflation,
+    convert_currency,
+    convert_currency_cached,
+)
 
 from .models import Asset, Liability
 from .services_assets_core import get_effective_asset_amount
@@ -43,13 +47,21 @@ def get_liquidity_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True, category=Asset.Category.CASH)
 
 
+def _ensure_user_settings(user) -> None:
+    """Ensure the user.settings reverse relation is loaded, creating the row if needed."""
+    try:
+        user.settings  # noqa: B018 – triggers Django cached descriptor
+    except ObjectDoesNotExist:
+        UserSettings.objects.get_or_create(user=user)
+
+
 def get_base_currency_for_user(*, user) -> str:
-    UserSettings.objects.get_or_create(user=user)
+    _ensure_user_settings(user)
     return cast(str, user.settings.base_currency)
 
 
 def get_inflation_region_for_user(*, user) -> str:
-    UserSettings.objects.get_or_create(user=user)
+    _ensure_user_settings(user)
     return cast(str, user.settings.inflation_region or InflationIndex.Region.ES)
 
 
@@ -67,7 +79,13 @@ def _get_active_positions(*, user):
 
 
 def calculate_totals(
-    *, assets_qs, liabilities_qs, base_currency: str, as_of_date: date
+    *,
+    assets_qs,
+    liabilities_qs,
+    base_currency: str,
+    as_of_date: date,
+    fx_cache: dict | None = None,
+    position_cache=None,
 ) -> NetWorthTotals:
     total_assets = Decimal("0")
     total_liabilities = Decimal("0")
@@ -77,11 +95,18 @@ def calculate_totals(
     assets_by_subcategory: dict[str, Decimal] = {}
     liabilities_by_category: dict[str, Decimal] = {}
 
+    def _convert(amount: Decimal, from_cur: str) -> Decimal:
+        if fx_cache is not None:
+            return convert_currency_cached(
+                amount, from_cur, base_currency, rate_date=as_of_date, fx_cache=fx_cache,
+            )
+        return convert_currency(amount, from_cur, base_currency, date=as_of_date)
+
     for asset in assets_qs:
-        effective_amount = get_effective_asset_amount(asset=asset, as_of_date=as_of_date)
-        converted = convert_currency(
-            effective_amount, asset.currency, base_currency, date=as_of_date
+        effective_amount = get_effective_asset_amount(
+            asset=asset, as_of_date=as_of_date, position_cache=position_cache,
         )
+        converted = _convert(effective_amount, asset.currency)
         total_assets += converted
         assets_by_category[asset.category] = (
             assets_by_category.get(asset.category, Decimal("0")) + converted
@@ -93,10 +118,9 @@ def calculate_totals(
         effective_amount = get_effective_liability_amount(
             liability=liability,
             as_of_date=as_of_date,
+            position_cache=position_cache,
         )
-        converted = convert_currency(
-            effective_amount, liability.currency, base_currency, date=as_of_date
-        )
+        converted = _convert(effective_amount, liability.currency)
         total_liabilities += converted
         liabilities_by_category[liability.category] = (
             liabilities_by_category.get(liability.category, Decimal("0")) + converted

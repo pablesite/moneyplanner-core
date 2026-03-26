@@ -21,15 +21,15 @@ const currencies = [
 
 const assetCategories = [
   { value: 'cash', label: 'Liquidez' },
-  { value: 'investments', label: 'Inversiones' },
   { value: 'real_estate', label: 'Inmuebles' },
+  { value: 'investments', label: 'Inversiones' },
   { value: 'furnishings', label: 'Mobiliario' },
   { value: 'other', label: 'Otros' },
 ];
 
 const assetSubcategories = [
   { category: 'cash', value: 'bank_account', label: 'Cuenta bancaria' },
-  { category: 'cash', value: 'short_term_deposit', label: 'Deposito a corto plazo' },
+  { category: 'cash', value: 'short_term_deposit', label: 'Depósito a corto plazo' },
   { category: 'cash', value: 'wallet', label: 'Monedero' },
   { category: 'cash', value: 'crypto_spot_earn', label: 'Spot/Earn Cripto' },
   { category: 'cash', value: 'other', label: 'Otros' },
@@ -61,9 +61,9 @@ const assetSubcategories = [
 ];
 
 const liabilityCategories = [
-  { value: 'mortgage', label: 'Hipoteca' },
-  { value: 'personal_loan', label: 'Prestamo personal' },
-  { value: 'credit_card', label: 'Tarjeta' },
+  { value: 'mortgage', label: 'Hipotecas' },
+  { value: 'personal_loan', label: 'Préstamos personales' },
+  { value: 'credit_card', label: 'Tarjetas de crédito' },
   { value: 'other', label: 'Otros' },
 ];
 
@@ -337,6 +337,13 @@ export function useNetWorthViewState() {
     return m;
   });
 
+  const canonicalKeyOrder = computed(() => {
+    const order = new Map<string, number>();
+    assetCategories.forEach((c, i) => order.set(c.value, i));
+    liabilityCategories.forEach((c, i) => order.set(c.value, assetCategories.length + i));
+    return order;
+  });
+
   const byCategoryFiltered = computed<ByCategoryRow[]>(() => {
     const rows = filterByCategoryRows(byCategoryChart.value);
     const existingKeys = new Set(rows.map((r) => r.key));
@@ -348,6 +355,10 @@ export function useNetWorthViewState() {
     for (const key of zeroCats) {
       rows.push({ key, a: 0, l: 0 });
     }
+    const order = canonicalKeyOrder.value;
+    rows.sort(
+      (a, b) => (order.get(a.key) ?? Infinity) - (order.get(b.key) ?? Infinity),
+    );
     return rows;
   });
 
@@ -378,7 +389,6 @@ export function useNetWorthViewState() {
   );
 
   onMounted(async () => {
-    await store.fetchSettings();
     await store.refreshAll();
   });
 

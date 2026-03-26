@@ -61,29 +61,31 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        const [summaryRes, assetsRes, liabilitiesRes] = await Promise.all([
-          coreNetWorthApi.getSummary(),
-          coreNetWorthApi.getAssets(),
-          coreNetWorthApi.getLiabilities(),
-        ]);
-        const [ownershipsRes, linksRes] = await Promise.all([
-          premiumOwnershipApi.getOwnerships(),
-          premiumOwnershipApi.getOwnershipLinks(),
-        ]);
+        const [settingsRes, summaryRes, assetsRes, liabilitiesRes, ownershipsRes, linksRes] =
+          await Promise.all([
+            coreNetWorthApi.getSettings(),
+            coreNetWorthApi.getSummary(),
+            coreNetWorthApi.getAssets(),
+            coreNetWorthApi.getLiabilities(),
+            premiumOwnershipApi.getOwnerships(),
+            premiumOwnershipApi.getOwnershipLinks(),
+          ]);
         const links = linksRes.data;
         const { assetOwnership, liabilityOwnership } = buildOwnershipMaps(links);
 
+        this.baseCurrency = settingsRes.data.base_currency;
+        this.inflationRegion = settingsRes.data.inflation_region;
         this.summary = summaryRes.data;
-        this.baseCurrency = summaryRes.data.base_currency;
         this.assets = attachOwnershipRef(assetsRes.data, assetOwnership);
         this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
         this.ownerships = ownershipsRes.data;
-        await this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
         this.loading = false;
       }
+      // Fire timeline load independently — it has its own timelineLoading state
+      this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
     },
 
     async fetchTimeline(
@@ -329,12 +331,11 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.loading = true;
       this.error = null;
       try {
-        const res = await coreNetWorthApi.updateSettings({
+        await coreNetWorthApi.updateSettings({
           base_currency: payload.base_currency ?? this.baseCurrency ?? 'EUR',
           inflation_region: payload.inflation_region ?? this.inflationRegion ?? 'ES',
         });
-        this.baseCurrency = res.data.base_currency;
-        this.inflationRegion = res.data.inflation_region;
+        // refreshAll re-fetches settings, summary, assets, liabilities from the server
         await this.refreshAll();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);

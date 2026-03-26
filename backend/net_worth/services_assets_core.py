@@ -591,7 +591,19 @@ def _get_effective_accounting_asset_amount_or_none(
     )
 
 
-def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) -> Decimal:
+def _cached_latest_valuation(position_cache, asset_id: int, as_of_date: date):
+    """Return the latest AssetValuation <= as_of_date from the cache, or None."""
+    entries = position_cache.asset_valuations.get(asset_id, [])
+    # entries are pre-sorted desc by (valuation_date, updated_at, id)
+    for v in entries:
+        if v.valuation_date <= as_of_date:
+            return v
+    return None
+
+
+def get_effective_asset_amount(
+    *, asset: Asset, as_of_date: date | None = None, position_cache=None,
+) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     accounting_amount = _get_effective_accounting_asset_amount_or_none(
         asset=asset,
@@ -601,11 +613,17 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
         return accounting_amount
 
     if asset.category == Asset.Category.INVESTMENTS:
-        return _get_effective_investment_asset_amount(asset=asset, as_of_date=ref_date)
+        return _get_effective_investment_asset_amount(
+            asset=asset, as_of_date=ref_date, position_cache=position_cache,
+        )
     if asset.category == Asset.Category.CASH:
-        return _get_effective_cash_asset_amount(asset=asset, as_of_date=ref_date)
+        return _get_effective_cash_asset_amount(
+            asset=asset, as_of_date=ref_date, position_cache=position_cache,
+        )
 
-    manual_override = _get_latest_asset_manual_value(asset=asset, as_of_date=ref_date)
+    manual_override = _get_latest_asset_manual_value(
+        asset=asset, as_of_date=ref_date, position_cache=position_cache,
+    )
     if manual_override is not None:
         return manual_override
 
@@ -719,15 +737,20 @@ def get_effective_asset_amount(*, asset: Asset, as_of_date: date | None = None) 
     return land_amount + building_amount + improvements_total
 
 
-def _get_effective_investment_asset_amount(*, asset: Asset, as_of_date: date) -> Decimal:
+def _get_effective_investment_asset_amount(
+    *, asset: Asset, as_of_date: date, position_cache=None,
+) -> Decimal:
     anchor_date = None
     anchor_value = Decimal(asset.amount)
 
-    latest_manual = (
-        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
-        .order_by("-valuation_date", "-updated_at", "-id")
-        .first()
-    )
+    if position_cache is not None:
+        latest_manual = _cached_latest_valuation(position_cache, asset.id, as_of_date)
+    else:
+        latest_manual = (
+            AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+            .order_by("-valuation_date", "-updated_at", "-id")
+            .first()
+        )
     latest_market_override = (
         asset.market_value_override
         if asset.market_value_override is not None
@@ -751,6 +774,7 @@ def _get_effective_investment_asset_amount(*, asset: Asset, as_of_date: date) ->
         asset=asset,
         from_date=anchor_date,
         as_of_date=as_of_date,
+        position_cache=position_cache,
     )
     scheduled_delta = _get_periodic_investment_delta_since_anchor(
         asset=asset,
@@ -760,16 +784,23 @@ def _get_effective_investment_asset_amount(*, asset: Asset, as_of_date: date) ->
     return anchor_value + event_delta + scheduled_delta
 
 
-def _get_effective_cash_asset_amount(*, asset: Asset, as_of_date: date) -> Decimal:
+def _get_effective_cash_asset_amount(
+    *, asset: Asset, as_of_date: date, position_cache=None,
+) -> Decimal:
     anchor_date = None
     anchor_value = Decimal(asset.amount)
 
-    latest_manual = (
-        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
-        .order_by("-valuation_date", "-updated_at", "-id")
-        .first()
+    if position_cache is not None:
+        latest_manual = _cached_latest_valuation(position_cache, asset.id, as_of_date)
+    else:
+        latest_manual = (
+            AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+            .order_by("-valuation_date", "-updated_at", "-id")
+            .first()
+        )
+    latest_checkin = _get_latest_liquidity_checkin(
+        asset=asset, as_of_date=as_of_date, position_cache=position_cache,
     )
-    latest_checkin = _get_latest_liquidity_checkin(asset=asset, as_of_date=as_of_date)
     latest_manual_date = latest_manual.valuation_date if latest_manual is not None else None
     latest_checkin_date = _get_liquidity_checkin_effective_date(latest_checkin)
 
@@ -786,22 +817,30 @@ def _get_effective_cash_asset_amount(*, asset: Asset, as_of_date: date) -> Decim
         asset=asset,
         from_date=anchor_date,
         as_of_date=as_of_date,
+        position_cache=position_cache,
     )
     return anchor_value + delta
 
 
-def _get_latest_asset_manual_value(*, asset: Asset, as_of_date: date) -> Decimal | None:
-    valuation = (
-        AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
-        .order_by("-valuation_date", "-updated_at", "-id")
-        .first()
-    )
+def _get_latest_asset_manual_value(
+    *, asset: Asset, as_of_date: date, position_cache=None,
+) -> Decimal | None:
+    if position_cache is not None:
+        valuation = _cached_latest_valuation(position_cache, asset.id, as_of_date)
+    else:
+        valuation = (
+            AssetValuation.objects.filter(asset=asset, valuation_date__lte=as_of_date)
+            .order_by("-valuation_date", "-updated_at", "-id")
+            .first()
+        )
     valuation_date = valuation.valuation_date if valuation is not None else None
 
     liquidity_checkin = None
     checkin_date = None
     if asset.category == Asset.Category.CASH:
-        liquidity_checkin = _get_latest_liquidity_checkin(asset=asset, as_of_date=as_of_date)
+        liquidity_checkin = _get_latest_liquidity_checkin(
+            asset=asset, as_of_date=as_of_date, position_cache=position_cache,
+        )
         checkin_date = _get_liquidity_checkin_effective_date(liquidity_checkin)
 
     if valuation is not None and (checkin_date is None or valuation_date >= checkin_date):
@@ -879,12 +918,20 @@ def get_investment_asset_events_delta(
     asset: Asset,
     from_date: date | None = None,
     as_of_date: date | None = None,
+    position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     delta = Decimal("0")
-    events = InvestmentAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
-    if from_date is not None:
-        events = events.filter(event_date__gt=from_date)
+    if position_cache is not None:
+        all_events = position_cache.investment_events.get(asset.id, [])
+        events = [
+            e for e in all_events
+            if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
+        ]
+    else:
+        events = InvestmentAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
+        if from_date is not None:
+            events = events.filter(event_date__gt=from_date)
     for event in events:
         amount = Decimal(event.amount)
         if event.event_type == InvestmentAssetEvent.EventType.CONTRIBUTION:
@@ -907,12 +954,20 @@ def get_liquidity_asset_events_delta(
     asset: Asset,
     from_date: date | None = None,
     as_of_date: date | None = None,
+    position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     delta = Decimal("0")
-    events = LiquidityAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
-    if from_date is not None:
-        events = events.filter(event_date__gt=from_date)
+    if position_cache is not None:
+        all_events = position_cache.liquidity_events.get(asset.id, [])
+        events = [
+            e for e in all_events
+            if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
+        ]
+    else:
+        events = LiquidityAssetEvent.objects.filter(asset=asset, event_date__lte=ref_date)
+        if from_date is not None:
+            events = events.filter(event_date__gt=from_date)
     for event in events:
         amount = Decimal(event.amount)
         if event.event_type in (
@@ -955,12 +1010,16 @@ def _get_periodic_investment_delta_since_anchor(
 
 
 def _get_latest_liquidity_checkin(
-    *, asset: Asset, as_of_date: date
+    *, asset: Asset, as_of_date: date, position_cache=None,
 ) -> LiquidityMonthlyCheckin | None:
+    if position_cache is not None:
+        rows = position_cache.liquidity_checkins.get(asset.id, [])
+    else:
+        rows = LiquidityMonthlyCheckin.objects.filter(asset=asset).order_by(
+            "-fiscal_year", "-month", "-updated_at", "-id"
+        )
     candidate = None
-    for row in LiquidityMonthlyCheckin.objects.filter(asset=asset).order_by(
-        "-fiscal_year", "-month", "-updated_at", "-id"
-    ):
+    for row in rows:
         effective_date = _get_liquidity_checkin_effective_date(row)
         if effective_date is not None and effective_date <= as_of_date:
             candidate = row
