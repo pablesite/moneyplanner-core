@@ -173,7 +173,6 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
-
     async createAsset(
       payload: OwnershipAwarePayload & {
         estimated_average_balance_for_interest?: string | null;

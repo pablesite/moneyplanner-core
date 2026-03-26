@@ -43,10 +43,8 @@ defineProps<{
     class="ui-nw-category-workspace ui-nw-category-workspace-empty"
     :style="timelineSidebarPanelStyle"
   >
-    <h3 class="ui-nw-category-workspace-title">Selecciona una categoria arriba</h3>
     <p class="ui-nw-category-workspace-copy">
-      El grafico se actualiza en primera plana y aqui veras las posiciones concretas de esa
-      categoria.
+      Selecciona una categoría de Activos o Pasivos para ver los detalles.
     </p>
   </div>
 
@@ -87,7 +85,7 @@ defineProps<{
         :value="selectedPositionId ?? ''"
         @change="onPositionSelection"
       >
-        <option value="">Categoria completa</option>
+        <option value="">Categoría completa</option>
         <option v-for="row in availablePositionRows" :key="row.id" :value="row.id">
           {{ row.name }}
         </option>
@@ -95,7 +93,7 @@ defineProps<{
     </label>
 
     <div v-if="categoryWorkspaceRows.length === 0" class="subtle">
-      No hay posiciones para esta categoria con el filtro actual.
+      No hay posiciones para esta categoría con el filtro actual.
     </div>
     <div v-else class="ui-nw-category-workspace-list">
       <article

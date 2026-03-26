@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.view_mixins import UserScopedQuerySetMixin
+from core.services import build_fx_cache
 from .api import raise_api_validation_error
 from .models import (
     Asset,
@@ -47,6 +48,7 @@ from .services_liquidity import (
 )
 from .services_summaries import build_net_worth_summary, serialize_net_worth_summary
 from .services_timelines import (
+    _build_position_data_cache,
     build_asset_timeline,
     build_liability_timeline,
     build_net_worth_timeline,
@@ -61,7 +63,20 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        ctx["base_currency"] = get_base_currency_for_user(user=self.request.user)
+        base_currency = get_base_currency_for_user(user=self.request.user)
+        ctx["base_currency"] = base_currency
+        if self.action == "list" and self.request.method == "GET":
+            asset_rows = list(
+                self.get_queryset().values_list("id", "currency")
+            )
+            if asset_rows:
+                currencies = {base_currency}
+                currencies.update(
+                    currency for _, currency in asset_rows if str(currency or "").strip()
+                )
+                ctx["fx_cache"] = build_fx_cache(currencies)
+                cache_assets = [Asset(id=asset_id) for asset_id, _ in asset_rows]
+                ctx["position_cache"] = _build_position_data_cache(cache_assets, [])
         return ctx
 
     def perform_create(self, serializer):
@@ -95,10 +110,23 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        ctx["base_currency"] = get_base_currency_for_user(user=self.request.user)
+        base_currency = get_base_currency_for_user(user=self.request.user)
+        ctx["base_currency"] = base_currency
         ctx["financed_asset_queryset"] = get_financed_asset_queryset_for_user(
             user=self.request.user
         )
+        if self.action == "list" and self.request.method == "GET":
+            liability_rows = list(
+                self.get_queryset().values_list("id", "currency")
+            )
+            if liability_rows:
+                currencies = {base_currency}
+                currencies.update(
+                    currency for _, currency in liability_rows if str(currency or "").strip()
+                )
+                ctx["fx_cache"] = build_fx_cache(currencies)
+                cache_liabilities = [Liability(id=liability_id) for liability_id, _ in liability_rows]
+                ctx["position_cache"] = _build_position_data_cache([], cache_liabilities)
         return ctx
 
     def perform_create(self, serializer):

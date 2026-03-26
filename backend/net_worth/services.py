@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
-from typing import cast
+from typing import Callable, cast
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone as _timezone
@@ -144,3 +145,38 @@ def _serialize_money(value: Decimal | None) -> str | None:
     if value is None:
         return None
     return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def build_inflation_adjuster(
+    *, region: str, date_value: date, base_period: date | None = None
+) -> Callable[[Decimal], Decimal]:
+    rows = list(
+        InflationIndex.objects.filter(region=region)
+        .order_by("period")
+        .values_list("period", "index")
+    )
+    if not rows:
+        raise ValidationError(f"Missing inflation index for region={region}.")
+
+    periods = [period for period, _ in rows]
+    indexes = [Decimal(index) for _, index in rows]
+
+    def _index_for(period_value: date) -> Decimal:
+        period_month = period_value.replace(day=1)
+        idx = bisect_right(periods, period_month) - 1
+        if idx < 0:
+            idx = 0
+        return indexes[idx]
+
+    base_month = (base_period or periods[-1]).replace(day=1)
+    date_month = date_value.replace(day=1)
+    index_base = _index_for(base_month)
+    index_date = _index_for(date_month)
+    if index_date == 0:
+        raise ValidationError(f"Invalid inflation index: region={region} period={date_month} is 0.")
+    factor = index_base / index_date
+
+    def _adjust(amount: Decimal) -> Decimal:
+        return (Decimal(amount) * factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    return _adjust

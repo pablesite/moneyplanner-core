@@ -108,14 +108,11 @@ defineProps<{
     />
   </div>
 
-  <div
-    v-if="visibleTimelineRows.length === 0 && !displayedTimelineLoading"
-    class="subtle"
-  >
+  <div v-if="visibleTimelineRows.length === 0 && !displayedTimelineLoading" class="subtle">
     {{
       selectedPosition
-        ? 'Esta posicion aun no tiene suficientes puntos para construir una serie mensual.'
-        : 'Aun no hay datos suficientes para construir la serie temporal.'
+        ? 'Esta posición aún no tiene suficientes puntos para construir una serie mensual.'
+        : 'Aún no hay datos suficientes para construir la serie temporal.'
     }}
   </div>
   <div v-else class="ui-nw-timeline-main">
@@ -186,19 +183,19 @@ defineProps<{
           <span v-else class="subtle">Ejercicio {{ accountingActivityYear }}</span>
         </div>
         <div v-if="showAccountingActivityNeedsReview" class="subtle">
-          Esta posicion esta en estado <strong>needs_review</strong>: la cuenta contable actual no
+          Esta posición está en estado <strong>needs_review</strong>: la cuenta contable actual no
           es compatible (usuario, moneda o tipo). Se mantiene fallback legacy hasta corregir el
           enlace.
         </div>
         <div v-else-if="showAccountingActivitySetupGap" class="subtle">
-          Esta posicion usa tracking contable pero aun no tiene una cuenta enlazada. Vinculala desde
-          editar posicion para derivar saldo y movimientos.
+          Esta posición usa tracking contable pero aún no tiene una cuenta enlazada. Vincúlala desde
+          editar posición para derivar saldo y movimientos.
         </div>
         <div v-else-if="accountingActivityError" class="subtle">
           No se pudo cargar la actividad contable: {{ accountingActivityError }}
         </div>
         <div v-else-if="accountingActivityRows.length === 0" class="subtle">
-          No hay asientos del ejercicio actual vinculados a esta posicion contable.
+          No hay asientos del ejercicio actual vinculados a esta posición contable.
         </div>
         <div v-else class="ui-nw-position-activity-list">
           <div

@@ -212,7 +212,7 @@ const LIABILITY_CATEGORY_DEFAULTS: Record<
   other: { paymentFrequency: 'monthly', preferredAssetCategories: ['furnishings', 'other'] },
 };
 const ASSET_AMORTIZATION_METHODS = [
-  { value: 'none', label: 'Sin amortizacion' },
+  { value: 'none', label: 'Sin amortización' },
   { value: 'straight_line', label: 'Lineal' },
 ];
 const REAL_ESTATE_USAGE_OPTIONS = [
@@ -221,7 +221,7 @@ const REAL_ESTATE_USAGE_OPTIONS = [
 ] as const;
 const PRIMARY_HOME_VALUATION_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
-  { value: 'real_estate_auto', label: 'Automatica (suelo + construccion)' },
+  { value: 'real_estate_auto', label: 'Automática (suelo + construcción)' },
 ];
 const PRIMARY_HOME_VALUATION_PROFILES = [
   {
@@ -238,7 +238,7 @@ const PRIMARY_HOME_VALUATION_PROFILES = [
   },
   {
     value: 'dynamic',
-    label: 'Dinamico',
+    label: 'Dinámico',
     landAnnualAppreciationPercent: '8',
     buildingAnnualDepreciationPercent: '0.2',
   },
@@ -246,7 +246,7 @@ const PRIMARY_HOME_VALUATION_PROFILES = [
 const PRIMARY_HOME_CUSTOM_PROFILE_VALUE = 'custom';
 const PRIMARY_HOME_DEFAULT_PROFILE_VALUE = 'dynamic';
 const PRIMARY_HOME_IMPROVEMENT_AMORTIZATION_OPTIONS = [
-  { value: 'none', label: 'Sin amortizacion' },
+  { value: 'none', label: 'Sin amortización' },
   { value: 'straight_line', label: 'Lineal' },
   { value: 'manual', label: 'Manual' },
 ] as const;
@@ -406,26 +406,26 @@ const useDegressiveResidualProfileForFurnishings = computed(() => {
 });
 const assetAmortizationMethodOptions = computed(() => {
   if (isJewelryFurnishings.value) {
-    return [{ value: 'none', label: 'Sin amortizacion (joyeria)' }];
+    return [{ value: 'none', label: 'Sin amortización (joyería)' }];
   }
   if (!useDegressiveResidualProfileForFurnishings.value) return ASSET_AMORTIZATION_METHODS;
   return ASSET_AMORTIZATION_METHODS.map((option) =>
     option.value === 'straight_line'
-      ? { ...option, label: 'Lineal (decreciente + residual por subcategoria)' }
+      ? { ...option, label: 'Lineal (decreciente + residual por subcategoría)' }
       : option,
   );
 });
 const assetAmortizationModelHint = computed(() => {
   if (isJewelryFurnishings.value) {
-    return "En 'Joyeria' no se aplica amortizacion automatica.";
+    return "En 'Joyería' no se aplica amortización automática.";
   }
   if (!useDegressiveResidualProfileForFurnishings.value) return '';
   const subcategory = String(form.subcategory ?? '').trim();
   if (subcategory === 'vehicles') {
-    return "En 'Vehiculos', este metodo aplica curva decreciente con suelo residual del 15%.";
+    return "En 'Vehículos', este método aplica curva decreciente con suelo residual del 15%.";
   }
   if (subcategory === 'sports_equipment') {
-    return "En 'Equipamiento deportivo', este metodo aplica curva decreciente con suelo residual del 20%.";
+    return "En 'Equipamiento deportivo', este método aplica curva decreciente con suelo residual del 20%.";
   }
   return '';
 });
@@ -794,17 +794,17 @@ function validatePrimaryHomeImprovement(item: PrimaryHomeImprovementDraft, index
   if (!String(item.reform_date ?? '').trim()) return `${label}: la fecha es obligatoria`;
 
   const amountSanitized = sanitizeAmount(item.amount, maxDecimals.value);
-  if (!amountSanitized.value || amountSanitized.error) return `${label}: importe invalido`;
+  if (!amountSanitized.value || amountSanitized.error) return `${label}: importe inválido`;
 
   if (item.amortization_method === 'straight_line') {
     const years = Number(String(item.amortization_term_years ?? '').trim());
-    if (!Number.isInteger(years) || years <= 0) return `${label}: plazo de amortizacion invalido`;
+    if (!Number.isInteger(years) || years <= 0) return `${label}: plazo de amortización inválido`;
   }
 
   if (item.amortization_method === 'manual') {
     const manualSanitized = sanitizeAmount(item.manual_current_value, maxDecimals.value);
     if (!manualSanitized.value || manualSanitized.error) {
-      return `${label}: valor actual manual invalido`;
+      return `${label}: valor actual manual inválido`;
     }
   }
 
@@ -814,7 +814,7 @@ function validatePrimaryHomeImprovement(item: PrimaryHomeImprovementDraft, index
     .replace(',', '.');
   const interest = Number(interestRaw);
   if (!interestRaw || !Number.isFinite(interest) || interest < 0) {
-    return `${label}: TAE invalida`;
+    return `${label}: TAE inválida`;
   }
   return '';
 }
@@ -860,10 +860,10 @@ function validatePrimaryHomeValuationFields(): string {
     return 'El porcentaje de suelo debe estar entre 0 y 100';
   }
   if (landGrowth.value === '' || landGrowthN < -100 || landGrowthN > 200) {
-    return 'La revalorizacion del suelo debe estar entre -100 y 200';
+    return 'La revalorización del suelo debe estar entre -100 y 200';
   }
   if (buildingDep.value === '' || buildingDepN < 0 || buildingDepN > 100) {
-    return 'La depreciacion de construccion debe estar entre 0 y 100';
+    return 'La depreciación de construcción debe estar entre 0 y 100';
   }
   return '';
 }
@@ -885,14 +885,14 @@ function validateLiabilityScheduleFields(): string {
     String(form.start_date ?? '').trim() &&
     scheduleAnchorDate < String(form.start_date ?? '').trim()
   ) {
-    return 'Fecha inicio pago debe ser >= fecha contratacion.';
+    return 'Fecha inicio pago debe ser >= fecha contratación.';
   }
   if (!hasTerm && !hasEndDate) return 'Indica cuotas o fecha fin (uno de los dos es obligatorio)';
   if (hasTerm) {
     const term = Number(String(form.term_months).trim());
     if (!Number.isInteger(term) || term <= 0) return 'Cuotas/plazo debe ser un entero > 0';
     if (paymentFrequency === 'quarterly' && term % 3 !== 0) {
-      return 'En frecuencia trimestral, el plazo se indica en meses y debe ser multiplo de 3 (ej: 12, 24).';
+      return 'En frecuencia trimestral, el plazo se indica en meses y debe ser múltiplo de 3 (ej: 12, 24).';
     }
   }
   if (hasEndDate) {
@@ -1337,7 +1337,7 @@ const annualInterestError = computed(() => {
     .replace(',', '.');
   if (!raw) return 'La TAE es obligatoria para este indicador';
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return 'TAE invalida';
+  if (!Number.isFinite(n) || n < 0) return 'TAE inválida';
   return '';
 });
 const estimatedAverageBalanceForInterestError = computed(() => {
@@ -1354,10 +1354,10 @@ const estimatedAverageBalanceForInterestError = computed(() => {
 const depositTermMonthsError = computed(() => {
   if (!showDepositTermMonthsInput.value) return '';
   const raw = String(form.deposit_term_months ?? '').trim();
-  if (!raw) return 'Indica la duracion del deposito (1-12 meses).';
+  if (!raw) return 'Indica la duración del depósito (1-12 meses).';
   const months = Number(raw);
   if (!Number.isInteger(months) || months < 1 || months > 12) {
-    return 'La duracion del deposito debe estar entre 1 y 12 meses.';
+    return 'La duración del depósito debe estar entre 1 y 12 meses.';
   }
   return '';
 });
@@ -1380,20 +1380,20 @@ const investmentContributionError = computed(() => {
   const monthly = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
   if (monthly.error) return monthly.error;
   if (!monthly.value || Number(monthly.value) <= 0) {
-    return 'Cuota periodica obligatoria y mayor que 0.';
+    return 'Cuota periódica obligatoria y mayor que 0.';
   }
   const initialAmount = sanitizeAmount(form.amount, maxDecimals.value);
   if (initialAmount.error) return initialAmount.error;
   if (!initialAmount.value || Number(initialAmount.value) < 0) {
-    return 'Importe inicial obligatorio para aportacion periodica.';
+    return 'Importe inicial obligatorio para aportación periódica.';
   }
   return '';
 });
 const requiredFieldsError = computed(() => {
   if (!String(form.name ?? '').trim()) return 'Nombre obligatorio';
-  if (!String(form.category ?? '').trim()) return 'Categoria obligatoria';
+  if (!String(form.category ?? '').trim()) return 'Categoría obligatoria';
   if (props.subcategories && !String(form.subcategory ?? '').trim()) {
-    return 'Subcategoria obligatoria';
+    return 'Subcategoría obligatoria';
   }
   if (!String(form.start_date ?? '').trim()) return 'Fecha inicio obligatoria';
   if (!String(form.amount ?? '').trim()) return 'Importe obligatorio';
@@ -1403,15 +1403,15 @@ const requiredFieldsError = computed(() => {
 const assetAmortizationError = computed(() => {
   if (!requiresAssetAmortizationInputs.value) return '';
   const amount = String(form.amount ?? '').trim();
-  if (!amount) return 'Importe obligatorio para modelar amortizacion';
+  if (!amount) return 'Importe obligatorio para modelar amortización';
   if (requiresAssetAmortizationTermInput.value) {
     const term = String(form.amortization_term_years ?? '').trim();
-    if (!term) return 'Plazo de amortizacion (anos) obligatorio';
+    if (!term) return 'Plazo de amortización (años) obligatorio';
     const years = Number(term);
-    if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortizacion invalido';
+    if (!Number.isInteger(years) || years <= 0) return 'Plazo de amortización inválido';
   }
   const normalizedPurchase = sanitizeAmount(amount, maxDecimals.value);
-  if (!normalizedPurchase.value || normalizedPurchase.error) return 'Valor de compra invalido';
+  if (!normalizedPurchase.value || normalizedPurchase.error) return 'Valor de compra inválido';
   return '';
 });
 const primaryHomeValuationError = computed(() => {
@@ -1426,7 +1426,7 @@ const liabilityDatesError = computed(() => {
     paymentStartDate &&
     paymentStartDate < String(form.start_date).trim()
   ) {
-    return 'Fecha inicio pago debe ser >= fecha contratacion.';
+    return 'Fecha inicio pago debe ser >= fecha contratación.';
   }
   if (!form.expected_end_date || !paymentStartDate) return '';
   return form.expected_end_date < paymentStartDate ? 'Fecha fin debe ser >= fecha inicio pago' : '';
@@ -1439,17 +1439,17 @@ const cancellationForecastError = computed(() => {
   if (!showMortgageCancellationForecastFields.value) return '';
   if (!form.cancellation_forecast_enabled) return '';
   const cancellationDate = String(form.cancellation_date ?? '').trim();
-  if (!cancellationDate) return 'Indica la fecha prevista de cancelacion.';
+  if (!cancellationDate) return 'Indica la fecha prevista de cancelación.';
   const referenceDate = getLiabilityScheduleAnchorDate() || String(form.start_date ?? '').trim();
   if (referenceDate && cancellationDate < referenceDate) {
-    return 'Fecha de cancelacion debe ser >= fecha inicio.';
+    return 'Fecha de cancelación debe ser >= fecha inicio.';
   }
   const feeSanitized = sanitizeAmount(form.cancellation_fee_amount, maxDecimals.value);
   if (
     String(form.cancellation_fee_amount ?? '').trim() &&
     (feeSanitized.error || !feeSanitized.value)
   ) {
-    return feeSanitized.error || 'Comision de cancelacion invalida.';
+    return feeSanitized.error || 'Comisión de cancelación inválida.';
   }
   return '';
 });
@@ -1477,7 +1477,7 @@ const liabilityTermFieldLabel = computed(() => {
 });
 const liabilityTermFieldPlaceholder = computed(() => {
   const paymentFrequency = String(form.payment_frequency ?? '').trim();
-  if (paymentFrequency === 'quarterly') return 'Ej: 12 o 24 (multiplo de 3)';
+  if (paymentFrequency === 'quarterly') return 'Ej: 12 o 24 (múltiplo de 3)';
   return 'Ej: 24';
 });
 const liabilityTermFieldHint = computed(() => {
@@ -1785,7 +1785,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
         </select>
       </label>
       <label v-if="showInvestmentContributionModeField" class="ui-item-form-field">
-        <span class="ui-item-form-label">Modo inversion</span>
+        <span class="ui-item-form-label">Modo inversión</span>
         <select v-model="form.investment_contribution_mode" class="select ui-data-field">
           <option
             v-for="option in INVESTMENT_CONTRIBUTION_MODE_OPTIONS"
@@ -2010,7 +2010,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
             />
           </label>
           <label class="ui-item-form-field">
-            <span class="ui-item-form-label">Revalorizacion suelo anual (%)</span>
+            <span class="ui-item-form-label">Revalorización suelo anual (%)</span>
             <input
               v-model="form.land_annual_appreciation_percent"
               inputmode="decimal"
@@ -2019,7 +2019,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
             />
           </label>
           <label class="ui-item-form-field">
-            <span class="ui-item-form-label">Depreciacion construccion anual (%)</span>
+            <span class="ui-item-form-label">Depreciación construcción anual (%)</span>
             <input
               v-model="form.building_annual_depreciation_percent"
               inputmode="decimal"
@@ -2045,7 +2045,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
                 class="btn ui-item-form-mini-btn"
                 @click="addPrimaryHomeImprovement"
               >
-                Anadir reforma
+                Añadir reforma
               </button>
             </div>
           </div>
@@ -2138,7 +2138,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
                   v-if="improvement.amortization_method === 'straight_line'"
                   class="ui-item-form-field"
                 >
-                  <span class="ui-item-form-label">Plazo amortizacion (anos)</span>
+                  <span class="ui-item-form-label">Plazo amortización (años)</span>
                   <input
                     v-model="improvement.amortization_term_years"
                     inputmode="numeric"
@@ -2383,7 +2383,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
           </label>
         </div>
         <div v-if="form.cancellation_forecast_enabled" class="ui-form-help">
-          Si no indicas importe, se estimara con "Amortizacion anticipada (%)" sobre el saldo
+          Si no indicas importe, se estimará con "Amortización anticipada (%)" sobre el saldo
           pendiente.
         </div>
       </details>

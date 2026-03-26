@@ -10,6 +10,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import build_net_worth_opening_balance_note
 from core.models import InflationIndex
+from core.services import adjust_for_inflation as core_adjust_for_inflation
 from ..models import (
     Asset,
     AssetImprovement,
@@ -24,6 +25,7 @@ from ..models import (
 from ..services import (
     NetWorthTotals,
     calculate_totals,
+    build_inflation_adjuster,
     get_base_currency_for_user,
     get_financed_asset_queryset_for_user,
     get_inflation_base_period,
@@ -55,6 +57,7 @@ from ..services_summaries import (
     serialize_net_worth_summary,
 )
 from ..services_timelines import (
+    _build_position_data_cache,
     build_asset_timeline,
     build_liability_timeline,
     build_net_worth_timeline,
@@ -537,6 +540,17 @@ class NetWorthServicesTests(TestCase):
         )
         self.assertEqual(value, "90.50")
 
+    @patch("net_worth.services_assets_core.convert_currency_cached", return_value=Decimal("90.40"))
+    def test_get_amount_base_value_uses_fx_cache_when_available(self, _convert_cached_mock):
+        value = get_amount_base_value(
+            amount=Decimal("100.00"),
+            currency="USD",
+            base_currency="EUR",
+            as_of_date=date(2026, 2, 18),
+            fx_cache={},
+        )
+        self.assertEqual(value, "90.40")
+
     @patch("net_worth.services_assets_core.convert_currency", side_effect=Exception("fx error"))
     def test_get_amount_base_value_returns_none_on_conversion_error(self, _convert_mock):
         value = get_amount_base_value(
@@ -1002,6 +1016,38 @@ class NetWorthServicesTests(TestCase):
         # Cuotas semanales en: 01, 08, 15, 22 y 29 de enero.
         self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("1500.00"))
 
+    @patch(
+        "net_worth.services_assets_core._build_investment_contribution_schedule",
+        return_value=[(date(2026, 1, 1), Decimal("100.00"))],
+    )
+    def test_periodic_investment_schedule_uses_position_cache(self, schedule_mock):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF cache",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            investment_contribution_frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            monthly_contribution_amount=Decimal("100.00"),
+            amount=Decimal("1000.00"),
+            initial_purchase_value=Decimal("1000.00"),
+            is_active=True,
+        )
+        position_cache = _build_position_data_cache([asset], [])
+        get_effective_asset_amount(
+            asset=asset,
+            as_of_date=date(2026, 2, 28),
+            position_cache=position_cache,
+        )
+        get_effective_asset_amount(
+            asset=asset,
+            as_of_date=date(2026, 2, 28),
+            position_cache=position_cache,
+        )
+        self.assertEqual(schedule_mock.call_count, 1)
+
     def test_get_effective_asset_amount_does_not_accumulate_when_contribution_currency_differs(
         self,
     ):
@@ -1466,6 +1512,150 @@ class NetWorthServicesTests(TestCase):
             Decimal("1000.00"),
         )
 
+    def test_get_effective_asset_amount_accounting_matches_with_position_cache(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta contable activo",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta banco",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("100.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Saldo cuenta",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("800.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("800.00"),
+            currency="EUR",
+        )
+        position_cache = _build_position_data_cache([asset], [])
+        self.assertEqual(
+            get_effective_asset_amount(
+                asset=asset, as_of_date=date(2026, 2, 28), position_cache=position_cache
+            ),
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 28)),
+        )
+
+    def test_get_effective_liability_amount_accounting_matches_with_position_cache(self):
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Hipoteca contable",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id=liability_account.id,
+            currency="EUR",
+            start_date=date(2024, 1, 1),
+            annual_interest_tae=Decimal("2.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+
+        historical_payment = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Pago historico",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_payment,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("900.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_payment,
+            account=asset_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("900.00"),
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial contable: Hipoteca",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=build_net_worth_opening_balance_note(
+                position_kind="liability", position_id=liability.id
+            ),
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        position_cache = _build_position_data_cache([], [liability])
+        self.assertEqual(
+            get_effective_liability_amount(
+                liability=liability,
+                as_of_date=date(2026, 3, 31),
+                position_cache=position_cache,
+            ),
+            get_effective_liability_amount(liability=liability, as_of_date=date(2026, 3, 31)),
+        )
+
     def test_get_liability_events_delta_applies_signs(self):
         liability = Liability.objects.create(
             user=self.user,
@@ -1613,6 +1803,32 @@ class NetWorthServicesTests(TestCase):
             index=Decimal("100.0000"),
         )
         self.assertEqual(get_inflation_base_period(region="ES"), date(2026, 1, 1))
+
+    def test_build_inflation_adjuster_matches_core_adjustment_formula(self):
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 1, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 2, 1),
+            index=Decimal("103.0000"),
+        )
+        adjuster = build_inflation_adjuster(
+            region="ES",
+            date_value=date(2026, 2, 18),
+            base_period=date(2026, 1, 1),
+        )
+        self.assertEqual(
+            adjuster(Decimal("300.00")),
+            core_adjust_for_inflation(
+                Decimal("300.00"),
+                date=date(2026, 2, 18),
+                region="ES",
+                base_period=date(2026, 1, 1),
+            ),
+        )
 
     @patch("net_worth.services.timezone.localdate", return_value=date(2026, 2, 18))
     @patch(

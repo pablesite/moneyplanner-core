@@ -34,6 +34,14 @@ class PositionDataCache:
     liquidity_checkins: dict[int, list] = field(default_factory=dict)
     liability_valuations: dict[int, list] = field(default_factory=dict)
     liability_events: dict[int, list] = field(default_factory=dict)
+    accounting_prefix_dates: dict[int, list[date]] = field(default_factory=dict)
+    accounting_prefix_debits: dict[int, list[Decimal]] = field(default_factory=dict)
+    accounting_prefix_credits: dict[int, list[Decimal]] = field(default_factory=dict)
+    accounting_account_types: dict[int, str] = field(default_factory=dict)
+    liability_opening_booking_dates: dict[int, date] = field(default_factory=dict)
+    periodic_investment_schedules: dict[tuple[int, date], list[tuple[date, Decimal]]] = field(
+        default_factory=dict
+    )
 
 
 def _build_position_data_cache(
@@ -69,6 +77,75 @@ def _build_position_data_cache(
 
         for e in LiabilityEvent.objects.filter(liability_id__in=liability_ids):
             cache.liability_events.setdefault(e.liability_id, []).append(e)
+
+    accounting_account_ids = {
+        int(account_id)
+        for account_id in [
+            *(a.accounting_account_id for a in assets if a.tracking_mode == Asset.TrackingMode.ACCOUNTING),
+            *(
+                li.accounting_account_id
+                for li in liabilities
+                if li.tracking_mode == Liability.TrackingMode.ACCOUNTING
+            ),
+        ]
+        if account_id is not None
+    }
+    if accounting_account_ids:
+        from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+        from accounting.services_ledger import build_net_worth_opening_balance_note
+
+        for account_id, account_type in LedgerAccount.objects.filter(
+            id__in=accounting_account_ids
+        ).values_list("id", "account_type"):
+            cache.accounting_account_types[int(account_id)] = str(account_type)
+
+        running_debits: dict[int, Decimal] = {}
+        running_credits: dict[int, Decimal] = {}
+        for account_id, booking_date, side, amount in (
+            LedgerEntry.objects.filter(
+                account_id__in=accounting_account_ids,
+                transaction__status=LedgerTransaction.Status.POSTED,
+            )
+            .select_related("transaction")
+            .order_by("account_id", "transaction__booking_date", "id")
+            .values_list("account_id", "transaction__booking_date", "side", "amount")
+        ):
+            account_id_int = int(account_id)
+            debit_total = running_debits.get(account_id_int, Decimal("0"))
+            credit_total = running_credits.get(account_id_int, Decimal("0"))
+            if side == LedgerEntry.Side.DEBIT:
+                debit_total += Decimal(amount)
+            else:
+                credit_total += Decimal(amount)
+            running_debits[account_id_int] = debit_total
+            running_credits[account_id_int] = credit_total
+            cache.accounting_prefix_dates.setdefault(account_id_int, []).append(booking_date)
+            cache.accounting_prefix_debits.setdefault(account_id_int, []).append(debit_total)
+            cache.accounting_prefix_credits.setdefault(account_id_int, []).append(credit_total)
+
+        for liability in liabilities:
+            if (
+                liability.tracking_mode != Liability.TrackingMode.ACCOUNTING
+                or liability.accounting_account_id is None
+            ):
+                continue
+            opening_note = build_net_worth_opening_balance_note(
+                position_kind="liability",
+                position_id=liability.id,
+            )
+            opening_booking_date = (
+                LedgerTransaction.objects.filter(
+                    status=LedgerTransaction.Status.POSTED,
+                    notes=opening_note,
+                    entries__account_id=liability.accounting_account_id,
+                )
+                .distinct()
+                .order_by("-booking_date", "-id")
+                .values_list("booking_date", flat=True)
+                .first()
+            )
+            if opening_booking_date is not None:
+                cache.liability_opening_booking_dates[liability.id] = opening_booking_date
 
     return cache
 

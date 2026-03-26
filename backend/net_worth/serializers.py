@@ -323,15 +323,24 @@ class AssetSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        effective_amount = get_effective_asset_amount(asset=obj)
+        effective_amount = get_effective_asset_amount(
+            asset=obj,
+            position_cache=self.context.get("position_cache"),
+        )
         return get_amount_base_value(
             amount=effective_amount,
             currency=obj.currency,
             base_currency=self.context.get("base_currency"),
+            fx_cache=self.context.get("fx_cache"),
         )
 
     def get_effective_amount(self, obj):
-        return str(get_effective_asset_amount(asset=obj))
+        return str(
+            get_effective_asset_amount(
+                asset=obj,
+                position_cache=self.context.get("position_cache"),
+            )
+        )
 
     def get_accounting_integration_state(self, obj):
         cached_state = getattr(obj, "_accounting_integration_state", None)
@@ -578,11 +587,15 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        effective_amount = get_effective_liability_amount(liability=obj)
+        effective_amount = get_effective_liability_amount(
+            liability=obj,
+            position_cache=self.context.get("position_cache"),
+        )
         return get_amount_base_value(
             amount=effective_amount,
             currency=obj.currency,
             base_currency=self.context.get("base_currency"),
+            fx_cache=self.context.get("fx_cache"),
         )
 
     def get_estimated_monthly_payment_amount(self, obj):
@@ -601,7 +614,12 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return str(value) if value is not None else None
 
     def get_effective_amount(self, obj):
-        return str(get_effective_liability_amount(liability=obj))
+        return str(
+            get_effective_liability_amount(
+                liability=obj,
+                position_cache=self.context.get("position_cache"),
+            )
+        )
 
     def get_accounting_integration_state(self, obj):
         cached_state = getattr(obj, "_accounting_integration_state", None)

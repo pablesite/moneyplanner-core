@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import date
 from decimal import Decimal
 from typing import cast
@@ -10,7 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from core.models import InflationIndex
-from core.services import convert_currency
+from core.services import convert_currency, convert_currency_cached
 
 from .services_liabilities_core import _last_day_of_month
 
@@ -96,6 +97,23 @@ def _build_investment_contribution_schedule(
         as_of_date=as_of_date,
         horizon_end_date=horizon_end_date,
     )
+
+
+def _get_investment_contribution_schedule_cached(
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
+) -> list[tuple[date, Decimal]]:
+    if position_cache is None:
+        return _build_investment_contribution_schedule(asset=asset, as_of_date=as_of_date)
+    key = (asset.id, as_of_date)
+    cached = position_cache.periodic_investment_schedules.get(key)
+    if cached is not None:
+        return cached
+    schedule = _build_investment_contribution_schedule(asset=asset, as_of_date=as_of_date)
+    position_cache.periodic_investment_schedules[key] = schedule
+    return schedule
 
 
 def _get_accounting_asset_account(*, user_id: int, account_id: int | None):
@@ -557,7 +575,7 @@ def _get_degressive_remaining_ratio(
 
 
 def _get_effective_accounting_asset_amount_or_none(
-    *, asset: Asset, as_of_date: date
+    *, asset: Asset, as_of_date: date, position_cache=None,
 ) -> Decimal | None:
     if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
         return None
@@ -573,14 +591,24 @@ def _get_effective_accounting_asset_amount_or_none(
         user_id=asset.user_id,
         account_id=asset.accounting_account_id,
     )
-    if (
-        accounting_account is None
-        or accounting_account.currency != asset.currency
-        or not has_account_entries(
-            account=accounting_account,
-            as_of_date=as_of_date,
-            status=cast(str, LedgerTransaction.Status.POSTED),
-        )
+    if accounting_account is None or accounting_account.currency != asset.currency:
+        return None
+
+    if position_cache is not None:
+        dates = position_cache.accounting_prefix_dates.get(accounting_account.id, [])
+        if not dates:
+            return None
+        idx = bisect_right(dates, as_of_date) - 1
+        if idx < 0:
+            return None
+        debit_total = position_cache.accounting_prefix_debits[accounting_account.id][idx]
+        credit_total = position_cache.accounting_prefix_credits[accounting_account.id][idx]
+        return debit_total - credit_total
+
+    if not has_account_entries(
+        account=accounting_account,
+        as_of_date=as_of_date,
+        status=cast(str, LedgerTransaction.Status.POSTED),
     ):
         return None
 
@@ -608,6 +636,7 @@ def get_effective_asset_amount(
     accounting_amount = _get_effective_accounting_asset_amount_or_none(
         asset=asset,
         as_of_date=ref_date,
+        position_cache=position_cache,
     )
     if accounting_amount is not None:
         return accounting_amount
@@ -641,8 +670,8 @@ def get_effective_asset_amount(
     ):
         accrued_contributions = sum(
             installment
-            for _, installment in _build_investment_contribution_schedule(
-                asset=asset, as_of_date=ref_date
+            for _, installment in _get_investment_contribution_schedule_cached(
+                asset=asset, as_of_date=ref_date, position_cache=position_cache
             )
         )
         return Decimal(asset.amount) + Decimal(accrued_contributions)
@@ -780,6 +809,7 @@ def _get_effective_investment_asset_amount(
         asset=asset,
         anchor_date=anchor_date,
         as_of_date=as_of_date,
+        position_cache=position_cache,
     )
     return anchor_value + event_delta + scheduled_delta
 
@@ -985,6 +1015,7 @@ def _get_periodic_investment_delta_since_anchor(
     asset: Asset,
     anchor_date: date | None,
     as_of_date: date,
+    position_cache=None,
 ) -> Decimal:
     if (
         asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
@@ -1000,8 +1031,8 @@ def _get_periodic_investment_delta_since_anchor(
     return sum(
         (
             installment
-            for due_date, installment in _build_investment_contribution_schedule(
-                asset=asset, as_of_date=as_of_date
+            for due_date, installment in _get_investment_contribution_schedule_cached(
+                asset=asset, as_of_date=as_of_date, position_cache=position_cache
             )
             if anchor_date is None or due_date > anchor_date
         ),
@@ -1066,12 +1097,27 @@ def get_effective_asset_improvement_amount(
 
 
 def get_amount_base_value(
-    *, amount, currency: str, base_currency: str | None, as_of_date: date | None = None
+    *,
+    amount,
+    currency: str,
+    base_currency: str | None,
+    as_of_date: date | None = None,
+    fx_cache: dict | None = None,
 ):
     if not base_currency:
         return None
     try:
         ref_date = as_of_date or timezone.localdate()
+        if fx_cache is not None:
+            return str(
+                convert_currency_cached(
+                    amount,
+                    currency,
+                    base_currency,
+                    rate_date=ref_date,
+                    fx_cache=fx_cache,
+                )
+            )
         return str(convert_currency(amount, currency, base_currency, date=ref_date))
     except Exception:
         return None

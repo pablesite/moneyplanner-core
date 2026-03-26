@@ -316,7 +316,7 @@ describe('NetWorthView', () => {
 
     expect(wrapper.text()).toContain('Expandir');
     expect(wrapper.text()).toContain('marzo de 2026 - marzo de 2026');
-    expect(wrapper.text()).not.toContain('Ultimo patrimonio neto');
+    expect(wrapper.text()).not.toContain('Último patrimonio neto');
   });
 
   it('wires header actions and snapshot deletion callback', async () => {

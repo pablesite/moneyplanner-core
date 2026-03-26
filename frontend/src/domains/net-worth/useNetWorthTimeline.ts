@@ -274,11 +274,11 @@ export function useNetWorthTimeline(params: {
   const displayedTimelineSummaryLabel = computed(() => {
     if (params.selectedPosition.value) {
       return params.selectedPosition.value.type === 'liability'
-        ? 'Ultimo valor del pasivo'
-        : 'Ultimo valor del activo';
+        ? 'Último valor del pasivo'
+        : 'Último valor del activo';
     }
-    if (!params.selectedTimelineCategory.value) return 'Ultimo patrimonio neto';
-    return 'Ultimo valor de la categoria';
+    if (!params.selectedTimelineCategory.value) return 'Último patrimonio neto';
+    return 'Último valor de la categoría';
   });
 
   const displayedTimelineSeriesColor = computed(() => {

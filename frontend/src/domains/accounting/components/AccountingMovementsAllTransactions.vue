@@ -84,11 +84,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
   <section class="ui-section-card">
     <div class="ui-accounting-filters-floating">
       <div class="ui-accounting-filters-row">
-        <input
-          v-model="state.activityFilters.query"
-          class="input"
-          placeholder="Buscar..."
-        />
+        <input v-model="state.activityFilters.query" class="input" placeholder="Buscar..." />
         <select v-model="state.activityFilters.kind" class="select">
           <option value="all">Tipo</option>
           <option value="income">Ingresos</option>
@@ -104,11 +100,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           class="select"
         >
           <option value="">Categoría</option>
-          <option
-            v-for="cat in state.filterCategoryOptions"
-            :key="cat.value"
-            :value="cat.value"
-          >
+          <option v-for="cat in state.filterCategoryOptions" :key="cat.value" :value="cat.value">
             {{ cat.label }}
           </option>
         </select>
@@ -118,20 +110,12 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           class="select"
         >
           <option value="">Subcategoria</option>
-          <option
-            v-for="sub in state.filterSubcategoryOptions"
-            :key="sub.value"
-            :value="sub.value"
-          >
+          <option v-for="sub in state.filterSubcategoryOptions" :key="sub.value" :value="sub.value">
             {{ sub.label }}
           </option>
         </select>
         <div class="ui-accounting-date-dropdown">
-          <button
-            type="button"
-            class="ui-accounting-date-trigger"
-            @click="toggleDateDropdown"
-          >
+          <button type="button" class="ui-accounting-date-trigger" @click="toggleDateDropdown">
             {{ activeDateLabel() }}
             <span class="ui-accounting-date-trigger-arrow">▾</span>
           </button>
@@ -141,7 +125,9 @@ function originLabel(origin: LedgerTransaction['origin']): string {
               :key="preset.value"
               type="button"
               class="ui-accounting-date-menu-item"
-              :class="{ 'ui-accounting-date-menu-item-active': state.todosDatePreset === preset.value }"
+              :class="{
+                'ui-accounting-date-menu-item-active': state.todosDatePreset === preset.value,
+              }"
               @click="selectDatePreset(preset.value)"
             >
               {{ preset.label }}

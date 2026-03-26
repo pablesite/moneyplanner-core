@@ -363,7 +363,12 @@ watch(
   { immediate: true },
 );
 
-const monthlyDelta = computed<{ value: number; pct: number | null; lastLabel: string; prevLabel: string } | null>(() => {
+const monthlyDelta = computed<{
+  value: number;
+  pct: number | null;
+  lastLabel: string;
+  prevLabel: string;
+} | null>(() => {
   const rows = globalTimelineRows.value;
   const last = rows[rows.length - 1];
   const prev = rows[rows.length - 2];
@@ -819,6 +824,5 @@ const {
         </div>
       </div>
     </BaseModal>
-
   </div>
 </template>

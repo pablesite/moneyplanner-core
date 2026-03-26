@@ -247,7 +247,7 @@ describe('net-worth page refactor composables', () => {
       timeline.timelineChartPoints.value[timeline.timelineChartPoints.value.length - 1]?.fullLabel,
     ).toBe('febrero de 2025');
     expect(timeline.timelineRangeCaption.value).toBe('enero de 2025 - febrero de 2025');
-    expect(timeline.timelineSummaryLabel.value).toBe('Ultimo patrimonio neto');
+    expect(timeline.timelineSummaryLabel.value).toBe('Último patrimonio neto');
     expect(timeline.displayedTimelineSeriesColor.value).toBe('#4cc3ff');
     expect(setStoreError).not.toHaveBeenCalled();
     expect(resetPositionSelection).not.toHaveBeenCalled();

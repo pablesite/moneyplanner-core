@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import cast
@@ -606,54 +607,81 @@ def get_effective_liability_amount(
             user_id=liability.user_id,
             account_id=liability.accounting_account_id,
         )
-        if (
-            accounting_account is not None
-            and accounting_account.currency == liability.currency
-            and has_account_entries(
-                account=accounting_account,
-                as_of_date=ref_date,
-                status=cast(str, LedgerTransaction.Status.POSTED),
-            )
-        ):
+        if accounting_account is not None and accounting_account.currency == liability.currency:
             posted_status = cast(str, LedgerTransaction.Status.POSTED)
             opening_note = build_net_worth_opening_balance_note(
                 position_kind="liability",
                 position_id=liability.id,
             )
-            opening_tx = (
-                LedgerTransaction.objects.filter(
-                    user_id=liability.user_id,
-                    status=posted_status,
-                    notes=opening_note,
-                    entries__account_id=accounting_account.id,
-                )
-                .distinct()
-                .order_by("-booking_date", "-id")
-                .first()
-            )
-            if opening_tx is not None and ref_date >= opening_tx.booking_date:
-                anchored_entries = get_account_entries(
-                    account=accounting_account,
-                    as_of_date=ref_date,
-                    status=posted_status,
-                ).filter(transaction__booking_date__gte=opening_tx.booking_date)
-                if anchored_entries.exists():
-                    totals = compute_entry_balance_totals(
-                        anchored_entries,
-                        account_id=accounting_account.id,
-                    )
-                    raw = compute_account_balance_from_totals(
-                        account_type=accounting_account.account_type,
-                        totals=totals,
-                    )
-                    return max(Decimal("0"), raw)
+            if position_cache is not None:
+                dates = position_cache.accounting_prefix_dates.get(accounting_account.id, [])
+                if dates:
+                    idx = bisect_right(dates, ref_date) - 1
+                    if idx >= 0:
+                        debit_total = position_cache.accounting_prefix_debits[accounting_account.id][
+                            idx
+                        ]
+                        credit_total = position_cache.accounting_prefix_credits[
+                            accounting_account.id
+                        ][idx]
+                        raw_full = credit_total - debit_total
 
-            raw = get_account_balance(
+                        opening_date = position_cache.liability_opening_booking_dates.get(
+                            liability.id
+                        )
+                        if opening_date is not None and ref_date >= opening_date:
+                            before_opening_idx = bisect_right(
+                                dates, opening_date - timedelta(days=1)
+                            ) - 1
+                            if before_opening_idx >= 0:
+                                before_debit_total = position_cache.accounting_prefix_debits[
+                                    accounting_account.id
+                                ][before_opening_idx]
+                                before_credit_total = position_cache.accounting_prefix_credits[
+                                    accounting_account.id
+                                ][before_opening_idx]
+                                raw_full -= before_credit_total - before_debit_total
+                        return max(Decimal("0"), raw_full)
+
+            if has_account_entries(
                 account=accounting_account,
                 as_of_date=ref_date,
-                status=cast(str, LedgerTransaction.Status.POSTED),
-            )
-            return max(Decimal("0"), raw)
+                status=posted_status,
+            ):
+                opening_tx = (
+                    LedgerTransaction.objects.filter(
+                        user_id=liability.user_id,
+                        status=posted_status,
+                        notes=opening_note,
+                        entries__account_id=accounting_account.id,
+                    )
+                    .distinct()
+                    .order_by("-booking_date", "-id")
+                    .first()
+                )
+                if opening_tx is not None and ref_date >= opening_tx.booking_date:
+                    anchored_entries = get_account_entries(
+                        account=accounting_account,
+                        as_of_date=ref_date,
+                        status=posted_status,
+                    ).filter(transaction__booking_date__gte=opening_tx.booking_date)
+                    if anchored_entries.exists():
+                        totals = compute_entry_balance_totals(
+                            anchored_entries,
+                            account_id=accounting_account.id,
+                        )
+                        raw = compute_account_balance_from_totals(
+                            account_type=accounting_account.account_type,
+                            totals=totals,
+                        )
+                        return max(Decimal("0"), raw)
+
+                raw = get_account_balance(
+                    account=accounting_account,
+                    as_of_date=ref_date,
+                    status=cast(str, LedgerTransaction.Status.POSTED),
+                )
+                return max(Decimal("0"), raw)
 
     if position_cache is not None:
         cached_vals = position_cache.liability_valuations.get(liability.id, [])
