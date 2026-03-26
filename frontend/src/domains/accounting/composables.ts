@@ -1291,19 +1291,27 @@ export function useAccountingPage() {
     debitEntry: LedgerTransaction['entries'][number] | null,
     creditEntry: LedgerTransaction['entries'][number] | null,
   ): { accountId: number | null; counterpartyAccountId: number | null } {
-    if (kind === 'income') {
+    type EditAccountsResolution = {
+      accountId: number | null;
+      counterpartyAccountId: number | null;
+    };
+    type KindResolver = () => EditAccountsResolution;
+
+    const resolveIncome: KindResolver = () => {
       return {
         accountId: debitEntry?.account_id ?? null,
         counterpartyAccountId: null,
       };
-    }
-    if (kind === 'expense') {
+    };
+
+    const resolveExpense: KindResolver = () => {
       return {
         accountId: creditEntry?.account_id ?? null,
         counterpartyAccountId: null,
       };
-    }
-    if (kind === 'debt_payment') {
+    };
+
+    const resolveDebtPayment: KindResolver = () => {
       const liabilityEntry =
         transaction.entries.find(
           (entry) => accountMap.value.get(entry.account_id)?.account_type === 'liability',
@@ -1314,8 +1322,9 @@ export function useAccountingPage() {
         accountId: creditEntry?.account_id ?? null,
         counterpartyAccountId: liabilityEntry?.account_id ?? null,
       };
-    }
-    if (kind === 'investment') {
+    };
+
+    const resolveInvestment: KindResolver = () => {
       const direction = getInvestmentDirection(transaction);
       if (direction === 'outflow') {
         return {
@@ -1327,8 +1336,9 @@ export function useAccountingPage() {
         accountId: creditEntry?.account_id ?? null,
         counterpartyAccountId: debitEntry?.account_id ?? null,
       };
-    }
-    if (kind === 'revaluation') {
+    };
+
+    const resolveRevaluation: KindResolver = () => {
       const assetEntry =
         transaction.entries.find(
           (entry) => accountMap.value.get(entry.account_id)?.account_type === 'asset',
@@ -1337,11 +1347,23 @@ export function useAccountingPage() {
         accountId: assetEntry?.account_id ?? null,
         counterpartyAccountId: null,
       };
-    }
-    return {
+    };
+
+    const resolveTransfer: KindResolver = () => ({
       accountId: creditEntry?.account_id ?? null,
       counterpartyAccountId: debitEntry?.account_id ?? null,
+    });
+
+    const resolverMap: Record<EditableActivityKind, KindResolver> = {
+      income: resolveIncome,
+      expense: resolveExpense,
+      debt_payment: resolveDebtPayment,
+      investment: resolveInvestment,
+      revaluation: resolveRevaluation,
+      transfer: resolveTransfer,
+      balance_adjustment: resolveTransfer,
     };
+    return resolverMap[kind]();
   }
 
   function fillEditTransactionForm(transaction: LedgerTransaction) {
@@ -1607,7 +1629,9 @@ export function useAccountingPage() {
     const targetSide = accountDeltaSide(targetAccount.account_type, amount);
     const counterpartySide = targetSide === 'debit' ? 'credit' : 'debit';
     const decimals = currencyDecimals(targetAccount.currency);
-    const absoluteAmount = Math.abs(roundByCurrency(amount, targetAccount.currency)).toFixed(decimals);
+    const absoluteAmount = Math.abs(roundByCurrency(amount, targetAccount.currency)).toFixed(
+      decimals,
+    );
     const makeEntry = (
       account: LedgerAccount,
       side: LedgerEntrySide,

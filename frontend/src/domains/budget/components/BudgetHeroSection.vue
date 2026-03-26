@@ -292,7 +292,10 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
             </label>
             <label class="ui-hero-context">
               <span class="ui-hero-context-label">Ejercicio</span>
-              <details class="ui-select-popover ui-hero-context-popover" :class="{ 'opacity-60': isLoading }">
+              <details
+                class="ui-select-popover ui-hero-context-popover"
+                :class="{ 'opacity-60': isLoading }"
+              >
                 <summary class="ui-select-popover-trigger ui-hero-context-trigger">
                   <span class="ui-select-popover-text">{{ selectedFiscalYearLabel }}</span>
                   <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>

@@ -180,6 +180,168 @@ body {
   padding-top: 12px;
 }
 
+/* ── Hero shell — shared layout for budget & net-worth hero sections ── */
+
+.ui-hero-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-hero-topbar {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ui-hero-topbar-kicker {
+  margin: 0;
+}
+
+.ui-hero-main {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+}
+
+.ui-hero-donut-pane {
+  padding: 4px 16px 4px 0;
+}
+
+.ui-hero-summary {
+  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 4px 0 4px 24px;
+  display: grid;
+  gap: 6px;
+}
+
+.ui-hero-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-hero-summary-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ui-hero-title {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ui-hero-summary-body {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 0;
+}
+
+.ui-hero-value {
+  font-size: clamp(1.55rem, 2.35vw, 2.45rem);
+  line-height: 0.92;
+  font-weight: 800;
+  color: #f5fbff;
+  letter-spacing: -0.02em;
+}
+
+.ui-hero-bottom-row {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ui-hero-bottom-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-hero-bottom-row-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-hero-stat {
+  display: grid;
+  gap: 2px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 50px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-hero-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.ui-hero-stat-value {
+  font-size: 0.92rem;
+  line-height: 1.12;
+  color: #fff;
+}
+
+.ui-hero-stat-meta {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.ui-hero-stat-income {
+  border-color: rgba(36, 208, 139, 0.28);
+  background: rgba(36, 208, 139, 0.06);
+}
+
+.ui-hero-stat-expense {
+  border-color: rgba(255, 131, 112, 0.28);
+  background: rgba(255, 131, 112, 0.06);
+}
+
+.ui-hero-stat-assets {
+  border-color: rgba(92, 192, 255, 0.2);
+  background: rgba(92, 192, 255, 0.08);
+}
+
+.ui-hero-stat-liabilities {
+  border-color: rgba(255, 99, 132, 0.18);
+  background: rgba(255, 99, 132, 0.06);
+}
+
+.ui-hero-context {
+  display: grid;
+  gap: 3px;
+  justify-items: stretch;
+  text-align: right;
+}
+
+.ui-hero-context-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.ui-hero-context-popover {
+  min-width: 0;
+  width: 100%;
+}
+
+.ui-hero-context-trigger {
+  min-height: 34px;
+  width: 100%;
+  justify-content: space-between;
+  border-radius: 12px;
+}
+
+/* ── end hero shell ── */
+
 .ui-inline-offset-sm {
   margin-left: var(--space-2);
 }

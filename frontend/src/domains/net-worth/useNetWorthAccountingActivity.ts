@@ -65,7 +65,7 @@ function resolveSideLabel(
 ): string {
   const direction = resolveInvestmentDirection(transaction, side, hasAssetLink);
   if (direction === 'inflow') return 'Aporte';
-  if (direction === 'outflow') return 'Retirada inversion';
+  if (direction === 'outflow') return 'Retirada inversión';
   return side === 'debit' ? 'Debe' : 'Haber';
 }
 

@@ -16,6 +16,7 @@ def _build_net_worth_summary_impl(
     get_inflation_base_period_fn,
     timezone_localdate_fn,
     adjust_for_inflation_fn,
+    build_inflation_adjuster_fn=None,
 ) -> dict[str, object]:
     today = timezone_localdate_fn()
     base_currency = get_base_currency_for_user_fn(user=user)
@@ -46,55 +47,40 @@ def _build_net_worth_summary_impl(
     if inflation_region is not None:
         try:
             inflation_base_period = get_inflation_base_period_fn(region=inflation_region)
+            inflation_adjuster = None
+            if build_inflation_adjuster_fn is not None:
+                try:
+                    inflation_adjuster = build_inflation_adjuster_fn(
+                        region=inflation_region,
+                        date_value=today,
+                        base_period=inflation_base_period,
+                    )
+                except ValidationError:
+                    inflation_adjuster = None
 
-            total_assets_real = adjust_for_inflation_fn(
-                totals.total_assets,
-                date=today,
-                region=inflation_region,
-                base_period=inflation_base_period,
-            )
-            total_liabilities_real = adjust_for_inflation_fn(
-                totals.total_liabilities,
-                date=today,
-                region=inflation_region,
-                base_period=inflation_base_period,
-            )
-            net_worth_real = adjust_for_inflation_fn(
-                net_worth,
-                date=today,
-                region=inflation_region,
-                base_period=inflation_base_period,
-            )
-            assets_by_category_real = {
-                category: adjust_for_inflation_fn(
+            def _adjust(amount: Decimal) -> Decimal:
+                if inflation_adjuster is not None:
+                    return inflation_adjuster(amount)
+                return adjust_for_inflation_fn(
                     amount,
                     date=today,
                     region=inflation_region,
                     base_period=inflation_base_period,
                 )
+
+            total_assets_real = _adjust(totals.total_assets)
+            total_liabilities_real = _adjust(totals.total_liabilities)
+            net_worth_real = _adjust(net_worth)
+            assets_by_category_real = {
+                category: _adjust(amount)
                 for category, amount in totals.assets_by_category.items()
             }
             liabilities_by_category_real = {
-                category: adjust_for_inflation_fn(
-                    amount,
-                    date=today,
-                    region=inflation_region,
-                    base_period=inflation_base_period,
-                )
+                category: _adjust(amount)
                 for category, amount in totals.liabilities_by_category.items()
             }
-            liabilities_asset_backed_real = adjust_for_inflation_fn(
-                totals.liabilities_asset_backed,
-                date=today,
-                region=inflation_region,
-                base_period=inflation_base_period,
-            )
-            liabilities_unbacked_real = adjust_for_inflation_fn(
-                totals.liabilities_unbacked,
-                date=today,
-                region=inflation_region,
-                base_period=inflation_base_period,
-            )
+            liabilities_asset_backed_real = _adjust(totals.liabilities_asset_backed)
+            liabilities_unbacked_real = _adjust(totals.liabilities_unbacked)
             inflation_available = True
             inflation_status = "available"
         except ValidationError:
@@ -138,6 +124,7 @@ def build_net_worth_summary(*, user) -> dict[str, object]:
         get_inflation_base_period_fn=services_facade.get_inflation_base_period,
         timezone_localdate_fn=services_facade.timezone.localdate,
         adjust_for_inflation_fn=services_facade.adjust_for_inflation,
+        build_inflation_adjuster_fn=services_facade.build_inflation_adjuster,
     )
 
 

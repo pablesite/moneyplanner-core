@@ -356,9 +356,7 @@ export function useNetWorthViewState() {
       rows.push({ key, a: 0, l: 0 });
     }
     const order = canonicalKeyOrder.value;
-    rows.sort(
-      (a, b) => (order.get(a.key) ?? Infinity) - (order.get(b.key) ?? Infinity),
-    );
+    rows.sort((a, b) => (order.get(a.key) ?? Infinity) - (order.get(b.key) ?? Infinity));
     return rows;
   });
 

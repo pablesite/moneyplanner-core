@@ -230,7 +230,12 @@ export function useNetWorthPageMetrics(params: {
   });
 
   const effectiveCategoryLabels = computed(() =>
-    effectiveCategoryKeys.value.map((key) => categoryLabelMap.value.get(`asset:${key}`) ?? key),
+    effectiveCategoryKeys.value.map(
+      (key) =>
+        categoryLabelMap.value.get(`asset:${key}`) ??
+        categoryLabelMap.value.get(`liability:${key}`) ??
+        key,
+    ),
   );
 
   const effectiveCategoryAssets = computed(() => {

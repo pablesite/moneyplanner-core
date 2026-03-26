@@ -32,10 +32,9 @@ const ASSET_COLOR_BY_LABEL: Record<string, string> = {
 };
 
 const LIAB_COLOR_BY_LABEL: Record<string, string> = {
-  hipoteca: 'rgba(255, 99, 132, 0.85)',
-  'préstamo personal': 'rgba(255, 120, 150, 0.85)',
-  'prestamo personal': 'rgba(255, 120, 150, 0.85)',
-  tarjeta: 'rgba(255, 140, 110, 0.85)',
+  hipotecas: 'rgba(255, 99, 132, 0.85)',
+  'préstamos personales': 'rgba(255, 120, 150, 0.85)',
+  'tarjetas de crédito': 'rgba(255, 140, 110, 0.85)',
   otros: 'rgba(255, 130, 130, 0.8)',
 };
 
@@ -86,8 +85,8 @@ const data = computed<ChartData<'bar'>>(() => ({
   ],
 }));
 
-const ASSET_ORDER = ['liquidez', 'inversiones', 'inmuebles', 'mobiliario', 'otros'];
-const LIAB_ORDER = ['tarjeta', 'préstamo personal', 'prestamo personal', 'hipoteca', 'otros'];
+const ASSET_ORDER = ['liquidez', 'inmuebles', 'inversiones', 'mobiliario', 'otros'];
+const LIAB_ORDER = ['hipotecas', 'préstamos personales', 'tarjetas de crédito', 'otros'];
 
 const assetRank = new Map<string, number>(ASSET_ORDER.map((k, i) => [k, i]));
 const liabRank = new Map<string, number>(LIAB_ORDER.map((k, i) => [k, i]));

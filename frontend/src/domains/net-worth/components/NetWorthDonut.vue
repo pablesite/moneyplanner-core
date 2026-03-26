@@ -126,7 +126,6 @@ function buildCategoryShares(
       share: positiveTotal > 0 ? item.value / positiveTotal : 0,
     }))
     .filter((item) => item.value >= 0 && (item.value > 0 || item.count > 0))
-    .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 }
 
@@ -265,7 +264,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
       <div v-if="props.showComposition !== false" class="nw-donut-composition">
         <div class="nw-donut-comp-block">
           <div class="nw-donut-comp-block-head">
-            <div class="nw-donut-comp-title">Composicion de activos</div>
+            <div class="nw-donut-comp-title">Activos</div>
             <button
               class="nw-donut-comp-action"
               type="button"
@@ -307,12 +306,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
               </button>
             </div>
           </div>
-          <div v-else class="nw-donut-comp-empty">Sin datos de activos por categoria.</div>
+          <div v-else class="nw-donut-comp-empty">Sin datos de activos por categoría.</div>
         </div>
 
         <div class="nw-donut-comp-block">
           <div class="nw-donut-comp-block-head">
-            <div class="nw-donut-comp-title">Composicion de pasivos</div>
+            <div class="nw-donut-comp-title">Pasivos</div>
             <button
               class="nw-donut-comp-action"
               type="button"
@@ -355,7 +354,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
               </button>
             </div>
           </div>
-          <div v-else class="nw-donut-comp-empty">Sin datos de pasivos por categoria.</div>
+          <div v-else class="nw-donut-comp-empty">Sin datos de pasivos por categoría.</div>
         </div>
       </div>
     </div>
