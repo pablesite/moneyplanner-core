@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
 import {
   type AnnualExpenseEntry,
@@ -183,7 +183,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
   >
     <h2 class="mt-0">Sin presupuesto anual para {{ fiscalYear }}</h2>
     <p class="subtle mb-0">
-      Usa el bloque `Balance anual` de esta misma vista para anadir ingresos y gastos previstos.
+      Usa el bloque `Balance anual` de esta misma vista para añadir ingresos y gastos previstos.
     </p>
   </section>
 
@@ -215,7 +215,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               {{
                 isSectionExpanded(section.id)
                   ? 'Ocultar detalle'
-                  : `Ver detalle (${section.categoryCount} categorias · ${section.subcategoryCount} subcategorias)`
+                  : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
               }}
             </span>
           </button>
@@ -419,17 +419,17 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             @keydown.space.prevent="toggleGroup(group.categoryKey)"
           >
             <div class="ui-budget-group-title-wrap">
-              <div class="ui-budget-group-kicker">Categoria</div>
+              <div class="ui-budget-group-kicker">Categoría</div>
               <h3>{{ group.categoryLabel }}</h3>
               <p>
-                {{ group.rows.length }} subcategorias ·
+                {{ group.rows.length }} subcategorías -
                 {{ formatPercent(group.shareOfSection, 0) }} de {{ section.title.toLowerCase() }}
               </p>
 
               <div
                 v-if="budgetCategoryActualExecution(section.id, group.categoryKey)"
                 class="ui-budget-inline-progress"
-                :aria-label="`Ejecucion YTD categoria ${group.categoryLabel}`"
+                :aria-label="`Ejecución YTD categoría ${group.categoryLabel}`"
               >
                 <div class="ui-budget-inline-progress-labels">
                   <span
@@ -477,7 +477,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               <div
                 v-else
                 class="ui-budget-inline-progress"
-                aria-label="Placeholder ejecucion categoria"
+                aria-label="Placeholder ejecución categoría"
               >
                 <div class="ui-budget-inline-progress-labels">
                   <span>Previsto vs Ejecutado</span>
@@ -557,15 +557,15 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           <ul v-show="isGroupExpanded(group.categoryKey)" class="ui-budget-rows">
             <li v-for="row in group.rows" :key="row.key" class="ui-budget-row">
               <div class="ui-budget-row-main">
-                <div class="ui-budget-row-kicker">Subcategoria</div>
+                <div class="ui-budget-row-kicker">Subcategoría</div>
                 <div class="ui-budget-row-title">{{ row.subcategoryLabel }}</div>
                 <div class="ui-budget-row-meta">
                   <template v-if="row.detectedUnbudgeted">
-                    Detectado en movimientos ·
+                    Detectado en movimientos -
                     {{ formatMoney(row.detectedExecutedYtd ?? 0) }} EUR fuera de presupuesto (YTD)
                   </template>
                   <template v-else>
-                    {{ row.itemsCount }} registro{{ row.itemsCount === 1 ? '' : 's' }} ·
+                    {{ row.itemsCount }} registro{{ row.itemsCount === 1 ? '' : 's' }} -
                     {{ formatMoney(row.plannedAnnual / 12) }} EUR/mes previsto
                   </template>
                 </div>
@@ -573,7 +573,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div
                   v-if="budgetSubcategoryActualExecution(section.id, row.key)"
                   class="ui-budget-inline-progress ui-budget-inline-progress-row"
-                  :aria-label="`Ejecucion YTD subcategoria ${row.subcategoryLabel}`"
+                  :aria-label="`Ejecución YTD subcategoría ${row.subcategoryLabel}`"
                 >
                   <div class="ui-budget-inline-progress-track">
                     <div
@@ -614,7 +614,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div
                   v-else
                   class="ui-budget-inline-progress ui-budget-inline-progress-row"
-                  aria-label="Placeholder ejecucion subcategoria"
+                  aria-label="Placeholder ejecución subcategoría"
                 >
                   <div class="ui-budget-inline-progress-track">
                     <div
@@ -631,7 +631,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     />
                   </div>
                   <div class="ui-budget-inline-progress-caption">
-                    Ejecucion pendiente · preview
+                    Ejecución pendiente - preview
                     <span
                       :class="`ui-budget-inline-progress-caption-tone-${executionPreview(section.id, `row:${row.key}`).tone}`"
                     >
@@ -648,10 +648,10 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   >
                     {{
                       isContextOpen(section.id, row.key)
-                        ? 'Ocultar edicion'
+                        ? 'Ocultar edición'
                         : row.detectedUnbudgeted
-                          ? 'Anadir al presupuesto'
-                          : 'Gestionar subcategoria'
+                          ? 'Añadir al presupuesto'
+                          : 'Gestionar subcategoría'
                     }}
                   </button>
                 </div>
@@ -663,8 +663,8 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                       <p class="ui-budget-context-panel-subtitle">
                         {{
                           row.detectedUnbudgeted
-                            ? 'Subcategoria detectada desde movimientos. Convierte este movimiento en linea anual.'
-                            : 'Alta, edicion y borrado sin salir del contexto de categoria.'
+                            ? 'Subcategoría detectada desde movimientos. Convierte este movimiento en linea anual.'
+                            : 'Alta, edición y borrado sin salir del contexto de categoría.'
                         }}
                       </p>
                     </div>
@@ -673,7 +673,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                       class="btn btn-primary btn-sm"
                       @click="openCreateFromContext"
                     >
-                      Anadir
+                      Añadir
                     </button>
                   </header>
 
@@ -687,7 +687,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                           <strong>{{ entry.name }}</strong>
                           <small>
                             {{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
-                            <template v-if="entry.owner"> · {{ entry.owner }}</template>
+                            <template v-if="entry.owner"> - {{ entry.owner }}</template>
                           </small>
                         </div>
                         <div class="ui-budget-context-actions">
@@ -725,7 +725,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                           <strong>{{ entry.name }}</strong>
                           <small>
                             {{ entry.expenseType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
-                            <template v-if="entry.owner"> · {{ entry.owner }}</template>
+                            <template v-if="entry.owner"> - {{ entry.owner }}</template>
                           </small>
                         </div>
                         <div class="ui-budget-context-actions">
@@ -754,7 +754,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   </ul>
 
                   <p v-else class="subtle mb-0">
-                    No hay registros con los filtros actuales para esta subcategoria.
+                    No hay registros con los filtros actuales para esta subcategoría.
                   </p>
                 </div>
               </div>
@@ -794,8 +794,8 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div class="ui-budget-row-metric">
                   <span>{{
                     budgetSubcategoryActualExecution(section.id, row.key)
-                      ? 'Desviacion YTD'
-                      : 'Desviacion'
+                      ? 'Desviación YTD'
+                      : 'Desviación'
                   }}</span>
                   <strong
                     class="ui-budget-pending-text"
@@ -820,7 +820,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       class="ui-budget-detail-collapsed-note"
     >
       Vista compacta activa. Se muestran resumen y evolucion ejecutada. Pulsa en `Ver detalle` para
-      desplegar categorias y subcategorias.
+      desplegar categorías y subcategorías.
     </div>
 
     <div v-else class="subtle">

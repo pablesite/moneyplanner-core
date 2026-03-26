@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { AnnualIncomeEntry } from '@/domains/data-input';
 
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
@@ -102,19 +102,19 @@ defineProps<{
           mes objetivo.
         </p>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          Ledger categorizado por taxonomia compartida y fallback legacy solo cuando esa
-          clasificacion todavia no exista.
+          Ledger categorizado por taxonomía compartida y fallback legacy solo cuando esa
+          clasificación todavía no exista.
         </p>
       </div>
     </div>
     <div class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
         <span>Previsto mes</span>
-        <strong>{{ formatMoney(selectedIncomeMonthPlanned) }} â‚¬</strong>
+        <strong>{{ formatMoney(selectedIncomeMonthPlanned) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
         <span>Ejecutado mes</span>
-        <strong>{{ formatMoney(selectedIncomeMonthExecuted) }} â‚¬</strong>
+        <strong>{{ formatMoney(selectedIncomeMonthExecuted) }} EUR</strong>
       </article>
       <article
         class="ui-budget-checkin-kpi"
@@ -123,10 +123,10 @@ defineProps<{
           'ui-budget-checkin-kpi-danger': selectedIncomeMonthDeviation < 0,
         }"
       >
-        <span>Desviacion del mes</span>
+        <span>Desviación del mes</span>
         <strong
           >{{ selectedIncomeMonthDeviation > 0 ? '+' : ''
-          }}{{ formatMoney(selectedIncomeMonthDeviation) }} â‚¬</strong
+          }}{{ formatMoney(selectedIncomeMonthDeviation) }} EUR</strong
         >
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -151,8 +151,8 @@ defineProps<{
           <div class="ui-budget-execution-note-main">
             <strong>Cobertura del mes</strong>
             <span>
-              {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger categorizado Â·
-              {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy Â·
+              {{ monthlyIncomeCoverageSummary.viaLedger }} via ledger categorizado -
+              {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy -
               {{ monthlyIncomeCoverageSummary.pending }} pendientes
             </span>
             <small class="ui-budget-execution-note-detail">{{ monthlyIncomeCoverageDetail }}</small>
@@ -169,8 +169,8 @@ defineProps<{
             alinear automaticamente con el presupuesto de este mes.
           </span>
           <small v-if="monthlyIncomePendingClassification.ambiguousRows > 0">
-            {{ monthlyIncomePendingClassification.ambiguousRows }} lineas comparten la misma
-            subcategoria y requieren revision manual.
+            {{ monthlyIncomePendingClassification.ambiguousRows }} líneas comparten la misma
+            subcategoría y requieren revisión manual.
           </small>
         </div>
         <div class="ui-budget-checkin-group">
@@ -178,13 +178,13 @@ defineProps<{
             <div class="ui-budget-checkin-group-title-wrap">
               <strong class="ui-budget-checkin-group-title">Ingresos recurrentes</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ monthlyIncomeExecutionEntries.length }} lineas Â·
+                {{ monthlyIncomeExecutionEntries.length }} líneas -
                 {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud
               </span>
             </div>
             <div class="ui-budget-checkin-group-kpis">
-              <span>P {{ formatMoney(selectedIncomeMonthPlanned) }} â‚¬</span>
-              <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} â‚¬</span>
+              <span>P {{ formatMoney(selectedIncomeMonthPlanned) }} EUR</span>
+              <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} EUR</span>
               <span
                 :class="{
                   'ui-budget-checkin-group-dev-pos': selectedIncomeMonthDeviation > 0,
@@ -192,7 +192,7 @@ defineProps<{
                 }"
               >
                 D {{ selectedIncomeMonthDeviation > 0 ? '+' : ''
-                }}{{ formatMoney(selectedIncomeMonthDeviation) }} â‚¬
+                }}{{ formatMoney(selectedIncomeMonthDeviation) }} EUR
               </span>
             </div>
           </div>
@@ -221,7 +221,7 @@ defineProps<{
                   >
                   {{ incomeCheckinRowSummary(row) }}
                   <span class="ui-budget-checkin-row-planned"
-                    >(Previsto {{ formatMoney(row.planned) }} €)</span
+                    >(Previsto {{ formatMoney(row.planned) }} EUR)</span
                   >
                 </div>
                 <div
@@ -243,10 +243,10 @@ defineProps<{
                     "
                     class="ui-budget-checkin-row-lock-note"
                   >
-                    Edicion legacy bloqueada
+                    Edición legacy bloqueada
                   </span>
                   <span v-else class="ui-budget-checkin-row-lock-note">
-                    Varias lineas comparten esta subcategoria.
+                    Varias líneas comparten esta subcategoría.
                   </span>
                 </div>
                 <div
@@ -255,7 +255,7 @@ defineProps<{
                 >
                   <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
                   <template v-if="row.checkin.status !== 'skipped' && row.executed != null">
-                    ({{ formatMoney(row.executed) }} â‚¬)
+                    ({{ formatMoney(row.executed) }} EUR)
                   </template>
                 </div>
               </div>

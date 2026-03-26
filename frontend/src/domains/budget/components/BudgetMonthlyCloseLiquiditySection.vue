@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type LiquidityResetMode = 'zero' | 'planned';
 
@@ -80,15 +80,15 @@ defineProps<{
             :disabled="!previousMonthlyCloseStep"
             @click="goToPreviousMonthlyCloseStep()"
           >
-            ←
+            &lt;
           </button>
-          <h2 class="ui-budget-checkin-title">Paso 1 · Cierre de liquidez</h2>
+          <h2 class="ui-budget-checkin-title">Paso 1 - Cierre de liquidez</h2>
           <button
             type="button"
             class="btn ui-monthly-close-step-nav-btn"
             @click="goToNextMonthlyCloseStep()"
           >
-            →
+            &gt;
           </button>
         </div>
         <h2 v-else class="ui-budget-checkin-title">Cierre de liquidez</h2>
@@ -118,11 +118,11 @@ defineProps<{
     <div v-if="liquidityMonthlySummary" class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
         <span>Saldo referencia</span>
-        <strong>{{ formatMoney(selectedLiquidityMonthPlanned) }} €</strong>
+        <strong>{{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
         <span>Real cierre</span>
-        <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} €</strong>
+        <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</strong>
       </article>
       <article
         class="ui-budget-checkin-kpi"
@@ -131,10 +131,10 @@ defineProps<{
           'ui-budget-checkin-kpi-good': selectedLiquidityMonthDeviation > 0,
         }"
       >
-        <span>Desviacion liquidez</span>
+        <span>Desviación liquidez</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
-          }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+          }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
         </strong>
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -158,14 +158,14 @@ defineProps<{
             <div class="ui-budget-checkin-group-title-wrap">
               <strong class="ui-budget-checkin-group-title">Activos liquidos</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ monthlyLiquidityExecutionRows.length }} cuentas ·
+                {{ monthlyLiquidityExecutionRows.length }} cuentas -
                 {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }}
                 completitud
               </span>
             </div>
             <div class="ui-budget-checkin-group-kpis">
-              <span>Ref {{ formatMoney(selectedLiquidityMonthPlanned) }} €</span>
-              <span>E {{ formatMoney(selectedLiquidityMonthExecuted) }} €</span>
+              <span>Ref {{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</span>
+              <span>E {{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</span>
               <span
                 :class="{
                   'ui-budget-checkin-group-dev-pos': selectedLiquidityMonthDeviation > 0,
@@ -173,7 +173,7 @@ defineProps<{
                 }"
               >
                 D {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
-                }}{{ formatMoney(selectedLiquidityMonthDeviation) }} €
+                }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
               </span>
             </div>
           </div>
@@ -189,7 +189,7 @@ defineProps<{
                   {{ liquidityCheckinRowSummary(row) }}
                   <span class="ui-budget-checkin-row-planned">
                     (Referencia {{ formatMoney(row.planned) }}
-                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
                   </span>
                 </div>
                 <div
@@ -199,7 +199,7 @@ defineProps<{
                   <strong>Ledger</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
                   </template>
                 </div>
                 <div
@@ -209,14 +209,14 @@ defineProps<{
                   <strong>Manual (override ledger)</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
                   </template>
                 </div>
                 <div v-else-if="row.checkin" class="ui-budget-checkin-row-state">
                   <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? '€' : row.currency }})
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
                   </template>
                 </div>
               </div>
@@ -233,7 +233,7 @@ defineProps<{
                     title="Abrir candado y ajustar manualmente esta cuenta"
                     @click="unlockLiquidityLedgerRow(row)"
                   >
-                    🔒 Ledger
+                    ðŸ”’ Ledger
                   </button>
                 </div>
                 <div v-else class="ui-budget-checkin-adjust">
@@ -264,7 +264,7 @@ defineProps<{
                       title="Volver a bloquear y usar el saldo del ledger"
                       @click="relockLiquidityLedgerRow(row)"
                     >
-                      🔓 Manual
+                      ðŸ”“ Manual
                     </button>
                   </div>
                   <input

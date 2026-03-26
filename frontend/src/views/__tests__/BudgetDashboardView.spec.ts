@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+﻿/** @vitest-environment jsdom */
 import { defineComponent } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -532,7 +532,38 @@ describe('BudgetDashboardView', () => {
     await toggleDetail?.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Gestionar subcategoria');
+    expect(wrapper.text()).toContain('Gestionar subcategoría');
+  });
+
+  it('opens budget suggestions inside a modal when user asks for them', async () => {
+    configureCoreApi();
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    expect(
+      wrapper
+        .findAll('button')
+        .some((candidate) => candidate.attributes('aria-label') === 'Ver sugerencias'),
+    ).toBe(true);
+    expect(wrapper.text()).not.toContain('Sugerencias desde histórico ledger');
+    expect(wrapper.text()).not.toContain(
+      'Sin cobertura ledger por subcategoría para sugerir ajustes todavía.',
+    );
+
+    const toggleSuggestions = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.attributes('aria-label') === 'Ver sugerencias');
+    await toggleSuggestions?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Sugerencias desde histórico ledger');
+    expect(wrapper.text()).toContain('Cerrar');
+    expect(wrapper.text()).toContain('Sin cobertura ledger por subcategoría para sugerir ajustes');
   });
 
   it('shows ledger-backed YTD execution in annual expense detail', async () => {
@@ -716,7 +747,7 @@ describe('BudgetDashboardView', () => {
 
     expect(wrapper.text()).toContain('Fuera de presupuesto (YTD)');
     expect(wrapper.text()).toContain('Detectado en movimientos');
-    expect(wrapper.text()).toContain('Anadir al presupuesto');
+    expect(wrapper.text()).toContain('Añadir al presupuesto');
   });
 
   it('shows unbudgeted income split and detected income rows', async () => {
@@ -818,7 +849,7 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     expect(incomeSection.text()).toContain('Detectado en movimientos');
-    expect(incomeSection.text()).toContain('Anadir al presupuesto');
+    expect(incomeSection.text()).toContain('Añadir al presupuesto');
   });
 
   it('updates income evolution executed bars when switching recurrent/one-off filter', async () => {
