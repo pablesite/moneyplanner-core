@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import DataInputAnnualSections from '@/views/data-input/DataInputAnnualSections.vue';
 import { useDataInputPage } from '@/views/data-input/useDataInputPage';
 

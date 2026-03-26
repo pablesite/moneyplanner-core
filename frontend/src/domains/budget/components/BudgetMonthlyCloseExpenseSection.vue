@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { AnnualExpenseEntry } from '@/domains/data-input';
 
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
@@ -112,8 +112,8 @@ defineProps<{
           </button>
         </div>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          Ledger categorizado por taxonomia compartida y fallback legacy explicito solo cuando falte
-          esa clasificacion.
+          Ledger categorizado por taxonomía compartida y fallback legacy explícito solo cuando falte
+          esa clasificación.
         </p>
         <p class="ui-budget-checkin-subtitle">
           Cierre mensual rapido de `Gastos` (14C v1). `Ingresos` se integra con el mismo patron.
@@ -137,7 +137,7 @@ defineProps<{
           'ui-budget-checkin-kpi-good': selectedExpenseMonthDeviation < 0,
         }"
       >
-        <span>Desviacion del mes</span>
+        <span>Desviación del mes</span>
         <strong>
           {{ selectedExpenseMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedExpenseMonthDeviation) }} EUR
@@ -163,8 +163,8 @@ defineProps<{
           <div class="ui-budget-execution-note-main">
             <strong>Cobertura del mes</strong>
             <span>
-              {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger categorizado ·
-              {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy ·
+              {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger categorizado -
+              {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy -
               {{ monthlyExpenseCoverageSummary.pending }} pendientes
             </span>
             <small class="ui-budget-execution-note-detail">{{
@@ -184,8 +184,8 @@ defineProps<{
             alinear automaticamente con el presupuesto de este mes.
           </span>
           <small v-if="monthlyExpensePendingClassification.ambiguousRows > 0">
-            {{ monthlyExpensePendingClassification.ambiguousRows }} lineas comparten la misma
-            subcategoria y requieren revision manual.
+            {{ monthlyExpensePendingClassification.ambiguousRows }} líneas comparten la misma
+            subcategoría y requieren revisión manual.
           </small>
         </div>
 
@@ -199,7 +199,7 @@ defineProps<{
             <div class="ui-budget-checkin-group-title-wrap">
               <strong class="ui-budget-checkin-group-title">{{ group.categoryLabel }}</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ group.rows.length }} lineas · {{ Math.round(group.completionRatio * 100) }} %
+                {{ group.rows.length }} líneas - {{ Math.round(group.completionRatio * 100) }} %
                 completitud
               </span>
             </div>
@@ -244,7 +244,7 @@ defineProps<{
                   <span class="ui-budget-checkin-row-planned">
                     (Previsto {{ formatMoney(row.planned) }} EUR)
                   </span>
-                  <template v-if="row.entry.expenseType === 'one_off'"> · Puntual</template>
+                  <template v-if="row.entry.expenseType === 'one_off'"> - Puntual</template>
                 </div>
                 <div
                   v-if="
@@ -265,10 +265,10 @@ defineProps<{
                     "
                     class="ui-budget-checkin-row-lock-note"
                   >
-                    Edicion legacy bloqueada
+                    Edición legacy bloqueada
                   </span>
                   <span v-else class="ui-budget-checkin-row-lock-note">
-                    Varias lineas comparten esta subcategoria.
+                    Varias líneas comparten esta subcategoría.
                   </span>
                 </div>
                 <div v-if="row.checkin" class="ui-budget-checkin-row-state">

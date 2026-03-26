@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type MonthlyCloseStatus = 'draft' | 'finalized' | 'locked';
 type ResultTone = 'positive' | 'warning' | 'negative' | 'neutral';
@@ -144,7 +144,7 @@ defineProps<{
         <strong>{{ formatPercent(selectedMonthlyCloseCompletionRatio, 0) }}</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Desviacion liquidez</span>
+        <span>Desviación liquidez</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
@@ -265,7 +265,7 @@ defineProps<{
         <div class="ui-budget-result-card-head">
           <h3 class="ui-budget-result-card-title">Ingresos ejecutados (detalle del mes)</h3>
           <div class="ui-budget-result-card-meta">
-            {{ monthlyIncomeExecutionEntries.length }} lineas
+            {{ monthlyIncomeExecutionEntries.length }} líneas
           </div>
         </div>
         <div v-if="!monthlyIncomeResultBreakdown.length" class="subtle">
@@ -281,7 +281,7 @@ defineProps<{
               <div>
                 <strong>{{ group.categoryLabel }}</strong>
                 <div class="ui-budget-result-breakdown-submeta">
-                  {{ group.lineCount }} lineas -
+                  {{ group.lineCount }} líneas -
                   {{ formatPercent(group.completionRatio, 0) }} completitud
                 </div>
               </div>
@@ -318,7 +318,7 @@ defineProps<{
                 </span>
               </div>
               <div v-if="group.rows.length > 5" class="ui-budget-result-breakdown-more">
-                + {{ group.rows.length - 5 }} subcategorias mas
+                + {{ group.rows.length - 5 }} subcategorías más
               </div>
             </div>
           </article>
@@ -329,7 +329,7 @@ defineProps<{
         <div class="ui-budget-result-card-head">
           <h3 class="ui-budget-result-card-title">Gastos ejecutados (detalle del mes)</h3>
           <div class="ui-budget-result-card-meta">
-            {{ monthlyExpenseExecutionEntries.length }} lineas
+            {{ monthlyExpenseExecutionEntries.length }} líneas
           </div>
         </div>
         <div v-if="!monthlyExpenseResultBreakdown.length" class="subtle">
@@ -345,7 +345,7 @@ defineProps<{
               <div>
                 <strong>{{ group.categoryLabel }}</strong>
                 <div class="ui-budget-result-breakdown-submeta">
-                  {{ group.lineCount }} lineas -
+                  {{ group.lineCount }} líneas -
                   {{ formatPercent(group.completionRatio, 0) }} completitud
                 </div>
               </div>
@@ -382,7 +382,7 @@ defineProps<{
                 </span>
               </div>
               <div v-if="group.rows.length > 5" class="ui-budget-result-breakdown-more">
-                + {{ group.rows.length - 5 }} subcategorias mas
+                + {{ group.rows.length - 5 }} subcategorías más
               </div>
             </div>
           </article>

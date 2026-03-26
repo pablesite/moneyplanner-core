@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue';
+﻿import { computed, ref, watch, type Ref } from 'vue';
 import {
   budgetApi,
   toBudgetErrorMessage,
@@ -880,7 +880,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       let executed = 0;
       let checkinsConfirmed = 0;
       for (const entry of filteredIncomeEntries.value) {
-        const checkin = incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
+        const checkin =
+          incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
         const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
         if (resolution.executionSource === 'none') continue;
         checkinsConfirmed += 1;
@@ -1620,9 +1621,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
     ).length;
     if (monthsWithLedger > 0) return 'Ledger categorizado + fallback';
-    if (!expenseMonthlySummary.value) return 'Cargando ejecucion';
+    if (!expenseMonthlySummary.value) return 'Cargando ejecución';
     if (expenseMonthlySummary.value.has_executed_data) return 'Fallback legacy';
-    return 'Sin ejecucion';
+    return 'Sin ejecución';
   });
   const executionStatusDetail = computed(() => {
     if (accountingExecutionError.value) {
@@ -1632,12 +1633,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
     ).length;
     if (monthsWithLedger > 0) {
-      return `Ledger categorizado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa taxonomia compartida como fuente primaria y fallback legacy solo cuando falta clasificacion nueva.`;
+      return `Ledger categorizado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa taxonomía compartida como fuente primaria y fallback legacy solo cuando falta clasificación nueva.`;
     }
     if (!expenseMonthlySummary.value) {
       return 'Cargando agregados mensuales para ledger y check-ins legacy.';
     }
-    return `Sin cobertura ledger todavia. Check-ins legacy disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
+    return `Sin cobertura ledger todavía. Check-ins legacy disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
   });
 
   const monthlyIncomeCoverageSummary = computed<MonthlyCoverageSummary>(() => {
@@ -1728,18 +1729,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   function coverageDetail(summary: MonthlyCoverageSummary): string {
     const mode = resolveCoverageMode(summary);
     if (mode === 'ledger') {
-      return 'Todas las lineas del mes estan cubiertas por ledger y las acciones legacy quedan bloqueadas.';
+      return 'Todas las líneas del mes estan cubiertas por ledger y las acciones legacy quedan bloqueadas.';
     }
     if (mode === 'fallback') {
-      return 'Todas las lineas cubiertas usan check-ins legacy; puedes editar cada fila.';
+      return 'Todas las líneas cubiertas usan check-ins legacy; puedes editar cada fila.';
     }
     if (mode === 'mixed') {
-      return 'Hay lineas con ledger y lineas legacy; solo se pueden editar las filas en fallback.';
+      return 'Hay líneas con ledger y líneas legacy; solo se pueden editar las filas en fallback.';
     }
     if (mode === 'partial') {
-      return 'Hay lineas cubiertas y lineas pendientes; completa solo las filas sin cobertura.';
+      return 'Hay líneas cubiertas y líneas pendientes; completa solo las filas sin cobertura.';
     }
-    return 'Todavia no hay lineas ejecutadas para este mes.';
+    return 'Todavía no hay líneas ejecutadas para este mes.';
   }
 
   function executionSourceLabel(origin: BudgetExecutionOrigin): string {
@@ -1983,7 +1984,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         if (!group) {
           group = {
             categoryKey: category.category,
-            categoryLabel: incomeCategoryLabels.get(category.category as never) ?? category.category,
+            categoryLabel:
+              incomeCategoryLabels.get(category.category as never) ?? category.category,
             plannedAnnual: 0,
             shareOfSection: 0,
             rows: [],
@@ -2175,7 +2177,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     {
       id: 'income',
       title: 'Ingresos',
-      subtitle: 'Detalle previsto por categorias y subcategorias del balance anual',
+      subtitle: 'Detalle previsto por categorías y subcategorías del balance anual',
       emptyMessage: 'No hay ingresos anuales cargados para este ejercicio.',
       toneClass: 'ui-budget-section-income',
       totalAnnual: plannedIncomeTotal.value,
@@ -2187,7 +2189,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     {
       id: 'expense',
       title: 'Gastos',
-      subtitle: 'Detalle previsto por categorias y subcategorias del balance anual',
+      subtitle: 'Detalle previsto por categorías y subcategorías del balance anual',
       emptyMessage: 'No hay gastos anuales cargados para este ejercicio.',
       toneClass: 'ui-budget-section-expense',
       totalAnnual: plannedExpenseTotal.value,
@@ -2276,7 +2278,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   const activeViewSummary = computed(
     () =>
-      `Ingresos: ${viewModeLabel(incomeViewMode.value)} · Gastos: ${viewModeLabel(expenseViewMode.value)}`,
+      `Ingresos: ${viewModeLabel(incomeViewMode.value)} - Gastos: ${viewModeLabel(expenseViewMode.value)}`,
   );
 
   async function refreshBudgetData(year = fiscalYear.value): Promise<void> {
@@ -2448,7 +2450,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     row: (typeof monthlyIncomeExecutionEntries.value)[number],
   ): string {
     const subcategory = incomeSubcategoryLabels.get(row.entry.subcategory) ?? row.entry.subcategory;
-    return `${subcategory} · ${row.entry.name}`;
+    return `${subcategory} - ${row.entry.name}`;
   }
 
   function suggestedIncomeExecutedAmountForRow(
@@ -2593,7 +2595,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const name = cleanedExpenseCheckinName(row.entry.name);
     const subcategory =
       expenseSubcategoryLabels.get(row.entry.subcategory) ?? row.entry.subcategory;
-    return `${subcategory} · ${name}`;
+    return `${subcategory} - ${name}`;
   }
 
   async function clearExpenseCheckin(
@@ -2711,7 +2713,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   function liquidityCheckinRowSummary(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
   ): string {
-    return `${shortLiquiditySubcategoryLabel(row.asset_subcategory)} · ${row.asset_name}`;
+    return `${shortLiquiditySubcategoryLabel(row.asset_subcategory)} - ${row.asset_name}`;
   }
 
   function suggestedLiquidityClosingBalanceForRow(
