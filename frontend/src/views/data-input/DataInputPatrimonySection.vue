@@ -44,6 +44,13 @@ const showGeneratedLiabilityExpenseModalModel = computed({
   },
 });
 
+const showGeneratedAssetExpenseModalModel = computed({
+  get: () => page.showGeneratedAssetExpenseModal.value,
+  set: (value: boolean) => {
+    page.showGeneratedAssetExpenseModal.value = value;
+  },
+});
+
 const showEditModalModel = computed({
   get: () => page.showEditModal.value,
   set: (value: boolean) => {
@@ -57,6 +64,15 @@ const hasGeneratedLiabilityExpenseEntry = computed(() => {
   return (unref(page.annualExpenseEntries) ?? []).some(
     (entry: { sourceLiabilityId: number | null; isSystemGenerated: boolean }) =>
       entry.sourceLiabilityId === review.liabilityId && entry.isSystemGenerated,
+  );
+});
+
+const hasGeneratedAssetExpenseEntry = computed(() => {
+  const review = unref(page.generatedAssetExpenseReview);
+  if (!review) return false;
+  return (unref(page.annualExpenseEntries) ?? []).some(
+    (entry: { sourceAssetId: number | null; isSystemGenerated: boolean }) =>
+      entry.sourceAssetId === review.assetId && entry.isSystemGenerated,
   );
 });
 
@@ -76,6 +92,19 @@ const generatedLiabilityExpenseReviewTitle = computed(() =>
 );
 const generatedLiabilityExpenseReviewChangeMessage = computed(
   () => unref(page.generatedLiabilityExpenseReviewChangeMessage) ?? '',
+);
+
+const generatedAssetExpenseReview = computed(
+  () => unref(page.generatedAssetExpenseReview) ?? null,
+);
+const generatedAssetExpenseEntries = computed(
+  () => generatedAssetExpenseReview.value?.entries ?? [],
+);
+const generatedAssetExpenseReviewTitle = computed(() =>
+  String(unref(page.generatedAssetExpenseReviewTitle) ?? ''),
+);
+const generatedAssetExpenseReviewChangeMessage = computed(
+  () => unref(page.generatedAssetExpenseReviewChangeMessage) ?? '',
 );
 const editTitle = computed(() => String(unref(page.editTitle) ?? ''));
 const editInitial = computed(() => unref(page.editInitial) ?? null);
@@ -251,6 +280,80 @@ const itemFormProps = computed(() => unref(page.itemFormProps) ?? {});
             type="button"
             :disabled="!hasGeneratedLiabilityExpenseEntry"
             @click="page.openGeneratedExpenseReviewEntryFromVisibleYear"
+          >
+            Revisar en gastos (año visible)
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+
+    <BaseModal
+      :open="showGeneratedAssetExpenseModalModel"
+      :title="generatedAssetExpenseReviewTitle"
+      @close="page.closeGeneratedAssetExpenseModal"
+    >
+      <div v-if="generatedAssetExpenseReview" class="grid gap-3">
+        <div
+          v-if="generatedAssetExpenseReviewChangeMessage"
+          class="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white/90"
+        >
+          {{ generatedAssetExpenseReviewChangeMessage }}
+        </div>
+        <div
+          class="rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-2 text-sm text-white/90"
+        >
+          Se han generado gastos recurrentes en
+          {{ generatedAssetExpenseEntries.length }}
+          anualidades para esta inversión. Revisalos y confirma que la clasificacion
+          (categoria/subcategoria/naturaleza) es correcta.
+        </div>
+
+        <div class="grid gap-2">
+          <div
+            v-for="entry in generatedAssetExpenseEntries"
+            :key="entry.id"
+            class="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-medium">Ejercicio {{ entry.fiscalYear }}</div>
+              <div class="text-sm text-white/90">
+                {{ page.formatMoneyAmount(entry.amountAnnual, entry.currency) }}
+              </div>
+            </div>
+            <div class="mt-1 text-xs text-white/70">
+              {{ page.expenseCategoryLabel(entry.category) }} /
+              {{ page.expenseSubcategoryLabel(entry.subcategory) }}
+              <template
+                v-if="
+                  !page.shouldHideExpenseCashflowRoleLabel({
+                    timeProfile: entry.timeProfile,
+                    cashflowRole: entry.cashflowRole,
+                  })
+                "
+              >
+                . {{ page.expenseCashflowRoleLabel(entry.cashflowRole) }}
+              </template>
+              . {{ page.timeProfileLabel(entry.timeProfile) }}
+            </div>
+            <div v-if="entry.notes" class="mt-1 text-xs text-white/55">
+              {{ entry.notes }}
+            </div>
+          </div>
+        </div>
+
+        <div class="actions justify-end">
+          <button
+            class="btn btn-ghost"
+            type="button"
+            @click="page.closeGeneratedAssetExpenseModal"
+          >
+            Cerrar
+          </button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            :disabled="!hasGeneratedAssetExpenseEntry"
+            @click="page.openGeneratedAssetExpenseReviewEntryFromVisibleYear"
           >
             Revisar en gastos (año visible)
           </button>

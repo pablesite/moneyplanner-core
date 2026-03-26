@@ -40,6 +40,7 @@ def create_quick_transaction(
     liability_account: LedgerAccount | None = None,
     interest_account: LedgerAccount | None = None,
     investment_direction: str = "",
+    destination_amount: Decimal | None = None,
     realized_cost_basis: Decimal | None = None,
     realized_gain_loss: Decimal | None = None,
 ) -> LedgerTransaction:
@@ -63,9 +64,18 @@ def create_quick_transaction(
         liability_account=liability_account,
         interest_account=interest_account,
         investment_direction=normalized_direction,
+        destination_amount=destination_amount,
     )
     validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
-    validate_transaction_entries(entries_data=payload, user_id=user.id)
+    allow_unbalanced_multicurrency = (
+        normalized_movement_type == "investment"
+        and account.currency.strip().upper() != counterparty_account.currency.strip().upper()
+    )
+    validate_transaction_entries(
+        entries_data=payload,
+        user_id=user.id,
+        allow_unbalanced_multicurrency=allow_unbalanced_multicurrency,
+    )
 
     transaction_row = LedgerTransaction.objects.create(
         user=user,
@@ -107,6 +117,7 @@ def _build_quick_entry_payload(
     liability_account: LedgerAccount | None = None,
     interest_account: LedgerAccount | None = None,
     investment_direction: str = "",
+    destination_amount: Decimal | None = None,
 ) -> list[dict]:
     base_amount = Decimal(amount)
     classification = _resolve_entry_classification(
@@ -152,12 +163,13 @@ def _build_quick_entry_payload(
             },
         ]
     if movement_type == "investment":
+        destination_value = Decimal(destination_amount) if destination_amount is not None else base_amount
         if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW:
             return [
                 {
                     "account": account,
                     "side": LedgerEntry.Side.DEBIT,
-                    "amount": base_amount,
+                    "amount": destination_value,
                     "currency": account.currency,
                 },
                 {
@@ -172,7 +184,7 @@ def _build_quick_entry_payload(
             {
                 "account": counterparty_account,
                 "side": LedgerEntry.Side.DEBIT,
-                "amount": base_amount,
+                "amount": destination_value,
                 "currency": counterparty_account.currency,
                 "asset": counterparty_account.asset if counterparty_account.asset_id else None,
             },

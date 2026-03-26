@@ -93,6 +93,12 @@ const investmentFlowHint = computed(() => {
     ? 'Primero eliges de que inversion sale el dinero y luego a que liquidez llega.'
     : 'Primero eliges de que liquidez sale el dinero y luego a que inversion llega.';
 });
+const editAmountLabel = computed(() => {
+  if (props.page.editTransactionForm.kind !== 'investment') return 'Importe';
+  return props.page.editInvestmentOriginCurrency
+    ? `Importe origen (${props.page.editInvestmentOriginCurrency})`
+    : 'Importe origen';
+});
 </script>
 
 <template>
@@ -210,7 +216,7 @@ const investmentFlowHint = computed(() => {
         </label>
 
         <label class="ui-accounting-field">
-          <span>Importe</span>
+          <span>{{ editAmountLabel }}</span>
           <input
             v-model="page.editTransactionForm.amount"
             class="input"
@@ -220,6 +226,10 @@ const investmentFlowHint = computed(() => {
                 ? 'Saldo objetivo'
                 : page.editTransactionForm.kind === 'revaluation'
                   ? 'Importe revalorizacion'
+                  : page.editTransactionForm.kind === 'investment'
+                    ? page.editInvestmentOriginCurrency
+                      ? `Importe origen (${page.editInvestmentOriginCurrency})`
+                      : 'Importe origen'
                   : '0.00'
             "
             required
@@ -287,6 +297,14 @@ const investmentFlowHint = computed(() => {
           <option value="inflow">Aporte (desde liquidez hacia inversion)</option>
           <option value="outflow">Retirada (desde inversion hacia liquidez)</option>
         </select>
+        <input
+          v-if="page.editInvestmentIsCrossCurrency"
+          v-model="page.editTransactionForm.destination_amount"
+          class="input"
+          inputmode="decimal"
+          :placeholder="`Importe destino (${page.editInvestmentDestinationCurrency || 'moneda destino'})`"
+          required
+        />
       </div>
       <p
         v-else-if="

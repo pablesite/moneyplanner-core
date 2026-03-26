@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-24 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-03-27 | **Versión Core:** 0.23.2
 
 ---
 
@@ -18,7 +18,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
-| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 106 cuentas totales, 16 ya revisadas). Bitcoin está a medio curar: se retiraron revalorizaciones manuales y queda validar coherencia final antes de continuar con el resto. | Se define durante la revisión. |
+| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 106 cuentas totales, 16 ya revisadas). Bitcoin está a medio curar: se migraron movimientos legacy `income/gasto` a `investment inflow`, se convirtió Spot Binance de EUR a USD y se eliminó parte de duplicados; queda validar coherencia final (timeline y saldo) antes de continuar con el resto. | Se define durante la revisión. |
 | Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
@@ -61,7 +61,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Añadida limpieza masiva provisional de movimientos `origin=import` desde la vista de Movimientos (Core-only). Pendiente remate manual de vista para cierre v1. |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Añadida limpieza masiva provisional de movimientos `origin=import` desde la vista de Movimientos (Core-only). Soporte multimoneda reforzado en alta/edición rápida de inversión y migración manual BTC/Spot Binance en ejecución. Pendiente remate manual de vista para cierre v1. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |

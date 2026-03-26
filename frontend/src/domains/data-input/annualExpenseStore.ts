@@ -22,6 +22,7 @@ export type AnnualExpenseCashflowRole =
 export type AnnualExpenseEntry = {
   id: number;
   sourceLiabilityId: number | null;
+  sourceAssetId: number | null;
   isSystemGenerated: boolean;
   name: string;
   category: ExpenseCategoryKey;
@@ -67,6 +68,7 @@ type AddResult = { ok: true } | { ok: false; error: string };
 type AnnualExpenseApiItem = {
   id: number;
   source_liability_id?: number | null;
+  source_asset_id?: number | null;
   is_system_generated?: boolean;
   name: string;
   category: ExpenseCategoryKey;
@@ -99,6 +101,7 @@ function mapApiItem(item: AnnualExpenseApiItem): AnnualExpenseEntry {
   return {
     id: item.id,
     sourceLiabilityId: item.source_liability_id == null ? null : Number(item.source_liability_id),
+    sourceAssetId: item.source_asset_id == null ? null : Number(item.source_asset_id),
     isSystemGenerated: Boolean(item.is_system_generated),
     name: item.name,
     category: item.category,
@@ -269,6 +272,13 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
     return (response.data ?? []).map(mapApiItem);
   }
 
+  async function listBySourceAsset(sourceAssetId: number): Promise<AnnualExpenseEntry[]> {
+    const response = await api.get<AnnualExpenseApiItem[]>('/api/budget/annual-expense/', {
+      params: { source_asset_id: sourceAssetId },
+    });
+    return (response.data ?? []).map(mapApiItem);
+  }
+
   return {
     entries,
     totalAnnual,
@@ -279,5 +289,6 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
     updateEntry,
     deleteEntry,
     listBySourceLiability,
+    listBySourceAsset,
   };
 }
