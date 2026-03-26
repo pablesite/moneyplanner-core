@@ -1,5 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { Doughnut } from 'vue-chartjs';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  type ChartData,
+  type ChartOptions,
+  type Plugin,
+} from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 type BudgetEntryViewMode = 'all' | 'recurrent' | 'one_off';
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
@@ -66,25 +78,87 @@ const hasBudgetSuggestions = computed(
 );
 
 const observedSuggestionMonths = computed(() => props.budgetSuggestions?.window_months ?? 0);
-const donutCircumference = 2 * Math.PI * 68;
-const donutTotal = computed(
-  () =>
-    Math.max(props.plannedIncomeTotal, 0) +
-    Math.max(props.plannedExpenseTotal, 0) +
-    Math.abs(props.plannedBalanceTotal) +
-    1,
-);
-const donutIncomeArc = computed(
-  () => (Math.max(props.plannedIncomeTotal, 0) / donutTotal.value) * donutCircumference,
-);
-const donutExpenseArc = computed(
-  () => (Math.max(props.plannedExpenseTotal, 0) / donutTotal.value) * donutCircumference,
-);
-const donutBalanceArc = computed(
-  () => (Math.abs(props.plannedBalanceTotal) / donutTotal.value) * donutCircumference,
-);
-const donutExpenseOffset = computed(() => -donutIncomeArc.value);
-const donutBalanceOffset = computed(() => -(donutIncomeArc.value + donutExpenseArc.value));
+
+function formatMoneyLocal(n: number, decimals = 2) {
+  return new Intl.NumberFormat('es-ES', {
+    useGrouping: true,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
+const INCOME_COLOR = 'rgba(52, 211, 153, 0.92)';
+const EXPENSE_COLOR = 'rgba(251, 113, 133, 0.92)';
+const BALANCE_COLOR = 'rgba(110, 209, 255, 0.92)';
+
+const chartData = computed<ChartData<'doughnut'>>(() => ({
+  labels: ['Ingresos', 'Gastos', 'Saldo'],
+  datasets: [
+    {
+      data: [
+        Math.max(props.plannedIncomeTotal, 0),
+        Math.max(props.plannedExpenseTotal, 0),
+        Math.abs(props.plannedBalanceTotal),
+      ],
+      backgroundColor: [INCOME_COLOR, EXPENSE_COLOR, BALANCE_COLOR],
+      borderColor: 'rgba(0,0,0,0)',
+      borderWidth: 0,
+      hoverOffset: 6,
+      spacing: 2,
+      cutout: '72%',
+    },
+  ],
+}));
+
+const chartOptions = computed<ChartOptions<'doughnut'>>(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => {
+          const label = ctx.label ?? '';
+          const v = typeof ctx.raw === 'number' ? ctx.raw : 0;
+          return `${label}: ${formatMoneyLocal(v, 2)} EUR`;
+        },
+      },
+    },
+  },
+}));
+
+const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
+  id: 'budgetCenterText',
+  afterDraw(chart) {
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return;
+
+    const cx = (chartArea.left + chartArea.right) / 2;
+    const cy = (chartArea.top + chartArea.bottom) / 2;
+
+    const balanceStr = formatMoneyLocal(props.plannedBalanceTotal, 2);
+    const isNeg = props.plannedBalanceTotal < 0;
+    const valColor = isNeg ? 'rgba(255, 120, 140, 0.95)' : 'rgba(140, 240, 180, 0.95)';
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.font = '700 16px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillStyle = valColor;
+    ctx.fillText(balanceStr, cx, cy - 10);
+
+    ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.fillText('Saldo previsto', cx, cy + 8);
+
+    ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.60)';
+    ctx.fillText('EUR', cx, cy + 26);
+
+    ctx.restore();
+  },
+}));
 </script>
 
 <template>
@@ -144,60 +218,39 @@ const donutBalanceOffset = computed(() => -(donutIncomeArc.value + donutExpenseA
     </div>
   </section>
 
-  <section v-else class="card ui-pro-panel ui-budget-hero">
-    <p class="ui-pro-kicker">Presupuesto</p>
-    <div class="ui-budget-hero-main">
-      <div class="ui-budget-hero-donut-pane">
-        <div class="ui-budget-hero-composition">
-          <div class="ui-budget-hero-donut-wrap">
-            <svg
-              viewBox="0 0 170 170"
-              class="ui-budget-hero-donut"
-              role="img"
-              aria-label="Resumen presupuesto"
-            >
-              <circle cx="85" cy="85" r="68" class="ui-budget-hero-donut-track" />
-              <circle
-                cx="85"
-                cy="85"
-                r="68"
-                class="ui-budget-hero-donut-income"
-                :stroke-dasharray="`${donutIncomeArc} ${donutCircumference}`"
-              />
-              <circle
-                cx="85"
-                cy="85"
-                r="68"
-                class="ui-budget-hero-donut-expense"
-                :stroke-dasharray="`${donutExpenseArc} ${donutCircumference}`"
-                :stroke-dashoffset="donutExpenseOffset"
-              />
-              <circle
-                cx="85"
-                cy="85"
-                r="68"
-                class="ui-budget-hero-donut-balance"
-                :stroke-dasharray="`${donutBalanceArc} ${donutCircumference}`"
-                :stroke-dashoffset="donutBalanceOffset"
-              />
-            </svg>
-            <div class="ui-budget-hero-donut-center">
-              <span>Saldo previsto</span>
-              <strong>{{ formatMoney(plannedBalanceTotal) }} EUR</strong>
+  <section v-else class="card ui-pro-panel ui-hero-shell ui-budget-hero">
+    <div class="ui-hero-topbar">
+      <p class="ui-pro-kicker ui-hero-topbar-kicker">Presupuesto</p>
+    </div>
+    <div class="ui-hero-main">
+      <div class="ui-nw-hero-donut">
+        <div class="ui-nw-hero-donut-frame ui-hero-donut-pane">
+          <div class="nw-donut-wrap nw-donut-wrap-chart-only">
+            <div class="nw-donut-chart">
+              <Doughnut :data="chartData" :options="chartOptions" :plugins="[centerTextPlugin]" />
             </div>
-          </div>
-          <div class="ui-budget-hero-legend">
-            <span><i class="ui-budget-hero-dot ui-budget-hero-dot-income"></i>Ingresos</span>
-            <span><i class="ui-budget-hero-dot ui-budget-hero-dot-expense"></i>Gastos</span>
-            <span><i class="ui-budget-hero-dot ui-budget-hero-dot-balance"></i>Saldo</span>
+            <div class="nw-donut-legend">
+              <span class="nw-donut-legend-item">
+                <span class="nw-donut-legend-dot" :style="{ background: INCOME_COLOR }" />
+                <span class="nw-donut-legend-label">Ingresos</span>
+              </span>
+              <span class="nw-donut-legend-item">
+                <span class="nw-donut-legend-dot" :style="{ background: EXPENSE_COLOR }" />
+                <span class="nw-donut-legend-label">Gastos</span>
+              </span>
+              <span class="nw-donut-legend-item">
+                <span class="nw-donut-legend-dot" :style="{ background: BALANCE_COLOR }" />
+                <span class="nw-donut-legend-label">Saldo</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <article class="ui-budget-hero-summary">
-        <div class="ui-budget-hero-summary-head">
-          <div class="ui-budget-hero-title">Saldo anual previsto</div>
-          <div class="ui-budget-toolbar">
+      <article class="ui-hero-summary">
+        <div class="ui-hero-summary-head">
+          <div class="ui-hero-title">Saldo anual previsto</div>
+          <div class="ui-hero-summary-controls">
             <button
               type="button"
               class="ui-budget-suggestions-info-btn"
@@ -206,12 +259,12 @@ const donutBalanceOffset = computed(() => -(donutIncomeArc.value + donutExpenseA
             >
               <span aria-hidden="true">i</span>
             </button>
-            <label class="ui-budget-owner-picker">
-              <span>Titularidad</span>
-              <details class="ui-select-popover">
-                <summary class="ui-select-popover-trigger">
+            <label class="ui-hero-context">
+              <span class="ui-hero-context-label">Titularidad</span>
+              <details class="ui-select-popover ui-hero-context-popover">
+                <summary class="ui-select-popover-trigger ui-hero-context-trigger">
                   <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
-                  <span class="ui-select-popover-caret" aria-hidden="true">v</span>
+                  <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
                 </summary>
                 <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
                   <button
@@ -237,12 +290,12 @@ const donutBalanceOffset = computed(() => -(donutIncomeArc.value + donutExpenseA
                 </div>
               </details>
             </label>
-            <label class="ui-budget-year-picker">
-              <span>Ejercicio</span>
-              <details class="ui-select-popover" :class="{ 'opacity-60': isLoading }">
-                <summary class="ui-select-popover-trigger">
+            <label class="ui-hero-context">
+              <span class="ui-hero-context-label">Ejercicio</span>
+              <details class="ui-select-popover ui-hero-context-popover" :class="{ 'opacity-60': isLoading }">
+                <summary class="ui-select-popover-trigger ui-hero-context-trigger">
                   <span class="ui-select-popover-text">{{ selectedFiscalYearLabel }}</span>
-                  <span class="ui-select-popover-caret" aria-hidden="true">v</span>
+                  <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
                 </summary>
                 <div class="ui-select-popover-menu" role="listbox" aria-label="Ejercicio">
                   <button
@@ -262,24 +315,22 @@ const donutBalanceOffset = computed(() => -(donutIncomeArc.value + donutExpenseA
           </div>
         </div>
 
-        <div class="ui-budget-hero-summary-body">
-          <div class="ui-budget-hero-balance">{{ formatMoney(plannedBalanceTotal) }} EUR</div>
-          <div class="ui-budget-hero-bottom-row">
-            <article class="ui-budget-hero-stat ui-budget-hero-stat-income">
-              <span class="ui-budget-hero-stat-label">Ingresos previstos</span>
-              <strong class="ui-budget-hero-stat-value">{{ formatMoney(plannedIncomeTotal) }} EUR</strong>
-              <small class="ui-budget-hero-stat-meta">
-                {{ formatMoney(plannedIncomeTotal / 12) }} EUR/mes (promedio)
-              </small>
-            </article>
+        <div class="ui-hero-summary-body">
+          <div class="ui-hero-value">{{ formatMoney(plannedBalanceTotal) }} EUR</div>
+          <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
+            <div class="ui-hero-stat ui-hero-stat-assets">
+              <span class="ui-hero-stat-label">Ingresos previstos</span>
+              <strong class="ui-hero-stat-value">
+                {{ formatMoney(plannedIncomeTotal) }} EUR
+              </strong>
+            </div>
 
-            <article class="ui-budget-hero-stat ui-budget-hero-stat-expense">
-              <span class="ui-budget-hero-stat-label">Gastos previstos</span>
-              <strong class="ui-budget-hero-stat-value">{{ formatMoney(plannedExpenseTotal) }} EUR</strong>
-              <small class="ui-budget-hero-stat-meta">
-                {{ formatMoney(plannedExpenseTotal / 12) }} EUR/mes (promedio)
-              </small>
-            </article>
+            <div class="ui-hero-stat ui-hero-stat-liabilities">
+              <span class="ui-hero-stat-label">Gastos previstos</span>
+              <strong class="ui-hero-stat-value">
+                {{ formatMoney(plannedExpenseTotal) }} EUR
+              </strong>
+            </div>
           </div>
         </div>
       </article>
