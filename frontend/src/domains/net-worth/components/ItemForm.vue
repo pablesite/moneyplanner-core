@@ -1,6 +1,11 @@
 ﻿<script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import type { AssetImprovement, NetWorthWritePayload, Ownership } from '@/domains/net-worth/models';
+import type {
+  AssetImprovement,
+  ContributionInterval,
+  NetWorthWritePayload,
+  Ownership,
+} from '@/domains/net-worth/models';
 
 type ItemFormPayload = NetWorthWritePayload & {
   ownership_id?: number | null;
@@ -33,10 +38,7 @@ type Props = {
     start_date: string;
     payment_start_date?: string | null;
     expected_end_date?: string | null;
-    investment_contribution_mode?: 'one_time' | 'periodic_contribution';
-    investment_contribution_frequency?: 'monthly' | 'weekly';
-    investment_contribution_currency?: string | null;
-    monthly_contribution_amount?: string | null;
+    contribution_intervals?: ContributionInterval[] | null;
     market_value_override?: string | null;
     market_value_override_date?: string | null;
     term_months?: number | string | null;
@@ -78,6 +80,16 @@ type PrimaryHomeImprovementDraft = {
   capitalize_interest: boolean;
   manual_current_value: string;
   notes: string;
+};
+
+type ContributionIntervalDraft = {
+  _key: string;
+  id?: number;
+  start_date: string;
+  end_date: string;
+  amount: string;
+  frequency: 'monthly' | 'weekly';
+  currency: string;
 };
 
 const props = defineProps<Props>();
@@ -187,14 +199,6 @@ const LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS = [
   { value: 'financial_commitments', label: 'Compromisos financieros' },
   { value: 'other_consumption_expenses', label: 'Otros gastos de consumo' },
 ];
-const INVESTMENT_CONTRIBUTION_MODE_OPTIONS = [
-  { value: 'one_time', label: 'Aportacion unica' },
-  { value: 'periodic_contribution', label: 'Aportacion periodica' },
-];
-const INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS = [
-  { value: 'monthly', label: 'Mensual' },
-  { value: 'weekly', label: 'Semanal' },
-];
 const TRACKING_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
   { value: 'accounting', label: 'Contable (ledger)' },
@@ -265,6 +269,13 @@ function buildEmptyPrimaryHomeImprovement(): PrimaryHomeImprovementDraft {
   };
 }
 
+function buildIntervalKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const form = reactive({
   name: '',
   category: '',
@@ -277,10 +288,6 @@ const form = reactive({
   start_date: todayIsoDate(),
   payment_start_date: '',
   expected_end_date: '',
-  investment_contribution_mode: 'one_time',
-  investment_contribution_frequency: 'monthly',
-  investment_contribution_currency: '',
-  monthly_contribution_amount: '',
   market_value_override: '',
   market_value_override_date: '',
   term_months: '',
@@ -310,6 +317,7 @@ const form = reactive({
 });
 
 const isEdit = computed(() => props.mode === 'edit');
+const contributionIntervals = ref<ContributionIntervalDraft[]>([]);
 
 const financedAssetOptions = computed(() => {
   const list = Array.isArray(props.assets) ? props.assets : [];
@@ -347,19 +355,11 @@ const showEstimatedAverageBalanceForInterestInput = computed(() => {
   const taeValue = Number(taeRaw);
   return Number.isFinite(taeValue) && taeValue > 0;
 });
-const showInvestmentContributionModeField = computed(
+const isInvestmentCategory = computed(
   () => isAssetForm.value && String(form.category ?? '').trim() === 'investments',
 );
 const showInvestmentMarketValueFields = computed(
   () => isAssetForm.value && String(form.category ?? '').trim() === 'investments',
-);
-const showInvestmentPeriodicFields = computed(
-  () =>
-    showInvestmentContributionModeField.value &&
-    String(form.investment_contribution_mode ?? '').trim() === 'periodic_contribution',
-);
-const isInvestmentPeriodicIndefinite = computed(
-  () => showInvestmentPeriodicFields.value && !String(form.expected_end_date ?? '').trim(),
 );
 const showDepositTermMonthsInput = computed(() => isShortTermDepositAsset.value);
 const showMonthlyPaymentInput = computed(() => false);
@@ -629,21 +629,19 @@ function formatAmountForEdit(raw: unknown, currency: string): string {
   if (!Number.isFinite(n)) return '';
   return n.toFixed(max).replace(/\.?0+$/, '');
 }
-function formatAmountFixedForEdit(raw: unknown, decimals = 2): string {
-  const normalized = String(raw ?? '')
-    .trim()
-    .replace(/\s/g, '')
-    .replace(/,/g, '.');
-  const n = Number(normalized);
-  if (!Number.isFinite(n)) return '';
-  return n.toFixed(decimals);
+function addContributionInterval(): void {
+  contributionIntervals.value.push({
+    _key: buildIntervalKey(),
+    start_date: '',
+    end_date: '',
+    amount: '',
+    frequency: 'monthly',
+    currency: String(form.currency ?? '').trim() || 'EUR',
+  });
 }
-function formatMonthlyContributionField(): void {
-  const sanitized = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
-  if (sanitized.error || !sanitized.value) return;
-  const n = Number(sanitized.value);
-  if (!Number.isFinite(n)) return;
-  form.monthly_contribution_amount = n.toFixed(2);
+
+function removeContributionInterval(key: string): void {
+  contributionIntervals.value = contributionIntervals.value.filter((row) => row._key !== key);
 }
 function sanitizePercent(raw: unknown) {
   const normalized = String(raw ?? '')
@@ -1019,28 +1017,25 @@ function buildInvestmentPayload(normalizedAmount: string): Partial<ItemFormPaylo
     : null;
   return {
     expected_end_date:
-      (showLiabilityAdvancedFields.value || showInvestmentPeriodicFields.value) &&
-      String(form.expected_end_date ?? '').trim()
+      showLiabilityAdvancedFields.value && String(form.expected_end_date ?? '').trim()
         ? String(form.expected_end_date).trim()
         : undefined,
-    investment_contribution_mode: showInvestmentContributionModeField.value
-      ? String(form.investment_contribution_mode ?? '').trim() === 'periodic_contribution'
-        ? 'periodic_contribution'
-        : 'one_time'
+    contribution_intervals: isInvestmentCategory.value
+      ? contributionIntervals.value
+          .filter((row) => String(row.start_date ?? '').trim() && String(row.amount ?? '').trim())
+          .map((row) => ({
+            ...(row.id ? { id: row.id } : {}),
+            start_date: String(row.start_date).trim(),
+            end_date: String(row.end_date ?? '').trim() ? String(row.end_date).trim() : null,
+            amount: sanitizeAmount(row.amount, maxDecimals.value).value ?? String(row.amount).trim(),
+            frequency: row.frequency === 'weekly' ? 'weekly' : 'monthly',
+            currency: String(row.currency ?? '').trim() || null,
+          }))
       : undefined,
-    investment_contribution_frequency: showInvestmentPeriodicFields.value
-      ? String(form.investment_contribution_frequency ?? '').trim() === 'weekly'
-        ? 'weekly'
-        : 'monthly'
-      : undefined,
-    investment_contribution_currency: showInvestmentPeriodicFields.value
-      ? String(form.investment_contribution_currency ?? '').trim() || undefined
-      : undefined,
-    monthly_contribution_amount:
-      showInvestmentPeriodicFields.value && String(form.monthly_contribution_amount ?? '').trim()
-        ? sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value).value
+    initial_purchase_value:
+      isInvestmentCategory.value && contributionIntervals.value.length > 0
+        ? normalizedAmount
         : undefined,
-    initial_purchase_value: showInvestmentPeriodicFields.value ? normalizedAmount : undefined,
     market_value_override: showInvestmentMarketValueFields.value
       ? hasMarketValueOverride
         ? sanitizeAmount(form.market_value_override, maxDecimals.value).value
@@ -1159,10 +1154,7 @@ function resetFormAfterSubmit(): void {
   form.start_date = todayIsoDate();
   form.payment_start_date = '';
   form.expected_end_date = '';
-  form.investment_contribution_mode = 'one_time';
-  form.investment_contribution_frequency = 'monthly';
-  form.investment_contribution_currency = '';
-  form.monthly_contribution_amount = '';
+  contributionIntervals.value = [];
   form.market_value_override = '';
   form.market_value_override_date = '';
   form.term_months = '';
@@ -1242,13 +1234,15 @@ function populateFormFromInitial(initial: NonNullable<Props['initial']>): void {
   form.start_date = initial.start_date ?? todayIsoDate();
   form.payment_start_date = initial.payment_start_date ?? '';
   form.expected_end_date = initial.expected_end_date ?? '';
-  form.investment_contribution_mode = initial.investment_contribution_mode ?? 'one_time';
-  form.investment_contribution_frequency = initial.investment_contribution_frequency ?? 'monthly';
-  form.investment_contribution_currency = initial.investment_contribution_currency ?? '';
-  form.monthly_contribution_amount = formatAmountFixedForEdit(
-    initial.monthly_contribution_amount ?? '',
-    2,
-  );
+  contributionIntervals.value = (initial.contribution_intervals ?? []).map((row) => ({
+    _key: String(row.id ?? buildIntervalKey()),
+    id: row.id,
+    start_date: row.start_date,
+    end_date: row.end_date ?? '',
+    amount: formatAmountForEdit(row.amount ?? '', initial.currency ?? 'EUR'),
+    frequency: row.frequency === 'weekly' ? 'weekly' : 'monthly',
+    currency: (row.currency ?? String(initial.currency ?? '').trim()) || 'EUR',
+  }));
   form.market_value_override = formatAmountForEdit(
     initial.market_value_override ?? '',
     initial.currency ?? 'EUR',
@@ -1369,23 +1363,26 @@ const monthlyPaymentError = computed(() => {
   return error;
 });
 const investmentContributionError = computed(() => {
-  if (!showInvestmentPeriodicFields.value) return '';
-  if (
-    String(form.start_date ?? '').trim() &&
-    String(form.expected_end_date ?? '').trim() &&
-    String(form.expected_end_date).trim() < String(form.start_date).trim()
-  ) {
-    return 'Fecha fin estimada debe ser >= fecha inicio.';
-  }
-  const monthly = sanitizeAmount(form.monthly_contribution_amount, maxDecimals.value);
-  if (monthly.error) return monthly.error;
-  if (!monthly.value || Number(monthly.value) <= 0) {
-    return 'Cuota periódica obligatoria y mayor que 0.';
-  }
-  const initialAmount = sanitizeAmount(form.amount, maxDecimals.value);
-  if (initialAmount.error) return initialAmount.error;
-  if (!initialAmount.value || Number(initialAmount.value) < 0) {
-    return 'Importe inicial obligatorio para aportación periódica.';
+  if (!isInvestmentCategory.value) return '';
+  for (const interval of contributionIntervals.value) {
+    const hasAnyValue = Boolean(
+      String(interval.start_date ?? '').trim() ||
+        String(interval.end_date ?? '').trim() ||
+        String(interval.amount ?? '').trim(),
+    );
+    if (!hasAnyValue) continue;
+    if (!String(interval.start_date ?? '').trim()) return 'Cada intervalo requiere fecha inicio.';
+    const amount = sanitizeAmount(interval.amount, maxDecimals.value);
+    if (amount.error) return amount.error;
+    if (!amount.value || Number(amount.value) <= 0) {
+      return 'Cada intervalo requiere cuota mayor que 0.';
+    }
+    if (
+      String(interval.end_date ?? '').trim() &&
+      String(interval.end_date).trim() < String(interval.start_date).trim()
+    ) {
+      return 'En cada intervalo, la fecha fin debe ser >= fecha inicio.';
+    }
   }
   return '';
 });
@@ -1546,9 +1543,12 @@ watch(
 watch(
   () => form.currency,
   (currency) => {
-    if (!showInvestmentPeriodicFields.value) return;
-    if (String(form.investment_contribution_currency ?? '').trim()) return;
-    form.investment_contribution_currency = String(currency ?? '').trim() || 'EUR';
+    const fallbackCurrency = String(currency ?? '').trim() || 'EUR';
+    for (const interval of contributionIntervals.value) {
+      if (!String(interval.currency ?? '').trim()) {
+        interval.currency = fallbackCurrency;
+      }
+    }
   },
 );
 
@@ -1572,10 +1572,8 @@ watch(
 );
 
 watch([() => form.category, () => form.subcategory], () => {
-  if (!showInvestmentPeriodicFields.value) {
-    form.investment_contribution_currency = '';
-  } else if (!String(form.investment_contribution_currency ?? '').trim()) {
-    form.investment_contribution_currency = String(form.currency ?? '').trim() || 'EUR';
+  if (!isInvestmentCategory.value) {
+    contributionIntervals.value = [];
   }
   if (!showInvestmentMarketValueFields.value) {
     form.market_value_override = '';
@@ -1784,60 +1782,18 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
           </option>
         </select>
       </label>
-      <label v-if="showInvestmentContributionModeField" class="ui-item-form-field">
-        <span class="ui-item-form-label">Modo inversión</span>
-        <select v-model="form.investment_contribution_mode" class="select ui-data-field">
-          <option
-            v-for="option in INVESTMENT_CONTRIBUTION_MODE_OPTIONS"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-
       <label :class="['ui-item-form-field', { 'ui-item-form-field-span-2': isLiabilityForm }]">
         <span class="ui-item-form-label">Nombre</span>
         <input v-model="form.name" placeholder="Nombre" class="input ui-data-field" />
       </label>
 
-      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
+      <label class="ui-item-form-field">
         <span class="ui-item-form-label">{{
           isLiabilityForm ? 'Fecha contratación préstamo' : 'Fecha inicio'
         }}</span>
         <input v-model="form.start_date" type="date" class="input ui-data-field" />
       </label>
-
-      <div
-        v-if="showInvestmentPeriodicFields"
-        class="ui-item-form-inline-grid ui-item-form-inline-grid-3 ui-item-form-field-span-2"
-      >
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Fecha inicio</span>
-          <input v-model="form.start_date" type="date" class="input ui-data-field" />
-        </label>
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Importe inicial</span>
-          <input
-            v-model="form.amount"
-            inputmode="decimal"
-            placeholder="Importe"
-            class="input ui-data-field"
-          />
-        </label>
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Moneda</span>
-          <select
-            v-model="form.currency"
-            :class="['select ui-data-field', { 'ui-select-placeholder': !form.currency }]"
-          >
-            <option value="" disabled>Selecciona moneda</option>
-            <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
-          </select>
-        </label>
-      </div>
-      <label v-else class="ui-item-form-field">
+      <label class="ui-item-form-field">
         <span class="ui-item-form-label">{{
           isLiabilityForm ? 'Principal / saldo actual' : 'Importe'
         }}</span>
@@ -1848,7 +1804,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
           class="input ui-data-field"
         />
       </label>
-      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
+      <label class="ui-item-form-field">
         <span class="ui-item-form-label">Moneda</span>
         <select
           v-model="form.currency"
@@ -1858,7 +1814,7 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
           <option v-for="c in currencies" :key="c.value" :value="c.value">{{ c.label }}</option>
         </select>
       </label>
-      <label v-if="!showInvestmentPeriodicFields" class="ui-item-form-field">
+      <label class="ui-item-form-field">
         <span class="ui-item-form-label">Tracking mode</span>
         <select v-model="form.tracking_mode" class="select ui-data-field">
           <option v-for="option in TRACKING_MODE_OPTIONS" :key="option.value" :value="option.value">
@@ -1885,63 +1841,58 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
           </option>
         </select>
       </label>
-      <div
-        v-if="showInvestmentPeriodicFields"
-        class="ui-item-form-inline-grid ui-item-form-inline-grid-4 ui-item-form-field-span-2"
-      >
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Frecuencia cuota</span>
-          <select v-model="form.investment_contribution_frequency" class="select ui-data-field">
-            <option
-              v-for="frequency in INVESTMENT_CONTRIBUTION_FREQUENCY_OPTIONS"
-              :key="frequency.value"
-              :value="frequency.value"
+      <div v-if="isInvestmentCategory" class="ui-item-form-section ui-item-form-field-span-2">
+        <div class="ui-item-form-section-head">
+          <div class="ui-item-form-section-title">Aportaciones periódicas</div>
+          <button type="button" class="btn ui-item-form-mini-btn" @click="addContributionInterval">
+            + Añadir intervalo
+          </button>
+        </div>
+        <div v-if="!contributionIntervals.length" class="ui-form-help">
+          Sin intervalos = activo sin aportaciones periódicas previstas.
+        </div>
+        <div
+          v-for="interval in contributionIntervals"
+          :key="interval._key"
+          class="ui-item-form-inline-grid ui-item-form-inline-grid-4 ui-surface-muted mt-2 p-2"
+        >
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Desde</span>
+            <input v-model="interval.start_date" type="date" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Hasta (opcional)</span>
+            <input v-model="interval.end_date" type="date" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Cuota</span>
+            <input v-model="interval.amount" inputmode="decimal" class="input ui-data-field" />
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Moneda</span>
+            <select v-model="interval.currency" class="select ui-data-field">
+              <option v-for="c in currencies" :key="`${interval._key}-${c.value}`" :value="c.value">
+                {{ c.label }}
+              </option>
+            </select>
+          </label>
+          <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Frecuencia</span>
+            <select v-model="interval.frequency" class="select ui-data-field">
+              <option value="monthly">Mensual</option>
+              <option value="weekly">Semanal</option>
+            </select>
+          </label>
+          <div class="ui-item-form-field">
+            <button
+              type="button"
+              class="btn ui-item-form-mini-btn"
+              @click="removeContributionInterval(interval._key)"
             >
-              {{ frequency.label }}
-            </option>
-          </select>
-        </label>
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">
-            {{
-              form.investment_contribution_frequency === 'weekly'
-                ? 'Cuota semanal'
-                : 'Cuota mensual'
-            }}
-          </span>
-          <input
-            v-model="form.monthly_contribution_amount"
-            inputmode="decimal"
-            placeholder="Ej: 500"
-            class="input ui-data-field"
-            @blur="formatMonthlyContributionField"
-          />
-        </label>
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Moneda cuota</span>
-          <select
-            v-model="form.investment_contribution_currency"
-            :class="[
-              'select ui-data-field',
-              { 'ui-select-placeholder': !form.investment_contribution_currency },
-            ]"
-          >
-            <option value="" disabled>Selecciona moneda cuota</option>
-            <option v-for="c in currencies" :key="`contrib-${c.value}`" :value="c.value">
-              {{ c.label }}
-            </option>
-          </select>
-        </label>
-        <label class="ui-item-form-field">
-          <span class="ui-item-form-label">Fecha fin estimada</span>
-          <input v-model="form.expected_end_date" type="date" class="input ui-data-field" />
-        </label>
-      </div>
-      <div
-        v-if="showInvestmentPeriodicFields"
-        class="subtle ui-item-form-note ui-item-form-note-row ui-item-form-field-span-2"
-      >
-        Vacía = aportación indefinida.
+              Eliminar
+            </button>
+          </div>
+        </div>
       </div>
       <label v-if="showInvestmentMarketValueFields" class="ui-item-form-field">
         <span class="ui-item-form-label">Valor real actual</span>
@@ -1956,12 +1907,6 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
         <span class="ui-item-form-label">Fecha valoración</span>
         <input v-model="form.market_value_override_date" type="date" class="input ui-data-field" />
       </label>
-      <div
-        v-if="showInvestmentPeriodicFields && isInvestmentPeriodicIndefinite"
-        class="subtle ui-item-form-note ui-item-form-note-row ui-item-form-field-span-2"
-      >
-        Sin fin: proyección hasta el año siguiente.
-      </div>
       <div
         v-if="showPrimaryHomeValuationFields"
         class="ui-item-form-section ui-item-form-field-span-2"

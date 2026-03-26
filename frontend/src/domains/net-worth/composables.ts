@@ -137,10 +137,14 @@ function buildEditScheduleFields(item: Asset | Liability) {
 
 function buildEditInvestmentFields(item: Asset | Liability) {
   return {
-    investment_contribution_mode: item.investment_contribution_mode ?? 'one_time',
-    investment_contribution_frequency: item.investment_contribution_frequency ?? 'monthly',
-    investment_contribution_currency: item.investment_contribution_currency ?? '',
-    monthly_contribution_amount: item.monthly_contribution_amount ?? '',
+    contribution_intervals: (item.contribution_intervals ?? []).map((row) => ({
+      id: row.id,
+      start_date: row.start_date,
+      end_date: row.end_date ?? null,
+      amount: row.amount,
+      frequency: row.frequency,
+      currency: row.currency ?? item.currency ?? null,
+    })),
     market_value_override: item.market_value_override ?? '',
     market_value_override_date: item.market_value_override_date ?? '',
     initial_purchase_value: item.initial_purchase_value ?? '',

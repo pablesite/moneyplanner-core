@@ -13,6 +13,15 @@ export type AssetImprovement = {
   updated_at?: string;
 };
 
+export type ContributionInterval = {
+  id?: number;
+  start_date: string;
+  end_date: string | null;
+  amount: string;
+  frequency: 'monthly' | 'weekly';
+  currency: string | null;
+};
+
 export type Asset = {
   id: number;
   name: string;
@@ -38,6 +47,7 @@ export type Asset = {
   land_annual_appreciation_percent?: string | null;
   building_annual_depreciation_percent?: string | null;
   improvements?: AssetImprovement[];
+  contribution_intervals?: ContributionInterval[];
   amount: string;
   annual_interest_tae?: string | null;
   estimated_average_balance_for_interest?: string | null;

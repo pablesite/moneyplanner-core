@@ -785,7 +785,7 @@ describe('ItemForm (saas)', () => {
     );
   });
 
-  it('submits periodic contribution fields for investment assets', async () => {
+  it('submits interval contribution payload for investment assets', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {
       props: {
@@ -800,20 +800,16 @@ describe('ItemForm (saas)', () => {
     const selects = wrapper.findAll('select');
     await selects[0]!.setValue('investments');
     await selects[1]!.setValue('funds');
-    const modeSelect = wrapper
-      .findAll('select')
-      .find(
-        (s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'),
-      )!;
-    await modeSelect.setValue('periodic_contribution');
     const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
     await currencySelect.setValue('EUR');
     await wrapper.find('input[placeholder="Importe"]').setValue('5000');
-    await wrapper.find('input[placeholder="Ej: 500"]').setValue('300');
-
+    await wrapper.find('button.btn.ui-item-form-mini-btn').trigger('click');
     const dateInputs = wrapper.findAll('input[type="date"]');
     await dateInputs[0]!.setValue('2026-01-15');
-    await dateInputs[1]!.setValue('2027-12-15');
+    await dateInputs[1]!.setValue('2026-01-15');
+    await dateInputs[2]!.setValue('2027-12-15');
+    const decimalInputs = wrapper.findAll('input[inputmode="decimal"]');
+    await decimalInputs[1]!.setValue('300');
 
     await wrapper.find('button.btn-primary').trigger('click');
     await flushPromises();
@@ -821,17 +817,22 @@ describe('ItemForm (saas)', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         category: 'investments',
-        investment_contribution_mode: 'periodic_contribution',
-        expected_end_date: '2027-12-15',
-        monthly_contribution_amount: '300',
-        investment_contribution_frequency: 'monthly',
         amount: '5000',
         initial_purchase_value: '5000',
+        contribution_intervals: [
+          {
+            start_date: '2026-01-15',
+            end_date: '2027-12-15',
+            amount: '300',
+            frequency: 'monthly',
+            currency: 'EUR',
+          },
+        ],
       }),
     );
   });
 
-  it('allows indefinite periodic investment with weekly contribution', async () => {
+  it('allows indefinite investment interval with weekly frequency', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {
       props: {
@@ -846,12 +847,7 @@ describe('ItemForm (saas)', () => {
     const selects = wrapper.findAll('select');
     await selects[0]!.setValue('investments');
     await selects[1]!.setValue('etfs');
-    const modeSelect = wrapper
-      .findAll('select')
-      .find(
-        (s) => s.text().includes('Aportacion unica') && s.text().includes('Aportacion periodica'),
-      )!;
-    await modeSelect.setValue('periodic_contribution');
+    await wrapper.find('button.btn.ui-item-form-mini-btn').trigger('click');
     const frequencySelect = wrapper
       .findAll('select')
       .find((s) => s.text().includes('Mensual') && s.text().includes('Semanal'))!;
@@ -859,19 +855,25 @@ describe('ItemForm (saas)', () => {
     const currencySelect = selects.find((s) => s.text().includes('Selecciona moneda'))!;
     await currencySelect.setValue('EUR');
     await wrapper.find('input[placeholder="Importe"]').setValue('1645.99');
-    await wrapper.find('input[placeholder="Ej: 500"]').setValue('137.4');
     const dateInputs = wrapper.findAll('input[type="date"]');
     await dateInputs[0]!.setValue('2026-03-06');
+    await dateInputs[1]!.setValue('2026-03-06');
+    const decimalInputs = wrapper.findAll('input[inputmode="decimal"]');
+    await decimalInputs[1]!.setValue('137.4');
 
     await wrapper.find('button.btn-primary').trigger('click');
     await flushPromises();
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        investment_contribution_mode: 'periodic_contribution',
-        investment_contribution_frequency: 'weekly',
-        expected_end_date: undefined,
-        monthly_contribution_amount: '137.4',
+        contribution_intervals: [
+          expect.objectContaining({
+            start_date: '2026-03-06',
+            end_date: null,
+            amount: '137.4',
+            frequency: 'weekly',
+          }),
+        ],
       }),
     );
   });
