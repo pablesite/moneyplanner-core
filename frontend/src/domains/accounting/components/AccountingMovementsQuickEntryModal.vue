@@ -220,7 +220,11 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           v-model="page.quickEntryForm.amount"
           class="input"
           inputmode="decimal"
-          placeholder="0.00"
+          :placeholder="
+            page.quickEntryForm.movement_type === 'investment'
+              ? `Importe origen${page.quickInvestmentOriginCurrency ? ` (${page.quickInvestmentOriginCurrency})` : ''}`
+              : '0.00'
+          "
           required
         />
 
@@ -274,6 +278,14 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           <option value="inflow">Aporte (liquidez a inversion)</option>
           <option value="outflow">Retirada inversion (inversion a liquidez)</option>
         </select>
+        <input
+          v-if="page.quickInvestmentIsCrossCurrency"
+          v-model="page.quickEntryForm.destination_amount"
+          class="input"
+          inputmode="decimal"
+          :placeholder="`Importe destino (${page.quickInvestmentDestinationCurrency || 'moneda destino'})`"
+          required
+        />
         <input
           v-model="page.quickEntryForm.realized_cost_basis"
           class="input"
@@ -409,7 +421,9 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
             page.quickEntryForm.movement_type === 'transfer'
               ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
               : page.quickEntryForm.movement_type === 'investment'
-                ? page.quickEntryForm.investment_direction === 'outflow'
+                ? page.quickInvestmentIsCrossCurrency
+                  ? 'Movimiento de inversion multimoneda: informa importe origen e importe destino segun ejecucion real del broker.'
+                  : page.quickEntryForm.investment_direction === 'outflow'
                   ? 'La desinversion acredita inversion y devuelve liquidez al activo de caja.'
                   : 'El aporte acredita liquidez y registra el alta en la cuenta de inversion.'
                 : page.quickEntryForm.movement_type === 'debt_payment'

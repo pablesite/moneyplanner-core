@@ -11,7 +11,12 @@ from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services_ledger import ZERO, normalize_currency_code
 
 
-def validate_transaction_entries(*, entries_data: list[dict], user_id: int) -> None:
+def validate_transaction_entries(
+    *,
+    entries_data: list[dict],
+    user_id: int,
+    allow_unbalanced_multicurrency: bool = False,
+) -> None:
     if len(entries_data) < 2:
         raise ValidationError({"entries": "Una transaccion debe incluir al menos dos apuntes."})
 
@@ -49,6 +54,9 @@ def validate_transaction_entries(*, entries_data: list[dict], user_id: int) -> N
                 {"entries": {index: {"amount": "El importe del apunte debe ser mayor que cero."}}}
             )
         totals_by_currency[currency][entry_data["side"]] += amount
+
+    if allow_unbalanced_multicurrency:
+        return
 
     for currency, totals in totals_by_currency.items():
         if totals["debit"] != totals["credit"]:

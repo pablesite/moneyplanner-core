@@ -981,6 +981,73 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("entries", response.data["error"]["details"])
 
+    def test_update_legacy_multicurrency_transaction_allows_amount_change_with_same_structure(self):
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 10, 9),
+            value_date=date(2025, 10, 9),
+            description="ST Criptos",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.IMPORT,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INCOME,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=btc_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("0.00283275"),
+            currency="BTC",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("300.90"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        response = self.client.patch(
+            f"/api/accounting/transactions/{tx.id}/",
+            {
+                "booking_date": "2025-10-09",
+                "value_date": "2025-10-09",
+                "description": "ST Criptos",
+                "entries": [
+                    {
+                        "account_id": btc_account.id,
+                        "side": "debit",
+                        "amount": "0.00250000",
+                        "currency": "BTC",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "265.56",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "capital_gains",
+                        "subcategory_key": "sale_financial_assets",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        tx.refresh_from_db()
+        btc_entry = tx.entries.get(account=btc_account)
+        eur_entry = tx.entries.get(account=self.income_account)
+        self.assertEqual(btc_entry.amount, Decimal("0.00250000"))
+        self.assertEqual(eur_entry.amount, Decimal("265.56000000"))
+
     def test_account_create_validates_owned_asset_and_currency(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -2051,6 +2118,92 @@ class AccountingApiTests(APITestCase):
         )
         self.assertEqual(debit_entry["side"], "debit")
         self.assertEqual(credit_entry["side"], "credit")
+
+    def test_quick_entry_investment_allows_cross_currency_with_destination_amount(self):
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("0.01000000"),
+            is_active=True,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="BTC Broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "inflow",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Compra BTC",
+                "amount": "25.00",
+                "destination_amount": "0.00042000",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": btc_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        cash_credit = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == self.cash_account.id
+        )
+        btc_debit = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == btc_account.id
+        )
+        self.assertEqual(cash_credit["side"], "credit")
+        self.assertEqual(cash_credit["currency"], "EUR")
+        self.assertEqual(cash_credit["amount"], "25.00000000")
+        self.assertEqual(btc_debit["side"], "debit")
+        self.assertEqual(btc_debit["currency"], "BTC")
+        self.assertEqual(btc_debit["amount"], "0.00042000")
+
+    def test_quick_entry_investment_cross_currency_requires_destination_amount(self):
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("0.01000000"),
+            is_active=True,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="BTC Broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "inflow",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Compra BTC sin destino",
+                "amount": "25.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": btc_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("destination_amount", response.data["error"]["details"])
 
     def test_quick_entry_rejects_realized_metadata_outside_investment(self):
         response = self.client.post(

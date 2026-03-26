@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from decimal import Decimal
 from typing import cast
 
@@ -337,13 +338,88 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
         if entries_data is not None:
             request = self.context["request"]
-            validate_transaction_entries(entries_data=entries_data, user_id=request.user.id)
+            existing_entries = list(instance.entries.select_related("account").all())
+            allow_legacy_unbalanced = self._allow_legacy_unbalanced_update(
+                existing_entries=existing_entries,
+                incoming_entries=entries_data,
+            )
+            validate_transaction_entries(
+                entries_data=entries_data,
+                user_id=request.user.id,
+                allow_unbalanced_multicurrency=allow_legacy_unbalanced,
+            )
             instance.entries.all().delete()
             for entry_data in entries_data:
                 payload = {**entry_data}
                 payload["currency"] = payload.get("currency") or payload["account"].currency
                 LedgerEntry.objects.create(transaction=instance, **payload)
         return instance
+
+    @staticmethod
+    def _entry_currency_from_payload(entry_data: dict) -> str:
+        account = entry_data["account"]
+        return str(entry_data.get("currency") or account.currency).strip().upper()
+
+    @classmethod
+    def _is_unbalanced_by_currency_from_existing(cls, entries: list[LedgerEntry]) -> bool:
+        totals: dict[str, dict[str, Decimal]] = defaultdict(
+            lambda: {"debit": Decimal("0"), "credit": Decimal("0")}
+        )
+        for entry in entries:
+            currency = str(entry.currency).strip().upper()
+            totals[currency][entry.side] += entry.amount
+        return any(values["debit"] != values["credit"] for values in totals.values())
+
+    @classmethod
+    def _is_unbalanced_by_currency_from_payload(cls, entries_data: list[dict]) -> bool:
+        totals: dict[str, dict[str, Decimal]] = defaultdict(
+            lambda: {"debit": Decimal("0"), "credit": Decimal("0")}
+        )
+        for entry_data in entries_data:
+            currency = cls._entry_currency_from_payload(entry_data)
+            totals[currency][entry_data["side"]] += entry_data["amount"]
+        return any(values["debit"] != values["credit"] for values in totals.values())
+
+    @classmethod
+    def _same_structure(cls, existing_entries: list[LedgerEntry], incoming_entries: list[dict]) -> bool:
+        if len(existing_entries) != len(incoming_entries):
+            return False
+        existing_signature = Counter(
+            (
+                entry.account_id,
+                entry.side,
+                str(entry.currency).strip().upper(),
+            )
+            for entry in existing_entries
+        )
+        incoming_signature = Counter(
+            (
+                entry_data["account"].id,
+                entry_data["side"],
+                cls._entry_currency_from_payload(entry_data),
+            )
+            for entry_data in incoming_entries
+        )
+        return existing_signature == incoming_signature
+
+    @classmethod
+    def _allow_legacy_unbalanced_update(
+        cls,
+        *,
+        existing_entries: list[LedgerEntry],
+        incoming_entries: list[dict],
+    ) -> bool:
+        if not existing_entries or not incoming_entries:
+            return False
+        existing_currencies = {str(entry.currency).strip().upper() for entry in existing_entries}
+        incoming_currencies = {cls._entry_currency_from_payload(entry) for entry in incoming_entries}
+        if len(existing_currencies) < 2 or len(incoming_currencies) < 2:
+            return False
+        if not cls._is_unbalanced_by_currency_from_existing(existing_entries):
+            return False
+        if not cls._same_structure(existing_entries, incoming_entries):
+            return False
+        return cls._is_unbalanced_by_currency_from_payload(incoming_entries)
 
 
 class QuickLedgerTransactionSerializer(serializers.Serializer):
@@ -367,6 +443,12 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     value_date = serializers.DateField(default=timezone.localdate)
     description = serializers.CharField(max_length=240)
     amount = serializers.DecimalField(max_digits=20, decimal_places=8)
+    destination_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
     account_id = serializers.PrimaryKeyRelatedField(
         source="account",
         queryset=LedgerAccount.objects.select_related("asset"),
@@ -463,6 +545,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         movement_type = attrs["movement_type"]
         investment_direction = attrs.get("investment_direction", "")
         amount = attrs["amount"]
+        destination_amount = attrs.get("destination_amount")
         account = attrs["account"]
         counterparty_account = attrs.get("counterparty_account")
         liability_account = attrs.get("liability_account")
@@ -536,6 +619,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             realized_cost_basis=realized_cost_basis,
             realized_gain_loss=realized_gain_loss,
         )
+        self._validate_destination_amount_contract(
+            movement_type=movement_type,
+            amount=amount,
+            destination_amount=destination_amount,
+        )
         self._validate_required_category_contract(
             movement_type=movement_type,
             category_key=category_key,
@@ -584,6 +672,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 annual_income_entry=annual_income_entry,
                 annual_expense_entry=annual_expense_entry,
                 investment_direction=investment_direction,
+                destination_amount=destination_amount,
             )
         elif movement_type == "revaluation":
             self._validate_revaluation_movement(
@@ -633,6 +722,26 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 {"investment_direction": "Indica si es aporte o desinversion."}
             )
         return movement_type, investment_direction
+
+    def _validate_destination_amount_contract(
+        self,
+        *,
+        movement_type: str,
+        amount: Decimal,
+        destination_amount: Decimal | None,
+    ) -> None:
+        if movement_type != "investment":
+            if destination_amount is not None:
+                raise serializers.ValidationError(
+                    {"destination_amount": "Solo aplica a movimientos de inversion."}
+                )
+            return
+        if amount <= 0:
+            raise serializers.ValidationError({"amount": "Debe ser mayor que cero."})
+        if destination_amount is not None and destination_amount <= 0:
+            raise serializers.ValidationError(
+                {"destination_amount": "Debe ser mayor que cero cuando se informa."}
+            )
 
     def _validate_investment_metadata(
         self,
@@ -919,6 +1028,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         annual_income_entry: AnnualIncomeEntry | None,
         annual_expense_entry: AnnualExpenseEntry | None,
         investment_direction: str,
+        destination_amount: Decimal | None,
     ) -> None:
         if investment_direction not in {
             LedgerTransaction.InvestmentDirection.INFLOW,
@@ -949,11 +1059,21 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     )
                 }
             )
-        if account.currency != counterparty_account.currency:
+        origin_currency = (
+            counterparty_account.currency
+            if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+            else account.currency
+        )
+        destination_currency = (
+            account.currency
+            if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+            else counterparty_account.currency
+        )
+        if origin_currency != destination_currency and destination_amount is None:
             raise serializers.ValidationError(
                 {
-                    "counterparty_account_id": (
-                        "El movimiento de inversion exige la misma moneda en ambas cuentas."
+                    "destination_amount": (
+                        "Indica el importe destino cuando origen y destino usan distinta moneda."
                     )
                 }
             )

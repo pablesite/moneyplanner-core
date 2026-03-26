@@ -2010,6 +2010,39 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }
     }
 
+    for (const cat of incomeCategories) {
+      const existingSubcatKeys = new Set(
+        groupsByCategory.get(cat.value)?.rows.map((r: any) => r.subcategoryKey) ?? [],
+      );
+      const missing = incomeSubcategories.filter(
+        (s) => s.category === cat.value && !existingSubcatKeys.has(s.value),
+      );
+      if (missing.length === 0) continue;
+      let targetGroup = groupsByCategory.get(cat.value);
+      if (!targetGroup) {
+        targetGroup = {
+          categoryKey: cat.value,
+          categoryLabel: cat.label,
+          plannedAnnual: 0,
+          shareOfSection: 0,
+          rows: [],
+        };
+        groups.push(targetGroup);
+        groupsByCategory.set(cat.value, targetGroup);
+      }
+      for (const sub of missing) {
+        targetGroup.rows.push({
+          key: `${cat.value}::${sub.value}`,
+          categoryKey: cat.value,
+          categoryLabel: cat.label,
+          subcategoryKey: sub.value,
+          subcategoryLabel: sub.label,
+          plannedAnnual: 0,
+          itemsCount: 0,
+        });
+      }
+    }
+
     for (const group of groups) {
       group.rows.sort((a, b) => {
         const aDetected = a.detectedUnbudgeted ? 1 : 0;
@@ -2081,6 +2114,39 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           itemsCount: 0,
           detectedUnbudgeted: true,
           detectedExecutedYtd,
+        });
+      }
+    }
+
+    for (const cat of expenseCategories) {
+      const existingSubcatKeys = new Set(
+        groupsByCategory.get(cat.value)?.rows.map((r: any) => r.subcategoryKey) ?? [],
+      );
+      const missing = expenseSubcategories.filter(
+        (s) => s.category === cat.value && !existingSubcatKeys.has(s.value),
+      );
+      if (missing.length === 0) continue;
+      let targetGroup = groupsByCategory.get(cat.value);
+      if (!targetGroup) {
+        targetGroup = {
+          categoryKey: cat.value,
+          categoryLabel: cat.label,
+          plannedAnnual: 0,
+          shareOfSection: 0,
+          rows: [],
+        };
+        groups.push(targetGroup);
+        groupsByCategory.set(cat.value, targetGroup);
+      }
+      for (const sub of missing) {
+        targetGroup.rows.push({
+          key: `${cat.value}::${sub.value}`,
+          categoryKey: cat.value,
+          categoryLabel: cat.label,
+          subcategoryKey: sub.value,
+          subcategoryLabel: sub.label,
+          plannedAnnual: 0,
+          itemsCount: 0,
         });
       }
     }

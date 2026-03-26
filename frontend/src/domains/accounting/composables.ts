@@ -47,6 +47,7 @@ type TransactionFormState = {
   account_id: number | null;
   counterparty_account_id: number | null;
   amount: string;
+  destination_amount: string;
   currency: string;
   kind: EditableActivityKind;
   initial_kind: EditableActivityKind;
@@ -175,6 +176,7 @@ export function useAccountingPage() {
     description: '',
     ownership_id: null as number | null,
     amount: '',
+    destination_amount: '',
     account_id: null as number | null,
     counterparty_account_id: null as number | null,
     liability_account_id: null as number | null,
@@ -251,6 +253,7 @@ export function useAccountingPage() {
     account_id: null,
     counterparty_account_id: null,
     amount: '',
+    destination_amount: '',
     currency: 'EUR',
     kind: 'transfer',
     initial_kind: 'transfer',
@@ -428,10 +431,60 @@ export function useAccountingPage() {
     accounts.value.filter(
       (account) =>
         account.account_type === 'asset' &&
-        account.id !== quickEntryForm.account_id &&
+        account.id !== normalizeAccountId(quickEntryForm.account_id) &&
         account.asset_id != null,
     ),
   );
+  function normalizeAccountId(value: unknown): number | null {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+  const quickSelectedLiquidityAccountId = computed(() =>
+    normalizeAccountId(quickEntryForm.account_id),
+  );
+  const quickSelectedInvestmentAccountId = computed(() =>
+    normalizeAccountId(quickEntryForm.counterparty_account_id),
+  );
+  function resolveAccountById(value: unknown): LedgerAccount | null {
+    const id = normalizeAccountId(value);
+    if (id == null) return null;
+    return (
+      accountMap.value.get(id) ??
+      accounts.value.find((account) => normalizeAccountId(account.id) === id) ??
+      null
+    );
+  }
+  const quickSelectedLiquidityAccount = computed(() =>
+    resolveAccountById(quickEntryForm.account_id),
+  );
+  const quickSelectedInvestmentAccount = computed(() =>
+    resolveAccountById(quickEntryForm.counterparty_account_id),
+  );
+  const quickInvestmentOriginCurrency = computed(() => {
+    if (quickEntryForm.movement_type !== 'investment') return '';
+    if (quickEntryForm.investment_direction === 'outflow') {
+      return quickSelectedInvestmentAccount.value?.currency ?? '';
+    }
+    return quickSelectedLiquidityAccount.value?.currency ?? '';
+  });
+  const quickInvestmentDestinationCurrency = computed(() => {
+    if (quickEntryForm.movement_type !== 'investment') return '';
+    if (quickEntryForm.investment_direction === 'outflow') {
+      return quickSelectedLiquidityAccount.value?.currency ?? '';
+    }
+    return quickSelectedInvestmentAccount.value?.currency ?? '';
+  });
+  const quickInvestmentIsCrossCurrency = computed(() => {
+    const origin = quickInvestmentOriginCurrency.value.trim().toUpperCase();
+    const destination = quickInvestmentDestinationCurrency.value.trim().toUpperCase();
+    return Boolean(origin && destination && origin !== destination);
+  });
   const revaluationAccountOptions = computed(() =>
     accounts.value.filter(
       (account) => account.account_type === 'asset' && account.asset_id != null,
@@ -480,12 +533,14 @@ export function useAccountingPage() {
     }
     const amountValue = toNumber(quickEntryForm.amount);
     if (amountValue <= 0) return false;
-    if (quickEntryForm.account_id == null) return false;
+    if (quickSelectedLiquidityAccountId.value == null) return false;
     if (quickEntryForm.movement_type === 'transfer') {
-      return quickEntryForm.counterparty_account_id != null;
+      return normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
     }
     if (quickEntryForm.movement_type === 'investment') {
-      return quickEntryForm.counterparty_account_id != null;
+      if (quickSelectedInvestmentAccountId.value == null) return false;
+      if (!quickInvestmentIsCrossCurrency.value) return true;
+      return toNumber(quickEntryForm.destination_amount) > 0;
     }
     if (quickEntryForm.movement_type === 'debt_payment') {
       return debtPaymentBreakdownReady(amountValue);
@@ -649,6 +704,33 @@ export function useAccountingPage() {
     }
     return 'No hay contracuentas disponibles para el tipo seleccionado.';
   });
+  const editSelectedLiquidityAccount = computed(() =>
+    editTransactionForm.account_id != null ? accountMap.value.get(editTransactionForm.account_id) ?? null : null,
+  );
+  const editSelectedInvestmentAccount = computed(() =>
+    editTransactionForm.counterparty_account_id != null
+      ? accountMap.value.get(editTransactionForm.counterparty_account_id) ?? null
+      : null,
+  );
+  const editInvestmentOriginCurrency = computed(() => {
+    if (editTransactionForm.kind !== 'investment') return '';
+    if (editTransactionForm.investment_direction === 'outflow') {
+      return editSelectedInvestmentAccount.value?.currency ?? '';
+    }
+    return editSelectedLiquidityAccount.value?.currency ?? '';
+  });
+  const editInvestmentDestinationCurrency = computed(() => {
+    if (editTransactionForm.kind !== 'investment') return '';
+    if (editTransactionForm.investment_direction === 'outflow') {
+      return editSelectedLiquidityAccount.value?.currency ?? '';
+    }
+    return editSelectedInvestmentAccount.value?.currency ?? '';
+  });
+  const editInvestmentIsCrossCurrency = computed(() => {
+    const origin = editInvestmentOriginCurrency.value.trim().toUpperCase();
+    const destination = editInvestmentDestinationCurrency.value.trim().toUpperCase();
+    return Boolean(origin && destination && origin !== destination);
+  });
 
   function hasValidEditCounterpartySelection(kind: EditableActivityKind): boolean {
     if (!isCounterpartyKind(kind)) return true;
@@ -698,6 +780,10 @@ export function useAccountingPage() {
     if (editKindNeedsClassification.value) {
       return Boolean(editTransactionForm.category_key && editTransactionForm.subcategory_key);
     }
+    if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+      const destinationValue = Number(formatDecimalInput(editTransactionForm.destination_amount));
+      return Number.isFinite(destinationValue) && destinationValue > 0;
+    }
     return true;
   });
 
@@ -723,6 +809,7 @@ export function useAccountingPage() {
       quickEntryForm.interest_amount = '';
       quickEntryForm.realized_cost_basis = '';
       quickEntryForm.realized_gain_loss = '';
+      quickEntryForm.destination_amount = '';
       quickEntryForm.flow_family = '';
       quickEntryForm.revaluation_new_value = '';
       quickEntryForm.investment_direction = 'inflow';
@@ -1201,6 +1288,7 @@ export function useAccountingPage() {
     quickEntryForm.description = '';
     quickEntryForm.ownership_id = null;
     quickEntryForm.amount = '';
+    quickEntryForm.destination_amount = '';
     quickEntryForm.account_id = null;
     quickEntryForm.counterparty_account_id = null;
     quickEntryForm.liability_account_id = null;
@@ -1229,6 +1317,7 @@ export function useAccountingPage() {
     editTransactionForm.account_id = null;
     editTransactionForm.counterparty_account_id = null;
     editTransactionForm.amount = '';
+    editTransactionForm.destination_amount = '';
     editTransactionForm.currency = 'EUR';
     editTransactionForm.kind = 'transfer';
     editTransactionForm.initial_kind = 'transfer';
@@ -1270,7 +1359,22 @@ export function useAccountingPage() {
       );
       if (assetEntry?.side === 'credit') return (-debitTotalValue).toFixed(decimals);
     }
+    if (transaction.activity_kind === 'investment_purchase') {
+      const creditEntry =
+        transaction.entries.find((entry) => entry.side === 'credit') ?? transaction.entries[1] ?? null;
+      if (creditEntry) {
+        return toNumber(creditEntry.amount).toFixed(currencyDecimals(creditEntry.currency));
+      }
+    }
     return debitTotalValue.toFixed(decimals);
+  }
+
+  function getTransactionEditDestinationAmount(transaction: LedgerTransaction): string {
+    if (transaction.activity_kind !== 'investment_purchase') return '';
+    const debitEntry =
+      transaction.entries.find((entry) => entry.side === 'debit') ?? transaction.entries[0] ?? null;
+    if (!debitEntry) return '';
+    return toNumber(debitEntry.amount).toFixed(currencyDecimals(debitEntry.currency));
   }
 
   function getInvestmentDirection(transaction: LedgerTransaction): 'inflow' | 'outflow' {
@@ -1397,6 +1501,7 @@ export function useAccountingPage() {
     editTransactionForm.ownership_id = transaction.ownership_id ?? null;
     editTransactionForm.currency = transaction.entries[0]?.currency ?? 'EUR';
     editTransactionForm.amount = getTransactionEditAmount(transaction);
+    editTransactionForm.destination_amount = getTransactionEditDestinationAmount(transaction);
     const kind = toEditableKind(transaction);
     editTransactionForm.kind = kind;
     editTransactionForm.initial_kind = kind;
@@ -1456,6 +1561,54 @@ export function useAccountingPage() {
     };
     applySide(debitIndexes);
     applySide(creditIndexes);
+    return scaled;
+  }
+
+  function scaleLegacyMixedCurrencyEntries(
+    entries: PersistedTransactionEntry[],
+    anchorAccountId: number,
+    targetAmount: number,
+  ): PersistedTransactionEntry[] {
+    const scaled = entries.map((entry) => ({ ...entry }));
+    const anchorIndexes = scaled
+      .map((entry, index) => (entry.account_id === anchorAccountId ? index : -1))
+      .filter((index) => index >= 0);
+    if (!anchorIndexes.length) return scaled;
+    const currentAnchorTotal = anchorIndexes.reduce(
+      (sum, index) => sum + toNumber(scaled[index]!.amount),
+      0,
+    );
+    if (currentAnchorTotal <= 0) return scaled;
+    const factor = targetAmount / currentAnchorTotal;
+    const sideBuckets = new Map<'debit' | 'credit', number[]>();
+    scaled.forEach((entry, index) => {
+      const bucket = sideBuckets.get(entry.side) ?? [];
+      bucket.push(index);
+      sideBuckets.set(entry.side, bucket);
+    });
+    const applySide = (indexes: number[]) => {
+      if (!indexes.length) return;
+      const currentSideTotal = indexes.reduce(
+        (sum, index) => sum + toNumber(scaled[index]!.amount),
+        0,
+      );
+      if (currentSideTotal <= 0) return;
+      let allocated = 0;
+      indexes.forEach((index, position) => {
+        const row = scaled[index]!;
+        const currentValue = toNumber(row.amount);
+        const roundedValue = roundByCurrency(currentValue * factor, row.currency);
+        const targetSideTotal = roundByCurrency(currentSideTotal * factor, row.currency);
+        const isLast = position === indexes.length - 1;
+        const nextValue = isLast
+          ? roundByCurrency(targetSideTotal - allocated, row.currency)
+          : roundedValue;
+        allocated = roundByCurrency(allocated + nextValue, row.currency);
+        row.amount = nextValue.toFixed(currencyDecimals(row.currency));
+      });
+    };
+    applySide(sideBuckets.get('debit') ?? []);
+    applySide(sideBuckets.get('credit') ?? []);
     return scaled;
   }
 
@@ -1652,6 +1805,7 @@ export function useAccountingPage() {
     return [makeEntry(targetAccount, targetSide), makeEntry(counterpartyAccount, counterpartySide)];
   }
 
+  // eslint-disable-next-line complexity
   function validateEditedTransactionInput(): {
     parsedAmount: number;
     selectedAccount: LedgerAccount;
@@ -1672,6 +1826,13 @@ export function useAccountingPage() {
     if (editTransactionForm.kind === 'revaluation' && parsedAmount === 0) {
       store.error = 'El importe de la revalorizacion no puede ser cero.';
       return null;
+    }
+    if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+      const parsedDestination = Number(formatDecimalInput(editTransactionForm.destination_amount));
+      if (!Number.isFinite(parsedDestination) || parsedDestination <= 0) {
+        store.error = 'Introduce un importe destino valido para la inversion multimoneda.';
+        return null;
+      }
     }
     if (editKindNeedsClassification.value) {
       if (!editTransactionForm.category_key || !editTransactionForm.subcategory_key) {
@@ -2121,11 +2282,89 @@ export function useAccountingPage() {
     return true;
   }
 
+  // eslint-disable-next-line complexity
   async function submitEditedTransaction(): Promise<boolean> {
     if (editTransactionId.value == null) return false;
     if (!editTransactionPersistedEntries.value.length) return false;
     const validated = validateEditedTransactionInput();
     if (!validated) return false;
+    const hasMixedCurrencyEntries =
+      new Set(
+        editTransactionPersistedEntries.value.map((entry) =>
+          entry.currency.trim().toUpperCase(),
+        ),
+      ).size > 1;
+    if (hasMixedCurrencyEntries) {
+      let compatibilityEntries = scaleLegacyMixedCurrencyEntries(
+        editTransactionPersistedEntries.value,
+        validated.selectedAccount.id,
+        validated.parsedAmount,
+      );
+      if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+        const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
+        const updatedAccounts = setEditedAccountsOnEntries(
+          compatibilityEntries,
+          editTransactionForm.kind,
+          editTransactionForm.account_id!,
+          editTransactionForm.counterparty_account_id,
+          editTransactionForm.investment_direction,
+        );
+        compatibilityEntries = updatedAccounts.map((entry) => ({ ...entry }));
+        const debitEntry = compatibilityEntries.find((entry) => entry.side === 'debit') ?? null;
+        const creditEntry = compatibilityEntries.find((entry) => entry.side === 'credit') ?? null;
+        if (debitEntry) {
+          debitEntry.amount = roundByCurrency(destinationAmount, debitEntry.currency).toFixed(
+            currencyDecimals(debitEntry.currency),
+          );
+        }
+        if (creditEntry) {
+          creditEntry.amount = roundByCurrency(validated.parsedAmount, creditEntry.currency).toFixed(
+            currencyDecimals(creditEntry.currency),
+          );
+        }
+      }
+      const compatibilityPayload: LedgerTransactionWritePayload = {
+        booking_date: editTransactionForm.booking_date,
+        value_date: editTransactionForm.value_date,
+        description: editTransactionForm.description.trim(),
+        notes: editTransactionForm.notes.trim(),
+        ownership_id: editTransactionForm.ownership_id,
+        quick_entry_kind:
+          editTransactionForm.kind === 'investment' ? 'investment' : editTransactionForm.kind,
+        investment_direction:
+          editTransactionForm.kind === 'investment' ? editTransactionForm.investment_direction : '',
+        entries: compatibilityEntries.map((entry) => ({
+          account_id: entry.account_id,
+          side: entry.side,
+          amount: formatDecimalInput(entry.amount),
+          currency: entry.currency.trim().toUpperCase(),
+          flow_family: entry.flow_family,
+          category_key: entry.category_key,
+          subcategory_key: entry.subcategory_key,
+          annual_income_entry_id: entry.annual_income_entry_id,
+          annual_expense_entry_id: entry.annual_expense_entry_id,
+          asset_id: entry.asset_id,
+          liability_id: entry.liability_id,
+          notes: entry.notes.trim(),
+        })),
+      };
+      try {
+        await store.updateTransaction(editTransactionId.value, compatibilityPayload);
+      } catch {
+        return false;
+      }
+      try {
+        await reloadMovementPagesAfterMutation();
+      } catch {
+        if (!store.error) {
+          store.error =
+            'Movimiento guardado, pero no se pudo refrescar el listado. Recarga la vista si no ves el cambio.';
+        }
+      }
+      resetEditTransactionForm();
+      successMessage.value = 'Movimiento multimoneda actualizado (modo compatibilidad legacy).';
+      return true;
+    }
     const payloadEntries = await resolveEditedTransactionEntries(
       validated.parsedAmount,
       validated.selectedAccount,
@@ -2270,7 +2509,7 @@ export function useAccountingPage() {
       value_date: quickEntryForm.value_date,
       description: quickEntryForm.description.trim(),
       amount: formatDecimalInput(quickEntryForm.amount),
-      account_id: quickEntryForm.account_id ?? 0,
+      account_id: normalizeAccountId(quickEntryForm.account_id) ?? 0,
       ownership_id: quickEntryForm.ownership_id,
       notes: quickEntryForm.notes.trim(),
       status: 'posted',
@@ -2284,7 +2523,9 @@ export function useAccountingPage() {
           }
         : {}),
       ...(quickEntryForm.movement_type === 'transfer'
-        ? { counterparty_account_id: quickEntryForm.counterparty_account_id }
+        ? {
+            counterparty_account_id: normalizeAccountId(quickEntryForm.counterparty_account_id),
+          }
         : {}),
       ...(quickEntryForm.movement_type === 'income'
         ? quickEntryForm.annual_income_entry_id != null
@@ -2298,8 +2539,11 @@ export function useAccountingPage() {
         : {}),
       ...(quickEntryForm.movement_type === 'investment'
         ? {
-            counterparty_account_id: quickEntryForm.counterparty_account_id,
+            counterparty_account_id: normalizeAccountId(quickEntryForm.counterparty_account_id),
             investment_direction: quickEntryForm.investment_direction,
+            ...(quickInvestmentIsCrossCurrency.value
+              ? { destination_amount: formatDecimalInput(quickEntryForm.destination_amount) }
+              : {}),
             ...(quickEntryForm.realized_cost_basis.trim()
               ? { realized_cost_basis: formatDecimalInput(quickEntryForm.realized_cost_basis) }
               : {}),
@@ -2310,14 +2554,14 @@ export function useAccountingPage() {
         : {}),
       ...(quickEntryForm.movement_type === 'debt_payment'
         ? {
-            liability_account_id: quickEntryForm.liability_account_id,
+            liability_account_id: normalizeAccountId(quickEntryForm.liability_account_id),
             principal_amount: formatDecimalInput(quickEntryForm.principal_amount),
             interest_amount: formatDecimalInput(quickEntryForm.interest_amount || '0'),
             ...(quickEntryForm.annual_expense_entry_id != null
               ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
               : {}),
             ...(toNumber(quickEntryForm.interest_amount) > 0
-              ? { interest_account_id: quickEntryForm.interest_account_id }
+              ? { interest_account_id: normalizeAccountId(quickEntryForm.interest_account_id) }
               : {}),
           }
         : {}),
@@ -2426,6 +2670,9 @@ export function useAccountingPage() {
     editKindNeedsCounterparty,
     editKindNeedsClassification,
     editCounterpartyLabel,
+    editInvestmentOriginCurrency,
+    editInvestmentDestinationCurrency,
+    editInvestmentIsCrossCurrency,
     editSelectedAccountCurrentBalance,
     editCategoryOptions,
     editSubcategoryOptions,
@@ -2459,6 +2706,9 @@ export function useAccountingPage() {
     cuentasFilterSubcategoryOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
+    quickInvestmentOriginCurrency,
+    quickInvestmentDestinationCurrency,
+    quickInvestmentIsCrossCurrency,
     liabilityCounterpartyOptions,
     debtInterestOptions,
     revaluationAccountOptions,

@@ -157,6 +157,42 @@ function openCreateFromContext(): void {
   });
 }
 
+function openCreateForCategory(sectionId: 'income' | 'expense', categoryKey: string): void {
+  if (!props.annualEntriesPage) return;
+  if (sectionId === 'income') {
+    props.annualEntriesPage.openIncomeModal();
+    props.annualEntriesPage.patchAnnualIncomeForm({
+      category: categoryKey,
+      owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+    });
+    return;
+  }
+  props.annualEntriesPage.openExpenseModal();
+  props.annualEntriesPage.patchAnnualExpenseForm({
+    category: categoryKey,
+    owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+  });
+}
+
+function openCreateDirect(sectionId: 'income' | 'expense', row: BudgetRow): void {
+  if (!props.annualEntriesPage) return;
+  if (sectionId === 'income') {
+    props.annualEntriesPage.openIncomeModal();
+    props.annualEntriesPage.patchAnnualIncomeForm({
+      category: row.categoryKey,
+      subcategory: row.subcategoryKey,
+      owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+    });
+    return;
+  }
+  props.annualEntriesPage.openExpenseModal();
+  props.annualEntriesPage.patchAnnualExpenseForm({
+    category: row.categoryKey,
+    subcategory: row.subcategoryKey,
+    owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
+  });
+}
+
 function openEditIncome(entry: AnnualIncomeEntry): void {
   props.annualEntriesPage?.openIncomeModal(entry);
 }
@@ -201,24 +237,12 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       </div>
       <div class="ui-budget-section-header-side">
         <div class="ui-budget-section-controls">
-          <button
-            v-if="section.groups.length"
-            type="button"
-            class="ui-budget-detail-toggle"
-            :aria-expanded="isSectionExpanded(section.id)"
-            @click="toggleSectionExpanded(section.id)"
+          <span
+            v-if="section.groups.length && !isSectionExpanded(section.id)"
+            class="ui-budget-compact-badge"
           >
-            <span class="ui-budget-detail-toggle-icon" aria-hidden="true">
-              {{ isSectionExpanded(section.id) ? '-' : '+' }}
-            </span>
-            <span>
-              {{
-                isSectionExpanded(section.id)
-                  ? 'Ocultar detalle'
-                  : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
-              }}
-            </span>
-          </button>
+            Vista compacta activa
+          </span>
 
           <div
             class="ui-budget-filter-segment"
@@ -383,6 +407,26 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       </div>
     </div>
 
+    <div v-if="section.groups.length" class="ui-budget-detail-toggle-bar">
+      <button
+        type="button"
+        class="ui-budget-detail-toggle"
+        :aria-expanded="isSectionExpanded(section.id)"
+        @click="toggleSectionExpanded(section.id)"
+      >
+        <span class="ui-budget-detail-toggle-icon" aria-hidden="true">
+          {{ isSectionExpanded(section.id) ? '-' : '+' }}
+        </span>
+        <span>
+          {{
+            isSectionExpanded(section.id)
+              ? 'Ocultar detalle'
+              : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
+          }}
+        </span>
+      </button>
+    </div>
+
     <div
       v-if="section.groups.length && isSectionExpanded(section.id)"
       class="ui-budget-detail-area"
@@ -408,6 +452,11 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           v-for="group in section.groups"
           :key="`${section.id}-${group.categoryKey}`"
           class="ui-budget-group"
+          :class="{
+            'ui-budget-group-catalog':
+              group.plannedAnnual === 0 &&
+              !group.rows.some((r: any) => r.detectedUnbudgeted),
+          }"
         >
           <header
             class="ui-budget-group-header"
@@ -424,6 +473,15 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               <p>
                 {{ group.rows.length }} subcategorías -
                 {{ formatPercent(group.shareOfSection, 0) }} de {{ section.title.toLowerCase() }}
+                <span
+                  v-if="group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted).length > 0"
+                  class="ui-budget-group-empty-badge"
+                >
+                  {{
+                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted).length
+                  }}
+                  sin presupuesto
+                </span>
               </p>
 
               <div
@@ -475,7 +533,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               </div>
 
               <div
-                v-else
+                v-else-if="group.plannedAnnual > 0 || group.rows.some((r: any) => r.detectedUnbudgeted)"
                 class="ui-budget-inline-progress"
                 aria-label="Placeholder ejecución categoría"
               >
@@ -514,6 +572,14 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             </div>
 
             <div class="ui-budget-group-header-right">
+              <button
+                type="button"
+                class="ui-budget-group-add-btn"
+                :title="`Añadir en ${group.categoryLabel}`"
+                @click.stop="openCreateForCategory(section.id, group.categoryKey)"
+              >
+                +
+              </button>
               <div class="ui-budget-group-amounts">
                 <template v-if="budgetCategoryActualExecution(section.id, group.categoryKey)">
                   <div class="ui-budget-group-amount-ytd">
@@ -612,7 +678,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 </div>
 
                 <div
-                  v-else
+                  v-else-if="row.itemsCount > 0 || row.detectedUnbudgeted"
                   class="ui-budget-inline-progress ui-budget-inline-progress-row"
                   aria-label="Placeholder ejecución subcategoría"
                 >
@@ -642,17 +708,37 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
                 <div class="ui-budget-row-actions">
                   <button
+                    v-if="!row.detectedUnbudgeted && row.itemsCount === 0"
+                    type="button"
+                    class="btn btn-ghost btn-sm ui-budget-row-add-direct"
+                    @click="openCreateDirect(section.id, row)"
+                  >
+                    + Añadir línea
+                  </button>
+                  <template v-else-if="!row.detectedUnbudgeted && row.itemsCount > 0">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      @click="toggleContext(section.id, row)"
+                    >
+                      {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Gestionar subcategoría' }}
+                    </button>
+                    <button
+                      v-if="!isContextOpen(section.id, row.key)"
+                      type="button"
+                      class="btn btn-ghost btn-sm ui-budget-row-add-direct"
+                      @click="openCreateDirect(section.id, row)"
+                    >
+                      + Añadir
+                    </button>
+                  </template>
+                  <button
+                    v-else
                     type="button"
                     class="btn btn-ghost btn-sm"
                     @click="toggleContext(section.id, row)"
                   >
-                    {{
-                      isContextOpen(section.id, row.key)
-                        ? 'Ocultar edición'
-                        : row.detectedUnbudgeted
-                          ? 'Añadir al presupuesto'
-                          : 'Gestionar subcategoría'
-                    }}
+                    {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Añadir al presupuesto' }}
                   </button>
                 </div>
 
@@ -815,15 +901,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       </div>
     </div>
 
-    <div
-      v-else-if="section.groups.length && !isSectionExpanded(section.id)"
-      class="ui-budget-detail-collapsed-note"
-    >
-      Vista compacta activa. Se muestran resumen y evolucion ejecutada. Pulsa en `Ver detalle` para
-      desplegar categorías y subcategorías.
-    </div>
-
-    <div v-else class="subtle">
+    <div v-if="!section.groups.length" class="subtle">
       {{ section.emptyMessage }}
       <template v-if="section.filterMode !== 'all'">
         Prueba con la vista `Todos` si quieres incluir movimientos puntuales.

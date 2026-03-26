@@ -60,7 +60,6 @@ export function useDataInputPage() {
     editTitle,
     editCategories,
     editInitial,
-    submitEdit,
   } = useNetWorthViewState();
 
   type AssetFormSubmitPayload = NetWorthWritePayload & {
@@ -89,6 +88,7 @@ export function useDataInputPage() {
     updateEntry: updateExpenseEntry,
     deleteEntry: deleteExpenseEntry,
     listBySourceLiability,
+    listBySourceAsset,
   } = useAnnualExpenseStore('core');
   const annualIncomeError = ref<string | null>(null);
   const annualExpenseError = ref<string | null>(null);
@@ -127,6 +127,32 @@ export function useDataInputPage() {
     }[];
   } | null>(null);
   const generatedLiabilityExpenseReviewChangeMessage = ref<string | null>(null);
+
+  const showGeneratedAssetExpenseModal = ref(false);
+  const generatedAssetExpenseReview = ref<{
+    assetId: number;
+    assetName: string;
+    entries: {
+      id: number;
+      fiscalYear: number;
+      name: string;
+      owner: string;
+      category: string;
+      subcategory: string;
+      expenseType: string;
+      cashflowRole: string;
+      timeProfile: string;
+      eventGroup: string;
+      targetMonth: number | null;
+      termEndMonth: number | null;
+      termEndYear: number | null;
+      amountInputPeriod: 'annual' | 'monthly';
+      amountAnnual: number;
+      currency: string;
+      notes: string;
+    }[];
+  } | null>(null);
+  const generatedAssetExpenseReviewChangeMessage = ref<string | null>(null);
 
   const annualIncomeForm = reactive({
     category: 'salary' as IncomeCategoryKey,
@@ -1227,6 +1253,12 @@ export function useDataInputPage() {
       : 'Gasto generado por pasivo',
   );
 
+  const generatedAssetExpenseReviewTitle = computed(() =>
+    generatedAssetExpenseReview.value
+      ? `Gasto generado por inversión: ${generatedAssetExpenseReview.value.assetName}`
+      : 'Gasto generado por inversión',
+  );
+
   function setGeneratedLiabilityExpenseReview(
     liabilityId: number,
     liabilityName: string,
@@ -1306,6 +1338,53 @@ export function useDataInputPage() {
     showGeneratedLiabilityExpenseModal.value = false;
     generatedLiabilityExpenseReview.value = null;
     generatedLiabilityExpenseReviewChangeMessage.value = null;
+  }
+
+  function setGeneratedAssetExpenseReview(
+    assetId: number,
+    assetName: string,
+    entries: AnnualExpenseEntry[],
+  ): void {
+    generatedAssetExpenseReview.value = {
+      assetId,
+      assetName,
+      entries: entries.map((entry) => ({
+        id: entry.id,
+        fiscalYear: entry.fiscalYear,
+        name: entry.name,
+        owner: entry.owner,
+        category: entry.category,
+        subcategory: entry.subcategory,
+        expenseType: entry.expenseType,
+        cashflowRole: entry.cashflowRole,
+        timeProfile: entry.timeProfile,
+        eventGroup: entry.eventGroup,
+        targetMonth: entry.targetMonth,
+        termEndMonth: entry.termEndMonth,
+        termEndYear: entry.termEndYear,
+        amountInputPeriod: entry.amountInputPeriod,
+        amountAnnual: entry.amountAnnual,
+        currency: entry.currency,
+        notes: entry.notes,
+      })),
+    };
+  }
+
+  function closeGeneratedAssetExpenseModal(): void {
+    showGeneratedAssetExpenseModal.value = false;
+    generatedAssetExpenseReview.value = null;
+    generatedAssetExpenseReviewChangeMessage.value = null;
+  }
+
+  function openGeneratedAssetExpenseReviewEntryFromVisibleYear(): void {
+    const review = generatedAssetExpenseReview.value;
+    if (!review) return;
+    const entry = annualExpenseEntries.value.find(
+      (row) => row.sourceAssetId === review.assetId && row.isSystemGenerated,
+    );
+    if (!entry) return;
+    closeGeneratedAssetExpenseModal();
+    openExpenseModal(entry);
   }
 
   function openGeneratedExpenseReviewEntryFromVisibleYear(): void {
@@ -1420,8 +1499,8 @@ export function useDataInputPage() {
     const current = editItem.value;
     if (!current || !editKind.value) return;
     if (editKind.value === 'asset') {
-      await submitEdit(payload);
-      await loadAnnualExpense(fiscalYear.value);
+      await updateAssetAndShowExpenseReview(current.id, payload);
+      closeEdit();
       return;
     }
     await updateLiabilityAndShowExpenseReview(current.id, payload);
@@ -1529,6 +1608,27 @@ export function useDataInputPage() {
     showAssetModal.value = false;
     await loadAnnualExpense(fiscalYear.value);
 
+    try {
+      const generatedEntries = await listBySourceAsset(createdOrMatchedAsset.id);
+      const systemGeneratedEntries = generatedEntries
+        .filter(
+          (entry) => entry.isSystemGenerated && entry.sourceAssetId === createdOrMatchedAsset.id,
+        )
+        .sort((a, b) => a.fiscalYear - b.fiscalYear);
+      if (systemGeneratedEntries.length) {
+        generatedAssetExpenseReviewChangeMessage.value = null;
+        setGeneratedAssetExpenseReview(
+          createdOrMatchedAsset.id,
+          createdOrMatchedAsset.name,
+          systemGeneratedEntries,
+        );
+        showGeneratedAssetExpenseModal.value = true;
+        return;
+      }
+    } catch (e: unknown) {
+      annualExpenseError.value = `Activo creado, pero no se pudo cargar el gasto generado: ${toApiErrorMessage(e)}`;
+    }
+
     if (!isRemuneratedLiquidityAsset(payload)) return;
     const estimatedAnnualInterestGross = estimateRemuneratedLiquidityInterest(payload);
     const currency =
@@ -1568,17 +1668,41 @@ export function useDataInputPage() {
     }
   }
 
+  async function updateAssetAndShowExpenseReview(
+    id: number,
+    payload: NetWorthWritePayload & { ownership_id?: number | null },
+  ): Promise<void> {
+    const beforeEntries = await listBySourceAsset(id);
+    await store.updateAsset(id, payload);
+    await loadAnnualExpense(fiscalYear.value);
+    const refreshedEntries = await listBySourceAsset(id);
+    const systemGeneratedEntries = refreshedEntries
+      .filter((entry) => entry.isSystemGenerated && entry.sourceAssetId === id)
+      .sort((a, b) => a.fiscalYear - b.fiscalYear);
+    if (!systemGeneratedEntries.length) return;
+
+    const assetName = store.assets.find((item) => item.id === id)?.name ?? 'Activo';
+    generatedAssetExpenseReviewChangeMessage.value = summarizeGeneratedLiabilityExpenseChanges(
+      beforeEntries.filter((entry) => entry.isSystemGenerated && entry.sourceAssetId === id),
+      systemGeneratedEntries,
+    );
+    setGeneratedAssetExpenseReview(id, assetName, systemGeneratedEntries);
+    showGeneratedAssetExpenseModal.value = true;
+  }
+
   async function updateAssetAndReloadExpenses(
     id: number,
     payload: NetWorthWritePayload & { ownership_id?: number | null },
   ): Promise<void> {
-    await store.updateAsset(id, payload);
-    await loadAnnualExpense(fiscalYear.value);
+    await updateAssetAndShowExpenseReview(id, payload);
   }
 
   async function deleteAssetAndReloadExpenses(id: number): Promise<void> {
     await store.deleteAsset(id);
     await loadAnnualExpense(fiscalYear.value);
+    if (generatedAssetExpenseReview.value?.assetId === id) {
+      closeGeneratedAssetExpenseModal();
+    }
   }
 
   async function deleteLiabilityAndReloadExpenses(id: number): Promise<void> {
@@ -2109,6 +2233,9 @@ export function useDataInputPage() {
     formatMoneyAmount,
     formatTermEndLabel,
     formatTotalsLine,
+    generatedAssetExpenseReview,
+    generatedAssetExpenseReviewChangeMessage,
+    generatedAssetExpenseReviewTitle,
     generatedLiabilityExpenseReview,
     generatedLiabilityExpenseReviewChangeMessage,
     generatedLiabilityExpenseReviewTitle,
@@ -2135,6 +2262,8 @@ export function useDataInputPage() {
     openAssetModal,
     openEdit,
     openExpenseModal,
+    closeGeneratedAssetExpenseModal,
+    openGeneratedAssetExpenseReviewEntryFromVisibleYear,
     openGeneratedExpenseBulkEdit,
     openGeneratedExpenseReviewEntryFromVisibleYear,
     openIncomeModal,
@@ -2150,6 +2279,7 @@ export function useDataInputPage() {
     showEditModal,
     showExpenseCashflowRoleField,
     showExpenseModal,
+    showGeneratedAssetExpenseModal,
     showGeneratedLiabilityExpenseModal,
     showIncomeModal,
     showLiabilityModal,

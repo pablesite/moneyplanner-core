@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-25 (sesion 7)
+Ultima actualizacion: 2026-03-27 (sesion 8)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -127,7 +127,11 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 | 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
-- ⚠️ **Bitcoin (id=26) a medio curar**: se han quitado manualmente revalorizaciones y se migro historico desde ST Criptos para trabajar en BTC. Pendiente chequeo integral de coherencia (saldo final BTC, contrapartidas y timeline) antes de cerrarlo como revisado.
+- ⚠️ **Bitcoin (id=26) a medio curar**: avance aplicado en sesion 8:
+  - conversion de alta/edicion rapida de inversion para soportar multimoneda en Core y espejo SaaS;
+  - cuenta `Spot Binance (id=22)` convertida de EUR a USD y conversion historica de importes legacy a USD por fecha FX (manteniendo intactos los aportes fijos de `25.00 USD`);
+  - varios movimientos `ST Criptos` reclasificados de `income` legacy a `investment inflow` (`Spot Binance -> Bitcoin`) y eliminacion de duplicados `gasto` asociados.
+  Pendiente chequeo integral de coherencia final (saldo BTC, timeline completo y duplicados residuales) antes de cerrarlo como revisado.
 - âš ï¸ **Cuenta ING de fondos sin monitorizar**: Fondo ING PIMCO tiene 2 aportes (50â‚¬ ago-22 y 80â‚¬ sep-22) cuyo origen es probablemente una cuenta ING de gestiÃ³n de fondos que aÃºn no estÃ¡ en el sistema. Crear ese activo/cuenta cuando se pueda y vincular esas transacciones.
 
 ## Como continuar manana

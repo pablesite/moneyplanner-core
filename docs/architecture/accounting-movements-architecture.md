@@ -72,6 +72,7 @@ This leaves a gap:
    - contributions, withdrawals, fees, and income should move toward transaction-driven activity
    - investment flows should be modeled as one bidirectional operation with explicit direction (`inflow` / `outflow`), not as unrelated income plus transfer shortcuts
    - quick-entry keeps backwards compatibility with `investment_purchase` as legacy alias of investment `inflow`
+   - for cross-currency investment quick-entry, Core accepts `amount` as origin amount and `destination_amount` as destination amount (broker executed units/value); same-currency investment keeps `destination_amount` optional and defaults it to `amount`
    - realized metadata (`realized_cost_basis`, `realized_gain_loss`) is optional and manual in this phase; Core stores it but does not auto-calculate lots or fiscal impact
    - investment aggregates per asset account expose `investment_inflow_total`, `investment_outflow_total`, and `investment_net_contributed`
    - legacy investment events remain available until explicit replacement
