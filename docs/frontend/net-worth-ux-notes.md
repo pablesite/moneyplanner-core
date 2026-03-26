@@ -77,6 +77,12 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 2. When `payment_start_date` is set, the installment schedule is anchored to that date.
 3. When `payment_start_date` is empty, legacy behavior is preserved (first installment one period after `start_date`).
 
+## Investment contribution intervals (asset form)
+1. Investment assets no longer expose the legacy periodic fields (`investment_contribution_mode`, `monthly_contribution_amount`, `investment_contribution_frequency`, `investment_contribution_currency`, `expected_end_date`) in the form UI.
+2. The form now includes an inline interval manager under "Aportaciones periódicas" to add, edit, and remove multiple intervals before save.
+3. Each interval captures `start_date`, optional `end_date`, `amount`, `frequency`, and `currency`.
+4. Saving sends `contribution_intervals` as a nested list to backend; submitting an empty list means "sin aportaciones periódicas previstas".
+
 ## UX principles of the current view
 1. Keep the main financial picture visible at the top.
 2. Let the user move from summary to category to position without losing context.
