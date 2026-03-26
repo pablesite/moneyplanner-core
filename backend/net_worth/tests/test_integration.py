@@ -15,6 +15,7 @@ from memberships.models import FamilyMember, Ownership, OwnershipSplit
 from ..models import (
     Asset,
     AssetImprovement,
+    InvestmentContributionInterval,
     Liability,
     LiquidityMonthlyCheckin,
 )
@@ -810,6 +811,132 @@ class NetWorthApiTests(APITestCase):
             row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
         )
         self.assertEqual(row_2026.amount_annual, Decimal("3600.00"))
+
+    def test_investment_asset_accepts_nested_contribution_intervals(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Fondo por tramos",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "5000.00",
+                "initial_purchase_value": "5000.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": "2026-06-15",
+                        "amount": "100.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    },
+                    {
+                        "start_date": "2026-07-15",
+                        "end_date": "2026-12-15",
+                        "amount": "200.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        asset = Asset.objects.get(id=response.data["id"])
+        self.assertEqual(asset.investment_contribution_mode, "periodic_contribution")
+        intervals = list(asset.contribution_intervals.order_by("start_date"))
+        self.assertEqual(len(intervals), 2)
+        self.assertEqual(intervals[0].amount, Decimal("100.00"))
+        self.assertEqual(intervals[1].amount, Decimal("200.00"))
+        generated = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_asset=asset,
+            is_system_generated=True,
+            fiscal_year=2026,
+        )
+        self.assertEqual(generated.amount_annual, Decimal("1800.00"))
+
+    def test_investment_asset_rejects_overlapping_contribution_intervals(self):
+        response = self.client.post(
+            "/api/net-worth/assets/",
+            {
+                "name": "Fondo solapado",
+                "category": Asset.Category.INVESTMENTS,
+                "subcategory": Asset.Subcategory.FUNDS,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "amount": "5000.00",
+                "initial_purchase_value": "5000.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-01",
+                        "end_date": "2026-06-01",
+                        "amount": "100.00",
+                        "frequency": "monthly",
+                    },
+                    {
+                        "start_date": "2026-06-01",
+                        "end_date": "2026-12-01",
+                        "amount": "200.00",
+                        "frequency": "monthly",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("contribution_intervals", response.data["error"]["details"])
+
+    def test_investment_asset_patch_uses_set_pattern_for_contribution_intervals(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo editable",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            start_date=date(2026, 1, 15),
+            amount=Decimal("5000.00"),
+            initial_purchase_value=Decimal("5000.00"),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            monthly_contribution_amount=Decimal("10.00"),
+            is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 15),
+            end_date=date(2026, 12, 15),
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
+        )
+
+        response = self.client.patch(
+            f"/api/net-worth/assets/{asset.id}/",
+            {
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": "2026-06-15",
+                        "amount": "150.00",
+                        "frequency": "monthly",
+                    },
+                    {
+                        "start_date": "2026-07-15",
+                        "end_date": None,
+                        "amount": "50.00",
+                        "frequency": "monthly",
+                    },
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        asset.refresh_from_db()
+        intervals = list(asset.contribution_intervals.order_by("start_date"))
+        self.assertEqual(len(intervals), 2)
+        self.assertEqual(intervals[0].amount, Decimal("150.00"))
+        self.assertIsNone(intervals[1].end_date)
 
     def test_periodic_investment_asset_sync_is_atomic_when_budget_row_creation_fails(self):
         asset = Asset.objects.create(
@@ -2428,4 +2555,3 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(len(response.data["rows"]), 2)
         self.assertEqual(response.data["rows"][0]["total_assets"], "1000.00")
-

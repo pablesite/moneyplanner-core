@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.core.validators import MaxValueValidator
 from django.db import models
@@ -257,6 +260,34 @@ class Asset(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id} - {self.name} ({self.amount} {self.currency})"
+
+
+class InvestmentContributionInterval(models.Model):
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="contribution_intervals",
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    frequency = models.CharField(
+        max_length=20,
+        choices=Asset.InvestmentContributionFrequency.choices,
+        default=Asset.InvestmentContributionFrequency.MONTHLY,
+    )
+    currency = models.CharField(max_length=3, null=True, blank=True)
+
+    class Meta:
+        ordering = ["start_date", "id"]
+
+    def clean(self) -> None:
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            raise ValidationError("end_date must be >= start_date")
 
 
 class AssetImprovement(models.Model):

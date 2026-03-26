@@ -15,6 +15,7 @@ from ..models import (
     Asset,
     AssetImprovement,
     AssetValuation,
+    InvestmentContributionInterval,
     InvestmentAssetEvent,
     Liability,
     LiabilityEvent,
@@ -1015,6 +1016,63 @@ class NetWorthServicesTests(TestCase):
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 29))
         # Cuotas semanales en: 01, 08, 15, 22 y 29 de enero.
         self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("1500.00"))
+
+    def test_get_effective_asset_amount_accumulates_multiple_intervals(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF multi-intervalo",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            monthly_contribution_amount=Decimal("1.00"),
+            amount=Decimal("1000.00"),
+            initial_purchase_value=Decimal("1000.00"),
+            is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 1),
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 3, 1),
+            amount=Decimal("50.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 1))
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("2350.00"))
+
+    def test_get_effective_asset_amount_skips_intervals_with_currency_mismatch(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETF USD",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            amount=Decimal("1000.00"),
+            initial_purchase_value=Decimal("1000.00"),
+            is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 1),
+            end_date=None,
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="USD",
+        )
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 1))
+        self.assertEqual(effective, Decimal("1000.00"))
 
     @patch(
         "net_worth.services_assets_core._build_investment_contribution_schedule",

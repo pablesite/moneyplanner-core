@@ -59,7 +59,7 @@ from .services_timelines import (
 class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = AssetSerializer
-    queryset = Asset.objects.prefetch_related("improvements").all()
+    queryset = Asset.objects.prefetch_related("improvements", "contribution_intervals").all()
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()

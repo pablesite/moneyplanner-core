@@ -228,7 +228,10 @@ def build_net_worth_timeline(
     liability_category: str | None = None,
 ) -> dict[str, object]:
     base_currency = get_base_currency_for_user(user=user)
-    assets_qs = Asset.objects.filter(user=user, is_active=True).prefetch_related("improvements")
+    assets_qs = Asset.objects.filter(user=user, is_active=True).prefetch_related(
+        "improvements",
+        "contribution_intervals",
+    )
     liabilities_qs = Liability.objects.filter(user=user, is_active=True)
     if asset_category:
         assets_qs = assets_qs.filter(category=asset_category)
