@@ -81,32 +81,80 @@ def _build_investment_contribution_schedule(
     as_of_date: date | None = None,
     horizon_end_date: date | None = None,
 ) -> list[tuple[date, Decimal]]:
+    if asset.category != Asset.Category.INVESTMENTS:
+        return []
+    intervals = list(asset.contribution_intervals.all())
+    if intervals:
+        schedule: list[tuple[date, Decimal]] = []
+        for interval in intervals:
+            schedule.extend(
+                _build_interval_schedule(
+                    start_date=interval.start_date,
+                    end_date=interval.end_date,
+                    amount=Decimal(interval.amount),
+                    frequency=interval.frequency,
+                    as_of_date=as_of_date,
+                    horizon_end_date=horizon_end_date,
+                )
+            )
+        return sorted(schedule, key=lambda row: row[0])
+    return _build_legacy_schedule(
+        asset=asset,
+        as_of_date=as_of_date,
+        horizon_end_date=horizon_end_date,
+    )
+
+
+def _build_legacy_schedule(
+    *,
+    asset: Asset,
+    as_of_date: date | None = None,
+    horizon_end_date: date | None = None,
+) -> list[tuple[date, Decimal]]:
     if (
-        asset.category != Asset.Category.INVESTMENTS
-        or asset.investment_contribution_mode
+        asset.investment_contribution_mode
         != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
         or asset.monthly_contribution_amount is None
         or asset.monthly_contribution_amount <= 0
     ):
         return []
+    return _build_interval_schedule(
+        start_date=asset.start_date,
+        end_date=asset.expected_end_date,
+        amount=Decimal(asset.monthly_contribution_amount),
+        frequency=str(
+            asset.investment_contribution_frequency
+            or Asset.InvestmentContributionFrequency.MONTHLY
+        ),
+        as_of_date=as_of_date,
+        horizon_end_date=horizon_end_date,
+    )
 
-    schedule_end = asset.expected_end_date
+
+def _build_interval_schedule(
+    *,
+    start_date: date,
+    end_date: date | None,
+    amount: Decimal,
+    frequency: str,
+    as_of_date: date | None = None,
+    horizon_end_date: date | None = None,
+) -> list[tuple[date, Decimal]]:
+    if amount <= 0:
+        return []
+    schedule_end = end_date
     bounded_end = horizon_end_date or as_of_date
     if schedule_end is None:
         schedule_end = bounded_end or timezone.localdate()
     elif bounded_end is not None:
         schedule_end = min(schedule_end, bounded_end)
-    if schedule_end < asset.start_date:
+    if schedule_end < start_date:
         return []
 
-    frequency = (
-        asset.investment_contribution_frequency or Asset.InvestmentContributionFrequency.MONTHLY
-    )
     schedule: list[tuple[date, Decimal]] = []
-    due_date = asset.start_date
-    installment = Decimal(asset.monthly_contribution_amount)
+    due_date = start_date
     while due_date <= schedule_end:
-        schedule.append((due_date, installment))
+        schedule.append((due_date, amount))
         if frequency == Asset.InvestmentContributionFrequency.WEEKLY:
             due_date += timedelta(days=7)
         else:
@@ -141,16 +189,29 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
 
     owner_name = _get_generated_asset_owner_name(asset=asset)
     expense_category, expense_subcategory = _get_generated_asset_expense_profile(asset=asset)
-    final_due_year = schedule[-1][0].year if asset.expected_end_date is not None else None
+    intervals = list(asset.contribution_intervals.all())
+    if intervals:
+        has_open_interval = any(interval.end_date is None for interval in intervals)
+        final_due_year = None if has_open_interval else schedule[-1][0].year
+        interval_currencies = {
+            str(interval.currency or "").strip().upper()
+            for interval in intervals
+            if str(interval.currency or "").strip()
+        }
+        contribution_currency = (
+            interval_currencies.pop() if len(interval_currencies) == 1 else str(asset.currency).strip().upper()
+        )
+    else:
+        final_due_year = schedule[-1][0].year if asset.expected_end_date is not None else None
+        contribution_currency = (
+            str(asset.investment_contribution_currency or "").strip().upper()
+            or str(asset.currency).strip().upper()
+        )
     for year, annual_total in totals_by_year.items():
         time_profile = (
             AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
             if final_due_year is not None
             else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
-        )
-        contribution_currency = (
-            str(asset.investment_contribution_currency or "").strip().upper()
-            or str(asset.currency).strip().upper()
         )
         generated_defaults = {
             "name": f"Aportacion inversion: {asset.name}",

@@ -9,6 +9,7 @@ from .models import (
     Asset,
     AssetImprovement,
     AssetValuation,
+    InvestmentContributionInterval,
     InvestmentAssetEvent,
     Liability,
     LiabilityEvent,
@@ -97,11 +98,20 @@ class AssetImprovementSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class InvestmentContributionIntervalSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = InvestmentContributionInterval
+        fields = ["id", "start_date", "end_date", "amount", "frequency", "currency"]
+
+
 class AssetSerializer(serializers.ModelSerializer):
     amount_base = serializers.SerializerMethodField()
     effective_amount = serializers.SerializerMethodField()
     accounting_integration_state = serializers.SerializerMethodField()
     improvements = AssetImprovementSerializer(many=True, required=False)
+    contribution_intervals = InvestmentContributionIntervalSerializer(many=True, required=False)
 
     class Meta:
         model = Asset
@@ -121,6 +131,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "investment_contribution_frequency",
             "investment_contribution_currency",
             "monthly_contribution_amount",
+            "contribution_intervals",
             "market_value_override",
             "market_value_override_date",
             "amortization_method",
@@ -206,6 +217,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "monthly_contribution_amount",
             getattr(self.instance, "monthly_contribution_amount", None),
         )
+        contribution_intervals = attrs.get("contribution_intervals", None)
         market_value_override = attrs.get(
             "market_value_override", getattr(self.instance, "market_value_override", None)
         )
@@ -271,6 +283,13 @@ class AssetSerializer(serializers.ModelSerializer):
             attrs["monthly_contribution_amount"] = None
             attrs["market_value_override"] = None
             attrs["market_value_override_date"] = None
+            if contribution_intervals:
+                raise serializers.ValidationError(
+                    {"contribution_intervals": "Solo aplica a activos de inversiones."}
+                )
+            if contribution_intervals is not None or self.instance is not None:
+                attrs["contribution_intervals"] = []
+                contribution_intervals = []
         elif investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
             investment_contribution_frequency = Asset.InvestmentContributionFrequency.MONTHLY
             investment_contribution_currency = None
@@ -292,6 +311,21 @@ class AssetSerializer(serializers.ModelSerializer):
                 "currency", getattr(self.instance, "currency", None)
             )
             attrs["investment_contribution_currency"] = investment_contribution_currency
+        if category == Asset.Category.INVESTMENTS and contribution_intervals is not None:
+            normalized_intervals = self._normalize_contribution_intervals(
+                contribution_intervals=contribution_intervals
+            )
+            self._validate_no_overlap_contribution_intervals(normalized_intervals)
+            attrs["contribution_intervals"] = normalized_intervals
+            has_intervals = len(normalized_intervals) > 0
+            if has_intervals:
+                investment_contribution_mode = (
+                    Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+                )
+            else:
+                investment_contribution_mode = Asset.InvestmentContributionMode.ONE_TIME
+            attrs["investment_contribution_mode"] = investment_contribution_mode
+            self._sync_legacy_periodic_fields_from_intervals(attrs=attrs)
 
         validate_asset_payload(
             tracking_mode=tracking_mode,
@@ -319,6 +353,14 @@ class AssetSerializer(serializers.ModelSerializer):
             user_id=getattr(getattr(request, "user", None), "id", None),
             current_asset_id=getattr(self.instance, "id", None),
             currency=attrs.get("currency", getattr(self.instance, "currency", None)),
+            has_contribution_intervals=bool(
+                attrs.get("contribution_intervals")
+                if "contribution_intervals" in attrs
+                else (
+                    self.instance is not None
+                    and self.instance.contribution_intervals.exists()
+                )
+            ),
         )
         return attrs
 
@@ -362,20 +404,97 @@ class AssetSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context["request"]
         improvements_data = validated_data.pop("improvements", [])
+        contribution_intervals_data = validated_data.pop("contribution_intervals", [])
         asset = create_asset_for_user(user=request.user, validated_data=validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
         self._ensure_accounting_opening_balance(asset=asset)
         self._sync_improvements(asset=asset, improvements_data=improvements_data)
+        self._sync_contribution_intervals(
+            asset=asset,
+            intervals_data=contribution_intervals_data,
+        )
         return asset
 
     def update(self, instance, validated_data):
         improvements_data = validated_data.pop("improvements", None)
+        contribution_intervals_data = validated_data.pop("contribution_intervals", None)
         asset = super().update(instance, validated_data)
         asset._accounting_integration_state = ensure_asset_accounting_account(asset=asset)
         self._ensure_accounting_opening_balance(asset=asset)
         if improvements_data is not None:
             self._sync_improvements(asset=asset, improvements_data=improvements_data)
+        if contribution_intervals_data is not None:
+            self._sync_contribution_intervals(
+                asset=asset,
+                intervals_data=contribution_intervals_data,
+            )
         return asset
+
+    def _normalize_contribution_intervals(
+        self, *, contribution_intervals: list[dict],
+    ) -> list[dict]:
+        normalized: list[dict] = []
+        for row in contribution_intervals:
+            payload = dict(row)
+            payload.pop("id", None)
+            payload["currency"] = (
+                str(payload.get("currency") or "").strip().upper() or None
+            )
+            normalized.append(payload)
+        return normalized
+
+    def _validate_no_overlap_contribution_intervals(self, intervals_data: list[dict]) -> None:
+        sorted_intervals = sorted(intervals_data, key=lambda row: row["start_date"])
+        for current, next_interval in zip(sorted_intervals, sorted_intervals[1:]):
+            current_end = current.get("end_date")
+            next_start = next_interval["start_date"]
+            if current_end is None or current_end >= next_start:
+                raise serializers.ValidationError(
+                    {
+                        "contribution_intervals": (
+                            "Los intervalos de aportacion no pueden solaparse."
+                        )
+                    }
+                )
+
+    def _sync_legacy_periodic_fields_from_intervals(self, *, attrs: dict) -> None:
+        intervals_data = attrs.get("contribution_intervals", [])
+        if not intervals_data:
+            attrs["investment_contribution_frequency"] = (
+                Asset.InvestmentContributionFrequency.MONTHLY
+            )
+            attrs["investment_contribution_currency"] = None
+            attrs["expected_end_date"] = None
+            attrs["monthly_contribution_amount"] = None
+            return
+        first_interval = intervals_data[0]
+        attrs["investment_contribution_frequency"] = first_interval["frequency"]
+        attrs["monthly_contribution_amount"] = first_interval["amount"]
+        currencies = {
+            str(interval.get("currency") or "").strip().upper()
+            for interval in intervals_data
+            if str(interval.get("currency") or "").strip()
+        }
+        attrs["investment_contribution_currency"] = (
+            currencies.pop() if len(currencies) == 1 else None
+        )
+        if any(interval.get("end_date") is None for interval in intervals_data):
+            attrs["expected_end_date"] = None
+        else:
+            attrs["expected_end_date"] = max(
+                interval["end_date"] for interval in intervals_data
+            )
+
+    def _sync_contribution_intervals(self, *, asset: Asset, intervals_data: list[dict]) -> None:
+        asset.contribution_intervals.all().delete()
+        if not intervals_data:
+            return
+        InvestmentContributionInterval.objects.bulk_create(
+            [
+                InvestmentContributionInterval(asset=asset, **row)
+                for row in intervals_data
+            ]
+        )
 
     def _ensure_accounting_opening_balance(self, *, asset: Asset) -> None:
         if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:

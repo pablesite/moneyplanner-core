@@ -49,6 +49,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `expense_execution_breakdown` for expense summary
    so Core and SaaS frontends can render unbudgeted execution visibility without duplicating backend rules.
 
+## Net Worth Investment Contribution Intervals
+1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
+2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
+3. Legacy flat fields in `Asset` remain available for backward compatibility, while the schedule builder prioritizes interval rows when present.
+
 ## Public Import API
 1. Core exposes MoneyWiz import endpoints in `accounting` for preview and commit:
    - `POST /api/accounting/transactions/import-moneywiz/preview/`

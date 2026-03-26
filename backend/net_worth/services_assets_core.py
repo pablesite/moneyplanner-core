@@ -318,6 +318,7 @@ def validate_asset_payload(
     monthly_contribution_amount=None,
     market_value_override=None,
     market_value_override_date: date | None = None,
+    has_contribution_intervals: bool = False,
     user_id: int | None = None,
     current_asset_id: int | None = None,
     currency: str | None = None,
@@ -376,7 +377,7 @@ def validate_asset_payload(
         category == Asset.Category.INVESTMENTS
         and investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
     )
-    if is_periodic_investment:
+    if is_periodic_investment and not has_contribution_intervals:
         _validate_periodic_investment_payload(
             start_date=start_date,
             expected_end_date=expected_end_date,
@@ -385,6 +386,8 @@ def validate_asset_payload(
             monthly_contribution_amount=monthly_contribution_amount,
             purchase_value=purchase_value,
         )
+    if is_periodic_investment and has_contribution_intervals and purchase_value is None:
+        raise DRFValidationError({"amount": ("Requerido para aportacion periodica en inversiones.")})
 
     _validate_market_value_override_payload(
         category=category,
@@ -656,17 +659,8 @@ def get_effective_asset_amount(
     if manual_override is not None:
         return manual_override
 
-    if (
-        asset.category == Asset.Category.INVESTMENTS
-        and asset.investment_contribution_mode
-        == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
-        and asset.monthly_contribution_amount is not None
-        and asset.monthly_contribution_amount > 0
-        and (
-            not str(asset.investment_contribution_currency or "").strip()
-            or str(asset.investment_contribution_currency).strip().upper()
-            == str(asset.currency).strip().upper()
-        )
+    if asset.category == Asset.Category.INVESTMENTS and _can_apply_periodic_investment_to_effective_amount(
+        asset=asset
     ):
         accrued_contributions = sum(
             installment
@@ -880,6 +874,23 @@ def _get_latest_asset_manual_value(
     return None
 
 
+def _can_apply_periodic_investment_to_effective_amount(*, asset: Asset) -> bool:
+    if asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
+        return False
+    intervals = list(asset.contribution_intervals.all())
+    if intervals:
+        asset_currency = str(asset.currency or "").strip().upper()
+        for interval in intervals:
+            interval_currency = str(interval.currency or "").strip().upper()
+            if interval_currency and interval_currency != asset_currency:
+                return False
+        return True
+    if asset.monthly_contribution_amount is None or asset.monthly_contribution_amount <= 0:
+        return False
+    contribution_currency = str(asset.investment_contribution_currency or "").strip().upper()
+    return not contribution_currency or contribution_currency == str(asset.currency).strip().upper()
+
+
 def validate_investment_asset_event_payload(
     *,
     asset: Asset | None,
@@ -1017,16 +1028,7 @@ def _get_periodic_investment_delta_since_anchor(
     as_of_date: date,
     position_cache=None,
 ) -> Decimal:
-    if (
-        asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
-        or asset.monthly_contribution_amount is None
-        or asset.monthly_contribution_amount <= 0
-        or (
-            str(asset.investment_contribution_currency or "").strip()
-            and str(asset.investment_contribution_currency).strip().upper()
-            != str(asset.currency).strip().upper()
-        )
-    ):
+    if not _can_apply_periodic_investment_to_effective_amount(asset=asset):
         return Decimal("0")
     return sum(
         (
