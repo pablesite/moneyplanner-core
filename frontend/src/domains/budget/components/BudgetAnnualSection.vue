@@ -1,10 +1,13 @@
 ﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   type AnnualExpenseEntry,
   type AnnualIncomeEntry,
   AnnualEntryModalForm,
 } from '@/domains/data-input';
+
+const router = useRouter();
 
 type BudgetSection = {
   id: 'income' | 'expense';
@@ -91,6 +94,30 @@ function toggleGroup(categoryKey: string): void {
     ...expandedGroups.value,
     [categoryKey]: !expandedGroups.value[categoryKey],
   };
+}
+
+function goToMovements(
+  sectionId: 'income' | 'expense',
+  categoryKey: string,
+  subcategoryKey?: string,
+): void {
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const dateFrom = fmt(new Date(props.fiscalYear, 0, 1));
+  const dateTo = fmt(new Date(props.fiscalYear, props.budgetDetailMonth, 0));
+  const query: Record<string, string> = {
+    tab: 'todos',
+    date_from: dateFrom,
+    date_to: dateTo,
+    kind: sectionId,
+    category_key: categoryKey,
+  };
+  if (subcategoryKey) query.subcategory_key = subcategoryKey;
+  router.push({ name: 'accounting-movements', query });
 }
 
 const contextIncomeEntries = computed(() => {
@@ -243,47 +270,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           >
             Vista compacta activa
           </span>
-
-          <div
-            class="ui-budget-filter-segment"
-            role="tablist"
-            :aria-label="`Filtro de ${section.title}`"
-          >
-            <button
-              type="button"
-              class="ui-budget-filter-btn"
-              :class="{ 'ui-budget-filter-btn-active': section.filterMode === 'all' }"
-              @click="
-                section.id === 'income' ? updateIncomeViewMode('all') : updateExpenseViewMode('all')
-              "
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              class="ui-budget-filter-btn"
-              :class="{ 'ui-budget-filter-btn-active': section.filterMode === 'recurrent' }"
-              @click="
-                section.id === 'income'
-                  ? updateIncomeViewMode('recurrent')
-                  : updateExpenseViewMode('recurrent')
-              "
-            >
-              Recurrentes
-            </button>
-            <button
-              type="button"
-              class="ui-budget-filter-btn"
-              :class="{ 'ui-budget-filter-btn-active': section.filterMode === 'one_off' }"
-              @click="
-                section.id === 'income'
-                  ? updateIncomeViewMode('one_off')
-                  : updateExpenseViewMode('one_off')
-              "
-            >
-              Puntuales
-            </button>
-          </div>
         </div>
 
         <div class="ui-budget-section-total">
@@ -469,7 +455,20 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           >
             <div class="ui-budget-group-title-wrap">
               <div class="ui-budget-group-kicker">Categoría</div>
-              <h3>{{ group.categoryLabel }}</h3>
+              <div class="ui-budget-group-name-row">
+                <h3
+                  class="ui-budget-name-link"
+                  @click.stop="goToMovements(section.id, group.categoryKey)"
+                >{{ group.categoryLabel }}</h3>
+                <button
+                  type="button"
+                  class="ui-budget-group-add-btn"
+                  :title="`Añadir en ${group.categoryLabel}`"
+                  @click.stop="openCreateForCategory(section.id, group.categoryKey)"
+                >
+                  +
+                </button>
+              </div>
               <p>
                 {{ group.rows.length }} subcategorías -
                 {{ formatPercent(group.shareOfSection, 0) }} de {{ section.title.toLowerCase() }}
@@ -572,14 +571,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             </div>
 
             <div class="ui-budget-group-header-right">
-              <button
-                type="button"
-                class="ui-budget-group-add-btn"
-                :title="`Añadir en ${group.categoryLabel}`"
-                @click.stop="openCreateForCategory(section.id, group.categoryKey)"
-              >
-                +
-              </button>
               <div class="ui-budget-group-amounts">
                 <template v-if="budgetCategoryActualExecution(section.id, group.categoryKey)">
                   <div class="ui-budget-group-amount-ytd">
@@ -625,7 +616,10 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               <div class="ui-budget-row-main">
                 <div class="ui-budget-row-kicker">Subcategoría</div>
                 <div class="ui-budget-row-title">
-                  {{ row.subcategoryLabel }}
+                  <span
+                    class="ui-budget-name-link"
+                    @click="goToMovements(section.id, group.categoryKey, row.subcategoryKey)"
+                  >{{ row.subcategoryLabel }}</span>
                   <button
                     type="button"
                     class="ui-budget-row-inline-add"

@@ -58,6 +58,8 @@ const props = defineProps<{
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   viewModeLabel: (mode: BudgetEntryViewMode) => string;
+  updateIncomeViewMode: (mode: BudgetEntryViewMode) => void;
+  updateExpenseViewMode: (mode: BudgetEntryViewMode) => void;
   closeStatus?: MonthlyCloseStatus;
   setActiveMonthlyCloseStep: (step: MonthlyCloseStepId) => void;
   updateSelectedExecutionMonth: (value: number) => void;
@@ -250,71 +252,108 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
       <article class="ui-hero-summary">
         <div class="ui-hero-summary-head">
           <div class="ui-hero-title">Saldo anual previsto</div>
-          <div class="ui-hero-summary-controls">
-            <button
-              type="button"
-              class="ui-budget-suggestions-info-btn"
-              aria-label="Ver sugerencias"
-              @click="isSuggestionsModalOpen = true"
-            >
-              <span aria-hidden="true">i</span>
-            </button>
-            <label class="ui-hero-context">
-              <span class="ui-hero-context-label">Titularidad</span>
-              <details class="ui-select-popover ui-hero-context-popover">
-                <summary class="ui-select-popover-trigger ui-hero-context-trigger">
-                  <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
-                  <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
-                </summary>
-                <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
-                  <button
-                    type="button"
-                    class="ui-select-popover-option"
-                    :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
-                    @click="selectOwnershipFilterOption('all', $event)"
-                  >
-                    Todos
-                  </button>
-                  <button
-                    v-for="ownerOption in ownershipOptions"
-                    :key="ownerOption.value"
-                    type="button"
-                    class="ui-select-popover-option"
-                    :class="{
-                      'ui-select-popover-option-active': ownershipFilter === ownerOption.value,
-                    }"
-                    @click="selectOwnershipFilterOption(ownerOption.value, $event)"
-                  >
-                    {{ ownerOption.label }}
-                  </button>
-                </div>
-              </details>
-            </label>
-            <label class="ui-hero-context">
-              <span class="ui-hero-context-label">Ejercicio</span>
-              <details
-                class="ui-select-popover ui-hero-context-popover"
-                :class="{ 'opacity-60': isLoading }"
+          <div class="ui-budget-hero-controls-col">
+            <div class="ui-hero-summary-controls">
+              <button
+                type="button"
+                class="ui-budget-suggestions-info-btn"
+                aria-label="Ver sugerencias"
+                @click="isSuggestionsModalOpen = true"
               >
-                <summary class="ui-select-popover-trigger ui-hero-context-trigger">
-                  <span class="ui-select-popover-text">{{ selectedFiscalYearLabel }}</span>
-                  <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
-                </summary>
-                <div class="ui-select-popover-menu" role="listbox" aria-label="Ejercicio">
-                  <button
-                    v-for="year in fiscalYearOptions"
-                    :key="year"
-                    type="button"
-                    class="ui-select-popover-option"
-                    :class="{ 'ui-select-popover-option-active': fiscalYear === year }"
-                    :disabled="isLoading"
-                    @click="selectFiscalYearOption(year, $event)"
-                  >
-                    {{ year }}
-                  </button>
-                </div>
-              </details>
-            </label>
+                <span aria-hidden="true">i</span>
+              </button>
+              <label class="ui-hero-context">
+                <span class="ui-hero-context-label">Titularidad</span>
+                <details class="ui-select-popover ui-hero-context-popover">
+                  <summary class="ui-select-popover-trigger ui-hero-context-trigger">
+                    <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
+                    <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
+                  </summary>
+                  <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                    <button
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                      @click="selectOwnershipFilterOption('all', $event)"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      v-for="ownerOption in ownershipOptions"
+                      :key="ownerOption.value"
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{
+                        'ui-select-popover-option-active': ownershipFilter === ownerOption.value,
+                      }"
+                      @click="selectOwnershipFilterOption(ownerOption.value, $event)"
+                    >
+                      {{ ownerOption.label }}
+                    </button>
+                  </div>
+                </details>
+              </label>
+              <label class="ui-hero-context">
+                <span class="ui-hero-context-label">Ejercicio</span>
+                <details
+                  class="ui-select-popover ui-hero-context-popover"
+                  :class="{ 'opacity-60': isLoading }"
+                >
+                  <summary class="ui-select-popover-trigger ui-hero-context-trigger">
+                    <span class="ui-select-popover-text">{{ selectedFiscalYearLabel }}</span>
+                    <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
+                  </summary>
+                  <div class="ui-select-popover-menu" role="listbox" aria-label="Ejercicio">
+                    <button
+                      v-for="year in fiscalYearOptions"
+                      :key="year"
+                      type="button"
+                      class="ui-select-popover-option"
+                      :class="{ 'ui-select-popover-option-active': fiscalYear === year }"
+                      :disabled="isLoading"
+                      @click="selectFiscalYearOption(year, $event)"
+                    >
+                      {{ year }}
+                    </button>
+                  </div>
+                </details>
+              </label>
+            </div>
+            <div class="ui-budget-filter-segment" role="tablist" aria-label="Tipo de partida">
+              <button
+                type="button"
+                class="ui-budget-filter-btn"
+                :class="{ 'ui-budget-filter-btn-active': incomeViewMode === 'all' }"
+                @click="
+                  updateIncomeViewMode('all');
+                  updateExpenseViewMode('all');
+                "
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                class="ui-budget-filter-btn"
+                :class="{ 'ui-budget-filter-btn-active': incomeViewMode === 'recurrent' }"
+                @click="
+                  updateIncomeViewMode('recurrent');
+                  updateExpenseViewMode('recurrent');
+                "
+              >
+                Recurrentes
+              </button>
+              <button
+                type="button"
+                class="ui-budget-filter-btn"
+                :class="{ 'ui-budget-filter-btn-active': incomeViewMode === 'one_off' }"
+                @click="
+                  updateIncomeViewMode('one_off');
+                  updateExpenseViewMode('one_off');
+                "
+              >
+                Puntuales
+              </button>
+            </div>
           </div>
         </div>
 
