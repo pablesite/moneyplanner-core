@@ -89,6 +89,7 @@ type EditableActivityKind =
   | 'revaluation';
 type ClassificationActivityKind = 'income' | 'expense';
 type CounterpartyEditableKind = 'transfer' | 'investment' | 'debt_payment';
+type LiabilityCategoryKey = 'mortgage' | 'personal_loan' | 'credit_card' | 'other';
 
 type LastQuickClassification = {
   category_key: string;
@@ -105,6 +106,11 @@ type AccountTimelineTransaction = LedgerTransaction & {
   impactValue: number;
   tone: 'positive' | 'negative' | 'neutral';
 };
+const EXPENSE_MOVEMENT_CATEGORY_KEYS: ExpenseCategoryKey[] = [
+  'consumption_expenses',
+  'real_estate_assets',
+  'tangible_assets',
+];
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -120,7 +126,8 @@ function round2(value: number): number {
 }
 
 function currencyDecimals(currency: string): number {
-  return currency.trim().toUpperCase() === 'BTC' ? 8 : 2;
+  const code = currency.trim().toUpperCase();
+  return code === 'BTC' || code === 'ETH' ? 8 : 2;
 }
 
 function roundByCurrency(value: number, currency: string): number {
@@ -341,6 +348,9 @@ export function useAccountingPage() {
   const accountMap = computed(
     () => new Map(accounts.value.map((account) => [account.id, account])),
   );
+  const liabilityMap = computed(
+    () => new Map(manualLiabilities.value.map((liability) => [liability.id, liability])),
+  );
   const liquidityAccounts = computed(() =>
     accounts.value.filter((account) => account.account_type === 'asset'),
   );
@@ -508,6 +518,22 @@ export function useAccountingPage() {
       (account) => account.account_type === 'liability' && account.liability_id != null,
     ),
   );
+  const quickSelectedLiabilityCategory = computed<LiabilityCategoryKey | null>(() => {
+    const liabilityAccountId = normalizeAccountId(quickEntryForm.liability_account_id);
+    if (liabilityAccountId == null) return null;
+    const liabilityId = accountMap.value.get(liabilityAccountId)?.liability_id ?? null;
+    if (liabilityId == null) return null;
+    const category = liabilityMap.value.get(liabilityId)?.category ?? null;
+    if (
+      category === 'mortgage' ||
+      category === 'personal_loan' ||
+      category === 'credit_card' ||
+      category === 'other'
+    ) {
+      return category;
+    }
+    return null;
+  });
   const debtInterestOptions = computed(() =>
     accounts.value.filter((account) => account.account_type === 'expense'),
   );
@@ -553,20 +579,33 @@ export function useAccountingPage() {
     }
     return true;
   });
-  const quickEntryNeedsClassification = computed(() => {
-    if (quickEntryForm.movement_type === 'income') return true;
-    if (quickEntryForm.movement_type === 'expense') return true;
-    if (quickEntryForm.movement_type !== 'debt_payment') return false;
-    return toNumber(quickEntryForm.interest_amount) > 0;
-  });
+  const quickEntryNeedsClassification = computed(
+    () =>
+      quickEntryForm.movement_type === 'income' ||
+      quickEntryForm.movement_type === 'expense' ||
+      quickEntryForm.movement_type === 'investment' ||
+      quickEntryForm.movement_type === 'debt_payment',
+  );
   const quickCategoryOptions = computed(() => {
     if (quickEntryForm.movement_type === 'income') return incomeCategories;
-    if (quickEntryForm.movement_type === 'expense') return expenseCategories;
-    if (
-      quickEntryForm.movement_type === 'debt_payment' &&
-      toNumber(quickEntryForm.interest_amount) > 0
-    ) {
-      return expenseCategories;
+    if (quickEntryForm.movement_type === 'expense') {
+      return expenseCategories.filter((row) =>
+        EXPENSE_MOVEMENT_CATEGORY_KEYS.includes(row.value as ExpenseCategoryKey),
+      );
+    }
+    if (quickEntryForm.movement_type === 'investment') {
+      if (quickEntryForm.investment_direction === 'outflow') {
+        return incomeCategories.filter((row) => row.value === 'capital_gains');
+      }
+      return expenseCategories.filter((row) =>
+        ['financial_investments', 'real_estate_assets', 'tangible_assets'].includes(row.value),
+      );
+    }
+    if (quickEntryForm.movement_type === 'debt_payment') {
+      if (quickSelectedLiabilityCategory.value === 'mortgage') {
+        return expenseCategories.filter((row) => row.value === 'real_estate_assets');
+      }
+      return expenseCategories.filter((row) => row.value === 'consumption_expenses');
     }
     return [];
   });
@@ -577,20 +616,62 @@ export function useAccountingPage() {
         (row) => row.category === (quickEntryForm.category_key as IncomeCategoryKey),
       );
     }
-    if (
-      quickEntryForm.movement_type === 'expense' ||
-      (quickEntryForm.movement_type === 'debt_payment' &&
-        toNumber(quickEntryForm.interest_amount) > 0)
-    ) {
+    if (quickEntryForm.movement_type === 'expense' || quickEntryForm.movement_type === 'debt_payment') {
+      return expenseSubcategories.filter(
+        (row) => row.category === (quickEntryForm.category_key as ExpenseCategoryKey),
+      );
+    }
+    if (quickEntryForm.movement_type === 'investment') {
+      if (quickEntryForm.investment_direction === 'outflow') {
+        return incomeSubcategories.filter(
+          (row) => row.category === (quickEntryForm.category_key as IncomeCategoryKey),
+        );
+      }
       return expenseSubcategories.filter(
         (row) => row.category === (quickEntryForm.category_key as ExpenseCategoryKey),
       );
     }
     return [];
   });
+  const quickCategoryLocked = computed(() => {
+    if (quickEntryForm.movement_type === 'investment') return true;
+    if (quickEntryForm.movement_type === 'debt_payment') return true;
+    return false;
+  });
+  const quickSubcategoryLocked = computed(() => {
+    if (quickEntryForm.movement_type === 'investment') {
+      return quickEntryForm.investment_direction === 'outflow';
+    }
+    if (quickEntryForm.movement_type === 'debt_payment') {
+      return quickSelectedLiabilityCategory.value === 'mortgage';
+    }
+    return false;
+  });
   function categoryOptionsByKind(kind: ActivityFilter) {
     if (kind === 'income') return incomeCategories;
-    if (kind === 'expense') return expenseCategories;
+    if (kind === 'expense') {
+      return expenseCategories.filter((row) =>
+        EXPENSE_MOVEMENT_CATEGORY_KEYS.includes(row.value as ExpenseCategoryKey),
+      );
+    }
+    if (kind === 'investment') {
+      return [
+        ...expenseCategories.filter((row) =>
+          [
+            'savings_allocation',
+            'financial_investments',
+            'real_estate_assets',
+            'tangible_assets',
+          ].includes(row.value),
+        ),
+        ...incomeCategories.filter((row) => row.value === 'capital_gains'),
+      ];
+    }
+    if (kind === 'debt_payment') {
+      return expenseCategories.filter((row) =>
+        ['real_estate_assets', 'tangible_assets', 'consumption_expenses'].includes(row.value),
+      );
+    }
     return [...incomeCategories, ...expenseCategories];
   }
   const filterCategoryOptions = computed(() => categoryOptionsByKind(activityFilters.kind));
@@ -654,8 +735,8 @@ export function useAccountingPage() {
       .filter((account) => account.account_type === 'asset' || account.account_type === 'liability')
       .sort((a, b) => a.name.localeCompare(b.name, 'es')),
   );
-  function isClassificationKind(kind: EditableActivityKind): kind is ClassificationActivityKind {
-    return kind === 'income' || kind === 'expense';
+  function isClassificationKind(kind: EditableActivityKind): boolean {
+    return kind === 'income' || kind === 'expense' || kind === 'investment' || kind === 'debt_payment';
   }
 
   function isCounterpartyKind(kind: EditableActivityKind): kind is CounterpartyEditableKind {
@@ -712,7 +793,27 @@ export function useAccountingPage() {
       ? accountMap.value.get(editTransactionForm.counterparty_account_id) ?? null
       : null,
   );
+  const editSelectedDebtLiabilityCategory = computed<LiabilityCategoryKey | null>(() => {
+    if (editTransactionForm.kind !== 'debt_payment') return null;
+    const liabilityAccountId = editTransactionForm.counterparty_account_id;
+    if (liabilityAccountId == null) return null;
+    const liabilityId = accountMap.value.get(liabilityAccountId)?.liability_id ?? null;
+    if (liabilityId == null) return null;
+    const category = liabilityMap.value.get(liabilityId)?.category ?? null;
+    if (
+      category === 'mortgage' ||
+      category === 'personal_loan' ||
+      category === 'credit_card' ||
+      category === 'other'
+    ) {
+      return category;
+    }
+    return null;
+  });
   const editInvestmentOriginCurrency = computed(() => {
+    if (editTransactionForm.kind === 'transfer') {
+      return editSelectedLiquidityAccount.value?.currency ?? '';
+    }
     if (editTransactionForm.kind !== 'investment') return '';
     if (editTransactionForm.investment_direction === 'outflow') {
       return editSelectedInvestmentAccount.value?.currency ?? '';
@@ -720,6 +821,9 @@ export function useAccountingPage() {
     return editSelectedLiquidityAccount.value?.currency ?? '';
   });
   const editInvestmentDestinationCurrency = computed(() => {
+    if (editTransactionForm.kind === 'transfer') {
+      return editSelectedInvestmentAccount.value?.currency ?? '';
+    }
     if (editTransactionForm.kind !== 'investment') return '';
     if (editTransactionForm.investment_direction === 'outflow') {
       return editSelectedLiquidityAccount.value?.currency ?? '';
@@ -740,7 +844,25 @@ export function useAccountingPage() {
   }
   const editCategoryOptions = computed(() => {
     if (editTransactionForm.kind === 'income') return incomeCategories;
-    if (editTransactionForm.kind === 'expense') return expenseCategories;
+    if (editTransactionForm.kind === 'expense') {
+      return expenseCategories.filter((row) =>
+        EXPENSE_MOVEMENT_CATEGORY_KEYS.includes(row.value as ExpenseCategoryKey),
+      );
+    }
+    if (editTransactionForm.kind === 'investment') {
+      if (editTransactionForm.investment_direction === 'outflow') {
+        return incomeCategories.filter((row) => row.value === 'capital_gains');
+      }
+      return expenseCategories.filter((row) =>
+        ['financial_investments', 'real_estate_assets', 'tangible_assets'].includes(row.value),
+      );
+    }
+    if (editTransactionForm.kind === 'debt_payment') {
+      if (editSelectedDebtLiabilityCategory.value === 'mortgage') {
+        return expenseCategories.filter((row) => row.value === 'real_estate_assets');
+      }
+      return expenseCategories.filter((row) => row.value === 'consumption_expenses');
+    }
     return [];
   });
   const editSubcategoryOptions = computed(() => {
@@ -750,12 +872,36 @@ export function useAccountingPage() {
         (row) => row.category === (editTransactionForm.category_key as IncomeCategoryKey),
       );
     }
-    if (editTransactionForm.kind === 'expense') {
+    if (editTransactionForm.kind === 'expense' || editTransactionForm.kind === 'debt_payment') {
+      return expenseSubcategories.filter(
+        (row) => row.category === (editTransactionForm.category_key as ExpenseCategoryKey),
+      );
+    }
+    if (editTransactionForm.kind === 'investment') {
+      if (editTransactionForm.investment_direction === 'outflow') {
+        return incomeSubcategories.filter(
+          (row) => row.category === (editTransactionForm.category_key as IncomeCategoryKey),
+        );
+      }
       return expenseSubcategories.filter(
         (row) => row.category === (editTransactionForm.category_key as ExpenseCategoryKey),
       );
     }
     return [];
+  });
+  const editCategoryLocked = computed(() => {
+    if (editTransactionForm.kind === 'investment') return true;
+    if (editTransactionForm.kind === 'debt_payment') return true;
+    return false;
+  });
+  const editSubcategoryLocked = computed(() => {
+    if (editTransactionForm.kind === 'investment') {
+      return editTransactionForm.investment_direction === 'outflow';
+    }
+    if (editTransactionForm.kind === 'debt_payment') {
+      return editSelectedDebtLiabilityCategory.value === 'mortgage';
+    }
+    return false;
   });
   const editEntryReady = computed(() => {
     if (!editTransactionForm.description.trim()) return false;
@@ -780,7 +926,10 @@ export function useAccountingPage() {
     if (editKindNeedsClassification.value) {
       return Boolean(editTransactionForm.category_key && editTransactionForm.subcategory_key);
     }
-    if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+    if (
+      (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
+      editInvestmentIsCrossCurrency.value
+    ) {
       const destinationValue = Number(formatDecimalInput(editTransactionForm.destination_amount));
       return Number.isFinite(destinationValue) && destinationValue > 0;
     }
@@ -827,6 +976,46 @@ export function useAccountingPage() {
       } else {
         quickEntryForm.category_key = '';
         quickEntryForm.subcategory_key = '';
+      }
+    },
+  );
+  watch(
+    () => [quickEntryForm.movement_type, quickEntryForm.investment_direction] as const,
+    () => {
+      if (quickEntryForm.movement_type !== 'investment') return;
+      if (quickEntryForm.investment_direction === 'outflow') {
+        quickEntryForm.category_key = 'capital_gains';
+        quickEntryForm.subcategory_key = 'sale_financial_assets';
+      } else if (!quickEntryForm.category_key) {
+        quickEntryForm.category_key = 'financial_investments';
+      }
+    },
+    { immediate: true },
+  );
+  watch(
+    () => [quickEntryForm.movement_type, quickEntryForm.liability_account_id] as const,
+    () => {
+      if (quickEntryForm.movement_type !== 'debt_payment') return;
+      if (quickSelectedLiabilityCategory.value === 'mortgage') {
+        quickEntryForm.category_key = 'real_estate_assets';
+        quickEntryForm.subcategory_key = 'mortgage_principal';
+      } else {
+        quickEntryForm.category_key = 'consumption_expenses';
+        if (quickEntryForm.subcategory_key === 'mortgage_principal') {
+          quickEntryForm.subcategory_key = 'financial_commitments';
+        }
+      }
+    },
+    { immediate: true },
+  );
+  watch(
+    () => quickEntryForm.movement_type,
+    (movementType) => {
+      if (movementType !== 'expense') return;
+      if (
+        !EXPENSE_MOVEMENT_CATEGORY_KEYS.includes(quickEntryForm.category_key as ExpenseCategoryKey)
+      ) {
+        quickEntryForm.category_key = 'consumption_expenses';
       }
     },
   );
@@ -899,6 +1088,46 @@ export function useAccountingPage() {
         }
       }
     },
+  );
+  watch(
+    () =>
+      [
+        editTransactionForm.kind,
+        editTransactionForm.investment_direction,
+        editTransactionForm.counterparty_account_id,
+      ] as const,
+    () => {
+      if (editTransactionForm.kind === 'investment') {
+        if (editTransactionForm.investment_direction === 'outflow') {
+          editTransactionForm.category_key = 'capital_gains';
+          editTransactionForm.subcategory_key = 'sale_financial_assets';
+        } else if (!editTransactionForm.category_key) {
+          editTransactionForm.category_key = 'financial_investments';
+        }
+        return;
+      }
+      if (editTransactionForm.kind === 'expense') {
+        if (
+          !EXPENSE_MOVEMENT_CATEGORY_KEYS.includes(
+            editTransactionForm.category_key as ExpenseCategoryKey,
+          )
+        ) {
+          editTransactionForm.category_key = 'consumption_expenses';
+        }
+        return;
+      }
+      if (editTransactionForm.kind !== 'debt_payment') return;
+      if (editSelectedDebtLiabilityCategory.value === 'mortgage') {
+        editTransactionForm.category_key = 'real_estate_assets';
+        editTransactionForm.subcategory_key = 'mortgage_principal';
+      } else {
+        editTransactionForm.category_key = 'consumption_expenses';
+        if (editTransactionForm.subcategory_key === 'mortgage_principal') {
+          editTransactionForm.subcategory_key = 'financial_commitments';
+        }
+      }
+    },
+    { immediate: true },
   );
   watch(
     () => editTransactionForm.account_id,
@@ -1030,7 +1259,13 @@ export function useAccountingPage() {
 
   function isCanceledRequestError(error: unknown): boolean {
     if ((error as { name?: string }).name === 'CanceledError') return true;
+    if ((error as { name?: string }).name === 'AbortError') return true;
     if ((error as { code?: string }).code === 'ERR_CANCELED') return true;
+    const message = (error as { message?: string }).message;
+    if (typeof message === 'string') {
+      const normalized = message.trim().toLowerCase();
+      if (normalized === 'canceled' || normalized === 'cancelled') return true;
+    }
     return false;
   }
 
@@ -1192,14 +1427,16 @@ export function useAccountingPage() {
   watch(
     () => activityFilters.kind,
     () => {
-      activityFilters.categoryKey = '';
+      const nextOptions = filterCategoryOptions.value;
+      activityFilters.categoryKey = nextOptions.length === 1 ? nextOptions[0]!.value : '';
       activityFilters.subcategoryKey = '';
     },
   );
   watch(
     () => cuentasFilters.kind,
     () => {
-      cuentasFilters.categoryKey = '';
+      const nextOptions = cuentasFilterCategoryOptions.value;
+      cuentasFilters.categoryKey = nextOptions.length === 1 ? nextOptions[0]!.value : '';
       cuentasFilters.subcategoryKey = '';
     },
   );
@@ -1366,11 +1603,22 @@ export function useAccountingPage() {
         return toNumber(creditEntry.amount).toFixed(currencyDecimals(creditEntry.currency));
       }
     }
+    if (transaction.activity_kind === 'transfer') {
+      const creditEntry =
+        transaction.entries.find((entry) => entry.side === 'credit') ?? transaction.entries[1] ?? null;
+      if (creditEntry) {
+        return toNumber(creditEntry.amount).toFixed(currencyDecimals(creditEntry.currency));
+      }
+    }
     return debitTotalValue.toFixed(decimals);
   }
 
   function getTransactionEditDestinationAmount(transaction: LedgerTransaction): string {
-    if (transaction.activity_kind !== 'investment_purchase') return '';
+    if (
+      transaction.activity_kind !== 'investment_purchase' &&
+      transaction.activity_kind !== 'transfer'
+    )
+      return '';
     const debitEntry =
       transaction.entries.find((entry) => entry.side === 'debit') ?? transaction.entries[0] ?? null;
     if (!debitEntry) return '';
@@ -1617,6 +1865,7 @@ export function useAccountingPage() {
     kind: EditableActivityKind,
     categoryKey: string,
     subcategoryKey: string,
+    investmentDirection: 'inflow' | 'outflow',
   ): PersistedTransactionEntry[] {
     const nextEntries = entries.map((entry) => ({
       ...entry,
@@ -1630,11 +1879,13 @@ export function useAccountingPage() {
     }));
     if (!isClassificationKind(kind)) return nextEntries;
 
-    const preferredSide = kind === 'income' ? 'credit' : 'debit';
+    const classifyAsIncome =
+      kind === 'income' || (kind === 'investment' && investmentDirection === 'outflow');
+    const preferredSide = classifyAsIncome ? 'credit' : 'debit';
     const preferredEntry =
       nextEntries.find((entry) => entry.side === preferredSide) ?? nextEntries[0] ?? null;
     if (!preferredEntry) return nextEntries;
-    preferredEntry.flow_family = kind;
+    preferredEntry.flow_family = classifyAsIncome ? 'income' : 'expense';
     preferredEntry.category_key = categoryKey;
     preferredEntry.subcategory_key = subcategoryKey;
     return nextEntries;
@@ -1827,10 +2078,13 @@ export function useAccountingPage() {
       store.error = 'El importe de la revalorizacion no puede ser cero.';
       return null;
     }
-    if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+    if (
+      (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
+      editInvestmentIsCrossCurrency.value
+    ) {
       const parsedDestination = Number(formatDecimalInput(editTransactionForm.destination_amount));
       if (!Number.isFinite(parsedDestination) || parsedDestination <= 0) {
-        store.error = 'Introduce un importe destino valido para la inversion multimoneda.';
+        store.error = 'Introduce un importe destino valido para el movimiento multimoneda.';
         return null;
       }
     }
@@ -1951,14 +2205,34 @@ export function useAccountingPage() {
             editTransactionForm.kind,
             editTransactionForm.category_key,
             editTransactionForm.subcategory_key,
+            editTransactionForm.investment_direction,
           );
-    return setEditedAccountsOnEntries(
+    const accountAdjustedEntries = setEditedAccountsOnEntries(
       kindAdjustedEntries,
       editTransactionForm.kind,
       editTransactionForm.account_id!,
       classificationCounterpartyAccountId,
       editTransactionForm.investment_direction,
     );
+    if (
+      (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
+      editInvestmentIsCrossCurrency.value
+    ) {
+      const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
+      const debitEntry = accountAdjustedEntries.find((entry) => entry.side === 'debit') ?? null;
+      const creditEntry = accountAdjustedEntries.find((entry) => entry.side === 'credit') ?? null;
+      if (debitEntry) {
+        debitEntry.amount = roundByCurrency(destinationAmount, debitEntry.currency).toFixed(
+          currencyDecimals(debitEntry.currency),
+        );
+      }
+      if (creditEntry) {
+        creditEntry.amount = roundByCurrency(parsedAmount, creditEntry.currency).toFixed(
+          currencyDecimals(creditEntry.currency),
+        );
+      }
+    }
+    return accountAdjustedEntries;
   }
 
   function getTransactionActivityKind(
@@ -2300,7 +2574,10 @@ export function useAccountingPage() {
         validated.selectedAccount.id,
         validated.parsedAmount,
       );
-      if (editTransactionForm.kind === 'investment' && editInvestmentIsCrossCurrency.value) {
+      if (
+        (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
+        editInvestmentIsCrossCurrency.value
+      ) {
         const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
         const updatedAccounts = setEditedAccountsOnEntries(
           compatibilityEntries,
@@ -2517,7 +2794,11 @@ export function useAccountingPage() {
       ...(quickEntryNeedsClassification.value
         ? {
             flow_family:
-              quickEntryForm.movement_type === 'income' ? 'income' : ('expense' as const),
+              quickEntryForm.movement_type === 'income' ||
+              (quickEntryForm.movement_type === 'investment' &&
+                quickEntryForm.investment_direction === 'outflow')
+                ? 'income'
+                : ('expense' as const),
             category_key: quickEntryForm.category_key,
             subcategory_key: quickEntryForm.subcategory_key,
           }
@@ -2676,6 +2957,8 @@ export function useAccountingPage() {
     editSelectedAccountCurrentBalance,
     editCategoryOptions,
     editSubcategoryOptions,
+    editCategoryLocked,
+    editSubcategoryLocked,
     accountForm,
     activationForm,
     ownershipOptions,
@@ -2700,6 +2983,8 @@ export function useAccountingPage() {
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    quickCategoryLocked,
+    quickSubcategoryLocked,
     filterCategoryOptions,
     filterSubcategoryOptions,
     cuentasFilterCategoryOptions,

@@ -94,7 +94,11 @@ const investmentFlowHint = computed(() => {
     : 'Primero eliges de que liquidez sale el dinero y luego a que inversion llega.';
 });
 const editAmountLabel = computed(() => {
-  if (props.page.editTransactionForm.kind !== 'investment') return 'Importe';
+  if (
+    props.page.editTransactionForm.kind !== 'investment' &&
+    props.page.editTransactionForm.kind !== 'transfer'
+  )
+    return 'Importe';
   return props.page.editInvestmentOriginCurrency
     ? `Importe origen (${props.page.editInvestmentOriginCurrency})`
     : 'Importe origen';
@@ -230,6 +234,11 @@ const editAmountLabel = computed(() => {
                     ? page.editInvestmentOriginCurrency
                       ? `Importe origen (${page.editInvestmentOriginCurrency})`
                       : 'Importe origen'
+                  : page.editTransactionForm.kind === 'transfer' &&
+                      page.editInvestmentIsCrossCurrency
+                    ? page.editInvestmentOriginCurrency
+                      ? `Importe origen (${page.editInvestmentOriginCurrency})`
+                      : 'Importe origen'
                   : '0.00'
             "
             required
@@ -290,10 +299,17 @@ const editAmountLabel = computed(() => {
         Selecciona categoria y subcategoria debajo.
       </p>
       <div
-        v-if="page.editTransactionForm.kind === 'investment'"
+        v-if="
+          page.editTransactionForm.kind === 'investment' ||
+          (page.editTransactionForm.kind === 'transfer' && page.editInvestmentIsCrossCurrency)
+        "
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select v-model="page.editTransactionForm.investment_direction" class="select">
+        <select
+          v-if="page.editTransactionForm.kind === 'investment'"
+          v-model="page.editTransactionForm.investment_direction"
+          class="select"
+        >
           <option value="inflow">Aporte (desde liquidez hacia inversion)</option>
           <option value="outflow">Retirada (desde inversion hacia liquidez)</option>
         </select>
@@ -320,7 +336,12 @@ const editAmountLabel = computed(() => {
         v-if="page.editKindNeedsClassification"
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select v-model="page.editTransactionForm.category_key" class="select" required>
+        <select
+          v-model="page.editTransactionForm.category_key"
+          class="select"
+          :disabled="page.editCategoryLocked"
+          required
+        >
           <option value="">Categoria</option>
           <option
             v-for="option in page.editCategoryOptions"
@@ -330,7 +351,12 @@ const editAmountLabel = computed(() => {
             {{ option.label }}
           </option>
         </select>
-        <select v-model="page.editTransactionForm.subcategory_key" class="select" required>
+        <select
+          v-model="page.editTransactionForm.subcategory_key"
+          class="select"
+          :disabled="page.editSubcategoryLocked"
+          required
+        >
           <option value="">Subcategoria</option>
           <option
             v-for="option in page.editSubcategoryOptions"

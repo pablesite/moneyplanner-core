@@ -1182,6 +1182,173 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(btc_entry.amount, Decimal("0.00250000"))
         self.assertEqual(eur_entry.amount, Decimal("265.56000000"))
 
+    def test_update_investment_allows_cross_currency_structure_change(self):
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("0.01000000"),
+            is_active=True,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="BTC wallet",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+        usd_liquidity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Spot Binance USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 8, 19),
+            value_date=date(2025, 8, 19),
+            description="ST Criptos",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.IMPORT,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=btc_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("0.00013201"),
+            currency="BTC",
+            asset=btc_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("12.80000000"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        response = self.client.patch(
+            f"/api/accounting/transactions/{tx.id}/",
+            {
+                "booking_date": "2025-08-19",
+                "value_date": "2025-08-19",
+                "description": "ST Criptos",
+                "quick_entry_kind": "investment",
+                "investment_direction": "inflow",
+                "entries": [
+                    {
+                        "account_id": btc_account.id,
+                        "side": "debit",
+                        "amount": "0.00013201",
+                        "currency": "BTC",
+                        "asset_id": btc_asset.id,
+                    },
+                    {
+                        "account_id": usd_liquidity.id,
+                        "side": "credit",
+                        "amount": "14.94",
+                        "currency": "USD",
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        tx.refresh_from_db()
+        self.assertEqual(tx.quick_entry_kind, LedgerTransaction.QuickEntryKind.INVESTMENT)
+        self.assertEqual(tx.investment_direction, LedgerTransaction.InvestmentDirection.INFLOW)
+        btc_entry = tx.entries.get(account=btc_account)
+        usd_entry = tx.entries.get(account=usd_liquidity)
+        self.assertEqual(btc_entry.currency, "BTC")
+        self.assertEqual(btc_entry.amount, Decimal("0.00013201"))
+        self.assertEqual(usd_entry.currency, "USD")
+        self.assertEqual(usd_entry.amount, Decimal("14.94000000"))
+
+    def test_update_transfer_allows_cross_currency_structure_change(self):
+        eth_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="MetaMask ETH",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="ETH",
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Binance BTC",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 10, 17),
+            value_date=date(2025, 10, 17),
+            description="Swap cripto",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("50.00000000"),
+            currency="EUR",
+        )
+        eur_destination = LedgerAccount.objects.create(
+            user=self.user,
+            name="Destino EUR inicial",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=eur_destination,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("50.00000000"),
+            currency="EUR",
+        )
+
+        response = self.client.patch(
+            f"/api/accounting/transactions/{tx.id}/",
+            {
+                "booking_date": "2025-10-17",
+                "value_date": "2025-10-17",
+                "description": "Swap cripto",
+                "quick_entry_kind": "transfer",
+                "entries": [
+                    {
+                        "account_id": eth_account.id,
+                        "side": "credit",
+                        "amount": "0.11000000",
+                        "currency": "ETH",
+                    },
+                    {
+                        "account_id": btc_account.id,
+                        "side": "debit",
+                        "amount": "0.00395872",
+                        "currency": "BTC",
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        tx.refresh_from_db()
+        eth_entry = tx.entries.get(account=eth_account)
+        btc_entry = tx.entries.get(account=btc_account)
+        self.assertEqual(eth_entry.currency, "ETH")
+        self.assertEqual(eth_entry.amount, Decimal("0.11000000"))
+        self.assertEqual(btc_entry.currency, "BTC")
+        self.assertEqual(btc_entry.amount, Decimal("0.00395872"))
+
     def test_account_create_validates_owned_asset_and_currency(self):
         asset = Asset.objects.create(
             user=self.user,
@@ -1464,6 +1631,29 @@ class AccountingApiTests(APITestCase):
             amount=Decimal("30.00"),
             currency="EUR",
         )
+        transfer_tagged_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 17),
+            value_date=date(2026, 3, 17),
+            description="Transfer mal etiquetada sobre inversion",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        LedgerEntry.objects.create(
+            transaction=transfer_tagged_tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("22.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=transfer_tagged_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("22.00"),
+            currency="EUR",
+        )
 
         revaluation_tx = LedgerTransaction.objects.create(
             user=self.user,
@@ -1571,6 +1761,157 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(filtered.data["total_count"], 1)
         self.assertEqual(filtered.data["results"][0]["description"], "Cuota hipoteca marzo")
         self.assertEqual(filtered.data["results"][0]["activity_kind"], "debt_payment")
+
+    def test_kind_filters_prioritize_quick_entry_kind_over_legacy_markers(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin test",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="BTC broker test",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo test",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo test",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+
+        investment_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 20),
+            value_date=date(2026, 3, 20),
+            description="Inversion con marca legacy de ingreso",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        transfer_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 21),
+            value_date=date(2026, 3, 21),
+            description="Transferencia con estructura no canonica",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        LedgerEntry.objects.create(
+            transaction=transfer_tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("5.00"),
+            currency="EUR",
+            asset=investment_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=transfer_tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("5.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        investment_with_liability_marker_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 22),
+            value_date=date(2026, 3, 22),
+            description="Inversion con marca de deuda legacy",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_with_liability_marker_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("7.00"),
+            currency="EUR",
+            liability=liability,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_with_liability_marker_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("7.00"),
+            currency="EUR",
+        )
+
+        debt_payment_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 23),
+            value_date=date(2026, 3, 23),
+            description="Pago deuda test",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.DEBT_PAYMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=debt_payment_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("50.00"),
+            currency="EUR",
+            liability=liability,
+        )
+        LedgerEntry.objects.create(
+            transaction=debt_payment_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("50.00"),
+            currency="EUR",
+        )
+
+        income_filtered = self.client.get("/api/accounting/transactions/?kind=income")
+        self.assertEqual(income_filtered.status_code, status.HTTP_200_OK, income_filtered.data)
+        income_descriptions = {row["description"] for row in income_filtered.data["results"]}
+        self.assertNotIn("Inversion con marca legacy de ingreso", income_descriptions)
+        self.assertNotIn("Transferencia con estructura no canonica", income_descriptions)
+
+        debt_filtered = self.client.get("/api/accounting/transactions/?kind=debt_payment")
+        self.assertEqual(debt_filtered.status_code, status.HTTP_200_OK, debt_filtered.data)
+        debt_descriptions = {row["description"] for row in debt_filtered.data["results"]}
+        self.assertIn("Pago deuda test", debt_descriptions)
+        self.assertNotIn("Inversion con marca de deuda legacy", debt_descriptions)
+
+        transfer_filtered = self.client.get("/api/accounting/transactions/?kind=transfer")
+        self.assertEqual(transfer_filtered.status_code, status.HTTP_200_OK, transfer_filtered.data)
+        transfer_descriptions = {row["description"] for row in transfer_filtered.data["results"]}
+        self.assertIn("Transferencia con estructura no canonica", transfer_descriptions)
 
     def test_monthly_summary_endpoint(self):
         expense_account = LedgerAccount.objects.create(
@@ -2338,6 +2679,123 @@ class AccountingApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("destination_amount", response.data["error"]["details"])
+
+    def test_quick_entry_investment_outflow_uses_capital_gains_classification(self):
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("0.01000000"),
+            is_active=True,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="BTC Broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+        usd_liquidity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Spot USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "outflow",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Venta BTC",
+                "amount": "0.00042000",
+                "destination_amount": "25.00",
+                "account_id": usd_liquidity.id,
+                "counterparty_account_id": btc_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        classified_entry = next(
+            row for row in response.data["entries"] if row["flow_family"] == "income"
+        )
+        self.assertEqual(classified_entry["category_key"], "capital_gains")
+        self.assertEqual(classified_entry["subcategory_key"], "sale_financial_assets")
+
+    def test_quick_entry_mortgage_payment_uses_fixed_real_estate_classification(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca casa",
+            category=Liability.Category.MORTGAGE,
+            currency="EUR",
+            amount=Decimal("120000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo hipoteca",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-20",
+                "value_date": "2026-04-20",
+                "description": "Pago hipoteca",
+                "amount": "500.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "principal_amount": "500.00",
+                "interest_amount": "0.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        classified_entry = next(
+            row for row in response.data["entries"] if row["flow_family"] == "expense"
+        )
+        self.assertEqual(classified_entry["category_key"], "real_estate_assets")
+        self.assertEqual(classified_entry["subcategory_key"], "mortgage_principal")
+
+    def test_quick_entry_personal_loan_payment_requires_consumption_subcategory(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("5000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-20",
+                "value_date": "2026-04-20",
+                "description": "Pago prestamo",
+                "amount": "400.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "principal_amount": "400.00",
+                "interest_amount": "0.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("subcategory_key", response.data["error"]["details"])
 
     def test_quick_entry_rejects_realized_metadata_outside_investment(self):
         response = self.client.post(
