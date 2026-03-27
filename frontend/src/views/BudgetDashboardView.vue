@@ -209,6 +209,8 @@ if (annualEntriesPage) {
       :format-money="formatMoney"
       :format-percent="formatPercent"
       :view-mode-label="viewModeLabel"
+      :update-income-view-mode="updateIncomeViewMode"
+      :update-expense-view-mode="updateExpenseViewMode"
       :close-status="closeStatus ?? undefined"
       :set-active-monthly-close-step="setActiveMonthlyCloseStep"
       :update-selected-execution-month="updateSelectedExecutionMonth"
