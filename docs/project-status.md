@@ -35,9 +35,9 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
-| Contabilidad — UX y bugs | Alta | 🔄 | UX rápida de registro, transferencias entre cuentas con doble impacto automático, bug edición de movimientos |
-| Presupuesto — migración y UX | Alta | 🔄 | Fase 1 y fase 2 completadas (CRUD anual + integración por categorías en un flujo único). Pendiente consolidación UX v1 final. |
-| Patrimonio — visualizaciones | Media | ⚪ | Gráficas de evolución temporal y distribución (donut), validar consistencia de KPIs |
+| Contabilidad — v1 | Alta | 🔄 | Pendiente v1: revisión del tracker de cuentas (coherencia movimientos→patrimonio), header al estilo Patrimonio y revisión de estilo visual del cuerpo. Importador MoneyWiz ad-hoc funcional; eliminar antes de producción. |
+| Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
+| Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
@@ -45,7 +45,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ⚪ | Revisar autenticación, permisos, ownership de activos/pasivos; test de flujos reales |
-| Importación de datos | Media | 🔄 | MoneyWiz v1 corregido y validado con CSV real; retiradas/desinversiones de cartera se colapsan en `investment outflow` sin duplicar ingresos espejo. Pendiente afinar casos borde restantes y soporte Excel. |
+| Importación de datos | Media | ✅ | Importador MoneyWiz funcional (ad-hoc). Eliminar antes de producción — no apto para uso general. |
 | Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -55,8 +55,8 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Net Worth (activos, pasivos, liquidez) | 🔄 | Base completa. Snapshots eliminados. Modal de revisión de gastos generados por activos de inversión añadido (espejo del patrón de pasivos). Intervalos múltiples de aportación periódica completados (phases 1-2 archivadas en `core/docs/tasks/net-worth/*/terminados/`). |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Ingresos/gastos anuales ya integrados en el flujo por categorías; en consolidación manual de detalles v1. Evolución ejecutada (barras) funcional en ingresos y gastos, reactiva al filtro recurrente/puntual. Barras YTD de categoría/subcategoría funcionales para ingresos y gastos con selector de mes independiente (defecto: mes actual). Resumen de ingresos y gasto ampliado con cobertura canónica (`executed_budgeted` vs `executed_unbudgeted`) y visibilidad de subcategorías detectadas sin línea anual. |
+| Net Worth (activos, pasivos, liquidez) | 🔄 | Base completa. Snapshots eliminados. Modal de revisión de gastos generados por activos de inversión añadido. Intervalos múltiples de aportación periódica completados (phases 1-2 archivadas). Gráficas (timeline + donut) y KPIs validados. Pendiente v1: revisión completa de modales de creación/edición de activos y pasivos. |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. UX general consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |

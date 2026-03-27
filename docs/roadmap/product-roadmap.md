@@ -11,10 +11,13 @@ Convenciones:
 
 ## PATRIMONIO
 
-### Pendientes próximos
-- Revisar si añadir más gráficas: evolución temporal o gráfico de quesito (donut de distribución).
-- **UX — Asistente para meter activos más fácilmente.** Formulario/flujo ultrasencillo de alta de activos.
-- Validar consistencia global de datos y KPIs (activos, pasivos, liquidez neta).
+### Para v1
+
+- **Revisión completa de modales de creación/edición de activos y pasivos.** Verificar coherencia visual, validaciones y flujo de todos los modales del módulo. La v1 se cierra cuando este punto esté resuelto.
+
+### Para v2
+
+- **Onboarding — Asistente para meter activos más fácilmente.** Formulario/flujo ultrasencillo de alta de activos. Activable en cualquier momento desde la vista (no solo al inicio del uso de la aplicación).
 
 ---
 
@@ -22,10 +25,16 @@ Convenciones:
 
 - ✅ Migración fase 1 completada (2026-03-20): formularios de ingresos/gastos previstos integrados en la vista de Presupuesto.
 - ✅ Integración fase 2 completada (2026-03-20): introducción de datos y visualización por categorías unificadas en un único flujo contextual dentro de Presupuesto.
-- Conectar gastos definidos en el presupuesto con los valores reales del cierre y los movimientos contables del día a día (ahora son placeholders).
-- Revisar el estilo de la evolución ejecutada mensual: las barras son visualmente correctas pero no se distinguen bien las categorías.
-- Simplificar la interpretación del estado financiero: menos ruido visual, más claridad para el usuario final.
-- Mejorar UX general: barras de progreso más legibles, estado del presupuesto más explícito.
+- ✅ Conexión gastos presupuesto ↔ cierre y movimientos contables completada.
+- ✅ Estilo de evolución ejecutada mensual revisado.
+- ✅ Interpretación del estado financiero simplificada.
+- ✅ UX general mejorada (barras de progreso, estado del presupuesto).
+
+### Para v1
+
+- **Revisión de consistencia de los cálculos de las barras.** Supeditado a haber revisado todos los movimientos de contabilidad.
+- **Revisión a fondo de los modales de crear/editar líneas de presupuesto.** Coherencia visual, validaciones y flujo.
+- **Ajuste fino del header** para que sea exactamente igual al de la vista de Patrimonio.
 
 ---
 
@@ -91,26 +100,25 @@ Convenciones:
 
 > ✅ **Revisión manual completada (usuario) el 2026-03-17.** Los ajustes finos de contabilidad se validarán durante la implementación y pruebas del importador.
 
-### Pendientes próximos
+### Para v1
+
+- **Revisión del tracker operativo de cuentas** — 106 cuentas totales, 16 ya revisadas. La coherencia movimientos → cuentas → patrimonio se valida durante esta revisión cuenta a cuenta. Tracker en `core/docs/operations/movements-user1-review-tracker.md`.
+- **Actualizar el header** para que sea exactamente igual al de la vista de Patrimonio.
+- **Revisión del estilo visual del cuerpo de la vista** (ya avanzado, pendiente de cierre).
+
+### Para v2
+
 - **UX de entrada rápida**: registro simple de movimientos, formulario ultrasencillo tipo app bancaria. Opcionalmente como asistente rápido o agente conversacional (cuatro datos clave → listo).
-- **Transferencias entre cuentas**: implementar doble impacto automático (salida de una cuenta + entrada en otra).
-- **Bug edición de movimientos**: corregir modal roto al editar un movimiento existente.
-- Validar consistencia end-to-end: movimientos → cuentas → patrimonio.
 
 ### Importación de datos
-- ✅ Importador MoneyWiz v1 completado:
+
+- ✅ Importador MoneyWiz completado:
   - Preview + commit desde CSV exportado por MoneyWiz.
   - Idempotencia por huella de fila.
   - Auto-creación de cuentas operativas cuando faltan.
   - Fallback seguro de clasificación para categorías sin mapeo exacto.
   - Flujo UI integrado en `AccountingMovementsView` y espejado en SaaS.
-- Pendiente después de v1:
-  - Afinar heurísticas de mapeo para categorías MoneyWiz menos frecuentes.
-  - Contraste e importador dedicado desde Excel.
-  - Corregir el parseo del export real de MoneyWiz detectado el 2026-03-18:
-    - fechas reales marcadas como inválidas en todas las filas,
-    - columna `Account` no reconocida en el CSV del usuario,
-    - filas degradadas a `income` con `0.00 EUR` en preview.
+- ⚠️ **Funcionalidad ad-hoc** — implementada para el caso de uso propio del autor. Debe eliminarse antes de lanzar a producción (no es apta para uso general).
 
 ---
 
