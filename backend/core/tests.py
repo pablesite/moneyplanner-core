@@ -25,6 +25,7 @@ from .services import (
     validate_inflation_period_start,
 )
 from .market_data import (
+    MarketDataSyncError,
     ensure_market_history,
     sync_inflation_history,
     sync_market_data,
@@ -285,6 +286,39 @@ class CoreServicesTests(TestCase):
             ).rate,
             Decimal("82500.5"),
         )
+
+    @patch("core.market_data._fetch_json")
+    def test_sync_market_history_falls_back_to_cryptocompare_when_coingecko_fails(
+        self, fetch_json_mock
+    ):
+        fetch_json_mock.side_effect = [
+            MarketDataSyncError("coingecko unauthorized"),
+            {
+                "Response": "Success",
+                "Data": {
+                    "Data": [
+                        {"time": 1740960000, "close": 82000.0},
+                        {"time": 1741046400, "close": 83010.25},
+                    ]
+                },
+            },
+        ]
+
+        inserted = sync_market_history(
+            from_currency="BTC",
+            to_currency="EUR",
+            start_date=date(2025, 3, 3),
+            end_date=date(2025, 3, 4),
+        )
+
+        self.assertEqual(inserted, 2)
+        row = FxRate.objects.get(
+            from_currency="BTC",
+            to_currency="EUR",
+            rate_date=date(2025, 3, 3),
+        )
+        self.assertEqual(row.rate, Decimal("82000.0"))
+        self.assertEqual(row.source, "cryptocompare")
 
     @patch("core.market_data.sync_market_history", return_value=31)
     def test_ensure_market_history_backfills_only_when_earliest_row_is_missing(

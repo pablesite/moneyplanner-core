@@ -67,15 +67,24 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         ctx["base_currency"] = base_currency
         if self.action == "list" and self.request.method == "GET":
             asset_rows = list(
-                self.get_queryset().values_list("id", "currency")
+                self.get_queryset().values_list(
+                    "id", "currency", "tracking_mode", "accounting_account_id"
+                )
             )
             if asset_rows:
                 currencies = {base_currency}
                 currencies.update(
-                    currency for _, currency in asset_rows if str(currency or "").strip()
+                    currency for _, currency, _, _ in asset_rows if str(currency or "").strip()
                 )
                 ctx["fx_cache"] = build_fx_cache(currencies)
-                cache_assets = [Asset(id=asset_id) for asset_id, _ in asset_rows]
+                cache_assets = [
+                    Asset(
+                        id=asset_id,
+                        tracking_mode=tracking_mode,
+                        accounting_account_id=accounting_account_id,
+                    )
+                    for asset_id, _, tracking_mode, accounting_account_id in asset_rows
+                ]
                 ctx["position_cache"] = _build_position_data_cache(cache_assets, [])
         return ctx
 
@@ -117,15 +126,24 @@ class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         )
         if self.action == "list" and self.request.method == "GET":
             liability_rows = list(
-                self.get_queryset().values_list("id", "currency")
+                self.get_queryset().values_list(
+                    "id", "currency", "tracking_mode", "accounting_account_id"
+                )
             )
             if liability_rows:
                 currencies = {base_currency}
                 currencies.update(
-                    currency for _, currency in liability_rows if str(currency or "").strip()
+                    currency for _, currency, _, _ in liability_rows if str(currency or "").strip()
                 )
                 ctx["fx_cache"] = build_fx_cache(currencies)
-                cache_liabilities = [Liability(id=liability_id) for liability_id, _ in liability_rows]
+                cache_liabilities = [
+                    Liability(
+                        id=liability_id,
+                        tracking_mode=tracking_mode,
+                        accounting_account_id=accounting_account_id,
+                    )
+                    for liability_id, _, tracking_mode, accounting_account_id in liability_rows
+                ]
                 ctx["position_cache"] = _build_position_data_cache([], cache_liabilities)
         return ctx
 

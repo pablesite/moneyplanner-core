@@ -7,6 +7,10 @@ Current managed datasets:
 1. `FX` daily rates in `FxRate`
 2. `IPC` monthly index (Spain + CCAA) in `InflationIndex`
 
+Provider notes:
+1. Fiat FX uses `frankfurter`.
+2. Crypto FX uses `coingecko` with automatic fallback to `cryptocompare` when CoinGecko rejects/rate-limits historical requests.
+
 ## Canonical Command
 From `core/`:
 

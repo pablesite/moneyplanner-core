@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 FRANKFURTER_API_URL = "https://api.frankfurter.app"
 COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
+CRYPTOCOMPARE_API_URL = "https://min-api.cryptocompare.com/data/v2"
 INE_API_URL = "https://servicios.ine.es/wstempus/js/ES"
 INE_GENERAL_INDEX_TABLE_ID = 24078
 
@@ -211,6 +212,43 @@ def sync_crypto_history(
     if not coin_id:
         return 0
 
+    try:
+        rows = _fetch_crypto_rows_coingecko(
+            coin_id=coin_id,
+            start_date=start_date,
+            end_date=end_date,
+            to_currency=to_currency,
+        )
+        source = "coingecko"
+    except MarketDataSyncError:
+        # Fallback provider for long historical ranges where CoinGecko may reject
+        # anonymous requests. We keep this transparent for sync callers.
+        logger.warning(
+            "CoinGecko crypto sync failed for %s->%s. Falling back to CryptoCompare.",
+            from_currency,
+            to_currency,
+            exc_info=True,
+        )
+        rows = _fetch_crypto_rows_cryptocompare(
+            from_currency=from_currency,
+            to_currency=to_currency,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        source = "cryptocompare"
+
+    return _upsert_fx_rows(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        rows=rows,
+        source=source,
+        source_key=f"{from_currency}->{to_currency}",
+    )
+
+
+def _fetch_crypto_rows_coingecko(
+    *, coin_id: str, to_currency: str, start_date: date, end_date: date
+) -> list[tuple[date, Decimal]]:
     daily_prices: dict[date, Decimal] = {}
     for chunk_start, chunk_end in _iter_crypto_range_chunks(
         start_date=start_date, end_date=end_date
@@ -244,14 +282,54 @@ def sync_crypto_history(
             _, last_price = max(entries, key=lambda row: row[0])
             daily_prices[point_date] = last_price
 
-    rows = sorted(daily_prices.items(), key=lambda row: row[0])
-    return _upsert_fx_rows(
-        from_currency=from_currency,
-        to_currency=to_currency,
-        rows=rows,
-        source="coingecko",
-        source_key=f"{from_currency}->{to_currency}",
-    )
+    return sorted(daily_prices.items(), key=lambda row: row[0])
+
+
+def _fetch_crypto_rows_cryptocompare(
+    *, from_currency: str, to_currency: str, start_date: date, end_date: date
+) -> list[tuple[date, Decimal]]:
+    # histoday supports up to 2000 daily points per request.
+    chunk_days = 2000
+    daily_prices: dict[date, Decimal] = {}
+    for chunk_start, chunk_end in _iter_crypto_range_chunks(
+        start_date=start_date, end_date=end_date, chunk_days=chunk_days
+    ):
+        to_ts = (
+            int(
+                datetime.combine(
+                    chunk_end + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+                ).timestamp()
+            )
+            - 1
+        )
+        limit = max(1, (chunk_end - chunk_start).days)
+        query = urlencode(
+            {
+                "fsym": from_currency.upper(),
+                "tsym": to_currency.upper(),
+                "limit": limit,
+                "toTs": to_ts,
+            }
+        )
+        url = f"{CRYPTOCOMPARE_API_URL}/histoday?{query}"
+        payload = _fetch_json(url=url)
+        data_payload = payload.get("Data") if isinstance(payload, dict) else None
+        points = data_payload.get("Data") if isinstance(data_payload, dict) else None
+        if not isinstance(points, list):
+            raise MarketDataSyncError(
+                f"Unexpected CryptoCompare response for {from_currency}->{to_currency}."
+            )
+        for point in points:
+            timestamp = point.get("time")
+            close_price = point.get("close")
+            if timestamp in (None, "") or close_price in (None, ""):
+                continue
+            point_date = datetime.fromtimestamp(int(timestamp), tz=UTC).date()
+            if point_date < chunk_start or point_date > chunk_end:
+                continue
+            daily_prices[point_date] = Decimal(str(close_price))
+
+    return sorted(daily_prices.items(), key=lambda row: row[0])
 
 
 def sync_market_history(

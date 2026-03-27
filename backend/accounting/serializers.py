@@ -24,6 +24,7 @@ from .services import (
     validate_booking_and_value_dates,
     validate_transaction_entries,
 )
+from .services_start_dates import sync_position_start_dates_for_transaction
 
 
 class LedgerAccountSerializer(serializers.ModelSerializer):
@@ -328,6 +329,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             payload = {**entry_data}
             payload["currency"] = payload.get("currency") or payload["account"].currency
             LedgerEntry.objects.create(transaction=transaction, **payload)
+        sync_position_start_dates_for_transaction(transaction=transaction)
         return transaction
 
     def update(self, instance: LedgerTransaction, validated_data: dict) -> LedgerTransaction:
@@ -353,6 +355,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
                 payload = {**entry_data}
                 payload["currency"] = payload.get("currency") or payload["account"].currency
                 LedgerEntry.objects.create(transaction=instance, **payload)
+        sync_position_start_dates_for_transaction(transaction=instance)
         return instance
 
     @staticmethod
