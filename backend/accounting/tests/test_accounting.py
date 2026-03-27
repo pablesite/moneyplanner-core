@@ -981,6 +981,140 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("entries", response.data["error"]["details"])
 
+    def test_create_transaction_updates_accounting_asset_start_date_when_booking_is_earlier(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin account",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        asset.accounting_account_id = investment_account.id
+        asset.save(update_fields=["accounting_account_id", "updated_at"])
+
+        response = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2025-10-09",
+                "value_date": "2025-10-09",
+                "description": "Movimiento antiguo",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": investment_account.id,
+                        "side": "debit",
+                        "amount": "300.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "300.00",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "capital_gains",
+                        "subcategory_key": "sale_financial_assets",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        asset.refresh_from_db()
+        self.assertEqual(asset.start_date, date(2025, 10, 9))
+
+    def test_update_transaction_updates_accounting_asset_start_date_when_booking_is_earlier(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin account",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        asset.accounting_account_id = investment_account.id
+        asset.save(update_fields=["accounting_account_id", "updated_at"])
+
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Movimiento reciente",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.MANUAL,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        response = self.client.patch(
+            f"/api/accounting/transactions/{tx.id}/",
+            {
+                "booking_date": "2025-08-15",
+                "value_date": "2025-08-15",
+                "description": "Movimiento corregido",
+                "entries": [
+                    {
+                        "account_id": investment_account.id,
+                        "side": "debit",
+                        "amount": "120.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "120.00",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "capital_gains",
+                        "subcategory_key": "sale_financial_assets",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        asset.refresh_from_db()
+        self.assertEqual(asset.start_date, date(2025, 8, 15))
+
     def test_update_legacy_multicurrency_transaction_allows_amount_change_with_same_structure(self):
         btc_account = LedgerAccount.objects.create(
             user=self.user,

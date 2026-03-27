@@ -9,6 +9,7 @@ from rest_framework.exceptions import ValidationError
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services_ledger import ZERO
+from .services_start_dates import sync_position_start_dates_for_transaction
 from .services_transactions import validate_booking_and_value_dates, validate_transaction_entries
 
 
@@ -98,6 +99,7 @@ def create_quick_transaction(
     )
     for entry_data in payload:
         LedgerEntry.objects.create(transaction=transaction_row, **entry_data)
+    sync_position_start_dates_for_transaction(transaction=transaction_row)
     return transaction_row
 
 
