@@ -206,42 +206,58 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     entry_subquery = LedgerEntry.objects.filter(transaction_id=OuterRef("pk"))
     if kind == "income":
         return queryset.filter(
-            Exists(
-                entry_subquery.filter(
-                    Q(flow_family=LedgerEntry.FlowFamily.INCOME)
-                    | Q(annual_income_entry_id__isnull=False)
+            Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INCOME)
+            | (
+                Q(quick_entry_kind="")
+                & Exists(
+                    entry_subquery.filter(
+                        Q(flow_family=LedgerEntry.FlowFamily.INCOME)
+                        | Q(annual_income_entry_id__isnull=False)
+                    )
                 )
             )
         )
     if kind == "expense":
         return queryset.filter(
-            Exists(
-                entry_subquery.filter(
-                    (
-                        Q(flow_family=LedgerEntry.FlowFamily.EXPENSE)
-                        | Q(annual_expense_entry_id__isnull=False)
+            Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE)
+            | (
+                Q(quick_entry_kind="")
+                & Exists(
+                    entry_subquery.filter(
+                        (
+                            Q(flow_family=LedgerEntry.FlowFamily.EXPENSE)
+                            | Q(annual_expense_entry_id__isnull=False)
+                        )
+                        & Q(liability_id__isnull=True)
                     )
-                    & Q(liability_id__isnull=True)
                 )
             )
         )
     if kind == "debt_payment":
         return queryset.filter(
-            ~Q(origin=LedgerTransaction.Origin.SYSTEM),
-            ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION),
-            Exists(entry_subquery.filter(liability_id__isnull=False)),
+            Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.DEBT_PAYMENT)
+            | (
+                Q(quick_entry_kind="")
+                & ~Q(origin=LedgerTransaction.Origin.SYSTEM)
+                & ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION)
+                & Exists(entry_subquery.filter(liability_id__isnull=False))
+            ),
         )
     if kind == "investment_purchase":
         return queryset.filter(
-            ~Q(origin=LedgerTransaction.Origin.SYSTEM),
-            ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION),
-            Exists(
-                entry_subquery.filter(
-                    asset_id__isnull=False,
-                    account__account_type=LedgerAccount.AccountType.ASSET,
-                    account__asset_id__isnull=False,
+            Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT)
+            | (
+                Q(quick_entry_kind="")
+                & ~Q(origin=LedgerTransaction.Origin.SYSTEM)
+                & ~Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION)
+                & Exists(
+                    entry_subquery.filter(
+                        asset_id__isnull=False,
+                        account__account_type=LedgerAccount.AccountType.ASSET,
+                        account__asset_id__isnull=False,
+                    )
                 )
-            )
+            ),
         )
     if kind == "revaluation":
         return queryset.filter(
@@ -249,7 +265,7 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             | Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION)
         )
     if kind == "transfer":
-        return queryset.annotate(
+        transfer_legacy_queryset = queryset.annotate(
             asset_entry_count=Count(
                 "entries",
                 filter=Q(entries__account__account_type=LedgerAccount.AccountType.ASSET),
@@ -278,10 +294,15 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 distinct=True,
             ),
         ).filter(
+            Q(quick_entry_kind=""),
             asset_entry_count__gte=2,
             income_like_entry_count=0,
             expense_like_entry_count=0,
             liability_entry_count=0,
             investment_entry_count=0,
+        )
+        return queryset.filter(
+            Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER)
+            | Q(id__in=transfer_legacy_queryset.values("id"))
         )
     raise ValidationError({"kind": "Query param 'kind' invalido."})

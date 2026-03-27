@@ -95,7 +95,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           <option value="revaluation">Revalorizaciones</option>
         </select>
         <select
-          v-if="state.activityFilters.kind === 'income' || state.activityFilters.kind === 'expense'"
+          v-if="['income', 'expense', 'investment', 'debt_payment'].includes(state.activityFilters.kind)"
           v-model="state.activityFilters.categoryKey"
           class="select"
         >

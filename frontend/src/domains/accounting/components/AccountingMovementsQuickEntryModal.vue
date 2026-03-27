@@ -304,7 +304,12 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
         v-if="page.quickEntryNeedsClassification"
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select v-model="page.quickEntryForm.category_key" class="select" required>
+        <select
+          v-model="page.quickEntryForm.category_key"
+          class="select"
+          :disabled="page.quickCategoryLocked"
+          required
+        >
           <option value="">Categoria</option>
           <option
             v-for="category in page.quickCategoryOptions"
@@ -315,7 +320,12 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           </option>
         </select>
 
-        <select v-model="page.quickEntryForm.subcategory_key" class="select" required>
+        <select
+          v-model="page.quickEntryForm.subcategory_key"
+          class="select"
+          :disabled="page.quickSubcategoryLocked"
+          required
+        >
           <option value="">Subcategoria</option>
           <option
             v-for="subcategory in page.quickSubcategoryOptions"

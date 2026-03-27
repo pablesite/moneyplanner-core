@@ -334,6 +334,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
     def update(self, instance: LedgerTransaction, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries", None)
+        target_quick_entry_kind = validated_data.get("quick_entry_kind", instance.quick_entry_kind)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -341,14 +342,15 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         if entries_data is not None:
             request = self.context["request"]
             existing_entries = list(instance.entries.select_related("account").all())
-            allow_legacy_unbalanced = self._allow_legacy_unbalanced_update(
+            allow_unbalanced_multicurrency = self._allow_unbalanced_multicurrency_update(
                 existing_entries=existing_entries,
                 incoming_entries=entries_data,
+                quick_entry_kind=target_quick_entry_kind,
             )
             validate_transaction_entries(
                 entries_data=entries_data,
                 user_id=request.user.id,
-                allow_unbalanced_multicurrency=allow_legacy_unbalanced,
+                allow_unbalanced_multicurrency=allow_unbalanced_multicurrency,
             )
             instance.entries.all().delete()
             for entry_data in entries_data:
@@ -406,17 +408,34 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         return existing_signature == incoming_signature
 
     @classmethod
-    def _allow_legacy_unbalanced_update(
+    def _allow_unbalanced_multicurrency_update(
         cls,
         *,
         existing_entries: list[LedgerEntry],
         incoming_entries: list[dict],
+        quick_entry_kind: str,
     ) -> bool:
         if not existing_entries or not incoming_entries:
             return False
-        existing_currencies = {str(entry.currency).strip().upper() for entry in existing_entries}
         incoming_currencies = {cls._entry_currency_from_payload(entry) for entry in incoming_entries}
-        if len(existing_currencies) < 2 or len(incoming_currencies) < 2:
+        if len(incoming_currencies) < 2:
+            return False
+
+        # Align update semantics with quick-entry create/edit:
+        # investment and transfer movements can be naturally unbalanced per currency.
+        if (
+            quick_entry_kind
+            in {
+                LedgerTransaction.QuickEntryKind.INVESTMENT,
+                LedgerTransaction.QuickEntryKind.TRANSFER,
+            }
+            and cls._is_unbalanced_by_currency_from_payload(incoming_entries)
+        ):
+            return True
+
+        # Backward-compatible lane for legacy mixed-currency rows.
+        existing_currencies = {str(entry.currency).strip().upper() for entry in existing_entries}
+        if len(existing_currencies) < 2:
             return False
         if not cls._is_unbalanced_by_currency_from_existing(existing_entries):
             return False
@@ -575,6 +594,16 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         attrs["movement_type"] = movement_type
         attrs["investment_direction"] = investment_direction
 
+        self._apply_canonical_classification_policy(
+            attrs=attrs,
+            movement_type=movement_type,
+            investment_direction=investment_direction,
+            liability_account=liability_account,
+        )
+        flow_family = attrs.get("flow_family", "")
+        category_key = attrs.get("category_key", "")
+        subcategory_key = attrs.get("subcategory_key", "")
+
         validate_booking_and_value_dates(
             booking_date=attrs["booking_date"],
             value_date=attrs["value_date"],
@@ -611,11 +640,19 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             and flow_family == LedgerEntry.FlowFamily.INCOME
         ):
             raise serializers.ValidationError({"flow_family": "No aplica a movimientos de gasto."})
-        if movement_type in {"transfer", "investment", "revaluation"} and (
+        if (
+            movement_type == "investment"
+            and investment_direction == LedgerTransaction.InvestmentDirection.INFLOW
+            and flow_family == LedgerEntry.FlowFamily.INCOME
+        ):
+            raise serializers.ValidationError(
+                {"flow_family": "Las inversiones solo pueden clasificarse como gasto."}
+            )
+        if movement_type in {"transfer", "revaluation"} and (
             flow_family or category_key or subcategory_key
         ):
             raise serializers.ValidationError(
-                {"flow_family": "No aplica a transferencias internas ni movimientos de inversion."}
+                {"flow_family": "No aplica a transferencias internas ni revalorizaciones."}
             )
         self._validate_investment_metadata(
             movement_type=movement_type,
@@ -669,6 +706,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             )
         elif movement_type == "investment":
             self._validate_investment_movement(
+                attrs=attrs,
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
@@ -706,6 +744,47 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             interest_amount=interest_amount or Decimal("0"),
         )
         return attrs
+
+    def _apply_canonical_classification_policy(
+        self,
+        *,
+        attrs: dict,
+        movement_type: str,
+        investment_direction: str,
+        liability_account: LedgerAccount | None,
+    ) -> None:
+        if movement_type == "transfer" or movement_type == "revaluation":
+            attrs["flow_family"] = ""
+            attrs["category_key"] = ""
+            attrs["subcategory_key"] = ""
+            return
+
+        if movement_type == "expense":
+            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
+            attrs["category_key"] = "consumption_expenses"
+            return
+
+        if movement_type == "investment":
+            if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW:
+                attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.INCOME)
+                attrs["category_key"] = "capital_gains"
+                attrs["subcategory_key"] = "sale_financial_assets"
+                return
+            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
+            return
+
+        if movement_type != "debt_payment":
+            return
+
+        attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
+        if liability_account is None or liability_account.liability is None:
+            return
+        liability_category = liability_account.liability.category
+        if liability_category == Liability.Category.MORTGAGE:
+            attrs["category_key"] = "real_estate_assets"
+            attrs["subcategory_key"] = "mortgage_principal"
+            return
+        attrs["category_key"] = "consumption_expenses"
 
     def _normalize_investment_payload(
         self,
@@ -771,9 +850,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     def _infer_flow_family(self, *, movement_type: str, interest_amount: Decimal | None) -> str:
         if movement_type == "income":
             return cast(str, LedgerEntry.FlowFamily.INCOME)
-        if movement_type == "expense":
-            return cast(str, LedgerEntry.FlowFamily.EXPENSE)
-        if movement_type == "debt_payment" and (interest_amount or Decimal("0")) > 0:
+        if movement_type in {"expense", "debt_payment", "investment"}:
             return cast(str, LedgerEntry.FlowFamily.EXPENSE)
         return ""
 
@@ -795,6 +872,22 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         if movement_type == "expense" and not has_classification and annual_expense_entry is None:
             raise serializers.ValidationError(
                 {"subcategory_key": "Categoria y subcategoria son obligatorias para gastos."}
+            )
+        if movement_type == "investment" and not has_classification:
+            raise serializers.ValidationError(
+                {
+                    "subcategory_key": (
+                        "Categoria y subcategoria son obligatorias para movimientos de inversion."
+                    )
+                }
+            )
+        if movement_type == "debt_payment" and not has_classification:
+            raise serializers.ValidationError(
+                {
+                    "subcategory_key": (
+                        "Categoria y subcategoria son obligatorias para pagos de deuda."
+                    )
+                }
             )
         if movement_type == "debt_payment" and (interest_amount or Decimal("0")) > 0:
             if not has_classification and annual_expense_entry is None:
@@ -1025,6 +1118,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     def _validate_investment_movement(
         self,
         *,
+        attrs: dict,
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
@@ -1080,6 +1174,21 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     )
                 }
             )
+
+        category_key = attrs.get("category_key", "")
+        if investment_direction == LedgerTransaction.InvestmentDirection.INFLOW:
+            if category_key not in {
+                "financial_investments",
+                "real_estate_assets",
+                "tangible_assets",
+            }:
+                raise serializers.ValidationError(
+                    {
+                        "category_key": (
+                            "Los aportes de inversion solo admiten categorias de inversion."
+                        )
+                    }
+                )
 
     def _validate_revaluation_movement(
         self,

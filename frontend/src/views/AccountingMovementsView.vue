@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import '@/domains/accounting/styles/movements.css';
 import { useAccountingMovementsPage } from '@/domains/accounting/useAccountingMovementsPage';
 import AccountingMovementsHero from '@/domains/accounting/components/AccountingMovementsHero.vue';
@@ -10,7 +12,30 @@ import AccountingMovementsEditTransactionModal from '@/domains/accounting/compon
 import AccountingMovementsMoneyWizModal from '@/domains/accounting/components/AccountingMovementsMoneyWizModal.vue';
 import AccountingMovementsQuickEntryModal from '@/domains/accounting/components/AccountingMovementsQuickEntryModal.vue';
 
+const route = useRoute();
 const page = useAccountingMovementsPage();
+
+onMounted(async () => {
+  const { tab, date_from, date_to, kind, category_key, subcategory_key } = route.query;
+  if (tab === 'todos') {
+    page.activeTab = 'todos';
+  }
+  if (date_from || date_to) {
+    page.todosDatePreset = 'custom';
+    page.todosDateFrom = String(date_from ?? '');
+    page.todosDateTo = String(date_to ?? '');
+  }
+  if (kind && kind !== 'all') {
+    page.activityFilters.kind = String(kind) as typeof page.activityFilters.kind;
+  }
+  if (category_key) {
+    page.activityFilters.categoryKey = String(category_key);
+  }
+  if (subcategory_key) {
+    await nextTick();
+    page.activityFilters.subcategoryKey = String(subcategory_key);
+  }
+});
 </script>
 
 <template>

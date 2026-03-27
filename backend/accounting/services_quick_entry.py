@@ -180,6 +180,7 @@ def _build_quick_entry_payload(
                     "amount": base_amount,
                     "currency": counterparty_account.currency,
                     "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+                    **classification,
                 },
             ]
         return [
@@ -189,6 +190,7 @@ def _build_quick_entry_payload(
                 "amount": destination_value,
                 "currency": counterparty_account.currency,
                 "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+                **classification,
             },
             {
                 "account": account,
@@ -235,6 +237,7 @@ def _build_quick_entry_payload(
                 "liability": liability_account.liability
                 if liability_account.liability_id
                 else None,
+                **classification,
             },
             {
                 "account": account,
