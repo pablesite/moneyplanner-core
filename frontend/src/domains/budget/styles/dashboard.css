@@ -1691,10 +1691,11 @@
 }
 
 .ui-budget-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "main metrics" "context context";
   gap: 12px;
-  padding: 8px 12px 8px 16px;
+  padding: 8px 12px 8px 28px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   background: transparent;
 }
@@ -1704,8 +1705,8 @@
 }
 
 .ui-budget-row-main {
+  grid-area: main;
   min-width: 0;
-  width: 100%;
 }
 
 .ui-budget-row-kicker {
@@ -1713,10 +1714,33 @@
 }
 
 .ui-budget-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
   font-size: 0.88rem;
   color: rgba(255, 255, 255, 0.96);
   letter-spacing: -0.01em;
+}
+
+.ui-budget-row-inline-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ui-budget-row-inline-add:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .ui-budget-row-meta {
@@ -1730,13 +1754,11 @@
 }
 
 .ui-budget-context-panel {
-  margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 10px;
+  grid-area: context;
+  padding-left: 2rem;
+  padding-bottom: 6px;
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .ui-budget-context-panel-head {
@@ -1765,10 +1787,8 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.01);
+  padding: 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .ui-budget-context-main {
@@ -1799,6 +1819,7 @@
 }
 
 .ui-budget-row-metrics {
+  grid-area: metrics;
   display: grid;
   grid-template-columns: repeat(3, minmax(120px, auto));
   gap: 12px;
@@ -1953,12 +1974,17 @@
   }
 
   .ui-budget-row {
-    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas: "main" "metrics" "context";
     gap: 8px;
   }
 
   .ui-budget-row-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ui-budget-context-panel {
+    padding-left: 0;
   }
 
   .ui-budget-inline-progress-row {
@@ -2151,10 +2177,6 @@
     text-align: left;
     border-top: 1px dashed rgba(255, 255, 255, 0.08);
     padding-top: 5px;
-  }
-
-  .ui-budget-context-panel-head {
-    display: grid;
   }
 
   .ui-budget-context-item {

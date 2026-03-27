@@ -624,7 +624,20 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             <li v-for="row in group.rows" :key="row.key" class="ui-budget-row">
               <div class="ui-budget-row-main">
                 <div class="ui-budget-row-kicker">Subcategoría</div>
-                <div class="ui-budget-row-title">{{ row.subcategoryLabel }}</div>
+                <div class="ui-budget-row-title">
+                  {{ row.subcategoryLabel }}
+                  <button
+                    type="button"
+                    class="ui-budget-row-inline-add"
+                    :title="`Añadir en ${row.subcategoryLabel}`"
+                    @click="openCreateDirect(section.id, row)"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">
+                      <rect x="3.5" y="0" width="1" height="8" />
+                      <rect x="0" y="3.5" width="8" height="1" />
+                    </svg>
+                  </button>
+                </div>
                 <div class="ui-budget-row-meta">
                   <template v-if="row.detectedUnbudgeted">
                     Detectado en movimientos -
@@ -708,32 +721,15 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
                 <div class="ui-budget-row-actions">
                   <button
-                    v-if="!row.detectedUnbudgeted && row.itemsCount === 0"
+                    v-if="!row.detectedUnbudgeted && row.itemsCount > 0"
                     type="button"
-                    class="btn btn-ghost btn-sm ui-budget-row-add-direct"
-                    @click="openCreateDirect(section.id, row)"
+                    class="btn btn-ghost btn-sm"
+                    @click="toggleContext(section.id, row)"
                   >
-                    + Añadir línea
+                    {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Ver detalle' }}
                   </button>
-                  <template v-else-if="!row.detectedUnbudgeted && row.itemsCount > 0">
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-sm"
-                      @click="toggleContext(section.id, row)"
-                    >
-                      {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Gestionar subcategoría' }}
-                    </button>
-                    <button
-                      v-if="!isContextOpen(section.id, row.key)"
-                      type="button"
-                      class="btn btn-ghost btn-sm ui-budget-row-add-direct"
-                      @click="openCreateDirect(section.id, row)"
-                    >
-                      + Añadir
-                    </button>
-                  </template>
                   <button
-                    v-else
+                    v-else-if="row.detectedUnbudgeted"
                     type="button"
                     class="btn btn-ghost btn-sm"
                     @click="toggleContext(section.id, row)"
@@ -742,107 +738,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   </button>
                 </div>
 
-                <div v-if="isContextOpen(section.id, row.key)" class="ui-budget-context-panel">
-                  <header class="ui-budget-context-panel-head">
-                    <div>
-                      <strong>{{ row.subcategoryLabel }}</strong>
-                      <p class="ui-budget-context-panel-subtitle">
-                        {{
-                          row.detectedUnbudgeted
-                            ? 'Subcategoría detectada desde movimientos. Convierte este movimiento en linea anual.'
-                            : 'Alta, edición y borrado sin salir del contexto de categoría.'
-                        }}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      class="btn btn-primary btn-sm"
-                      @click="openCreateFromContext"
-                    >
-                      Añadir
-                    </button>
-                  </header>
-
-                  <ul
-                    v-if="section.id === 'income' && contextIncomeEntries.length"
-                    class="ui-budget-context-list"
-                  >
-                    <li v-for="entry in contextIncomeEntries" :key="`income-${entry.id}`">
-                      <div class="ui-budget-context-item">
-                        <div class="ui-budget-context-main">
-                          <strong>{{ entry.name }}</strong>
-                          <small>
-                            {{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
-                            <template v-if="entry.owner"> - {{ entry.owner }}</template>
-                          </small>
-                        </div>
-                        <div class="ui-budget-context-actions">
-                          <span class="ui-budget-context-amount"
-                            >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
-                          >
-                          <button
-                            type="button"
-                            class="icon-btn"
-                            title="Editar"
-                            @click="openEditIncome(entry)"
-                          >
-                            &#9998;
-                          </button>
-                          <button
-                            type="button"
-                            class="icon-btn"
-                            title="Eliminar"
-                            @click="removeIncome(entry)"
-                          >
-                            &#128465;
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  </ul>
-
-                  <ul
-                    v-else-if="section.id === 'expense' && contextExpenseEntries.length"
-                    class="ui-budget-context-list"
-                  >
-                    <li v-for="entry in contextExpenseEntries" :key="`expense-${entry.id}`">
-                      <div class="ui-budget-context-item">
-                        <div class="ui-budget-context-main">
-                          <strong>{{ entry.name }}</strong>
-                          <small>
-                            {{ entry.expenseType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
-                            <template v-if="entry.owner"> - {{ entry.owner }}</template>
-                          </small>
-                        </div>
-                        <div class="ui-budget-context-actions">
-                          <span class="ui-budget-context-amount"
-                            >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
-                          >
-                          <button
-                            type="button"
-                            class="icon-btn"
-                            title="Editar"
-                            @click="openEditExpense(entry)"
-                          >
-                            &#9998;
-                          </button>
-                          <button
-                            type="button"
-                            class="icon-btn"
-                            title="Eliminar"
-                            @click="removeExpense(entry)"
-                          >
-                            &#128465;
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  </ul>
-
-                  <p v-else class="subtle mb-0">
-                    No hay registros con los filtros actuales para esta subcategoría.
-                  </p>
-                </div>
               </div>
 
               <div class="ui-budget-row-metrics">
@@ -894,6 +789,88 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     }}
                   </strong>
                 </div>
+              </div>
+
+              <div v-if="isContextOpen(section.id, row.key)" class="ui-budget-context-panel">
+                <ul
+                  v-if="section.id === 'income' && contextIncomeEntries.length"
+                  class="ui-budget-context-list"
+                >
+                  <li v-for="entry in contextIncomeEntries" :key="`income-${entry.id}`">
+                    <div class="ui-budget-context-item">
+                      <div class="ui-budget-context-main">
+                        <strong>{{ entry.name }}</strong>
+                        <small>
+                          {{ entry.incomeType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
+                          <template v-if="entry.owner"> - {{ entry.owner }}</template>
+                        </small>
+                      </div>
+                      <div class="ui-budget-context-actions">
+                        <span class="ui-budget-context-amount"
+                          >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
+                        >
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Editar"
+                          @click="openEditIncome(entry)"
+                        >
+                          &#9998;
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Eliminar"
+                          @click="removeIncome(entry)"
+                        >
+                          &#128465;
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+
+                <ul
+                  v-else-if="section.id === 'expense' && contextExpenseEntries.length"
+                  class="ui-budget-context-list"
+                >
+                  <li v-for="entry in contextExpenseEntries" :key="`expense-${entry.id}`">
+                    <div class="ui-budget-context-item">
+                      <div class="ui-budget-context-main">
+                        <strong>{{ entry.name }}</strong>
+                        <small>
+                          {{ entry.expenseType === 'recurrent' ? 'Recurrente' : 'Puntual' }}
+                          <template v-if="entry.owner"> - {{ entry.owner }}</template>
+                        </small>
+                      </div>
+                      <div class="ui-budget-context-actions">
+                        <span class="ui-budget-context-amount"
+                          >{{ formatMoney(entry.amountAnnual) }} {{ entry.currency }}</span
+                        >
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Editar"
+                          @click="openEditExpense(entry)"
+                        >
+                          &#9998;
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-btn"
+                          title="Eliminar"
+                          @click="removeExpense(entry)"
+                        >
+                          &#128465;
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+
+                <p v-else class="subtle mb-0">
+                  No hay registros con los filtros actuales para esta subcategoría.
+                </p>
               </div>
             </li>
           </ul>
