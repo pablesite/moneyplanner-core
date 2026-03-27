@@ -27,12 +27,17 @@ onMounted(async () => {
   }
   if (kind && kind !== 'all') {
     page.activityFilters.kind = String(kind) as typeof page.activityFilters.kind;
+    // Wait for the watcher on filterCategoryOptions (triggered by kind change) to fire
+    // before setting categoryKey, otherwise it would be cleared.
+    await nextTick();
   }
   if (category_key) {
     page.activityFilters.categoryKey = String(category_key);
+    // Wait for the watcher on categoryKey (which resets subcategoryKey) to fire
+    // before setting subcategoryKey.
+    await nextTick();
   }
   if (subcategory_key) {
-    await nextTick();
     page.activityFilters.subcategoryKey = String(subcategory_key);
   }
 });
