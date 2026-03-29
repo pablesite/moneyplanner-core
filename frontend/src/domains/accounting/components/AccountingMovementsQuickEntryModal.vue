@@ -115,16 +115,8 @@ watch(showValueDate, (show: boolean) => {
     panel-class="max-w-[920px]"
     @close="page.showQuickEntryModal = false"
   >
-    <div class="ui-accounting-modal-copy">
-      <p class="ui-page-eyebrow">Alta rapida</p>
-      <p class="subtle">
-        La fecha de contabilizacion manda en el libro y la fecha valor indica cuando impacta
-        realmente en saldo.
-      </p>
-    </div>
-
     <div v-if="!page.liquidityAccounts.length" class="ui-accounting-inline-note">
-      Necesitas al menos una cuenta de liquidez para registrar movimientos de alta rapida.
+      Necesitas al menos una cuenta de liquidez para registrar movimientos.
     </div>
 
     <form
@@ -372,7 +364,7 @@ watch(showValueDate, (show: boolean) => {
           </template>
         </template>
         <template v-else>
-          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automaticamente.
+          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automáticamente.
         </template>
       </p>
       <div
@@ -380,8 +372,8 @@ watch(showValueDate, (show: boolean) => {
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
         <select v-model="page.quickEntryForm.investment_direction" class="select">
-          <option value="inflow">Aporte (liquidez a inversion)</option>
-          <option value="outflow">Retirada inversion (inversion a liquidez)</option>
+          <option value="inflow">Aporte (liquidez → inversión)</option>
+          <option value="outflow">Retirada (inversión → liquidez)</option>
         </select>
         <input
           v-if="page.quickInvestmentIsCrossCurrency"
@@ -395,13 +387,13 @@ watch(showValueDate, (show: boolean) => {
           v-model="page.quickEntryForm.realized_cost_basis"
           class="input"
           inputmode="decimal"
-          placeholder="Coste realizado (opcional)"
+          placeholder="Precio de compra original (opcional)"
         />
         <input
           v-model="page.quickEntryForm.realized_gain_loss"
           class="input"
           inputmode="decimal"
-          placeholder="Ganancia/perdida realizada (opcional)"
+          placeholder="Ganancia/pérdida realizada (opcional)"
         />
       </div>
 
@@ -415,7 +407,7 @@ watch(showValueDate, (show: boolean) => {
           :disabled="page.quickCategoryLocked"
           required
         >
-          <option value="">Categoria</option>
+          <option value="">Categoría</option>
           <option
             v-for="category in page.quickCategoryOptions"
             :key="category.value"
@@ -431,7 +423,7 @@ watch(showValueDate, (show: boolean) => {
           :disabled="page.quickSubcategoryLocked"
           required
         >
-          <option value="">Subcategoria</option>
+          <option value="">Subcategoría</option>
           <option
             v-for="subcategory in page.quickSubcategoryOptions"
             :key="subcategory.value"
@@ -502,7 +494,7 @@ watch(showValueDate, (show: boolean) => {
           v-model="page.quickEntryForm.interest_amount"
           class="input"
           inputmode="decimal"
-          placeholder="Interes (ej: 30.00, 0 si no aplica)"
+          placeholder="Interés (ej: 30.00, 0 si no aplica)"
           required
         />
         <select v-model="page.quickEntryForm.interest_account_id" class="select">
