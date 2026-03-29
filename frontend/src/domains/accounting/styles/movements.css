@@ -637,6 +637,53 @@
   gap: 10px;
 }
 
+.ui-accounting-value-date-row {
+  display: flex;
+  align-items: flex-start;
+  min-height: 24px;
+}
+
+.ui-accounting-value-date-toggle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(255, 255, 255, 0.15);
+  transition: color 0.15s;
+}
+
+.ui-accounting-value-date-toggle:hover {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ui-accounting-value-date-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-accounting-value-date-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(255, 255, 255, 0.15);
+  transition: color 0.15s;
+}
+
+.ui-accounting-value-date-close:hover {
+  color: rgba(255, 255, 255, 0.65);
+}
+
 .ui-accounting-field {
   display: grid;
   gap: 6px;
