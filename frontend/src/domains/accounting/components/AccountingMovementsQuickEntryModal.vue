@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-mutating-props */
-import { computed, type PropType } from 'vue';
+import { computed, ref, watch, type PropType } from 'vue';
 import BaseModal from '@/domains/ui/components/BaseModal.vue';
 
 const props = defineProps({
@@ -81,6 +81,23 @@ const liabilityGroups = computed(() =>
   groupAndSortAccounts(props.page.liabilityCounterpartyOptions),
 );
 const interestGroups = computed(() => groupAndSortAccounts(props.page.debtInterestOptions));
+
+const showValueDate = ref(false);
+
+watch(
+  () => props.page.quickEntryForm.booking_date,
+  (date: string) => {
+    if (!showValueDate.value) {
+      props.page.quickEntryForm.value_date = date;
+    }
+  },
+);
+
+watch(showValueDate, (show: boolean) => {
+  if (!show) {
+    props.page.quickEntryForm.value_date = props.page.quickEntryForm.booking_date;
+  }
+});
 </script>
 
 <template>
@@ -141,19 +158,39 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
         </select>
 
         <label class="ui-accounting-field">
-          <span>Fecha contabilizacion</span>
+          <span>Fecha contabilización</span>
           <input v-model="page.quickEntryForm.booking_date" type="date" class="input" required />
-        </label>
-
-        <label class="ui-accounting-field">
-          <span>Fecha valor</span>
-          <input v-model="page.quickEntryForm.value_date" type="date" class="input" required />
         </label>
       </div>
 
-      <p class="ui-accounting-inline-note">
-        Normalmente coinciden. Si el banco liquida despues, usa una fecha valor posterior.
-      </p>
+      <div class="ui-accounting-value-date-row">
+        <button
+          v-if="!showValueDate"
+          type="button"
+          class="ui-accounting-value-date-toggle"
+          @click="showValueDate = true"
+        >
+          Fecha valor diferente
+        </button>
+        <label v-else class="ui-accounting-field">
+          <span>Fecha valor</span>
+          <div class="ui-accounting-value-date-input-row">
+            <input
+              v-model="page.quickEntryForm.value_date"
+              type="date"
+              class="input"
+              required
+            />
+            <button
+              type="button"
+              class="ui-accounting-value-date-close"
+              @click="showValueDate = false"
+            >
+              Misma fecha
+            </button>
+          </div>
+        </label>
+      </div>
 
       <template v-if="page.quickEntryForm.movement_type === 'revaluation'">
         <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
