@@ -96,6 +96,8 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
         return "revaluation"
     if qek == LedgerTransaction.QuickEntryKind.TRANSFER:
         return "transfer"
+    if qek == LedgerTransaction.QuickEntryKind.ADJUSTMENT:
+        return "adjustment"
     if qek == LedgerTransaction.QuickEntryKind.INVESTMENT:
         return "investment_purchase"
     if qek == LedgerTransaction.QuickEntryKind.INCOME:
@@ -305,4 +307,6 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER)
             | Q(id__in=transfer_legacy_queryset.values("id"))
         )
+    if kind == "adjustment":
+        return queryset.filter(Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT))
     raise ValidationError({"kind": "Query param 'kind' invalido."})

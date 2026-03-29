@@ -386,7 +386,9 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         return any(values["debit"] != values["credit"] for values in totals.values())
 
     @classmethod
-    def _same_structure(cls, existing_entries: list[LedgerEntry], incoming_entries: list[dict]) -> bool:
+    def _same_structure(
+        cls, existing_entries: list[LedgerEntry], incoming_entries: list[dict]
+    ) -> bool:
         if len(existing_entries) != len(incoming_entries):
             return False
         existing_signature = Counter(
@@ -417,20 +419,18 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     ) -> bool:
         if not existing_entries or not incoming_entries:
             return False
-        incoming_currencies = {cls._entry_currency_from_payload(entry) for entry in incoming_entries}
+        incoming_currencies = {
+            cls._entry_currency_from_payload(entry) for entry in incoming_entries
+        }
         if len(incoming_currencies) < 2:
             return False
 
         # Align update semantics with quick-entry create/edit:
         # investment and transfer movements can be naturally unbalanced per currency.
-        if (
-            quick_entry_kind
-            in {
-                LedgerTransaction.QuickEntryKind.INVESTMENT,
-                LedgerTransaction.QuickEntryKind.TRANSFER,
-            }
-            and cls._is_unbalanced_by_currency_from_payload(incoming_entries)
-        ):
+        if quick_entry_kind in {
+            LedgerTransaction.QuickEntryKind.INVESTMENT,
+            LedgerTransaction.QuickEntryKind.TRANSFER,
+        } and cls._is_unbalanced_by_currency_from_payload(incoming_entries):
             return True
 
         # Backward-compatible lane for legacy mixed-currency rows.
@@ -450,6 +450,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             "income",
             "expense",
             "transfer",
+            "adjustment",
             "investment",
             "investment_purchase",
             "debt_payment",
@@ -608,7 +609,13 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             booking_date=attrs["booking_date"],
             value_date=attrs["value_date"],
         )
-        if movement_type not in {"transfer", "investment", "investment_purchase", "revaluation"}:
+        if movement_type not in {
+            "transfer",
+            "adjustment",
+            "investment",
+            "investment_purchase",
+            "revaluation",
+        }:
             validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
 
         if annual_income_entry is not None and annual_income_entry.user_id != user.id:
@@ -648,11 +655,15 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"flow_family": "Las inversiones solo pueden clasificarse como gasto."}
             )
-        if movement_type in {"transfer", "revaluation"} and (
+        if movement_type in {"transfer", "adjustment", "revaluation"} and (
             flow_family or category_key or subcategory_key
         ):
             raise serializers.ValidationError(
-                {"flow_family": "No aplica a transferencias internas ni revalorizaciones."}
+                {
+                    "flow_family": (
+                        "No aplica a transferencias internas, ajustes ni revalorizaciones."
+                    )
+                }
             )
         self._validate_investment_metadata(
             movement_type=movement_type,
@@ -698,6 +709,15 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             )
         elif movement_type == "transfer":
             self._validate_transfer_movement(
+                user_id=user.id,
+                account=account,
+                counterparty_account=counterparty_account,
+                annual_income_entry=annual_income_entry,
+                annual_expense_entry=annual_expense_entry,
+            )
+        elif movement_type == "adjustment":
+            self._validate_adjustment_movement(
+                attrs=attrs,
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
@@ -753,7 +773,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         investment_direction: str,
         liability_account: LedgerAccount | None,
     ) -> None:
-        if movement_type == "transfer" or movement_type == "revaluation":
+        if movement_type in {"transfer", "adjustment", "revaluation"}:
             attrs["flow_family"] = ""
             attrs["category_key"] = ""
             attrs["subcategory_key"] = ""
@@ -1111,6 +1131,64 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 {
                     "counterparty_account_id": (
                         "La transferencia interna exige la misma moneda en ambas cuentas."
+                    )
+                }
+            )
+
+    def _validate_adjustment_movement(
+        self,
+        *,
+        attrs: dict,
+        user_id: int,
+        account: LedgerAccount,
+        counterparty_account: LedgerAccount | None,
+        annual_income_entry: AnnualIncomeEntry | None,
+        annual_expense_entry: AnnualExpenseEntry | None,
+    ) -> None:
+        if annual_income_entry is not None:
+            raise serializers.ValidationError(
+                {"annual_income_entry_id": "No aplica a ajustes de conciliacion."}
+            )
+        if annual_expense_entry is not None:
+            raise serializers.ValidationError(
+                {"annual_expense_entry_id": "No aplica a ajustes de conciliacion."}
+            )
+        if account.account_type not in {
+            LedgerAccount.AccountType.ASSET,
+            LedgerAccount.AccountType.LIABILITY,
+        }:
+            raise serializers.ValidationError(
+                {
+                    "account_id": (
+                        "El ajuste de conciliacion solo admite cuentas de tipo asset o liability."
+                    )
+                }
+            )
+        if counterparty_account is not None:
+            validate_counterparty_account_type(
+                account=counterparty_account,
+                user_id=user_id,
+                expected_type=cast(str, LedgerAccount.AccountType.EQUITY),
+                field_name="counterparty_account_id",
+            )
+        else:
+            counterparty_account = get_or_create_system_account(
+                user_id=user_id,
+                account_type=cast(str, LedgerAccount.AccountType.EQUITY),
+                currency=account.currency,
+                name="Ajustes de conciliacion",
+            )
+            attrs["counterparty_account"] = counterparty_account
+
+        if account.id == counterparty_account.id:
+            raise serializers.ValidationError(
+                {"counterparty_account_id": "La contracuenta de ajuste debe ser distinta."}
+            )
+        if account.currency != counterparty_account.currency:
+            raise serializers.ValidationError(
+                {
+                    "counterparty_account_id": (
+                        "El ajuste de conciliacion exige la misma moneda en ambas cuentas."
                     )
                 }
             )

@@ -2499,6 +2499,109 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("subcategory_key", response.data["error"]["details"])
 
+    def test_quick_entry_adjustment_creates_equity_counterparty_automatically(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "adjustment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Ajuste conciliacion BTC",
+                "amount": "-0.00078100",
+                "account_id": self.cash_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["quick_entry_kind"], "adjustment")
+        self.assertEqual(response.data["activity_kind"], "adjustment")
+        self.assertEqual(len(response.data["entries"]), 2)
+
+        account_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == self.cash_account.id
+        )
+        self.assertEqual(account_entry["side"], "credit")
+        self.assertEqual(account_entry["amount"], "0.00078100")
+
+        equity_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] != self.cash_account.id
+        )
+        self.assertEqual(equity_entry["side"], "debit")
+        self.assertEqual(equity_entry["amount"], "0.00078100")
+        equity_account = LedgerAccount.objects.get(id=equity_entry["account_id"])
+        self.assertEqual(equity_account.account_type, LedgerAccount.AccountType.EQUITY)
+        self.assertEqual(equity_account.currency, self.cash_account.currency)
+
+    def test_quick_entry_adjustment_rejects_non_operational_account(self):
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio tecnico",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "adjustment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Ajuste invalido",
+                "amount": "10.00",
+                "account_id": equity_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("account_id", response.data["error"]["details"])
+
+    def test_transactions_filter_kind_adjustment_returns_only_adjustments(self):
+        second_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ahorro filtro",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "adjustment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Ajuste 1",
+                "amount": "10.00",
+                "account_id": self.cash_account.id,
+            },
+            format="json",
+        )
+        self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-13",
+                "value_date": "2026-04-13",
+                "description": "Transferencia 1",
+                "amount": "10.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": second_asset_account.id,
+            },
+            format="json",
+        )
+
+        response = self.client.get("/api/accounting/transactions/?kind=adjustment")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertGreaterEqual(response.data["total_count"], 1)
+        self.assertTrue(response.data["results"])
+        self.assertTrue(
+            all(row["activity_kind"] == "adjustment" for row in response.data["results"])
+        )
+
     def test_quick_entry_investment_purchase_creates_balanced_entries_with_asset_link(self):
         investment_asset = Asset.objects.create(
             user=self.user,

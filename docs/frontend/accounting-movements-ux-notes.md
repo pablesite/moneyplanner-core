@@ -48,6 +48,7 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 3. optional manual realized metadata for investment (`realized_cost_basis`, `realized_gain_loss`) without mandatory calculation
 4. `debt_payment` with explicit `principal` + `interest` breakdown
 5. edit flow supports changing investment direction while preserving a balanced entry
+6. `adjustment` for reconciliation: the UI asks for target final balance and computes delta automatically before posting
 
 ## Integration with current screens
 1. `DataInputView`

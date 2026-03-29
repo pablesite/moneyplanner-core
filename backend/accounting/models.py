@@ -68,6 +68,7 @@ class LedgerTransaction(models.Model):
         INCOME = "income", "Ingreso"
         EXPENSE = "expense", "Gasto"
         TRANSFER = "transfer", "Transferencia"
+        ADJUSTMENT = "adjustment", "Ajuste"
         INVESTMENT = "investment", "Inversion"
         DEBT_PAYMENT = "debt_payment", "Pago deuda"
         REVALUATION = "revaluation", "Revalorizacion"

@@ -76,6 +76,7 @@ type ActivityFilter =
   | 'income'
   | 'expense'
   | 'transfer'
+  | 'adjustment'
   | 'investment'
   | 'debt_payment'
   | 'revaluation';
@@ -354,6 +355,11 @@ export function useAccountingPage() {
   const liquidityAccounts = computed(() =>
     accounts.value.filter((account) => account.account_type === 'asset'),
   );
+  const quickAdjustmentAccountOptions = computed(() =>
+    accounts.value.filter(
+      (account) => account.account_type === 'asset' || account.account_type === 'liability',
+    ),
+  );
   const manualPositionTypeOptions: { value: ManualPositionType; label: string }[] = [
     { value: 'asset', label: 'Activo manual' },
     { value: 'liability', label: 'Pasivo manual' },
@@ -476,6 +482,9 @@ export function useAccountingPage() {
   const quickSelectedInvestmentAccount = computed(() =>
     resolveAccountById(quickEntryForm.counterparty_account_id),
   );
+  const quickSelectedAdjustmentAccount = computed(() =>
+    quickEntryForm.movement_type === 'adjustment' ? resolveAccountById(quickEntryForm.account_id) : null,
+  );
   const quickInvestmentOriginCurrency = computed(() => {
     if (quickEntryForm.movement_type !== 'investment') return '';
     if (quickEntryForm.investment_direction === 'outflow') {
@@ -512,6 +521,28 @@ export function useAccountingPage() {
     const currentBalance = revaluationCurrentBalance.value;
     if (currentBalance == null) return null;
     return round2(toNumber(raw) - currentBalance);
+  });
+  const quickAdjustmentCurrentBalance = computed((): number | null => {
+    if (quickEntryForm.movement_type !== 'adjustment') return null;
+    const account = quickSelectedAdjustmentAccount.value;
+    if (!account) return null;
+    return toNumber(account.current_balance);
+  });
+  const quickAdjustmentCurrency = computed(
+    () => quickSelectedAdjustmentAccount.value?.currency.trim().toUpperCase() ?? '',
+  );
+  const quickAdjustmentDisplayDecimals = computed(() => {
+    if (!quickAdjustmentCurrency.value) return 2;
+    return currencyDecimals(quickAdjustmentCurrency.value);
+  });
+  const quickAdjustmentDelta = computed((): number | null => {
+    if (quickEntryForm.movement_type !== 'adjustment') return null;
+    const rawTarget = quickEntryForm.amount.trim();
+    if (!rawTarget) return null;
+    const account = quickSelectedAdjustmentAccount.value;
+    const currentBalance = quickAdjustmentCurrentBalance.value;
+    if (!account || currentBalance == null) return null;
+    return roundByCurrency(toNumber(rawTarget) - currentBalance, account.currency);
   });
   const liabilityCounterpartyOptions = computed(() =>
     accounts.value.filter(
@@ -557,8 +588,17 @@ export function useAccountingPage() {
       const delta = revaluationDelta.value;
       return delta != null && Math.abs(delta) >= 0.005;
     }
+    if (quickEntryForm.movement_type === 'adjustment') {
+      const account = quickSelectedAdjustmentAccount.value;
+      const delta = quickAdjustmentDelta.value;
+      if (!account || delta == null) return false;
+      const minUnit = 1 / 10 ** currencyDecimals(account.currency);
+      return Math.abs(delta) >= minUnit;
+    }
     const amountValue = toNumber(quickEntryForm.amount);
-    if (amountValue <= 0) return false;
+    if (amountValue <= 0) {
+      return false;
+    }
     if (quickSelectedLiquidityAccountId.value == null) return false;
     if (quickEntryForm.movement_type === 'transfer') {
       return normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
@@ -717,6 +757,7 @@ export function useAccountingPage() {
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
     { value: 'transfer', label: 'Transferencia' },
+    { value: 'adjustment', label: 'Ajuste' },
     { value: 'investment', label: 'Inversion' },
     { value: 'debt_payment', label: 'Pago deuda' },
     { value: 'revaluation', label: 'Revalorizacion' },
@@ -2129,6 +2170,7 @@ export function useAccountingPage() {
     return { parsedAmount, selectedAccount };
   }
 
+  // eslint-disable-next-line complexity
   async function resolveEditedTransactionEntries(
     parsedAmount: number,
     selectedAccount: LedgerAccount,
@@ -2242,6 +2284,7 @@ export function useAccountingPage() {
     if (transaction.activity_kind === 'income') return 'income';
     if (transaction.activity_kind === 'expense') return 'expense';
     if (transaction.activity_kind === 'transfer') return 'transfer';
+    if (transaction.activity_kind === 'adjustment') return 'adjustment';
     if (transaction.activity_kind === 'debt_payment') return 'debt_payment';
     if (transaction.activity_kind === 'revaluation') return 'revaluation';
     return 'other';
@@ -2252,6 +2295,7 @@ export function useAccountingPage() {
     if (kind === 'income') return 'Ingreso';
     if (kind === 'expense') return 'Gasto';
     if (kind === 'transfer') return 'Transferencia';
+    if (kind === 'adjustment') return 'Ajuste';
     if (kind === 'investment') {
       return getInvestmentDirection(transaction) === 'outflow'
         ? 'Retirada inversion'
@@ -2774,18 +2818,29 @@ export function useAccountingPage() {
     successMessage.value = 'Revalorizacion registrada.';
   }
 
+  // eslint-disable-next-line complexity
   async function submitQuickEntry() {
     if (quickEntryForm.movement_type === 'revaluation') {
       await submitRevaluationEntry();
       return;
     }
     successMessage.value = null;
+    const adjustmentDelta =
+      quickEntryForm.movement_type === 'adjustment' ? quickAdjustmentDelta.value : null;
+    if (quickEntryForm.movement_type === 'adjustment' && adjustmentDelta == null) {
+      store.error =
+        'Selecciona cuenta y saldo final objetivo para calcular automaticamente el ajuste.';
+      return;
+    }
     const payload: QuickLedgerTransactionWritePayload = {
       movement_type: quickEntryForm.movement_type,
       booking_date: quickEntryForm.booking_date,
       value_date: quickEntryForm.value_date,
       description: quickEntryForm.description.trim(),
-      amount: formatDecimalInput(quickEntryForm.amount),
+      amount:
+        quickEntryForm.movement_type === 'adjustment'
+          ? String(adjustmentDelta)
+          : formatDecimalInput(quickEntryForm.amount),
       account_id: normalizeAccountId(quickEntryForm.account_id) ?? 0,
       ownership_id: quickEntryForm.ownership_id,
       notes: quickEntryForm.notes.trim(),
@@ -2970,6 +3025,7 @@ export function useAccountingPage() {
     cuentasFilters,
     moneyWizImportFile,
     liquidityAccounts,
+    quickAdjustmentAccountOptions,
     availableManualPositionOptions,
     accountPositionMetaByAccountId,
     accountDisplayName,
@@ -2999,6 +3055,10 @@ export function useAccountingPage() {
     revaluationAccountOptions,
     revaluationCurrentBalance,
     revaluationDelta,
+    quickAdjustmentCurrency,
+    quickAdjustmentDisplayDecimals,
+    quickAdjustmentCurrentBalance,
+    quickAdjustmentDelta,
     quickEntryReady,
     editEntryReady,
     debitTotal,

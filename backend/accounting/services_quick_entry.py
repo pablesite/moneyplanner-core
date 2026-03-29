@@ -165,7 +165,9 @@ def _build_quick_entry_payload(
             },
         ]
     if movement_type == "investment":
-        destination_value = Decimal(destination_amount) if destination_amount is not None else base_amount
+        destination_value = (
+            Decimal(destination_amount) if destination_amount is not None else base_amount
+        )
         if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW:
             return [
                 {
@@ -213,6 +215,31 @@ def _build_quick_entry_payload(
             {
                 "account": account,
                 "side": asset_side,
+                "amount": abs_amount,
+                "currency": account.currency,
+            },
+            {
+                "account": counterparty_account,
+                "side": counterparty_side,
+                "amount": abs_amount,
+                "currency": counterparty_account.currency,
+            },
+        ]
+    if movement_type == "adjustment":
+        abs_amount = abs(base_amount)
+        account_side = _resolve_adjustment_side(
+            account_type=account.account_type,
+            delta=base_amount,
+        )
+        counterparty_side = (
+            LedgerEntry.Side.CREDIT
+            if account_side == LedgerEntry.Side.DEBIT
+            else LedgerEntry.Side.DEBIT
+        )
+        return [
+            {
+                "account": account,
+                "side": account_side,
                 "amount": abs_amount,
                 "currency": account.currency,
             },
@@ -277,6 +304,16 @@ def _build_quick_entry_payload(
             "currency": account.currency,
         },
     ]
+
+
+def _resolve_adjustment_side(*, account_type: str, delta: Decimal) -> str:
+    debit_increases = account_type in {
+        LedgerAccount.AccountType.ASSET,
+        LedgerAccount.AccountType.EXPENSE,
+    }
+    if delta >= ZERO:
+        return cast(str, LedgerEntry.Side.DEBIT if debit_increases else LedgerEntry.Side.CREDIT)
+    return cast(str, LedgerEntry.Side.CREDIT if debit_increases else LedgerEntry.Side.DEBIT)
 
 
 def _resolve_entry_classification(

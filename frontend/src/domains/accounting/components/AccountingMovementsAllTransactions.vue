@@ -38,6 +38,7 @@ function typeBadgeVariant(transaction: LedgerTransaction): string {
   if (transaction.activity_kind === 'income') return 'income';
   if (transaction.activity_kind === 'expense') return 'expense';
   if (transaction.activity_kind === 'transfer') return 'transfer';
+  if (transaction.activity_kind === 'adjustment') return 'transfer';
   if (transaction.activity_kind === 'investment_purchase') {
     return transaction.investment_direction === 'outflow'
       ? 'investment-outflow'
@@ -90,6 +91,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           <option value="income">Ingresos</option>
           <option value="expense">Gastos</option>
           <option value="transfer">Transferencias</option>
+          <option value="adjustment">Ajustes</option>
           <option value="investment">Inversion</option>
           <option value="debt_payment">Pago deuda</option>
           <option value="revaluation">Revalorizaciones</option>
