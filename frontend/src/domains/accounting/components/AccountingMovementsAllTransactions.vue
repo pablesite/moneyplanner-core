@@ -45,6 +45,7 @@ function typeBadgeVariant(transaction: LedgerTransaction): string {
       : 'investment-inflow';
   }
   if (transaction.activity_kind === 'debt_payment') return 'debt-payment';
+  if (transaction.activity_kind === 'opening_balance') return 'transfer';
   if (transaction.activity_kind === 'revaluation') return 'revaluation';
   return 'other';
 }
@@ -58,7 +59,10 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
   if (transaction.activity_kind === 'investment_purchase') {
     return transaction.investment_direction === 'outflow' ? baseAmount : -baseAmount;
   }
-  if (transaction.activity_kind === 'revaluation') {
+  if (
+    transaction.activity_kind === 'revaluation' ||
+    transaction.activity_kind === 'opening_balance'
+  ) {
     const linkedEntry = transaction.entries.find(
       (entry) => entry.asset_id != null || entry.liability_id != null,
     );
@@ -94,6 +98,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           <option value="adjustment">Ajustes</option>
           <option value="investment">Inversion</option>
           <option value="debt_payment">Pago deuda</option>
+          <option value="opening_balance">Saldo inicial</option>
           <option value="revaluation">Revalorizaciones</option>
         </select>
         <select

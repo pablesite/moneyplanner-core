@@ -8,7 +8,7 @@ from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
-from .services_ledger import ZERO, normalize_currency_code
+from .services_ledger import NET_WORTH_OPENING_NOTE_PREFIX, ZERO, normalize_currency_code
 
 
 def validate_transaction_entries(
@@ -88,7 +88,11 @@ def validate_balance_summary_filters(*, fiscal_year: int | None, month: int | No
 
 def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
     entries = list(transaction.entries.all())
+    notes = str(transaction.notes or "").strip()
+    is_opening_balance = notes.startswith(NET_WORTH_OPENING_NOTE_PREFIX)
     if transaction.origin == LedgerTransaction.Origin.SYSTEM:
+        if is_opening_balance:
+            return "opening_balance"
         return "revaluation"
     # If quick_entry_kind is explicitly set, trust it over entry-based heuristics.
     qek = transaction.quick_entry_kind
@@ -264,7 +268,13 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     if kind == "revaluation":
         return queryset.filter(
             Q(origin=LedgerTransaction.Origin.SYSTEM)
+            & ~Q(notes__startswith=NET_WORTH_OPENING_NOTE_PREFIX)
             | Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION)
+        )
+    if kind == "opening_balance":
+        return queryset.filter(
+            Q(origin=LedgerTransaction.Origin.SYSTEM)
+            & Q(notes__startswith=NET_WORTH_OPENING_NOTE_PREFIX)
         )
     if kind == "transfer":
         transfer_legacy_queryset = queryset.annotate(

@@ -62,6 +62,7 @@ function typeBadgeVariant(movement: {
     return movement.investment_direction === 'outflow' ? 'investment-outflow' : 'investment-inflow';
   }
   if (movement.activity_kind === 'debt_payment') return 'debt-payment';
+  if (movement.activity_kind === 'opening_balance') return 'transfer';
   if (movement.activity_kind === 'revaluation') return 'revaluation';
   return 'other';
 }
@@ -86,6 +87,7 @@ function typeBadgeVariant(movement: {
           <option value="adjustment">Ajustes</option>
           <option value="investment">Inversion</option>
           <option value="debt_payment">Pago deuda</option>
+          <option value="opening_balance">Saldo inicial</option>
           <option value="revaluation">Revalorizaciones</option>
         </select>
         <select
