@@ -3182,6 +3182,50 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("amount", response.data["error"]["details"])
 
+    def test_quick_entry_debt_payment_keeps_non_consumption_category_for_principal(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo movil",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("2000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo movil",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "debt_payment",
+                "booking_date": "2026-04-23",
+                "value_date": "2026-04-23",
+                "description": "Cuota movil",
+                "amount": "120.00",
+                "principal_amount": "120.00",
+                "interest_amount": "0.00",
+                "account_id": self.cash_account.id,
+                "liability_account_id": liability_account.id,
+                "category_key": "tangible_assets",
+                "subcategory_key": "technology_devices",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        principal_entry = next(
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == liability_account.id
+        )
+        self.assertEqual(principal_entry["flow_family"], "expense")
+        self.assertEqual(principal_entry["category_key"], "tangible_assets")
+        self.assertEqual(principal_entry["subcategory_key"], "technology_devices")
+
     def test_quick_entry_debt_payment_requires_category_for_interest_when_no_annual_link(self):
         liability = Liability.objects.create(
             user=self.user,

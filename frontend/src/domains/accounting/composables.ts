@@ -113,6 +113,12 @@ const EXPENSE_MOVEMENT_CATEGORY_KEYS: ExpenseCategoryKey[] = [
   'real_estate_assets',
   'tangible_assets',
 ];
+const DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS: ExpenseCategoryKey[] = [
+  'consumption_expenses',
+  'real_estate_assets',
+  'tangible_assets',
+  'financial_investments',
+];
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -566,6 +572,27 @@ export function useAccountingPage() {
     }
     return null;
   });
+  function debtPaymentDefaultCategoryForAccount(
+    liabilityAccountId: number | null,
+  ): ExpenseCategoryKey {
+    if (liabilityAccountId == null) return 'consumption_expenses';
+    const liabilityId = accountMap.value.get(liabilityAccountId)?.liability_id ?? null;
+    if (liabilityId == null) return 'consumption_expenses';
+    const liability = liabilityMap.value.get(liabilityId);
+    if (!liability) return 'consumption_expenses';
+    if (liability.category === 'mortgage') return 'real_estate_assets';
+
+    const financedAssetId = liability.financed_asset_ref ?? null;
+    if (financedAssetId == null) return 'consumption_expenses';
+    const financedAsset = manualAssets.value.find((asset) => asset.id === financedAssetId);
+    if (!financedAsset) return 'consumption_expenses';
+    if (financedAsset.category === 'real_estate') return 'real_estate_assets';
+    if (financedAsset.category === 'furnishings' || financedAsset.category === 'vehicle') {
+      return 'tangible_assets';
+    }
+    if (financedAsset.category === 'investments') return 'financial_investments';
+    return 'consumption_expenses';
+  }
   const debtInterestOptions = computed(() =>
     accounts.value.filter((account) => account.account_type === 'expense'),
   );
@@ -646,7 +673,9 @@ export function useAccountingPage() {
       if (quickSelectedLiabilityCategory.value === 'mortgage') {
         return expenseCategories.filter((row) => row.value === 'real_estate_assets');
       }
-      return expenseCategories.filter((row) => row.value === 'consumption_expenses');
+      return expenseCategories.filter((row) =>
+        DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS.includes(row.value as ExpenseCategoryKey),
+      );
     }
     return [];
   });
@@ -676,7 +705,9 @@ export function useAccountingPage() {
   });
   const quickCategoryLocked = computed(() => {
     if (quickEntryForm.movement_type === 'investment') return true;
-    if (quickEntryForm.movement_type === 'debt_payment') return true;
+    if (quickEntryForm.movement_type === 'debt_payment') {
+      return quickSelectedLiabilityCategory.value === 'mortgage';
+    }
     return false;
   });
   const quickSubcategoryLocked = computed(() => {
@@ -903,7 +934,9 @@ export function useAccountingPage() {
       if (editSelectedDebtLiabilityCategory.value === 'mortgage') {
         return expenseCategories.filter((row) => row.value === 'real_estate_assets');
       }
-      return expenseCategories.filter((row) => row.value === 'consumption_expenses');
+      return expenseCategories.filter((row) =>
+        DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS.includes(row.value as ExpenseCategoryKey),
+      );
     }
     return [];
   });
@@ -933,7 +966,9 @@ export function useAccountingPage() {
   });
   const editCategoryLocked = computed(() => {
     if (editTransactionForm.kind === 'investment') return true;
-    if (editTransactionForm.kind === 'debt_payment') return true;
+    if (editTransactionForm.kind === 'debt_payment') {
+      return editSelectedDebtLiabilityCategory.value === 'mortgage';
+    }
     return false;
   });
   const editSubcategoryLocked = computed(() => {
@@ -1038,13 +1073,26 @@ export function useAccountingPage() {
     () => [quickEntryForm.movement_type, quickEntryForm.liability_account_id] as const,
     () => {
       if (quickEntryForm.movement_type !== 'debt_payment') return;
+      const defaultCategory = debtPaymentDefaultCategoryForAccount(
+        normalizeAccountId(quickEntryForm.liability_account_id),
+      );
       if (quickSelectedLiabilityCategory.value === 'mortgage') {
         quickEntryForm.category_key = 'real_estate_assets';
         quickEntryForm.subcategory_key = 'mortgage_principal';
       } else {
-        quickEntryForm.category_key = 'consumption_expenses';
+        if (
+          !quickEntryForm.category_key ||
+          !DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS.includes(
+            quickEntryForm.category_key as ExpenseCategoryKey,
+          )
+        ) {
+          quickEntryForm.category_key = defaultCategory;
+        }
         if (quickEntryForm.subcategory_key === 'mortgage_principal') {
-          quickEntryForm.subcategory_key = 'financial_commitments';
+          quickEntryForm.subcategory_key =
+            quickEntryForm.category_key === 'consumption_expenses'
+              ? 'financial_commitments'
+              : '';
         }
       }
     },
@@ -1159,13 +1207,26 @@ export function useAccountingPage() {
         return;
       }
       if (editTransactionForm.kind !== 'debt_payment') return;
+      const defaultCategory = debtPaymentDefaultCategoryForAccount(
+        editTransactionForm.counterparty_account_id,
+      );
       if (editSelectedDebtLiabilityCategory.value === 'mortgage') {
         editTransactionForm.category_key = 'real_estate_assets';
         editTransactionForm.subcategory_key = 'mortgage_principal';
       } else {
-        editTransactionForm.category_key = 'consumption_expenses';
+        if (
+          !editTransactionForm.category_key ||
+          !DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS.includes(
+            editTransactionForm.category_key as ExpenseCategoryKey,
+          )
+        ) {
+          editTransactionForm.category_key = defaultCategory;
+        }
         if (editTransactionForm.subcategory_key === 'mortgage_principal') {
-          editTransactionForm.subcategory_key = 'financial_commitments';
+          editTransactionForm.subcategory_key =
+            editTransactionForm.category_key === 'consumption_expenses'
+              ? 'financial_commitments'
+              : '';
         }
       }
     },
