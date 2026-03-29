@@ -443,30 +443,23 @@ watch(showValueDate, (show: boolean) => {
       </div>
 
       <details
-        v-if="page.quickEntryNeedsClassification"
+        v-if="page.quickEntryNeedsClassification && page.hasCompatibleAnnualPlanOptions"
         class="ui-accounting-annual-link"
         :open="
           page.quickEntryForm.annual_income_entry_id != null ||
           page.quickEntryForm.annual_expense_entry_id != null
         "
       >
-        <summary>
-          {{
-            page.hasCompatibleAnnualPlanOptions
-              ? 'Alinear con una linea del plan (opcional)'
-              : 'Sin lineas anuales compatibles para esta clasificacion'
-          }}
-        </summary>
+        <summary>Alinear con una línea del plan (opcional)</summary>
         <p class="ui-accounting-inline-note">
           Usa este enlace solo si quieres relacionar el movimiento con una fila concreta del
-          presupuesto anual. La clasificacion principal ya queda guardada en el ledger.
+          presupuesto anual. La clasificación principal ya queda guardada en el ledger.
         </p>
 
         <select
           v-if="page.quickEntryForm.movement_type === 'income'"
           v-model="page.quickEntryForm.annual_income_entry_id"
           class="select"
-          :disabled="!page.annualIncomeOptionsCompatible.length"
         >
           <option :value="null">Sin vincular al plan anual</option>
           <option
@@ -482,7 +475,6 @@ watch(showValueDate, (show: boolean) => {
           v-else
           v-model="page.quickEntryForm.annual_expense_entry_id"
           class="select"
-          :disabled="!page.annualExpenseOptionsCompatible.length"
         >
           <option :value="null">Sin vincular al plan anual</option>
           <option
@@ -530,20 +522,27 @@ watch(showValueDate, (show: boolean) => {
         placeholder="Nota opcional para el movimiento"
       />
 
+      <p
+        v-if="!page.quickEntryReady && !page.transactionCreationLoading"
+        class="ui-accounting-inline-note"
+      >
+        Completa descripción, fechas, importe y cuenta. Algunos tipos requieren campos adicionales.
+      </p>
+
       <div class="ui-accounting-submit-row">
         <p class="subtle">
           {{
             page.quickEntryForm.movement_type === 'transfer'
-              ? 'La transferencia crea un asiento balanceado entre dos cuentas de liquidez.'
+              ? 'Crea un asiento balanceado entre dos cuentas de liquidez.'
               : page.quickEntryForm.movement_type === 'investment'
                 ? page.quickInvestmentIsCrossCurrency
-                  ? 'Movimiento de inversion multimoneda: informa importe origen e importe destino segun ejecucion real del broker.'
+                  ? 'Inversión multimoneda: informa importe origen e importe destino según ejecución real.'
                   : page.quickEntryForm.investment_direction === 'outflow'
-                  ? 'La desinversion acredita inversion y devuelve liquidez al activo de caja.'
-                  : 'El aporte acredita liquidez y registra el alta en la cuenta de inversion.'
+                  ? 'La desinversión devuelve liquidez al activo de caja.'
+                  : 'El aporte registra el alta en la cuenta de inversión.'
                 : page.quickEntryForm.movement_type === 'debt_payment'
-                  ? 'El pago separa principal e intereses; total = principal + interes.'
-                  : 'El backend genera la contrapartida contable y registra categoria/subcategoria como clasificacion primaria.'
+                  ? 'El pago separa principal e intereses. Total = principal + intereses.'
+                  : 'Las partidas contables se generan automáticamente.'
           }}
         </p>
         <button
@@ -551,17 +550,9 @@ watch(showValueDate, (show: boolean) => {
           type="submit"
           :disabled="page.transactionCreationLoading || !page.quickEntryReady"
         >
-          {{ page.transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento rapido' }}
+          {{ page.transactionCreationLoading ? 'Guardando...' : 'Registrar movimiento' }}
         </button>
       </div>
-
-      <p
-        v-if="!page.quickEntryReady && !page.transactionCreationLoading"
-        class="ui-accounting-inline-note"
-      >
-        Completa descripcion, fechas, importe y cuenta de liquidez. Cada tipo puede requerir
-        cuentas, clasificacion funcional y desglose adicionales.
-      </p>
     </form>
   </BaseModal>
 </template>
