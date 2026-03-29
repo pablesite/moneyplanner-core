@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-27 (sesion 8)
+Ultima actualizacion: 2026-03-29 (sesion 9)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 16.
-- `Pendientes`: 90.
+- `Revisadas`: 17.
+- `Pendientes`: 89.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -34,6 +34,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `480` - `ETF REIT Real Global Real State` (activo de inversion / ETF REIT)
 - `482` - `Cartera Ahorro MyInvestor` (activo de inversion / roboadvisor)
 - `483` - `Cartera Ahorro MyInvestor (Compartida)` (activo de inversion / roboadvisor)
+- `26` - `Bitcoin` (activo de inversion / cripto)
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
@@ -52,6 +53,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `ETF REIT Real Global Real State` (id=480): revisado. Movimientos migrados desde cuenta obsoleta `id=440` (15 movimientos) y cuenta obsoleta eliminada. Activo vinculado en la cuenta nueva (`asset_id=157`). Conceptos normalizados: `Inversion=9` (8 inflow + 1 outflow) y `Revalorizacion=6`. Ownership ajustado: revalorizaciones sin ownership; el resto se mantiene.
 - `Cartera Ahorro MyInvestor` (id=482): revisado. Movimientos migrados desde cuenta obsoleta `id=435` (70 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
 - `Cartera Ahorro MyInvestor (Compartida)` (id=483): revisado. Movimientos migrados desde cuenta obsoleta `id=464` (72 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
+- `Bitcoin` (id=26): revisado. Spot Binance migrado a USD, deduplicacion aplicada y clasificacion normalizada en aportes (`financial_investments -> crypto`) y retiradas (`capital_gains -> sale_financial_assets`). Coherencia de saldo/timeline validada.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -99,7 +101,6 @@ SatÃ©lites cripto. Contrapartidas suelen ser Spot Binance â†” liquidez.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 110 | 26 | Bitcoin | asset |
 | 246 | 22 | Spot Binance | asset |
 | 174 | 445 | DT Bots Cripto | asset |
 
@@ -127,15 +128,10 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 | 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
-- ⚠️ **Bitcoin (id=26) a medio curar**: avance aplicado en sesion 8:
-  - conversion de alta/edicion rapida de inversion para soportar multimoneda en Core y espejo SaaS;
-  - cuenta `Spot Binance (id=22)` convertida de EUR a USD y conversion historica de importes legacy a USD por fecha FX (manteniendo intactos los aportes fijos de `25.00 USD`);
-  - varios movimientos `ST Criptos` reclasificados de `income` legacy a `investment inflow` (`Spot Binance -> Bitcoin`) y eliminacion de duplicados `gasto` asociados.
-  Pendiente chequeo integral de coherencia final (saldo BTC, timeline completo y duplicados residuales) antes de cerrarlo como revisado.
 - âš ï¸ **Cuenta ING de fondos sin monitorizar**: Fondo ING PIMCO tiene 2 aportes (50â‚¬ ago-22 y 80â‚¬ sep-22) cuyo origen es probablemente una cuenta ING de gestiÃ³n de fondos que aÃºn no estÃ¡ en el sistema. Crear ese activo/cuenta cuando se pueda y vincular esas transacciones.
 
 ## Como continuar manana
-1. Seguir los grupos en orden: Inversion -> Cripto (terminar primero el chequeo de Bitcoin) -> Pasivos satelite -> Cuentas corrientes -> MoneyWiz virtuales (al final).
+1. Seguir los grupos en orden: Inversion -> Cripto -> Pasivos satelite -> Cuentas corrientes -> MoneyWiz virtuales (al final).
 2. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),

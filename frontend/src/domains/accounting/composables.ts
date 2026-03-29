@@ -1983,6 +1983,42 @@ export function useAccountingPage() {
     return nextEntries;
   }
 
+  function applyClassificationToEntries(
+    entries: PersistedTransactionEntry[],
+    options: {
+      kind: EditableActivityKind;
+      categoryKey: string;
+      subcategoryKey: string;
+      investmentDirection: 'inflow' | 'outflow';
+    },
+  ): PersistedTransactionEntry[] {
+    const { kind, categoryKey, subcategoryKey, investmentDirection } = options;
+    if (!isClassificationKind(kind)) return entries;
+    const classifyAsIncome =
+      kind === 'income' || (kind === 'investment' && investmentDirection === 'outflow');
+    const preferredSide: LedgerEntrySide = classifyAsIncome ? 'credit' : 'debit';
+    const next = entries.map((entry) => ({ ...entry }));
+    let classifiedAssigned = false;
+    next.forEach((entry) => {
+      if (!classifiedAssigned && entry.side === preferredSide) {
+        entry.flow_family = classifyAsIncome ? 'income' : 'expense';
+        entry.category_key = categoryKey;
+        entry.subcategory_key = subcategoryKey;
+        classifiedAssigned = true;
+      } else {
+        entry.flow_family = '';
+        entry.category_key = '';
+        entry.subcategory_key = '';
+      }
+    });
+    if (!classifiedAssigned && next[0]) {
+      next[0].flow_family = classifyAsIncome ? 'income' : 'expense';
+      next[0].category_key = categoryKey;
+      next[0].subcategory_key = subcategoryKey;
+    }
+    return next;
+  }
+
   function resolveClassificationCounterpartyAccountId(
     kind: ClassificationActivityKind,
     currency: string,
@@ -2256,13 +2292,19 @@ export function useAccountingPage() {
       classificationCounterpartyAccountId,
       editTransactionForm.investment_direction,
     );
+    const classifiedEntries = applyClassificationToEntries(accountAdjustedEntries, {
+      kind: editTransactionForm.kind,
+      categoryKey: editTransactionForm.category_key,
+      subcategoryKey: editTransactionForm.subcategory_key,
+      investmentDirection: editTransactionForm.investment_direction,
+    });
     if (
       (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
       editInvestmentIsCrossCurrency.value
     ) {
       const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
-      const debitEntry = accountAdjustedEntries.find((entry) => entry.side === 'debit') ?? null;
-      const creditEntry = accountAdjustedEntries.find((entry) => entry.side === 'credit') ?? null;
+      const debitEntry = classifiedEntries.find((entry) => entry.side === 'debit') ?? null;
+      const creditEntry = classifiedEntries.find((entry) => entry.side === 'credit') ?? null;
       if (debitEntry) {
         debitEntry.amount = roundByCurrency(destinationAmount, debitEntry.currency).toFixed(
           currencyDecimals(debitEntry.currency),
@@ -2274,7 +2316,7 @@ export function useAccountingPage() {
         );
       }
     }
-    return accountAdjustedEntries;
+    return classifiedEntries;
   }
 
   function getTransactionActivityKind(
