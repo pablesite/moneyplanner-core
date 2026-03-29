@@ -255,12 +255,96 @@ watch(showValueDate, (show: boolean) => {
         </p>
       </template>
 
+      <template v-else-if="page.quickEntryForm.movement_type === 'investment'">
+        <div class="ui-accounting-segmented">
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
+            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'inflow' }"
+            @click="page.quickEntryForm.investment_direction = 'inflow'"
+          >
+            Aporte
+          </button>
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
+            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'outflow' }"
+            @click="page.quickEntryForm.investment_direction = 'outflow'"
+          >
+            Retirada
+          </button>
+        </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-edit-simple">
+          <label class="ui-accounting-field">
+            <span>Cuenta de liquidez {{ page.quickEntryForm.investment_direction === 'inflow' ? '(origen)' : '(destino)' }}</span>
+            <select v-model="page.quickEntryForm.account_id" class="select" required>
+              <option :value="null">Seleccionar</option>
+              <optgroup v-for="group in liquidityGroups" :key="group.key" :label="group.label">
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="ui-accounting-field">
+            <span>Cuenta de inversión {{ page.quickEntryForm.investment_direction === 'inflow' ? '(destino)' : '(origen)' }}</span>
+            <select v-model="page.quickEntryForm.counterparty_account_id" class="select" required>
+              <option :value="null">Seleccionar</option>
+              <optgroup v-for="group in investmentGroups" :key="group.key" :label="group.label">
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+
+        <div
+          class="ui-accounting-form-grid"
+          :class="
+            page.quickInvestmentIsCrossCurrency || page.quickEntryForm.investment_direction === 'outflow'
+              ? 'ui-accounting-form-grid-wide'
+              : 'ui-accounting-form-grid-edit-simple'
+          "
+        >
+          <input
+            v-model="page.quickEntryForm.amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="`Importe${page.quickInvestmentOriginCurrency ? ` (${page.quickInvestmentOriginCurrency})` : ''}`"
+            required
+          />
+          <input
+            v-if="page.quickInvestmentIsCrossCurrency"
+            v-model="page.quickEntryForm.destination_amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="`Importe destino (${page.quickInvestmentDestinationCurrency || 'moneda destino'})`"
+            required
+          />
+          <template v-if="page.quickEntryForm.investment_direction === 'outflow'">
+            <input
+              v-model="page.quickEntryForm.realized_cost_basis"
+              class="input"
+              inputmode="decimal"
+              placeholder="Coste de adquisición (opcional)"
+            />
+            <input
+              v-model="page.quickEntryForm.realized_gain_loss"
+              class="input"
+              inputmode="decimal"
+              placeholder="Ganancia/pérdida realizada (opcional)"
+            />
+          </template>
+        </div>
+      </template>
+
       <div
         v-else
         class="ui-accounting-form-grid"
         :class="
           page.quickEntryForm.movement_type === 'transfer' ||
-          page.quickEntryForm.movement_type === 'investment' ||
           page.quickEntryForm.movement_type === 'debt_payment'
             ? 'ui-accounting-form-grid-wide'
             : 'ui-accounting-form-grid-edit-simple'
@@ -293,8 +377,6 @@ watch(showValueDate, (show: boolean) => {
           :placeholder="
             page.quickEntryForm.movement_type === 'adjustment'
               ? 'Saldo final objetivo'
-              : page.quickEntryForm.movement_type === 'investment'
-              ? `Importe origen${page.quickInvestmentOriginCurrency ? ` (${page.quickInvestmentOriginCurrency})` : ''}`
               : '0.00'
           "
           required
@@ -308,20 +390,6 @@ watch(showValueDate, (show: boolean) => {
         >
           <option :value="null">Cuenta destino</option>
           <optgroup v-for="group in transferGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
-            </option>
-          </optgroup>
-        </select>
-
-        <select
-          v-else-if="page.quickEntryForm.movement_type === 'investment'"
-          v-model="page.quickEntryForm.counterparty_account_id"
-          class="select"
-          required
-        >
-          <option :value="null">Cuenta de inversion</option>
-          <optgroup v-for="group in investmentGroups" :key="group.key" :label="group.label">
             <option v-for="account in group.accounts" :key="account.id" :value="account.id">
               {{ accountLabel(account) }} / {{ account.currency }}
             </option>
@@ -366,35 +434,6 @@ watch(showValueDate, (show: boolean) => {
           Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automáticamente.
         </template>
       </p>
-      <div
-        v-if="page.quickEntryForm.movement_type === 'investment'"
-        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
-      >
-        <select v-model="page.quickEntryForm.investment_direction" class="select">
-          <option value="inflow">Aporte (liquidez → inversión)</option>
-          <option value="outflow">Retirada (inversión → liquidez)</option>
-        </select>
-        <input
-          v-if="page.quickInvestmentIsCrossCurrency"
-          v-model="page.quickEntryForm.destination_amount"
-          class="input"
-          inputmode="decimal"
-          :placeholder="`Importe destino (${page.quickInvestmentDestinationCurrency || 'moneda destino'})`"
-          required
-        />
-        <input
-          v-model="page.quickEntryForm.realized_cost_basis"
-          class="input"
-          inputmode="decimal"
-          placeholder="Precio de compra original (opcional)"
-        />
-        <input
-          v-model="page.quickEntryForm.realized_gain_loss"
-          class="input"
-          inputmode="decimal"
-          placeholder="Ganancia/pérdida realizada (opcional)"
-        />
-      </div>
 
       <div
         v-if="page.quickEntryNeedsClassification"
