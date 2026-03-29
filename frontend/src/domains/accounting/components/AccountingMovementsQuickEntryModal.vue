@@ -232,13 +232,12 @@ watch(showValueDate, (show: boolean) => {
           />
         </div>
 
-        <p class="ui-accounting-inline-note">
+        <p class="ui-accounting-balance-feedback">
           <template v-if="page.revaluationCurrentBalance != null">
             Saldo actual:
-            <strong>{{ page.revaluationCurrentBalance.toFixed(2) }}</strong
-            >.
+            <strong>{{ page.revaluationCurrentBalance.toFixed(2) }}</strong>.
             <template v-if="page.revaluationDelta != null">
-              Revalorizacion:
+              Revalorización:
               <strong
                 :class="
                   page.revaluationDelta > 0
@@ -252,7 +251,7 @@ watch(showValueDate, (show: boolean) => {
               </strong>
             </template>
           </template>
-          <template v-else> Selecciona la cuenta de inversion para ver el saldo actual. </template>
+          <template v-else>Selecciona la cuenta de inversión para ver el saldo actual.</template>
         </p>
       </template>
 
@@ -343,7 +342,7 @@ watch(showValueDate, (show: boolean) => {
           </optgroup>
         </select>
       </div>
-      <p v-if="page.quickEntryForm.movement_type === 'adjustment'" class="ui-accounting-inline-note">
+      <p v-if="page.quickEntryForm.movement_type === 'adjustment'" class="ui-accounting-balance-feedback">
         <template v-if="page.quickAdjustmentCurrentBalance != null">
           Saldo actual:
           <strong>{{ page.quickAdjustmentCurrentBalance.toFixed(page.quickAdjustmentDisplayDecimals) }}</strong
