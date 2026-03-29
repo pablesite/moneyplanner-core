@@ -804,7 +804,8 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             attrs["category_key"] = "real_estate_assets"
             attrs["subcategory_key"] = "mortgage_principal"
             return
-        attrs["category_key"] = "consumption_expenses"
+        if not attrs.get("category_key"):
+            attrs["category_key"] = "consumption_expenses"
 
     def _normalize_investment_payload(
         self,
