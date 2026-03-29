@@ -18,7 +18,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
-| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 106 cuentas totales, 17 ya revisadas). Bitcoin quedó revisado: aportes y retiradas clasificados con taxonomía canónica y coherencia final de timeline/saldo validada. | Se define durante la revisión. |
+| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 106 cuentas totales, 17 ya revisadas). Cierre de categorizacion final ya completado para 4 cuentas (`42 FIV IVI`, `46 Iphone 16 Pro`, `468 Master Matematicas (Deuda)`, `26 Bitcoin`); el resto de cuentas revisadas siguen pendientes de ultima pasada de categoria/subcategoria. | Se define durante la revisión. |
 | Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
@@ -89,4 +89,3 @@ _(ninguna tarea aparcada en este momento)_
 | ⚪ | No iniciado (en scope futuro) |
 | ⛔ | Fuera de alcance explícito (decisión tomada) |
 | ⏸ | Aparcado conscientemente |
-

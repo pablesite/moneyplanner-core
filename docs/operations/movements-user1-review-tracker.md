@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-29 (sesion 9)
+Ultima actualizacion: 2026-03-29 (sesion 10)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -35,6 +35,14 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `482` - `Cartera Ahorro MyInvestor` (activo de inversion / roboadvisor)
 - `483` - `Cartera Ahorro MyInvestor (Compartida)` (activo de inversion / roboadvisor)
 - `26` - `Bitcoin` (activo de inversion / cripto)
+
+## Estado De Categorizacion Final (ultima pasada)
+- ✅ Cuentas con categorizacion final cerrada:
+  - `42` - `FIV IVI`
+  - `46` - `Iphone 16 Pro`
+  - `468` - `Master Matematicas (Deuda)`
+  - `26` - `Bitcoin`
+- 🔄 Resto de cuentas ya revisadas: pendientes de una ultima revision para cerrar asignacion final de categoria/subcategoria.
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
