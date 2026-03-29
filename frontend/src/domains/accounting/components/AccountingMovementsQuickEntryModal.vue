@@ -140,22 +140,28 @@ watch(showValueDate, (show: boolean) => {
       </div>
 
       <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
-        <input
-          v-model="page.quickEntryForm.description"
-          class="input"
-          placeholder="Nomina marzo, compra semanal, mover a ahorro..."
-          required
-        />
+        <label class="ui-accounting-field">
+          <span>Descripción</span>
+          <input
+            v-model="page.quickEntryForm.description"
+            class="input"
+            placeholder="Nomina marzo, compra semanal, mover a ahorro..."
+            required
+          />
+        </label>
 
-        <select v-model="page.quickEntryForm.ownership_id" class="select">
-          <option
-            v-for="option in page.ownershipOptions"
-            :key="option.value == null ? 'none' : option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        <label class="ui-accounting-field">
+          <span>Titularidad</span>
+          <select v-model="page.quickEntryForm.ownership_id" class="select">
+            <option
+              v-for="option in page.ownershipOptions"
+              :key="option.value == null ? 'none' : option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
 
         <label class="ui-accounting-field">
           <span>Fecha contabilización</span>
