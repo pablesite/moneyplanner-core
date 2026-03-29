@@ -71,6 +71,9 @@ const revaluationGroups = computed(() =>
   groupAndSortAccounts(props.page.revaluationAccountOptions),
 );
 const transferGroups = computed(() => groupAndSortAccounts(props.page.transferCounterpartyOptions));
+const adjustmentGroups = computed(() =>
+  groupAndSortAccounts(props.page.quickAdjustmentAccountOptions),
+);
 const investmentGroups = computed(() =>
   groupAndSortAccounts(props.page.investmentCounterpartyOptions),
 );
@@ -208,8 +211,19 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
         "
       >
         <select v-model="page.quickEntryForm.account_id" class="select" required>
-          <option :value="null">Cuenta de liquidez</option>
-          <optgroup v-for="group in liquidityGroups" :key="group.key" :label="group.label">
+          <option :value="null">
+            {{
+              page.quickEntryForm.movement_type === 'adjustment'
+                ? 'Cuenta a conciliar'
+                : 'Cuenta de liquidez'
+            }}
+          </option>
+          <optgroup
+            v-for="group in
+            page.quickEntryForm.movement_type === 'adjustment' ? adjustmentGroups : liquidityGroups"
+            :key="group.key"
+            :label="group.label"
+          >
             <option v-for="account in group.accounts" :key="account.id" :value="account.id">
               {{ accountLabel(account) }} / {{ account.currency }}
             </option>
@@ -221,7 +235,9 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           class="input"
           inputmode="decimal"
           :placeholder="
-            page.quickEntryForm.movement_type === 'investment'
+            page.quickEntryForm.movement_type === 'adjustment'
+              ? 'Saldo final objetivo'
+              : page.quickEntryForm.movement_type === 'investment'
               ? `Importe origen${page.quickInvestmentOriginCurrency ? ` (${page.quickInvestmentOriginCurrency})` : ''}`
               : '0.00'
           "
@@ -270,6 +286,30 @@ const interestGroups = computed(() => groupAndSortAccounts(props.page.debtIntere
           </optgroup>
         </select>
       </div>
+      <p v-if="page.quickEntryForm.movement_type === 'adjustment'" class="ui-accounting-inline-note">
+        <template v-if="page.quickAdjustmentCurrentBalance != null">
+          Saldo actual:
+          <strong>{{ page.quickAdjustmentCurrentBalance.toFixed(page.quickAdjustmentDisplayDecimals) }}</strong
+          >.
+          <template v-if="page.quickAdjustmentDelta != null">
+            Ajuste calculado:
+            <strong
+              :class="
+                page.quickAdjustmentDelta > 0
+                  ? 'ui-accounting-tone-positive'
+                  : page.quickAdjustmentDelta < 0
+                    ? 'ui-accounting-tone-negative'
+                    : ''
+              "
+            >
+              {{ page.quickAdjustmentDelta >= 0 ? '+' : '' }}{{ page.quickAdjustmentDelta.toFixed(page.quickAdjustmentDisplayDecimals) }}
+            </strong>
+          </template>
+        </template>
+        <template v-else>
+          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automaticamente.
+        </template>
+      </p>
       <div
         v-if="page.quickEntryForm.movement_type === 'investment'"
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"

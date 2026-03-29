@@ -7,6 +7,7 @@ export type QuickLedgerMovementType =
   | 'income'
   | 'expense'
   | 'transfer'
+  | 'adjustment'
   | 'investment'
   | 'investment_purchase'
   | 'debt_payment'

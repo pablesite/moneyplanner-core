@@ -57,6 +57,7 @@ function typeBadgeVariant(movement: {
   if (movement.activity_kind === 'income') return 'income';
   if (movement.activity_kind === 'expense') return 'expense';
   if (movement.activity_kind === 'transfer') return 'transfer';
+  if (movement.activity_kind === 'adjustment') return 'transfer';
   if (movement.activity_kind === 'investment_purchase') {
     return movement.investment_direction === 'outflow' ? 'investment-outflow' : 'investment-inflow';
   }
@@ -82,6 +83,7 @@ function typeBadgeVariant(movement: {
           <option value="income">Ingresos</option>
           <option value="expense">Gastos</option>
           <option value="transfer">Transferencias</option>
+          <option value="adjustment">Ajustes</option>
           <option value="investment">Inversion</option>
           <option value="debt_payment">Pago deuda</option>
           <option value="revaluation">Revalorizaciones</option>
