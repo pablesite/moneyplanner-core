@@ -275,7 +275,7 @@ watch(showValueDate, (show: boolean) => {
           </button>
         </div>
 
-        <div class="ui-accounting-form-grid ui-accounting-form-grid-edit-simple">
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <label class="ui-accounting-field">
             <span>Cuenta de liquidez {{ page.quickEntryForm.investment_direction === 'inflow' ? '(origen)' : '(destino)' }}</span>
             <select v-model="page.quickEntryForm.account_id" class="select" required>
@@ -300,14 +300,7 @@ watch(showValueDate, (show: boolean) => {
           </label>
         </div>
 
-        <div
-          class="ui-accounting-form-grid"
-          :class="
-            page.quickInvestmentIsCrossCurrency || page.quickEntryForm.investment_direction === 'outflow'
-              ? 'ui-accounting-form-grid-wide'
-              : 'ui-accounting-form-grid-edit-simple'
-          "
-        >
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <input
             v-model="page.quickEntryForm.amount"
             class="input"
@@ -439,37 +432,43 @@ watch(showValueDate, (show: boolean) => {
         v-if="page.quickEntryNeedsClassification"
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select
-          v-model="page.quickEntryForm.category_key"
-          class="select"
-          :disabled="page.quickCategoryLocked"
-          required
-        >
-          <option value="">Categoría</option>
-          <option
-            v-for="category in page.quickCategoryOptions"
-            :key="category.value"
-            :value="category.value"
+        <label class="ui-accounting-field">
+          <span>Categoría</span>
+          <select
+            v-model="page.quickEntryForm.category_key"
+            class="select"
+            :disabled="page.quickCategoryLocked"
+            required
           >
-            {{ category.label }}
-          </option>
-        </select>
+            <option value="">Seleccionar</option>
+            <option
+              v-for="category in page.quickCategoryOptions"
+              :key="category.value"
+              :value="category.value"
+            >
+              {{ category.label }}
+            </option>
+          </select>
+        </label>
 
-        <select
-          v-model="page.quickEntryForm.subcategory_key"
-          class="select"
-          :disabled="page.quickSubcategoryLocked"
-          required
-        >
-          <option value="">Subcategoría</option>
-          <option
-            v-for="subcategory in page.quickSubcategoryOptions"
-            :key="subcategory.value"
-            :value="subcategory.value"
+        <label class="ui-accounting-field">
+          <span>Subcategoría</span>
+          <select
+            v-model="page.quickEntryForm.subcategory_key"
+            class="select"
+            :disabled="page.quickSubcategoryLocked"
+            required
           >
-            {{ subcategory.label }}
-          </option>
-        </select>
+            <option value="">Seleccionar</option>
+            <option
+              v-for="subcategory in page.quickSubcategoryOptions"
+              :key="subcategory.value"
+              :value="subcategory.value"
+            >
+              {{ subcategory.label }}
+            </option>
+          </select>
+        </label>
       </div>
 
       <details
