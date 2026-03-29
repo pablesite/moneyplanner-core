@@ -855,6 +855,23 @@
   font-weight: 600;
 }
 
+.ui-accounting-segmented-divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+  margin: 6px 0;
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn-advanced {
+  flex: 0.8;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ui-accounting-segmented .ui-accounting-segmented-btn-advanced.ui-accounting-segmented-btn-active {
+  color: rgba(45, 212, 191, 0.95);
+}
+
 .ui-accounting-annual-link {
   display: grid;
   gap: 10px;

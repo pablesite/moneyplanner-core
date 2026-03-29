@@ -82,6 +82,14 @@ const liabilityGroups = computed(() =>
 );
 const interestGroups = computed(() => groupAndSortAccounts(props.page.debtInterestOptions));
 
+type MovementTypeOption = { value: string; label: string };
+const commonTypeOptions = computed<MovementTypeOption[]>(() =>
+  (props.page.quickMovementTypeOptions as MovementTypeOption[]).slice(0, 2),
+);
+const advancedTypeOptions = computed<MovementTypeOption[]>(() =>
+  (props.page.quickMovementTypeOptions as MovementTypeOption[]).slice(2),
+);
+
 const showValueDate = ref(false);
 
 watch(
@@ -125,10 +133,24 @@ watch(showValueDate, (show: boolean) => {
     >
       <div class="ui-accounting-segmented">
         <button
-          v-for="option in page.quickMovementTypeOptions"
+          v-for="option in commonTypeOptions"
           :key="option.value"
           type="button"
           class="btn ui-accounting-segmented-btn"
+          :class="{
+            'ui-accounting-segmented-btn-active':
+              page.quickEntryForm.movement_type === option.value,
+          }"
+          @click="page.quickEntryForm.movement_type = option.value"
+        >
+          {{ option.label }}
+        </button>
+        <div class="ui-accounting-segmented-divider" aria-hidden="true" />
+        <button
+          v-for="option in advancedTypeOptions"
+          :key="option.value"
+          type="button"
+          class="btn ui-accounting-segmented-btn ui-accounting-segmented-btn-advanced"
           :class="{
             'ui-accounting-segmented-btn-active':
               page.quickEntryForm.movement_type === option.value,
