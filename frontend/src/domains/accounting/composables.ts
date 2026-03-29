@@ -79,6 +79,7 @@ type ActivityFilter =
   | 'adjustment'
   | 'investment'
   | 'debt_payment'
+  | 'opening_balance'
   | 'revaluation';
 type EditableActivityKind =
   | 'income'
@@ -2328,6 +2329,7 @@ export function useAccountingPage() {
     if (transaction.activity_kind === 'transfer') return 'transfer';
     if (transaction.activity_kind === 'adjustment') return 'adjustment';
     if (transaction.activity_kind === 'debt_payment') return 'debt_payment';
+    if (transaction.activity_kind === 'opening_balance') return 'opening_balance';
     if (transaction.activity_kind === 'revaluation') return 'revaluation';
     return 'other';
   }
@@ -2344,6 +2346,7 @@ export function useAccountingPage() {
         : 'Aporte inversion';
     }
     if (kind === 'debt_payment') return 'Pago deuda';
+    if (kind === 'opening_balance') return 'Saldo inicial';
     if (kind === 'revaluation') return 'Revalorizacion';
     return 'Asiento';
   }

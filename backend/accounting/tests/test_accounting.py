@@ -1762,6 +1762,157 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(filtered.data["results"][0]["description"], "Cuota hipoteca marzo")
         self.assertEqual(filtered.data["results"][0]["activity_kind"], "debt_payment")
 
+    def test_transactions_list_classifies_system_opening_balance_as_opening_balance(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta inicial",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        opening_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Caja inicial",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto tecnico",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 10),
+            value_date=date(2026, 3, 10),
+            description="Saldo inicial contable: Caja inicial",
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes="net_worth_opening_balance:asset:999",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=opening_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            asset=asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/accounting/transactions/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        found = next((row for row in response.data["results"] if row["id"] == opening_tx.id), None)
+        self.assertIsNotNone(found)
+        self.assertEqual(found["activity_kind"], "opening_balance")
+
+    def test_transactions_list_kind_opening_balance_excludes_revaluation(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Activo apertura",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta apertura",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio neto tecnico",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+            origin=LedgerAccount.Origin.SYSTEM,
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 11),
+            value_date=date(2026, 3, 11),
+            description="Saldo inicial contable: Cuenta apertura",
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes="net_worth_opening_balance:asset:1001",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=asset_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            asset=asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+
+        revaluation_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Revalorizacion cartera marzo",
+            origin=LedgerTransaction.Origin.SYSTEM,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=asset_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("15.00"),
+            currency="EUR",
+            asset=asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=revaluation_tx,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("15.00"),
+            currency="EUR",
+        )
+
+        opening_filtered = self.client.get("/api/accounting/transactions/?kind=opening_balance")
+        self.assertEqual(opening_filtered.status_code, status.HTTP_200_OK, opening_filtered.data)
+        self.assertEqual(opening_filtered.data["total_count"], 1)
+        self.assertEqual(
+            opening_filtered.data["results"][0]["description"],
+            "Saldo inicial contable: Cuenta apertura",
+        )
+        self.assertEqual(opening_filtered.data["results"][0]["activity_kind"], "opening_balance")
+
+        revaluation_filtered = self.client.get("/api/accounting/transactions/?kind=revaluation")
+        self.assertEqual(
+            revaluation_filtered.status_code,
+            status.HTTP_200_OK,
+            revaluation_filtered.data,
+        )
+        self.assertEqual(revaluation_filtered.data["total_count"], 1)
+        self.assertEqual(
+            revaluation_filtered.data["results"][0]["description"], "Revalorizacion cartera marzo"
+        )
+        self.assertEqual(revaluation_filtered.data["results"][0]["activity_kind"], "revaluation")
+
     def test_kind_filters_prioritize_quick_entry_kind_over_legacy_markers(self):
         investment_asset = Asset.objects.create(
             user=self.user,
