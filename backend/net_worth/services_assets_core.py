@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import cast
 
@@ -588,7 +588,14 @@ def _get_effective_accounting_asset_amount_or_none(
         return None
 
     from accounting.models import LedgerTransaction
-    from accounting.services_ledger import get_account_balance, has_account_entries
+    from accounting.services_ledger import (
+        build_net_worth_opening_balance_note,
+        compute_account_balance_from_totals,
+        compute_entry_balance_totals,
+        get_account_balance,
+        get_account_entries,
+        has_account_entries,
+    )
 
     accounting_account = _get_accounting_asset_account(
         user_id=asset.user_id,
@@ -606,7 +613,20 @@ def _get_effective_accounting_asset_amount_or_none(
             return None
         debit_total = position_cache.accounting_prefix_debits[accounting_account.id][idx]
         credit_total = position_cache.accounting_prefix_credits[accounting_account.id][idx]
-        return debit_total - credit_total
+        raw_full = debit_total - credit_total
+
+        opening_date = position_cache.asset_opening_booking_dates.get(asset.id)
+        if opening_date is not None and as_of_date >= opening_date:
+            before_opening_idx = bisect_right(dates, opening_date - timedelta(days=1)) - 1
+            if before_opening_idx >= 0:
+                before_debit_total = position_cache.accounting_prefix_debits[accounting_account.id][
+                    before_opening_idx
+                ]
+                before_credit_total = position_cache.accounting_prefix_credits[accounting_account.id][
+                    before_opening_idx
+                ]
+                raw_full -= before_debit_total - before_credit_total
+        return raw_full
 
     if not has_account_entries(
         account=accounting_account,
@@ -614,6 +634,37 @@ def _get_effective_accounting_asset_amount_or_none(
         status=cast(str, LedgerTransaction.Status.POSTED),
     ):
         return None
+
+    opening_note = build_net_worth_opening_balance_note(
+        position_kind="asset",
+        position_id=asset.id,
+    )
+    opening_tx = (
+        LedgerTransaction.objects.filter(
+            user_id=asset.user_id,
+            status=LedgerTransaction.Status.POSTED,
+            notes=opening_note,
+            entries__account_id=accounting_account.id,
+        )
+        .distinct()
+        .order_by("-booking_date", "-id")
+        .first()
+    )
+    if opening_tx is not None and as_of_date >= opening_tx.booking_date:
+        anchored_entries = get_account_entries(
+            account=accounting_account,
+            as_of_date=as_of_date,
+            status=cast(str, LedgerTransaction.Status.POSTED),
+        ).filter(transaction__booking_date__gte=opening_tx.booking_date)
+        if anchored_entries.exists():
+            totals = compute_entry_balance_totals(
+                anchored_entries,
+                account_id=accounting_account.id,
+            )
+            return compute_account_balance_from_totals(
+                account_type=accounting_account.account_type,
+                totals=totals,
+            )
 
     return get_account_balance(
         account=accounting_account,
