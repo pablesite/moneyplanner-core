@@ -499,8 +499,8 @@ class PortableDataImportAPITests(APITestCase):
                         "name": "Cuenta",
                         "category": "cash",
                         "subcategory": "bank_account",
-                        "tracking_mode": "manual",
-                        "accounting_account_id": None,
+                        "tracking_mode": "accounting",
+                        "accounting_account_id": 70,
                         "currency": "EUR",
                         "start_date": "2026-01-01",
                         "amount": "1000.00",
@@ -642,6 +642,10 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(LedgerAccount.objects.filter(user=self.user).count(), 2)
         self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 1)
         self.assertEqual(LedgerEntry.objects.filter(transaction__user=self.user).count(), 2)
+        imported_asset = Asset.objects.get(user=self.user)
+        self.assertEqual(imported_asset.tracking_mode, Asset.TrackingMode.ACCOUNTING)
+        linked_account = LedgerAccount.objects.get(user=self.user, id=imported_asset.accounting_account_id)
+        self.assertEqual(linked_account.account_type, LedgerAccount.AccountType.ASSET)
         self.assertEqual(AnnualIncomeEntry.objects.filter(user=self.user).count(), 1)
         self.assertEqual(AnnualExpenseEntry.objects.filter(user=self.user).count(), 1)
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
