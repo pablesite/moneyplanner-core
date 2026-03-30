@@ -883,6 +883,49 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["counts"]["accounting_transactions"], 2)
 
+    def test_portable_import_autocompletes_single_entry_transaction(self):
+        bundle = self._build_bundle()
+        bundle["data"]["accounting"]["transactions"] = [
+            {
+                "id": 83,
+                "booking_date": "2026-02-14",
+                "value_date": "2026-02-14",
+                "description": "Legacy single entry row",
+                "status": "posted",
+                "origin": "manual",
+                "notes": "",
+                "ownership_id": None,
+                "quick_entry_kind": "",
+                "investment_direction": "",
+                "entries": [
+                    {
+                        "id": 96,
+                        "account_id": 70,
+                        "side": "debit",
+                        "amount": "10.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    }
+                ],
+            }
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        transaction = LedgerTransaction.objects.get(user=self.user, description="Legacy single entry row")
+        self.assertEqual(transaction.entries.count(), 2)
+
 
 class CoreApiTests(APITestCase):
     def setUp(self):
