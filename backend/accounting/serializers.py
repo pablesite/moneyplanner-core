@@ -464,12 +464,45 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         }
         if len(incoming_currencies) < 2:
             return False
-        if quick_entry_kind not in {
+        if not cls._is_unbalanced_by_currency_from_payload(incoming_entries):
+            return False
+
+        if quick_entry_kind in {
             LedgerTransaction.QuickEntryKind.INVESTMENT,
             LedgerTransaction.QuickEntryKind.TRANSFER,
         }:
-            return False
-        return cls._is_unbalanced_by_currency_from_payload(incoming_entries)
+            return True
+
+        # Legacy lane for imported rows without quick_entry_kind:
+        # allow multicurrency asymmetry when shape maps to classic transfer/investment.
+        has_income_like = any(
+            entry.get("flow_family") == LedgerEntry.FlowFamily.INCOME
+            or entry.get("annual_income_entry") is not None
+            for entry in incoming_entries
+        )
+        has_expense_like = any(
+            entry.get("flow_family") == LedgerEntry.FlowFamily.EXPENSE
+            or entry.get("annual_expense_entry") is not None
+            for entry in incoming_entries
+        )
+        has_liability_link = any(entry.get("liability") is not None for entry in incoming_entries)
+        asset_account_entries = sum(
+            1
+            for entry in incoming_entries
+            if entry["account"].account_type == LedgerAccount.AccountType.ASSET
+        )
+        has_investment_shape = any(
+            entry["account"].account_type == LedgerAccount.AccountType.ASSET
+            and entry["account"].asset_id is not None
+            for entry in incoming_entries
+        )
+        has_transfer_shape = (
+            asset_account_entries >= 2
+            and not has_income_like
+            and not has_expense_like
+            and not has_liability_link
+        )
+        return has_investment_shape or has_transfer_shape
 
 
 class QuickLedgerTransactionSerializer(serializers.Serializer):
