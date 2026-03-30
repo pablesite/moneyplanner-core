@@ -49,25 +49,33 @@ function humanMessageForAuthFailure(error: unknown): string | null {
   return null;
 }
 
-function firstValidationMessage(data: unknown): string | null {
+function firstValidationMessage(data: unknown, path: string[] = []): string | null {
+  const label = path.length > 0 ? `${path.join('.')}: ` : '';
+
+  if (typeof data === 'string' && data.trim()) {
+    return `${label}${data}`;
+  }
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const nested = firstValidationMessage(item, path);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
   if (!isRecord(data)) return null;
 
   for (const [field, raw] of Object.entries(data)) {
-    if (field === 'error' || field === 'detail') continue;
-
-    if (typeof raw === 'string' && raw.trim()) {
-      return `${field}: ${raw}`;
-    }
-
-    if (Array.isArray(raw)) {
-      const first = raw.find((item) => typeof item === 'string' && item.trim());
-      if (typeof first === 'string' && first.trim()) {
-        return `${field}: ${first}`;
-      }
-    }
+    if (field === 'error') continue;
+    const nextPath = field === 'detail' ? path : [...path, field];
+    const nested = firstValidationMessage(raw, nextPath);
+    if (nested) return nested;
   }
 
-  if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+  if (typeof data.detail === 'string' && data.detail.trim()) {
+    return `${label}${data.detail}`;
+  }
   return null;
 }
 

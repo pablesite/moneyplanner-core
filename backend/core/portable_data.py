@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.conf import settings
@@ -651,15 +652,29 @@ def _build_transaction_payload(
         old_expense_id = entry.get("annual_expense_entry_id")
         old_asset_id = entry.get("asset_id")
         old_liability_id = entry.get("liability_id")
+        flow_family = str(entry.get("flow_family", "")).strip()
+        category_key = str(entry.get("category_key", "")).strip()
+        subcategory_key = str(entry.get("subcategory_key", "")).strip()
+
+        # Legacy bundles can contain only one/two classification fields.
+        # Ledger serializers require the three values together, so normalize
+        # partial classifications to unclassified entries during import.
+        has_any_classification = bool(flow_family or category_key or subcategory_key)
+        has_complete_classification = bool(flow_family and category_key and subcategory_key)
+        if has_any_classification and not has_complete_classification:
+            flow_family = ""
+            category_key = ""
+            subcategory_key = ""
+
         entries_payload.append(
             {
                 "account_id": new_account_id,
                 "side": str(entry.get("side", "")),
                 "amount": str(entry.get("amount", "0")),
                 "currency": str(entry.get("currency", "EUR")).upper(),
-                "flow_family": str(entry.get("flow_family", "")),
-                "category_key": str(entry.get("category_key", "")),
-                "subcategory_key": str(entry.get("subcategory_key", "")),
+                "flow_family": flow_family,
+                "category_key": category_key,
+                "subcategory_key": subcategory_key,
                 "annual_income_entry_id": (
                     annual_income_id_map.get(int(old_income_id)) if old_income_id not in (None, "") else None
                 ),
@@ -714,6 +729,7 @@ def _import_ledger_transactions(
             liability_id_map=liability_id_map,
         )
         _ensure_minimum_transaction_entries(payload=payload, user=context.user)
+        _ensure_balanced_entries_by_currency(payload=payload, user=context.user)
         serializer = LedgerTransactionSerializer(data=payload, context={"request": context.request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -758,6 +774,60 @@ def _ensure_minimum_transaction_entries(*, payload: dict[str, Any], user: Any) -
             "notes": "Contraapunte generado automaticamente durante importacion portable.",
         }
     )
+
+
+def _ensure_balanced_entries_by_currency(*, payload: dict[str, Any], user: Any) -> None:
+    entries = payload.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return
+
+    totals_by_currency: dict[str, dict[str, Decimal]] = {}
+    for entry in entries:
+        currency = str(entry.get("currency", "EUR")).strip().upper() or "EUR"
+        side = str(entry.get("side", "debit")).strip().lower()
+        amount_raw = str(entry.get("amount", "0")).strip() or "0"
+        try:
+            amount = Decimal(amount_raw)
+        except (InvalidOperation, ValueError):
+            # Let serializer raise canonical validation errors for malformed amounts.
+            continue
+
+        if currency not in totals_by_currency:
+            totals_by_currency[currency] = {"debit": Decimal("0"), "credit": Decimal("0")}
+        if side in ("debit", "credit"):
+            totals_by_currency[currency][side] += amount
+
+    for currency, totals in totals_by_currency.items():
+        diff = totals["debit"] - totals["credit"]
+        if diff == Decimal("0"):
+            continue
+
+        contra_side = "credit" if diff > 0 else "debit"
+        contra_account = get_or_create_system_account(
+            user_id=user.id,
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency=currency,
+            name="Ajuste importacion portable",
+        )
+        entries.append(
+            {
+                "account_id": contra_account.id,
+                "side": contra_side,
+                "amount": str(abs(diff)),
+                "currency": currency,
+                "flow_family": "",
+                "category_key": "",
+                "subcategory_key": "",
+                "annual_income_entry_id": None,
+                "annual_expense_entry_id": None,
+                "asset_id": None,
+                "liability_id": None,
+                "notes": (
+                    "Contraapunte generado automaticamente para balancear "
+                    "la transaccion por moneda durante importacion portable."
+                ),
+            }
+        )
 
 
 def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) -> dict[str, Any]:
