@@ -323,7 +323,16 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries")
         request = self.context["request"]
-        validate_transaction_entries(entries_data=entries_data, user_id=request.user.id)
+        quick_entry_kind = validated_data.get("quick_entry_kind", "")
+        allow_unbalanced_multicurrency = self._allow_unbalanced_multicurrency_create(
+            incoming_entries=entries_data,
+            quick_entry_kind=quick_entry_kind,
+        )
+        validate_transaction_entries(
+            entries_data=entries_data,
+            user_id=request.user.id,
+            allow_unbalanced_multicurrency=allow_unbalanced_multicurrency,
+        )
         transaction = LedgerTransaction.objects.create(user=request.user, **validated_data)
         for entry_data in entries_data:
             payload = {**entry_data}
@@ -440,6 +449,25 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         if not cls._is_unbalanced_by_currency_from_existing(existing_entries):
             return False
         if not cls._same_structure(existing_entries, incoming_entries):
+            return False
+        return cls._is_unbalanced_by_currency_from_payload(incoming_entries)
+
+    @classmethod
+    def _allow_unbalanced_multicurrency_create(
+        cls,
+        *,
+        incoming_entries: list[dict],
+        quick_entry_kind: str,
+    ) -> bool:
+        incoming_currencies = {
+            cls._entry_currency_from_payload(entry) for entry in incoming_entries
+        }
+        if len(incoming_currencies) < 2:
+            return False
+        if quick_entry_kind not in {
+            LedgerTransaction.QuickEntryKind.INVESTMENT,
+            LedgerTransaction.QuickEntryKind.TRANSFER,
+        }:
             return False
         return cls._is_unbalanced_by_currency_from_payload(incoming_entries)
 
