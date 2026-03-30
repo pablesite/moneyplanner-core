@@ -62,12 +62,19 @@ export type PortableAssetRecord = {
   investment_contribution_frequency?: 'monthly' | 'weekly';
   investment_contribution_currency?: string | null;
   monthly_contribution_amount?: string | null;
+  contribution_intervals?: PortableInvestmentContributionIntervalRecord[];
   market_value_override?: string | null;
   market_value_override_date?: string | null;
   initial_purchase_value?: string | null;
   amortization_method?: string;
   amortization_term_years?: number | null;
+  valuation_model?: 'manual' | 'real_estate_auto';
+  land_value_share_percent?: string | null;
+  land_annual_appreciation_percent?: string | null;
+  building_annual_depreciation_percent?: string | null;
+  improvements?: PortableAssetImprovementRecord[];
   annual_interest_tae?: string | null;
+  estimated_average_balance_for_interest?: string | null;
   deposit_term_months?: number | null;
   amount: string;
   is_active: boolean;
@@ -82,10 +89,12 @@ export type PortableLiabilityRecord = {
   accounting_account_id: number | null;
   currency: string;
   start_date?: string;
+  payment_start_date?: string | null;
   expected_end_date?: string | null;
   term_months?: number | null;
   rate_type?: string;
   payment_frequency?: string;
+  expense_subcategory_override?: string | null;
   amortization_system?: string | null;
   annual_interest_tae?: string | null;
   monthly_payment_amount?: string | null;
@@ -94,10 +103,36 @@ export type PortableLiabilityRecord = {
   early_repayment_fee_percent?: string | null;
   novation_subrogation_fee_amount?: string | null;
   linked_products_monthly_cost?: string | null;
+  cancellation_forecast_enabled?: boolean;
+  cancellation_date?: string | null;
+  cancellation_fee_amount?: string | null;
   amount: string;
   is_active: boolean;
+  is_asset_backed?: boolean;
   notes?: string;
   financed_asset_ref?: number | null;
+};
+
+export type PortableInvestmentContributionIntervalRecord = {
+  id?: number;
+  start_date: string;
+  end_date?: string | null;
+  amount: string;
+  frequency: 'monthly' | 'weekly';
+  currency?: string | null;
+};
+
+export type PortableAssetImprovementRecord = {
+  id?: number;
+  name: string;
+  reform_date: string;
+  amount: string;
+  amortization_method?: 'none' | 'straight_line' | 'manual';
+  amortization_term_years?: number | null;
+  annual_interest_tae?: string | null;
+  capitalize_interest?: boolean;
+  manual_current_value?: string | null;
+  notes?: string;
 };
 
 export type PortableSnapshotRecord = {
@@ -156,6 +191,52 @@ export type PortableSettingsRecord = {
   base_currency: string;
 };
 
+export type PortableAssetValuationRecord = {
+  id?: number;
+  asset_ref: number;
+  valuation_date: string;
+  value: string;
+  source?: 'manual_checkpoint' | 'imported' | 'system';
+  note?: string;
+};
+
+export type PortableInvestmentEventRecord = {
+  id?: number;
+  asset_ref: number;
+  event_date: string;
+  event_type: 'contribution' | 'withdrawal' | 'fee' | 'passive_income';
+  amount: string;
+  is_reinvested?: boolean;
+  note?: string;
+};
+
+export type PortableLiquidityEventRecord = {
+  id?: number;
+  asset_ref: number;
+  event_date: string;
+  event_type: 'inflow' | 'outflow' | 'fee' | 'interest';
+  amount: string;
+  note?: string;
+};
+
+export type PortableLiabilityEventRecord = {
+  id?: number;
+  liability_ref: number;
+  event_date: string;
+  event_type: 'charge' | 'payment' | 'fee' | 'interest' | 'adjustment';
+  amount: string;
+  note?: string;
+};
+
+export type PortableLiabilityValuationRecord = {
+  id?: number;
+  liability_ref: number;
+  valuation_date: string;
+  value: string;
+  source?: 'manual_checkpoint' | 'imported' | 'system';
+  note?: string;
+};
+
 export type PortableFamilyMemberRecord = {
   id: number;
   name: string;
@@ -196,6 +277,11 @@ export type PortableDataBundle = {
     assets: PortableAssetRecord[];
     liabilities: PortableLiabilityRecord[];
     snapshots?: PortableSnapshotRecord[];
+    asset_valuations?: PortableAssetValuationRecord[];
+    investment_events?: PortableInvestmentEventRecord[];
+    liquidity_events?: PortableLiquidityEventRecord[];
+    liability_events?: PortableLiabilityEventRecord[];
+    liability_valuations?: PortableLiabilityValuationRecord[];
     accounting: {
       accounts: PortableLedgerAccountRecord[];
       transactions: PortableLedgerTransactionRecord[];
@@ -549,6 +635,16 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
     investment_contribution_frequency: toAssetContributionFrequency(
       raw.investment_contribution_frequency,
     ),
+    contribution_intervals: Array.isArray(raw.contribution_intervals)
+      ? raw.contribution_intervals.map((row) => ({
+          id: row.id == null ? undefined : Number(row.id),
+          start_date: String(row.start_date ?? ''),
+          end_date: row.end_date == null ? null : String(row.end_date),
+          amount: String(row.amount ?? '0'),
+          frequency: row.frequency === 'weekly' ? 'weekly' : 'monthly',
+          currency: row.currency == null ? null : String(row.currency).toUpperCase(),
+        }))
+      : [],
     investment_contribution_currency:
       raw.investment_contribution_currency == null
         ? null
@@ -559,7 +655,32 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
     initial_purchase_value: toOptionalText(raw.initial_purchase_value),
     amortization_method: raw.amortization_method == null ? 'none' : String(raw.amortization_method),
     amortization_term_years: toNumberOrNull(raw.amortization_term_years),
+    valuation_model:
+      raw.valuation_model === 'real_estate_auto' ? 'real_estate_auto' : 'manual',
+    land_value_share_percent: toOptionalText(raw.land_value_share_percent),
+    land_annual_appreciation_percent: toOptionalText(raw.land_annual_appreciation_percent),
+    building_annual_depreciation_percent: toOptionalText(raw.building_annual_depreciation_percent),
+    improvements: Array.isArray(raw.improvements)
+      ? raw.improvements.map((row) => ({
+          id: row.id == null ? undefined : Number(row.id),
+          name: String(row.name ?? ''),
+          reform_date: String(row.reform_date ?? ''),
+          amount: String(row.amount ?? '0'),
+          amortization_method:
+            row.amortization_method === 'straight_line' || row.amortization_method === 'manual'
+              ? row.amortization_method
+              : 'none',
+          amortization_term_years: toNumberOrNull(row.amortization_term_years),
+          annual_interest_tae: toOptionalText(row.annual_interest_tae),
+          capitalize_interest: row.capitalize_interest ?? false,
+          manual_current_value: toOptionalText(row.manual_current_value),
+          notes: row.notes == null ? '' : String(row.notes),
+        }))
+      : [],
     annual_interest_tae: toOptionalText(raw.annual_interest_tae),
+    estimated_average_balance_for_interest: toOptionalText(
+      raw.estimated_average_balance_for_interest,
+    ),
     deposit_term_months: toNumberOrNull(raw.deposit_term_months),
     amount: String(raw.amount ?? '0'),
     is_active: raw.is_active ?? true,
@@ -583,10 +704,12 @@ export function toPortableLiabilityRecord(
     accounting_account_id: toNumberOrNull(raw.accounting_account_id),
     currency: toUpperText(raw.currency, 'EUR'),
     start_date: toOptionalDateText(raw.start_date),
+    payment_start_date: toOptionalText(raw.payment_start_date),
     expected_end_date: toOptionalDateText(raw.expected_end_date),
     term_months: toNumberOrNull(raw.term_months),
     rate_type: raw.rate_type == null ? 'fixed' : String(raw.rate_type),
     payment_frequency: raw.payment_frequency == null ? 'monthly' : String(raw.payment_frequency),
+    expense_subcategory_override: toOptionalText(raw.expense_subcategory_override),
     amortization_system: toOptionalText(raw.amortization_system),
     annual_interest_tae: toOptionalText(raw.annual_interest_tae),
     monthly_payment_amount: toOptionalText(raw.monthly_payment_amount),
@@ -595,8 +718,12 @@ export function toPortableLiabilityRecord(
     early_repayment_fee_percent: toOptionalText(raw.early_repayment_fee_percent),
     novation_subrogation_fee_amount: toOptionalText(raw.novation_subrogation_fee_amount),
     linked_products_monthly_cost: toOptionalText(raw.linked_products_monthly_cost),
+    cancellation_forecast_enabled: raw.cancellation_forecast_enabled ?? false,
+    cancellation_date: toOptionalText(raw.cancellation_date),
+    cancellation_fee_amount: toOptionalText(raw.cancellation_fee_amount),
     amount: String(raw.amount ?? '0'),
     is_active: raw.is_active ?? true,
+    is_asset_backed: raw.is_asset_backed ?? false,
     notes: raw.notes == null ? '' : String(raw.notes),
     financed_asset_ref: financedAssetRef == null ? null : Number(financedAssetRef),
   };
@@ -659,9 +786,26 @@ function assertPortableDataCollections(
   assets: PortableDataBundle['data']['assets'];
   liabilities: PortableDataBundle['data']['liabilities'];
   snapshots: PortableDataBundle['data']['snapshots'];
+  asset_valuations: PortableDataBundle['data']['asset_valuations'];
+  investment_events: PortableDataBundle['data']['investment_events'];
+  liquidity_events: PortableDataBundle['data']['liquidity_events'];
+  liability_events: PortableDataBundle['data']['liability_events'];
+  liability_valuations: PortableDataBundle['data']['liability_valuations'];
   accounting: PortableDataBundle['data']['accounting'] | undefined;
 } {
-  const { annual_income, annual_expense, assets, liabilities, snapshots, accounting } = data;
+  const {
+    annual_income,
+    annual_expense,
+    assets,
+    liabilities,
+    snapshots,
+    asset_valuations,
+    investment_events,
+    liquidity_events,
+    liability_events,
+    liability_valuations,
+    accounting,
+  } = data;
   if (
     !Array.isArray(annual_income) ||
     !Array.isArray(annual_expense) ||
@@ -676,6 +820,11 @@ function assertPortableDataCollections(
     assets,
     liabilities,
     snapshots,
+    asset_valuations,
+    investment_events,
+    liquidity_events,
+    liability_events,
+    liability_valuations,
     accounting,
   };
 }
@@ -720,7 +869,19 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
   if (parsed?.schema_version !== 1 || !parsed.data) {
     throw new Error('Formato de archivo no compatible.');
   }
-  const { annual_income, annual_expense, assets, liabilities, snapshots, accounting } =
+  const {
+    annual_income,
+    annual_expense,
+    assets,
+    liabilities,
+    snapshots,
+    asset_valuations,
+    investment_events,
+    liquidity_events,
+    liability_events,
+    liability_valuations,
+    accounting,
+  } =
     assertPortableDataCollections(parsed.data as PortableDataBundle['data']);
   const sourceApp = parsed.source_app === 'saas' ? 'saas' : 'core';
   const premium = parsePortablePremium(parsed.premium);
@@ -740,6 +901,11 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
       assets: assets.map((row) => toPortableAssetRecord(row)),
       liabilities: liabilities.map((row) => toPortableLiabilityRecord(row)),
       snapshots: Array.isArray(snapshots) ? snapshots : [],
+      asset_valuations: Array.isArray(asset_valuations) ? asset_valuations : [],
+      investment_events: Array.isArray(investment_events) ? investment_events : [],
+      liquidity_events: Array.isArray(liquidity_events) ? liquidity_events : [],
+      liability_events: Array.isArray(liability_events) ? liability_events : [],
+      liability_valuations: Array.isArray(liability_valuations) ? liability_valuations : [],
       accounting: parsePortableAccounting(accounting),
     },
     premium,
