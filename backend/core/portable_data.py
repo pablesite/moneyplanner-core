@@ -172,8 +172,10 @@ def _build_asset_payload(asset: dict[str, Any]) -> dict[str, Any]:
         "name": str(asset.get("name", "")),
         "category": str(asset.get("category", "")),
         "subcategory": str(asset.get("subcategory", "other")),
-        "tracking_mode": str(asset.get("tracking_mode", "manual")),
-        "accounting_account_id": asset.get("accounting_account_id"),
+        # Import assets first without accounting linkage; it is remapped after
+        # ledger accounts are created in destination.
+        "tracking_mode": "manual",
+        "accounting_account_id": None,
         "currency": str(asset.get("currency", "EUR")).upper(),
         "start_date": asset.get("start_date"),
         "expected_end_date": normalize_optional_text(asset.get("expected_end_date")),
@@ -214,8 +216,10 @@ def _build_liability_payload(
     return {
         "name": str(liability.get("name", "")),
         "category": str(liability.get("category", "")),
-        "tracking_mode": str(liability.get("tracking_mode", "manual")),
-        "accounting_account_id": liability.get("accounting_account_id"),
+        # Import liabilities first without accounting linkage; it is remapped after
+        # ledger accounts are created in destination.
+        "tracking_mode": "manual",
+        "accounting_account_id": None,
         "currency": str(liability.get("currency", "EUR")).upper(),
         "start_date": liability.get("start_date"),
         "payment_start_date": normalize_optional_text(liability.get("payment_start_date")),
@@ -590,7 +594,10 @@ def _sync_imported_tracking_account_links(
         new_account_id = account_id_map.get(int(old_account_id))
         if new_asset_id is None or new_account_id is None:
             continue
-        Asset.objects.filter(user=context.user, id=new_asset_id).update(accounting_account_id=new_account_id)
+        Asset.objects.filter(user=context.user, id=new_asset_id).update(
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=new_account_id,
+        )
 
     for raw_liability in liabilities:
         old_liability_id = raw_liability.get("id")
@@ -602,6 +609,7 @@ def _sync_imported_tracking_account_links(
         if new_liability_id is None or new_account_id is None:
             continue
         Liability.objects.filter(user=context.user, id=new_liability_id).update(
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
             accounting_account_id=new_account_id
         )
 
