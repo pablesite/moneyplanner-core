@@ -9,6 +9,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from accounts.services import get_or_create_user_settings, update_user_settings
+from accounting.models import LedgerAccount, LedgerTransaction
+from accounting.serializers import LedgerAccountSerializer, LedgerTransactionSerializer
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 from memberships.models import FamilyMember, Ownership, OwnershipLink
@@ -101,6 +103,18 @@ class PortableImportRequestSerializer(serializers.Serializer):
                     f"El archivo no contiene la coleccion esperada: {key}."
                 )
 
+        accounting = data.get("accounting")
+        if accounting is not None:
+            if not isinstance(accounting, dict):
+                raise serializers.ValidationError("El bloque accounting del archivo no es valido.")
+            if not isinstance(accounting.get("accounts"), list):
+                raise serializers.ValidationError(
+                    "El bloque accounting no contiene la coleccion esperada: accounts."
+                )
+            if not isinstance(accounting.get("transactions"), list):
+                raise serializers.ValidationError(
+                    "El bloque accounting no contiene la coleccion esperada: transactions."
+                )
 
         premium = value.get("premium")
         if premium is not None:
@@ -301,6 +315,8 @@ def _prepare_expense_payload(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clear_existing_portable_core_data(*, user) -> None:
+    LedgerTransaction.objects.filter(user=user).delete()
+    LedgerAccount.objects.filter(user=user).delete()
     OwnershipLink.objects.filter(
         user=user,
         target_type__in=[OwnershipLink.TargetType.ASSET, OwnershipLink.TargetType.LIABILITY],
@@ -432,28 +448,32 @@ def _import_liabilities(
 
 def _import_annual_income(
     *, context: PortableImportContext, annual_income: list[dict[str, Any]]
-) -> int:
+) -> tuple[int, dict[int, int]]:
+    income_id_map: dict[int, int] = {}
     for entry in sorted(annual_income, key=lambda row: int(row.get("id", 0))):
         serializer = AnnualIncomeEntrySerializer(
             data=_prepare_income_payload(entry),
             context={"request": context.request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=context.user)
-    return len(annual_income)
+        created = serializer.save(user=context.user)
+        income_id_map[int(entry.get("id", 0))] = created.id
+    return len(annual_income), income_id_map
 
 
 def _import_annual_expense(
     *, context: PortableImportContext, annual_expense: list[dict[str, Any]]
-) -> int:
+) -> tuple[int, dict[int, int]]:
+    expense_id_map: dict[int, int] = {}
     for entry in sorted(annual_expense, key=lambda row: int(row.get("id", 0))):
         serializer = AnnualExpenseEntrySerializer(
             data=_prepare_expense_payload(entry),
             context={"request": context.request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=context.user)
-    return len(annual_expense)
+        created = serializer.save(user=context.user)
+        expense_id_map[int(entry.get("id", 0))] = created.id
+    return len(annual_expense), expense_id_map
 
 
 def _import_settings(
@@ -505,10 +525,200 @@ def _import_ownership_links(
     return imported
 
 
+def _build_account_payload(
+    *,
+    account: dict[str, Any],
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+) -> dict[str, Any]:
+    old_asset_id = account.get("asset_id")
+    old_liability_id = account.get("liability_id")
+    mapped_asset_id = asset_id_map.get(int(old_asset_id)) if old_asset_id not in (None, "") else None
+    mapped_liability_id = (
+        liability_id_map.get(int(old_liability_id)) if old_liability_id not in (None, "") else None
+    )
+    return {
+        "name": str(account.get("name", "")),
+        "account_type": str(account.get("account_type", "")),
+        "currency": str(account.get("currency", "EUR")).upper(),
+        "origin": str(account.get("origin", LedgerAccount.Origin.USER)),
+        "asset_id": mapped_asset_id,
+        "liability_id": mapped_liability_id,
+        "is_active": account.get("is_active", True),
+        "notes": account.get("notes", "") or "",
+    }
+
+
+def _import_ledger_accounts(
+    *,
+    context: PortableImportContext,
+    accounts: list[dict[str, Any]],
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+) -> dict[int, int]:
+    account_id_map: dict[int, int] = {}
+    for account in sorted(accounts, key=lambda row: int(row.get("id", 0))):
+        serializer = LedgerAccountSerializer(
+            data=_build_account_payload(
+                account=account,
+                asset_id_map=asset_id_map,
+                liability_id_map=liability_id_map,
+            ),
+            context={"request": context.request},
+        )
+        serializer.is_valid(raise_exception=True)
+        created = serializer.save()
+        account_id_map[int(account.get("id", 0))] = created.id
+    return account_id_map
+
+
+def _sync_imported_tracking_account_links(
+    *,
+    context: PortableImportContext,
+    assets: list[dict[str, Any]],
+    liabilities: list[dict[str, Any]],
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+    account_id_map: dict[int, int],
+) -> None:
+    for raw_asset in assets:
+        old_asset_id = raw_asset.get("id")
+        old_account_id = raw_asset.get("accounting_account_id")
+        if old_asset_id in (None, "") or old_account_id in (None, ""):
+            continue
+        new_asset_id = asset_id_map.get(int(old_asset_id))
+        new_account_id = account_id_map.get(int(old_account_id))
+        if new_asset_id is None or new_account_id is None:
+            continue
+        Asset.objects.filter(user=context.user, id=new_asset_id).update(accounting_account_id=new_account_id)
+
+    for raw_liability in liabilities:
+        old_liability_id = raw_liability.get("id")
+        old_account_id = raw_liability.get("accounting_account_id")
+        if old_liability_id in (None, "") or old_account_id in (None, ""):
+            continue
+        new_liability_id = liability_id_map.get(int(old_liability_id))
+        new_account_id = account_id_map.get(int(old_account_id))
+        if new_liability_id is None or new_account_id is None:
+            continue
+        Liability.objects.filter(user=context.user, id=new_liability_id).update(
+            accounting_account_id=new_account_id
+        )
+
+
+def _build_transaction_payload(
+    *,
+    transaction_row: dict[str, Any],
+    account_id_map: dict[int, int],
+    ownership_id_map: dict[int, int],
+    annual_income_id_map: dict[int, int],
+    annual_expense_id_map: dict[int, int],
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+) -> dict[str, Any]:
+    ownership_id: int | None = None
+    old_ownership_id = transaction_row.get("ownership_id")
+    if old_ownership_id not in (None, ""):
+        ownership_id = ownership_id_map.get(int(old_ownership_id))
+
+    entries_payload: list[dict[str, Any]] = []
+    for entry in transaction_row.get("entries", []):
+        old_account_id = entry.get("account_id")
+        new_account_id = account_id_map.get(int(old_account_id)) if old_account_id not in (None, "") else None
+        if new_account_id is None:
+            raise serializers.ValidationError(
+                {
+                    "bundle": {
+                        "data": {
+                            "accounting": {
+                                "transactions": "No se pudo mapear account_id en una entrada contable."
+                            }
+                        }
+                    }
+                }
+            )
+
+        old_income_id = entry.get("annual_income_entry_id")
+        old_expense_id = entry.get("annual_expense_entry_id")
+        old_asset_id = entry.get("asset_id")
+        old_liability_id = entry.get("liability_id")
+        entries_payload.append(
+            {
+                "account_id": new_account_id,
+                "side": str(entry.get("side", "")),
+                "amount": str(entry.get("amount", "0")),
+                "currency": str(entry.get("currency", "EUR")).upper(),
+                "flow_family": str(entry.get("flow_family", "")),
+                "category_key": str(entry.get("category_key", "")),
+                "subcategory_key": str(entry.get("subcategory_key", "")),
+                "annual_income_entry_id": (
+                    annual_income_id_map.get(int(old_income_id)) if old_income_id not in (None, "") else None
+                ),
+                "annual_expense_entry_id": (
+                    annual_expense_id_map.get(int(old_expense_id))
+                    if old_expense_id not in (None, "")
+                    else None
+                ),
+                "asset_id": asset_id_map.get(int(old_asset_id)) if old_asset_id not in (None, "") else None,
+                "liability_id": (
+                    liability_id_map.get(int(old_liability_id))
+                    if old_liability_id not in (None, "")
+                    else None
+                ),
+                "notes": entry.get("notes", "") or "",
+            }
+        )
+
+    return {
+        "booking_date": transaction_row.get("booking_date"),
+        "value_date": transaction_row.get("value_date"),
+        "description": str(transaction_row.get("description", "")),
+        "status": str(transaction_row.get("status", LedgerTransaction.Status.POSTED)),
+        "origin": str(transaction_row.get("origin", LedgerTransaction.Origin.MANUAL)),
+        "notes": transaction_row.get("notes", "") or "",
+        "ownership_id": ownership_id,
+        "quick_entry_kind": str(transaction_row.get("quick_entry_kind", "")),
+        "investment_direction": str(transaction_row.get("investment_direction", "")),
+        "entries": entries_payload,
+    }
+
+
+def _import_ledger_transactions(
+    *,
+    context: PortableImportContext,
+    transactions: list[dict[str, Any]],
+    account_id_map: dict[int, int],
+    ownership_id_map: dict[int, int],
+    annual_income_id_map: dict[int, int],
+    annual_expense_id_map: dict[int, int],
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+) -> int:
+    for transaction_row in sorted(transactions, key=lambda row: int(row.get("id", 0))):
+        serializer = LedgerTransactionSerializer(
+            data=_build_transaction_payload(
+                transaction_row=transaction_row,
+                account_id_map=account_id_map,
+                ownership_id_map=ownership_id_map,
+                annual_income_id_map=annual_income_id_map,
+                annual_expense_id_map=annual_expense_id_map,
+                asset_id_map=asset_id_map,
+                liability_id_map=liability_id_map,
+            ),
+            context={"request": context.request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+    return len(transactions)
+
+
 def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) -> dict[str, Any]:
     context = PortableImportContext(user=user, request=request)
     premium = bundle.get("premium") if isinstance(bundle.get("premium"), dict) else None
     data = bundle["data"]
+    accounting = data.get("accounting") if isinstance(data.get("accounting"), dict) else {}
+    accounting_accounts = list(accounting.get("accounts", []))
+    accounting_transactions = list(accounting.get("transactions", []))
 
     with transaction.atomic():
         if mode == "replace":
@@ -523,11 +733,35 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             liabilities=list(data["liabilities"]),
             asset_id_map=asset_id_map,
         )
-        income_count = _import_annual_income(
+        income_count, annual_income_id_map = _import_annual_income(
             context=context, annual_income=list(data["annual_income"])
         )
-        expense_count = _import_annual_expense(
+        expense_count, annual_expense_id_map = _import_annual_expense(
             context=context, annual_expense=list(data["annual_expense"])
+        )
+        account_id_map = _import_ledger_accounts(
+            context=context,
+            accounts=accounting_accounts,
+            asset_id_map=asset_id_map,
+            liability_id_map=liability_id_map,
+        )
+        _sync_imported_tracking_account_links(
+            context=context,
+            assets=list(data["assets"]),
+            liabilities=list(data["liabilities"]),
+            asset_id_map=asset_id_map,
+            liability_id_map=liability_id_map,
+            account_id_map=account_id_map,
+        )
+        transaction_count = _import_ledger_transactions(
+            context=context,
+            transactions=accounting_transactions,
+            account_id_map=account_id_map,
+            ownership_id_map=ownership_id_map,
+            annual_income_id_map=annual_income_id_map,
+            annual_expense_id_map=annual_expense_id_map,
+            asset_id_map=asset_id_map,
+            liability_id_map=liability_id_map,
         )
         _import_settings(context=context, bundle=bundle)
         ownership_link_count = _import_ownership_links(
@@ -553,6 +787,8 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             "annual_expense": expense_count,
             "assets": len(data["assets"]),
             "liabilities": len(data["liabilities"]),
+            "accounting_accounts": len(accounting_accounts),
+            "accounting_transactions": transaction_count,
             "family_members": len(premium["family_members"]) if premium is not None else 0,
             "ownerships": len(premium["ownerships"]) if premium is not None else 0,
             "ownership_links": ownership_link_count,

@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import UserSettings
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from .models import FxRate, InflationIndex, MarketDataSyncState
@@ -530,16 +531,78 @@ class PortableDataImportAPITests(APITestCase):
                         "financed_asset_ref": 20,
                     }
                 ],
-                "snapshots": [
-                    {
-                        "id": 40,
-                        "snapshot_date": "2026-03-01",
-                        "base_currency": "USD",
-                        "total_assets": "1000.00",
-                        "total_liabilities": "80000.00",
-                        "net_worth": "-79000.00",
-                    }
-                ],
+                "accounting": {
+                    "accounts": [
+                        {
+                            "id": 70,
+                            "name": "Cuenta corriente",
+                            "account_type": "asset",
+                            "currency": "EUR",
+                            "origin": "user",
+                            "asset_id": 20,
+                            "liability_id": None,
+                            "is_active": True,
+                            "notes": "",
+                        },
+                        {
+                            "id": 71,
+                            "name": "Ingresos sistema",
+                            "account_type": "income",
+                            "currency": "EUR",
+                            "origin": "system",
+                            "asset_id": None,
+                            "liability_id": None,
+                            "is_active": True,
+                            "notes": "",
+                        },
+                    ],
+                    "transactions": [
+                        {
+                            "id": 80,
+                            "booking_date": "2026-02-10",
+                            "value_date": "2026-02-10",
+                            "description": "Nomina importada",
+                            "status": "posted",
+                            "origin": "manual",
+                            "notes": "",
+                            "ownership_id": 60,
+                            "quick_entry_kind": "income",
+                            "investment_direction": "",
+                            "entries": [
+                                {
+                                    "id": 90,
+                                    "account_id": 70,
+                                    "side": "debit",
+                                    "amount": "1000.00",
+                                    "currency": "EUR",
+                                    "flow_family": "income",
+                                    "category_key": "salary",
+                                    "subcategory_key": "employee_salary",
+                                    "annual_income_entry_id": 10,
+                                    "annual_expense_entry_id": None,
+                                    "asset_id": 20,
+                                    "liability_id": None,
+                                    "notes": "",
+                                },
+                                {
+                                    "id": 91,
+                                    "account_id": 71,
+                                    "side": "credit",
+                                    "amount": "1000.00",
+                                    "currency": "EUR",
+                                    "flow_family": "income",
+                                    "category_key": "salary",
+                                    "subcategory_key": "employee_salary",
+                                    "annual_income_entry_id": None,
+                                    "annual_expense_entry_id": None,
+                                    "asset_id": None,
+                                    "liability_id": None,
+                                    "notes": "",
+                                },
+                            ],
+                        }
+                    ],
+                },
             },
             "premium": {
                 "family_members": [{"id": 50, "name": "Pablo", "role": "adult", "is_active": True}],
@@ -572,8 +635,13 @@ class PortableDataImportAPITests(APITestCase):
         self.assertTrue(response.data["ok"])
         self.assertEqual(response.data["counts"]["assets"], 1)
         self.assertEqual(response.data["counts"]["ownership_links"], 1)
+        self.assertEqual(response.data["counts"]["accounting_accounts"], 2)
+        self.assertEqual(response.data["counts"]["accounting_transactions"], 1)
         self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
         self.assertEqual(Liability.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LedgerAccount.objects.filter(user=self.user).count(), 2)
+        self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LedgerEntry.objects.filter(transaction__user=self.user).count(), 2)
         self.assertEqual(AnnualIncomeEntry.objects.filter(user=self.user).count(), 1)
         self.assertEqual(AnnualExpenseEntry.objects.filter(user=self.user).count(), 1)
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
@@ -665,6 +733,8 @@ class PortableDataImportAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(Asset.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LedgerAccount.objects.filter(user=self.user).count(), 2)
+        self.assertEqual(LedgerTransaction.objects.filter(user=self.user).count(), 1)
         self.assertFalse(Asset.objects.filter(user=self.user, name="Cuenta previa").exists())
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
         self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)

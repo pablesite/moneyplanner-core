@@ -30,14 +30,17 @@ import {
   type PortableAssetRecord,
   type PortableDataBundle,
   type PortableFamilyMemberRecord,
+  type PortableLedgerAccountRecord,
+  type PortableLedgerTransactionRecord,
   type PortableLiabilityRecord,
   type PortableOwnershipLinkRecord,
   type PortableOwnershipRecord,
   type PortableSettingsRecord,
-  type PortableSnapshotRecord,
   toPortableAnnualExpenseRecord,
   toPortableAnnualIncomeRecord,
   toPortableAssetRecord,
+  toPortableLedgerAccountRecord,
+  toPortableLedgerTransactionRecord,
   toPortableLiabilityRecord,
   toPortableOwnershipRecord,
 } from '@/domains/data-input/portableBundle';
@@ -1961,11 +1964,17 @@ export function useDataInputPage() {
       annual_expense: number;
       assets: number;
       liabilities: number;
-      snapshots: number;
+      accounting_accounts: number;
+      accounting_transactions: number;
       family_members: number;
       ownerships: number;
       ownership_links: number;
     };
+  };
+
+  type AccountingTransactionsPage = {
+    results: PortableLedgerTransactionRecord[];
+    next_cursor: string | null;
   };
 
   const dataTransferUiBusy = computed(
@@ -2018,12 +2027,13 @@ export function useDataInputPage() {
     dataTransferBusy.value = true;
     try {
       const appVersion = await ensurePortableDataAppVersion();
+      const transactions = await fetchAllAccountingTransactions();
       const [
         incomeRes,
         expenseRes,
         assetsRes,
         liabilitiesRes,
-        snapshotsRes,
+        accountsRes,
         settingsRes,
         membersRes,
         ownershipsRes,
@@ -2033,7 +2043,7 @@ export function useDataInputPage() {
         dataInputPageApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
         dataInputPageApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
         dataInputPageApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-        dataInputPageApi.get<PortableSnapshotRecord[]>('/api/net-worth/snapshots/'),
+        dataInputPageApi.get<PortableLedgerAccountRecord[]>('/api/accounting/accounts/'),
         dataInputPageApi.get<PortableSettingsRecord>('/api/auth/settings/'),
         dataInputPageApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
         dataInputPageApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
@@ -2051,7 +2061,10 @@ export function useDataInputPage() {
           annual_expense: (expenseRes.data ?? []).map(toPortableAnnualExpenseRecord),
           assets: (assetsRes.data ?? []).map((row) => toPortableAssetRecord(row)),
           liabilities: (liabilitiesRes.data ?? []).map((row) => toPortableLiabilityRecord(row)),
-          snapshots: (snapshotsRes.data ?? []).slice(),
+          accounting: {
+            accounts: (accountsRes.data ?? []).map((row) => toPortableLedgerAccountRecord(row)),
+            transactions,
+          },
         },
         premium: {
           family_members: (membersRes.data ?? []).slice(),
@@ -2070,7 +2083,7 @@ export function useDataInputPage() {
       link.remove();
       URL.revokeObjectURL(url);
 
-      dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos, ${payload.data.snapshots?.length ?? 0} snapshots, ${payload.premium?.family_members.length ?? 0} miembros y ${payload.premium?.ownerships.length ?? 0} titularidades.`;
+      dataTransferStatus.value = `Exportacion completada: ${payload.data.annual_income.length} ingresos, ${payload.data.annual_expense.length} gastos, ${payload.data.assets.length} activos, ${payload.data.liabilities.length} pasivos, ${payload.data.accounting.accounts.length} cuentas contables, ${payload.data.accounting.transactions.length} movimientos y ${payload.premium?.family_members.length ?? 0} miembros con ${payload.premium?.ownerships.length ?? 0} titularidades.`;
     } catch (e: unknown) {
       dataTransferError.value = `No se pudo exportar: ${toApiErrorMessage(e)}`;
     } finally {
@@ -2102,8 +2115,31 @@ export function useDataInputPage() {
     const { importMode, response } = params;
     const counts = response.counts;
     return importMode === 'replace'
-      ? `Reemplazo completado: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.snapshots} snapshots, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`
-      : `Importacion completada: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.snapshots} snapshots, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`;
+      ? `Reemplazo completado: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.accounting_accounts} cuentas contables, ${counts.accounting_transactions} movimientos, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`
+      : `Importacion completada: ${counts.annual_income} ingresos, ${counts.annual_expense} gastos, ${counts.assets} activos, ${counts.liabilities} pasivos, ${counts.accounting_accounts} cuentas contables, ${counts.accounting_transactions} movimientos, ${counts.family_members} miembros, ${counts.ownerships} titularidades y ${counts.ownership_links} enlaces de titularidad.`;
+  }
+
+  async function fetchAllAccountingTransactions(): Promise<PortableLedgerTransactionRecord[]> {
+    const all: PortableLedgerTransactionRecord[] = [];
+    let cursor: string | null = null;
+    do {
+      const pageData = (
+        await dataInputPageApi.get('/api/accounting/transactions/', {
+          params: {
+            page_size: 200,
+            ...(cursor ? { cursor } : {}),
+          },
+        })
+      ).data as AccountingTransactionsPage;
+      const pageRows: PortableLedgerTransactionRecord[] = pageData.results ?? [];
+      all.push(
+        ...pageRows.map((row: PortableLedgerTransactionRecord) =>
+          toPortableLedgerTransactionRecord(row),
+        ),
+      );
+      cursor = pageData.next_cursor;
+    } while (cursor);
+    return all;
   }
 
   async function importDataFromFile(event: Event): Promise<void> {
