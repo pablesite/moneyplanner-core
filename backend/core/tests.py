@@ -743,6 +743,76 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
         self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
 
+    def test_portable_import_accepts_multicurrency_investment_transaction(self):
+        bundle = self._build_bundle()
+        bundle["data"]["accounting"]["accounts"].append(
+            {
+                "id": 72,
+                "name": "Broker USD",
+                "account_type": "asset",
+                "currency": "USD",
+                "origin": "user",
+                "asset_id": None,
+                "liability_id": None,
+                "is_active": True,
+                "notes": "",
+            }
+        )
+        bundle["data"]["accounting"]["transactions"].append(
+            {
+                "id": 81,
+                "booking_date": "2026-02-12",
+                "value_date": "2026-02-12",
+                "description": "Compra ETF USD",
+                "status": "posted",
+                "origin": "manual",
+                "notes": "",
+                "ownership_id": None,
+                "quick_entry_kind": "investment",
+                "investment_direction": "inflow",
+                "entries": [
+                    {
+                        "id": 92,
+                        "account_id": 70,
+                        "side": "credit",
+                        "amount": "1.00",
+                        "currency": "EUR",
+                        "flow_family": "expense",
+                        "category_key": "financial_investments",
+                        "subcategory_key": "stocks_etf",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                    {
+                        "id": 93,
+                        "account_id": 72,
+                        "side": "debit",
+                        "amount": "1.16",
+                        "currency": "USD",
+                        "flow_family": "expense",
+                        "category_key": "financial_investments",
+                        "subcategory_key": "stocks_etf",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                ],
+            }
+        )
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["counts"]["accounting_transactions"], 2)
+
 
 class CoreApiTests(APITestCase):
     def setUp(self):
