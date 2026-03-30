@@ -11,6 +11,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from accounts.services import get_or_create_user_settings, update_user_settings
 from accounting.models import LedgerAccount, LedgerTransaction
 from accounting.serializers import LedgerAccountSerializer, LedgerTransactionSerializer
+from accounting.services_ledger import get_or_create_system_account
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 from memberships.models import FamilyMember, Ownership, OwnershipLink
@@ -703,21 +704,60 @@ def _import_ledger_transactions(
     liability_id_map: dict[int, int],
 ) -> int:
     for transaction_row in sorted(transactions, key=lambda row: int(row.get("id", 0))):
-        serializer = LedgerTransactionSerializer(
-            data=_build_transaction_payload(
-                transaction_row=transaction_row,
-                account_id_map=account_id_map,
-                ownership_id_map=ownership_id_map,
-                annual_income_id_map=annual_income_id_map,
-                annual_expense_id_map=annual_expense_id_map,
-                asset_id_map=asset_id_map,
-                liability_id_map=liability_id_map,
-            ),
-            context={"request": context.request},
+        payload = _build_transaction_payload(
+            transaction_row=transaction_row,
+            account_id_map=account_id_map,
+            ownership_id_map=ownership_id_map,
+            annual_income_id_map=annual_income_id_map,
+            annual_expense_id_map=annual_expense_id_map,
+            asset_id_map=asset_id_map,
+            liability_id_map=liability_id_map,
         )
+        _ensure_minimum_transaction_entries(payload=payload, user=context.user)
+        serializer = LedgerTransactionSerializer(data=payload, context={"request": context.request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
     return len(transactions)
+
+
+def _ensure_minimum_transaction_entries(*, payload: dict[str, Any], user: Any) -> None:
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return
+    if len(entries) == 0:
+        raise serializers.ValidationError(
+            {"entries": "La transaccion no contiene apuntes importables."}
+        )
+    if len(entries) >= 2:
+        return
+
+    entry = entries[0]
+    side = str(entry.get("side", "debit")).strip().lower()
+    amount = str(entry.get("amount", "0"))
+    currency = str(entry.get("currency", "EUR")).strip().upper()
+    counter_side = "credit" if side == "debit" else "debit"
+    contra_account = get_or_create_system_account(
+        user_id=user.id,
+        account_type=LedgerAccount.AccountType.EQUITY,
+        currency=currency,
+        name="Ajuste importacion portable",
+    )
+    entries.append(
+        {
+            "account_id": contra_account.id,
+            "side": counter_side,
+            "amount": amount,
+            "currency": currency,
+            "flow_family": "",
+            "category_key": "",
+            "subcategory_key": "",
+            "annual_income_entry_id": None,
+            "annual_expense_entry_id": None,
+            "asset_id": None,
+            "liability_id": None,
+            "notes": "Contraapunte generado automaticamente durante importacion portable.",
+        }
+    )
 
 
 def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) -> dict[str, Any]:
