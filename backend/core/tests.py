@@ -14,7 +14,15 @@ from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from .models import FxRate, InflationIndex, MarketDataSyncState
-from net_worth.models import Asset, Liability
+from net_worth.models import (
+    Asset,
+    AssetValuation,
+    InvestmentAssetEvent,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+)
 from .services import (
     _get_inflation_index,
     _normalize_month_start,
@@ -651,6 +659,110 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(FamilyMember.objects.filter(user=self.user).count(), 1)
         self.assertEqual(OwnershipLink.objects.filter(user=self.user).count(), 1)
         self.assertEqual(UserSettings.objects.get(user=self.user).base_currency, "USD")
+
+    def test_portable_import_appends_net_worth_events_and_valuations(self):
+        bundle = self._build_bundle()
+        bundle["data"]["assets"][0]["estimated_average_balance_for_interest"] = "1200.00"
+        bundle["data"]["assets"].append(
+            {
+                "id": 21,
+                "name": "Fondo indexado",
+                "category": "investments",
+                "subcategory": "funds",
+                "tracking_mode": "manual",
+                "accounting_account_id": None,
+                "currency": "EUR",
+                "start_date": "2026-01-01",
+                "investment_contribution_mode": "periodic_contribution",
+                "investment_contribution_frequency": "monthly",
+                "investment_contribution_currency": "EUR",
+                "monthly_contribution_amount": "250.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-01",
+                        "end_date": None,
+                        "amount": "250.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    }
+                ],
+                "amount": "1000.00",
+                "is_active": True,
+                "notes": "",
+            }
+        )
+        bundle["data"]["asset_valuations"] = [
+            {
+                "id": 1,
+                "asset_ref": 21,
+                "valuation_date": "2026-03-01",
+                "value": "125000.00",
+                "source": "manual_checkpoint",
+                "note": "Checkpoint activo",
+            }
+        ]
+        bundle["data"]["investment_events"] = [
+            {
+                "id": 5,
+                "asset_ref": 21,
+                "event_date": "2026-02-10",
+                "event_type": "contribution",
+                "amount": "250.00",
+                "is_reinvested": True,
+                "note": "",
+            }
+        ]
+        bundle["data"]["liquidity_events"] = [
+            {
+                "id": 2,
+                "asset_ref": 20,
+                "event_date": "2026-02-01",
+                "event_type": "inflow",
+                "amount": "500.00",
+                "note": "Aporte liquidez",
+            }
+        ]
+        bundle["data"]["liabilities"][0]["payment_start_date"] = "2026-02-01"
+        bundle["data"]["liability_events"] = [
+            {
+                "id": 3,
+                "liability_ref": 30,
+                "event_date": "2026-03-01",
+                "event_type": "payment",
+                "amount": "600.00",
+                "note": "Pago extraordinario",
+            }
+        ]
+        bundle["data"]["liability_valuations"] = [
+            {
+                "id": 4,
+                "liability_ref": 30,
+                "valuation_date": "2026-03-01",
+                "value": "79000.00",
+                "source": "manual_checkpoint",
+                "note": "Checkpoint pasivo",
+            }
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["counts"]["asset_valuations"], 1)
+        self.assertEqual(response.data["counts"]["investment_events"], 1)
+        self.assertEqual(response.data["counts"]["liquidity_events"], 1)
+        self.assertEqual(response.data["counts"]["liability_events"], 1)
+        self.assertEqual(response.data["counts"]["liability_valuations"], 1)
+
+        imported_investment = Asset.objects.get(user=self.user, name="Fondo indexado")
+        self.assertEqual(imported_investment.contribution_intervals.count(), 1)
+        self.assertEqual(AssetValuation.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(InvestmentAssetEvent.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LiquidityAssetEvent.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LiabilityEvent.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LiabilityValuation.objects.filter(user=self.user).count(), 1)
 
     def test_portable_import_rejects_clearly_invalid_payload_with_validation_error(self):
         response = self.client.post(

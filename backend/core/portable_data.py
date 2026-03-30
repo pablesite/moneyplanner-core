@@ -19,7 +19,15 @@ from memberships.models import FamilyMember, Ownership, OwnershipLink
 from memberships.serializers import FamilyMemberSerializer, OwnershipWriteSerializer
 from memberships.services import sync_ownership_link
 from net_worth.models import Asset, Liability
-from net_worth.serializers import AssetSerializer, LiabilitySerializer
+from net_worth.serializers import (
+    AssetSerializer,
+    AssetValuationSerializer,
+    InvestmentAssetEventSerializer,
+    LiabilityEventSerializer,
+    LiabilitySerializer,
+    LiabilityValuationSerializer,
+    LiquidityAssetEventSerializer,
+)
 from net_worth.services import get_base_currency_for_user, get_financed_asset_queryset_for_user
 
 
@@ -101,6 +109,19 @@ class PortableImportRequestSerializer(serializers.Serializer):
         required_collections = ("annual_income", "annual_expense", "assets", "liabilities")
         for key in required_collections:
             if not isinstance(data.get(key), list):
+                raise serializers.ValidationError(
+                    f"El archivo no contiene la coleccion esperada: {key}."
+                )
+
+        optional_collections = (
+            "asset_valuations",
+            "investment_events",
+            "liquidity_events",
+            "liability_events",
+            "liability_valuations",
+        )
+        for key in optional_collections:
+            if key in data and not isinstance(data.get(key), list):
                 raise serializers.ValidationError(
                     f"El archivo no contiene la coleccion esperada: {key}."
                 )
@@ -195,6 +216,7 @@ def _build_asset_payload(asset: dict[str, Any]) -> dict[str, Any]:
         "monthly_contribution_amount": normalize_optional_text(
             asset.get("monthly_contribution_amount")
         ),
+        "contribution_intervals": list(asset.get("contribution_intervals", [])),
         "market_value_override": normalize_optional_text(asset.get("market_value_override")),
         "market_value_override_date": normalize_optional_text(
             asset.get("market_value_override_date")
@@ -202,7 +224,19 @@ def _build_asset_payload(asset: dict[str, Any]) -> dict[str, Any]:
         "initial_purchase_value": normalize_optional_text(asset.get("initial_purchase_value")),
         "amortization_method": normalize_optional_text(asset.get("amortization_method")) or "none",
         "amortization_term_years": asset.get("amortization_term_years"),
+        "valuation_model": normalize_optional_text(asset.get("valuation_model")) or "manual",
+        "land_value_share_percent": normalize_optional_text(asset.get("land_value_share_percent")),
+        "land_annual_appreciation_percent": normalize_optional_text(
+            asset.get("land_annual_appreciation_percent")
+        ),
+        "building_annual_depreciation_percent": normalize_optional_text(
+            asset.get("building_annual_depreciation_percent")
+        ),
+        "improvements": list(asset.get("improvements", [])),
         "annual_interest_tae": normalize_imported_asset_tae(asset),
+        "estimated_average_balance_for_interest": normalize_optional_text(
+            asset.get("estimated_average_balance_for_interest")
+        ),
         "deposit_term_months": asset.get("deposit_term_months"),
         "amount": str(asset.get("amount", "0")),
         "is_active": asset.get("is_active", True),
@@ -230,6 +264,9 @@ def _build_liability_payload(
         "rate_type": normalize_optional_text(liability.get("rate_type")) or "fixed",
         "payment_frequency": normalize_optional_text(liability.get("payment_frequency"))
         or "monthly",
+        "expense_subcategory_override": normalize_optional_text(
+            liability.get("expense_subcategory_override")
+        ),
         "amortization_system": normalize_optional_text(liability.get("amortization_system")),
         "annual_interest_tae": normalize_imported_liability_tae(liability),
         "principal_amount": normalize_optional_text(liability.get("principal_amount")),
@@ -243,6 +280,9 @@ def _build_liability_payload(
         "linked_products_monthly_cost": normalize_optional_text(
             liability.get("linked_products_monthly_cost")
         ),
+        "cancellation_forecast_enabled": liability.get("cancellation_forecast_enabled", False),
+        "cancellation_date": normalize_optional_text(liability.get("cancellation_date")),
+        "cancellation_fee_amount": normalize_optional_text(liability.get("cancellation_fee_amount")),
         "amount": str(liability.get("amount", "0")),
         "is_active": liability.get("is_active", True),
         "notes": liability.get("notes", "") or "",
@@ -450,6 +490,177 @@ def _import_liabilities(
         created = serializer.save()
         liability_id_map[int(liability.get("id", 0))] = created.id
     return liability_id_map
+
+
+def _import_asset_valuations(
+    *,
+    context: PortableImportContext,
+    valuations: list[dict[str, Any]],
+    asset_id_map: dict[int, int],
+) -> int:
+    if not valuations:
+        return 0
+
+    asset_queryset = Asset.objects.filter(user=context.user)
+    imported = 0
+    for row in sorted(valuations, key=lambda entry: int(entry.get("id", 0))):
+        old_asset_id = row.get("asset_ref")
+        if old_asset_id in (None, ""):
+            continue
+        new_asset_id = asset_id_map.get(int(old_asset_id))
+        if new_asset_id is None:
+            continue
+        serializer = AssetValuationSerializer(
+            data={
+                "asset_id": new_asset_id,
+                "valuation_date": row.get("valuation_date"),
+                "value": str(row.get("value", "0")),
+                "source": str(row.get("source", "manual_checkpoint")),
+                "note": row.get("note", "") or "",
+            },
+            context={"request": context.request, "asset_queryset": asset_queryset},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        imported += 1
+    return imported
+
+
+def _import_investment_events(
+    *,
+    context: PortableImportContext,
+    events: list[dict[str, Any]],
+    asset_id_map: dict[int, int],
+) -> int:
+    if not events:
+        return 0
+
+    investment_queryset = Asset.objects.filter(user=context.user, category=Asset.Category.INVESTMENTS)
+    imported = 0
+    for row in sorted(events, key=lambda entry: int(entry.get("id", 0))):
+        old_asset_id = row.get("asset_ref")
+        if old_asset_id in (None, ""):
+            continue
+        new_asset_id = asset_id_map.get(int(old_asset_id))
+        if new_asset_id is None:
+            continue
+        serializer = InvestmentAssetEventSerializer(
+            data={
+                "asset_id": new_asset_id,
+                "event_date": row.get("event_date"),
+                "event_type": str(row.get("event_type", "")),
+                "amount": str(row.get("amount", "0")),
+                "is_reinvested": row.get("is_reinvested", True),
+                "note": row.get("note", "") or "",
+            },
+            context={"request": context.request, "investment_asset_queryset": investment_queryset},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        imported += 1
+    return imported
+
+
+def _import_liquidity_events(
+    *,
+    context: PortableImportContext,
+    events: list[dict[str, Any]],
+    asset_id_map: dict[int, int],
+) -> int:
+    if not events:
+        return 0
+
+    liquidity_queryset = Asset.objects.filter(user=context.user, category=Asset.Category.CASH)
+    imported = 0
+    for row in sorted(events, key=lambda entry: int(entry.get("id", 0))):
+        old_asset_id = row.get("asset_ref")
+        if old_asset_id in (None, ""):
+            continue
+        new_asset_id = asset_id_map.get(int(old_asset_id))
+        if new_asset_id is None:
+            continue
+        serializer = LiquidityAssetEventSerializer(
+            data={
+                "asset_id": new_asset_id,
+                "event_date": row.get("event_date"),
+                "event_type": str(row.get("event_type", "")),
+                "amount": str(row.get("amount", "0")),
+                "note": row.get("note", "") or "",
+            },
+            context={"request": context.request, "liquidity_event_asset_queryset": liquidity_queryset},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        imported += 1
+    return imported
+
+
+def _import_liability_events(
+    *,
+    context: PortableImportContext,
+    events: list[dict[str, Any]],
+    liability_id_map: dict[int, int],
+) -> int:
+    if not events:
+        return 0
+
+    liability_queryset = Liability.objects.filter(user=context.user)
+    imported = 0
+    for row in sorted(events, key=lambda entry: int(entry.get("id", 0))):
+        old_liability_id = row.get("liability_ref")
+        if old_liability_id in (None, ""):
+            continue
+        new_liability_id = liability_id_map.get(int(old_liability_id))
+        if new_liability_id is None:
+            continue
+        serializer = LiabilityEventSerializer(
+            data={
+                "liability_id": new_liability_id,
+                "event_date": row.get("event_date"),
+                "event_type": str(row.get("event_type", "")),
+                "amount": str(row.get("amount", "0")),
+                "note": row.get("note", "") or "",
+            },
+            context={"request": context.request, "liability_event_queryset": liability_queryset},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        imported += 1
+    return imported
+
+
+def _import_liability_valuations(
+    *,
+    context: PortableImportContext,
+    valuations: list[dict[str, Any]],
+    liability_id_map: dict[int, int],
+) -> int:
+    if not valuations:
+        return 0
+
+    liability_queryset = Liability.objects.filter(user=context.user)
+    imported = 0
+    for row in sorted(valuations, key=lambda entry: int(entry.get("id", 0))):
+        old_liability_id = row.get("liability_ref")
+        if old_liability_id in (None, ""):
+            continue
+        new_liability_id = liability_id_map.get(int(old_liability_id))
+        if new_liability_id is None:
+            continue
+        serializer = LiabilityValuationSerializer(
+            data={
+                "liability_id": new_liability_id,
+                "valuation_date": row.get("valuation_date"),
+                "value": str(row.get("value", "0")),
+                "source": str(row.get("source", "manual_checkpoint")),
+                "note": row.get("note", "") or "",
+            },
+            context={"request": context.request, "liability_queryset": liability_queryset},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        imported += 1
+    return imported
 
 
 def _import_annual_income(
@@ -835,6 +1046,11 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
     premium = bundle.get("premium") if isinstance(bundle.get("premium"), dict) else None
     data = bundle["data"]
     accounting = data.get("accounting") if isinstance(data.get("accounting"), dict) else {}
+    asset_valuations = list(data.get("asset_valuations", []))
+    investment_events = list(data.get("investment_events", []))
+    liquidity_events = list(data.get("liquidity_events", []))
+    liability_events = list(data.get("liability_events", []))
+    liability_valuations = list(data.get("liability_valuations", []))
     accounting_accounts = list(accounting.get("accounts", []))
     accounting_transactions = list(accounting.get("transactions", []))
 
@@ -850,6 +1066,31 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             context=context,
             liabilities=list(data["liabilities"]),
             asset_id_map=asset_id_map,
+        )
+        asset_valuation_count = _import_asset_valuations(
+            context=context,
+            valuations=asset_valuations,
+            asset_id_map=asset_id_map,
+        )
+        investment_event_count = _import_investment_events(
+            context=context,
+            events=investment_events,
+            asset_id_map=asset_id_map,
+        )
+        liquidity_event_count = _import_liquidity_events(
+            context=context,
+            events=liquidity_events,
+            asset_id_map=asset_id_map,
+        )
+        liability_event_count = _import_liability_events(
+            context=context,
+            events=liability_events,
+            liability_id_map=liability_id_map,
+        )
+        liability_valuation_count = _import_liability_valuations(
+            context=context,
+            valuations=liability_valuations,
+            liability_id_map=liability_id_map,
         )
         income_count, annual_income_id_map = _import_annual_income(
             context=context, annual_income=list(data["annual_income"])
@@ -905,6 +1146,11 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             "annual_expense": expense_count,
             "assets": len(data["assets"]),
             "liabilities": len(data["liabilities"]),
+            "asset_valuations": asset_valuation_count,
+            "investment_events": investment_event_count,
+            "liquidity_events": liquidity_event_count,
+            "liability_events": liability_event_count,
+            "liability_valuations": liability_valuation_count,
             "accounting_accounts": len(accounting_accounts),
             "accounting_transactions": transaction_count,
             "family_members": len(premium["family_members"]) if premium is not None else 0,
