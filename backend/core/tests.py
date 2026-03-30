@@ -22,6 +22,7 @@ from net_worth.models import (
     LiabilityEvent,
     LiabilityValuation,
     LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
 )
 from .services import (
     _get_inflation_index,
@@ -722,6 +723,17 @@ class PortableDataImportAPITests(APITestCase):
                 "note": "Aporte liquidez",
             }
         ]
+        bundle["data"]["liquidity_checkins"] = [
+            {
+                "id": 9,
+                "asset_ref": 20,
+                "fiscal_year": 2026,
+                "month": 3,
+                "status": "confirmed",
+                "closing_balance_real": "6891.16",
+                "note": "Saldo real cierre mes",
+            }
+        ]
         bundle["data"]["liabilities"][0]["payment_start_date"] = "2026-02-01"
         bundle["data"]["liability_events"] = [
             {
@@ -753,6 +765,7 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.data["counts"]["asset_valuations"], 1)
         self.assertEqual(response.data["counts"]["investment_events"], 1)
         self.assertEqual(response.data["counts"]["liquidity_events"], 1)
+        self.assertEqual(response.data["counts"]["liquidity_checkins"], 1)
         self.assertEqual(response.data["counts"]["liability_events"], 1)
         self.assertEqual(response.data["counts"]["liability_valuations"], 1)
 
@@ -761,6 +774,7 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(AssetValuation.objects.filter(user=self.user).count(), 1)
         self.assertEqual(InvestmentAssetEvent.objects.filter(user=self.user).count(), 1)
         self.assertEqual(LiquidityAssetEvent.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(LiquidityMonthlyCheckin.objects.filter(user=self.user).count(), 1)
         self.assertEqual(LiabilityEvent.objects.filter(user=self.user).count(), 1)
         self.assertEqual(LiabilityValuation.objects.filter(user=self.user).count(), 1)
 
@@ -1140,6 +1154,48 @@ class PortableDataImportAPITests(APITestCase):
             ),
             2,
         )
+
+    def test_portable_import_ignores_legacy_improvement_ids(self):
+        bundle = self._build_bundle()
+        bundle["data"]["assets"] = [
+            {
+                "id": 20,
+                "name": "Casa reformada",
+                "category": "real_estate",
+                "subcategory": "primary_home",
+                "tracking_mode": "manual",
+                "accounting_account_id": None,
+                "currency": "EUR",
+                "start_date": "2026-01-01",
+                "amount": "100000.00",
+                "valuation_model": "real_estate_auto",
+                "land_value_share_percent": "30.00",
+                "land_annual_appreciation_percent": "4.000",
+                "building_annual_depreciation_percent": "1.00",
+                "improvements": [
+                    {
+                        "id": 2,
+                        "name": "Reforma cocina",
+                        "reform_date": "2026-06-01",
+                        "amount": "15000.00",
+                        "amortization_method": "straight_line",
+                        "amortization_term_years": 15,
+                    }
+                ],
+                "is_active": True,
+                "notes": "",
+            }
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        asset = Asset.objects.get(user=self.user, name="Casa reformada")
+        self.assertEqual(asset.improvements.count(), 1)
+        self.assertEqual(asset.improvements.first().name, "Reforma cocina")
 
     def test_portable_import_autocompletes_single_entry_transaction(self):
         bundle = self._build_bundle()

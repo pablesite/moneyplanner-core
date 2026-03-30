@@ -219,6 +219,16 @@ export type PortableLiquidityEventRecord = {
   note?: string;
 };
 
+export type PortableLiquidityCheckinRecord = {
+  id?: number;
+  asset_ref: number;
+  fiscal_year: number;
+  month: number;
+  status?: 'confirmed' | 'estimated';
+  closing_balance_real: string;
+  note?: string;
+};
+
 export type PortableLiabilityEventRecord = {
   id?: number;
   liability_ref: number;
@@ -280,6 +290,7 @@ export type PortableDataBundle = {
     asset_valuations?: PortableAssetValuationRecord[];
     investment_events?: PortableInvestmentEventRecord[];
     liquidity_events?: PortableLiquidityEventRecord[];
+    liquidity_checkins?: PortableLiquidityCheckinRecord[];
     liability_events?: PortableLiabilityEventRecord[];
     liability_valuations?: PortableLiabilityValuationRecord[];
     accounting: {
@@ -789,6 +800,7 @@ function assertPortableDataCollections(
   asset_valuations: PortableDataBundle['data']['asset_valuations'];
   investment_events: PortableDataBundle['data']['investment_events'];
   liquidity_events: PortableDataBundle['data']['liquidity_events'];
+  liquidity_checkins: PortableDataBundle['data']['liquidity_checkins'];
   liability_events: PortableDataBundle['data']['liability_events'];
   liability_valuations: PortableDataBundle['data']['liability_valuations'];
   accounting: PortableDataBundle['data']['accounting'] | undefined;
@@ -802,6 +814,7 @@ function assertPortableDataCollections(
     asset_valuations,
     investment_events,
     liquidity_events,
+    liquidity_checkins,
     liability_events,
     liability_valuations,
     accounting,
@@ -823,6 +836,7 @@ function assertPortableDataCollections(
     asset_valuations,
     investment_events,
     liquidity_events,
+    liquidity_checkins,
     liability_events,
     liability_valuations,
     accounting,
@@ -878,6 +892,7 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
     asset_valuations,
     investment_events,
     liquidity_events,
+    liquidity_checkins,
     liability_events,
     liability_valuations,
     accounting,
@@ -904,6 +919,7 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
       asset_valuations: Array.isArray(asset_valuations) ? asset_valuations : [],
       investment_events: Array.isArray(investment_events) ? investment_events : [],
       liquidity_events: Array.isArray(liquidity_events) ? liquidity_events : [],
+      liquidity_checkins: Array.isArray(liquidity_checkins) ? liquidity_checkins : [],
       liability_events: Array.isArray(liability_events) ? liability_events : [],
       liability_valuations: Array.isArray(liability_valuations) ? liability_valuations : [],
       accounting: parsePortableAccounting(accounting),
