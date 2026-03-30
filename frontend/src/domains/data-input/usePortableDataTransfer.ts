@@ -12,6 +12,7 @@ import {
   type PortableAssetValuationRecord,
   type PortableInvestmentEventRecord,
   type PortableLiquidityEventRecord,
+  type PortableLiquidityCheckinRecord,
   type PortableLiabilityEventRecord,
   type PortableLiabilityValuationRecord,
   type PortableLedgerAccountRecord,
@@ -132,6 +133,7 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
         assetValuationsRes,
         investmentEventsRes,
         liquidityEventsRes,
+        liquidityCheckinsRes,
         liabilityEventsRes,
         liabilityValuationsRes,
         accountsRes,
@@ -147,6 +149,9 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
         dataInputPageApi.get<PortableAssetValuationRecord[]>('/api/net-worth/asset-valuations/'),
         dataInputPageApi.get<PortableInvestmentEventRecord[]>('/api/net-worth/investment-events/'),
         dataInputPageApi.get<PortableLiquidityEventRecord[]>('/api/net-worth/liquidity-events/'),
+        dataInputPageApi.get<PortableLiquidityCheckinRecord[]>(
+          '/api/net-worth/liquidity-checkins/',
+        ),
         dataInputPageApi.get<PortableLiabilityEventRecord[]>('/api/net-worth/liability-events/'),
         dataInputPageApi.get<PortableLiabilityValuationRecord[]>(
           '/api/net-worth/liability-valuations/',
@@ -172,6 +177,7 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
           asset_valuations: (assetValuationsRes.data ?? []).slice(),
           investment_events: (investmentEventsRes.data ?? []).slice(),
           liquidity_events: (liquidityEventsRes.data ?? []).slice(),
+          liquidity_checkins: (liquidityCheckinsRes.data ?? []).slice(),
           liability_events: (liabilityEventsRes.data ?? []).slice(),
           liability_valuations: (liabilityValuationsRes.data ?? []).slice(),
           accounting: {
