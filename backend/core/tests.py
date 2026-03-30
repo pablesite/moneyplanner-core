@@ -883,6 +883,152 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["counts"]["accounting_transactions"], 2)
 
+    def test_portable_import_clears_partial_entry_classification(self):
+        bundle = self._build_bundle()
+        bundle["data"]["accounting"]["transactions"] = [
+            {
+                "id": 84,
+                "booking_date": "2026-02-15",
+                "value_date": "2026-02-15",
+                "description": "Legacy partial classification",
+                "status": "posted",
+                "origin": "manual",
+                "notes": "",
+                "ownership_id": None,
+                "quick_entry_kind": "",
+                "investment_direction": "",
+                "entries": [
+                    {
+                        "id": 97,
+                        "account_id": 70,
+                        "side": "debit",
+                        "amount": "10.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "employee_salary",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                    {
+                        "id": 98,
+                        "account_id": 71,
+                        "side": "credit",
+                        "amount": "10.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                ],
+            }
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        transaction = LedgerTransaction.objects.get(
+            user=self.user, description="Legacy partial classification"
+        )
+        rows = list(transaction.entries.all().order_by("id"))
+        self.assertEqual(rows[0].flow_family, "")
+        self.assertEqual(rows[0].category_key, "")
+        self.assertEqual(rows[0].subcategory_key, "")
+
+    def test_portable_import_autobalances_legacy_multicurrency_entries(self):
+        bundle = self._build_bundle()
+        bundle["data"]["accounting"]["accounts"].append(
+            {
+                "id": 74,
+                "name": "Wallet ETH",
+                "account_type": "asset",
+                "currency": "ETH",
+                "origin": "user",
+                "asset_id": None,
+                "liability_id": None,
+                "is_active": True,
+                "notes": "",
+            }
+        )
+        bundle["data"]["accounting"]["transactions"] = [
+            {
+                "id": 85,
+                "booking_date": "2026-02-16",
+                "value_date": "2026-02-16",
+                "description": "Legacy unbalanced by currency",
+                "status": "posted",
+                "origin": "manual",
+                "notes": "",
+                "ownership_id": None,
+                "quick_entry_kind": "",
+                "investment_direction": "",
+                "entries": [
+                    {
+                        "id": 99,
+                        "account_id": 74,
+                        "side": "debit",
+                        "amount": "8.75000000",
+                        "currency": "ETH",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                    {
+                        "id": 100,
+                        "account_id": 71,
+                        "side": "credit",
+                        "amount": "15000.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                ],
+            }
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        transaction = LedgerTransaction.objects.get(
+            user=self.user, description="Legacy unbalanced by currency"
+        )
+        entries = list(transaction.entries.all())
+        self.assertEqual(len(entries), 4)
+        self.assertEqual(
+            sum(
+                1
+                for row in entries
+                if "balancear la transaccion por moneda"
+                in str(row.notes)
+            ),
+            2,
+        )
+
     def test_portable_import_autocompletes_single_entry_transaction(self):
         bundle = self._build_bundle()
         bundle["data"]["accounting"]["transactions"] = [
