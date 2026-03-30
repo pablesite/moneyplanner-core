@@ -38,6 +38,7 @@ class PositionDataCache:
     accounting_prefix_debits: dict[int, list[Decimal]] = field(default_factory=dict)
     accounting_prefix_credits: dict[int, list[Decimal]] = field(default_factory=dict)
     accounting_account_types: dict[int, str] = field(default_factory=dict)
+    asset_opening_booking_dates: dict[int, date] = field(default_factory=dict)
     liability_opening_booking_dates: dict[int, date] = field(default_factory=dict)
     periodic_investment_schedules: dict[tuple[int, date], list[tuple[date, Decimal]]] = field(
         default_factory=dict
@@ -122,6 +123,30 @@ def _build_position_data_cache(
             cache.accounting_prefix_dates.setdefault(account_id_int, []).append(booking_date)
             cache.accounting_prefix_debits.setdefault(account_id_int, []).append(debit_total)
             cache.accounting_prefix_credits.setdefault(account_id_int, []).append(credit_total)
+
+        for asset in assets:
+            if (
+                asset.tracking_mode != Asset.TrackingMode.ACCOUNTING
+                or asset.accounting_account_id is None
+            ):
+                continue
+            opening_note = build_net_worth_opening_balance_note(
+                position_kind="asset",
+                position_id=asset.id,
+            )
+            opening_booking_date = (
+                LedgerTransaction.objects.filter(
+                    status=LedgerTransaction.Status.POSTED,
+                    notes=opening_note,
+                    entries__account_id=asset.accounting_account_id,
+                )
+                .distinct()
+                .order_by("-booking_date", "-id")
+                .values_list("booking_date", flat=True)
+                .first()
+            )
+            if opening_booking_date is not None:
+                cache.asset_opening_booking_dates[asset.id] = opening_booking_date
 
         for liability in liabilities:
             if (
