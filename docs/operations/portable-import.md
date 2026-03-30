@@ -4,6 +4,8 @@
 1. La exportacion portable incluye `exported_app_version`.
 2. `Reemplazar datos` se ejecuta en Core como operacion atomica: o importa todo o no modifica nada.
 3. `append` y `replace` usan un unico endpoint backend.
+4. El bloque `data` incluye presupuesto, patrimonio y contabilidad (`accounting.accounts` + `accounting.transactions`).
+5. Los movimientos importados remapean referencias internas (activos, pasivos, ownership y lineas anuales) al entorno destino.
 
 ## Reglas de seguridad
 1. `replace` se bloquea si el archivo no incluye `exported_app_version`.

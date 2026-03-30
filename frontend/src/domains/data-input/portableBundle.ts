@@ -110,6 +110,48 @@ export type PortableSnapshotRecord = {
   created_at?: string;
 };
 
+export type PortableLedgerAccountRecord = {
+  id: number;
+  name: string;
+  account_type: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+  currency: string;
+  origin: 'user' | 'system';
+  asset_id?: number | null;
+  liability_id?: number | null;
+  is_active?: boolean;
+  notes?: string;
+};
+
+export type PortableLedgerEntryRecord = {
+  id?: number;
+  account_id: number;
+  side: 'debit' | 'credit';
+  amount: string;
+  currency: string;
+  flow_family?: 'income' | 'expense' | '';
+  category_key?: string;
+  subcategory_key?: string;
+  annual_income_entry_id?: number | null;
+  annual_expense_entry_id?: number | null;
+  asset_id?: number | null;
+  liability_id?: number | null;
+  notes?: string;
+};
+
+export type PortableLedgerTransactionRecord = {
+  id: number;
+  booking_date: string;
+  value_date: string;
+  description: string;
+  status?: 'draft' | 'posted';
+  origin?: 'manual' | 'import' | 'system';
+  notes?: string;
+  ownership_id?: number | null;
+  quick_entry_kind?: string;
+  investment_direction?: 'inflow' | 'outflow' | '';
+  entries: PortableLedgerEntryRecord[];
+};
+
 export type PortableSettingsRecord = {
   base_currency: string;
 };
@@ -154,6 +196,10 @@ export type PortableDataBundle = {
     assets: PortableAssetRecord[];
     liabilities: PortableLiabilityRecord[];
     snapshots?: PortableSnapshotRecord[];
+    accounting: {
+      accounts: PortableLedgerAccountRecord[];
+      transactions: PortableLedgerTransactionRecord[];
+    };
   };
   premium?: PortablePremiumData;
 };
@@ -277,11 +323,6 @@ export function buildImportPreviewMessageWithVersion(
   currentAppVersion?: string | null,
 ): string {
   const snapshots = bundle.data.snapshots ?? [];
-  const sortedDates = snapshots.map((s) => s.snapshot_date).sort();
-  const snapshotRange =
-    sortedDates.length > 0
-      ? `${sortedDates[0]} .. ${sortedDates[sortedDates.length - 1]}`
-      : 'sin snapshots';
   const hasPremium = Boolean(bundle.premium);
   const exportedVersion = normalizeOptionalText(bundle.exported_app_version);
   const compatibility = evaluateImportCompatibility(bundle, mode, currentAppVersion);
@@ -296,7 +337,9 @@ export function buildImportPreviewMessageWithVersion(
     `- Gastos: ${bundle.data.annual_expense.length}`,
     `- Activos: ${bundle.data.assets.length}`,
     `- Pasivos: ${bundle.data.liabilities.length}`,
-    `- Snapshots: ${snapshots.length} (${snapshotRange})`,
+    `- Cuentas contables: ${bundle.data.accounting.accounts.length}`,
+    `- Movimientos contables: ${bundle.data.accounting.transactions.length}`,
+    snapshots.length > 0 ? `- Snapshots legacy detectados: ${snapshots.length}` : null,
     `- Configuracion base_currency: ${bundle.settings?.base_currency ?? 'sin incluir'}`,
     hasPremium
       ? `- Miembros: ${bundle.premium?.family_members.length ?? 0} | Titularidades: ${bundle.premium?.ownerships.length ?? 0} | Enlaces: ${bundle.premium?.ownership_links.length ?? 0}`
@@ -306,8 +349,8 @@ export function buildImportPreviewMessageWithVersion(
     formatImportYearSummary(bundle.data.annual_expense, 'Gastos por ano'),
     '',
     mode === 'replace'
-      ? 'Se borraran primero los datos actuales de estos bloques (incluidos snapshots).'
-      : 'La importacion anade registros y actualiza settings/snapshots/relaciones importados.',
+      ? 'Se borraran primero los datos actuales de estos bloques.'
+      : 'La importacion anade registros y actualiza settings/relaciones importados.',
     compatibility === 'legacy_replace_blocked'
       ? 'Aviso: este archivo no incluye version exportada. El backend bloqueara `replace` por seguridad.'
       : compatibility === 'newer_than_app'
@@ -317,7 +360,7 @@ export function buildImportPreviewMessageWithVersion(
           : 'Compatibilidad preliminar: OK.',
     'Continuar?',
   ];
-  return lines.join('\n');
+  return lines.filter((line): line is string => Boolean(line)).join('\n');
 }
 
 export function buildPortableFilename(): string {
@@ -397,6 +440,98 @@ function toAssetContributionMode(raw: unknown): 'one_time' | 'periodic_contribut
 
 function toAssetContributionFrequency(raw: unknown): 'monthly' | 'weekly' {
   return raw == null ? 'monthly' : (String(raw) as 'monthly' | 'weekly');
+}
+
+function toLedgerAccountType(
+  raw: unknown,
+): 'asset' | 'liability' | 'equity' | 'income' | 'expense' {
+  const candidate = String(raw ?? '').trim();
+  if (
+    candidate === 'asset' ||
+    candidate === 'liability' ||
+    candidate === 'equity' ||
+    candidate === 'income' ||
+    candidate === 'expense'
+  ) {
+    return candidate;
+  }
+  return 'asset';
+}
+
+function toLedgerOrigin(raw: unknown): 'user' | 'system' {
+  return String(raw ?? '').trim() === 'system' ? 'system' : 'user';
+}
+
+function toLedgerSide(raw: unknown): 'debit' | 'credit' {
+  return String(raw ?? '').trim() === 'credit' ? 'credit' : 'debit';
+}
+
+function toFlowFamily(raw: unknown): 'income' | 'expense' | '' {
+  const candidate = String(raw ?? '').trim();
+  if (candidate === 'income' || candidate === 'expense') return candidate;
+  return '';
+}
+
+export function toPortableLedgerAccountRecord(
+  raw: Partial<PortableLedgerAccountRecord>,
+): PortableLedgerAccountRecord {
+  return {
+    id: Number(raw.id ?? 0),
+    name: String(raw.name ?? ''),
+    account_type: toLedgerAccountType(raw.account_type),
+    currency: toUpperText(raw.currency, 'EUR'),
+    origin: toLedgerOrigin(raw.origin),
+    asset_id: toNumberOrNull(raw.asset_id),
+    liability_id: toNumberOrNull(raw.liability_id),
+    is_active: raw.is_active ?? true,
+    notes: raw.notes == null ? '' : String(raw.notes),
+  };
+}
+
+export function toPortableLedgerEntryRecord(
+  raw: Partial<PortableLedgerEntryRecord>,
+): PortableLedgerEntryRecord {
+  return {
+    id: raw.id == null ? undefined : Number(raw.id),
+    account_id: Number(raw.account_id ?? 0),
+    side: toLedgerSide(raw.side),
+    amount: String(raw.amount ?? '0'),
+    currency: toUpperText(raw.currency, 'EUR'),
+    flow_family: toFlowFamily(raw.flow_family),
+    category_key: String(raw.category_key ?? ''),
+    subcategory_key: String(raw.subcategory_key ?? ''),
+    annual_income_entry_id: toNumberOrNull(raw.annual_income_entry_id),
+    annual_expense_entry_id: toNumberOrNull(raw.annual_expense_entry_id),
+    asset_id: toNumberOrNull(raw.asset_id),
+    liability_id: toNumberOrNull(raw.liability_id),
+    notes: raw.notes == null ? '' : String(raw.notes),
+  };
+}
+
+export function toPortableLedgerTransactionRecord(
+  raw: Partial<PortableLedgerTransactionRecord>,
+): PortableLedgerTransactionRecord {
+  return {
+    id: Number(raw.id ?? 0),
+    booking_date: String(raw.booking_date ?? ''),
+    value_date: String(raw.value_date ?? ''),
+    description: String(raw.description ?? ''),
+    status: raw.status === 'draft' ? 'draft' : 'posted',
+    origin:
+      raw.origin === 'import' || raw.origin === 'system'
+        ? raw.origin
+        : ('manual' as const),
+    notes: raw.notes == null ? '' : String(raw.notes),
+    ownership_id: toNumberOrNull(raw.ownership_id),
+    quick_entry_kind: raw.quick_entry_kind == null ? '' : String(raw.quick_entry_kind),
+    investment_direction:
+      raw.investment_direction === 'inflow' || raw.investment_direction === 'outflow'
+        ? raw.investment_direction
+        : '',
+    entries: Array.isArray(raw.entries)
+      ? raw.entries.map((row) => toPortableLedgerEntryRecord(row))
+      : [],
+  };
 }
 
 export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): PortableAssetRecord {
@@ -516,13 +651,17 @@ export function toPortableOwnershipLinkRecord(
   };
 }
 
-export function parsePortableDataBundle(raw: string): PortableDataBundle {
-  const parsed = JSON.parse(raw) as Partial<PortableDataBundle>;
-  if (parsed?.schema_version !== 1 || !parsed.data) {
-    throw new Error('Formato de archivo no compatible.');
-  }
-  const { annual_income, annual_expense, assets, liabilities, snapshots } =
-    parsed.data as PortableDataBundle['data'];
+function assertPortableDataCollections(
+  data: PortableDataBundle['data'],
+): {
+  annual_income: PortableDataBundle['data']['annual_income'];
+  annual_expense: PortableDataBundle['data']['annual_expense'];
+  assets: PortableDataBundle['data']['assets'];
+  liabilities: PortableDataBundle['data']['liabilities'];
+  snapshots: PortableDataBundle['data']['snapshots'];
+  accounting: PortableDataBundle['data']['accounting'] | undefined;
+} {
+  const { annual_income, annual_expense, assets, liabilities, snapshots, accounting } = data;
   if (
     !Array.isArray(annual_income) ||
     !Array.isArray(annual_expense) ||
@@ -531,23 +670,60 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
   ) {
     throw new Error('El archivo no contiene las colecciones esperadas.');
   }
-  const sourceApp = parsed.source_app === 'saas' ? 'saas' : 'core';
-  let premium: PortablePremiumData | undefined;
-  if (parsed.premium != null) {
-    const premiumRaw = parsed.premium as Partial<PortablePremiumData>;
-    if (
-      !Array.isArray(premiumRaw.family_members) ||
-      !Array.isArray(premiumRaw.ownerships) ||
-      !Array.isArray(premiumRaw.ownership_links)
-    ) {
-      throw new Error('El bloque premium del archivo no es valido.');
-    }
-    premium = {
-      family_members: premiumRaw.family_members.map((row) => toPortableFamilyMemberRecord(row)),
-      ownerships: premiumRaw.ownerships.map((row) => toPortableOwnershipRecord(row)),
-      ownership_links: premiumRaw.ownership_links.map((row) => toPortableOwnershipLinkRecord(row)),
-    };
+  return {
+    annual_income,
+    annual_expense,
+    assets,
+    liabilities,
+    snapshots,
+    accounting,
+  };
+}
+
+function parsePortablePremium(raw: unknown): PortablePremiumData | undefined {
+  if (raw == null) return undefined;
+  const premiumRaw = raw as Partial<PortablePremiumData>;
+  if (
+    !Array.isArray(premiumRaw.family_members) ||
+    !Array.isArray(premiumRaw.ownerships) ||
+    !Array.isArray(premiumRaw.ownership_links)
+  ) {
+    throw new Error('El bloque premium del archivo no es valido.');
   }
+  return {
+    family_members: premiumRaw.family_members.map((row) => toPortableFamilyMemberRecord(row)),
+    ownerships: premiumRaw.ownerships.map((row) => toPortableOwnershipRecord(row)),
+    ownership_links: premiumRaw.ownership_links.map((row) => toPortableOwnershipLinkRecord(row)),
+  };
+}
+
+function parsePortableAccounting(
+  raw: PortableDataBundle['data']['accounting'] | undefined,
+): PortableDataBundle['data']['accounting'] {
+  const accountingAccounts = raw?.accounts;
+  const accountingTransactions = raw?.transactions;
+  if (raw != null && (!Array.isArray(accountingAccounts) || !Array.isArray(accountingTransactions))) {
+    throw new Error('El bloque accounting del archivo no es valido.');
+  }
+  return {
+    accounts: Array.isArray(accountingAccounts)
+      ? accountingAccounts.map((row) => toPortableLedgerAccountRecord(row))
+      : [],
+    transactions: Array.isArray(accountingTransactions)
+      ? accountingTransactions.map((row) => toPortableLedgerTransactionRecord(row))
+      : [],
+  };
+}
+
+export function parsePortableDataBundle(raw: string): PortableDataBundle {
+  const parsed = JSON.parse(raw) as Partial<PortableDataBundle>;
+  if (parsed?.schema_version !== 1 || !parsed.data) {
+    throw new Error('Formato de archivo no compatible.');
+  }
+  const { annual_income, annual_expense, assets, liabilities, snapshots, accounting } =
+    assertPortableDataCollections(parsed.data as PortableDataBundle['data']);
+  const sourceApp = parsed.source_app === 'saas' ? 'saas' : 'core';
+  const premium = parsePortablePremium(parsed.premium);
   return {
     schema_version: 1,
     exported_at: String(parsed.exported_at ?? ''),
@@ -564,6 +740,7 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
       assets: assets.map((row) => toPortableAssetRecord(row)),
       liabilities: liabilities.map((row) => toPortableLiabilityRecord(row)),
       snapshots: Array.isArray(snapshots) ? snapshots : [],
+      accounting: parsePortableAccounting(accounting),
     },
     premium,
   };
