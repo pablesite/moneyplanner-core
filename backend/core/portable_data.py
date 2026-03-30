@@ -957,12 +957,44 @@ def _build_transaction_payload(
         "description": str(transaction_row.get("description", "")),
         "status": str(transaction_row.get("status", LedgerTransaction.Status.POSTED)),
         "origin": str(transaction_row.get("origin", LedgerTransaction.Origin.MANUAL)),
-        "notes": transaction_row.get("notes", "") or "",
+        "notes": _remap_opening_balance_note(
+            note=transaction_row.get("notes", "") or "",
+            asset_id_map=asset_id_map,
+            liability_id_map=liability_id_map,
+        ),
         "ownership_id": ownership_id,
         "quick_entry_kind": str(transaction_row.get("quick_entry_kind", "")),
         "investment_direction": str(transaction_row.get("investment_direction", "")),
         "entries": entries_payload,
     }
+
+
+def _remap_opening_balance_note(
+    *,
+    note: str,
+    asset_id_map: dict[int, int],
+    liability_id_map: dict[int, int],
+) -> str:
+    raw_note = str(note or "").strip()
+    parts = raw_note.split(":")
+    if len(parts) != 3:
+        return raw_note
+    prefix, position_kind, position_id_raw = parts
+    if prefix != "net_worth_opening_balance":
+        return raw_note
+    if position_kind not in {"asset", "liability"}:
+        return raw_note
+    if not position_id_raw.isdigit():
+        return raw_note
+
+    old_position_id = int(position_id_raw)
+    if position_kind == "asset":
+        new_position_id = asset_id_map.get(old_position_id)
+    else:
+        new_position_id = liability_id_map.get(old_position_id)
+    if new_position_id is None:
+        return raw_note
+    return f"{prefix}:{position_kind}:{new_position_id}"
 
 
 def _import_ledger_transactions(

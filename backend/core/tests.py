@@ -41,6 +41,7 @@ from .market_data import (
     sync_market_data,
     sync_market_history,
 )
+from net_worth.services_liabilities_core import get_effective_liability_amount
 
 
 class CoreServicesTests(TestCase):
@@ -1239,6 +1240,143 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         transaction = LedgerTransaction.objects.get(user=self.user, description="Legacy single entry row")
         self.assertEqual(transaction.entries.count(), 2)
+
+    def test_portable_import_remaps_opening_balance_note_for_accounting_liabilities(self):
+        bundle = self._build_bundle()
+        bundle["data"]["liabilities"][0]["tracking_mode"] = "accounting"
+        bundle["data"]["liabilities"][0]["accounting_account_id"] = 72
+        bundle["data"]["accounting"]["accounts"].extend(
+            [
+                {
+                    "id": 72,
+                    "name": "Tarjeta Kutxa",
+                    "account_type": "liability",
+                    "currency": "EUR",
+                    "origin": "user",
+                    "asset_id": None,
+                    "liability_id": 30,
+                    "is_active": True,
+                    "notes": "",
+                },
+                {
+                    "id": 73,
+                    "name": "Patrimonio neto test",
+                    "account_type": "equity",
+                    "currency": "EUR",
+                    "origin": "system",
+                    "asset_id": None,
+                    "liability_id": None,
+                    "is_active": True,
+                    "notes": "",
+                },
+            ]
+        )
+        bundle["data"]["accounting"]["transactions"] = [
+            {
+                "id": 1001,
+                "booking_date": "2025-12-31",
+                "value_date": "2025-12-31",
+                "description": "Movimiento previo",
+                "status": "posted",
+                "origin": "manual",
+                "notes": "",
+                "ownership_id": None,
+                "quick_entry_kind": "transfer",
+                "investment_direction": "",
+                "entries": [
+                    {
+                        "account_id": 73,
+                        "side": "debit",
+                        "amount": "500.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                    {
+                        "account_id": 72,
+                        "side": "credit",
+                        "amount": "500.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": 30,
+                        "notes": "",
+                    },
+                ],
+            },
+            {
+                "id": 1002,
+                "booking_date": "2026-01-01",
+                "value_date": "2026-01-01",
+                "description": "Saldo inicial Tarjeta",
+                "status": "posted",
+                "origin": "system",
+                "notes": "net_worth_opening_balance:liability:30",
+                "ownership_id": None,
+                "quick_entry_kind": "",
+                "investment_direction": "",
+                "entries": [
+                    {
+                        "account_id": 73,
+                        "side": "debit",
+                        "amount": "1000.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": None,
+                        "notes": "",
+                    },
+                    {
+                        "account_id": 72,
+                        "side": "credit",
+                        "amount": "1000.00",
+                        "currency": "EUR",
+                        "flow_family": "",
+                        "category_key": "",
+                        "subcategory_key": "",
+                        "annual_income_entry_id": None,
+                        "annual_expense_entry_id": None,
+                        "asset_id": None,
+                        "liability_id": 30,
+                        "notes": "",
+                    },
+                ],
+            },
+        ]
+
+        response = self.client.post(
+            "/api/core/portable-data/import/",
+            {"mode": "append", "bundle": bundle},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        imported_liability = Liability.objects.get(user=self.user, name="Hipoteca")
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user, description="Saldo inicial Tarjeta"
+        )
+        self.assertEqual(
+            opening_tx.notes,
+            f"net_worth_opening_balance:liability:{imported_liability.id}",
+        )
+        self.assertEqual(
+            get_effective_liability_amount(liability=imported_liability),
+            Decimal("1000.00"),
+        )
 
 
 class CoreApiTests(APITestCase):
