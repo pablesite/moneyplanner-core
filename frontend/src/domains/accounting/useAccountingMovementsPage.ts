@@ -129,12 +129,12 @@ export function useAccountingMovementsPage() {
 
   function formatMoney(value: number, currency = 'EUR'): string {
     const normalizedCurrency = currency.trim().toUpperCase();
-    const isBtc = normalizedCurrency === 'BTC';
+    const isCrypto = normalizedCurrency === 'BTC' || normalizedCurrency === 'ETH';
     return new Intl.NumberFormat('es-ES', {
       style: 'currency',
       currency: normalizedCurrency,
-      minimumFractionDigits: isBtc ? 6 : normalizedCurrency === 'EUR' ? 2 : undefined,
-      maximumFractionDigits: isBtc ? 8 : 2,
+      minimumFractionDigits: isCrypto ? 8 : normalizedCurrency === 'EUR' ? 2 : undefined,
+      maximumFractionDigits: isCrypto ? 8 : 2,
     }).format(value);
   }
 

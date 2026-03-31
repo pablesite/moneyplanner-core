@@ -194,7 +194,12 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           class="ui-accounting-balance-delta"
           :class="`ui-accounting-balance-delta-${amountTone(transaction)}`"
         >
-          {{ state.formatMoney(state.transactionMainAmount(transaction)) }}
+          {{
+            state.formatMoney(
+              state.transactionMainAmount(transaction),
+              transaction.entries[0]?.currency ?? 'EUR',
+            )
+          }}
         </span>
         <div class="ui-entry-actions">
           <button
