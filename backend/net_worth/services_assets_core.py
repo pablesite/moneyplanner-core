@@ -63,7 +63,7 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
 }
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
 OPENING_ASSET_NOTE_PREFIX = "net_worth_opening_balance:asset:"
-OPENING_BALANCE_DESCRIPTION_PREFIX = "Saldo inicial contable:"
+OPENING_BALANCE_DESCRIPTION_PREFIX = "Saldo inicial"
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     cast(str, Asset.Subcategory.DEPOSITS): "deposits_fixed_income",
     cast(str, Asset.Subcategory.FUNDS): "index_funds",
