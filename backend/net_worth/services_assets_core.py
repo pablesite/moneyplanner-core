@@ -604,6 +604,8 @@ def _get_effective_accounting_asset_amount_or_none(
     if accounting_account is None or accounting_account.currency != asset.currency:
         return None
 
+    should_apply_opening_anchor = asset.category == Asset.Category.CASH
+
     if position_cache is not None:
         dates = position_cache.accounting_prefix_dates.get(accounting_account.id, [])
         if not dates:
@@ -615,17 +617,18 @@ def _get_effective_accounting_asset_amount_or_none(
         credit_total = position_cache.accounting_prefix_credits[accounting_account.id][idx]
         raw_full = debit_total - credit_total
 
-        opening_date = position_cache.asset_opening_booking_dates.get(asset.id)
-        if opening_date is not None and as_of_date >= opening_date:
-            before_opening_idx = bisect_right(dates, opening_date - timedelta(days=1)) - 1
-            if before_opening_idx >= 0:
-                before_debit_total = position_cache.accounting_prefix_debits[accounting_account.id][
-                    before_opening_idx
-                ]
-                before_credit_total = position_cache.accounting_prefix_credits[accounting_account.id][
-                    before_opening_idx
-                ]
-                raw_full -= before_debit_total - before_credit_total
+        if should_apply_opening_anchor:
+            opening_date = position_cache.asset_opening_booking_dates.get(asset.id)
+            if opening_date is not None and as_of_date >= opening_date:
+                before_opening_idx = bisect_right(dates, opening_date - timedelta(days=1)) - 1
+                if before_opening_idx >= 0:
+                    before_debit_total = position_cache.accounting_prefix_debits[
+                        accounting_account.id
+                    ][before_opening_idx]
+                    before_credit_total = position_cache.accounting_prefix_credits[
+                        accounting_account.id
+                    ][before_opening_idx]
+                    raw_full -= before_debit_total - before_credit_total
         return raw_full
 
     if not has_account_entries(
@@ -635,36 +638,37 @@ def _get_effective_accounting_asset_amount_or_none(
     ):
         return None
 
-    opening_note = build_net_worth_opening_balance_note(
-        position_kind="asset",
-        position_id=asset.id,
-    )
-    opening_tx = (
-        LedgerTransaction.objects.filter(
-            user_id=asset.user_id,
-            status=LedgerTransaction.Status.POSTED,
-            notes=opening_note,
-            entries__account_id=accounting_account.id,
+    if should_apply_opening_anchor:
+        opening_note = build_net_worth_opening_balance_note(
+            position_kind="asset",
+            position_id=asset.id,
         )
-        .distinct()
-        .order_by("-booking_date", "-id")
-        .first()
-    )
-    if opening_tx is not None and as_of_date >= opening_tx.booking_date:
-        anchored_entries = get_account_entries(
-            account=accounting_account,
-            as_of_date=as_of_date,
-            status=cast(str, LedgerTransaction.Status.POSTED),
-        ).filter(transaction__booking_date__gte=opening_tx.booking_date)
-        if anchored_entries.exists():
-            totals = compute_entry_balance_totals(
-                anchored_entries,
-                account_id=accounting_account.id,
+        opening_tx = (
+            LedgerTransaction.objects.filter(
+                user_id=asset.user_id,
+                status=LedgerTransaction.Status.POSTED,
+                notes=opening_note,
+                entries__account_id=accounting_account.id,
             )
-            return compute_account_balance_from_totals(
-                account_type=accounting_account.account_type,
-                totals=totals,
-            )
+            .distinct()
+            .order_by("-booking_date", "-id")
+            .first()
+        )
+        if opening_tx is not None and as_of_date >= opening_tx.booking_date:
+            anchored_entries = get_account_entries(
+                account=accounting_account,
+                as_of_date=as_of_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
+            ).filter(transaction__booking_date__gte=opening_tx.booking_date)
+            if anchored_entries.exists():
+                totals = compute_entry_balance_totals(
+                    anchored_entries,
+                    account_id=accounting_account.id,
+                )
+                return compute_account_balance_from_totals(
+                    account_type=accounting_account.account_type,
+                    totals=totals,
+                )
 
     return get_account_balance(
         account=accounting_account,

@@ -845,6 +845,178 @@ class NetWorthServicesTests(TestCase):
             Decimal("1250.00"),
         )
 
+    def test_get_effective_asset_amount_cash_anchors_to_opening_balance_when_present(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Kutxa Bank",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        expense = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Kutxa",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        historical_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 1),
+            value_date=date(2026, 2, 1),
+            description="Movimiento historico",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("2400.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=expense,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("2400.00"),
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial Kutxa",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=build_net_worth_opening_balance_note(
+                position_kind="asset", position_id=asset.id
+            ),
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("10000.00"),
+        )
+
+    def test_get_effective_asset_amount_investment_keeps_historical_balance(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cartera fondos",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        expense = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo global",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        historical_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 1),
+            value_date=date(2026, 2, 1),
+            description="Movimiento historico inversion",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("5000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=expense,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("5000.00"),
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial inversion",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=build_net_worth_opening_balance_note(
+                position_kind="asset", position_id=asset.id
+            ),
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("15000.00"),
+        )
+
     def test_get_effective_asset_amount_applies_ipc_growth_for_furnishings(self):
         InflationIndex.objects.create(
             region="ES",
