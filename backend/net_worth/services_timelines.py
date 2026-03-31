@@ -128,6 +128,7 @@ def _build_position_data_cache(
             if (
                 asset.tracking_mode != Asset.TrackingMode.ACCOUNTING
                 or asset.accounting_account_id is None
+                or asset.category != Asset.Category.CASH
             ):
                 continue
             opening_note = build_net_worth_opening_balance_note(
