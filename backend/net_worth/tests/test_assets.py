@@ -1025,6 +1025,92 @@ class NetWorthServicesTests(TestCase):
             Decimal("10000.00"),
         )
 
+    def test_get_effective_asset_amount_cash_anchors_with_system_opening_description_without_note(
+        self,
+    ):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Deposito MyInvestor",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        expense = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Deposito 1 mes",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        historical_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 1),
+            value_date=date(2026, 2, 1),
+            description="Movimiento historico deposito",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("16533.40"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=historical_tx,
+            account=expense,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("16533.40"),
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial contable: Deposito 1 mes",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes="",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("6533.40"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("6533.40"),
+            currency="EUR",
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("6533.40"),
+        )
+
     def test_get_effective_asset_amount_investment_keeps_historical_balance(self):
         account = LedgerAccount.objects.create(
             user=self.user,

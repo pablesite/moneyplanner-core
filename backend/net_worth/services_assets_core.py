@@ -63,6 +63,7 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
 }
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
 OPENING_ASSET_NOTE_PREFIX = "net_worth_opening_balance:asset:"
+OPENING_BALANCE_DESCRIPTION_PREFIX = "Saldo inicial contable:"
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     cast(str, Asset.Subcategory.DEPOSITS): "deposits_fixed_income",
     cast(str, Asset.Subcategory.FUNDS): "index_funds",
@@ -691,6 +692,10 @@ def _get_latest_opening_balance_tx_for_accounting_asset(
             origin=LedgerTransaction.Origin.SYSTEM,
             notes__startswith=OPENING_ASSET_NOTE_PREFIX,
             entries__asset_id=asset_id,
+        )
+        | Q(
+            origin=LedgerTransaction.Origin.SYSTEM,
+            description__startswith=OPENING_BALANCE_DESCRIPTION_PREFIX,
         )
     )
     return queryset.distinct().order_by("-booking_date", "-id").first()
