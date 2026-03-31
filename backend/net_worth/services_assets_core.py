@@ -682,13 +682,26 @@ def _get_latest_opening_balance_tx_for_accounting_asset(
         position_kind="asset",
         position_id=asset_id,
     )
+    exact_match = (
+        LedgerTransaction.objects.filter(
+            user_id=user_id,
+            status=LedgerTransaction.Status.POSTED,
+            notes=opening_note,
+            entries__account_id=account_id,
+        )
+        .distinct()
+        .order_by("-booking_date", "-id")
+        .first()
+    )
+    if exact_match is not None:
+        return exact_match
+
     queryset = LedgerTransaction.objects.filter(
         user_id=user_id,
         status=LedgerTransaction.Status.POSTED,
         entries__account_id=account_id,
     ).filter(
-        Q(notes=opening_note)
-        | Q(
+        Q(
             origin=LedgerTransaction.Origin.SYSTEM,
             notes__startswith=OPENING_ASSET_NOTE_PREFIX,
             entries__asset_id=asset_id,
@@ -698,7 +711,48 @@ def _get_latest_opening_balance_tx_for_accounting_asset(
             description__startswith=OPENING_BALANCE_DESCRIPTION_PREFIX,
         )
     )
-    return queryset.distinct().order_by("-booking_date", "-id").first()
+    for tx in queryset.distinct().order_by("-booking_date", "-id"):
+        if _is_opening_balance_candidate_for_accounting_asset(
+            transaction=tx,
+            asset_id=asset_id,
+            account_id=account_id,
+        ):
+            return tx
+    return None
+
+
+def _is_opening_balance_candidate_for_accounting_asset(
+    *,
+    transaction,
+    asset_id: int,
+    account_id: int,
+) -> bool:
+    from accounting.models import LedgerAccount
+
+    entries = list(transaction.entries.select_related("account").all())
+    if len(entries) != 2:
+        return False
+
+    position_entries = [entry for entry in entries if entry.account_id == account_id]
+    if len(position_entries) != 1:
+        return False
+
+    counterpart_entries = [entry for entry in entries if entry.account_id != account_id]
+    if len(counterpart_entries) != 1:
+        return False
+
+    position_entry = position_entries[0]
+    counterpart_entry = counterpart_entries[0]
+
+    if counterpart_entry.account.account_type != LedgerAccount.AccountType.EQUITY:
+        return False
+    if position_entry.amount != counterpart_entry.amount:
+        return False
+    if position_entry.side == counterpart_entry.side:
+        return False
+    if position_entry.asset_id not in (None, asset_id):
+        return False
+    return True
 
 
 def _cached_latest_valuation(position_cache, asset_id: int, as_of_date: date):

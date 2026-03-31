@@ -1195,6 +1195,96 @@ class NetWorthServicesTests(TestCase):
             Decimal("10000.00"),
         )
 
+    def test_get_effective_asset_amount_ignores_non_opening_system_saldo_inicial_candidates(self):
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta liquidez",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        expense = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Patrimonio",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta liquidez",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 18),
+            value_date=date(2026, 3, 18),
+            description="Saldo inicial contable: Cuenta liquidez",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=build_net_worth_opening_balance_note(
+                position_kind="asset", position_id=asset.id
+            ),
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+
+        # Candidate with legacy description but not a real opening shape
+        # (counterpart is expense, not equity) must be ignored.
+        wrong_candidate = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 28),
+            value_date=date(2026, 2, 28),
+            description="Saldo inicial ajuste manual",
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes="",
+        )
+        LedgerEntry.objects.create(
+            transaction=wrong_candidate,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=wrong_candidate,
+            account=expense,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("500.00"),
+            currency="EUR",
+        )
+
+        self.assertEqual(
+            get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 31)),
+            Decimal("10000.00"),
+        )
+
     def test_get_effective_asset_amount_investment_keeps_historical_balance(self):
         account = LedgerAccount.objects.create(
             user=self.user,
