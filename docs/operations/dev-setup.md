@@ -19,6 +19,19 @@ market datasets (`FX` and `IPC`) used by net worth calculations and the `/data` 
    - `docker compose ps -a`
    - `docker compose logs --tail 200 <service>`
 
+## Core DB Export/Import (cmder)
+1. Export full database:
+   - `.\scripts\db-export.cmd`
+2. Import latest dump in `.\backups`:
+   - `.\scripts\db-import.cmd`
+3. Import a specific dump:
+   - `.\scripts\db-import.cmd -DumpFile .\backups\core_db_YYYYMMDD_HHMMSS.dump`
+
+Notes:
+1. Import creates an automatic pre-import backup (`core_db_pre_import_*.dump`).
+2. Import validates the dump (`pg_restore -l`) before destructive steps.
+3. Recommended format is `.dump` (PostgreSQL custom format).
+
 ## Safe Operation
 1. Do not remove database volumes unless explicitly required.
 2. Do not run `docker compose down -v` unless you intentionally want to destroy local data.
