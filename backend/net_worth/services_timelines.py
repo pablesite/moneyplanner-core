@@ -20,7 +20,10 @@ from .models import (
     LiquidityMonthlyCheckin,
 )
 from .services import calculate_totals, get_base_currency_for_user
-from .services_assets_core import get_effective_asset_amount
+from .services_assets_core import (
+    _get_latest_opening_balance_tx_for_accounting_asset,
+    get_effective_asset_amount,
+)
 from .services_liabilities_core import get_effective_liability_amount
 
 
@@ -131,23 +134,13 @@ def _build_position_data_cache(
                 or asset.category != Asset.Category.CASH
             ):
                 continue
-            opening_note = build_net_worth_opening_balance_note(
-                position_kind="asset",
-                position_id=asset.id,
+            opening_tx = _get_latest_opening_balance_tx_for_accounting_asset(
+                user_id=asset.user_id,
+                asset_id=asset.id,
+                account_id=asset.accounting_account_id,
             )
-            opening_booking_date = (
-                LedgerTransaction.objects.filter(
-                    status=LedgerTransaction.Status.POSTED,
-                    notes=opening_note,
-                    entries__account_id=asset.accounting_account_id,
-                )
-                .distinct()
-                .order_by("-booking_date", "-id")
-                .values_list("booking_date", flat=True)
-                .first()
-            )
-            if opening_booking_date is not None:
-                cache.asset_opening_booking_dates[asset.id] = opening_booking_date
+            if opening_tx is not None:
+                cache.asset_opening_booking_dates[asset.id] = opening_tx.booking_date
 
         for liability in liabilities:
             if (

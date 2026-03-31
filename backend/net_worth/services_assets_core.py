@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import cast
 
 from django.db import transaction
+from django.db.models import Q
 
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -61,6 +62,7 @@ RESIDENTIAL_REAL_ESTATE_SUBCATEGORIES = {
     Asset.Subcategory.RENTAL,
 }
 SYSTEM_GENERATED_ASSET_EXPENSE_EVENT_PREFIX = "asset_"
+OPENING_ASSET_NOTE_PREFIX = "net_worth_opening_balance:asset:"
 INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY: dict[str, str] = {
     cast(str, Asset.Subcategory.DEPOSITS): "deposits_fixed_income",
     cast(str, Asset.Subcategory.FUNDS): "index_funds",
@@ -589,7 +591,6 @@ def _get_effective_accounting_asset_amount_or_none(
 
     from accounting.models import LedgerTransaction
     from accounting.services_ledger import (
-        build_net_worth_opening_balance_note,
         compute_account_balance_from_totals,
         compute_entry_balance_totals,
         get_account_balance,
@@ -639,20 +640,10 @@ def _get_effective_accounting_asset_amount_or_none(
         return None
 
     if should_apply_opening_anchor:
-        opening_note = build_net_worth_opening_balance_note(
-            position_kind="asset",
-            position_id=asset.id,
-        )
-        opening_tx = (
-            LedgerTransaction.objects.filter(
-                user_id=asset.user_id,
-                status=LedgerTransaction.Status.POSTED,
-                notes=opening_note,
-                entries__account_id=accounting_account.id,
-            )
-            .distinct()
-            .order_by("-booking_date", "-id")
-            .first()
+        opening_tx = _get_latest_opening_balance_tx_for_accounting_asset(
+            user_id=asset.user_id,
+            asset_id=asset.id,
+            account_id=accounting_account.id,
         )
         if opening_tx is not None and as_of_date >= opening_tx.booking_date:
             anchored_entries = get_account_entries(
@@ -675,6 +666,34 @@ def _get_effective_accounting_asset_amount_or_none(
         as_of_date=as_of_date,
         status=cast(str, LedgerTransaction.Status.POSTED),
     )
+
+
+def _get_latest_opening_balance_tx_for_accounting_asset(
+    *,
+    user_id: int,
+    asset_id: int,
+    account_id: int,
+):
+    from accounting.models import LedgerTransaction
+    from accounting.services_ledger import build_net_worth_opening_balance_note
+
+    opening_note = build_net_worth_opening_balance_note(
+        position_kind="asset",
+        position_id=asset_id,
+    )
+    queryset = LedgerTransaction.objects.filter(
+        user_id=user_id,
+        status=LedgerTransaction.Status.POSTED,
+        entries__account_id=account_id,
+    ).filter(
+        Q(notes=opening_note)
+        | Q(
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes__startswith=OPENING_ASSET_NOTE_PREFIX,
+            entries__asset_id=asset_id,
+        )
+    )
+    return queryset.distinct().order_by("-booking_date", "-id").first()
 
 
 def _cached_latest_valuation(position_cache, asset_id: int, as_of_date: date):
