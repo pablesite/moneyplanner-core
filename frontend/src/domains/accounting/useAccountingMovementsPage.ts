@@ -108,6 +108,7 @@ export function useAccountingMovementsPage() {
     commitMoneyWizImport,
     submitQuickEntry,
     submitEditedTransaction,
+    fillQuickEntryFromTransaction,
   } = useAccountingPage();
 
   function toNumber(raw: string): number {
@@ -561,6 +562,11 @@ export function useAccountingMovementsPage() {
     }
   }
 
+  async function openDuplicateFromTransaction(transaction: Parameters<typeof fillQuickEntryFromTransaction>[0]) {
+    await fillQuickEntryFromTransaction(transaction);
+    showQuickEntryModal.value = true;
+  }
+
   async function deleteTransactionFromTimeline(transactionId: number, description: string) {
     await deleteTransaction(transactionId, description);
   }
@@ -709,6 +715,7 @@ export function useAccountingMovementsPage() {
     deleteTransactionFromTimeline,
     openActivationModal,
     openEditTransactionModal,
+    openDuplicateFromTransaction,
   });
 
   watch(availableManualPositionOptions, (options) => {

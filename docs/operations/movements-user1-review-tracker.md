@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-01 (sesion 11)
+Ultima actualizacion: 2026-04-01 (sesion 12)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -45,19 +45,24 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `468` - `Master Matematicas (Deuda)`
   - `26` - `Bitcoin`
   - `470` - `Fondo ING PIMCO GIS Commodity`
+  - `89` - `Reserva Atrio`
+  - `36` - `Reserva Atrio Residencial`
+  - `424` - `ING Health Care`
+  - `425` - `ING 10/90`
+  - `459` - `ING Renta Fija`
 - 🔄 Resto de cuentas ya revisadas: pendientes de una ultima revision para cerrar asignacion final de categoria/subcategoria.
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
 - `Iphone 16 Pro`: sin limpieza adicional pendiente detectada.
 - `Master Matematicas (Deuda)`: sin limpieza estructural pendiente detectada.
-- `Reserva Atrio` (deuda): sin limpieza adicional pendiente detectada.
-- `Reserva Atrio Residencial` (activo): sin limpieza adicional pendiente detectada.
+- `Reserva Atrio` (deuda): revision final cerrada. Pagos de deuda normalizados a `Deuda - Nueva vivienda`, clasificacion `real_estate_assets/property_purchase` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
+- `Reserva Atrio Residencial` (activo): revision final cerrada. Movimientos de compra y mejoras inmobiliarias revisados en su historico.
 - `Cartera Metal`: limpio. 27 aportes (investment_purchase inflow desde MyInvestor), 172 revalorizaciones, 1 transferencia de traspaso desde Fondo ING PIMCO.
 - `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). Revision final completada y cerrada para esta cuenta.
-- `ING 10/90` (id=425): revisado. Aportes con `ownership_id=1 (Pablo)`. Cuenta obsoleta sin movimientos `id=473` eliminada.
-- `ING Health Care` (id=424): revisado. Ingresos reclasificados a revalorizacion/aporte segun caso; revalorizaciones sin categoria ni ownership; aportes con concepto `Inversion` y `ownership_id=1`. Cuenta obsoleta sin movimientos `id=472` eliminada.
-- `ING Renta Fija` (id=459): revisado. Ingresos convertidos a aportes de inversion desde `ING (id=5)`; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=474` eliminada.
+- `ING 10/90` (id=425): revision final cerrada. Aportes con `ownership_id=1 (Pablo)`. Cuenta obsoleta sin movimientos `id=473` eliminada.
+- `ING Health Care` (id=424): revision final cerrada. Ingresos reclasificados a revalorizacion/aporte segun caso; revalorizaciones sin categoria ni ownership; aportes normalizados y cuenta obsoleta sin movimientos `id=472` eliminada.
+- `ING Renta Fija` (id=459): revision final cerrada. Aportes de inversion normalizados con concepto `Inversion en Fondo ING Renta Fija` y clasificacion `financial_investments/index_funds`; cuenta obsoleta sin movimientos `id=474` eliminada.
 - `ING S&P` (id=460): revisado. Ingresos convertidos a aportes de inversion; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=475` eliminada.
 - `Fondo Monetario ING` (id=477): revisado. Movimientos migrados desde cuenta obsoleta `id=450`; ingresos convertidos a revalorizacion; revalorizaciones y transferencias sin ownership; concepto canonico `Revalorizacion`.
 - `ETF MSCI World` (id=479): revisado. Movimientos migrados desde cuenta obsoleta `id=441`; cashback mensual normalizado a aporte de inversion desde `TradeRepublic (id=25)` con espejo de ingreso `Cashback` en TradeRepublic; conceptos normalizados (`Inversion`, `Inversion (Cashback)`, `Revalorizacion`). Conteo aplicado con patron habitual: `Revalorizacion=24`, `Inversion=29`, `Inversion (Cashback)=7`, y `ownership_id=1 (Pablo)` en las 36 aportaciones.
