@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-03-29 (sesion 10)
+Ultima actualizacion: 2026-04-01 (sesion 11)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 17.
-- `Pendientes`: 89.
+- `Revisadas`: 19.
+- `Pendientes`: 87.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -35,6 +35,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `482` - `Cartera Ahorro MyInvestor` (activo de inversion / roboadvisor)
 - `483` - `Cartera Ahorro MyInvestor (Compartida)` (activo de inversion / roboadvisor)
 - `26` - `Bitcoin` (activo de inversion / cripto)
+- `486` - `Cripto - ETH (Metamask)` (activo de inversion / cripto)
+- `27` - `ETH` (activo de inversion / cripto; Binance)
 
 ## Estado De Categorizacion Final (ultima pasada)
 - ✅ Cuentas con categorizacion final cerrada:
@@ -42,6 +44,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `46` - `Iphone 16 Pro`
   - `468` - `Master Matematicas (Deuda)`
   - `26` - `Bitcoin`
+  - `470` - `Fondo ING PIMCO GIS Commodity`
 - 🔄 Resto de cuentas ya revisadas: pendientes de una ultima revision para cerrar asignacion final de categoria/subcategoria.
 
 ## Limpieza Pendiente En Cuentas Revisadas
@@ -51,7 +54,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Reserva Atrio` (deuda): sin limpieza adicional pendiente detectada.
 - `Reserva Atrio Residencial` (activo): sin limpieza adicional pendiente detectada.
 - `Cartera Metal`: limpio. 27 aportes (investment_purchase inflow desde MyInvestor), 172 revalorizaciones, 1 transferencia de traspaso desde Fondo ING PIMCO.
-- `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). âš ï¸ Pendiente: 2 "Fondos" (50â‚¬ ago-22 y 80â‚¬ sep-22) con contrapartida virtual â€” origen probable en cuenta ING de fondos aÃºn no incorporada al sistema. Revisar cuando se cree esa cuenta.
+- `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). Revision final completada y cerrada para esta cuenta.
 - `ING 10/90` (id=425): revisado. Aportes con `ownership_id=1 (Pablo)`. Cuenta obsoleta sin movimientos `id=473` eliminada.
 - `ING Health Care` (id=424): revisado. Ingresos reclasificados a revalorizacion/aporte segun caso; revalorizaciones sin categoria ni ownership; aportes con concepto `Inversion` y `ownership_id=1`. Cuenta obsoleta sin movimientos `id=472` eliminada.
 - `ING Renta Fija` (id=459): revisado. Ingresos convertidos a aportes de inversion desde `ING (id=5)`; conceptos normalizados (`Inversion` / `Revalorizacion`) y aportes con `ownership_id=1`. Cuenta obsoleta sin movimientos `id=474` eliminada.
@@ -62,6 +65,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Cartera Ahorro MyInvestor` (id=482): revisado. Movimientos migrados desde cuenta obsoleta `id=435` (70 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
 - `Cartera Ahorro MyInvestor (Compartida)` (id=483): revisado. Movimientos migrados desde cuenta obsoleta `id=464` (72 movimientos) y cuenta obsoleta eliminada. Ingresos/gastos reclasificados a `Revalorizacion`; revalorizaciones sin categoria ni subcategoria.
 - `Bitcoin` (id=26): revisado. Spot Binance migrado a USD, deduplicacion aplicada y clasificacion normalizada en aportes (`financial_investments -> crypto`) y retiradas (`capital_gains -> sale_financial_assets`). Coherencia de saldo/timeline validada.
+- `Cripto - ETH (Metamask)` (id=486): revisado. Cuenta mantenida como satelite de inversion; ownership de activo y movimientos alineado a `Lucas` (`ownership_id=11`).
+- `ETH` (id=27, Binance): revisado. Aportes de inversion (`investment/inflow`) normalizados con concepto `Inversion en ETH` y ownership de movimientos alineado a `Lucas` (`ownership_id=11`).
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -136,7 +141,7 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 | 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
-- âš ï¸ **Cuenta ING de fondos sin monitorizar**: Fondo ING PIMCO tiene 2 aportes (50â‚¬ ago-22 y 80â‚¬ sep-22) cuyo origen es probablemente una cuenta ING de gestiÃ³n de fondos que aÃºn no estÃ¡ en el sistema. Crear ese activo/cuenta cuando se pueda y vincular esas transacciones.
+- (sin pendientes transversales nuevos tras el cierre de `Fondo ING PIMCO GIS Commodity`).
 
 ## Como continuar manana
 1. Seguir los grupos en orden: Inversion -> Cripto -> Pasivos satelite -> Cuentas corrientes -> MoneyWiz virtuales (al final).
