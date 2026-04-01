@@ -66,10 +66,17 @@ function groupAndSortAccounts(accounts: AccountOption[]): AccountGroup[] {
     }));
 }
 
-const editAccountGroups = computed(() => groupAndSortAccounts(props.page.editAccountOptions));
+const editLiquidityGroups = computed(() => groupAndSortAccounts(props.page.liquidityAccounts));
+const editRevaluationGroups = computed(() =>
+  groupAndSortAccounts(props.page.revaluationAccountOptions),
+);
+const editAdjustmentGroups = computed(() =>
+  groupAndSortAccounts(props.page.quickAdjustmentAccountOptions),
+);
 const editCounterpartyGroups = computed(() =>
   groupAndSortAccounts(props.page.editCounterpartyOptions),
 );
+
 type MovementTypeOption = { value: string; label: string };
 const commonTypeOptions = computed<MovementTypeOption[]>(() =>
   (props.page.editMovementTypeOptions as MovementTypeOption[]).slice(0, 2),
@@ -77,6 +84,7 @@ const commonTypeOptions = computed<MovementTypeOption[]>(() =>
 const advancedTypeOptions = computed<MovementTypeOption[]>(() =>
   (props.page.editMovementTypeOptions as MovementTypeOption[]).slice(2),
 );
+
 const showValueDate = ref(false);
 
 watch(
@@ -102,38 +110,37 @@ watch(showValueDate, (show: boolean) => {
     props.page.editTransactionForm.value_date = props.page.editTransactionForm.booking_date;
   }
 });
+
 const isInvestmentOutflow = computed(
   () =>
     props.page.editTransactionForm.kind === 'investment' &&
     props.page.editTransactionForm.investment_direction === 'outflow',
 );
-const editPrimaryAccountLabel = computed(() => {
-  if (props.page.editTransactionForm.kind === 'investment') {
-    return isInvestmentOutflow.value ? 'Cuenta destino (liquidez)' : 'Cuenta origen (liquidez)';
-  }
-  return 'Cuenta principal';
+
+const editAdjustmentCurrentBalance = computed((): number | null => {
+  if (props.page.editTransactionForm.kind !== 'balance_adjustment') return null;
+  const raw = props.page.editSelectedAccountCurrentBalance;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 });
-const editCounterpartyAccountLabel = computed(() => {
-  if (props.page.editTransactionForm.kind === 'investment') {
-    return isInvestmentOutflow.value ? 'Cuenta origen (inversion)' : 'Cuenta destino (inversion)';
-  }
-  return props.page.editCounterpartyLabel;
+
+const editAdjustmentDelta = computed((): number | null => {
+  if (props.page.editTransactionForm.kind !== 'balance_adjustment') return null;
+  const rawTarget = String(props.page.editTransactionForm.amount ?? '').trim();
+  if (!rawTarget) return null;
+  const currentBalance = editAdjustmentCurrentBalance.value;
+  if (currentBalance == null) return null;
+  const target = Number(rawTarget.replace(',', '.'));
+  return Number.isFinite(target) ? Math.round((target - currentBalance) * 100) / 100 : null;
 });
-const investmentFlowHint = computed(() => {
-  if (props.page.editTransactionForm.kind !== 'investment') return '';
-  return isInvestmentOutflow.value
-    ? 'Primero eliges de que inversion sale el dinero y luego a que liquidez llega.'
-    : 'Primero eliges de que liquidez sale el dinero y luego a que inversion llega.';
-});
-const editAmountLabel = computed(() => {
-  if (
-    props.page.editTransactionForm.kind !== 'investment' &&
-    props.page.editTransactionForm.kind !== 'transfer'
-  )
-    return 'Importe';
-  return props.page.editInvestmentOriginCurrency
-    ? `Importe origen (${props.page.editInvestmentOriginCurrency})`
-    : 'Importe origen';
+
+const editRevaluationCurrentBalance = computed((): number | null => {
+  if (props.page.editTransactionForm.kind !== 'revaluation') return null;
+  const raw = props.page.editSelectedAccountCurrentBalance;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 });
 </script>
 
@@ -144,14 +151,8 @@ const editAmountLabel = computed(() => {
     panel-class="max-w-[920px]"
     @close="page.showEditTransactionModal = false"
   >
-    <div class="ui-accounting-modal-copy">
-      <p class="ui-page-eyebrow">Edicion</p>
-      <p class="subtle">
-        Ajusta tipo, cuenta, fechas e importe manteniendo el asiento balanceado y coherente.
-      </p>
-    </div>
     <form
-      class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form ui-accounting-edit-form"
+      class="ui-accounting-form ui-accounting-transaction-form ui-accounting-modal-form"
       @submit.prevent="page.submitEditedTransactionFromModal"
     >
       <div class="ui-accounting-segmented">
@@ -215,11 +216,6 @@ const editAmountLabel = computed(() => {
             required
           />
         </label>
-
-        <label class="ui-accounting-field">
-          <span>Hora</span>
-          <input v-model="page.editTransactionForm.booking_time" type="time" class="input" />
-        </label>
       </div>
 
       <div class="ui-accounting-value-date-row">
@@ -249,139 +245,53 @@ const editAmountLabel = computed(() => {
             </button>
           </div>
         </label>
-
       </div>
 
-      <div
-        class="ui-accounting-form-grid"
-        :class="
-          page.editKindNeedsCounterparty
-            ? 'ui-accounting-form-grid-wide'
-            : 'ui-accounting-form-grid-edit-simple'
-        "
-      >
-        <label
-          v-if="
-            page.editKindNeedsCounterparty &&
-            page.editTransactionForm.kind === 'investment' &&
-            isInvestmentOutflow
-          "
-          class="ui-accounting-field"
-        >
-          <span>{{ editCounterpartyAccountLabel }}</span>
-          <select
-            v-model="page.editTransactionForm.counterparty_account_id"
-            class="select"
-            required
-          >
-            <option :value="null">{{ editCounterpartyAccountLabel }}</option>
-            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
-              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-                {{ accountLabel(account) }} / {{ account.currency }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
-
-        <label class="ui-accounting-field">
-          <span>{{ editPrimaryAccountLabel }}</span>
+      <template v-if="page.editTransactionForm.kind === 'revaluation'">
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <select v-model="page.editTransactionForm.account_id" class="select" required>
-            <option :value="null" disabled>{{ editPrimaryAccountLabel }}</option>
-            <optgroup v-for="group in editAccountGroups" :key="group.key" :label="group.label">
+            <option :value="null">Cuenta de inversion</option>
+            <optgroup v-for="group in editRevaluationGroups" :key="group.key" :label="group.label">
               <option v-for="account in group.accounts" :key="account.id" :value="account.id">
                 {{ accountLabel(account) }} / {{ account.currency }}
               </option>
             </optgroup>
           </select>
-        </label>
 
-        <label class="ui-accounting-field">
-          <span>{{ editAmountLabel }}</span>
           <input
             v-model="page.editTransactionForm.amount"
             class="input"
             inputmode="decimal"
-            :placeholder="
-              page.editTransactionForm.kind === 'balance_adjustment'
-                ? 'Saldo objetivo'
-                : page.editTransactionForm.kind === 'revaluation'
-                  ? 'Importe revalorizacion'
-                  : page.editTransactionForm.kind === 'investment'
-                    ? page.editInvestmentOriginCurrency
-                      ? `Importe origen (${page.editInvestmentOriginCurrency})`
-                      : 'Importe origen'
-                  : page.editTransactionForm.kind === 'transfer' &&
-                      page.editInvestmentIsCrossCurrency
-                    ? page.editInvestmentOriginCurrency
-                      ? `Importe origen (${page.editInvestmentOriginCurrency})`
-                      : 'Importe origen'
-                  : '0.00'
-            "
+            placeholder="Importe de la revalorizacion"
             required
           />
-        </label>
+        </div>
 
-        <label
-          v-if="page.editKindNeedsCounterparty && page.editTransactionForm.kind !== 'investment'"
-          class="ui-accounting-field"
-        >
-          <span>{{ page.editCounterpartyLabel }}</span>
-          <select
-            v-model="page.editTransactionForm.counterparty_account_id"
-            class="select"
-            required
-          >
-            <option :value="null">{{ page.editCounterpartyLabel }}</option>
-            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
-              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-                {{ accountLabel(account) }} / {{ account.currency }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
-        <label
-          v-if="
-            page.editKindNeedsCounterparty &&
-            page.editTransactionForm.kind === 'investment' &&
-            !isInvestmentOutflow
-          "
-          class="ui-accounting-field"
-        >
-          <span>{{ editCounterpartyAccountLabel }}</span>
-          <select
-            v-model="page.editTransactionForm.counterparty_account_id"
-            class="select"
-            required
-          >
-            <option :value="null">{{ editCounterpartyAccountLabel }}</option>
-            <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
-              <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-                {{ accountLabel(account) }} / {{ account.currency }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
-      </div>
-      <p v-if="page.editTransactionForm.kind === 'investment'" class="ui-accounting-inline-note">
-        {{ investmentFlowHint }}
-      </p>
-      <p
-        v-if="page.editKindNeedsCounterparty && !page.editCounterpartyOptions.length"
-        class="ui-accounting-inline-note"
-      >
-        {{ page.editCounterpartyMissingHint }}
-      </p>
-      <p v-else-if="page.editKindNeedsClassification" class="ui-accounting-inline-note">
-        Selecciona categoria y subcategoria debajo.
-      </p>
-      <div
-        v-if="
-          page.editTransactionForm.kind === 'investment' ||
-          (page.editTransactionForm.kind === 'transfer' && page.editInvestmentIsCrossCurrency)
-        "
-        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
-      >
-        <div v-if="page.editTransactionForm.kind === 'investment'" class="ui-accounting-segmented">
+        <p class="ui-accounting-balance-feedback">
+          <template v-if="editRevaluationCurrentBalance != null">
+            Saldo actual:
+            <strong>{{ editRevaluationCurrentBalance.toFixed(2) }}</strong>.
+            <template v-if="page.editTransactionForm.amount.trim()">
+              Revalorizacion:
+              <strong
+                :class="
+                  Number(page.editTransactionForm.amount) > 0
+                    ? 'ui-accounting-tone-positive'
+                    : Number(page.editTransactionForm.amount) < 0
+                      ? 'ui-accounting-tone-negative'
+                      : ''
+                "
+              >
+                {{ Number(page.editTransactionForm.amount) >= 0 ? '+' : '' }}{{ page.editTransactionForm.amount }}
+              </strong>
+            </template>
+          </template>
+          <template v-else>Selecciona la cuenta de inversion para ver el saldo actual.</template>
+        </p>
+      </template>
+
+      <template v-else-if="page.editTransactionForm.kind === 'investment'">
+        <div class="ui-accounting-segmented">
           <button
             type="button"
             class="ui-accounting-segmented-btn"
@@ -405,23 +315,180 @@ const editAmountLabel = computed(() => {
             Retirada
           </button>
         </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <label class="ui-accounting-field">
+            <span>Cuenta de liquidez {{ isInvestmentOutflow ? '(destino)' : '(origen)' }}</span>
+            <select v-model="page.editTransactionForm.account_id" class="select" required>
+              <option :value="null">Seleccionar</option>
+              <optgroup
+                v-for="group in editLiquidityGroups"
+                :key="group.key"
+                :label="group.label"
+              >
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="ui-accounting-field">
+            <span>Cuenta de inversion {{ isInvestmentOutflow ? '(origen)' : '(destino)' }}</span>
+            <select
+              v-model="page.editTransactionForm.counterparty_account_id"
+              class="select"
+              required
+            >
+              <option :value="null">Seleccionar</option>
+              <optgroup
+                v-for="group in editCounterpartyGroups"
+                :key="group.key"
+                :label="group.label"
+              >
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
+          <input
+            v-model="page.editTransactionForm.amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="`Importe${page.editInvestmentOriginCurrency ? ` (${page.editInvestmentOriginCurrency})` : ''}`"
+            required
+          />
+          <input
+            v-if="page.editInvestmentIsCrossCurrency"
+            v-model="page.editTransactionForm.destination_amount"
+            class="input"
+            inputmode="decimal"
+            :placeholder="`Importe destino (${page.editInvestmentDestinationCurrency || 'moneda destino'})`"
+            required
+          />
+        </div>
+      </template>
+
+      <div
+        v-else
+        class="ui-accounting-form-grid"
+        :class="
+          page.editTransactionForm.kind === 'transfer' ||
+          page.editTransactionForm.kind === 'debt_payment'
+            ? 'ui-accounting-form-grid-wide'
+            : 'ui-accounting-form-grid-edit-simple'
+        "
+      >
+        <select v-model="page.editTransactionForm.account_id" class="select" required>
+          <option :value="null" disabled>
+            {{
+              page.editTransactionForm.kind === 'balance_adjustment'
+                ? 'Cuenta a conciliar'
+                : 'Cuenta de liquidez'
+            }}
+          </option>
+          <optgroup
+            v-for="group in page.editTransactionForm.kind === 'balance_adjustment'
+              ? editAdjustmentGroups
+              : editLiquidityGroups"
+            :key="group.key"
+            :label="group.label"
+          >
+            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+              {{ accountLabel(account) }} / {{ account.currency }}
+            </option>
+          </optgroup>
+        </select>
+
         <input
-          v-if="page.editInvestmentIsCrossCurrency"
-          v-model="page.editTransactionForm.destination_amount"
+          v-model="page.editTransactionForm.amount"
           class="input"
           inputmode="decimal"
-          :placeholder="`Importe destino (${page.editInvestmentDestinationCurrency || 'moneda destino'})`"
+          :placeholder="
+            page.editTransactionForm.kind === 'balance_adjustment'
+              ? 'Saldo final objetivo'
+              : page.editTransactionForm.kind === 'transfer' && page.editInvestmentIsCrossCurrency
+                ? page.editInvestmentOriginCurrency
+                  ? `Importe origen (${page.editInvestmentOriginCurrency})`
+                  : 'Importe origen'
+                : '0.00'
+          "
           required
         />
+
+        <select
+          v-if="page.editTransactionForm.kind === 'transfer'"
+          v-model="page.editTransactionForm.counterparty_account_id"
+          class="select"
+          required
+        >
+          <option :value="null">Cuenta destino</option>
+          <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+              {{ accountLabel(account) }} / {{ account.currency }}
+            </option>
+          </optgroup>
+        </select>
+
+        <select
+          v-else-if="page.editTransactionForm.kind === 'debt_payment'"
+          v-model="page.editTransactionForm.counterparty_account_id"
+          class="select"
+          required
+        >
+          <option :value="null">Cuenta de pasivo</option>
+          <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
+            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+              {{ accountLabel(account) }} / {{ account.currency }}
+            </option>
+          </optgroup>
+        </select>
       </div>
+
+      <input
+        v-if="page.editTransactionForm.kind === 'transfer' && page.editInvestmentIsCrossCurrency"
+        v-model="page.editTransactionForm.destination_amount"
+        class="input"
+        inputmode="decimal"
+        :placeholder="`Importe destino (${page.editInvestmentDestinationCurrency || 'moneda destino'})`"
+        required
+      />
+
       <p
-        v-else-if="
-          page.editTransactionForm.kind !== 'balance_adjustment' &&
-          page.editTransactionForm.kind !== 'revaluation'
-        "
+        v-if="page.editTransactionForm.kind === 'balance_adjustment'"
+        class="ui-accounting-balance-feedback"
+      >
+        <template v-if="editAdjustmentCurrentBalance != null">
+          Saldo actual:
+          <strong>{{ editAdjustmentCurrentBalance.toFixed(2) }}</strong>.
+          <template v-if="editAdjustmentDelta != null">
+            Ajuste calculado:
+            <strong
+              :class="
+                editAdjustmentDelta > 0
+                  ? 'ui-accounting-tone-positive'
+                  : editAdjustmentDelta < 0
+                    ? 'ui-accounting-tone-negative'
+                    : ''
+              "
+            >
+              {{ editAdjustmentDelta >= 0 ? '+' : '' }}{{ editAdjustmentDelta.toFixed(2) }}
+            </strong>
+          </template>
+        </template>
+        <template v-else>
+          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automaticamente.
+        </template>
+      </p>
+
+      <p
+        v-if="page.editKindNeedsCounterparty && !page.editCounterpartyOptions.length"
         class="ui-accounting-inline-note"
       >
-        No requiere contracuenta manual para este tipo.
+        {{ page.editCounterpartyMissingHint }}
       </p>
 
       <div
@@ -466,50 +533,34 @@ const editAmountLabel = computed(() => {
         </label>
       </div>
 
+      <textarea
+        v-model="page.editTransactionForm.notes"
+        class="textarea"
+        rows="2"
+        placeholder="Nota opcional para el movimiento"
+      />
+
       <p
-        v-if="
-          page.editTransactionForm.kind === 'balance_adjustment' ||
-          page.editTransactionForm.kind === 'revaluation'
-        "
+        v-if="!page.editEntryReady && !page.transactionCreationLoading"
         class="ui-accounting-inline-note"
       >
-        Saldo actual de la cuenta:
-        <strong>
-          {{
-            page.editSelectedAccountCurrentBalance != null
-              ? page.formatCompact(
-                  page.editSelectedAccountCurrentBalance,
-                  page.editTransactionForm.currency,
-                )
-              : '-'
-          }}
-        </strong>
-        .
-        {{
-          page.editTransactionForm.kind === 'revaluation'
-            ? 'Introduce el importe de la revalorizacion (diferencia respecto al saldo actual).'
-            : 'Se registrara un asiento de ajuste por la diferencia.'
-        }}
+        Completa descripcion, fechas, importe y cuenta. Algunos tipos requieren campos adicionales.
       </p>
-
-      <label class="ui-accounting-field">
-        <span>Notas</span>
-        <textarea
-          v-model="page.editTransactionForm.notes"
-          class="textarea"
-          rows="2"
-          placeholder="Nota opcional para el movimiento"
-        />
-      </label>
 
       <div class="ui-accounting-submit-row">
         <p class="subtle">
           {{
-            page.editTransactionForm.kind === 'balance_adjustment'
-              ? 'Ajuste: fija el saldo actual de la cuenta al valor objetivo sin tocar otros movimientos.'
-              : page.editTransactionForm.kind === 'revaluation'
-                ? 'Revalorizacion: ajusta el importe registrado sin modificar los apuntes de contrapartida.'
-                : 'Se mantiene el asiento balanceado y se actualizan tipo, cuenta, clasificacion e importe.'
+            page.editTransactionForm.kind === 'transfer'
+              ? 'Crea un asiento balanceado entre dos cuentas de liquidez.'
+              : page.editTransactionForm.kind === 'investment'
+                ? page.editInvestmentIsCrossCurrency
+                  ? 'Inversion multimoneda: informa importe origen e importe destino segun ejecucion real.'
+                  : page.editTransactionForm.investment_direction === 'outflow'
+                    ? 'La desinversion devuelve liquidez al activo de caja.'
+                    : 'El aporte registra el alta en la cuenta de inversion.'
+                : page.editTransactionForm.kind === 'debt_payment'
+                  ? 'El pago reduce el saldo de la deuda en el pasivo contable.'
+                  : 'Las partidas contables se generan automaticamente.'
           }}
         </p>
         <button
@@ -520,13 +571,6 @@ const editAmountLabel = computed(() => {
           {{ page.transactionCreationLoading ? 'Guardando...' : 'Guardar cambios' }}
         </button>
       </div>
-      <p
-        v-if="!page.editEntryReady && !page.transactionCreationLoading"
-        class="ui-accounting-inline-note"
-      >
-        Completa descripcion, fechas, importe y cuenta principal. Segun el tipo tambien puede
-        requerir contracuenta y clasificacion.
-      </p>
     </form>
   </BaseModal>
 </template>
