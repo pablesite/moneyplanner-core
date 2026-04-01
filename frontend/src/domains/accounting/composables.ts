@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAccountingStore } from '@/domains/accounting/store';
 import { coreAccountingApi } from '@/domains/accounting/api';
@@ -3105,6 +3105,86 @@ export function useAccountingPage() {
     }
   });
 
+  async function fillQuickEntryFromTransaction(transaction: LedgerTransaction): Promise<void> {
+    const rawKind: string = transaction.quick_entry_kind || transaction.activity_kind;
+    let movementType: QuickLedgerMovementType = 'expense';
+    if (rawKind === 'income') movementType = 'income';
+    else if (rawKind === 'expense') movementType = 'expense';
+    else if (rawKind === 'transfer') movementType = 'transfer';
+    else if (rawKind === 'adjustment') movementType = 'adjustment';
+    else if (rawKind === 'investment' || rawKind === 'investment_purchase') movementType = 'investment';
+    else if (rawKind === 'debt_payment') movementType = 'debt_payment';
+    else if (rawKind === 'revaluation') movementType = 'revaluation';
+
+    const editableKind: EditableActivityKind =
+      movementType === 'adjustment'
+        ? 'balance_adjustment'
+        : movementType === 'revaluation'
+          ? 'revaluation'
+          : movementType === 'investment'
+            ? 'investment'
+            : movementType === 'transfer'
+              ? 'transfer'
+              : movementType === 'debt_payment'
+                ? 'debt_payment'
+                : movementType === 'income'
+                  ? 'income'
+                  : 'expense';
+
+    const direction =
+      movementType === 'investment' ? getInvestmentDirection(transaction) : 'inflow';
+    const debitEntry =
+      transaction.entries.find((e) => e.side === 'debit') ?? transaction.entries[0] ?? null;
+    const creditEntry =
+      transaction.entries.find((e) => e.side === 'credit') ?? transaction.entries[1] ?? null;
+
+    const { accountId, counterpartyAccountId } = resolveEditAccountsForKind(
+      transaction,
+      editableKind,
+      debitEntry,
+      creditEntry,
+    );
+
+    const liabilityId = movementType === 'debt_payment' ? counterpartyAccountId : null;
+    const counterpartyId = movementType !== 'debt_payment' ? counterpartyAccountId : null;
+
+    const amount = getTransactionEditAmount(transaction);
+    const destinationAmount = getTransactionEditDestinationAmount(transaction);
+
+    const classifiedEntry =
+      transaction.entries.find(
+        (e) => Boolean(e.flow_family) && Boolean(e.category_key) && Boolean(e.subcategory_key),
+      ) ?? null;
+
+    // Phase 1: set movement_type to trigger watcher that resets dependent fields
+    quickEntryForm.movement_type = movementType;
+
+    // Phase 2: after watcher settles, fill all fields
+    await nextTick();
+
+    quickEntryForm.investment_direction = direction;
+    quickEntryForm.booking_date = transaction.booking_date;
+    quickEntryForm.value_date = transaction.value_date;
+    quickEntryForm.description = transaction.description;
+    quickEntryForm.ownership_id = transaction.ownership_id ?? null;
+    quickEntryForm.amount = amount;
+    quickEntryForm.destination_amount = destinationAmount;
+    quickEntryForm.account_id = accountId;
+    quickEntryForm.counterparty_account_id = counterpartyId;
+    quickEntryForm.liability_account_id = liabilityId;
+    quickEntryForm.interest_account_id = null;
+    quickEntryForm.principal_amount = '';
+    quickEntryForm.interest_amount = '';
+    quickEntryForm.realized_cost_basis = transaction.realized_cost_basis ?? '';
+    quickEntryForm.realized_gain_loss = transaction.realized_gain_loss ?? '';
+    quickEntryForm.category_key = classifiedEntry?.category_key ?? '';
+    quickEntryForm.subcategory_key = classifiedEntry?.subcategory_key ?? '';
+    quickEntryForm.annual_income_entry_id = classifiedEntry?.annual_income_entry_id ?? null;
+    quickEntryForm.annual_expense_entry_id = classifiedEntry?.annual_expense_entry_id ?? null;
+    quickEntryForm.notes = transaction.notes ?? '';
+    quickEntryForm.revaluation_new_value = '';
+  }
+
   return {
     loading,
     accountCreationLoading,
@@ -3237,5 +3317,6 @@ export function useAccountingPage() {
     resetEditTransactionForm,
     deleteTransaction,
     deleteImportedTransactions,
+    fillQuickEntryFromTransaction,
   };
 }

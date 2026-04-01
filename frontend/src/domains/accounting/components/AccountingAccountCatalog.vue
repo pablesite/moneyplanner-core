@@ -256,6 +256,41 @@ function typeBadgeVariant(movement: {
                     <div class="ui-entry-actions">
                       <button
                         v-if="movement.origin !== 'system'"
+                        class="icon-btn ui-accounting-entry-action-btn"
+                        type="button"
+                        title="Duplicar movimiento"
+                        aria-label="Duplicar movimiento"
+                        :disabled="state.transactionCreationLoading"
+                        @click="state.openDuplicateFromTransaction(movement)"
+                      >
+                        <svg
+                          class="ui-entry-action-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true"
+                        >
+                          <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        v-if="movement.origin !== 'system'"
                         class="icon-btn ui-accounting-entry-action-btn ui-entry-action-edit"
                         type="button"
                         title="Editar movimiento"
