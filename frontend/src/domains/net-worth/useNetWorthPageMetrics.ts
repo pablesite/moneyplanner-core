@@ -166,7 +166,7 @@ export function useNetWorthPageMetrics(params: {
         };
       })
       .filter((asset) => asset.ownershipFraction > 0)
-      .sort((a, b) => b.value - a.value),
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')),
   );
 
   const assetPositionRows = computed<PositionRow[]>(() =>
@@ -200,7 +200,7 @@ export function useNetWorthPageMetrics(params: {
         };
       })
       .filter((liability) => liability.ownershipFraction > 0)
-      .sort((a, b) => b.value - a.value),
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')),
   );
 
   const liabilityPositionRows = computed<PositionRow[]>(() =>
