@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-mutating-props */
-import { computed, type PropType } from 'vue';
+import { computed, ref, watch, type PropType } from 'vue';
 import BaseModal from '@/domains/ui/components/BaseModal.vue';
 
 const props = defineProps({
@@ -70,6 +70,38 @@ const editAccountGroups = computed(() => groupAndSortAccounts(props.page.editAcc
 const editCounterpartyGroups = computed(() =>
   groupAndSortAccounts(props.page.editCounterpartyOptions),
 );
+type MovementTypeOption = { value: string; label: string };
+const commonTypeOptions = computed<MovementTypeOption[]>(() =>
+  (props.page.editMovementTypeOptions as MovementTypeOption[]).slice(0, 2),
+);
+const advancedTypeOptions = computed<MovementTypeOption[]>(() =>
+  (props.page.editMovementTypeOptions as MovementTypeOption[]).slice(2),
+);
+const showValueDate = ref(false);
+
+watch(
+  () => props.page.showEditTransactionModal,
+  (isOpen: boolean) => {
+    if (!isOpen) return;
+    showValueDate.value =
+      props.page.editTransactionForm.value_date !== props.page.editTransactionForm.booking_date;
+  },
+);
+
+watch(
+  () => props.page.editTransactionForm.booking_date,
+  (date: string) => {
+    if (!showValueDate.value) {
+      props.page.editTransactionForm.value_date = date;
+    }
+  },
+);
+
+watch(showValueDate, (show: boolean) => {
+  if (!show) {
+    props.page.editTransactionForm.value_date = props.page.editTransactionForm.booking_date;
+  }
+});
 const isInvestmentOutflow = computed(
   () =>
     props.page.editTransactionForm.kind === 'investment' &&
@@ -109,7 +141,7 @@ const editAmountLabel = computed(() => {
   <BaseModal
     :open="page.showEditTransactionModal"
     title="Editar movimiento"
-    panel-class="max-w-[760px]"
+    panel-class="max-w-[920px]"
     @close="page.showEditTransactionModal = false"
   >
     <div class="ui-accounting-modal-copy">
@@ -124,7 +156,7 @@ const editAmountLabel = computed(() => {
     >
       <div class="ui-accounting-segmented">
         <button
-          v-for="option in page.editMovementTypeOptions"
+          v-for="option in commonTypeOptions"
           :key="option.value"
           type="button"
           class="btn ui-accounting-segmented-btn"
@@ -135,42 +167,32 @@ const editAmountLabel = computed(() => {
         >
           {{ option.label }}
         </button>
+        <div class="ui-accounting-segmented-divider" aria-hidden="true" />
+        <button
+          v-for="option in advancedTypeOptions"
+          :key="option.value"
+          type="button"
+          class="btn ui-accounting-segmented-btn ui-accounting-segmented-btn-advanced"
+          :class="{
+            'ui-accounting-segmented-btn-active': page.editTransactionForm.kind === option.value,
+          }"
+          @click="page.editTransactionForm.kind = option.value"
+        >
+          {{ option.label }}
+        </button>
       </div>
 
-      <input
-        v-model="page.editTransactionForm.description"
-        class="input"
-        placeholder="Nomina marzo, compra semanal, mover a ahorro..."
-        required
-      />
-      <div class="ui-accounting-form-grid ui-accounting-form-grid-dates">
+      <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
         <label class="ui-accounting-field">
-          <span>Fecha contabilizacion</span>
+          <span>Descripcion</span>
           <input
-            v-model="page.editTransactionForm.booking_date"
-            type="date"
+            v-model="page.editTransactionForm.description"
             class="input"
+            placeholder="Nomina marzo, compra semanal, mover a ahorro..."
             required
           />
         </label>
-        <label class="ui-accounting-field">
-          <span>Fecha valor</span>
-          <input v-model="page.editTransactionForm.value_date" type="date" class="input" required />
-        </label>
-        <label class="ui-accounting-field">
-          <span>Hora</span>
-          <input v-model="page.editTransactionForm.booking_time" type="time" class="input" />
-        </label>
-      </div>
 
-      <div
-        class="ui-accounting-form-grid"
-        :class="
-          page.editKindNeedsCounterparty
-            ? 'ui-accounting-form-grid-wide'
-            : 'ui-accounting-form-grid-edit-simple'
-        "
-      >
         <label class="ui-accounting-field">
           <span>Titularidad</span>
           <select v-model="page.editTransactionForm.ownership_id" class="select">
@@ -184,6 +206,60 @@ const editAmountLabel = computed(() => {
           </select>
         </label>
 
+        <label class="ui-accounting-field">
+          <span>Fecha contabilizacion</span>
+          <input
+            v-model="page.editTransactionForm.booking_date"
+            type="date"
+            class="input"
+            required
+          />
+        </label>
+
+        <label class="ui-accounting-field">
+          <span>Hora</span>
+          <input v-model="page.editTransactionForm.booking_time" type="time" class="input" />
+        </label>
+      </div>
+
+      <div class="ui-accounting-value-date-row">
+        <button
+          v-if="!showValueDate"
+          type="button"
+          class="ui-accounting-value-date-toggle"
+          @click="showValueDate = true"
+        >
+          Fecha valor diferente
+        </button>
+        <label v-else class="ui-accounting-field">
+          <span>Fecha valor</span>
+          <div class="ui-accounting-value-date-input-row">
+            <input
+              v-model="page.editTransactionForm.value_date"
+              type="date"
+              class="input"
+              required
+            />
+            <button
+              type="button"
+              class="ui-accounting-value-date-close"
+              @click="showValueDate = false"
+            >
+              Misma fecha
+            </button>
+          </div>
+        </label>
+
+      </div>
+
+      <div
+        class="ui-accounting-form-grid"
+        :class="
+          page.editKindNeedsCounterparty
+            ? 'ui-accounting-form-grid-wide'
+            : 'ui-accounting-form-grid-edit-simple'
+        "
+      >
         <label
           v-if="
             page.editKindNeedsCounterparty &&
@@ -305,14 +381,30 @@ const editAmountLabel = computed(() => {
         "
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select
-          v-if="page.editTransactionForm.kind === 'investment'"
-          v-model="page.editTransactionForm.investment_direction"
-          class="select"
-        >
-          <option value="inflow">Aporte (desde liquidez hacia inversion)</option>
-          <option value="outflow">Retirada (desde inversion hacia liquidez)</option>
-        </select>
+        <div v-if="page.editTransactionForm.kind === 'investment'" class="ui-accounting-segmented">
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
+            :class="{
+              'ui-accounting-segmented-btn-active':
+                page.editTransactionForm.investment_direction === 'inflow',
+            }"
+            @click="page.editTransactionForm.investment_direction = 'inflow'"
+          >
+            Aporte
+          </button>
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
+            :class="{
+              'ui-accounting-segmented-btn-active':
+                page.editTransactionForm.investment_direction === 'outflow',
+            }"
+            @click="page.editTransactionForm.investment_direction = 'outflow'"
+          >
+            Retirada
+          </button>
+        </div>
         <input
           v-if="page.editInvestmentIsCrossCurrency"
           v-model="page.editTransactionForm.destination_amount"
@@ -336,36 +428,42 @@ const editAmountLabel = computed(() => {
         v-if="page.editKindNeedsClassification"
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
-        <select
-          v-model="page.editTransactionForm.category_key"
-          class="select"
-          :disabled="page.editCategoryLocked"
-          required
-        >
-          <option value="">Categoria</option>
-          <option
-            v-for="option in page.editCategoryOptions"
-            :key="option.value"
-            :value="option.value"
+        <label class="ui-accounting-field">
+          <span>Categoria</span>
+          <select
+            v-model="page.editTransactionForm.category_key"
+            class="select"
+            :disabled="page.editCategoryLocked"
+            required
           >
-            {{ option.label }}
-          </option>
-        </select>
-        <select
-          v-model="page.editTransactionForm.subcategory_key"
-          class="select"
-          :disabled="page.editSubcategoryLocked"
-          required
-        >
-          <option value="">Subcategoria</option>
-          <option
-            v-for="option in page.editSubcategoryOptions"
-            :key="option.value"
-            :value="option.value"
+            <option value="">Seleccionar</option>
+            <option
+              v-for="option in page.editCategoryOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label class="ui-accounting-field">
+          <span>Subcategoria</span>
+          <select
+            v-model="page.editTransactionForm.subcategory_key"
+            class="select"
+            :disabled="page.editSubcategoryLocked"
+            required
           >
-            {{ option.label }}
-          </option>
-        </select>
+            <option value="">Seleccionar</option>
+            <option
+              v-for="option in page.editSubcategoryOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
       </div>
 
       <p

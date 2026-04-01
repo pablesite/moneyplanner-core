@@ -2724,19 +2724,34 @@ export function useAccountingPage() {
         validated.selectedAccount.id,
         validated.parsedAmount,
       );
+      const kindAdjustedEntries =
+        editTransactionForm.kind === editTransactionForm.initial_kind
+          ? compatibilityEntries
+          : setEditedKindOnEntries(
+              compatibilityEntries,
+              editTransactionForm.kind,
+              editTransactionForm.category_key,
+              editTransactionForm.subcategory_key,
+              editTransactionForm.investment_direction,
+            );
+      const accountAdjustedEntries = setEditedAccountsOnEntries(
+        kindAdjustedEntries,
+        editTransactionForm.kind,
+        editTransactionForm.account_id!,
+        editTransactionForm.counterparty_account_id,
+        editTransactionForm.investment_direction,
+      );
+      compatibilityEntries = applyClassificationToEntries(accountAdjustedEntries, {
+        kind: editTransactionForm.kind,
+        categoryKey: editTransactionForm.category_key,
+        subcategoryKey: editTransactionForm.subcategory_key,
+        investmentDirection: editTransactionForm.investment_direction,
+      });
       if (
         (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
         editInvestmentIsCrossCurrency.value
       ) {
         const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
-        const updatedAccounts = setEditedAccountsOnEntries(
-          compatibilityEntries,
-          editTransactionForm.kind,
-          editTransactionForm.account_id!,
-          editTransactionForm.counterparty_account_id,
-          editTransactionForm.investment_direction,
-        );
-        compatibilityEntries = updatedAccounts.map((entry) => ({ ...entry }));
         const debitEntry = compatibilityEntries.find((entry) => entry.side === 'debit') ?? null;
         const creditEntry = compatibilityEntries.find((entry) => entry.side === 'credit') ?? null;
         if (debitEntry) {
@@ -2749,6 +2764,12 @@ export function useAccountingPage() {
             currencyDecimals(creditEntry.currency),
           );
         }
+      } else {
+        compatibilityEntries = scaleEntriesToAmount(
+          compatibilityEntries,
+          roundByCurrency(validated.parsedAmount, validated.selectedAccount.currency),
+          validated.selectedAccount.currency,
+        );
       }
       const compatibilityPayload: LedgerTransactionWritePayload = {
         booking_date: editTransactionForm.booking_date,
