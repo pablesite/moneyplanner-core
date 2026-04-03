@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-02 (sesion 16)
+Ultima actualizacion: 2026-04-03 (sesion 24)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 19.
-- `Pendientes`: 87.
+- `Revisadas`: 27.
+- `Pendientes`: 79.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -37,6 +37,14 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `26` - `Bitcoin` (activo de inversion / cripto)
 - `486` - `Cripto - ETH (Metamask)` (activo de inversion / cripto)
 - `27` - `ETH` (activo de inversion / cripto; Binance)
+- `485` - `Cripto - Bots de Grids (Pionex)` (activo de inversion / cripto; cierre final completado)
+- `38` - `Urbanitae` (activo de inversion / crowdfunding inmobiliario; cierre final completado)
+- `40` - `ViaInvest` (activo de inversion / crowdlending; cierre final completado)
+- `31` - `Healthcare` (activo de inversion / ETF; cierre final completado)
+- `28` - `ETF Physical Gold USD (Acc)` (activo de inversion / ETF; cierre final completado)
+- `35` - `Small Caps` (activo de inversion / ETF - Small Caps; cierre final completado)
+- `39` - `Water` (activo de inversion / ETF - Water; cierre final completado)
+- `33` - `MyInv. Indexado Global (MSCI)` (activo de inversion / plan pensiones; cierre final completado)
 
 ## Estado De Categorizacion Final (ultima pasada)
 - ✅ Cuentas con categorizacion final cerrada:
@@ -59,6 +67,14 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `482` - `Cartera Ahorro MyInvestor`
   - `483` - `Cartera Ahorro MyInvestor (Compartida)`
   - `486` - `Cripto - ETH (Metamask)`
+  - `485` - `Cripto - Bots de Grids (Pionex)`
+  - `38` - `Urbanitae`
+  - `40` - `ViaInvest`
+  - `31` - `Healthcare`
+  - `28` - `ETF Physical Gold USD (Acc)`
+  - `35` - `Small Caps`
+  - `39` - `Water`
+  - `33` - `MyInv. Indexado Global (MSCI)`
 - ✅ Todas las cuentas revisadas tienen ya cierre final de categorizacion.
 
 ## Limpieza Pendiente En Cuentas Revisadas
@@ -81,6 +97,14 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Bitcoin` (id=26): revisado. Spot Binance migrado a USD, deduplicacion aplicada y clasificacion normalizada en aportes (`financial_investments -> crypto`) y retiradas (`capital_gains -> sale_financial_assets`). Coherencia de saldo/timeline validada.
 - `Cripto - ETH (Metamask)` (id=486): revision final cerrada. Cuenta satelite de inversion con ownership de activo y movimientos alineado a `Lucas` (`ownership_id=11`).
 - `ETH` (id=27, Binance): revision final cerrada. Aportes de inversion (`investment/inflow`) normalizados con concepto `Inversion en ETH` y ownership de movimientos alineado a `Lucas` (`ownership_id=11`).
+- `Cripto - Bots de Grids (Pionex)` (id=485): revision final cerrada. Limpieza de saldo inicial legacy duplicado (`tx 25`) y de movimientos espejo duplicados en Spot Binance. `DT Criptos` reclasificados de ingreso pasivo a inversion con contrapartida correcta en Spot, revalorizaciones normalizadas (tipo + concepto `Revalorización`) y conceptos finales unificados: aportes `Inversión a Cripto - Bots de Grids`, retiradas `Retirada de inversión de Cripto - Bots de Grids a Spot Binance`. Aportes con clasificacion `financial_investments/crypto`.
+- `Urbanitae` (id=38): revision final cerrada. Aportes de inversion normalizados con concepto `Inversión en Crowdfunding`; caso puntual de ingreso mal tipado (`Crowdfunding Inm.`) convertido a aporte de inversion contra `TradeRepublic` y eliminacion de gasto espejo duplicado en Trade (`tx 45128`). Reembolsos/movimientos de retorno mantenidos como retirada/ganancia de capital segun corresponda.
+- `ViaInvest` (id=40): revision final cerrada. Aportes de inversion normalizados con concepto `Inversión en Crowdlending` y clasificacion `financial_investments/crowdlending_p2p` en toda la cuenta.
+- `Healthcare` (id=31): revision final cerrada. Revalorizaciones con concepto `Revalorización`. Aportes de inversion normalizados con concepto `Inversión en ETF Healthcare` y clasificacion `financial_investments/etf_indexed`.
+- `ETF Physical Gold USD (Acc)` (id=28): revision final cerrada. Revalorizaciones con concepto `Revalorización`. Aportes de inversion normalizados con concepto `Inversión en ETF Physycial Gold` y clasificacion `financial_investments/etf_indexed`. Excepcion acordada: los aportes de cashback mantienen concepto `Inversión en ETF Physical Gold (Cashback)`.
+- `Small Caps` (id=35): revision final cerrada. Revalorizaciones con concepto `Revalorización` (tilde correcta) y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en ETF - Small Caps` y clasificacion `financial_investments/etf_indexed`.
+- `Water` (id=39): revision final cerrada. Revalorizaciones normalizadas con concepto `Revalorización` y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en ETF - Water` y clasificacion `financial_investments/etf_indexed`.
+- `MyInv. Indexado Global (MSCI)` (id=33): revision final cerrada. Movimientos legacy `income/expense` reclasificados como `revaluation`, concepto unificado a `Revalorización` y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en Plan de Pensiones - Indexado Global (MSCI)` y clasificacion `financial_investments/pension_plan`.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -121,7 +145,6 @@ SatÃ©lites de inversiÃ³n. Contrapartidas suelen ser MyInvestor/TradeRepublic
 | 152 | 476 | Cuenta Naranja | asset |
 | 138 | 18 | MyInvestor | asset |
 | 129 | 447 | ST Stocks | asset |
-| 81 | 40 | ViaInvest | asset |
 
 ### Grupo 2 â€” Cripto
 SatÃ©lites cripto. Contrapartidas suelen ser Spot Binance â†” liquidez.
@@ -169,17 +192,9 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Inversiones pendientes (lista acordada)
 Listado acordado manualmente para la siguiente sesion de revision de inversiones:
 
-1. `485` - `Cripto - Bots de Grids (Pionex)` (antes duplicada con `32 Grids Pionex`, ya eliminada)
-2. `38` - `Urbanitae` (Crowfunding Inm)
-3. `40` - `ViaInvest` (Crowdlending)
-4. `31` - `Healthcare` (ETF - Healthcare)
-5. `28` - `ETF Physical Gold USD (Acc)`
-6. `35` - `Small Caps` (ETF - Small Caps)
-7. `39` - `Water` (ETF - Water)
-8. `33` - `MyInv. Indexado Global (MSCI)` (Plan Pensiones)
-9. `34` - `Quantfury` + `447` - `ST Stocks` (revisar conjuntamente; `ST Stocks` concentra movimientos importados)
-10. `37` - `Trade Republic` (Stocks - Trade Republic)
-11. `446` - `Trading Automático` (cuenta en "otros")
+1. `34` - `Quantfury` + `447` - `ST Stocks` (revisar conjuntamente; `ST Stocks` concentra movimientos importados)
+2. `37` - `Trade Republic` (Stocks - Trade Republic)
+3. `446` - `Trading Automático` (cuenta en "otros")
 
 ## Comando de regeneracion de listado completo (usuario 1)
 Usar para obtener el inventario completo actualizado:
