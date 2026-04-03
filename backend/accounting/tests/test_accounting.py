@@ -2603,6 +2603,59 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("account_id", response.data["error"]["details"])
 
+    def test_quick_entry_income_allows_investment_account_for_reinvested_yield(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Crowdlending position",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CROWDLENDING,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Crowdlending - ViaInvest / EUR",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        investment_asset.accounting_account_id = investment_account.id
+        investment_asset.save(update_fields=["accounting_account_id", "updated_at"])
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "income",
+                "booking_date": "2026-04-07",
+                "value_date": "2026-04-07",
+                "description": "Intereses crowdlending",
+                "amount": "14.29",
+                "account_id": investment_account.id,
+                "category_key": "passive_income",
+                "subcategory_key": "p2p_lending",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["activity_kind"], "income")
+        self.assertEqual(response.data["quick_entry_kind"], "income")
+        self.assertEqual(len(response.data["entries"]), 2)
+        investment_entry = next(
+            row for row in response.data["entries"] if row["account_id"] == investment_account.id
+        )
+        classified_entry = next(
+            row for row in response.data["entries"] if row["flow_family"] == "income"
+        )
+        self.assertEqual(investment_entry["side"], "debit")
+        self.assertEqual(investment_entry["amount"], "14.29000000")
+        self.assertEqual(classified_entry["category_key"], "passive_income")
+        self.assertEqual(classified_entry["subcategory_key"], "p2p_lending")
+
     def test_quick_entry_transfer_rejects_foreign_counterparty_reference(self):
         other_user = get_user_model().objects.create_user(
             username="acct_foreign_transfer",

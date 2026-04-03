@@ -670,13 +670,22 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             booking_date=attrs["booking_date"],
             value_date=attrs["value_date"],
         )
-        if movement_type not in {
+        requires_liquidity_origin = movement_type not in {
             "transfer",
             "adjustment",
             "investment",
             "investment_purchase",
             "revaluation",
-        }:
+        }
+        # Income movements can also target accounting investment accounts when the
+        # user wants to register reinvested yield directly on the position.
+        if (
+            movement_type == "income"
+            and account.account_type == LedgerAccount.AccountType.ASSET
+            and account.asset_id is not None
+        ):
+            requires_liquidity_origin = False
+        if requires_liquidity_origin:
             validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
 
         if annual_income_entry is not None and annual_income_entry.user_id != user.id:
