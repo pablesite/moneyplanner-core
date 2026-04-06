@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-03 (sesion 24)
+Ultima actualizacion: 2026-04-06 (sesion 28)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 27.
-- `Pendientes`: 79.
+- `Revisadas`: 30.
+- `Pendientes`: 76.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -45,6 +45,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `35` - `Small Caps` (activo de inversion / ETF - Small Caps; cierre final completado)
 - `39` - `Water` (activo de inversion / ETF - Water; cierre final completado)
 - `33` - `MyInv. Indexado Global (MSCI)` (activo de inversion / plan pensiones; cierre final completado)
+- `34` - `Quantfury` (activo de inversion / stocks; cierre final completado, integra movimientos de `447 ST Stocks`)
+- `37` - `Trade Republic` (activo de inversion / stocks; cierre final completado)
+- `490` - `Trading Automático` (activo de inversion / otros; cierre final completado)
 
 ## Estado De Categorizacion Final (ultima pasada)
 - ✅ Cuentas con categorizacion final cerrada:
@@ -75,6 +78,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `35` - `Small Caps`
   - `39` - `Water`
   - `33` - `MyInv. Indexado Global (MSCI)`
+  - `34` - `Quantfury`
+  - `37` - `Trade Republic`
+  - `490` - `Trading Automático`
 - ✅ Todas las cuentas revisadas tienen ya cierre final de categorizacion.
 
 ## Limpieza Pendiente En Cuentas Revisadas
@@ -105,6 +111,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Small Caps` (id=35): revision final cerrada. Revalorizaciones con concepto `Revalorización` (tilde correcta) y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en ETF - Small Caps` y clasificacion `financial_investments/etf_indexed`.
 - `Water` (id=39): revision final cerrada. Revalorizaciones normalizadas con concepto `Revalorización` y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en ETF - Water` y clasificacion `financial_investments/etf_indexed`.
 - `MyInv. Indexado Global (MSCI)` (id=33): revision final cerrada. Movimientos legacy `income/expense` reclasificados como `revaluation`, concepto unificado a `Revalorización` y sin categoria/subcategoria. Aportes de inversion normalizados con concepto `Inversión en Plan de Pensiones - Indexado Global (MSCI)` y clasificacion `financial_investments/pension_plan`.
+- `Quantfury` (id=34): revision final cerrada. Movimientos trasladados desde `ST Stocks` (id=447) y convertidos de EUR a USD por fecha de apunte; cuenta `447` eliminada tras el traslado. Ingresos `St Stocks` con clasificacion legacy `capital_gains/sale_financial_assets` reclasificados a `revaluation` y concepto unificado a `Revalorización`.
+- `Trade Republic` (id=37): revision final cerrada. Todos los movimientos `income` reclasificados a `revaluation`; limpieza de clasificacion legacy `capital_gains/sale_financial_assets` aplicada en esos ingresos y concepto de revalorizaciones unificado a `Revalorización`. Se mantienen sin cambios las retiradas de inversion (`investment/outflow`) con ganancia de capital.
+- `Trading Automático` (id=490): revision final cerrada. Movimientos migrados desde cuenta obsoleta `id=446` (eliminada). Conversion EUR->USD aplicada en revalorizaciones y normalizacion de clasificacion: `income` reclasificado a `revaluation`, concepto unificado a `Revalorización` y categorias de revalorizacion limpiadas. Permanece un caso de retirada de inversion (`investment/outflow`) con clasificacion `capital_gains/sale_financial_assets`.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -135,16 +144,11 @@ Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cu
 | 90 | 436 | MoneyWiz expense: financial_investments/roboadvisor | expense |
 
 ### Grupo 1 â€” InversiÃ³n (fondos, brokers, roboadvisors)
-SatÃ©lites de inversiÃ³n. Contrapartidas suelen ser MyInvestor/TradeRepublic â†” liquidez.
+Pendientes actuales de inversion (lista depurada). `Quantfury (34)`, `Trade Republic (37)` y `Trading Automático (490)` ya revisadas y cerradas.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 468 | 19 | MyInvestor | asset |
-| 430 | 25 | TradeRepublic | asset |
-| 324 | 33 | MyInv. Indexado Global (MSCI) | asset |
-| 152 | 476 | Cuenta Naranja | asset |
-| 138 | 18 | MyInvestor | asset |
-| 129 | 447 | ST Stocks | asset |
+| - | - | (sin pendientes de inversion en este grupo) | - |
 
 ### Grupo 2 â€” Cripto
 SatÃ©lites cripto. Contrapartidas suelen ser Spot Binance â†” liquidez.
@@ -181,20 +185,19 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 - (sin pendientes transversales nuevos tras el cierre de `Fondo ING PIMCO GIS Commodity`).
 
 ## Como continuar manana
-1. Seguir los grupos en orden: Inversion -> Cripto -> Pasivos satelite -> Cuentas corrientes -> MoneyWiz virtuales (al final).
+1. Nuevo orden acordado: Pasivos satelite pendientes -> Depositos dentro de liquidez -> resto de grupos pendientes.
 2. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
    - cuentas tecnicas o espejo que queden sin uso.
 3. Marcar como revisada una cuenta solo cuando su historico quede consistente.
-4. Las cuentas corrientes (Grupo 4) no empezar hasta tener los grupos 1-3 razonablemente limpios.
+4. Para "depositos dentro de liquidez", priorizar en Grupo 4 las cuentas de liquidez (`ING`, `Kutxa`, `Santander`, `Monederos`) antes de seguir con otras cuentas corrientes.
 
-## Proximo dia - Inversiones pendientes (lista acordada)
-Listado acordado manualmente para la siguiente sesion de revision de inversiones:
+## Proximo dia - Prioridad acordada
+Listado acordado manualmente para la siguiente sesion de revision:
 
-1. `34` - `Quantfury` + `447` - `ST Stocks` (revisar conjuntamente; `ST Stocks` concentra movimientos importados)
-2. `37` - `Trade Republic` (Stocks - Trade Republic)
-3. `446` - `Trading Automático` (cuenta en "otros")
+1. Pasivos pendientes: `481` (Tarjeta ING), `45` (Hipoteca Palmito), `41` (Tarjeta ECI).
+2. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
 
 ## Comando de regeneracion de listado completo (usuario 1)
 Usar para obtener el inventario completo actualizado:
