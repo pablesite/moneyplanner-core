@@ -447,8 +447,21 @@ export function useAccountingPage() {
       .filter((entry) => entry.fiscalYear === selectedYear.value)
       .sort((a, b) => a.name.localeCompare(b.name, 'es')),
   );
+  function isLiquidityAssetAccount(account: LedgerAccount): boolean {
+    if (account.account_type !== 'asset') return false;
+    if (account.asset_id == null) return true;
+    const meta = accountPositionMetaByAccountId.value.get(account.id);
+    return (meta?.category ?? '').trim() === 'cash';
+  }
+  const transferOriginOptions = computed(() =>
+    accounts.value.filter((account) => isLiquidityAssetAccount(account)),
+  );
   const transferCounterpartyOptions = computed(() =>
-    liquidityAccounts.value.filter((account) => account.id !== quickEntryForm.account_id),
+    accounts.value.filter((account) => {
+      if (account.id === quickEntryForm.account_id) return false;
+      if (isLiquidityAssetAccount(account)) return true;
+      return account.account_type === 'liability' && account.liability_id != null;
+    }),
   );
   const investmentCounterpartyOptions = computed(() =>
     accounts.value.filter(
@@ -3252,6 +3265,7 @@ export function useAccountingPage() {
     filterSubcategoryOptions,
     cuentasFilterCategoryOptions,
     cuentasFilterSubcategoryOptions,
+    transferOriginOptions,
     transferCounterpartyOptions,
     investmentCounterpartyOptions,
     quickInvestmentOriginCurrency,
