@@ -13,17 +13,17 @@ class Asset(models.Model):
         CASH = "cash", "Liquidez"
         INVESTMENTS = "investments", "Inversiones"
         REAL_ESTATE = "real_estate", "Inmuebles"
-        VEHICLE = "vehicle", "Vehiculo"
+        VEHICLE = "vehicle", "Vehículo"
         FURNISHINGS = "furnishings", "Mobiliario"
         OTHER = "other", "Otros"
 
     class Subcategory(models.TextChoices):
         BANK_ACCOUNT = "bank_account", "Cuenta bancaria"
-        SHORT_TERM_DEPOSIT = "short_term_deposit", "Deposito a corto plazo"
+        SHORT_TERM_DEPOSIT = "short_term_deposit", "Depósito a corto plazo"
         WALLET = "wallet", "Monedero"
         CRYPTO_SPOT_EARN = "crypto_spot_earn", "Spot/Earn Cripto"
 
-        DEPOSITS = "deposits", "Depositos"
+        DEPOSITS = "deposits", "Depósitos"
         FUNDS = "funds", "Fondos"
         ETFS = "etfs", "ETFs"
         ROBOADVISOR = "roboadvisor", "Roboadvisor"
@@ -37,11 +37,11 @@ class Asset(models.Model):
         SECOND_HOME = "second_home", "Segunda vivienda"
         RENTAL = "rental", "Rentas"
 
-        VEHICLES = "vehicles", "Vehiculos"
-        TECHNOLOGY = "technology", "Tecnologia"
+        VEHICLES = "vehicles", "Vehículos"
+        TECHNOLOGY = "technology", "Tecnología"
         HOME_FURNISHINGS = "home_furnishings", "Muebles vivienda"
         SPORTS_EQUIPMENT = "sports_equipment", "Equipamiento deportivo"
-        JEWELRY = "jewelry", "Joyeria"
+        JEWELRY = "jewelry", "Joyería"
 
         OTHER = "other", "Otros"
 
@@ -50,17 +50,17 @@ class Asset(models.Model):
         ACCOUNTING = "accounting", "Desde contabilidad"
 
     class AmortizationMethod(models.TextChoices):
-        NONE = "none", "Sin amortizacion"
+        NONE = "none", "Sin amortización"
         STRAIGHT_LINE = "straight_line", "Lineal"
         MANUAL = "manual", "Manual"
 
     class ValuationModel(models.TextChoices):
         MANUAL = "manual", "Manual"
-        REAL_ESTATE_AUTO = "real_estate_auto", "Vivienda automatica"
+        REAL_ESTATE_AUTO = "real_estate_auto", "Vivienda automática"
 
     class InvestmentContributionMode(models.TextChoices):
-        ONE_TIME = "one_time", "Aportacion unica"
-        PERIODIC_CONTRIBUTION = "periodic_contribution", "Aportacion periodica"
+        ONE_TIME = "one_time", "Aportación única"
+        PERIODIC_CONTRIBUTION = "periodic_contribution", "Aportación periódica"
 
     class InvestmentContributionFrequency(models.TextChoices):
         MONTHLY = "monthly", "Mensual"
@@ -292,7 +292,7 @@ class InvestmentContributionInterval(models.Model):
 
 class AssetImprovement(models.Model):
     class AmortizationMethod(models.TextChoices):
-        NONE = "none", "Sin amortizacion"
+        NONE = "none", "Sin amortización"
         STRAIGHT_LINE = "straight_line", "Lineal"
         MANUAL = "manual", "Manual"
 
@@ -734,9 +734,9 @@ class AssetValuation(models.Model):
 
 class InvestmentAssetEvent(models.Model):
     class EventType(models.TextChoices):
-        CONTRIBUTION = "contribution", "Aportacion"
+        CONTRIBUTION = "contribution", "Aportación"
         WITHDRAWAL = "withdrawal", "Retirada"
-        FEE = "fee", "Comision"
+        FEE = "fee", "Comisión"
         PASSIVE_INCOME = "passive_income", "Rendimiento"
 
     user = models.ForeignKey(
@@ -789,8 +789,8 @@ class LiquidityAssetEvent(models.Model):
     class EventType(models.TextChoices):
         INFLOW = "inflow", "Entrada"
         OUTFLOW = "outflow", "Salida"
-        FEE = "fee", "Comision"
-        INTEREST = "interest", "Interes"
+        FEE = "fee", "Comisión"
+        INTEREST = "interest", "Interés"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -838,8 +838,8 @@ class LiabilityEvent(models.Model):
     class EventType(models.TextChoices):
         CHARGE = "charge", "Cargo"
         PAYMENT = "payment", "Pago"
-        FEE = "fee", "Comision"
-        INTEREST = "interest", "Interes"
+        FEE = "fee", "Comisión"
+        INTEREST = "interest", "Interés"
         ADJUSTMENT = "adjustment", "Ajuste"
 
     user = models.ForeignKey(
