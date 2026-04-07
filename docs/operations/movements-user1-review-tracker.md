@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-06 (sesion 28)
+Ultima actualizacion: 2026-04-07 (sesion 37)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 30.
-- `Pendientes`: 76.
+- `Revisadas`: 34.
+- `Pendientes`: 72.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -48,6 +48,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `34` - `Quantfury` (activo de inversion / stocks; cierre final completado, integra movimientos de `447 ST Stocks`)
 - `37` - `Trade Republic` (activo de inversion / stocks; cierre final completado)
 - `490` - `Trading Automático` (activo de inversion / otros; cierre final completado)
+- `481` - `Tarjeta ING` (pasivo / tarjeta; cierre final completado)
+- `41` - `Tarjeta ECI` (pasivo / tarjeta; cierre final completado)
+- `43` - `Kutxa Bank Ana` (pasivo / tarjeta; cierre final completado)
+- `44` - `Kutxa Bank Pablo` (pasivo / tarjeta; cierre final completado)
 
 ## Estado De Categorizacion Final (ultima pasada)
 - ✅ Cuentas con categorizacion final cerrada:
@@ -81,6 +85,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `34` - `Quantfury`
   - `37` - `Trade Republic`
   - `490` - `Trading Automático`
+  - `481` - `Tarjeta ING`
+  - `41` - `Tarjeta ECI`
+  - `43` - `Kutxa Bank Ana`
+  - `44` - `Kutxa Bank Pablo`
 - ✅ Todas las cuentas revisadas tienen ya cierre final de categorizacion.
 
 ## Limpieza Pendiente En Cuentas Revisadas
@@ -114,6 +122,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Quantfury` (id=34): revision final cerrada. Movimientos trasladados desde `ST Stocks` (id=447) y convertidos de EUR a USD por fecha de apunte; cuenta `447` eliminada tras el traslado. Ingresos `St Stocks` con clasificacion legacy `capital_gains/sale_financial_assets` reclasificados a `revaluation` y concepto unificado a `Revalorización`.
 - `Trade Republic` (id=37): revision final cerrada. Todos los movimientos `income` reclasificados a `revaluation`; limpieza de clasificacion legacy `capital_gains/sale_financial_assets` aplicada en esos ingresos y concepto de revalorizaciones unificado a `Revalorización`. Se mantienen sin cambios las retiradas de inversion (`investment/outflow`) con ganancia de capital.
 - `Trading Automático` (id=490): revision final cerrada. Movimientos migrados desde cuenta obsoleta `id=446` (eliminada). Conversion EUR->USD aplicada en revalorizaciones y normalizacion de clasificacion: `income` reclasificado a `revaluation`, concepto unificado a `Revalorización` y categorias de revalorizacion limpiadas. Permanece un caso de retirada de inversion (`investment/outflow`) con clasificacion `capital_gains/sale_financial_assets`.
+- `Tarjeta ING` (id=481): revision final cerrada. Recategorizacion masiva en `consumption_expenses`: 31 movimientos migrados desde `other_consumption_expenses` a subcategorias especificas (`transport_mobility`=12, `living_expenses`=9, `leisure_lifestyle`=7, `gifts_donations`=2, `housing_home`=1). Se mantienen 3 casos ambiguos sin cambio (`Retirada Cajero LGW N79 IDL COLUMN ACC`, `Nuevo saldo`, `Compras Materiales`).
+- `Tarjeta ECI` (id=41): revision final cerrada. Recategorizacion aplicada en gastos de consumo (`Cejas De ana` -> `health_wellbeing`, `Traje Boda Celia` y `Northface Para Pablo` -> `leisure_lifestyle`), eliminacion de asiento obsoleto de saldo inicial (`tx 35`) y normalizacion de concepto en transferencias con ING (`Transferencia a Tarjeta ECI desde ING`, 38 movimientos). Permanecen 3 movimientos `Nuevo saldo` en `other_consumption_expenses` al no aportar señal suficiente para reclasificacion automatica.
+- `Kutxa Bank Ana` (id=43): revision final cerrada. Reclasificacion acordada de 17 gastos desde `tangible_assets/other_tangible_assets` a `consumption_expenses/housing_home` y refinado de `other_consumption_expenses` con 5 reclasificaciones claras (`transport_mobility`, `health_wellbeing`, `leisure_lifestyle`, `gifts_donations`). Se mantienen 16 casos ambiguos sin cambio por falta de señal semantica.
+- `Kutxa Bank Pablo` (id=44): revision final cerrada. Recategorizacion de `other_consumption_expenses` con criterio conservador en 127 movimientos (`financial_commitments`=52, `leisure_lifestyle`=55, `transport_mobility`=11, `living_expenses`=4, `gifts_donations`=3, `health_wellbeing`=1, `housing_home`=1) y criterio manual adicional para `iCloud` a `housing_home` (53 movimientos en total). Quedan 36 movimientos ambiguos mantenidos en `other_consumption_expenses` por falta de contexto.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -163,26 +175,22 @@ PequeÃ±os pasivos independientes. Contrapartidas ya conocidas.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 71 | 481 | Tarjeta ING | liability |
 | 128 | 45 | Hipoteca Palmito | liability |
-| 107 | 41 | Tarjeta ECI | liability |
 
 ### Grupo 4 â€” Cuentas corrientes (dejar para el final)
 Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los grupos anteriores estÃ©n limpios.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 2119 | 44 | Kutxa Bank Pablo | liability |
 | 1986 | 16 | Monedero compartido | asset |
 | 1956 | 5 | ING | asset |
 | 1374 | 6 | Kutxa | asset |
 | 1058 | 17 | Monedero Pablo | asset |
-| 702 | 43 | Kutxa Bank Ana | liability |
 | 414 | 21 | Santander | asset |
 | 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
-- (sin pendientes transversales nuevos tras el cierre de `Fondo ING PIMCO GIS Commodity`).
+- Sin pendientes transversales nuevos en esta sesion.
 
 ## Como continuar manana
 1. Nuevo orden acordado: Pasivos satelite pendientes -> Depositos dentro de liquidez -> resto de grupos pendientes.
@@ -196,7 +204,7 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
 
-1. Pasivos pendientes: `481` (Tarjeta ING), `45` (Hipoteca Palmito), `41` (Tarjeta ECI).
+1. Pasivos pendientes: `45` (Hipoteca Palmito).
 2. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
 
 ## Comando de regeneracion de listado completo (usuario 1)
