@@ -67,10 +67,14 @@ function groupAndSortAccounts(accounts: AccountOption[]): AccountGroup[] {
 }
 
 const liquidityGroups = computed(() => groupAndSortAccounts(props.page.liquidityAccounts));
+const operationalGroups = computed(() => groupAndSortAccounts(props.page.editAccountOptions));
 const revaluationGroups = computed(() =>
   groupAndSortAccounts(props.page.revaluationAccountOptions),
 );
 const transferGroups = computed(() => groupAndSortAccounts(props.page.transferCounterpartyOptions));
+const transferOriginGroups = computed(() =>
+  groupAndSortAccounts(props.page.transferOriginOptions),
+);
 const adjustmentGroups = computed(() =>
   groupAndSortAccounts(props.page.quickAdjustmentAccountOptions),
 );
@@ -105,6 +109,17 @@ watch(showValueDate, (show: boolean) => {
   if (!show) {
     props.page.quickEntryForm.value_date = props.page.quickEntryForm.booking_date;
   }
+});
+
+const quickMainAccountGroups = computed(() => {
+  const type = props.page.quickEntryForm.movement_type;
+  if (type === 'income' || type === 'expense') {
+    return operationalGroups.value;
+  }
+  if (type === 'transfer') {
+    return transferOriginGroups.value;
+  }
+  return liquidityGroups.value;
 });
 </script>
 
@@ -348,12 +363,17 @@ watch(showValueDate, (show: boolean) => {
             {{
               page.quickEntryForm.movement_type === 'adjustment'
                 ? 'Cuenta a conciliar'
-                : 'Cuenta de liquidez'
+                : page.quickEntryForm.movement_type === 'income' ||
+                    page.quickEntryForm.movement_type === 'expense'
+                  ? 'Cuenta contable'
+                  : 'Cuenta de liquidez'
             }}
           </option>
           <optgroup
             v-for="group in
-            page.quickEntryForm.movement_type === 'adjustment' ? adjustmentGroups : liquidityGroups"
+            page.quickEntryForm.movement_type === 'adjustment'
+              ? adjustmentGroups
+              : quickMainAccountGroups"
             :key="group.key"
             :label="group.label"
           >

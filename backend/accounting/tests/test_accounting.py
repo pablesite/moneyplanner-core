@@ -2440,6 +2440,52 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(summary.status_code, status.HTTP_200_OK, summary.data)
         self.assertEqual(summary.data["months"][4]["expense_total"], "130.00")
 
+    def test_quick_entry_expense_allows_liability_origin_account(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta ECI",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Tarjeta ECI Pablo",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-05-06",
+                "value_date": "2026-05-06",
+                "description": "Parking",
+                "amount": "4.95",
+                "account_id": liability_account.id,
+                "flow_family": "expense",
+                "category_key": "consumption_expenses",
+                "subcategory_key": "transport_mobility",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["quick_entry_kind"], "expense")
+        liability_entry = next(
+            row for row in response.data["entries"] if row["account_id"] == liability_account.id
+        )
+        expense_entry = next(
+            row for row in response.data["entries"] if row["flow_family"] == "expense"
+        )
+        self.assertEqual(liability_entry["side"], "credit")
+        self.assertEqual(liability_entry["amount"], "4.95000000")
+        self.assertEqual(expense_entry["side"], "debit")
+        self.assertEqual(expense_entry["category_key"], "consumption_expenses")
+        self.assertEqual(expense_entry["subcategory_key"], "transport_mobility")
+
     def test_ledger_entry_with_annual_expense_link_is_reflected_in_monthly_summary(self):
         expense_plan = AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -2572,6 +2618,47 @@ class AccountingApiTests(APITestCase):
             invalid_response.status_code, status.HTTP_400_BAD_REQUEST, invalid_response.data
         )
         self.assertIn("counterparty_account_id", invalid_response.data["error"]["details"])
+
+    def test_quick_entry_transfer_allows_liquidity_to_credit_card_liability(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta ECI",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Tarjeta ECI Pablo",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-03",
+                "value_date": "2026-04-03",
+                "description": "Transferencia a Tarjeta ECI desde ING",
+                "amount": "136.47",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": liability_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["quick_entry_kind"], "transfer")
+        liability_entry = next(
+            row for row in response.data["entries"] if row["account_id"] == liability_account.id
+        )
+        origin_entry = next(
+            row for row in response.data["entries"] if row["account_id"] == self.cash_account.id
+        )
+        self.assertEqual(liability_entry["side"], "debit")
+        self.assertEqual(origin_entry["side"], "credit")
 
     def test_quick_entry_income_rejects_foreign_account_reference(self):
         other_user = get_user_model().objects.create_user(

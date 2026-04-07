@@ -670,23 +670,22 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             booking_date=attrs["booking_date"],
             value_date=attrs["value_date"],
         )
-        requires_liquidity_origin = movement_type not in {
-            "transfer",
-            "adjustment",
-            "investment",
-            "investment_purchase",
-            "revaluation",
-        }
-        # Income movements can also target accounting investment accounts when the
-        # user wants to register reinvested yield directly on the position.
-        if (
-            movement_type == "income"
-            and account.account_type == LedgerAccount.AccountType.ASSET
-            and account.asset_id is not None
-        ):
-            requires_liquidity_origin = False
-        if requires_liquidity_origin:
-            validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
+        if movement_type in {"income", "expense"}:
+            self._validate_income_expense_origin_account(
+                movement_type=movement_type,
+                account=account,
+                user_id=user.id,
+            )
+        else:
+            requires_liquidity_origin = movement_type not in {
+                "transfer",
+                "adjustment",
+                "investment",
+                "investment_purchase",
+                "revaluation",
+            }
+            if requires_liquidity_origin:
+                validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
 
         if annual_income_entry is not None and annual_income_entry.user_id != user.id:
             raise serializers.ValidationError(
@@ -991,6 +990,28 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     }
                 )
 
+    def _validate_income_expense_origin_account(
+        self,
+        *,
+        movement_type: str,
+        account: LedgerAccount,
+        user_id: int,
+    ) -> None:
+        # Allow posting income/expense directly on liabilities (e.g., credit cards).
+        if account.account_type == LedgerAccount.AccountType.LIABILITY:
+            return
+
+        if account.account_type != LedgerAccount.AccountType.ASSET:
+            raise serializers.ValidationError(
+                {"account_id": "La cuenta debe ser de tipo asset o liability."}
+            )
+
+        # Income can also target accounting investment assets for reinvested yield.
+        if movement_type == "income" and account.asset_id is not None:
+            return
+
+        validate_liquidity_account(account=account, user_id=user_id, field_name="account_id")
+
     def _validate_functional_classification(
         self,
         *,
@@ -1188,7 +1209,12 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"annual_expense_entry_id": "No aplica a transferencias internas."}
             )
-        validate_liquidity_account(
+        self._validate_transfer_account(
+            account=account,
+            user_id=user_id,
+            field_name="account_id",
+        )
+        self._validate_transfer_account(
             account=counterparty_account,
             user_id=user_id,
             field_name="counterparty_account_id",
@@ -1205,6 +1231,31 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     )
                 }
             )
+
+    def _validate_transfer_account(
+        self,
+        *,
+        account: LedgerAccount | None,
+        user_id: int,
+        field_name: str,
+    ) -> None:
+        if account is None:
+            raise serializers.ValidationError({field_name: "La cuenta es obligatoria."})
+        if account.user_id != user_id:
+            raise serializers.ValidationError(
+                {field_name: "La cuenta no pertenece al usuario autenticado."}
+            )
+        if account.account_type == LedgerAccount.AccountType.LIABILITY:
+            if account.liability_id is None:
+                raise serializers.ValidationError(
+                    {
+                        field_name: (
+                            "La transferencia con pasivos requiere una cuenta vinculada a pasivo."
+                        )
+                    }
+                )
+            return
+        validate_liquidity_account(account=account, user_id=user_id, field_name=field_name)
 
     def _validate_adjustment_movement(
         self,
