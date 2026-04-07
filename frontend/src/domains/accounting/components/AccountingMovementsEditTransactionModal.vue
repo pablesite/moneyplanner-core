@@ -67,6 +67,7 @@ function groupAndSortAccounts(accounts: AccountOption[]): AccountGroup[] {
 }
 
 const editLiquidityGroups = computed(() => groupAndSortAccounts(props.page.liquidityAccounts));
+const editOperationalGroups = computed(() => groupAndSortAccounts(props.page.editAccountOptions));
 const editRevaluationGroups = computed(() =>
   groupAndSortAccounts(props.page.revaluationAccountOptions),
 );
@@ -141,6 +142,14 @@ const editRevaluationCurrentBalance = computed((): number | null => {
   if (raw == null) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+});
+
+const editMainAccountGroups = computed(() => {
+  const kind = props.page.editTransactionForm.kind;
+  if (kind === 'income' || kind === 'expense') {
+    return editOperationalGroups.value;
+  }
+  return editLiquidityGroups.value;
 });
 </script>
 
@@ -393,7 +402,7 @@ const editRevaluationCurrentBalance = computed((): number | null => {
           <optgroup
             v-for="group in page.editTransactionForm.kind === 'balance_adjustment'
               ? editAdjustmentGroups
-              : editLiquidityGroups"
+              : editMainAccountGroups"
             :key="group.key"
             :label="group.label"
           >
