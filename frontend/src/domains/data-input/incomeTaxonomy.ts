@@ -24,16 +24,16 @@ export const incomeCategories: { value: IncomeCategoryKey; label: string }[] = [
 ];
 
 export const incomeSubcategories: IncomeSubcategory[] = [
-  { category: 'salary', value: 'employee_salary', label: 'Nomina' },
+  { category: 'salary', value: 'employee_salary', label: 'Nómina' },
   { category: 'salary', value: 'bonus_commission', label: 'Bonus/comisiones' },
   { category: 'salary', value: 'overtime', label: 'Horas extra' },
-  { category: 'salary', value: 'severance', label: 'Indemnizacion' },
+  { category: 'salary', value: 'severance', label: 'Indemnización' },
   { category: 'salary', value: 'other_salary', label: 'Otros salarios' },
 
-  { category: 'business', value: 'self_employed_services', label: 'Autonomo/freelance' },
+  { category: 'business', value: 'self_employed_services', label: 'Autónomo/freelance' },
   { category: 'business', value: 'business_profit', label: 'Beneficio de negocio' },
   { category: 'business', value: 'professional_fees', label: 'Honorarios' },
-  { category: 'business', value: 'royalties', label: 'Regalias' },
+  { category: 'business', value: 'royalties', label: 'Regalías' },
   { category: 'business', value: 'other_business', label: 'Otros ingresos de negocio' },
 
   { category: 'passive_income', value: 'real_estate_rent', label: 'Alquileres' },
@@ -72,12 +72,12 @@ export const incomeSubcategories: IncomeSubcategory[] = [
   {
     category: 'transfers_support',
     value: 'alimony_received',
-    label: 'Pension/alimentos recibidos',
+    label: 'Pensión/alimentos recibidos',
   },
   {
     category: 'transfers_support',
     value: 'insurance_payout',
-    label: 'Indemnizacion de seguro',
+    label: 'Indemnización de seguro',
   },
   {
     category: 'transfers_support',
@@ -88,28 +88,28 @@ export const incomeSubcategories: IncomeSubcategory[] = [
   {
     category: 'public_benefits',
     value: 'unemployment_benefit',
-    label: 'Prestacion por desempleo',
+    label: 'Prestación por desempleo',
   },
   {
     category: 'public_benefits',
     value: 'retirement_pension',
-    label: 'Pension de jubilacion',
+    label: 'Pensión de jubilación',
   },
   {
     category: 'public_benefits',
     value: 'disability_benefit',
-    label: 'Prestacion por incapacidad',
+    label: 'Prestación por incapacidad',
   },
   { category: 'public_benefits', value: 'scholarship', label: 'Beca' },
-  { category: 'public_benefits', value: 'subsidy_grant', label: 'Subsidio/ayuda publica' },
+  { category: 'public_benefits', value: 'subsidy_grant', label: 'Subsidio/ayuda pública' },
   {
     category: 'public_benefits',
     value: 'other_public_benefits',
-    label: 'Otras prestaciones publicas',
+    label: 'Otras prestaciones públicas',
   },
 
-  { category: 'other_income', value: 'tax_refund', label: 'Devolucion de impuestos' },
+  { category: 'other_income', value: 'tax_refund', label: 'Devolución de impuestos' },
   { category: 'other_income', value: 'one_off_adjustment', label: 'Ajuste puntual' },
-  { category: 'other_income', value: 'misc', label: 'Miscelanea' },
+  { category: 'other_income', value: 'misc', label: 'Miscelánea' },
   { category: 'other_income', value: 'other', label: 'Otros ingresos' },
 ];

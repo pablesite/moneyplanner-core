@@ -90,7 +90,7 @@ class AnnualExpenseEntry(models.Model):
 
     class Category(models.TextChoices):
         SAVINGS_ALLOCATION = "savings_allocation", "Ahorro"
-        FINANCIAL_INVESTMENTS = "financial_investments", "Inversion financiera"
+        FINANCIAL_INVESTMENTS = "financial_investments", "Inversión financiera"
         REAL_ESTATE_ASSETS = "real_estate_assets", "Activos inmobiliarios"
         TANGIBLE_ASSETS = "tangible_assets", "Activos mobiliarios"
         CONSUMPTION_EXPENSES = "consumption_expenses", "Gastos"
@@ -108,7 +108,7 @@ class AnnualExpenseEntry(models.Model):
         OPERATING = "operating", "Operativo"
         TEMPORARY_COMMITMENT = "temporary_commitment", "Compromiso temporal"
         SAVINGS = "savings", "Ahorro"
-        INVESTMENT = "investment", "Inversion"
+        INVESTMENT = "investment", "Inversión"
         ASSET_PURCHASE = "asset_purchase", "Compra de activo"
         TAX_FEE = "tax_fee", "Impuestos y gastos"
         TRANSFER = "transfer", "Transferencia"

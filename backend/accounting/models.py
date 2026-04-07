@@ -61,7 +61,7 @@ class LedgerTransaction(models.Model):
 
     class Origin(models.TextChoices):
         MANUAL = "manual", "Manual"
-        IMPORT = "import", "Importacion"
+        IMPORT = "import", "Importación"
         SYSTEM = "system", "Sistema"
 
     class QuickEntryKind(models.TextChoices):
@@ -69,13 +69,13 @@ class LedgerTransaction(models.Model):
         EXPENSE = "expense", "Gasto"
         TRANSFER = "transfer", "Transferencia"
         ADJUSTMENT = "adjustment", "Ajuste"
-        INVESTMENT = "investment", "Inversion"
+        INVESTMENT = "investment", "Inversión"
         DEBT_PAYMENT = "debt_payment", "Pago deuda"
-        REVALUATION = "revaluation", "Revalorizacion"
+        REVALUATION = "revaluation", "Revalorización"
 
     class InvestmentDirection(models.TextChoices):
         INFLOW = "inflow", "Aporte"
-        OUTFLOW = "outflow", "Desinversion"
+        OUTFLOW = "outflow", "Desinversión"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ledger_transactions"

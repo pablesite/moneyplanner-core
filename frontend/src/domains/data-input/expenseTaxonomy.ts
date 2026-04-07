@@ -13,7 +13,7 @@ export type ExpenseSubcategory = {
 
 export const expenseCategories: { value: ExpenseCategoryKey; label: string }[] = [
   { value: 'savings_allocation', label: 'Ahorro' },
-  { value: 'financial_investments', label: 'Inversion financiera' },
+  { value: 'financial_investments', label: 'Inversión financiera' },
   { value: 'real_estate_assets', label: 'Activos inmobiliarios' },
   { value: 'tangible_assets', label: 'Activos mobiliarios' },
   { value: 'consumption_expenses', label: 'Gastos de consumo' },
@@ -50,13 +50,13 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
   {
     category: 'real_estate_assets',
     value: 'mortgage_principal',
-    label: 'Amortizacion principal hipoteca',
+    label: 'Amortización principal hipoteca',
   },
   { category: 'real_estate_assets', value: 'property_improvements', label: 'Reformas y mejoras' },
   {
     category: 'real_estate_assets',
     value: 'real_estate_fees_taxes',
-    label: 'Gastos/impuestos de adquisicion',
+    label: 'Gastos/impuestos de adquisición',
   },
   {
     category: 'real_estate_assets',
@@ -64,17 +64,17 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
     label: 'Otros destinos inmobiliarios',
   },
 
-  { category: 'tangible_assets', value: 'vehicle_purchase', label: 'Compra de vehiculo' },
+  { category: 'tangible_assets', value: 'vehicle_purchase', label: 'Compra de vehículo' },
   {
     category: 'tangible_assets',
     value: 'home_furniture_appliances',
-    label: 'Mobiliario y electrodomesticos',
+    label: 'Mobiliario y electrodomésticos',
   },
-  { category: 'tangible_assets', value: 'technology_devices', label: 'Tecnologia y dispositivos' },
+  { category: 'tangible_assets', value: 'technology_devices', label: 'Tecnología y dispositivos' },
   {
     category: 'tangible_assets',
     value: 'jewelry_collectibles',
-    label: 'Joyeria y coleccionables',
+    label: 'Joyería y coleccionables',
   },
   {
     category: 'tangible_assets',
@@ -83,15 +83,15 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
   },
 
   { category: 'consumption_expenses', value: 'housing_home', label: 'Vivienda y hogar' },
-  { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
-  { category: 'consumption_expenses', value: 'family_childcare', label: 'Familia y bebe' },
+  { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentación' },
+  { category: 'consumption_expenses', value: 'family_childcare', label: 'Familia y bebé' },
   {
     category: 'consumption_expenses',
     value: 'transport_mobility',
     label: 'Transporte y movilidad',
   },
   { category: 'consumption_expenses', value: 'health_wellbeing', label: 'Salud y bienestar' },
-  { category: 'consumption_expenses', value: 'education_growth', label: 'Formacion y desarrollo' },
+  { category: 'consumption_expenses', value: 'education_growth', label: 'Formación y desarrollo' },
   { category: 'consumption_expenses', value: 'leisure_lifestyle', label: 'Ocio y estilo de vida' },
   { category: 'consumption_expenses', value: 'gifts_donations', label: 'Regalos y donaciones' },
   {
