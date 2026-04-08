@@ -1,5 +1,6 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useAccountingPage } from '@/domains/accounting/composables';
+import { useNetWorthStore } from '@/domains/net-worth/store';
 
 export function useAccountingMovementsPage() {
   const {
@@ -112,6 +113,8 @@ export function useAccountingMovementsPage() {
     fillQuickEntryFromTransaction,
   } = useAccountingPage();
 
+  const netWorthStore = useNetWorthStore();
+
   function toNumber(raw: string): number {
     const normalized = String(raw ?? '')
       .trim()
@@ -197,7 +200,10 @@ export function useAccountingMovementsPage() {
       label: string;
       positionType: 'asset' | 'liability';
       accounts: (typeof operationalAccounts.value)[number][];
+      subtotal: number;
+      baseCurrency: string;
     };
+    const baseCurrency = netWorthStore.baseCurrency ?? 'EUR';
     const groups = new Map<string, Group>();
     for (const account of operationalAccounts.value) {
       const meta = accountPositionMetaByAccountId.value.get(account.id);
@@ -214,9 +220,16 @@ export function useAccountingMovementsPage() {
           label: labels[category] ?? category,
           positionType: posType,
           accounts: [],
+          subtotal: 0,
+          baseCurrency,
         });
       }
-      groups.get(key)!.accounts.push(account);
+      const group = groups.get(key)!;
+      group.accounts.push(account);
+      const amountBase = meta?.amount_base;
+      group.subtotal =
+        (group.subtotal ?? 0) +
+        (amountBase != null ? toNumber(amountBase) : toNumber(account.current_balance));
     }
     for (const group of groups.values()) {
       group.accounts.sort((a, b) =>
