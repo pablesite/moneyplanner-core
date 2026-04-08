@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-07 (sesion 37)
+Ultima actualizacion: 2026-04-08 (sesion 39)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,12 +14,13 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 34.
-- `Pendientes`: 72.
+- `Revisadas`: 35.
+- `Pendientes`: 71.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
 - `46` - `Iphone 16 Pro` (pasivo / Prestamo iPhone 16 Pro)
+- `492` - `Préstamo - Iphone 15 Pro` (pasivo / consolidada desde cuenta obsoleta `465`)
 - `468` - `Master Matematicas (Deuda)` (pasivo)
 - `89` - `Reserva Atrio` (pasivo / deuda)
 - `36` - `Reserva Atrio Residencial` (activo de inversion)
@@ -57,6 +58,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - ✅ Cuentas con categorizacion final cerrada:
   - `42` - `FIV IVI`
   - `46` - `Iphone 16 Pro`
+  - `492` - `Préstamo - Iphone 15 Pro`
   - `468` - `Master Matematicas (Deuda)`
   - `26` - `Bitcoin`
   - `470` - `Fondo ING PIMCO GIS Commodity`
@@ -93,9 +95,10 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 
 ## Limpieza Pendiente En Cuentas Revisadas
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
-- `Iphone 16 Pro`: sin limpieza adicional pendiente detectada.
+- `Iphone 16 Pro` (id=46): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Iphone 16 pro`.
+- `Préstamo - Iphone 15 Pro` (id=492): revision final cerrada. Cuenta consolidada con 12 cuotas trasladadas desde `iPhone 15 Ana` (id=465), cuenta obsoleta eliminada y concepto de pagos de deuda unificado a `Préstamo -  Iphone 15 Pro`.
 - `Master Matematicas (Deuda)`: sin limpieza estructural pendiente detectada.
-- `Reserva Atrio` (deuda): revision final cerrada. Pagos de deuda normalizados a `Deuda - Nueva vivienda`, clasificacion `real_estate_assets/property_purchase` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
+- `Reserva Atrio` (deuda): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Reserva Atrio`, clasificacion `real_estate_assets/property_purchase` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
 - `Reserva Atrio Residencial` (activo): revision final cerrada. Movimientos de compra y mejoras inmobiliarias revisados en su historico.
 - `Cartera Metal`: revision final cerrada. Aportes de inversion normalizados a `Inversion en Roboadvisor` con clasificacion `financial_investments/roboadvisor`; movimientos legacy `investment_purchase` convertidos a `investment`.
 - `Fondo ING PIMCO GIS Commodity` (id=470): revisado y consolidado. Activo creado (asset_id=147). Cuenta duplicada obsoleta (id=458) eliminada. 2 revalorizaciones limpias ("Intereses"). Revision final completada y cerrada para esta cuenta.
