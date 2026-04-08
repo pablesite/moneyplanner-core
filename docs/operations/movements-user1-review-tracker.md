@@ -197,15 +197,20 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 
 ## Pendientes Transversales
 - Sin pendientes transversales nuevos en esta sesion.
+- Siguiente paso acordado para vista de Movimientos:
+  - revisar como se contabilizan los pagos de hipoteca en `Kutxa` frente a la amortizacion en `Hipoteca Palmito`,
+  - validar coherencia funcional entre modal de `Registrar movimiento` y modal de `Editar movimiento` para deuda/hipoteca,
+  - cerrar criterio unico de contabilizacion (origen liquidez vs reduccion de principal/intereses) y aplicarlo en ambos flujos.
 
 ## Como continuar manana
 1. Nuevo orden acordado: Pasivos satelite pendientes -> Depositos dentro de liquidez -> resto de grupos pendientes.
-2. Por cada cuenta revisar:
+2. Antes de continuar con liquidez, ejecutar la revision transversal `Kutxa vs Hipoteca Palmito` y la coherencia crear/editar en modales de deuda.
+3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
    - cuentas tecnicas o espejo que queden sin uso.
-3. Marcar como revisada una cuenta solo cuando su historico quede consistente.
-4. Para "depositos dentro de liquidez", priorizar en Grupo 4 las cuentas de liquidez (`ING`, `Kutxa`, `Santander`, `Monederos`) antes de seguir con otras cuentas corrientes.
+4. Marcar como revisada una cuenta solo cuando su historico quede consistente.
+5. Para "depositos dentro de liquidez", priorizar en Grupo 4 las cuentas de liquidez (`ING`, `Kutxa`, `Santander`, `Monederos`) antes de seguir con otras cuentas corrientes.
 
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
