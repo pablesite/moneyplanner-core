@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-08 (sesion 39)
+Ultima actualizacion: 2026-04-08 (sesion 40)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,13 +14,14 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 35.
-- `Pendientes`: 71.
+- `Revisadas`: 36.
+- `Pendientes`: 70.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
 - `46` - `Iphone 16 Pro` (pasivo / Prestamo iPhone 16 Pro)
 - `492` - `Préstamo - Iphone 15 Pro` (pasivo / consolidada desde cuenta obsoleta `465`)
+- `45` - `Hipoteca Palmito` (pasivo / hipoteca vivienda)
 - `468` - `Master Matematicas (Deuda)` (pasivo)
 - `89` - `Reserva Atrio` (pasivo / deuda)
 - `36` - `Reserva Atrio Residencial` (activo de inversion)
@@ -59,6 +60,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `42` - `FIV IVI`
   - `46` - `Iphone 16 Pro`
   - `492` - `Préstamo - Iphone 15 Pro`
+  - `45` - `Hipoteca Palmito`
   - `468` - `Master Matematicas (Deuda)`
   - `26` - `Bitcoin`
   - `470` - `Fondo ING PIMCO GIS Commodity`
@@ -97,6 +99,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
 - `Iphone 16 Pro` (id=46): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Iphone 16 pro`.
 - `Préstamo - Iphone 15 Pro` (id=492): revision final cerrada. Cuenta consolidada con 12 cuotas trasladadas desde `iPhone 15 Ana` (id=465), cuenta obsoleta eliminada y concepto de pagos de deuda unificado a `Préstamo -  Iphone 15 Pro`.
+- `Hipoteca Palmito` (id=45): revision final cerrada. Concepto unificado en todos los pagos de deuda a `Hipoteca Vivienda Palmito`.
 - `Master Matematicas (Deuda)`: sin limpieza estructural pendiente detectada.
 - `Reserva Atrio` (deuda): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Reserva Atrio`, clasificacion `real_estate_assets/property_purchase` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
 - `Reserva Atrio Residencial` (activo): revision final cerrada. Movimientos de compra y mejoras inmobiliarias revisados en su historico.
@@ -178,7 +181,7 @@ PequeÃ±os pasivos independientes. Contrapartidas ya conocidas.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 128 | 45 | Hipoteca Palmito | liability |
+| - | - | (sin pendientes en pasivos satélite) | - |
 
 ### Grupo 4 â€” Cuentas corrientes (dejar para el final)
 Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los grupos anteriores estÃ©n limpios.
@@ -207,8 +210,7 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
 
-1. Pasivos pendientes: `45` (Hipoteca Palmito).
-2. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
+1. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
 
 ## Comando de regeneracion de listado completo (usuario 1)
 Usar para obtener el inventario completo actualizado:
