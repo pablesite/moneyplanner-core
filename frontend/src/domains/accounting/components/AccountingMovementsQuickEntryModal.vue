@@ -544,15 +544,13 @@ const quickMainAccountGroups = computed(() => {
           v-model="page.quickEntryForm.principal_amount"
           class="input"
           inputmode="decimal"
-          placeholder="Principal (ej: 300.00)"
-          required
+          placeholder="Principal (opcional; por defecto = importe total)"
         />
         <input
           v-model="page.quickEntryForm.interest_amount"
           class="input"
           inputmode="decimal"
-          placeholder="Interés (ej: 30.00, 0 si no aplica)"
-          required
+          placeholder="Inter�s (opcional; 0 si no aplica)"
         />
         <select v-model="page.quickEntryForm.interest_account_id" class="select">
           <option :value="null">Cuenta de gasto por intereses (si aplica)</option>
@@ -590,7 +588,7 @@ const quickMainAccountGroups = computed(() => {
                   ? 'La desinversión devuelve liquidez al activo de caja.'
                   : 'El aporte registra el alta en la cuenta de inversión.'
                 : page.quickEntryForm.movement_type === 'debt_payment'
-                  ? 'El pago separa principal e intereses. Total = principal + intereses.'
+                  ? 'El pago reduce deuda. El desglose principal/intereses es opcional.'
                   : 'Las partidas contables se generan automáticamente.'
           }}
         </p>
@@ -605,3 +603,4 @@ const quickMainAccountGroups = computed(() => {
     </form>
   </BaseModal>
 </template>
+

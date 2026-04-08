@@ -612,14 +612,47 @@ export function useAccountingPage() {
   function hasQuickClassification(): boolean {
     return Boolean(quickEntryForm.category_key && quickEntryForm.subcategory_key);
   }
+  function resolveDebtPaymentBreakdown(amountValue: number): {
+    principal: number;
+    interest: number;
+    hasCustomBreakdown: boolean;
+    valid: boolean;
+  } {
+    const principalRaw = quickEntryForm.principal_amount.trim();
+    const interestRaw = quickEntryForm.interest_amount.trim();
+    const hasCustomBreakdown = Boolean(principalRaw || interestRaw);
+    if (!hasCustomBreakdown) {
+      return {
+        principal: amountValue,
+        interest: 0,
+        hasCustomBreakdown: false,
+        valid: amountValue > 0,
+      };
+    }
+    const principalValue = toNumber(principalRaw);
+    const interestValue = toNumber(interestRaw || '0');
+    if (principalValue <= 0 || interestValue < 0) {
+      return {
+        principal: principalValue,
+        interest: interestValue,
+        hasCustomBreakdown: true,
+        valid: false,
+      };
+    }
+    return {
+      principal: principalValue,
+      interest: interestValue,
+      hasCustomBreakdown: true,
+      valid: Math.abs(principalValue + interestValue - amountValue) < 0.000001,
+    };
+  }
   function debtPaymentBreakdownReady(amountValue: number): boolean {
-    const principalValue = toNumber(quickEntryForm.principal_amount);
-    const interestValue = toNumber(quickEntryForm.interest_amount);
     if (quickEntryForm.liability_account_id == null) return false;
-    if (principalValue <= 0 || interestValue < 0) return false;
-    if (interestValue > 0 && quickEntryForm.interest_account_id == null) return false;
-    if (interestValue > 0 && !hasQuickClassification()) return false;
-    return Math.abs(principalValue + interestValue - amountValue) < 0.000001;
+    if (!hasQuickClassification()) return false;
+    const breakdown = resolveDebtPaymentBreakdown(amountValue);
+    if (!breakdown.valid) return false;
+    if (breakdown.interest > 0 && quickEntryForm.interest_account_id == null) return false;
+    return true;
   }
   const quickEntryReady = computed(() => {
     if (!quickEntryForm.description.trim()) return false;
@@ -2972,6 +3005,10 @@ export function useAccountingPage() {
         'Selecciona cuenta y saldo final objetivo para calcular automaticamente el ajuste.';
       return;
     }
+    const debtBreakdown =
+      quickEntryForm.movement_type === 'debt_payment'
+        ? resolveDebtPaymentBreakdown(toNumber(quickEntryForm.amount))
+        : null;
     const payload: QuickLedgerTransactionWritePayload = {
       movement_type: quickEntryForm.movement_type,
       booking_date: quickEntryForm.booking_date,
@@ -3031,12 +3068,12 @@ export function useAccountingPage() {
       ...(quickEntryForm.movement_type === 'debt_payment'
         ? {
             liability_account_id: normalizeAccountId(quickEntryForm.liability_account_id),
-            principal_amount: formatDecimalInput(quickEntryForm.principal_amount),
-            interest_amount: formatDecimalInput(quickEntryForm.interest_amount || '0'),
+            principal_amount: String(debtBreakdown?.principal ?? 0),
+            interest_amount: String(debtBreakdown?.interest ?? 0),
             ...(quickEntryForm.annual_expense_entry_id != null
               ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
               : {}),
-            ...(toNumber(quickEntryForm.interest_amount) > 0
+            ...((debtBreakdown?.interest ?? 0) > 0
               ? { interest_account_id: normalizeAccountId(quickEntryForm.interest_account_id) }
               : {}),
           }
@@ -3186,8 +3223,8 @@ export function useAccountingPage() {
     quickEntryForm.counterparty_account_id = counterpartyId;
     quickEntryForm.liability_account_id = liabilityId;
     quickEntryForm.interest_account_id = null;
-    quickEntryForm.principal_amount = '';
-    quickEntryForm.interest_amount = '';
+    quickEntryForm.principal_amount = movementType === 'debt_payment' ? amount : '';
+    quickEntryForm.interest_amount = movementType === 'debt_payment' ? '0' : '';
     quickEntryForm.realized_cost_basis = transaction.realized_cost_basis ?? '';
     quickEntryForm.realized_gain_loss = transaction.realized_gain_loss ?? '';
     quickEntryForm.category_key = classifiedEntry?.category_key ?? '';
