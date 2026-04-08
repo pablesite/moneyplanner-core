@@ -1222,6 +1222,11 @@
   flex: 1;
 }
 
+.ui-catalog-group-subtotal {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
 .ui-catalog-group-count {
   font-size: 0.7rem;
   background: rgba(255, 255, 255, 0.1);

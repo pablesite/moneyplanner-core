@@ -103,6 +103,7 @@ type AccountPositionMeta = {
   position_type: ManualPositionType;
   category: string;
   subcategory: string;
+  amount_base?: string;
 };
 type AccountTimelineTransaction = LedgerTransaction & {
   impactValue: number;
@@ -415,6 +416,7 @@ export function useAccountingPage() {
             position_type: 'asset',
             category: String(asset.category ?? '').trim() || 'other',
             subcategory: String(asset.subcategory ?? '').trim() || 'other',
+            amount_base: asset.amount_base,
           });
           return;
         }
@@ -426,6 +428,7 @@ export function useAccountingPage() {
             position_type: 'liability',
             category: String(liability.category ?? '').trim() || 'other',
             subcategory: String(liability.subcategory ?? '').trim() || 'other',
+            amount_base: liability.amount_base,
           });
         }
       }

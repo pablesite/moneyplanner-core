@@ -173,6 +173,9 @@ function typeBadgeVariant(movement: {
         <div :class="`ui-catalog-group ui-catalog-group-${group.positionType}`">
           <button class="ui-catalog-group-header" type="button" @click="toggleGroup(group.key)">
             <span class="ui-catalog-group-label">{{ group.label }}</span>
+            <span class="ui-catalog-group-subtotal">{{
+              state.formatMoney(group.subtotal, group.baseCurrency)
+            }}</span>
             <span class="ui-catalog-group-count">{{ group.accounts.length }}</span>
             <span class="ui-catalog-group-chevron" :class="{ open: isGroupOpen(group.key) }"
               >▾</span
