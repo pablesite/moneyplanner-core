@@ -109,6 +109,7 @@ export const incomeSubcategories: IncomeSubcategory[] = [
   },
 
   { category: 'other_income', value: 'tax_refund', label: 'Devolución de impuestos' },
+  { category: 'other_income', value: 'purchase_refunds', label: 'Devoluciones' },
   { category: 'other_income', value: 'one_off_adjustment', label: 'Ajuste puntual' },
   { category: 'other_income', value: 'misc', label: 'Miscelánea' },
   { category: 'other_income', value: 'other', label: 'Otros ingresos' },

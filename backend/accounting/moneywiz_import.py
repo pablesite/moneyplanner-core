@@ -163,7 +163,7 @@ _MONEYWIZ_INCOME_PATH: dict[str, tuple[str, str]] = {
     "pasivos > declaracion de la renta": ("other_income", "tax_refund"),
     "pasivos": ("other_income", "misc"),
     # Deudores
-    "deudores > devoluciones": ("transfers_support", "other_transfers_support"),
+    "deudores > devoluciones": ("other_income", "purchase_refunds"),
     "deudores > prestamo personal": ("other_income", "misc"),
     "deudores": ("other_income", "misc"),
     # Ganancias de capital
@@ -1208,7 +1208,7 @@ def _resolve_income_classification(text: str) -> tuple[str, str] | None:
         ("staking", ("passive_income", "staking_yield")),
         ("p2p", ("passive_income", "p2p_lending")),
         ("tax refund", ("other_income", "tax_refund")),
-        ("refund", ("other_income", "tax_refund")),
+        ("refund", ("other_income", "purchase_refunds")),
         ("gift", ("transfers_support", "gifts_received")),
         ("inheritance", ("transfers_support", "inheritance")),
         ("alimony", ("transfers_support", "alimony_received")),

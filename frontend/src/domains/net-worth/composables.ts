@@ -351,12 +351,24 @@ export function useNetWorthViewState() {
   const byCategoryFiltered = computed<ByCategoryRow[]>(() => {
     const rows = filterByCategoryRows(byCategoryChart.value);
     const existingKeys = new Set(rows.map((r) => r.key));
-    const zeroCats = new Set(
+    const zeroLiabCats = new Set(
       store.liabilities
         .filter((l) => l.is_active !== false && l.category && !existingKeys.has(l.category))
         .map((l) => l.category),
     );
-    for (const key of zeroCats) {
+    for (const key of zeroLiabCats) {
+      rows.push({ key, a: 0, l: 0 });
+    }
+    // Categorías de activos con saldo neto negativo o cero: si hay activos activos en esa
+    // categoría, incluirla igualmente (con a: 0) para que no desaparezca del panel.
+    const zeroAssetCats = new Set(
+      store.assets
+        .filter(
+          (a) => a.is_active !== false && a.category && !existingKeys.has(a.category) && !zeroLiabCats.has(a.category),
+        )
+        .map((a) => a.category),
+    );
+    for (const key of zeroAssetCats) {
       rows.push({ key, a: 0, l: 0 });
     }
     const order = canonicalKeyOrder.value;

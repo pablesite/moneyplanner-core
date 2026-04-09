@@ -35,7 +35,7 @@ export function buildByCategoryChart(
   return {
     unit,
     keys,
-    assets: keys.map((key) => Math.max(0, toNumber(assetsBy[key]))),
+    assets: keys.map((key) => toNumber(assetsBy[key])),
     liabilities: keys.map((key) => Math.max(0, toNumber(liabsBy[key]))),
   };
 }

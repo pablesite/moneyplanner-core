@@ -62,6 +62,7 @@ INCOME_TAXONOMY: dict[str, set[str]] = {
     },
     "other_income": {
         "tax_refund",
+        "purchase_refunds",
         "one_off_adjustment",
         "misc",
         "other",
@@ -112,6 +113,7 @@ EXPENSE_TAXONOMY: dict[str, set[str]] = {
         "leisure_lifestyle",
         "gifts_donations",
         "financial_commitments",
+        "personal_loan_repayment",
         "other_consumption_expenses",
     },
 }

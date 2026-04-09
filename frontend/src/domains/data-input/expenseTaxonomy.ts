@@ -101,6 +101,11 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
   },
   {
     category: 'consumption_expenses',
+    value: 'personal_loan_repayment',
+    label: 'Devolución préstamo personal',
+  },
+  {
+    category: 'consumption_expenses',
     value: 'other_consumption_expenses',
     label: 'Otros gastos de consumo',
   },
