@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-09 (sesion 41)
+Ultima actualizacion: 2026-04-09 (sesion 42)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 36.
-- `Pendientes`: 70.
+- `Revisadas`: 39.
+- `Pendientes`: 67.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -36,6 +36,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `480` - `ETF REIT Real Global Real State` (activo de inversion / ETF REIT)
 - `482` - `Cartera Ahorro MyInvestor` (activo de inversion / roboadvisor)
 - `483` - `Cartera Ahorro MyInvestor (Compartida)` (activo de inversion / roboadvisor)
+- `24` - `MyInvestor Depósito 1 mes` (activo de inversion / deposito; revision final cerrada)
+- `23` - `MyInvestor 3 meses` (activo de inversion / deposito; revision final cerrada)
+- `22` - `Spot Binance` (activo de inversion / cripto; revision final cerrada)
 - `26` - `Bitcoin` (activo de inversion / cripto)
 - `486` - `Cripto - ETH (Metamask)` (activo de inversion / cripto)
 - `27` - `ETH` (activo de inversion / cripto; Binance)
@@ -77,6 +80,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `480` - `ETF REIT Real Global Real State`
   - `482` - `Cartera Ahorro MyInvestor`
   - `483` - `Cartera Ahorro MyInvestor (Compartida)`
+  - `24` - `MyInvestor Depósito 1 mes`
+  - `23` - `MyInvestor 3 meses`
+  - `22` - `Spot Binance`
   - `486` - `Cripto - ETH (Metamask)`
   - `485` - `Cripto - Bots de Grids (Pionex)`
   - `38` - `Urbanitae`
@@ -114,6 +120,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `ETF REIT Real Global Real State` (id=480): revision final cerrada. Aportes normalizados con concepto `Inversion en ETF REIT Real Global Real State` y clasificacion `financial_investments/etf_indexed`; revalorizaciones sin categoria/subcategoria.
 - `Cartera Ahorro MyInvestor` (id=482): revision final cerrada. Revalorizaciones con tilde (`Revalorizacion` -> `Revalorización`) y sin ownership.
 - `Cartera Ahorro MyInvestor (Compartida)` (id=483): revision final cerrada. Revalorizaciones con tilde (`Revalorizacion` -> `Revalorización`) y sin ownership.
+- `MyInvestor Depósito 1 mes` (id=24): revision final cerrada. Ingresos unificados con concepto `Intereses de depósitos`. Retiradas de inversion (`investment/outflow`) normalizadas con concepto `Retirada de inversión en depósitos` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
+- `MyInvestor 3 meses` (id=23): revision final cerrada. Deposito marcado como revisado en la pasada de cuentas de liquidez/depositos MyInvestor.
+- `Spot Binance` (id=22): revision final cerrada. Correccion de metadatos de direccion en aportes a Bots (`investment_direction` coherente con el asiento), normalizacion de conceptos en aportes a BTC (`Inversión en BTC`) y en ingresos por ajuste manual Euro/USD (`Ajuste cambio manual Euro/Dolar`) con categoria `other_income/other`. Añadido en UI el saldo contable tras movimiento para facilitar auditoria del timeline por cuenta.
 - `Bitcoin` (id=26): revisado. Spot Binance migrado a USD, deduplicacion aplicada y clasificacion normalizada en aportes (`financial_investments -> crypto`) y retiradas (`capital_gains -> sale_financial_assets`). Coherencia de saldo/timeline validada.
 - `Cripto - ETH (Metamask)` (id=486): revision final cerrada. Cuenta satelite de inversion con ownership de activo y movimientos alineado a `Lucas` (`ownership_id=11`).
 - `ETH` (id=27, Binance): revision final cerrada. Aportes de inversion (`investment/inflow`) normalizados con concepto `Inversion en ETH` y ownership de movimientos alineado a `Lucas` (`ownership_id=11`).
@@ -173,7 +182,6 @@ SatÃ©lites cripto. Contrapartidas suelen ser Spot Binance â†” liquidez.
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 246 | 22 | Spot Binance | asset |
 | 174 | 445 | DT Bots Cripto | asset |
 
 ### Grupo 3 â€” Pasivos satÃ©lite (prÃ©stamos y tarjeta)
@@ -200,8 +208,8 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 - Revisiones transversales de hipoteca cerradas: criterio unico de contabilizacion deuda (principal vs interes) validado y aplicado en `Hipoteca Palmito`.
 
 ## Como continuar manana
-1. Nuevo orden acordado: Pasivos satelite pendientes -> Depositos dentro de liquidez -> resto de grupos pendientes.
-2. Revision transversal `Kutxa vs Hipoteca Palmito` cerrada; continuar con liquidez segun prioridad acordada.
+1. Nuevo orden acordado: cripto satelite pendiente -> liquidez/depositos -> resto de grupos pendientes.
+2. Revision de `Spot Binance` cerrada; continuar con `DT Bots Cripto` y despues con cuentas de liquidez segun prioridad acordada.
 3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
@@ -212,7 +220,8 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
 
-1. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
+1. Cripto satelite pendiente: `445` (DT Bots Cripto).
+2. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
 
 ## Comando de regeneracion de listado completo (usuario 1)
 Usar para obtener el inventario completo actualizado:

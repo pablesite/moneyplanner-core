@@ -245,17 +245,31 @@ function typeBadgeVariant(movement: {
                         {{ state.transactionClassificationLabel(movement) }}
                       </span>
                     </div>
-                    <span
-                      class="ui-accounting-balance-delta"
-                      :class="`ui-accounting-balance-delta-${movement.tone}`"
-                    >
-                      {{
-                        state.formatSignedMoney(
-                          movement.impactValue,
-                          state.cuentasSelectedAccount?.currency,
-                        )
-                      }}
-                    </span>
+                    <div class="ui-entry-values">
+                      <span
+                        class="ui-accounting-balance-delta"
+                        :class="`ui-accounting-balance-delta-${movement.tone}`"
+                      >
+                        {{
+                          state.formatSignedMoney(
+                            movement.impactValue,
+                            state.cuentasSelectedAccount?.currency,
+                          )
+                        }}
+                      </span>
+                      <span
+                        v-if="movement.accountBalanceAfterValue != null"
+                        class="ui-entry-balance-after"
+                      >
+                        Saldo tras movimiento:
+                        {{
+                          state.formatMoney(
+                            movement.accountBalanceAfterValue,
+                            state.cuentasSelectedAccount?.currency,
+                          )
+                        }}
+                      </span>
+                    </div>
                     <div class="ui-entry-actions">
                       <button
                         v-if="movement.origin !== 'system'"

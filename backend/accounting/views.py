@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from django.db.models import Prefetch
 from rest_framework import status, viewsets
@@ -30,6 +31,7 @@ from .services import (
     validate_balance_summary_filters,
     validate_budget_suggestion_filters,
 )
+from .services_ledger import get_account_balance
 
 
 class LedgerAccountViewSet(viewsets.ModelViewSet):
@@ -112,6 +114,41 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LedgerTransactionSerializer
 
+    @staticmethod
+    def _signed_impact_for_account(
+        *, account_type: str, side: str, amount: Decimal
+    ) -> Decimal:
+        increases_on_debit = account_type in {
+            LedgerAccount.AccountType.ASSET,
+            LedgerAccount.AccountType.EXPENSE,
+        }
+        if (side == LedgerEntry.Side.DEBIT) == increases_on_debit:
+            return amount
+        return -amount
+
+    def _build_account_balance_after_map(self, *, account: LedgerAccount) -> dict[int, Decimal]:
+        account_rows = list(
+            self.get_queryset()
+            .filter(entries__account_id=account.id)
+            .distinct()
+            .order_by("-booking_date", "-id")
+        )
+        running_balance = get_account_balance(account=account)
+        by_transaction_id: dict[int, Decimal] = {}
+        for transaction in account_rows:
+            by_transaction_id[transaction.id] = running_balance
+            impact = Decimal("0")
+            for entry in transaction.entries.all():
+                if entry.account_id != account.id:
+                    continue
+                impact += self._signed_impact_for_account(
+                    account_type=account.account_type,
+                    side=entry.side,
+                    amount=entry.amount,
+                )
+            running_balance -= impact
+        return by_transaction_id
+
     def get_queryset(self):
         queryset = LedgerTransaction.objects.filter(user=self.request.user).prefetch_related(
             Prefetch("entries", queryset=LedgerEntry.objects.select_related("account"))
@@ -140,7 +177,22 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             page_size=page_size,
             cursor=cursor,
         )
-        serializer = self.get_serializer(rows, many=True)
+        serializer_context = self.get_serializer_context()
+        account_id = parse_optional_int_query_param(request.query_params, "account_id")
+        if account_id is not None:
+            account = LedgerAccount.objects.filter(user=request.user, id=account_id).first()
+            if account is None:
+                raise ValidationError(
+                    {"account_id": "La cuenta no existe o no pertenece al usuario autenticado."}
+                )
+            serializer_context = {
+                **serializer_context,
+                "account_balance_after_by_tx_id": self._build_account_balance_after_map(
+                    account=account
+                ),
+            }
+
+        serializer = self.get_serializer(rows, many=True, context=serializer_context)
         return Response(
             {
                 "results": serializer.data,

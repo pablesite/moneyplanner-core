@@ -64,6 +64,7 @@ export type LedgerTransaction = {
   realized_cost_basis: string | null;
   realized_gain_loss: string | null;
   activity_kind: string;
+  account_balance_after?: string | null;
   entries: LedgerEntry[];
   created_at: string;
   updated_at: string;
