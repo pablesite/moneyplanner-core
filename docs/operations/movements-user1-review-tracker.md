@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-08 (sesion 40)
+Ultima actualizacion: 2026-04-09 (sesion 41)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -99,7 +99,7 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `FIV IVI`: sin limpieza adicional pendiente detectada.
 - `Iphone 16 Pro` (id=46): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Iphone 16 pro`.
 - `Préstamo - Iphone 15 Pro` (id=492): revision final cerrada. Cuenta consolidada con 12 cuotas trasladadas desde `iPhone 15 Ana` (id=465), cuenta obsoleta eliminada y concepto de pagos de deuda unificado a `Préstamo -  Iphone 15 Pro`.
-- `Hipoteca Palmito` (id=45): revision final cerrada. Concepto unificado en todos los pagos de deuda a `Hipoteca Vivienda Palmito`.
+- `Hipoteca Palmito` (id=45): revision final cerrada y completada al 100%. Concepto unificado en todos los pagos de deuda a `Hipoteca Vivienda Palmito`; principal normalizado a `real_estate_assets/mortgage_principal`, intereses normalizados a `consumption_expenses/financial_commitments` y ownership de todos los pagos de deuda unificado a compartido 50/50 (`ownership_id=4`).
 - `Master Matematicas (Deuda)`: sin limpieza estructural pendiente detectada.
 - `Reserva Atrio` (deuda): revision final cerrada. Pagos de deuda con concepto unificado a `Préstamo - Reserva Atrio`, clasificacion `real_estate_assets/property_purchase` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
 - `Reserva Atrio Residencial` (activo): revision final cerrada. Movimientos de compra y mejoras inmobiliarias revisados en su historico.
@@ -197,14 +197,11 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 
 ## Pendientes Transversales
 - Sin pendientes transversales nuevos en esta sesion.
-- Siguiente paso acordado para vista de Movimientos:
-  - revisar como se contabilizan los pagos de hipoteca en `Kutxa` frente a la amortizacion en `Hipoteca Palmito`,
-  - validar coherencia funcional entre modal de `Registrar movimiento` y modal de `Editar movimiento` para deuda/hipoteca,
-  - cerrar criterio unico de contabilizacion (origen liquidez vs reduccion de principal/intereses) y aplicarlo en ambos flujos.
+- Revisiones transversales de hipoteca cerradas: criterio unico de contabilizacion deuda (principal vs interes) validado y aplicado en `Hipoteca Palmito`.
 
 ## Como continuar manana
 1. Nuevo orden acordado: Pasivos satelite pendientes -> Depositos dentro de liquidez -> resto de grupos pendientes.
-2. Antes de continuar con liquidez, ejecutar la revision transversal `Kutxa vs Hipoteca Palmito` y la coherencia crear/editar en modales de deuda.
+2. Revision transversal `Kutxa vs Hipoteca Palmito` cerrada; continuar con liquidez segun prioridad acordada.
 3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
