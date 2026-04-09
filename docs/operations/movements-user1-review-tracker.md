@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 39.
-- `Pendientes`: 67.
+- `Revisadas`: 41.
+- `Pendientes`: 65.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -39,6 +39,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `24` - `MyInvestor Depósito 1 mes` (activo de inversion / deposito; revision final cerrada)
 - `23` - `MyInvestor 3 meses` (activo de inversion / deposito; revision final cerrada)
 - `22` - `Spot Binance` (activo de inversion / cripto; revision final cerrada)
+- `6` - `Kutxa` (activo de liquidez / hucha; revision final cerrada)
+- `15` - `Monedero Ana` (activo de liquidez; revision final cerrada)
 - `26` - `Bitcoin` (activo de inversion / cripto)
 - `486` - `Cripto - ETH (Metamask)` (activo de inversion / cripto)
 - `27` - `ETH` (activo de inversion / cripto; Binance)
@@ -83,6 +85,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `24` - `MyInvestor Depósito 1 mes`
   - `23` - `MyInvestor 3 meses`
   - `22` - `Spot Binance`
+  - `6` - `Kutxa`
+  - `15` - `Monedero Ana`
   - `486` - `Cripto - ETH (Metamask)`
   - `485` - `Cripto - Bots de Grids (Pionex)`
   - `38` - `Urbanitae`
@@ -123,6 +127,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `MyInvestor Depósito 1 mes` (id=24): revision final cerrada. Ingresos unificados con concepto `Intereses de depósitos`. Retiradas de inversion (`investment/outflow`) normalizadas con concepto `Retirada de inversión en depósitos` y ownership compartido `Pablo/Ana 50%` (`ownership_id=4`).
 - `MyInvestor 3 meses` (id=23): revision final cerrada. Deposito marcado como revisado en la pasada de cuentas de liquidez/depositos MyInvestor.
 - `Spot Binance` (id=22): revision final cerrada. Correccion de metadatos de direccion en aportes a Bots (`investment_direction` coherente con el asiento), normalizacion de conceptos en aportes a BTC (`Inversión en BTC`) y en ingresos por ajuste manual Euro/USD (`Ajuste cambio manual Euro/Dolar`) con categoria `other_income/other`. Añadido en UI el saldo contable tras movimiento para facilitar auditoria del timeline por cuenta. Eliminada cuenta obsoleta `Earn Binance` (id=10) tras validacion manual.
+- `Kutxa` (id=6): revision final cerrada (Hucha lista). Cuenta marcada como cerrada por validacion manual del historico de liquidez.
+- `Monedero Ana` (id=15): revision final cerrada. Cuenta de liquidez marcada como lista tras validacion manual.
 - `Bitcoin` (id=26): revisado. Spot Binance migrado a USD, deduplicacion aplicada y clasificacion normalizada en aportes (`financial_investments -> crypto`) y retiradas (`capital_gains -> sale_financial_assets`). Coherencia de saldo/timeline validada.
 - `Cripto - ETH (Metamask)` (id=486): revision final cerrada. Cuenta satelite de inversion con ownership de activo y movimientos alineado a `Lucas` (`ownership_id=11`).
 - `ETH` (id=27, Binance): revision final cerrada. Aportes de inversion (`investment/inflow`) normalizados con concepto `Inversion en ETH` y ownership de movimientos alineado a `Lucas` (`ownership_id=11`).
@@ -198,18 +204,17 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 |---:|---:|---|---|
 | 1986 | 16 | Monedero compartido | asset |
 | 1956 | 5 | ING | asset |
-| 1374 | 6 | Kutxa | asset |
 | 1058 | 17 | Monedero Pablo | asset |
 | 414 | 21 | Santander | asset |
-| 213 | 15 | Monedero Ana | asset |
 
 ## Pendientes Transversales
 - Sin pendientes transversales nuevos en esta sesion.
 - Revisiones transversales de hipoteca cerradas: criterio unico de contabilizacion deuda (principal vs interes) validado y aplicado en `Hipoteca Palmito`.
+- `Monedero compartido` (id=16) en revision activa. Detectado y añadido manualmente movimiento faltante de transferencia por `600 EUR` con fecha `2020-11-26`. Retomar la auditoria desde este punto en la siguiente sesion para verificar que no falten mas transferencias/movimientos relevantes.
 
 ## Como continuar manana
 1. Nuevo orden acordado: cripto satelite pendiente -> liquidez/depositos -> resto de grupos pendientes.
-2. Revision de `Spot Binance` cerrada; continuar con `DT Bots Cripto` y despues con cuentas de liquidez segun prioridad acordada.
+2. Revision de `Spot Binance` y `Kutxa` cerradas; continuar con `DT Bots Cripto` y despues con cuentas de liquidez segun prioridad acordada.
 3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
@@ -220,8 +225,9 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
 
-1. Cripto satelite pendiente: `445` (DT Bots Cripto).
-2. Depositos dentro de liquidez: `5` (ING), `6` (Kutxa), `21` (Santander), `16`/`17`/`15` (Monederos).
+1. Continuar revision de `16` (Monedero compartido) desde el ajuste manual del `2020-11-26` (`600 EUR`) y comprobar integridad de transferencias/movimientos relevantes.
+2. Cripto satelite pendiente: `445` (DT Bots Cripto).
+3. Depositos dentro de liquidez: `5` (ING), `21` (Santander), `16`/`17`/`15` (Monederos).
 
 ## Comando de regeneracion de listado completo (usuario 1)
 Usar para obtener el inventario completo actualizado:
