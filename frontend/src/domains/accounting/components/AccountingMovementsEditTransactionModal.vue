@@ -87,14 +87,57 @@ const advancedTypeOptions = computed<MovementTypeOption[]>(() =>
 );
 
 const showValueDate = ref(false);
+const debtInterestManualOverride = ref(false);
+
+function decimalsForCurrency(currency?: string): number {
+  const code = String(currency ?? '').trim().toUpperCase();
+  return code === 'BTC' || code === 'ETH' ? 8 : 2;
+}
+
+function parseDecimal(raw: string): number | null {
+  const normalized = String(raw ?? '').replace(',', '.').trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function maybeAutofillDebtInterest() {
+  if (props.page.editTransactionForm.kind !== 'debt_payment') return;
+  if (debtInterestManualOverride.value) return;
+  const total = parseDecimal(props.page.editTransactionForm.amount);
+  const principal = parseDecimal(props.page.editTransactionForm.principal_amount);
+  if (total == null || principal == null) return;
+  const interest = total - principal;
+  if (!Number.isFinite(interest) || interest < 0) return;
+  const decimals = decimalsForCurrency(props.page.editTransactionForm.currency);
+  props.page.editTransactionForm.interest_amount = interest.toFixed(decimals);
+}
+
+function handleDebtInterestInput() {
+  debtInterestManualOverride.value = true;
+}
 
 watch(
   () => props.page.showEditTransactionModal,
   (isOpen: boolean) => {
     if (!isOpen) return;
+    debtInterestManualOverride.value = false;
     showValueDate.value =
       props.page.editTransactionForm.value_date !== props.page.editTransactionForm.booking_date;
   },
+);
+watch(
+  () =>
+    [
+      props.page.editTransactionForm.kind,
+      props.page.editTransactionForm.amount,
+      props.page.editTransactionForm.principal_amount,
+      props.page.editTransactionForm.currency,
+    ] as const,
+  () => {
+    maybeAutofillDebtInterest();
+  },
+  { flush: 'sync' },
 );
 
 watch(
@@ -381,12 +424,101 @@ const editMainAccountGroups = computed(() => {
         </div>
       </template>
 
+      <template v-else-if="page.editTransactionForm.kind === 'debt_payment'">
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-2col">
+          <label class="ui-accounting-field">
+            <span>Cuenta de liquidez</span>
+            <select v-model="page.editTransactionForm.account_id" class="select" required>
+              <option :value="null" disabled>Seleccionar</option>
+              <optgroup v-for="group in editLiquidityGroups" :key="group.key" :label="group.label">
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="ui-accounting-field">
+            <span>Cuenta de pasivo</span>
+            <select
+              v-model="page.editTransactionForm.counterparty_account_id"
+              class="select"
+              required
+            >
+              <option :value="null" disabled>Seleccionar</option>
+              <optgroup
+                v-for="group in editCounterpartyGroups"
+                :key="group.key"
+                :label="group.label"
+              >
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+
+        <div class="ui-accounting-debt-block">
+          <p class="ui-accounting-debt-hint">
+            Informa dos de los tres campos — el tercero se calcula automáticamente.
+            <template v-if="page.editDebtComputedInterest != null">
+              <span class="ui-accounting-tone-positive">
+                Interés = {{ page.editDebtComputedInterest.toFixed(2) }}
+                {{ page.editTransactionForm.currency }}
+              </span>
+            </template>
+          </p>
+          <div class="ui-accounting-form-grid">
+            <label class="ui-accounting-field">
+              <span>Total pagado</span>
+              <input
+                v-model="page.editTransactionForm.amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="Total cargado en cuenta"
+                :required="
+                  !(
+                    page.editTransactionForm.principal_amount?.trim() &&
+                    page.editTransactionForm.interest_amount?.trim()
+                  )
+                "
+              />
+            </label>
+            <label class="ui-accounting-field">
+              <span>Principal amortizado</span>
+              <input
+                v-model="page.editTransactionForm.principal_amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="Parte que reduce deuda"
+              />
+            </label>
+            <label class="ui-accounting-field">
+              <span>Interés</span>
+              <input
+                v-model="page.editTransactionForm.interest_amount"
+                class="input"
+                inputmode="decimal"
+                :placeholder="
+                  page.editDebtComputedInterest != null
+                    ? `= ${page.editDebtComputedInterest.toFixed(2)}`
+                    : 'Coste financiero'
+                "
+                @input="handleDebtInterestInput"
+              />
+            </label>
+          </div>
+          <p class="ui-accounting-inline-note">
+            La cuenta de gasto de intereses se asigna automáticamente al guardar.
+          </p>
+        </div>
+      </template>
+
       <div
         v-else
         class="ui-accounting-form-grid"
         :class="
-          page.editTransactionForm.kind === 'transfer' ||
-          page.editTransactionForm.kind === 'debt_payment'
+          page.editTransactionForm.kind === 'transfer'
             ? 'ui-accounting-form-grid-wide'
             : 'ui-accounting-form-grid-edit-simple'
         "
@@ -435,20 +567,6 @@ const editMainAccountGroups = computed(() => {
           required
         >
           <option :value="null">Cuenta destino</option>
-          <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
-            </option>
-          </optgroup>
-        </select>
-
-        <select
-          v-else-if="page.editTransactionForm.kind === 'debt_payment'"
-          v-model="page.editTransactionForm.counterparty_account_id"
-          class="select"
-          required
-        >
-          <option :value="null">Cuenta de pasivo</option>
           <optgroup v-for="group in editCounterpartyGroups" :key="group.key" :label="group.label">
             <option v-for="account in group.accounts" :key="account.id" :value="account.id">
               {{ accountLabel(account) }} / {{ account.currency }}
@@ -567,9 +685,7 @@ const editMainAccountGroups = computed(() => {
                   : page.editTransactionForm.investment_direction === 'outflow'
                     ? 'La desinversion devuelve liquidez al activo de caja.'
                     : 'El aporte registra el alta en la cuenta de inversion.'
-                : page.editTransactionForm.kind === 'debt_payment'
-                  ? 'El pago reduce el saldo de la deuda en el pasivo contable.'
-                  : 'Las partidas contables se generan automaticamente.'
+                : 'Las partidas contables se generan automaticamente.'
           }}
         </p>
         <button

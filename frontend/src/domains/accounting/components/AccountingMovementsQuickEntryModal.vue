@@ -348,12 +348,74 @@ const quickMainAccountGroups = computed(() => {
         </div>
       </template>
 
+      <template v-else-if="page.quickEntryForm.movement_type === 'debt_payment'">
+        <div class="ui-accounting-form-grid ui-accounting-form-grid-2col">
+          <label class="ui-accounting-field">
+            <span>Cuenta de liquidez</span>
+            <select v-model="page.quickEntryForm.account_id" class="select" required>
+              <option :value="null" disabled>Seleccionar</option>
+              <optgroup v-for="group in liquidityGroups" :key="group.key" :label="group.label">
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="ui-accounting-field">
+            <span>Cuenta de pasivo</span>
+            <select v-model="page.quickEntryForm.liability_account_id" class="select" required>
+              <option :value="null" disabled>Seleccionar</option>
+              <optgroup v-for="group in liabilityGroups" :key="group.key" :label="group.label">
+                <option v-for="account in group.accounts" :key="account.id" :value="account.id">
+                  {{ accountLabel(account) }} / {{ account.currency }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+
+        <div class="ui-accounting-debt-block">
+          <p class="ui-accounting-debt-hint">
+            Informa dos de los tres campos — el tercero se calcula automáticamente.
+          </p>
+          <div class="ui-accounting-form-grid">
+            <label class="ui-accounting-field">
+              <span>Total pagado</span>
+              <input
+                v-model="page.quickEntryForm.amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="Total cargado en cuenta"
+                required
+              />
+            </label>
+            <label class="ui-accounting-field">
+              <span>Principal amortizado</span>
+              <input
+                v-model="page.quickEntryForm.principal_amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="Parte que reduce deuda"
+              />
+            </label>
+            <label class="ui-accounting-field">
+              <span>Interés</span>
+              <input
+                v-model="page.quickEntryForm.interest_amount"
+                class="input"
+                inputmode="decimal"
+                placeholder="Coste financiero"
+              />
+            </label>
+          </div>
+        </div>
+      </template>
+
       <div
         v-else
         class="ui-accounting-form-grid"
         :class="
-          page.quickEntryForm.movement_type === 'transfer' ||
-          page.quickEntryForm.movement_type === 'debt_payment'
+          page.quickEntryForm.movement_type === 'transfer'
             ? 'ui-accounting-form-grid-wide'
             : 'ui-accounting-form-grid-edit-simple'
         "
@@ -403,20 +465,6 @@ const quickMainAccountGroups = computed(() => {
         >
           <option :value="null">Cuenta destino</option>
           <optgroup v-for="group in transferGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
-            </option>
-          </optgroup>
-        </select>
-
-        <select
-          v-else-if="page.quickEntryForm.movement_type === 'debt_payment'"
-          v-model="page.quickEntryForm.liability_account_id"
-          class="select"
-          required
-        >
-          <option :value="null">Cuenta de pasivo</option>
-          <optgroup v-for="group in liabilityGroups" :key="group.key" :label="group.label">
             <option v-for="account in group.accounts" :key="account.id" :value="account.id">
               {{ accountLabel(account) }} / {{ account.currency }}
             </option>
@@ -536,32 +584,6 @@ const quickMainAccountGroups = computed(() => {
         </select>
       </details>
 
-      <div
-        v-if="page.quickEntryForm.movement_type === 'debt_payment'"
-        class="ui-accounting-form-grid ui-accounting-form-grid-wide"
-      >
-        <input
-          v-model="page.quickEntryForm.principal_amount"
-          class="input"
-          inputmode="decimal"
-          placeholder="Principal (opcional; por defecto = importe total)"
-        />
-        <input
-          v-model="page.quickEntryForm.interest_amount"
-          class="input"
-          inputmode="decimal"
-          placeholder="Inter�s (opcional; 0 si no aplica)"
-        />
-        <select v-model="page.quickEntryForm.interest_account_id" class="select">
-          <option :value="null">Cuenta de gasto por intereses (si aplica)</option>
-          <optgroup v-for="group in interestGroups" :key="group.key" :label="group.label">
-            <option v-for="account in group.accounts" :key="account.id" :value="account.id">
-              {{ accountLabel(account) }} / {{ account.currency }}
-            </option>
-          </optgroup>
-        </select>
-      </div>
-
       <textarea
         v-model="page.quickEntryForm.notes"
         class="textarea"
@@ -587,9 +609,7 @@ const quickMainAccountGroups = computed(() => {
                   : page.quickEntryForm.investment_direction === 'outflow'
                   ? 'La desinversión devuelve liquidez al activo de caja.'
                   : 'El aporte registra el alta en la cuenta de inversión.'
-                : page.quickEntryForm.movement_type === 'debt_payment'
-                  ? 'El pago reduce deuda. El desglose principal/intereses es opcional.'
-                  : 'Las partidas contables se generan automáticamente.'
+                : 'Las partidas contables se generan automáticamente.'
           }}
         </p>
         <button
