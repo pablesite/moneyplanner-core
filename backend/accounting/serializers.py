@@ -263,6 +263,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
 class LedgerTransactionSerializer(serializers.ModelSerializer):
     entries = LedgerEntrySerializer(many=True)
     activity_kind = serializers.SerializerMethodField()
+    account_balance_after = serializers.SerializerMethodField()
     ownership_id = serializers.PrimaryKeyRelatedField(
         source="ownership",
         queryset=Ownership.objects.all(),
@@ -288,6 +289,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "realized_cost_basis",
             "realized_gain_loss",
             "activity_kind",
+            "account_balance_after",
             "entries",
             "created_at",
             "updated_at",
@@ -304,6 +306,13 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
     def get_activity_kind(self, obj: LedgerTransaction) -> str:
         return classify_transaction_activity_kind(obj)
+
+    def get_account_balance_after(self, obj: LedgerTransaction) -> str | None:
+        by_tx_id = self.context.get("account_balance_after_by_tx_id")
+        if not isinstance(by_tx_id, dict):
+            return None
+        value = by_tx_id.get(obj.id)
+        return str(value) if value is not None else None
 
     def validate(self, attrs: dict) -> dict:
         request = self.context.get("request")

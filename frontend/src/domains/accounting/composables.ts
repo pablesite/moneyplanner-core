@@ -118,6 +118,7 @@ type AccountPositionMeta = {
 };
 type AccountTimelineTransaction = LedgerTransaction & {
   impactValue: number;
+  accountBalanceAfterValue: number | null;
   tone: 'positive' | 'negative' | 'neutral';
 };
 const EXPENSE_MOVEMENT_CATEGORY_KEYS: ExpenseCategoryKey[] = [
@@ -1540,7 +1541,16 @@ export function useAccountingPage() {
       const impactValue = transaction.entries
         .filter((entry) => entry.account_id === accountId)
         .reduce((sum, entry) => sum + signedImpact(accountType, entry.side, entry.amount), 0);
-      return { ...transaction, impactValue, tone: impactTone(impactValue) };
+      const accountBalanceAfterValue =
+        transaction.account_balance_after != null
+          ? toNumber(transaction.account_balance_after)
+          : null;
+      return {
+        ...transaction,
+        impactValue,
+        accountBalanceAfterValue,
+        tone: impactTone(impactValue),
+      };
     });
   }
 

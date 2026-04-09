@@ -500,6 +500,20 @@
   justify-content: flex-end;
 }
 
+.ui-entry-values {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.ui-entry-balance-after {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.62);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* -- Balance delta � kept for test compatibility --------------- */
 .ui-accounting-balance-delta {
   display: inline-flex;
@@ -1108,6 +1122,15 @@
     grid-column: 3;
     grid-row: 1 / span 2;
     align-self: center;
+  }
+
+  .ui-entry-values {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .ui-entry-balance-after {
+    text-align: left;
   }
 }
 
