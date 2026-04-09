@@ -630,6 +630,39 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
+.ui-accounting-form-grid-2col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-accounting-debt-block {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-debt-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.46);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ui-accounting-tone-positive {
+  color: rgba(45, 212, 191, 0.9);
+  font-weight: 600;
+}
+
+.ui-accounting-tone-negative {
+  color: rgba(251, 113, 133, 0.9);
+  font-weight: 600;
+}
+
 /* 3-column row for booking_date + value_date + time in edit modal */
 .ui-accounting-form-grid-dates {
   display: grid;
@@ -1082,6 +1115,7 @@
   .ui-accounting-form-grid,
   .ui-accounting-form-grid-wide,
   .ui-accounting-form-grid-edit-simple,
+  .ui-accounting-form-grid-2col,
   .ui-accounting-form-grid-dates,
   .ui-accounting-entry-editor-row {
     grid-template-columns: 1fr;
