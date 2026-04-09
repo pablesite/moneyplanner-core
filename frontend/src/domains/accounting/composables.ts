@@ -49,6 +49,9 @@ type TransactionFormState = {
   amount: string;
   destination_amount: string;
   currency: string;
+  interest_account_id: number | null;
+  principal_amount: string;
+  interest_amount: string;
   kind: EditableActivityKind;
   initial_kind: EditableActivityKind;
   investment_direction: 'inflow' | 'outflow';
@@ -96,6 +99,14 @@ type LiabilityCategoryKey = 'mortgage' | 'personal_loan' | 'credit_card' | 'othe
 type LastQuickClassification = {
   category_key: string;
   subcategory_key: string;
+};
+
+type DebtBreakdownResolution = {
+  total: number;
+  principal: number;
+  interest: number;
+  valid: boolean;
+  error: string | null;
 };
 
 type ManualPositionType = 'asset' | 'liability';
@@ -271,6 +282,9 @@ export function useAccountingPage() {
     amount: '',
     destination_amount: '',
     currency: 'EUR',
+    interest_account_id: null,
+    principal_amount: '',
+    interest_amount: '',
     kind: 'transfer',
     initial_kind: 'transfer',
     investment_direction: 'inflow',
@@ -612,47 +626,123 @@ export function useAccountingPage() {
   const debtInterestOptions = computed(() =>
     accounts.value.filter((account) => account.account_type === 'expense'),
   );
+  function resolveDefaultDebtInterestAccountId(currency: string): number | null {
+    const candidates = debtInterestOptions.value;
+    if (!candidates.length) return null;
+    const normalizedCurrency = currency.trim().toUpperCase();
+    return (
+      candidates.find((account) => account.currency === normalizedCurrency && account.origin === 'system')
+        ?.id ??
+      candidates.find((account) => account.currency === normalizedCurrency)?.id ??
+      candidates.find((account) => account.origin === 'system')?.id ??
+      candidates[0]?.id ??
+      null
+    );
+  }
   function hasQuickClassification(): boolean {
     return Boolean(quickEntryForm.category_key && quickEntryForm.subcategory_key);
   }
-  function resolveDebtPaymentBreakdown(amountValue: number): {
-    principal: number;
-    interest: number;
-    hasCustomBreakdown: boolean;
-    valid: boolean;
-  } {
-    const principalRaw = quickEntryForm.principal_amount.trim();
-    const interestRaw = quickEntryForm.interest_amount.trim();
-    const hasCustomBreakdown = Boolean(principalRaw || interestRaw);
-    if (!hasCustomBreakdown) {
+  // eslint-disable-next-line complexity
+  function resolveFlexibleDebtBreakdown(
+    totalRaw: string,
+    principalRaw: string,
+    interestRaw: string,
+    currency: string,
+  ): DebtBreakdownResolution {
+    const parseAmount = (raw: string): number | null => {
+      const normalized = formatDecimalInput(raw);
+      if (!normalized) return null;
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : Number.NaN;
+    };
+    let total = parseAmount(totalRaw);
+    let principal = parseAmount(principalRaw);
+    let interest = parseAmount(interestRaw);
+    if ([total, principal, interest].some((value) => Number.isNaN(value))) {
       return {
-        principal: amountValue,
+        total: 0,
+        principal: 0,
         interest: 0,
-        hasCustomBreakdown: false,
-        valid: amountValue > 0,
+        valid: false,
+        error: 'Introduce importes válidos en total, principal o interés.',
       };
     }
-    const principalValue = toNumber(principalRaw);
-    const interestValue = toNumber(interestRaw || '0');
-    if (principalValue <= 0 || interestValue < 0) {
+    const filledValues = [total, principal, interest].filter((value) => value != null).length;
+    if (filledValues < 2) {
       return {
-        principal: principalValue,
-        interest: interestValue,
-        hasCustomBreakdown: true,
+        total: 0,
+        principal: 0,
+        interest: 0,
         valid: false,
+        error: 'En pago deuda informa al menos dos campos: total, principal o interés.',
+      };
+    }
+    if (filledValues === 2) {
+      if (total == null && principal != null && interest != null) total = principal + interest;
+      else if (principal == null && total != null && interest != null) principal = total - interest;
+      else if (interest == null && total != null && principal != null) interest = total - principal;
+    }
+    if (total == null || principal == null || interest == null) {
+      return {
+        total: 0,
+        principal: 0,
+        interest: 0,
+        valid: false,
+        error: 'No se pudo resolver el desglose del pago deuda.',
+      };
+    }
+    if (total <= 0) {
+      return { total, principal, interest, valid: false, error: 'El total pagado debe ser mayor que 0.' };
+    }
+    if (principal <= 0) {
+      return {
+        total,
+        principal,
+        interest,
+        valid: false,
+        error: 'La amortización de principal debe ser mayor que 0.',
+      };
+    }
+    if (interest < 0) {
+      return {
+        total,
+        principal,
+        interest,
+        valid: false,
+        error: 'El interés debe ser mayor o igual que 0.',
+      };
+    }
+    const minUnit = 1 / 10 ** currencyDecimals(currency || 'EUR');
+    if (Math.abs(principal + interest - total) > minUnit / 2) {
+      return {
+        total,
+        principal,
+        interest,
+        valid: false,
+        error: 'El total debe coincidir con principal + interés.',
       };
     }
     return {
-      principal: principalValue,
-      interest: interestValue,
-      hasCustomBreakdown: true,
-      valid: Math.abs(principalValue + interestValue - amountValue) < 0.000001,
+      total: roundByCurrency(total, currency || 'EUR'),
+      principal: roundByCurrency(principal, currency || 'EUR'),
+      interest: roundByCurrency(interest, currency || 'EUR'),
+      valid: true,
+      error: null,
     };
   }
-  function debtPaymentBreakdownReady(amountValue: number): boolean {
+  function resolveQuickDebtBreakdown(): DebtBreakdownResolution {
+    const currency = quickSelectedLiquidityAccount.value?.currency ?? 'EUR';
+    return resolveFlexibleDebtBreakdown(
+      quickEntryForm.amount,
+      quickEntryForm.principal_amount,
+      quickEntryForm.interest_amount,
+      currency,
+    );
+  }
+  function debtPaymentBreakdownReady(): boolean {
     if (quickEntryForm.liability_account_id == null) return false;
     if (!hasQuickClassification()) return false;
-    const breakdown = resolveDebtPaymentBreakdown(amountValue);
+    const breakdown = resolveQuickDebtBreakdown();
     if (!breakdown.valid) return false;
     if (breakdown.interest > 0 && quickEntryForm.interest_account_id == null) return false;
     return true;
@@ -672,11 +762,14 @@ export function useAccountingPage() {
       const minUnit = 1 / 10 ** currencyDecimals(account.currency);
       return Math.abs(delta) >= minUnit;
     }
+    if (quickSelectedLiquidityAccountId.value == null) return false;
+    if (quickEntryForm.movement_type === 'debt_payment') {
+      return debtPaymentBreakdownReady();
+    }
     const amountValue = toNumber(quickEntryForm.amount);
     if (amountValue <= 0) {
       return false;
     }
-    if (quickSelectedLiquidityAccountId.value == null) return false;
     if (quickEntryForm.movement_type === 'transfer') {
       return normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
     }
@@ -684,9 +777,6 @@ export function useAccountingPage() {
       if (quickSelectedInvestmentAccountId.value == null) return false;
       if (!quickInvestmentIsCrossCurrency.value) return true;
       return toNumber(quickEntryForm.destination_amount) > 0;
-    }
-    if (quickEntryForm.movement_type === 'debt_payment') {
-      return debtPaymentBreakdownReady(amountValue);
     }
     if (
       (quickEntryForm.movement_type === 'income' || quickEntryForm.movement_type === 'expense') &&
@@ -1029,6 +1119,21 @@ export function useAccountingPage() {
     }
     return false;
   });
+  const editDebtComputedInterest = computed((): number | null => {
+    if (editTransactionForm.kind !== 'debt_payment') return null;
+    if (editTransactionForm.interest_amount.trim()) return null;
+    const currency =
+      (editTransactionForm.account_id != null
+        ? accountMap.value.get(editTransactionForm.account_id)?.currency
+        : null) ?? 'EUR';
+    const breakdown = resolveFlexibleDebtBreakdown(
+      editTransactionForm.amount,
+      editTransactionForm.principal_amount,
+      editTransactionForm.interest_amount,
+      currency,
+    );
+    return breakdown.valid ? breakdown.interest : null;
+  });
   const editEntryReady = computed(() => {
     if (!editTransactionForm.description.trim()) return false;
     if (!editTransactionForm.booking_date || !editTransactionForm.value_date) return false;
@@ -1205,6 +1310,11 @@ export function useAccountingPage() {
       }
       if (kind !== 'investment') {
         editTransactionForm.investment_direction = 'inflow';
+      }
+      if (kind !== 'debt_payment') {
+        editTransactionForm.interest_account_id = null;
+        editTransactionForm.principal_amount = '';
+        editTransactionForm.interest_amount = '';
       }
       if (isCounterpartyKind(kind)) {
         if (!hasValidEditCounterpartySelection(kind)) {
@@ -1708,6 +1818,9 @@ export function useAccountingPage() {
     editTransactionForm.amount = '';
     editTransactionForm.destination_amount = '';
     editTransactionForm.currency = 'EUR';
+    editTransactionForm.interest_account_id = null;
+    editTransactionForm.principal_amount = '';
+    editTransactionForm.interest_amount = '';
     editTransactionForm.kind = 'transfer';
     editTransactionForm.initial_kind = 'transfer';
     editTransactionForm.investment_direction = 'inflow';
@@ -1775,6 +1888,32 @@ export function useAccountingPage() {
       transaction.entries.find((entry) => entry.side === 'debit') ?? transaction.entries[0] ?? null;
     if (!debitEntry) return '';
     return toNumber(debitEntry.amount).toFixed(currencyDecimals(debitEntry.currency));
+  }
+
+  function resolveDebtBreakdownFromEntries(transaction: LedgerTransaction): {
+    principalAmount: string;
+    interestAmount: string;
+    interestAccountId: number | null;
+  } {
+    const transactionCurrency = transaction.entries[0]?.currency ?? 'EUR';
+    const decimals = currencyDecimals(transactionCurrency);
+    const liabilityEntry =
+      transaction.entries.find(
+        (entry) =>
+          entry.side === 'debit' &&
+          (entry.liability_id != null ||
+            accountMap.value.get(entry.account_id)?.account_type === 'liability'),
+      ) ?? null;
+    const principalValue = liabilityEntry ? toNumber(liabilityEntry.amount) : 0;
+    const interestEntries = transaction.entries.filter(
+      (entry) => entry.side === 'debit' && entry.account_id !== liabilityEntry?.account_id,
+    );
+    const interestValue = interestEntries.reduce((sum, entry) => sum + toNumber(entry.amount), 0);
+    return {
+      principalAmount: principalValue > 0 ? principalValue.toFixed(decimals) : '',
+      interestAmount: interestValue > 0 ? interestValue.toFixed(decimals) : '',
+      interestAccountId: interestEntries.length === 1 ? interestEntries[0]?.account_id ?? null : null,
+    };
   }
 
   function getInvestmentDirection(transaction: LedgerTransaction): 'inflow' | 'outflow' {
@@ -1921,6 +2060,16 @@ export function useAccountingPage() {
     editTransactionForm.counterparty_account_id = counterpartyAccountId;
     editTransactionForm.investment_direction =
       kind === 'investment' ? getInvestmentDirection(transaction) : 'inflow';
+    if (kind === 'debt_payment') {
+      const debtBreakdown = resolveDebtBreakdownFromEntries(transaction);
+      editTransactionForm.principal_amount = debtBreakdown.principalAmount;
+      editTransactionForm.interest_amount = debtBreakdown.interestAmount;
+      editTransactionForm.interest_account_id = debtBreakdown.interestAccountId;
+    } else {
+      editTransactionForm.interest_account_id = null;
+      editTransactionForm.principal_amount = '';
+      editTransactionForm.interest_amount = '';
+    }
     editTransactionForm.category_key = primaryClassifiedEntry?.category_key ?? '';
     editTransactionForm.subcategory_key = primaryClassifiedEntry?.subcategory_key ?? '';
     editTransactionForm.kind_label = activityKindDisplay(kind);
@@ -2248,9 +2397,36 @@ export function useAccountingPage() {
   function validateEditedTransactionInput(): {
     parsedAmount: number;
     selectedAccount: LedgerAccount;
+    debtBreakdown: DebtBreakdownResolution | null;
   } | null {
-    const parsedAmount = Number(formatDecimalInput(editTransactionForm.amount));
-    if (!Number.isFinite(parsedAmount)) {
+    let parsedAmount = Number(formatDecimalInput(editTransactionForm.amount));
+    let debtBreakdown: DebtBreakdownResolution | null = null;
+    if (editTransactionForm.kind === 'debt_payment') {
+      const accountCurrency =
+        (editTransactionForm.account_id != null
+          ? accountMap.value.get(editTransactionForm.account_id)?.currency
+          : null) ?? 'EUR';
+      debtBreakdown = resolveFlexibleDebtBreakdown(
+        editTransactionForm.amount,
+        editTransactionForm.principal_amount,
+        editTransactionForm.interest_amount,
+        accountCurrency,
+      );
+      if (!debtBreakdown.valid) {
+        store.error = debtBreakdown.error;
+        return null;
+      }
+      parsedAmount = debtBreakdown.total;
+      if (debtBreakdown.interest > 0 && editTransactionForm.interest_account_id == null) {
+        const defaultInterestAccountId = resolveDefaultDebtInterestAccountId(accountCurrency);
+        if (defaultInterestAccountId != null) {
+          editTransactionForm.interest_account_id = defaultInterestAccountId;
+        } else {
+          store.error = 'Selecciona una cuenta de gasto para registrar el interés.';
+          return null;
+        }
+      }
+    } else if (!Number.isFinite(parsedAmount)) {
       store.error = 'Introduce un importe valido.';
       return null;
     }
@@ -2314,7 +2490,7 @@ export function useAccountingPage() {
       store.error = 'La cuenta seleccionada no existe o no esta activa.';
       return null;
     }
-    return { parsedAmount, selectedAccount };
+    return { parsedAmount, selectedAccount, debtBreakdown };
   }
 
   // eslint-disable-next-line complexity
@@ -2369,6 +2545,100 @@ export function useAccountingPage() {
         return null;
       }
       return buildBalanceAdjustmentEntries(delta, selectedAccount, counterpartyAccount);
+    }
+    if (editTransactionForm.kind === 'debt_payment') {
+      const breakdown = resolveFlexibleDebtBreakdown(
+        editTransactionForm.amount,
+        editTransactionForm.principal_amount,
+        editTransactionForm.interest_amount,
+        selectedAccount.currency,
+      );
+      if (!breakdown.valid) {
+        store.error = breakdown.error;
+        return null;
+      }
+      const liabilityAccountId = editTransactionForm.counterparty_account_id;
+      if (liabilityAccountId == null) {
+        store.error = 'Selecciona la cuenta de pasivo.';
+        return null;
+      }
+      const liabilityAccount = accountMap.value.get(liabilityAccountId);
+      if (!liabilityAccount || liabilityAccount.account_type !== 'liability') {
+        store.error = 'Selecciona una cuenta de pasivo contable valida.';
+        return null;
+      }
+      if (liabilityAccount.currency !== selectedAccount.currency) {
+        store.error = 'Liquidez y pasivo deben usar la misma moneda en pago deuda.';
+        return null;
+      }
+      const annualExpenseEntryId =
+        editTransactionPersistedEntries.value.find((entry) => entry.annual_expense_entry_id != null)
+          ?.annual_expense_entry_id ?? null;
+      const entryNotesByAccountId = new Map(
+        editTransactionPersistedEntries.value.map((entry) => [entry.account_id, entry.notes]),
+      );
+      const decimals = currencyDecimals(selectedAccount.currency);
+      const entries: PersistedTransactionEntry[] = [
+        {
+          account_id: liabilityAccount.id,
+          side: 'debit',
+          amount: breakdown.principal.toFixed(decimals),
+          currency: liabilityAccount.currency,
+          flow_family: 'expense',
+          category_key: editTransactionForm.category_key,
+          subcategory_key: editTransactionForm.subcategory_key,
+          annual_income_entry_id: null,
+          annual_expense_entry_id: annualExpenseEntryId,
+          asset_id: null,
+          liability_id: liabilityAccount.liability_id ?? null,
+          notes: entryNotesByAccountId.get(liabilityAccount.id) ?? '',
+        },
+      ];
+      if (breakdown.interest > 0) {
+        const interestAccountId = editTransactionForm.interest_account_id;
+        if (interestAccountId == null) {
+          store.error = 'Selecciona una cuenta de gasto para registrar el interés.';
+          return null;
+        }
+        const interestAccount = accountMap.value.get(interestAccountId);
+        if (!interestAccount || interestAccount.account_type !== 'expense') {
+          store.error = 'La cuenta de interés debe ser una cuenta de gasto.';
+          return null;
+        }
+        if (interestAccount.currency !== selectedAccount.currency) {
+          store.error = 'La cuenta de interés debe usar la misma moneda que la cuenta de liquidez.';
+          return null;
+        }
+        entries.push({
+          account_id: interestAccount.id,
+          side: 'debit',
+          amount: breakdown.interest.toFixed(currencyDecimals(interestAccount.currency)),
+          currency: interestAccount.currency,
+          flow_family: 'expense',
+          category_key: editTransactionForm.category_key,
+          subcategory_key: editTransactionForm.subcategory_key,
+          annual_income_entry_id: null,
+          annual_expense_entry_id: annualExpenseEntryId,
+          asset_id: null,
+          liability_id: null,
+          notes: entryNotesByAccountId.get(interestAccount.id) ?? '',
+        });
+      }
+      entries.push({
+        account_id: selectedAccount.id,
+        side: 'credit',
+        amount: breakdown.total.toFixed(decimals),
+        currency: selectedAccount.currency,
+        flow_family: '',
+        category_key: '',
+        subcategory_key: '',
+        annual_income_entry_id: null,
+        annual_expense_entry_id: null,
+        asset_id: selectedAccount.asset_id ?? null,
+        liability_id: null,
+        notes: entryNotesByAccountId.get(selectedAccount.id) ?? '',
+      });
+      return entries;
     }
     const editedAmount = roundByCurrency(parsedAmount, selectedAccount.currency);
     const classificationCounterpartyAccountId = editKindNeedsCounterparty.value
@@ -3009,9 +3279,25 @@ export function useAccountingPage() {
       return;
     }
     const debtBreakdown =
-      quickEntryForm.movement_type === 'debt_payment'
-        ? resolveDebtPaymentBreakdown(toNumber(quickEntryForm.amount))
-        : null;
+      quickEntryForm.movement_type === 'debt_payment' ? resolveQuickDebtBreakdown() : null;
+    if (quickEntryForm.movement_type === 'debt_payment' && debtBreakdown && !debtBreakdown.valid) {
+      store.error = debtBreakdown.error;
+      return;
+    }
+    if (
+      quickEntryForm.movement_type === 'debt_payment' &&
+      (debtBreakdown?.interest ?? 0) > 0 &&
+      quickEntryForm.interest_account_id == null
+    ) {
+      const currency = quickSelectedLiquidityAccount.value?.currency ?? 'EUR';
+      const defaultInterestAccountId = resolveDefaultDebtInterestAccountId(currency);
+      if (defaultInterestAccountId != null) {
+        quickEntryForm.interest_account_id = defaultInterestAccountId;
+      } else {
+        store.error = 'Selecciona una cuenta de gasto para registrar el interés.';
+        return;
+      }
+    }
     const payload: QuickLedgerTransactionWritePayload = {
       movement_type: quickEntryForm.movement_type,
       booking_date: quickEntryForm.booking_date,
@@ -3071,6 +3357,7 @@ export function useAccountingPage() {
       ...(quickEntryForm.movement_type === 'debt_payment'
         ? {
             liability_account_id: normalizeAccountId(quickEntryForm.liability_account_id),
+            amount: String(debtBreakdown?.total ?? 0),
             principal_amount: String(debtBreakdown?.principal ?? 0),
             interest_amount: String(debtBreakdown?.interest ?? 0),
             ...(quickEntryForm.annual_expense_entry_id != null
@@ -3158,6 +3445,7 @@ export function useAccountingPage() {
     }
   });
 
+  // eslint-disable-next-line complexity
   async function fillQuickEntryFromTransaction(transaction: LedgerTransaction): Promise<void> {
     const rawKind: string = transaction.quick_entry_kind || transaction.activity_kind;
     let movementType: QuickLedgerMovementType = 'expense';
@@ -3225,9 +3513,16 @@ export function useAccountingPage() {
     quickEntryForm.account_id = accountId;
     quickEntryForm.counterparty_account_id = counterpartyId;
     quickEntryForm.liability_account_id = liabilityId;
-    quickEntryForm.interest_account_id = null;
-    quickEntryForm.principal_amount = movementType === 'debt_payment' ? amount : '';
-    quickEntryForm.interest_amount = movementType === 'debt_payment' ? '0' : '';
+    if (movementType === 'debt_payment') {
+      const debtBreakdown = resolveDebtBreakdownFromEntries(transaction);
+      quickEntryForm.interest_account_id = debtBreakdown.interestAccountId;
+      quickEntryForm.principal_amount = debtBreakdown.principalAmount;
+      quickEntryForm.interest_amount = debtBreakdown.interestAmount;
+    } else {
+      quickEntryForm.interest_account_id = null;
+      quickEntryForm.principal_amount = '';
+      quickEntryForm.interest_amount = '';
+    }
     quickEntryForm.realized_cost_basis = transaction.realized_cost_basis ?? '';
     quickEntryForm.realized_gain_loss = transaction.realized_gain_loss ?? '';
     quickEntryForm.category_key = classifiedEntry?.category_key ?? '';
@@ -3274,6 +3569,7 @@ export function useAccountingPage() {
     editSubcategoryOptions,
     editCategoryLocked,
     editSubcategoryLocked,
+    editDebtComputedInterest,
     accountForm,
     activationForm,
     ownershipOptions,
