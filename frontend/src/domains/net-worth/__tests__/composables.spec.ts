@@ -99,7 +99,7 @@ describe('useNetWorthViewState (core)', () => {
   it('reacts to mode changes, computes labels, edit payloads and error messages', async () => {
     const store = reactive({
       loading: false,
-      error: '{"detail":"boom"}',
+      error: '{"detail":"boom"}' as string | null,
       baseCurrency: 'EUR',
       summary: {
         ...makeSummary(),
@@ -116,6 +116,9 @@ describe('useNetWorthViewState (core)', () => {
         liabilities_asset_backed_real: '80',
         liabilities_unbacked_real: '40',
       } as Summary,
+      assets: [],
+      liabilities: [],
+      ownerships: [],
       byCategoryChart: {
         keys: ['cash', 'mortgage', 'other'],
         assets: [10, 0, 0],
@@ -127,8 +130,8 @@ describe('useNetWorthViewState (core)', () => {
       createAsset: vi.fn(async () => undefined),
       createLiability: vi.fn(async () => undefined),
       deleteSnapshot: vi.fn(async () => undefined),
-      updateAsset: vi.fn(async () => undefined),
-      updateLiability: vi.fn(async () => undefined),
+      updateAsset: vi.fn(async () => { store.error = null; }),
+      updateLiability: vi.fn(async () => { store.error = null; }),
     });
     mocks.useNetWorthStore.mockReturnValue(store);
 
@@ -151,7 +154,7 @@ describe('useNetWorthViewState (core)', () => {
     expect(state.summaryAssetBackedLiabilities).toBe('80');
     expect(state.summaryUnbackedLiabilities).toBe('40');
     expect(state.byCategoryKeys).toEqual(['cash', 'mortgage']);
-    expect(state.byCategoryLabels).toEqual(['Liquidez', 'Hipoteca']);
+    expect(state.byCategoryLabels).toEqual(['Liquidez', 'Hipotecas']);
     expect(state.byCategoryAssets).toEqual([9, 0]);
     expect(state.byCategoryLiabilities).toEqual([0, 4]);
 

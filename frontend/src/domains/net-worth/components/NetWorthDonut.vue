@@ -110,7 +110,7 @@ function buildCategoryShares(
 ) {
   if (!keys?.length || !labels?.length || !values?.length) return [] as CategoryShare[];
   const items = labels.map((label, index) => {
-    const value = Math.max(0, values[index] ?? 0);
+    const value = values[index] ?? 0;
     return {
       key: keys[index] ?? label,
       label,
@@ -119,13 +119,14 @@ function buildCategoryShares(
       count: Math.max(0, counts?.[index] ?? 0),
     };
   });
-  const positiveTotal = items.reduce((sum, item) => sum + item.value, 0);
+  // La proporción de barra solo usa valores positivos; los negativos muestran barra vacía.
+  const positiveTotal = items.reduce((sum, item) => sum + Math.max(0, item.value), 0);
   return items
     .map((item) => ({
       ...item,
-      share: positiveTotal > 0 ? item.value / positiveTotal : 0,
+      share: positiveTotal > 0 ? Math.max(0, item.value) / positiveTotal : 0,
     }))
-    .filter((item) => item.value >= 0 && (item.value > 0 || item.count > 0))
+    .filter((item) => item.value !== 0 || item.count > 0)
     .slice(0, 5);
 }
 
@@ -153,7 +154,7 @@ const chartSlices = computed<ChartSlice[]>(() => {
   if (categories.length > 0) {
     const slices: ChartSlice[] = categories.slice(0, 5).map((cat, i) => ({
       label: cat.label,
-      value: cat.value,
+      value: Math.max(0, cat.value),
       color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] ?? CATEGORY_COLORS[0] ?? '',
     }));
     const liab = toNumber(props.totalLiabilities);
