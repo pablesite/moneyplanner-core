@@ -221,7 +221,7 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 
 ## Como continuar manana
 1. Nuevo orden acordado: liquidez/depositos pendientes -> resto de grupos -> cuentas virtuales MoneyWiz al final.
-2. Revision de `Spot Binance`, `Kutxa`, `DT Bots Cripto` y `Monedero Pablo` cerradas; continuar con cuentas de liquidez pendientes segun prioridad acordada.
+2. Revision de `Spot Binance`, `Trade Republic`, `Kutxa`, `DT Bots Cripto` y `Monedero Pablo` cerradas; continuar con cuentas de liquidez pendientes segun prioridad acordada.
 3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
