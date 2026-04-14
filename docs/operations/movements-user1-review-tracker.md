@@ -1,6 +1,6 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-14 (sesion 44)
+Ultima actualizacion: 2026-04-14 (sesion 48)
 
 ## Objetivo
 Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
@@ -14,8 +14,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 ## Alcance
 - `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 45.
-- `Pendientes`: 61.
+- `Revisadas`: 47.
+- `Pendientes`: 59.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
@@ -63,6 +63,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `43` - `Kutxa Bank Ana` (pasivo / tarjeta; cierre final completado)
 - `44` - `Kutxa Bank Pablo` (pasivo / tarjeta; cierre final completado)
 - `21` - `Santander` (activo de liquidez; cierre final completado)
+- `476` - `Cuenta Naranja` (activo de liquidez; cierre final completado)
+- `18` - `MyInvestor (Compartido)` (activo de liquidez; cierre final completado)
 
 ## Estado De Categorizacion Final (ultima pasada)
 - ✅ Cuentas con categorizacion final cerrada:
@@ -111,6 +113,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
   - `43` - `Kutxa Bank Ana`
   - `44` - `Kutxa Bank Pablo`
   - `21` - `Santander`
+  - `476` - `Cuenta Naranja`
+  - `18` - `MyInvestor (Compartido)`
 - ✅ Todas las cuentas revisadas tienen ya cierre final de categorizacion.
 
 ## Limpieza Pendiente En Cuentas Revisadas
@@ -159,6 +163,8 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - `Kutxa Bank Ana` (id=43): revision final cerrada. Reclasificacion acordada de 17 gastos desde `tangible_assets/other_tangible_assets` a `consumption_expenses/housing_home` y refinado de `other_consumption_expenses` con 5 reclasificaciones claras (`transport_mobility`, `health_wellbeing`, `leisure_lifestyle`, `gifts_donations`). Se mantienen 16 casos ambiguos sin cambio por falta de señal semantica.
 - `Kutxa Bank Pablo` (id=44): revision final cerrada. Recategorizacion de `other_consumption_expenses` con criterio conservador en 127 movimientos (`financial_commitments`=52, `leisure_lifestyle`=55, `transport_mobility`=11, `living_expenses`=4, `gifts_donations`=3, `health_wellbeing`=1, `housing_home`=1) y criterio manual adicional para `iCloud` a `housing_home` (53 movimientos en total). Quedan 36 movimientos ambiguos mantenidos en `other_consumption_expenses` por falta de contexto.
 - `Santander` (id=21): revision final cerrada. Cuenta de liquidez marcada como lista tras actualizacion manual del historico y validacion de coherencia de contrapartidas.
+- `Cuenta Naranja` (id=476): revision final cerrada. Cuenta de liquidez marcada como lista tras actualizacion manual del historico y validacion de coherencia de contrapartidas.
+- `MyInvestor (Compartido)` (id=18): revision final cerrada. Ajuste de conceptos aplicado en el bloque `Ayuda Ibi` -> `Ayuda IVI de padres` (9 movimientos) y validacion manual del historico en la cuenta compartida.
 
 ## Cuentas Pendientes De Revisar (Cola Priorizada)
 Estrategia: primero cuentas satÃ©lite (mÃ¡s independientes), al final las cuentas corrientes gordas (dependen de que el resto estÃ© limpio).
@@ -214,16 +220,18 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 
 | Movs | id | Cuenta | Tipo |
 |---:|---:|---|---|
-| 1956 | 5 | ING | asset |
+| 1956 | 5 | ING Sin nómina | asset (en curso; revision a medio, avance por 2020) |
 
 ## Pendientes Transversales
 - Sin pendientes transversales nuevos en esta sesion.
+- Fix masivo aplicado en cuenta `MyInvestor` (Pablo, id=19) y `MyInv. Indexado Global (MSCI)` (id=33): 58 movimientos `Plan Pensiones` importados como `expense` se han reconvertido a `investment/inflow` con concepto canonico `Inversión en Plan de Pensiones - Indexado Global (MSCI)` y contrapartida en la cuenta del plan. Se eliminaron 57 revalorizaciones espejo duplicadas (`Revalorización`, contrapartida `MoneyWiz income: passive_income/other_passive`) emparejadas por fecha+importe.
+- Ajuste en aportes de inversión de `ING Renta Fija` (id=459): las aportaciones periódicas que salían desde `ING` (id=5) se han movido a contrapartida externa `Aportes externos inversion` (cuenta sistema `equity`, id=494) manteniendo `quick_entry_kind=investment` e `investment_direction=inflow`. Incluye bloque mensual del día 28 hasta `2019-02-28` y casos de `2021-01-28` y `2021-02-28`.
 - Revisiones transversales de hipoteca cerradas: criterio unico de contabilizacion deuda (principal vs interes) validado y aplicado en `Hipoteca Palmito`.
 - Revision de `Monedero compartido` (id=16) cerrada. Movimiento faltante del `2020-11-26` (`600 EUR`) ya integrado en el cierre de la revision.
 
 ## Como continuar manana
-1. Nuevo orden acordado: liquidez/depositos pendientes -> resto de grupos -> cuentas virtuales MoneyWiz al final.
-2. Revision de `Spot Binance`, `Trade Republic`, `Kutxa`, `DT Bots Cripto`, `Monedero Pablo` y `Santander` cerradas; continuar con la cuenta de liquidez pendiente segun prioridad acordada.
+1. Nuevo orden acordado: cerrar liquidez pendiente (`ING Sin nómina`) y despues pasar a cuentas virtuales MoneyWiz al final.
+2. Revision de `Spot Binance`, `Trade Republic`, `Kutxa`, `DT Bots Cripto`, `Monedero Pablo`, `Santander`, `Cuenta Naranja` y `MyInvestor (Compartido)` cerradas; continuar con la cuenta de liquidez pendiente segun prioridad acordada.
 3. Por cada cuenta revisar:
    - coherencia de contrapartidas en liquidez,
    - movimientos duplicados (manual/import),
@@ -234,7 +242,7 @@ Las mÃ¡s gordas y con mÃ¡s dependencias cruzadas. Revisar una vez que los gr
 ## Proximo dia - Prioridad acordada
 Listado acordado manualmente para la siguiente sesion de revision:
 
-1. Depositos dentro de liquidez: `5` (ING).
+1. Depositos dentro de liquidez: `5` (`ING Sin nómina`, en curso; avance actual por 2020).
 2. Al cerrar liquidez, pasar a cuentas virtuales `MoneyWiz (origin=system)` para revision final.
 
 ## Comando de regeneracion de listado completo (usuario 1)
