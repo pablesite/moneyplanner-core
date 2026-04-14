@@ -50,7 +50,11 @@ def get_account_entries(
     as_of_date: date | None = None,
     status: str | None = None,
 ) -> QuerySet[LedgerEntry]:
-    queryset = account.entries.select_related("transaction")
+    # Safety boundary: only entries from transactions owned by the same user
+    # should contribute to account balances.
+    queryset = account.entries.select_related("transaction").filter(
+        transaction__user_id=account.user_id
+    )
     if as_of_date is not None:
         queryset = queryset.filter(transaction__booking_date__lte=as_of_date)
     if status is not None:
