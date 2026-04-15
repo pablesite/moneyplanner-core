@@ -100,6 +100,7 @@ EXPENSE_TAXONOMY: dict[str, set[str]] = {
         "vehicle_purchase",
         "home_furniture_appliances",
         "technology_devices",
+        "sports_equipment",
         "jewelry_collectibles",
         "other_tangible_assets",
     },

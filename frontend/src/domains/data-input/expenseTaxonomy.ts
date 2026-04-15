@@ -71,6 +71,7 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
     label: 'Mobiliario y electrodomésticos',
   },
   { category: 'tangible_assets', value: 'technology_devices', label: 'Tecnología y dispositivos' },
+  { category: 'tangible_assets', value: 'sports_equipment', label: 'Material deportivo' },
   {
     category: 'tangible_assets',
     value: 'jewelry_collectibles',
