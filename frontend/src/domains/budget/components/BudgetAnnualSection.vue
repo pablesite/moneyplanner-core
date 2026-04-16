@@ -38,6 +38,13 @@ type ContextPanel = {
 };
 
 type RowEntry = AnnualIncomeEntry | AnnualExpenseEntry;
+type BudgetExecutionTone = 'neutral' | 'good' | 'warn' | 'danger';
+type BudgetExecutionPreview = {
+  ratio: number;
+  widthPct: number;
+  tone: BudgetExecutionTone;
+  overflow: boolean;
+};
 
 const props = defineProps<{
   isMonthlyCloseView: boolean;
@@ -62,6 +69,8 @@ const props = defineProps<{
   toggleSectionExpanded: (sectionId: 'income' | 'expense') => void;
   budgetCategoryActualExecution: (...args: any[]) => any;
   budgetSubcategoryActualExecution: (...args: any[]) => any;
+  incomeInvestmentRotationCategoryAdjustment?: (...args: any[]) => number;
+  incomeInvestmentRotationSubcategoryAdjustment?: (...args: any[]) => number;
   incomeExecutionYtdTotals: {
     planned: number;
     executedBudgeted: number;
@@ -77,6 +86,8 @@ const props = defineProps<{
   executionPreview: (...args: any[]) => any;
   updateIncomeViewMode: (mode: 'all' | 'recurrent' | 'one_off') => void;
   updateExpenseViewMode: (mode: 'all' | 'recurrent' | 'one_off') => void;
+  onSubmitAnnualIncome?: () => Promise<void> | void;
+  onSubmitAnnualExpense?: () => Promise<void> | void;
   annualEntriesPage: any | null;
   filteredIncomeEntries: AnnualIncomeEntry[];
   filteredExpenseEntries: AnnualExpenseEntry[];
@@ -166,26 +177,6 @@ function toggleContext(sectionId: 'income' | 'expense', row: BudgetRow): void {
   activeContext.value = { sectionId, row };
 }
 
-function openCreateFromContext(): void {
-  const context = activeContext.value;
-  if (!context || !props.annualEntriesPage) return;
-  if (context.sectionId === 'income') {
-    props.annualEntriesPage.openIncomeModal();
-    props.annualEntriesPage.patchAnnualIncomeForm({
-      category: context.row.categoryKey,
-      subcategory: context.row.subcategoryKey,
-      owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
-    });
-    return;
-  }
-  props.annualEntriesPage.openExpenseModal();
-  props.annualEntriesPage.patchAnnualExpenseForm({
-    category: context.row.categoryKey,
-    subcategory: context.row.subcategoryKey,
-    owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
-  });
-}
-
 function openCreateForCategory(sectionId: 'income' | 'expense', categoryKey: string): void {
   if (!props.annualEntriesPage) return;
   if (sectionId === 'income') {
@@ -263,6 +254,16 @@ function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string
     return `${countText} - ${props.formatMoney(total)} EUR puntual previsto`;
   }
   return `${countText} - ${props.formatMoney(total / 12)} EUR/mes previsto`;
+}
+
+function groupExecutionPreview(
+  sectionId: 'income' | 'expense',
+  group: { categoryKey: string; plannedAnnual: number },
+): BudgetExecutionPreview {
+  if ((Number(group.plannedAnnual) || 0) <= 0) {
+    return { ratio: 0, widthPct: 0, tone: 'neutral', overflow: false };
+  }
+  return props.executionPreview(sectionId, `group:${group.categoryKey}`) as BudgetExecutionPreview;
 }
 
 function openEditIncome(entry: AnnualIncomeEntry): void {
@@ -527,6 +528,21 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   sin presupuesto
                 </span>
               </p>
+              <p
+                v-if="
+                  (incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ?? 0) >
+                  0
+                "
+                class="subtle mb-0"
+              >
+                Neto de rotación aplicado (YTD):
+                -{{
+                  formatMoney(
+                    incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ?? 0,
+                  )
+                }}
+                EUR
+              </p>
 
               <div
                 v-if="budgetCategoryActualExecution(section.id, group.categoryKey)"
@@ -587,11 +603,11 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     Pendiente contabilidad
                     <span
                       class="ui-budget-inline-progress-preview-pill"
-                      :class="`ui-budget-inline-progress-preview-pill-${executionPreview(section.id, `group:${group.categoryKey}`).tone}`"
+                      :class="`ui-budget-inline-progress-preview-pill-${groupExecutionPreview(section.id, group).tone}`"
                     >
                       {{
                         formatPercent(
-                          executionPreview(section.id, `group:${group.categoryKey}`).ratio,
+                          groupExecutionPreview(section.id, group).ratio,
                           0,
                         )
                       }}
@@ -601,13 +617,13 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div class="ui-budget-inline-progress-track ui-budget-inline-progress-track-lg">
                   <div
                     class="ui-budget-inline-progress-fill"
-                    :class="`ui-budget-inline-progress-fill-${executionPreview(section.id, `group:${group.categoryKey}`).tone}`"
+                    :class="`ui-budget-inline-progress-fill-${groupExecutionPreview(section.id, group).tone}`"
                     :style="{
-                      width: `${executionPreview(section.id, `group:${group.categoryKey}`).widthPct}%`,
+                      width: `${groupExecutionPreview(section.id, group).widthPct}%`,
                     }"
                   />
                   <span
-                    v-if="executionPreview(section.id, `group:${group.categoryKey}`).overflow"
+                    v-if="groupExecutionPreview(section.id, group).overflow"
                     class="ui-budget-inline-progress-overflow-marker"
                     aria-hidden="true"
                   />
@@ -686,6 +702,20 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     {{ rowPlannedMeta(section.id, row) }}
                   </template>
                 </div>
+                <div
+                  v-if="
+                    (incomeInvestmentRotationSubcategoryAdjustment?.(section.id, row.key) ?? 0) > 0
+                  "
+                  class="ui-budget-row-meta"
+                >
+                  Neto de rotación aplicado (YTD):
+                  -{{
+                    formatMoney(
+                      incomeInvestmentRotationSubcategoryAdjustment?.(section.id, row.key) ?? 0,
+                    )
+                  }}
+                  EUR
+                </div>
 
                 <div
                   v-if="budgetSubcategoryActualExecution(section.id, row.key)"
@@ -757,9 +787,9 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     v-else-if="row.detectedUnbudgeted"
                     type="button"
                     class="btn btn-ghost btn-sm"
-                    @click="toggleContext(section.id, row)"
+                    @click="openCreateDirect(section.id, row)"
                   >
-                    {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Añadir al presupuesto' }}
+                    Añadir al presupuesto
                   </button>
                 </div>
 
@@ -816,7 +846,10 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 </div>
               </div>
 
-              <div v-if="isContextOpen(section.id, row.key)" class="ui-budget-context-panel">
+              <div
+                v-if="isContextOpen(section.id, row.key) && !row.detectedUnbudgeted"
+                class="ui-budget-context-panel"
+              >
                 <ul
                   v-if="section.id === 'income' && contextIncomeEntries.length"
                   class="ui-budget-context-list"
@@ -933,7 +966,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     :amount-placeholder="annualEntriesPage.incomeAmountInputPlaceholder.value"
     @patch="annualEntriesPage.patchAnnualIncomeForm"
     @close="annualEntriesPage.closeIncomeModal"
-    @submit="annualEntriesPage.submitAnnualIncome"
+    @submit="onSubmitAnnualIncome ? onSubmitAnnualIncome() : annualEntriesPage.submitAnnualIncome()"
   />
 
   <AnnualEntryModalForm
@@ -960,6 +993,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     :notes-placeholder="annualEntriesPage.expenseBulkEditHint.value"
     @patch="annualEntriesPage.patchAnnualExpenseForm"
     @close="annualEntriesPage.closeExpenseModal"
-    @submit="annualEntriesPage.submitAnnualExpense"
+    @submit="onSubmitAnnualExpense ? onSubmitAnnualExpense() : annualEntriesPage.submitAnnualExpense()"
   />
 </template>
