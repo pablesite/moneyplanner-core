@@ -282,6 +282,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "description",
             "status",
             "origin",
+            "member_tag",
             "notes",
             "import_source",
             "import_fingerprint",

@@ -37,6 +37,8 @@ type ContextPanel = {
   row: BudgetRow;
 };
 
+type RowEntry = AnnualIncomeEntry | AnnualExpenseEntry;
+
 const props = defineProps<{
   isMonthlyCloseView: boolean;
   hasAnyPlannedData: boolean;
@@ -218,6 +220,49 @@ function openCreateDirect(sectionId: 'income' | 'expense', row: BudgetRow): void
     subcategory: row.subcategoryKey,
     owner: props.ownershipFilter === 'all' ? '' : props.selectedOwnershipFilterLabel,
   });
+}
+
+function isOneOffEntry(entry: RowEntry): boolean {
+  if ('incomeType' in entry) return entry.incomeType === 'one_off';
+  return entry.expenseType === 'one_off';
+}
+
+function targetMonthLabel(targetMonth?: number | null): string {
+  const month = Number(targetMonth ?? 0);
+  if (Number.isFinite(month) && month >= 1 && month <= 12) {
+    return props.monthLabels[month - 1] ?? `mes ${month}`;
+  }
+  return 'mes objetivo';
+}
+
+function entriesForRow(sectionId: 'income' | 'expense', row: BudgetRow): RowEntry[] {
+  const source = sectionId === 'income' ? props.filteredIncomeEntries : props.filteredExpenseEntries;
+  return source.filter(
+    (entry) => entry.category === row.categoryKey && entry.subcategory === row.subcategoryKey,
+  );
+}
+
+function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string {
+  const entries = entriesForRow(sectionId, row);
+  const total = entries.reduce((sum, entry) => sum + Number(entry.amountAnnual ?? 0), 0);
+  const count = entries.length || row.itemsCount;
+  const countText = `${count} registro${count === 1 ? '' : 's'}`;
+  if (!entries.length) {
+    return `${countText} - ${props.formatMoney(row.plannedAnnual / 12)} EUR/mes previsto`;
+  }
+  const oneOffEntries = entries.filter((entry) => isOneOffEntry(entry));
+  if (oneOffEntries.length === entries.length) {
+    const uniqueMonths = new Set<number>();
+    for (const entry of oneOffEntries) {
+      if (entry.targetMonth != null) uniqueMonths.add(entry.targetMonth);
+    }
+    if (uniqueMonths.size === 1) {
+      const month = Array.from(uniqueMonths)[0];
+      return `${countText} - ${props.formatMoney(total)} EUR en ${targetMonthLabel(month)} previsto`;
+    }
+    return `${countText} - ${props.formatMoney(total)} EUR puntual previsto`;
+  }
+  return `${countText} - ${props.formatMoney(total / 12)} EUR/mes previsto`;
 }
 
 function openEditIncome(entry: AnnualIncomeEntry): void {
@@ -638,8 +683,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     {{ formatMoney(row.detectedExecutedYtd ?? 0) }} EUR fuera de presupuesto (YTD)
                   </template>
                   <template v-else>
-                    {{ row.itemsCount }} registro{{ row.itemsCount === 1 ? '' : 's' }} -
-                    {{ formatMoney(row.plannedAnnual / 12) }} EUR/mes previsto
+                    {{ rowPlannedMeta(section.id, row) }}
                   </template>
                 </div>
 
@@ -691,26 +735,13 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 >
                   <div class="ui-budget-inline-progress-track">
                     <div
-                      class="ui-budget-inline-progress-fill"
-                      :class="`ui-budget-inline-progress-fill-${executionPreview(section.id, `row:${row.key}`).tone}`"
+                      class="ui-budget-inline-progress-fill ui-budget-inline-progress-fill-neutral"
                       :style="{
-                        width: `${executionPreview(section.id, `row:${row.key}`).widthPct}%`,
+                        width: '0%',
                       }"
                     />
-                    <span
-                      v-if="executionPreview(section.id, `row:${row.key}`).overflow"
-                      class="ui-budget-inline-progress-overflow-marker"
-                      aria-hidden="true"
-                    />
                   </div>
-                  <div class="ui-budget-inline-progress-caption">
-                    Ejecución pendiente - preview
-                    <span
-                      :class="`ui-budget-inline-progress-caption-tone-${executionPreview(section.id, `row:${row.key}`).tone}`"
-                    >
-                      {{ formatPercent(executionPreview(section.id, `row:${row.key}`).ratio, 0) }}
-                    </span>
-                  </div>
+                  <div class="ui-budget-inline-progress-caption">Ejecución pendiente</div>
                 </div>
 
                 <div class="ui-budget-row-actions">
@@ -757,12 +788,12 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   }}</span>
                   <strong
                     class="ui-budget-pending-text"
-                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? executionPreview(section.id, `row:${row.key}`).tone}`"
+                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? 'neutral'}`"
                   >
                     {{
                       budgetSubcategoryActualExecution(section.id, row.key)
                         ? `${formatMoney(budgetSubcategoryActualExecution(section.id, row.key)?.executed ?? 0)} EUR`
-                        : 'Pendiente'
+                        : `${formatMoney(0)} EUR`
                     }}
                   </strong>
                 </div>
@@ -774,7 +805,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   }}</span>
                   <strong
                     class="ui-budget-pending-text"
-                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? executionPreview(section.id, `row:${row.key}`).tone}`"
+                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? 'neutral'}`"
                   >
                     {{
                       budgetSubcategoryActualExecution(section.id, row.key)
