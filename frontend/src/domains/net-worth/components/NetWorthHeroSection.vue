@@ -204,7 +204,7 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
                   }}{{ formatPct(monthlyDelta.pct, 1) }})</span
                 >
                 <span class="ui-nw-hero-delta-range"
-                  >{{ monthlyDelta.prevLabel }} â†’ {{ monthlyDelta.lastLabel }}</span
+                  >{{ monthlyDelta.prevLabel }} → {{ monthlyDelta.lastLabel }}</span
                 >
               </div>
               <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
@@ -221,7 +221,7 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
                   </strong>
                 </div>
                 <div class="ui-hero-stat">
-                  <span class="ui-hero-stat-label">Cobertura lÃ­quida</span>
+                  <span class="ui-hero-stat-label">Cobertura líquida</span>
                   <strong class="ui-hero-stat-value">
                     {{ formatPct(analysis.liquidityToDebtRatio, 0) }}
                   </strong>

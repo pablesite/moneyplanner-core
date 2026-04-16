@@ -105,10 +105,15 @@ def _build_position_data_cache(
 
         running_debits: dict[int, Decimal] = {}
         running_credits: dict[int, Decimal] = {}
+        from django.db.models import F
+
         for account_id, booking_date, side, amount in (
             LedgerEntry.objects.filter(
                 account_id__in=accounting_account_ids,
                 transaction__status=LedgerTransaction.Status.POSTED,
+                # Safety boundary: only count entries from transactions owned by
+                # the same user as the account (mirrors get_account_entries).
+                transaction__user_id=F("account__user_id"),
             )
             .select_related("transaction")
             .order_by("account_id", "transaction__booking_date", "id")
@@ -279,11 +284,14 @@ def build_net_worth_timeline(
         active_liabilities = [
             liability for liability in liabilities if liability.start_date <= point_date
         ]
+        # For the current (incomplete) month, cap the effective date at today so that
+        # periodic-contribution projections don't inflate the value beyond what is known.
+        effective_date = min(point_date, timeline_end_date)
         totals = calculate_totals(
             assets_qs=active_assets,
             liabilities_qs=active_liabilities,
             base_currency=base_currency,
-            as_of_date=point_date,
+            as_of_date=effective_date,
             fx_cache=fx_cache,
             position_cache=pos_cache,
         )
