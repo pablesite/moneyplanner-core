@@ -230,8 +230,8 @@ defineProps<{
                     type="button"
                     class="btn ui-budget-checkin-mini-btn"
                     :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
-                    title=”Abrir candado y ajustar manualmente esta cuenta”
-                    @click=”unlockLiquidityLedgerRow(row)”
+                    title="Abrir candado y ajustar manualmente esta cuenta"
+                    @click="unlockLiquidityLedgerRow(row)"
                   >
                     🔒 Libro contable
                   </button>
@@ -264,7 +264,7 @@ defineProps<{
                       title="Volver a bloquear y usar el saldo del libro contable"
                       @click="relockLiquidityLedgerRow(row)"
                     >
-                      ðŸ”“ Manual
+                      ðŸ"" Manual
                     </button>
                   </div>
                   <input
