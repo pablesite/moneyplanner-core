@@ -75,6 +75,16 @@ onMounted(async () => {
           </button>
         </div>
         <button
+          v-if="page.activeTab === 'cuentas' && page.hasAvailableManualPositions"
+          class="btn ui-accounting-cta-secondary"
+          type="button"
+          aria-label="Añadir cuenta al libro contable"
+          title="Añadir cuenta al libro contable"
+          @click="page.openActivationModal"
+        >
+          ⊕
+        </button>
+        <button
           class="btn btn-primary ui-accounting-cta"
           type="button"
           aria-label="Registrar movimiento diario"
@@ -82,7 +92,7 @@ onMounted(async () => {
           :disabled="!page.liquidityAccounts.length"
           @click="page.showQuickEntryModal = true"
         >
-          + Registrar movimiento
+          +
         </button>
       </div>
       <AccountingAccountCatalog v-if="page.activeTab === 'cuentas'" :page="page" />

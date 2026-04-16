@@ -65,10 +65,34 @@
 
 /* Primary CTA � more visual weight than secondary actions */
 .ui-accounting-cta {
-  padding: 10px 22px;
-  font-size: 0.94rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ui-accounting-cta-secondary {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.15rem;
+  font-weight: 400;
+  line-height: 1;
+  flex-shrink: 0;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ui-accounting-cta-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 /* Net balance hero number � larger than the shared kpi-value */

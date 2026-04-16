@@ -150,18 +150,6 @@ function typeBadgeVariant(movement: {
       </div>
     </div>
 
-    <div v-if="state.hasAvailableManualPositions" class="ui-accounting-catalog-actions">
-      <button
-        class="btn"
-        type="button"
-        aria-label="Añadir cuenta al libro contable"
-        title="Añadir cuenta al libro contable"
-        @click="state.openActivationModal"
-      >
-        + Añadir cuenta al libro
-      </button>
-    </div>
-
     <div
       v-if="state.cuentasLoading && state.cuentasSelectedAccountId == null"
       class="ui-section-loading"
