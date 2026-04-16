@@ -112,7 +112,7 @@ defineProps<{
           </button>
         </div>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          Ledger categorizado por taxonomía compartida y fallback legacy explícito solo cuando falte
+          Libro contable categorizado por taxonomía compartida y fallback legacy explícito solo cuando falte
           esa clasificación.
         </p>
         <p class="ui-budget-checkin-subtitle">
@@ -163,7 +163,7 @@ defineProps<{
           <div class="ui-budget-execution-note-main">
             <strong>Cobertura del mes</strong>
             <span>
-              {{ monthlyExpenseCoverageSummary.viaLedger }} via ledger categorizado -
+              {{ monthlyExpenseCoverageSummary.viaLedger }} vía libro contable -
               {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy -
               {{ monthlyExpenseCoverageSummary.pending }} pendientes
             </span>
@@ -180,7 +180,7 @@ defineProps<{
         >
           <strong>Pendiente clasificar</strong>
           <span>
-            {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del ledger no se puede
+            {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del libro contable no se puede
             alinear automaticamente con el presupuesto de este mes.
           </span>
           <small v-if="monthlyExpensePendingClassification.ambiguousRows > 0">

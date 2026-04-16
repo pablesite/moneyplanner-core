@@ -12,49 +12,6 @@ const state = props.page;
         <p class="ui-page-eyebrow">Accounting Movements</p>
         <h1 class="ui-accounting-hero-title">Libro diario operativo</h1>
       </div>
-      <div class="ui-accounting-hero-right">
-        <div class="ui-page-actions">
-          <button
-            class="btn"
-            type="button"
-            aria-label="Activar tracking contable"
-            title="Activar tracking contable"
-            :disabled="!state.hasAvailableManualPositions"
-            @click="state.openActivationModal"
-          >
-            Activar tracking
-          </button>
-          <button
-            class="btn"
-            type="button"
-            aria-label="Importar CSV MoneyWiz"
-            title="Importar CSV MoneyWiz"
-            @click="state.showMoneyWizImportModal = true"
-          >
-            Importar MoneyWiz
-          </button>
-          <button
-            class="btn"
-            type="button"
-            aria-label="Eliminar movimientos importados"
-            title="Eliminar movimientos importados"
-            :disabled="!state.hasImportedTransactions || state.transactionCreationLoading"
-            @click="state.deleteImportedTransactions"
-          >
-            Limpiar importados
-          </button>
-          <button
-            class="btn btn-primary ui-accounting-cta"
-            type="button"
-            aria-label="Registrar movimiento diario"
-            title="Registrar movimiento diario"
-            :disabled="!state.liquidityAccounts.length"
-            @click="state.showQuickEntryModal = true"
-          >
-            + Registrar movimiento
-          </button>
-        </div>
-      </div>
     </div>
 
     <div class="ui-accounting-net-kpi">

@@ -550,7 +550,7 @@ const quickMainAccountGroups = computed(() => {
         <summary>Alinear con una línea del plan (opcional)</summary>
         <p class="ui-accounting-inline-note">
           Usa este enlace solo si quieres relacionar el movimiento con una fila concreta del
-          presupuesto anual. La clasificación principal ya queda guardada en el ledger.
+          presupuesto anual. La clasificación principal ya queda guardada en el libro contable.
         </p>
 
         <select

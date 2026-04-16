@@ -391,7 +391,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
       >
         <header class="ui-budget-suggestions-modal-head">
           <div>
-            <h2 id="budget-suggestions-title">Sugerencias desde histórico ledger</h2>
+            <h2 id="budget-suggestions-title">Sugerencias desde histórico del libro contable</h2>
             <p>
               Referencia orientativa para plan anual. El presupuesto sigue siendo editable y manual.
             </p>
@@ -414,7 +414,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
             {{ budgetSuggestionsError }}
           </div>
           <div v-else-if="!hasBudgetSuggestions" class="subtle">
-            Sin cobertura ledger por subcategoría para sugerir ajustes todavía.
+            Sin cobertura del libro contable por subcategoría para sugerir ajustes todavía.
           </div>
           <div v-else class="ui-budget-suggestions-grid">
             <article class="ui-budget-suggestions-col">

@@ -201,7 +201,7 @@ const LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS = [
 ];
 const TRACKING_MODE_OPTIONS = [
   { value: 'manual', label: 'Manual' },
-  { value: 'accounting', label: 'Contable (ledger)' },
+  { value: 'accounting', label: 'Contable (libro)' },
 ];
 const LIABILITY_CATEGORY_DEFAULTS: Record<
   string,
