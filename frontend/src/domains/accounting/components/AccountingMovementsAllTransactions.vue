@@ -57,7 +57,7 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
     return -baseAmount;
   }
   if (transaction.activity_kind === 'investment_purchase') {
-    return transaction.investment_direction === 'outflow' ? baseAmount : -baseAmount;
+    return 0;
   }
   if (
     transaction.activity_kind === 'revaluation' ||
