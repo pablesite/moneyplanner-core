@@ -76,6 +76,7 @@ class LedgerTransaction(models.Model):
     class InvestmentDirection(models.TextChoices):
         INFLOW = "inflow", "Aporte"
         OUTFLOW = "outflow", "Desinversión"
+        REINVESTMENT = "reinvestment", "Reinversión"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ledger_transactions"

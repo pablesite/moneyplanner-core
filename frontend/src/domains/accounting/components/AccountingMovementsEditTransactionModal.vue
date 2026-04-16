@@ -160,6 +160,11 @@ const isInvestmentOutflow = computed(
     props.page.editTransactionForm.kind === 'investment' &&
     props.page.editTransactionForm.investment_direction === 'outflow',
 );
+const isInvestmentReinvestment = computed(
+  () =>
+    props.page.editTransactionForm.kind === 'investment' &&
+    props.page.editTransactionForm.investment_direction === 'reinvestment',
+);
 
 const editAdjustmentCurrentBalance = computed((): number | null => {
   if (props.page.editTransactionForm.kind !== 'balance_adjustment') return null;
@@ -360,6 +365,17 @@ const editMainAccountGroups = computed(() => {
             class="ui-accounting-segmented-btn"
             :class="{
               'ui-accounting-segmented-btn-active':
+                page.editTransactionForm.investment_direction === 'reinvestment',
+            }"
+            @click="page.editTransactionForm.investment_direction = 'reinvestment'"
+          >
+            Reinversion
+          </button>
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
+            :class="{
+              'ui-accounting-segmented-btn-active':
                 page.editTransactionForm.investment_direction === 'outflow',
             }"
             @click="page.editTransactionForm.investment_direction = 'outflow'"
@@ -370,11 +386,20 @@ const editMainAccountGroups = computed(() => {
 
         <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <label class="ui-accounting-field">
-            <span>Cuenta de liquidez {{ isInvestmentOutflow ? '(destino)' : '(origen)' }}</span>
+            <span>
+              {{
+                isInvestmentReinvestment
+                  ? 'Cuenta de inversion (origen)'
+                  : `Cuenta de liquidez ${isInvestmentOutflow ? '(destino)' : '(origen)'}`
+              }}
+            </span>
             <select v-model="page.editTransactionForm.account_id" class="select" required>
               <option :value="null">Seleccionar</option>
               <optgroup
-                v-for="group in editLiquidityGroups"
+                v-for="group in
+                  isInvestmentReinvestment
+                    ? groupAndSortAccounts(page.editInvestmentOriginOptions)
+                    : editLiquidityGroups"
                 :key="group.key"
                 :label="group.label"
               >
@@ -682,6 +707,8 @@ const editMainAccountGroups = computed(() => {
               : page.editTransactionForm.kind === 'investment'
                 ? page.editInvestmentIsCrossCurrency
                   ? 'Inversion multimoneda: informa importe origen e importe destino segun ejecucion real.'
+                  : page.editTransactionForm.investment_direction === 'reinvestment'
+                    ? 'La reinversion mueve capital entre dos cuentas de inversion sin usar cuenta puente.'
                   : page.editTransactionForm.investment_direction === 'outflow'
                     ? 'La desinversion devuelve liquidez al activo de caja.'
                     : 'El aporte registra el alta en la cuenta de inversion.'

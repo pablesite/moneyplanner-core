@@ -737,6 +737,18 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"flow_family": "Las inversiones solo pueden clasificarse como gasto."}
             )
+        if (
+            movement_type == "investment"
+            and investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT
+            and (flow_family or category_key or subcategory_key)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "flow_family": (
+                        "La reinversion entre cuentas de inversion no admite clasificacion funcional."
+                    )
+                }
+            )
         if movement_type in {"transfer", "adjustment", "revaluation"} and (
             flow_family or category_key or subcategory_key
         ):
@@ -759,6 +771,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         )
         self._validate_required_category_contract(
             movement_type=movement_type,
+            investment_direction=investment_direction,
             category_key=category_key,
             subcategory_key=subcategory_key,
             annual_income_entry=annual_income_entry,
@@ -872,6 +885,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 attrs["category_key"] = "capital_gains"
                 attrs["subcategory_key"] = "sale_financial_assets"
                 return
+            if investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT:
+                attrs["flow_family"] = ""
+                attrs["category_key"] = ""
+                attrs["subcategory_key"] = ""
+                return
             attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
             return
 
@@ -904,7 +922,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             return movement_type, ""
         if not investment_direction:
             raise serializers.ValidationError(
-                {"investment_direction": "Indica si es aporte o desinversion."}
+                {"investment_direction": "Indica si es aporte, desinversion o reinversion."}
             )
         return movement_type, investment_direction
 
@@ -961,6 +979,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         self,
         *,
         movement_type: str,
+        investment_direction: str,
         category_key: str,
         subcategory_key: str,
         annual_income_entry: AnnualIncomeEntry | None,
@@ -976,7 +995,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"subcategory_key": "Categoria y subcategoria son obligatorias para gastos."}
             )
-        if movement_type == "investment" and not has_classification:
+        if (
+            movement_type == "investment"
+            and investment_direction != LedgerTransaction.InvestmentDirection.REINVESTMENT
+            and not has_classification
+        ):
             raise serializers.ValidationError(
                 {
                     "subcategory_key": (
@@ -1343,9 +1366,10 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         if investment_direction not in {
             LedgerTransaction.InvestmentDirection.INFLOW,
             LedgerTransaction.InvestmentDirection.OUTFLOW,
+            LedgerTransaction.InvestmentDirection.REINVESTMENT,
         }:
             raise serializers.ValidationError(
-                {"investment_direction": "Indica si es aporte o desinversion."}
+                {"investment_direction": "Indica si es aporte, desinversion o reinversion."}
             )
         if annual_income_entry is not None:
             raise serializers.ValidationError(
@@ -1365,20 +1389,56 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {
                     "counterparty_account_id": (
-                        "La cuenta de inversion debe ser distinta a la cuenta de liquidez."
+                        "La cuenta de destino debe ser distinta de la cuenta origen."
                     )
                 }
             )
-        origin_currency = (
-            counterparty_account.currency
-            if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
-            else account.currency
-        )
-        destination_currency = (
-            account.currency
-            if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
-            else counterparty_account.currency
-        )
+        if investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT:
+            if account.asset_id is None:
+                raise serializers.ValidationError(
+                    {
+                        "account_id": (
+                            "La reinversion requiere que la cuenta origen sea una cuenta de inversion."
+                        )
+                    }
+                )
+            if counterparty_account.asset_id is None:
+                raise serializers.ValidationError(
+                    {
+                        "counterparty_account_id": (
+                            "La reinversion requiere que la cuenta destino sea una cuenta de inversion."
+                        )
+                    }
+                )
+            if account.asset.category != Asset.Category.INVESTMENTS:
+                raise serializers.ValidationError(
+                    {
+                        "account_id": (
+                            "La reinversion solo admite cuentas ligadas a activos de categoria inversiones."
+                        )
+                    }
+                )
+            if counterparty_account.asset.category != Asset.Category.INVESTMENTS:
+                raise serializers.ValidationError(
+                    {
+                        "counterparty_account_id": (
+                            "La reinversion solo admite cuentas ligadas a activos de categoria inversiones."
+                        )
+                    }
+                )
+            origin_currency = account.currency
+            destination_currency = counterparty_account.currency
+        else:
+            origin_currency = (
+                counterparty_account.currency
+                if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+                else account.currency
+            )
+            destination_currency = (
+                account.currency
+                if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+                else counterparty_account.currency
+            )
         if origin_currency != destination_currency and destination_amount is None:
             raise serializers.ValidationError(
                 {

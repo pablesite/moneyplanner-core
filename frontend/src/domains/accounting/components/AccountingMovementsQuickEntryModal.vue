@@ -84,7 +84,6 @@ const investmentGroups = computed(() =>
 const liabilityGroups = computed(() =>
   groupAndSortAccounts(props.page.liabilityCounterpartyOptions),
 );
-const interestGroups = computed(() => groupAndSortAccounts(props.page.debtInterestOptions));
 
 type MovementTypeOption = { value: string; label: string };
 const commonTypeOptions = computed<MovementTypeOption[]>(() =>
@@ -283,6 +282,14 @@ const quickMainAccountGroups = computed(() => {
           <button
             type="button"
             class="ui-accounting-segmented-btn"
+            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'reinvestment' }"
+            @click="page.quickEntryForm.investment_direction = 'reinvestment'"
+          >
+            Reinversion
+          </button>
+          <button
+            type="button"
+            class="ui-accounting-segmented-btn"
             :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'outflow' }"
             @click="page.quickEntryForm.investment_direction = 'outflow'"
           >
@@ -292,10 +299,23 @@ const quickMainAccountGroups = computed(() => {
 
         <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
           <label class="ui-accounting-field">
-            <span>Cuenta de liquidez {{ page.quickEntryForm.investment_direction === 'inflow' ? '(origen)' : '(destino)' }}</span>
+            <span>
+              {{
+                page.quickEntryForm.investment_direction === 'reinvestment'
+                  ? 'Cuenta de inversion (origen)'
+                  : `Cuenta de liquidez ${page.quickEntryForm.investment_direction === 'inflow' ? '(origen)' : '(destino)'}`
+              }}
+            </span>
             <select v-model="page.quickEntryForm.account_id" class="select" required>
               <option :value="null">Seleccionar</option>
-              <optgroup v-for="group in liquidityGroups" :key="group.key" :label="group.label">
+              <optgroup
+                v-for="group in
+                  page.quickEntryForm.investment_direction === 'reinvestment'
+                    ? groupAndSortAccounts(page.investmentOriginOptions)
+                    : liquidityGroups"
+                :key="group.key"
+                :label="group.label"
+              >
                 <option v-for="account in group.accounts" :key="account.id" :value="account.id">
                   {{ accountLabel(account) }} / {{ account.currency }}
                 </option>
@@ -303,7 +323,10 @@ const quickMainAccountGroups = computed(() => {
             </select>
           </label>
           <label class="ui-accounting-field">
-            <span>Cuenta de inversión {{ page.quickEntryForm.investment_direction === 'inflow' ? '(destino)' : '(origen)' }}</span>
+            <span>
+              Cuenta de inversión
+              {{ page.quickEntryForm.investment_direction === 'outflow' ? '(origen)' : '(destino)' }}
+            </span>
             <select v-model="page.quickEntryForm.counterparty_account_id" class="select" required>
               <option :value="null">Seleccionar</option>
               <optgroup v-for="group in investmentGroups" :key="group.key" :label="group.label">
@@ -606,6 +629,8 @@ const quickMainAccountGroups = computed(() => {
               : page.quickEntryForm.movement_type === 'investment'
                 ? page.quickInvestmentIsCrossCurrency
                   ? 'Inversión multimoneda: informa importe origen e importe destino según ejecución real.'
+                  : page.quickEntryForm.investment_direction === 'reinvestment'
+                    ? 'La reinversión mueve capital entre dos cuentas de inversión sin usar cuenta puente.'
                   : page.quickEntryForm.investment_direction === 'outflow'
                   ? 'La desinversión devuelve liquidez al activo de caja.'
                   : 'El aporte registra el alta en la cuenta de inversión.'
@@ -623,4 +648,3 @@ const quickMainAccountGroups = computed(() => {
     </form>
   </BaseModal>
 </template>
-

@@ -54,7 +54,7 @@ type TransactionFormState = {
   interest_amount: string;
   kind: EditableActivityKind;
   initial_kind: EditableActivityKind;
-  investment_direction: 'inflow' | 'outflow';
+  investment_direction: 'inflow' | 'outflow' | 'reinvestment';
   category_key: string;
   subcategory_key: string;
   kind_label: string;
@@ -193,7 +193,7 @@ export function useAccountingPage() {
 
   const quickEntryForm = reactive({
     movement_type: 'expense' as QuickLedgerMovementType,
-    investment_direction: 'inflow' as 'inflow' | 'outflow',
+    investment_direction: 'inflow' as 'inflow' | 'outflow' | 'reinvestment',
     booking_date: new Date().toISOString().slice(0, 10),
     value_date: new Date().toISOString().slice(0, 10),
     description: '',
@@ -462,9 +462,15 @@ export function useAccountingPage() {
   );
   function isLiquidityAssetAccount(account: LedgerAccount): boolean {
     if (account.account_type !== 'asset') return false;
+    if (isAutoInvestmentBridgeAccount(account)) return false;
     if (account.asset_id == null) return true;
     const meta = accountPositionMetaByAccountId.value.get(account.id);
     return (meta?.category ?? '').trim() === 'cash';
+  }
+  function isAutoInvestmentBridgeAccount(account: LedgerAccount): boolean {
+    if (account.origin !== 'system') return false;
+    const normalizedName = String(account.name ?? '').trim().toLowerCase();
+    return normalizedName.startsWith('puente traspasos inversion (auto)');
   }
   const transferOriginOptions = computed(() =>
     accounts.value.filter((account) => isLiquidityAssetAccount(account)),
@@ -481,7 +487,17 @@ export function useAccountingPage() {
       (account) =>
         account.account_type === 'asset' &&
         account.id !== normalizeAccountId(quickEntryForm.account_id) &&
+        !isAutoInvestmentBridgeAccount(account) &&
         account.asset_id != null,
+    ),
+  );
+  const investmentOriginOptions = computed(() =>
+    accounts.value.filter(
+      (account) =>
+        account.account_type === 'asset' &&
+        account.asset_id != null &&
+        !isAutoInvestmentBridgeAccount(account) &&
+        account.id !== normalizeAccountId(quickEntryForm.counterparty_account_id),
     ),
   );
   function normalizeAccountId(value: unknown): number | null {
@@ -523,12 +539,18 @@ export function useAccountingPage() {
     if (quickEntryForm.investment_direction === 'outflow') {
       return quickSelectedInvestmentAccount.value?.currency ?? '';
     }
+    if (quickEntryForm.investment_direction === 'reinvestment') {
+      return quickSelectedLiquidityAccount.value?.currency ?? '';
+    }
     return quickSelectedLiquidityAccount.value?.currency ?? '';
   });
   const quickInvestmentDestinationCurrency = computed(() => {
     if (quickEntryForm.movement_type !== 'investment') return '';
     if (quickEntryForm.investment_direction === 'outflow') {
       return quickSelectedLiquidityAccount.value?.currency ?? '';
+    }
+    if (quickEntryForm.investment_direction === 'reinvestment') {
+      return quickSelectedInvestmentAccount.value?.currency ?? '';
     }
     return quickSelectedInvestmentAccount.value?.currency ?? '';
   });
@@ -743,6 +765,29 @@ export function useAccountingPage() {
     if (breakdown.interest > 0 && quickEntryForm.interest_account_id == null) return false;
     return true;
   }
+  function quickInvestmentEntryReady(): boolean {
+    if (quickSelectedInvestmentAccountId.value == null) return false;
+    if (quickEntryForm.investment_direction === 'reinvestment') {
+      const originAccount = quickSelectedLiquidityAccount.value;
+      const destinationAccount = quickSelectedInvestmentAccount.value;
+      if (
+        !originAccount ||
+        originAccount.asset_id == null ||
+        isAutoInvestmentBridgeAccount(originAccount)
+      ) {
+        return false;
+      }
+      if (
+        !destinationAccount ||
+        destinationAccount.asset_id == null ||
+        isAutoInvestmentBridgeAccount(destinationAccount)
+      ) {
+        return false;
+      }
+    }
+    if (!quickInvestmentIsCrossCurrency.value) return true;
+    return toNumber(quickEntryForm.destination_amount) > 0;
+  }
   const quickEntryReady = computed(() => {
     if (!quickEntryForm.description.trim()) return false;
     if (!quickEntryForm.booking_date || !quickEntryForm.value_date) return false;
@@ -770,9 +815,7 @@ export function useAccountingPage() {
       return normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
     }
     if (quickEntryForm.movement_type === 'investment') {
-      if (quickSelectedInvestmentAccountId.value == null) return false;
-      if (!quickInvestmentIsCrossCurrency.value) return true;
-      return toNumber(quickEntryForm.destination_amount) > 0;
+      return quickInvestmentEntryReady();
     }
     if (
       (quickEntryForm.movement_type === 'income' || quickEntryForm.movement_type === 'expense') &&
@@ -786,7 +829,8 @@ export function useAccountingPage() {
     () =>
       quickEntryForm.movement_type === 'income' ||
       quickEntryForm.movement_type === 'expense' ||
-      quickEntryForm.movement_type === 'investment' ||
+      (quickEntryForm.movement_type === 'investment' &&
+        quickEntryForm.investment_direction !== 'reinvestment') ||
       quickEntryForm.movement_type === 'debt_payment',
   );
   const quickCategoryOptions = computed(() => {
@@ -797,6 +841,9 @@ export function useAccountingPage() {
       );
     }
     if (quickEntryForm.movement_type === 'investment') {
+      if (quickEntryForm.investment_direction === 'reinvestment') {
+        return [];
+      }
       if (quickEntryForm.investment_direction === 'outflow') {
         return incomeCategories.filter((row) => row.value === 'capital_gains');
       }
@@ -827,6 +874,9 @@ export function useAccountingPage() {
       );
     }
     if (quickEntryForm.movement_type === 'investment') {
+      if (quickEntryForm.investment_direction === 'reinvestment') {
+        return [];
+      }
       if (quickEntryForm.investment_direction === 'outflow') {
         return incomeSubcategories.filter(
           (row) => row.category === (quickEntryForm.category_key as IncomeCategoryKey),
@@ -839,7 +889,9 @@ export function useAccountingPage() {
     return [];
   });
   const quickCategoryLocked = computed(() => {
-    if (quickEntryForm.movement_type === 'investment') return true;
+    if (quickEntryForm.movement_type === 'investment') {
+      return quickEntryForm.investment_direction !== 'reinvestment';
+    }
     if (quickEntryForm.movement_type === 'debt_payment') {
       return quickSelectedLiabilityCategory.value === 'mortgage';
     }
@@ -847,7 +899,10 @@ export function useAccountingPage() {
   });
   const quickSubcategoryLocked = computed(() => {
     if (quickEntryForm.movement_type === 'investment') {
-      return quickEntryForm.investment_direction === 'outflow';
+      return (
+        quickEntryForm.investment_direction === 'outflow' ||
+        quickEntryForm.investment_direction === 'reinvestment'
+      );
     }
     if (quickEntryForm.movement_type === 'debt_payment') {
       return quickSelectedLiabilityCategory.value === 'mortgage';
@@ -940,11 +995,19 @@ export function useAccountingPage() {
   ];
   const editAccountOptions = computed(() =>
     accounts.value
-      .filter((account) => account.account_type === 'asset' || account.account_type === 'liability')
+      .filter(
+        (account) =>
+          (account.account_type === 'asset' || account.account_type === 'liability') &&
+          !isAutoInvestmentBridgeAccount(account),
+      )
       .sort((a, b) => a.name.localeCompare(b.name, 'es')),
   );
-  function isClassificationKind(kind: EditableActivityKind): boolean {
-    return kind === 'income' || kind === 'expense' || kind === 'investment' || kind === 'debt_payment';
+  function kindUsesClassification(
+    kind: EditableActivityKind,
+    investmentDirection: 'inflow' | 'outflow' | 'reinvestment',
+  ): boolean {
+    if (kind === 'investment') return investmentDirection !== 'reinvestment';
+    return kind === 'income' || kind === 'expense' || kind === 'debt_payment';
   }
 
   function isCounterpartyKind(kind: EditableActivityKind): kind is CounterpartyEditableKind {
@@ -952,7 +1015,7 @@ export function useAccountingPage() {
   }
 
   const editKindNeedsClassification = computed(() =>
-    isClassificationKind(editTransactionForm.kind),
+    kindUsesClassification(editTransactionForm.kind, editTransactionForm.investment_direction),
   );
   const editKindNeedsCounterparty = computed(() => isCounterpartyKind(editTransactionForm.kind));
   const editCounterpartyLabel = computed(() => {
@@ -981,6 +1044,15 @@ export function useAccountingPage() {
       );
     }
     return baseOptions;
+  });
+  const editInvestmentOriginOptions = computed(() => {
+    const selectedCounterpartyId = editTransactionForm.counterparty_account_id;
+    return editAccountOptions.value.filter((account) => {
+      if (account.account_type !== 'asset') return false;
+      if (account.asset_id == null) return false;
+      if (selectedCounterpartyId == null) return true;
+      return account.id !== selectedCounterpartyId;
+    });
   });
   const editCounterpartyMissingHint = computed(() => {
     if (!editKindNeedsCounterparty.value) return '';
@@ -1026,6 +1098,9 @@ export function useAccountingPage() {
     if (editTransactionForm.investment_direction === 'outflow') {
       return editSelectedInvestmentAccount.value?.currency ?? '';
     }
+    if (editTransactionForm.investment_direction === 'reinvestment') {
+      return editSelectedLiquidityAccount.value?.currency ?? '';
+    }
     return editSelectedLiquidityAccount.value?.currency ?? '';
   });
   const editInvestmentDestinationCurrency = computed(() => {
@@ -1035,6 +1110,9 @@ export function useAccountingPage() {
     if (editTransactionForm.kind !== 'investment') return '';
     if (editTransactionForm.investment_direction === 'outflow') {
       return editSelectedLiquidityAccount.value?.currency ?? '';
+    }
+    if (editTransactionForm.investment_direction === 'reinvestment') {
+      return editSelectedInvestmentAccount.value?.currency ?? '';
     }
     return editSelectedInvestmentAccount.value?.currency ?? '';
   });
@@ -1058,6 +1136,9 @@ export function useAccountingPage() {
       );
     }
     if (editTransactionForm.kind === 'investment') {
+      if (editTransactionForm.investment_direction === 'reinvestment') {
+        return [];
+      }
       if (editTransactionForm.investment_direction === 'outflow') {
         return incomeCategories.filter((row) => row.value === 'capital_gains');
       }
@@ -1088,6 +1169,9 @@ export function useAccountingPage() {
       );
     }
     if (editTransactionForm.kind === 'investment') {
+      if (editTransactionForm.investment_direction === 'reinvestment') {
+        return [];
+      }
       if (editTransactionForm.investment_direction === 'outflow') {
         return incomeSubcategories.filter(
           (row) => row.category === (editTransactionForm.category_key as IncomeCategoryKey),
@@ -1100,7 +1184,9 @@ export function useAccountingPage() {
     return [];
   });
   const editCategoryLocked = computed(() => {
-    if (editTransactionForm.kind === 'investment') return true;
+    if (editTransactionForm.kind === 'investment') {
+      return editTransactionForm.investment_direction !== 'reinvestment';
+    }
     if (editTransactionForm.kind === 'debt_payment') {
       return editSelectedDebtLiabilityCategory.value === 'mortgage';
     }
@@ -1108,7 +1194,10 @@ export function useAccountingPage() {
   });
   const editSubcategoryLocked = computed(() => {
     if (editTransactionForm.kind === 'investment') {
-      return editTransactionForm.investment_direction === 'outflow';
+      return (
+        editTransactionForm.investment_direction === 'outflow' ||
+        editTransactionForm.investment_direction === 'reinvestment'
+      );
     }
     if (editTransactionForm.kind === 'debt_payment') {
       return editSelectedDebtLiabilityCategory.value === 'mortgage';
@@ -1210,6 +1299,13 @@ export function useAccountingPage() {
     () => [quickEntryForm.movement_type, quickEntryForm.investment_direction] as const,
     () => {
       if (quickEntryForm.movement_type !== 'investment') return;
+      if (quickEntryForm.investment_direction === 'reinvestment') {
+        quickEntryForm.category_key = '';
+        quickEntryForm.subcategory_key = '';
+        quickEntryForm.annual_income_entry_id = null;
+        quickEntryForm.annual_expense_entry_id = null;
+        return;
+      }
       if (quickEntryForm.investment_direction === 'outflow') {
         quickEntryForm.category_key = 'capital_gains';
         quickEntryForm.subcategory_key = 'sale_financial_assets';
@@ -1300,7 +1396,7 @@ export function useAccountingPage() {
       if (editTransactionForm.account_id == null && editAccountOptions.value.length) {
         editTransactionForm.account_id = editAccountOptions.value[0]!.id;
       }
-      if (!isClassificationKind(kind)) {
+      if (!kindUsesClassification(kind, editTransactionForm.investment_direction)) {
         editTransactionForm.category_key = '';
         editTransactionForm.subcategory_key = '';
       }
@@ -1343,6 +1439,11 @@ export function useAccountingPage() {
       ] as const,
     () => {
       if (editTransactionForm.kind === 'investment') {
+        if (editTransactionForm.investment_direction === 'reinvestment') {
+          editTransactionForm.category_key = '';
+          editTransactionForm.subcategory_key = '';
+          return;
+        }
         if (editTransactionForm.investment_direction === 'outflow') {
           editTransactionForm.category_key = 'capital_gains';
           editTransactionForm.subcategory_key = 'sale_financial_assets';
@@ -1921,10 +2022,13 @@ export function useAccountingPage() {
     };
   }
 
-  function getInvestmentDirection(transaction: LedgerTransaction): 'inflow' | 'outflow' {
+  function getInvestmentDirection(
+    transaction: LedgerTransaction,
+  ): 'inflow' | 'outflow' | 'reinvestment' {
     if (
       transaction.investment_direction === 'inflow' ||
-      transaction.investment_direction === 'outflow'
+      transaction.investment_direction === 'outflow' ||
+      transaction.investment_direction === 'reinvestment'
     ) {
       return transaction.investment_direction;
     }
@@ -1978,6 +2082,12 @@ export function useAccountingPage() {
         return {
           accountId: debitEntry?.account_id ?? null,
           counterpartyAccountId: creditEntry?.account_id ?? null,
+        };
+      }
+      if (direction === 'reinvestment') {
+        return {
+          accountId: creditEntry?.account_id ?? null,
+          counterpartyAccountId: debitEntry?.account_id ?? null,
         };
       }
       return {
@@ -2171,7 +2281,7 @@ export function useAccountingPage() {
     kind: EditableActivityKind,
     categoryKey: string,
     subcategoryKey: string,
-    investmentDirection: 'inflow' | 'outflow',
+    investmentDirection: 'inflow' | 'outflow' | 'reinvestment',
   ): PersistedTransactionEntry[] {
     const nextEntries = entries.map((entry) => ({
       ...entry,
@@ -2183,7 +2293,7 @@ export function useAccountingPage() {
       asset_id: null,
       liability_id: null,
     }));
-    if (!isClassificationKind(kind)) return nextEntries;
+    if (!kindUsesClassification(kind, investmentDirection)) return nextEntries;
 
     const classifyAsIncome =
       kind === 'income' || (kind === 'investment' && investmentDirection === 'outflow');
@@ -2202,7 +2312,7 @@ export function useAccountingPage() {
     kind: EditableActivityKind,
     accountId: number,
     counterpartyAccountId: number | null,
-    investmentDirection: 'inflow' | 'outflow',
+    investmentDirection: 'inflow' | 'outflow' | 'reinvestment',
   ): PersistedTransactionEntry[] {
     const nextEntries = entries.map((entry) => ({ ...entry }));
     const debitEntry =
@@ -2234,6 +2344,9 @@ export function useAccountingPage() {
       if (investmentDirection === 'outflow') {
         setAccount(debitEntry, accountId);
         setAccount(creditEntry, counterpartyAccountId);
+      } else if (investmentDirection === 'reinvestment') {
+        setAccount(creditEntry, accountId);
+        setAccount(debitEntry, counterpartyAccountId);
       } else {
         setAccount(creditEntry, accountId);
         setAccount(debitEntry, counterpartyAccountId);
@@ -2254,11 +2367,11 @@ export function useAccountingPage() {
       kind: EditableActivityKind;
       categoryKey: string;
       subcategoryKey: string;
-      investmentDirection: 'inflow' | 'outflow';
+      investmentDirection: 'inflow' | 'outflow' | 'reinvestment';
     },
   ): PersistedTransactionEntry[] {
     const { kind, categoryKey, subcategoryKey, investmentDirection } = options;
-    if (!isClassificationKind(kind)) return entries;
+    if (!kindUsesClassification(kind, investmentDirection)) return entries;
     const classifyAsIncome =
       kind === 'income' || (kind === 'investment' && investmentDirection === 'outflow');
     const preferredSide: LedgerEntrySide = classifyAsIncome ? 'credit' : 'debit';
@@ -2726,9 +2839,10 @@ export function useAccountingPage() {
     if (kind === 'transfer') return 'Transferencia';
     if (kind === 'adjustment') return 'Ajuste';
     if (kind === 'investment') {
-      return getInvestmentDirection(transaction) === 'outflow'
-        ? 'Retirada inversion'
-        : 'Aporte inversion';
+      const direction = getInvestmentDirection(transaction);
+      if (direction === 'outflow') return 'Retirada inversion';
+      if (direction === 'reinvestment') return 'Reinversion';
+      return 'Aporte inversion';
     }
     if (kind === 'debt_payment') return 'Pago deuda';
     if (kind === 'opening_balance') return 'Saldo inicial';
@@ -3520,6 +3634,7 @@ export function useAccountingPage() {
     editKindNeedsCounterparty,
     editKindNeedsClassification,
     editCounterpartyLabel,
+    editInvestmentOriginOptions,
     editInvestmentOriginCurrency,
     editInvestmentDestinationCurrency,
     editInvestmentIsCrossCurrency,
@@ -3561,6 +3676,7 @@ export function useAccountingPage() {
     cuentasFilterSubcategoryOptions,
     transferOriginOptions,
     transferCounterpartyOptions,
+    investmentOriginOptions,
     investmentCounterpartyOptions,
     quickInvestmentOriginCurrency,
     quickInvestmentDestinationCurrency,
