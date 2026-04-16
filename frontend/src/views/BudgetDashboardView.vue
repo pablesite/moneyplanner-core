@@ -97,6 +97,8 @@ const {
   updateBudgetDetailMonth,
   budgetCategoryActualExecution,
   budgetSubcategoryActualExecution,
+  incomeInvestmentRotationCategoryAdjustment,
+  incomeInvestmentRotationSubcategoryAdjustment,
   selectedMonthlyExecutedVolume,
   selectedMonthlyResidualVolumeRatio,
   selectedMonthlyResidualIncomeRatio,
@@ -118,6 +120,11 @@ const {
   monthlyExpenseCoverageDetail,
   monthlyIncomeCoverageLabel,
   monthlyIncomeCoverageDetail,
+  refreshAccountingExecutionData,
+  refreshBudgetData,
+  refreshBudgetSuggestionData,
+  refreshExpenseExecutionData,
+  refreshIncomeExecutionData,
   formatMoney,
   formatSignedMoney,
   formatPercent,
@@ -175,6 +182,30 @@ if (annualEntriesPage) {
     },
     { immediate: true },
   );
+}
+
+async function submitAnnualIncomeAndRefresh(): Promise<void> {
+  if (!annualEntriesPage) return;
+  await annualEntriesPage.submitAnnualIncome();
+  await Promise.all([
+    refreshBudgetData(fiscalYear.value),
+    refreshBudgetSuggestionData(),
+    refreshAccountingExecutionData(),
+    refreshIncomeExecutionData(),
+    refreshExpenseExecutionData(),
+  ]);
+}
+
+async function submitAnnualExpenseAndRefresh(): Promise<void> {
+  if (!annualEntriesPage) return;
+  await annualEntriesPage.submitAnnualExpense();
+  await Promise.all([
+    refreshBudgetData(fiscalYear.value),
+    refreshBudgetSuggestionData(),
+    refreshAccountingExecutionData(),
+    refreshIncomeExecutionData(),
+    refreshExpenseExecutionData(),
+  ]);
 }
 </script>
 
@@ -384,12 +415,18 @@ if (annualEntriesPage) {
       :toggle-section-expanded="toggleSectionExpanded"
       :budget-category-actual-execution="budgetCategoryActualExecution"
       :budget-subcategory-actual-execution="budgetSubcategoryActualExecution"
+      :income-investment-rotation-category-adjustment="incomeInvestmentRotationCategoryAdjustment"
+      :income-investment-rotation-subcategory-adjustment="
+        incomeInvestmentRotationSubcategoryAdjustment
+      "
       :income-execution-ytd-totals="incomeExecutionYtdTotals"
       :expense-execution-ytd-totals="expenseExecutionYtdTotals"
       :execution-preview="executionPreview"
       :update-income-view-mode="updateIncomeViewMode"
       :update-expense-view-mode="updateExpenseViewMode"
       :annual-entries-page="annualEntriesPage"
+      :on-submit-annual-income="submitAnnualIncomeAndRefresh"
+      :on-submit-annual-expense="submitAnnualExpenseAndRefresh"
       :filtered-income-entries="filteredIncomeEntries"
       :filtered-expense-entries="filteredExpenseEntries"
       :ownership-filter="ownershipFilter"
