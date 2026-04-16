@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-03-27 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-04-16 | **Versión Core:** 0.23.2
 
 ---
 
@@ -18,8 +18,6 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
-| Movimientos | Manual | Remate manual de la vista para dejarla en estado v1 final. Seguimiento operativo por cuentas en `core/docs/operations/movements-user1-review-tracker.md` (usuario 1: 106 cuentas totales, 47 ya revisadas). Cierre de categorizacion final completado para las cuentas revisadas; bloque de préstamos personales cerrado (incluida consolidación de `iPhone 15 Ana` en `Préstamo - Iphone 15 Pro` y eliminación de la cuenta obsoleta) y cierre completo de `Hipoteca Palmito` (concepto, clasificación principal/interés y ownership 50/50). Revisados también `MyInvestor Depósito 1 mes`, `MyInvestor 3 meses`, `MyInvestor (Compartido)`, `Spot Binance` (incluye visibilidad de saldo tras movimiento en el timeline de cuentas y limpieza de cuenta obsoleta `Earn Binance`), `Trade Republic`, `DT Bots Cripto`, `Kutxa (Hucha)`, `Monedero Ana`, `Monedero compartido` (revisión a fondo), `Monedero Pablo`, `Santander` y `Cuenta Naranja`. Pendiente operativo actual: cierre final de `ING Sin nómina` (cuenta id=5), limitado ya al remate de categorización de gastos. | Se define durante la revisión. |
-| Importación MoneyWiz | Manual | Afinar reglas y casos borde de importación para consolidar la v1 de movimientos. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
 
@@ -35,7 +33,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
-| Contabilidad — v1 | Alta | 🔄 | Pendiente v1: revisión del tracker de cuentas (coherencia movimientos→patrimonio), header al estilo Patrimonio y revisión de estilo visual del cuerpo. Importador MoneyWiz ad-hoc funcional; eliminar antes de producción. |
+| Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Importador MoneyWiz ad-hoc funcional y consolidado; eliminar antes de producción. |
 | Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
@@ -61,7 +59,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | 🔄 | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Añadida limpieza masiva provisional de movimientos `origin=import` desde la vista de Movimientos (Core-only). Soporte multimoneda reforzado en alta/edición rápida de inversión y migración manual BTC/Spot Binance en ejecución. Pendiente remate manual de vista para cierre v1. |
+| Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, alias `investment_purchase`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Importador MoneyWiz adaptado para retiradas de inversión sin ingresos espejo duplicados. Soporte multimoneda en alta/edición rápida de inversión. Vista de movimientos cerrada v1. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
 | Portable data (export/import) | ✅ | Con versionado y validación |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |

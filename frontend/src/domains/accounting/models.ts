@@ -13,7 +13,7 @@ export type QuickLedgerMovementType =
   | 'debt_payment'
   | 'revaluation';
 
-export type InvestmentDirection = 'inflow' | 'outflow';
+export type InvestmentDirection = 'inflow' | 'outflow' | 'reinvestment';
 
 export type LedgerAccount = {
   id: number;

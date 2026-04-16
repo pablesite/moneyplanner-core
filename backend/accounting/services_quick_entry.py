@@ -168,6 +168,23 @@ def _build_quick_entry_payload(
         destination_value = (
             Decimal(destination_amount) if destination_amount is not None else base_amount
         )
+        if investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT:
+            return [
+                {
+                    "account": counterparty_account,
+                    "side": LedgerEntry.Side.DEBIT,
+                    "amount": destination_value,
+                    "currency": counterparty_account.currency,
+                    "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+                },
+                {
+                    "account": account,
+                    "side": LedgerEntry.Side.CREDIT,
+                    "amount": base_amount,
+                    "currency": account.currency,
+                    "asset": account.asset if account.asset_id else None,
+                },
+            ]
         if investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW:
             return [
                 {

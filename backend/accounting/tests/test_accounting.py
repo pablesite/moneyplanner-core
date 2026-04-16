@@ -1,4 +1,3 @@
-import json
 from io import StringIO
 from datetime import date
 from decimal import Decimal
@@ -3155,6 +3154,122 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(classified_entry["category_key"], "capital_gains")
         self.assertEqual(classified_entry["subcategory_key"], "sale_financial_assets")
 
+    def test_quick_entry_investment_reinvestment_moves_between_investment_accounts(self):
+        source_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo origen",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        destination_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo destino",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("400.00"),
+            is_active=True,
+        )
+        source_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker origen",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=source_asset,
+        )
+        destination_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker destino",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=destination_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "reinvestment",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Traspaso entre fondos",
+                "amount": "250.00",
+                "account_id": source_account.id,
+                "counterparty_account_id": destination_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["investment_direction"], "reinvestment")
+        debit_entry = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == destination_account.id
+        )
+        credit_entry = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == source_account.id
+        )
+        self.assertEqual(debit_entry["side"], "debit")
+        self.assertEqual(debit_entry["asset_id"], destination_asset.id)
+        self.assertEqual(credit_entry["side"], "credit")
+        self.assertEqual(credit_entry["asset_id"], source_asset.id)
+        self.assertEqual(debit_entry["flow_family"], "")
+        self.assertEqual(credit_entry["flow_family"], "")
+
+    def test_quick_entry_investment_reinvestment_cross_currency_requires_destination_amount(self):
+        eur_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo EUR",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="BTC",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("0.01000000"),
+            is_active=True,
+        )
+        eur_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker EUR",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=eur_asset,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker BTC",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "reinvestment",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Reinversion sin destino",
+                "amount": "250.00",
+                "account_id": eur_account.id,
+                "counterparty_account_id": btc_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("destination_amount", response.data["error"]["details"])
+
     def test_quick_entry_mortgage_payment_uses_fixed_real_estate_classification(self):
         liability = Liability.objects.create(
             user=self.user,
@@ -3625,4 +3740,3 @@ class AccountingApiTests(APITestCase):
             response.data["expense"]["subcategories"][0]["subcategory"],
             "living_expenses",
         )
-
