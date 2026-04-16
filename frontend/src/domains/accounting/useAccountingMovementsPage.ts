@@ -147,6 +147,20 @@ export function useAccountingMovementsPage() {
     return formatMoney(toNumber(raw), currency);
   }
 
+  function accountBalanceInBase(account: (typeof accounts.value)[number]): number {
+    const baseCurrency = String(netWorthStore.baseCurrency ?? 'EUR')
+      .trim()
+      .toUpperCase();
+    const accountCurrency = String(account.currency ?? '')
+      .trim()
+      .toUpperCase();
+    const currentBalance = toNumber(account.current_balance);
+    if (accountCurrency === baseCurrency) return currentBalance;
+    const meta = accountPositionMetaByAccountId.value.get(account.id);
+    const amountBase = meta?.amount_base != null ? toNumber(meta.amount_base) : null;
+    return amountBase != null ? amountBase : currentBalance;
+  }
+
   function monthLabel(month: number): string {
     return (
       monthOptions.find((option) => option.value === month)?.label.slice(0, 3) ??
@@ -165,13 +179,13 @@ export function useAccountingMovementsPage() {
   });
   const accountingAssetsTotal = computed(() =>
     (accountsByType.value.get('asset') ?? []).reduce(
-      (total, account) => total + toNumber(account.current_balance),
+      (total, account) => total + accountBalanceInBase(account),
       0,
     ),
   );
   const accountingLiabilitiesTotal = computed(() =>
     (accountsByType.value.get('liability') ?? []).reduce(
-      (total, account) => total + toNumber(account.current_balance),
+      (total, account) => total + accountBalanceInBase(account),
       0,
     ),
   );
@@ -204,6 +218,7 @@ export function useAccountingMovementsPage() {
       baseCurrency: string;
     };
     const baseCurrency = netWorthStore.baseCurrency ?? 'EUR';
+    const normalizedBaseCurrency = String(baseCurrency).trim().toUpperCase();
     const groups = new Map<string, Group>();
     for (const account of operationalAccounts.value) {
       const meta = accountPositionMetaByAccountId.value.get(account.id);
@@ -226,10 +241,16 @@ export function useAccountingMovementsPage() {
       }
       const group = groups.get(key)!;
       group.accounts.push(account);
-      const amountBase = meta?.amount_base;
-      group.subtotal =
-        (group.subtotal ?? 0) +
-        (amountBase != null ? toNumber(amountBase) : toNumber(account.current_balance));
+      const accountCurrency = String(account.currency ?? '').trim().toUpperCase();
+      const currentBalance = toNumber(account.current_balance);
+      const amountBase = meta?.amount_base != null ? toNumber(meta.amount_base) : null;
+      const subtotalContribution =
+        accountCurrency === normalizedBaseCurrency
+          ? currentBalance
+          : amountBase != null
+            ? amountBase
+            : currentBalance;
+      group.subtotal = (group.subtotal ?? 0) + subtotalContribution;
     }
     for (const group of groups.values()) {
       group.accounts.sort((a, b) =>

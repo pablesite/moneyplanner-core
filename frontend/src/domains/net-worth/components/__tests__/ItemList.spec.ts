@@ -4,8 +4,9 @@ import ItemList from '@/domains/net-worth/components/ItemList.vue';
 
 const stubs = {
   ItemCategoryHeader: {
-    props: ['label'],
-    template: '<button data-test="toggle" @click="$emit(\'toggle\')">{{ label }}</button>',
+    props: ['label', 'baseLabel'],
+    template:
+      '<button data-test="toggle" @click="$emit(\'toggle\')">{{ label }}</button><span data-test="category-base">{{ baseLabel }}</span>',
   },
   ItemSubgroupHeader: {
     template: '<div data-test="subgroup"></div>',
@@ -143,5 +144,54 @@ describe('ItemList (core)', () => {
     });
 
     expect(wrapper.text()).toContain('72.952,69');
+  });
+
+  it('uses visible rows total when archived rows are hidden', () => {
+    const wrapper = mount(ItemList, {
+      props: {
+        title: 'Activos',
+        showArchived: false,
+        totalBase: '101.00',
+        baseCurrency: 'EUR',
+        items: [
+          {
+            id: 1,
+            name: 'Caja',
+            category: 'cash',
+            subcategory: 'wallet',
+            amount: '100.00',
+            amount_base: '100.00',
+            currency: 'EUR',
+            notes: '',
+            is_active: true,
+            tracking_mode: 'manual',
+            accounting_account_id: null,
+          },
+          {
+            id: 2,
+            name: 'Archivado',
+            category: 'cash',
+            subcategory: 'wallet',
+            amount: '1.00',
+            amount_base: '1.00',
+            currency: 'EUR',
+            notes: '',
+            is_active: false,
+            tracking_mode: 'manual',
+            accounting_account_id: null,
+          },
+        ],
+        categories: [{ value: 'cash', label: 'Cash' }],
+        subcategories: [{ value: 'wallet', label: 'Wallet', category: 'cash' }],
+        onUpdate: vi.fn().mockResolvedValue(undefined),
+        onArchive: vi.fn().mockResolvedValue(undefined),
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain('100');
+    expect(wrapper.text()).not.toContain('101');
+    expect(wrapper.find('[data-test="category-base"]').text()).toContain('100');
+    expect(wrapper.find('[data-test="category-base"]').text()).not.toContain('101');
   });
 });

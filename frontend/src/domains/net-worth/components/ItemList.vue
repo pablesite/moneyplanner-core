@@ -466,20 +466,35 @@ function totalBaseForItems(items: Item[]) {
 
 function totalBaseAll() {
   if (ownershipFilter.value === 'all') {
-    if (!props.totalBase) return null;
-    const total = Number(rawValue(props.totalBase));
-    return Number.isFinite(total) ? total : null;
+    // Si la lista visible esta filtrada (p.ej. ocultando archivados), usar la suma visible.
+    // Evita mostrar un total global que no coincide con las filas renderizadas.
+    if (props.showArchived === false) {
+      return totalBaseForItems(filteredItems.value);
+    }
+    if (props.totalBase) {
+      const total = Number(rawValue(props.totalBase));
+      if (Number.isFinite(total)) return total;
+    }
+    return totalBaseForItems(filteredItems.value);
   }
   return totalBaseForItems(filteredItems.value);
 }
 
 function categoryBaseValue(category: string, items: Item[]) {
   if (ownershipFilter.value === 'all') {
-    if (!props.categoryTotalsBase) return null;
-    const raw = props.categoryTotalsBase[category];
-    if (!raw) return null;
-    const v = Number(rawValue(raw));
-    return Number.isFinite(v) ? v : null;
+    // Si la lista visible esta filtrada (p.ej. ocultando archivados), el subtotal
+    // de categoria debe salir de los items visibles para evitar descuadres.
+    if (props.showArchived === false) {
+      return totalBaseForItems(items);
+    }
+    if (props.categoryTotalsBase) {
+      const raw = props.categoryTotalsBase[category];
+      if (raw) {
+        const v = Number(rawValue(raw));
+        if (Number.isFinite(v)) return v;
+      }
+    }
+    return totalBaseForItems(items);
   }
   return totalBaseForItems(items);
 }
@@ -487,11 +502,18 @@ function categoryBaseValue(category: string, items: Item[]) {
 function subcategoryBaseValue(category: string, subcategory: string | null, items: Item[]) {
   const subKey = subcategory ?? 'other';
   if (ownershipFilter.value === 'all') {
-    if (!props.subcategoryTotalsBase) return null;
-    const raw = props.subcategoryTotalsBase[`${category}:${subKey}`];
-    if (!raw) return null;
-    const v = Number(rawValue(raw));
-    return Number.isFinite(v) ? v : null;
+    // Mismo criterio que en categoria: priorizar filas visibles si hay filtro activo.
+    if (props.showArchived === false) {
+      return totalBaseForItems(items);
+    }
+    if (props.subcategoryTotalsBase) {
+      const raw = props.subcategoryTotalsBase[`${category}:${subKey}`];
+      if (raw) {
+        const v = Number(rawValue(raw));
+        if (Number.isFinite(v)) return v;
+      }
+    }
+    return totalBaseForItems(items);
   }
   return totalBaseForItems(items);
 }
