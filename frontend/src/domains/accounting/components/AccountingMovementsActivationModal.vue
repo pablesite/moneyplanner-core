@@ -14,7 +14,7 @@ defineProps({
 <template>
   <BaseModal
     :open="page.showActivationModal"
-    title="Activar tracking contable"
+    title="Añadir cuenta al libro contable"
     @close="page.showActivationModal = false"
   >
     <form
@@ -23,7 +23,7 @@ defineProps({
     >
       <p class="subtle">
         Selecciona una o varias posiciones manuales del patrimonio para activar su seguimiento
-        contable en el ledger. Core generara automaticamente el saldo de apertura.
+        contable en el libro. Se generará automáticamente el saldo de apertura.
       </p>
 
       <div class="ui-accounting-form-grid">
@@ -102,8 +102,8 @@ defineProps({
         No hay activos ni pasivos manuales disponibles para activar desde esta vista.
       </div>
       <p v-else class="ui-accounting-inline-note">
-        Al activar una posicion, Core la vincula al ledger y genera automaticamente el saldo de
-        apertura contra patrimonio neto contable.
+        Al activar una posicion, se vincula al libro contable y se genera automáticamente el saldo
+        de apertura contra patrimonio neto contable.
       </p>
 
       <div class="ui-accounting-submit-row">
@@ -117,8 +117,8 @@ defineProps({
         >
           {{
             page.accountActivationLoading
-              ? 'Activando...'
-              : `Activar tracking (${page.selectedActivationIds.length})`
+              ? 'Añadiendo...'
+              : `Añadir al libro (${page.selectedActivationIds.length})`
           }}
         </button>
       </div>

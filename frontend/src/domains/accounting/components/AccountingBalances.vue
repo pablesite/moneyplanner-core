@@ -63,7 +63,7 @@ const state = props.page;
 
     <p class="ui-page-lead">
       Este saldo solo incluye cuentas contables activas en esta vista. No incluye vivienda,
-      mobiliario u otros activos fuera del ledger.
+      mobiliario u otros activos fuera del libro contable.
     </p>
 
     <details v-if="state.hasTechnicalAccounts" class="ui-ledger-technical">

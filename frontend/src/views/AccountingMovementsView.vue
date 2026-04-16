@@ -9,7 +9,6 @@ import AccountingMovementsAllTransactions from '@/domains/accounting/components/
 import AccountingBalances from '@/domains/accounting/components/AccountingBalances.vue';
 import AccountingMovementsActivationModal from '@/domains/accounting/components/AccountingMovementsActivationModal.vue';
 import AccountingMovementsEditTransactionModal from '@/domains/accounting/components/AccountingMovementsEditTransactionModal.vue';
-import AccountingMovementsMoneyWizModal from '@/domains/accounting/components/AccountingMovementsMoneyWizModal.vue';
 import AccountingMovementsQuickEntryModal from '@/domains/accounting/components/AccountingMovementsQuickEntryModal.vue';
 
 const route = useRoute();
@@ -75,6 +74,16 @@ onMounted(async () => {
             Estadisticas
           </button>
         </div>
+        <button
+          class="btn btn-primary ui-accounting-cta"
+          type="button"
+          aria-label="Registrar movimiento diario"
+          title="Registrar movimiento diario"
+          :disabled="!page.liquidityAccounts.length"
+          @click="page.showQuickEntryModal = true"
+        >
+          + Registrar movimiento
+        </button>
       </div>
       <AccountingAccountCatalog v-if="page.activeTab === 'cuentas'" :page="page" />
       <AccountingMovementsAllTransactions v-else-if="page.activeTab === 'todos'" :page="page" />
@@ -83,7 +92,6 @@ onMounted(async () => {
 
     <AccountingMovementsActivationModal :page="page" />
     <AccountingMovementsEditTransactionModal :page="page" />
-    <AccountingMovementsMoneyWizModal :page="page" :show-unmapped-categories="true" />
     <AccountingMovementsQuickEntryModal :page="page" />
   </div>
 </template>

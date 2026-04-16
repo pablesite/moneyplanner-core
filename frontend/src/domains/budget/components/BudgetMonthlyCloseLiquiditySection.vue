@@ -196,7 +196,7 @@ defineProps<{
                   v-if="row.ledger_available && row.coverage_source === 'ledger'"
                   class="ui-budget-checkin-row-state"
                 >
-                  <strong>Ledger</strong>
+                  <strong>Libro contable</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
                     {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
@@ -206,7 +206,7 @@ defineProps<{
                   v-else-if="row.ledger_available && row.checkin"
                   class="ui-budget-checkin-row-state"
                 >
-                  <strong>Manual (override ledger)</strong>
+                  <strong>Manual (sin libro contable)</strong>
                   <template v-if="row.executed != null">
                     ({{ formatMoney(row.executed) }}
                     {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
@@ -230,10 +230,10 @@ defineProps<{
                     type="button"
                     class="btn ui-budget-checkin-mini-btn"
                     :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
-                    title="Abrir candado y ajustar manualmente esta cuenta"
-                    @click="unlockLiquidityLedgerRow(row)"
+                    title=”Abrir candado y ajustar manualmente esta cuenta”
+                    @click=”unlockLiquidityLedgerRow(row)”
                   >
-                    ðŸ”’ Ledger
+                    🔒 Libro contable
                   </button>
                 </div>
                 <div v-else class="ui-budget-checkin-adjust">
@@ -261,7 +261,7 @@ defineProps<{
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
                       :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
-                      title="Volver a bloquear y usar el saldo del ledger"
+                      title="Volver a bloquear y usar el saldo del libro contable"
                       @click="relockLiquidityLedgerRow(row)"
                     >
                       ðŸ”“ Manual

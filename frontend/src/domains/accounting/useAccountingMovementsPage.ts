@@ -8,12 +8,9 @@ export function useAccountingMovementsPage() {
     accountCreationLoading,
     accountActivationLoading,
     transactionCreationLoading,
-    importPreviewLoading,
-    importCommitLoading,
     error,
     successMessage,
     accounts,
-    moneyWizImportPreview,
     selectedYear,
     yearOptions,
     monthOptions,
@@ -34,7 +31,6 @@ export function useAccountingMovementsPage() {
     editCategoryOptions,
     editSubcategoryOptions,
     activationForm,
-    moneyWizImportFile,
     ownershipOptions,
     quickEntryForm,
     editTransactionForm,
@@ -105,9 +101,6 @@ export function useAccountingMovementsPage() {
     deleteTransaction,
     deleteImportedTransactions,
     openTransactionForEditing,
-    setMoneyWizImportFile,
-    previewMoneyWizImport,
-    commitMoneyWizImport,
     submitQuickEntry,
     submitEditedTransaction,
     fillQuickEntryFromTransaction,
@@ -355,7 +348,6 @@ export function useAccountingMovementsPage() {
 
   const showActivationModal = ref(false);
   const showEditTransactionModal = ref(false);
-  const showMoneyWizImportModal = ref(false);
   const showQuickEntryModal = ref(false);
   const activationQuery = ref('');
   const activationOperationalOnly = ref(true);
@@ -477,113 +469,6 @@ export function useAccountingMovementsPage() {
     showQuickEntryModal.value = false;
   }
 
-  function handleMoneyWizFileChange(event: Event) {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0] ?? null;
-    setMoneyWizImportFile(file);
-  }
-
-  const moneyWizPreviewRows = computed(() => moneyWizImportPreview.value?.rows.slice(0, 6) ?? []);
-  const moneyWizPreviewWarnings = computed(() => moneyWizImportPreview.value?.warnings ?? []);
-  const moneyWizCanCommit = computed(
-    () =>
-      moneyWizImportFile.value != null &&
-      moneyWizImportPreview.value != null &&
-      moneyWizImportPreview.value.error_row_count === 0,
-  );
-
-  const moneyWizAccountMap = ref<Record<string, number | null>>({});
-
-  function normalizeForMatch(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-  }
-
-  function significantWords(normalized: string): string[] {
-    return normalized.split(/[\s()]+/).filter((w) => w.length >= 3);
-  }
-
-  function fuzzyMatchScore(csvNorm: string, accNorm: string): number {
-    const csvWords = significantWords(csvNorm);
-    const accWords = significantWords(accNorm);
-    if (csvWords.length === 0 || accWords.length === 0) return 0;
-    // All words of the shorter name must appear in the longer name
-    const [shorter, longer] =
-      csvWords.length <= accWords.length ? [csvWords, accNorm] : [accWords, csvNorm];
-    if (!shorter.every((w) => longer.includes(w))) return 0;
-    return shorter.length / Math.max(csvWords.length, accWords.length);
-  }
-
-  function autoMatchMoneyWizAccount(detected: {
-    name: string;
-    account_type: string;
-    role: string;
-  }): number | null {
-    const normalizedCsv = normalizeForMatch(detected.name);
-    // Search across asset + liability regardless of detected type (MoneyWiz may misclassify)
-    const candidates = accounts.value.filter(
-      (a) => a.account_type === 'asset' || a.account_type === 'liability',
-    );
-
-    // Pass 1: exact normalized match, unique winner only
-    const exactMatches = candidates.filter(
-      (a) => normalizeForMatch(accountDisplayName(a)) === normalizedCsv,
-    );
-    if (exactMatches.length === 1) return exactMatches[0]!.id;
-    if (exactMatches.length > 1) return null; // ambiguous duplicates
-
-    // Pass 2: fuzzy word-score match, unique winner only
-    const scored = candidates
-      .map((a) => ({
-        a,
-        score: fuzzyMatchScore(normalizedCsv, normalizeForMatch(accountDisplayName(a))),
-      }))
-      .filter(({ score }) => score > 0)
-      .sort((x, y) => y.score - x.score);
-    if (scored.length === 0) return null;
-    const top = scored[0]!;
-    const second = scored[1];
-    // Accept only if the top candidate is clearly better than the second
-    if (!second || top.score > second.score) return top.a.id;
-    return null;
-  }
-
-  watch(moneyWizImportPreview, () => {
-    const newMap: Record<string, number | null> = {};
-    if (moneyWizImportPreview.value) {
-      for (const detected of moneyWizImportPreview.value.detected_accounts) {
-        if (/^moneywiz counterparty/i.test(detected.name)) continue;
-        const match = autoMatchMoneyWizAccount(detected);
-        if (match !== null) newMap[detected.name] = match;
-      }
-    }
-    moneyWizAccountMap.value = newMap;
-  });
-
-  function updateMoneyWizAccountMap(csvName: string, value: string) {
-    moneyWizAccountMap.value[csvName] = value ? Number(value) : null;
-  }
-
-  async function previewMoneyWizImportFromModal() {
-    await previewMoneyWizImport();
-  }
-
-  async function commitMoneyWizImportFromModal() {
-    const accountIdMap: Record<string, number> = {};
-    for (const [csvName, accountId] of Object.entries(moneyWizAccountMap.value)) {
-      if (accountId != null) {
-        accountIdMap[csvName] = accountId;
-      }
-    }
-    const result = await commitMoneyWizImport(accountIdMap);
-    if (result) {
-      showMoneyWizImportModal.value = false;
-    }
-  }
-
   function openEditTransactionModal(transactionId: number) {
     if (openTransactionForEditing(transactionId)) {
       showEditTransactionModal.value = true;
@@ -611,12 +496,9 @@ export function useAccountingMovementsPage() {
     accountCreationLoading,
     accountActivationLoading,
     transactionCreationLoading,
-    importPreviewLoading,
-    importCommitLoading,
     error,
     successMessage,
     accounts,
-    moneyWizImportPreview,
     accountsByType,
     accountingAssetsTotal,
     accountingLiabilitiesTotal,
@@ -641,7 +523,6 @@ export function useAccountingMovementsPage() {
     editCategoryOptions,
     editSubcategoryOptions,
     activationForm,
-    moneyWizImportFile,
     ownershipOptions,
     quickEntryForm,
     editTransactionForm,
@@ -720,7 +601,6 @@ export function useAccountingMovementsPage() {
     openTransactionForEditing,
     showActivationModal,
     showEditTransactionModal,
-    showMoneyWizImportModal,
     showQuickEntryModal,
     activationQuery,
     activationOperationalOnly,
@@ -731,10 +611,6 @@ export function useAccountingMovementsPage() {
     operationalAccounts,
     technicalAccountTypeOptions,
     hasTechnicalAccounts,
-    moneyWizAccountMap,
-    moneyWizPreviewRows,
-    moneyWizPreviewWarnings,
-    moneyWizCanCommit,
     formatDate,
     formatMoney,
     formatCompact,
@@ -743,10 +619,6 @@ export function useAccountingMovementsPage() {
     toggleSelectAllFiltered,
     activatePositionFromModal,
     submitQuickEntryFromModal,
-    handleMoneyWizFileChange,
-    updateMoneyWizAccountMap,
-    previewMoneyWizImportFromModal,
-    commitMoneyWizImportFromModal,
     submitEditedTransactionFromModal,
     deleteTransactionFromTimeline,
     openActivationModal,

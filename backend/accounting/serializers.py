@@ -63,7 +63,9 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "display_name", "current_balance", "created_at", "updated_at"]
 
     def get_current_balance(self, obj: LedgerAccount) -> str:
-        return str(get_account_balance(account=obj))
+        return str(
+            get_account_balance(account=obj, status=cast(str, LedgerTransaction.Status.POSTED))
+        )
 
     def get_display_name(self, obj: LedgerAccount) -> str:
         if obj.asset_id and obj.asset and obj.asset.name:
@@ -694,7 +696,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 "revaluation",
             }
             if requires_liquidity_origin:
-                validate_liquidity_account(account=account, user_id=user.id, field_name="account_id")
+                validate_liquidity_account(
+                    account=account, user_id=user.id, field_name="account_id"
+                )
 
         if annual_income_entry is not None and annual_income_entry.user_id != user.id:
             raise serializers.ValidationError(

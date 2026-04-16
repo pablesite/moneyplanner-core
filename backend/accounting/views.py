@@ -18,11 +18,6 @@ from .serializers import (
     LedgerTransactionSerializer,
     QuickLedgerTransactionSerializer,
 )
-from .moneywiz_import import (
-    build_moneywiz_import_preview,
-    commit_moneywiz_import,
-    extract_moneywiz_csv_text,
-)
 from .services import (
     apply_transaction_list_filters,
     build_account_balances_summary,
@@ -232,46 +227,6 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             LedgerTransactionSerializer(transaction, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
-
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="import-moneywiz/preview",
-    )
-    def import_preview(self, request):
-        csv_text = extract_moneywiz_csv_text(
-            csv_text=request.data.get("csv_text"),
-            file=request.FILES.get("file"),
-        )
-        payload = build_moneywiz_import_preview(
-            user=request.user,
-            csv_text=csv_text,
-        )
-        return Response(payload)
-
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="import-moneywiz/commit",
-    )
-    def import_commit(self, request):
-        csv_text = extract_moneywiz_csv_text(
-            csv_text=request.data.get("csv_text"),
-            file=request.FILES.get("file"),
-        )
-        account_id_map: dict[str, int] = {}
-        raw_map = request.data.get("account_id_map")
-        if raw_map:
-            try:
-                account_id_map = json.loads(raw_map)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
-        payload = commit_moneywiz_import(
-            user=request.user,
-            csv_text=csv_text,
-            account_id_map=account_id_map or None,
-        )
-        return Response(payload, status=status.HTTP_201_CREATED)
 
     @action(
         detail=False,
