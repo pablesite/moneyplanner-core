@@ -208,9 +208,11 @@ def _build_quick_entry_payload(
         if base_amount >= 0:
             asset_side = LedgerEntry.Side.DEBIT
             counterparty_side = LedgerEntry.Side.CREDIT
+            counterparty_flow_family = LedgerEntry.FlowFamily.INCOME
         else:
             asset_side = LedgerEntry.Side.CREDIT
             counterparty_side = LedgerEntry.Side.DEBIT
+            counterparty_flow_family = LedgerEntry.FlowFamily.EXPENSE
         return [
             {
                 "account": account,
@@ -223,6 +225,7 @@ def _build_quick_entry_payload(
                 "side": counterparty_side,
                 "amount": abs_amount,
                 "currency": counterparty_account.currency,
+                "flow_family": counterparty_flow_family,
             },
         ]
     if movement_type == "adjustment":

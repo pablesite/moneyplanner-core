@@ -75,6 +75,11 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
     if (flowEntry) {
       return flowEntry.side === 'credit' ? baseAmount : -baseAmount;
     }
+    // Last resort for legacy entries without flow_family: entries are ordered by id,
+    // so entries[0] is always the asset account (debit = gain, credit = loss).
+    if (transaction.entries.length > 0) {
+      return transaction.entries[0].side === 'debit' ? baseAmount : -baseAmount;
+    }
     return 0;
   }
   return 0;
