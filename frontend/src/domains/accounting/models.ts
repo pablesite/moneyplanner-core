@@ -57,6 +57,7 @@ export type LedgerTransaction = {
   description: string;
   status: LedgerTransactionStatus;
   origin: LedgerTransactionOrigin;
+  member_tag: string;
   notes: string;
   ownership_id: number | null;
   quick_entry_kind: '' | QuickLedgerMovementType;

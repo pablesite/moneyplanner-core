@@ -27,6 +27,7 @@ import {
 } from '@/domains/data-input';
 
 export type BudgetDashboardMode = 'budget' | 'monthly-close';
+const EXECUTION_TONE_MONEY_TOLERANCE = 0.5;
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   type ExpenseMonthlySummaryMonth = {
@@ -230,6 +231,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   };
   type AccountingPostedEntry = LedgerEntry & {
     bookingMonth: number;
+    transactionMemberTag: string;
   };
 
   type MonthlyResultBreakdownSubrow = {
@@ -658,7 +660,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       const flowFamily = resolveLedgerEntryFlowFamily(entry);
       if (!flowFamily || !isPositiveExecutionLedgerEntry(entry, flowFamily)) continue;
 
-      const amount = toNumberOrZero(entry.amount);
+      const ownershipFraction = allocationFractionForOwnerLabel(
+        entry.transactionMemberTag ?? '',
+        ownershipFilter.value,
+      );
+      if (ownershipFraction <= 0) continue;
+      const amount = toNumberOrZero(entry.amount) * ownershipFraction;
       const bookingMonth = entry.bookingMonth;
       if (!bookingMonth) continue;
       if (entry.category_key && entry.subcategory_key) {
@@ -826,7 +833,11 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   const monthlyIncomeExecutionEntries = computed(() => {
     return incomeEntries.value
-      .filter((entry) => entry.fiscalYear === fiscalYear.value && entry.incomeType !== 'one_off')
+      .filter((entry) => {
+        if (entry.fiscalYear !== fiscalYear.value) return false;
+        if (entry.incomeType === 'one_off') return entry.targetMonth === selectedExecutionMonth.value;
+        return true;
+      })
       .map((entry) => {
         const checkin = incomeCheckinsByEntryId.value[entry.id] ?? null;
         const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
@@ -1236,90 +1247,85 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     expectedCount: number;
   };
 
-  const incomeYtdActualByCategory = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
-    const map = new Map<string, BudgetActualAggregateRow>();
-    for (const entry of filteredIncomeEntries.value) {
-      const categoryKey = entry.category;
-      let row = map.get(categoryKey);
-      if (!row) {
-        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
-        map.set(categoryKey, row);
+  const incomePlannedTotalsByMonthTaxonomy = computed(() => {
+    const map = new Map<string, number>();
+    for (const entry of incomeEntries.value) {
+      if (entry.fiscalYear !== fiscalYear.value) continue;
+      for (let month = 1; month <= 12; month++) {
+        const planned = monthlyPlannedAmountForIncomeEntry(entry, month);
+        if (planned <= 0) continue;
+        const key = budgetMonthTaxonomyKey(month, entry.category, entry.subcategory);
+        map.set(key, (map.get(key) ?? 0) + planned);
       }
-      for (let month = 1; month <= monthsCount; month++) {
-        const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, month);
-        if (monthlyPlanned > 0) {
-          row.planned += monthlyPlanned;
-          row.expectedCount += 1;
-        }
-        const checkin =
-          incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
-        const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
-        if (resolution.executionSource === 'none') continue;
-        row.checkedCount += 1;
-        if (resolution.executed != null) row.executed += resolution.executed;
-      }
-    }
-    for (const category of incomeExecutionBreakdownCategories.value) {
-      let row = map.get(category.category);
-      if (!row) {
-        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
-        map.set(category.category, row);
-      }
-      for (const subcategory of category.subcategories) {
-        if (subcategory.has_budgeted_line) continue;
-        for (const monthRow of subcategory.months) {
-          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
-          row.executed += toNumberOrZero(monthRow.executed_unbudgeted);
-        }
-      }
-      if (row.executed > 0) row.checkedCount = Math.max(row.checkedCount, 1);
     }
     return map;
   });
 
-  const incomeYtdActualBySubcategoryKey = computed(() => {
-    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
-    const map = new Map<string, BudgetActualAggregateRow>();
+  const incomePlannedFilteredByMonthTaxonomy = computed(() => {
+    const map = new Map<string, number>();
     for (const entry of filteredIncomeEntries.value) {
-      const key = `${entry.category}::${entry.subcategory}`;
-      let row = map.get(key);
-      if (!row) {
-        row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
-        map.set(key, row);
-      }
-      for (let month = 1; month <= monthsCount; month++) {
-        const monthlyPlanned = monthlyPlannedAmountForIncomeEntry(entry, month);
-        if (monthlyPlanned > 0) {
-          row.planned += monthlyPlanned;
-          row.expectedCount += 1;
-        }
-        const checkin =
-          incomeCheckinsByEntryMonth.value[incomeEntryMonthKey(entry.id, month)] ?? null;
-        const resolution = resolveIncomeExecutionForMonth(entry, month, checkin);
-        if (resolution.executionSource === 'none') continue;
-        row.checkedCount += 1;
-        if (resolution.executed != null) row.executed += resolution.executed;
-      }
-    }
-    for (const category of incomeExecutionBreakdownCategories.value) {
-      for (const subcategory of category.subcategories) {
-        if (subcategory.has_budgeted_line) continue;
-        const key = `${category.category}::${subcategory.subcategory}`;
-        let row = map.get(key);
-        if (!row) {
-          row = { planned: 0, executed: 0, checkedCount: 0, expectedCount: 0 };
-          map.set(key, row);
-        }
-        for (const monthRow of subcategory.months) {
-          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
-          row.executed += toNumberOrZero(monthRow.executed_unbudgeted);
-        }
-        if (row.executed > 0) row.checkedCount = Math.max(row.checkedCount, 1);
+      if (entry.fiscalYear !== fiscalYear.value) continue;
+      for (let month = 1; month <= 12; month++) {
+        const planned = monthlyPlannedAmountForIncomeEntry(entry, month);
+        if (planned <= 0) continue;
+        const key = budgetMonthTaxonomyKey(month, entry.category, entry.subcategory);
+        map.set(key, (map.get(key) ?? 0) + planned);
       }
     }
     return map;
   });
+
+  const incomePlannedViewModeByMonthTaxonomy = computed(() => {
+    const map = new Map<string, number>();
+    for (const entry of incomeEntries.value) {
+      if (entry.fiscalYear !== fiscalYear.value) continue;
+      if (!matchesIncomeViewMode(entry, incomeViewMode.value)) continue;
+      for (let month = 1; month <= 12; month++) {
+        const planned = monthlyPlannedAmountForIncomeEntry(entry, month);
+        if (planned <= 0) continue;
+        const key = budgetMonthTaxonomyKey(month, entry.category, entry.subcategory);
+        map.set(key, (map.get(key) ?? 0) + planned);
+      }
+    }
+    return map;
+  });
+
+  function incomePlannedTaxonomyWeight(month: number, category: string, subcategory: string): number {
+    const key = budgetMonthTaxonomyKey(month, category, subcategory);
+    const allPlanned = incomePlannedTotalsByMonthTaxonomy.value.get(key) ?? 0;
+    if (allPlanned <= 0) return incomeViewMode.value === 'all' ? 1 : 0;
+    const filteredPlanned = incomePlannedFilteredByMonthTaxonomy.value.get(key) ?? 0;
+    return Math.max(0, Math.min(1, filteredPlanned / allPlanned));
+  }
+
+  function incomeExecutionTaxonomyWeight(
+    month: number,
+    category: string,
+    subcategory: string,
+  ): number {
+    if (incomeViewMode.value === 'all') return 1;
+    const key = budgetMonthTaxonomyKey(month, category, subcategory);
+    const allPlanned = incomePlannedTotalsByMonthTaxonomy.value.get(key) ?? 0;
+    if (allPlanned <= 0) return 0;
+    const viewModePlanned = incomePlannedViewModeByMonthTaxonomy.value.get(key) ?? 0;
+    return Math.max(0, Math.min(1, viewModePlanned / allPlanned));
+  }
+
+  type IncomeCoverageYtdAggregate = BudgetActualAggregateRow & {
+    executedBudgeted: number;
+    executedUnbudgeted: number;
+  };
+
+  function emptyIncomeCoverageAggregate(): IncomeCoverageYtdAggregate {
+    return {
+      planned: 0,
+      executed: 0,
+      executedBudgeted: 0,
+      executedUnbudgeted: 0,
+      checkedCount: 0,
+      expectedCount: 0,
+    };
+  }
 
   const expenseExecutionBreakdownCategories = computed(
     () => expenseMonthlySummary.value?.expense_execution_breakdown?.categories ?? [],
@@ -1327,6 +1333,111 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const incomeExecutionBreakdownCategories = computed(
     () => incomeMonthlySummary.value?.income_execution_breakdown?.categories ?? [],
   );
+
+  const incomeYtdActualByCategory = computed(() => {
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
+    const map = new Map<string, IncomeCoverageYtdAggregate>();
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      let row = map.get(category.category);
+      if (!row) {
+        row = emptyIncomeCoverageAggregate();
+        map.set(category.category, row);
+      }
+      for (const subcategory of category.subcategories) {
+        for (const monthRow of subcategory.months) {
+          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
+          const weight = incomePlannedTaxonomyWeight(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const executionWeight = incomeExecutionTaxonomyWeight(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const taxonomyKey = budgetMonthTaxonomyKey(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const taxonomyExecuted =
+            accountingExecutionBuckets.value.incomeCategorizedByMonthTaxonomy.get(taxonomyKey) ??
+            null;
+          if (weight > 0) {
+            row.planned += toNumberOrZero(monthRow.planned) * weight;
+            if (taxonomyExecuted != null) {
+              if (subcategory.has_budgeted_line) {
+                row.executedBudgeted += taxonomyExecuted * executionWeight;
+              } else {
+                row.executedUnbudgeted += taxonomyExecuted * executionWeight;
+              }
+            } else {
+              row.executedBudgeted += toNumberOrZero(monthRow.executed_budgeted) * weight;
+              row.executedUnbudgeted += toNumberOrZero(monthRow.executed_unbudgeted) * weight;
+            }
+          }
+        }
+      }
+      row.executed = row.executedBudgeted + row.executedUnbudgeted;
+      row.expectedCount = row.planned > 0 ? 1 : 0;
+      row.checkedCount = row.executed > 0 ? 1 : 0;
+    }
+    return map;
+  });
+
+  const incomeYtdActualBySubcategoryKey = computed(() => {
+    const monthsCount = Math.max(0, Math.min(12, budgetDetailMonth.value));
+    const map = new Map<string, IncomeCoverageYtdAggregate>();
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      for (const subcategory of category.subcategories) {
+        const key = `${category.category}::${subcategory.subcategory}`;
+        let row = map.get(key);
+        if (!row) {
+          row = emptyIncomeCoverageAggregate();
+          map.set(key, row);
+        }
+        for (const monthRow of subcategory.months) {
+          if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
+          const weight = incomePlannedTaxonomyWeight(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const executionWeight = incomeExecutionTaxonomyWeight(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const taxonomyKey = budgetMonthTaxonomyKey(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const taxonomyExecuted =
+            accountingExecutionBuckets.value.incomeCategorizedByMonthTaxonomy.get(taxonomyKey) ??
+            null;
+          if (weight > 0) {
+            row.planned += toNumberOrZero(monthRow.planned) * weight;
+            if (taxonomyExecuted != null) {
+              if (subcategory.has_budgeted_line) {
+                row.executedBudgeted += taxonomyExecuted * executionWeight;
+              } else {
+                row.executedUnbudgeted += taxonomyExecuted * executionWeight;
+              }
+            } else {
+              row.executedBudgeted += toNumberOrZero(monthRow.executed_budgeted) * weight;
+              row.executedUnbudgeted += toNumberOrZero(monthRow.executed_unbudgeted) * weight;
+            }
+          }
+        }
+        row.executed = row.executedBudgeted + row.executedUnbudgeted;
+        row.expectedCount = row.planned > 0 ? 1 : 0;
+        row.checkedCount = row.executed > 0 ? 1 : 0;
+      }
+    }
+    return map;
+  });
 
   type ExpenseCoverageYtdAggregate = BudgetActualAggregateRow & {
     executedBudgeted: number;
@@ -1411,6 +1522,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     completionRatio: number,
   ): BudgetActualExecution | null {
     if (!Number.isFinite(planned) || planned <= 0) {
+      if (sectionId === 'income' && (!Number.isFinite(executed) || executed <= 0)) {
+        return {
+          planned: 0,
+          executed: 0,
+          deviation: 0,
+          completionRatio,
+          ratio: 0,
+          widthPct: 0,
+          tone: 'neutral',
+          overflow: false,
+        };
+      }
       if (sectionId === 'expense' && Number.isFinite(executed) && executed > 0) {
         return {
           planned: 0,
@@ -1425,15 +1548,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }
       return null;
     }
+    const deviation = executed - planned;
     const ratio = executed / planned;
+    const normalizedRatio =
+      Math.abs(deviation) <= EXECUTION_TONE_MONEY_TOLERANCE ? 1 : ratio;
     return {
       planned,
       executed,
-      deviation: executed - planned,
+      deviation,
       completionRatio,
       ratio,
       widthPct: ratio <= 0 ? 0 : clamp(ratio * 100, 4, 100),
-      tone: executionToneFor(sectionId, ratio),
+      tone: executionToneFor(sectionId, normalizedRatio),
       overflow: ratio > 1,
     };
   }
@@ -1779,7 +1905,11 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           allResults.push(
             ...(response.data.results ?? []).flatMap((transaction: LedgerTransaction) => {
               const bookingMonth = bookingMonthFromDate(transaction.booking_date);
-              return transaction.entries.map((entry) => ({ ...entry, bookingMonth }));
+              return transaction.entries.map((entry) => ({
+                ...entry,
+                bookingMonth,
+                transactionMemberTag: transaction.member_tag ?? '',
+              }));
             }),
           );
           cursor = response.data.next_cursor ?? undefined;
@@ -1960,6 +2090,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       .sort((a, b) => b.plannedAnnual - a.plannedAnnual);
   }
 
+  // eslint-disable-next-line complexity
   const incomeGroups = computed(() => {
     const groups = aggregateBudgetRows(
       filteredIncomeEntries.value,
@@ -1975,7 +2106,25 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         let detectedExecutedYtd = 0;
         for (const monthRow of subcategory.months) {
           if (monthRow.month < 1 || monthRow.month > monthsCount) continue;
-          detectedExecutedYtd += toNumberOrZero(monthRow.executed_unbudgeted);
+          const weight = incomeExecutionTaxonomyWeight(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          if (weight <= 0) continue;
+          const taxonomyKey = budgetMonthTaxonomyKey(
+            monthRow.month,
+            category.category,
+            subcategory.subcategory,
+          );
+          const taxonomyExecuted =
+            accountingExecutionBuckets.value.incomeCategorizedByMonthTaxonomy.get(taxonomyKey) ??
+            null;
+          if (taxonomyExecuted != null) {
+            detectedExecutedYtd += taxonomyExecuted * weight;
+          } else {
+            detectedExecutedYtd += toNumberOrZero(monthRow.executed_unbudgeted) * weight;
+          }
         }
         if (detectedExecutedYtd <= 0) continue;
 
@@ -2068,6 +2217,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       return a.categoryLabel.localeCompare(b.categoryLabel, 'es');
     });
   });
+  // eslint-disable-next-line complexity
   const expenseGroups = computed(() => {
     const groups = aggregateBudgetRows(
       filteredExpenseEntries.value,
