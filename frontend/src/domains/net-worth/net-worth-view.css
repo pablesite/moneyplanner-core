@@ -815,6 +815,20 @@
   color: #fff;
 }
 
+.ui-nw-timeline-point-delta {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ui-nw-timeline-point-delta-pos {
+  color: #34d399;
+}
+
+.ui-nw-timeline-point-delta-neg {
+  color: #f87171;
+}
+
 .ui-nw-delta-chart {
   display: grid;
   gap: 6px;
