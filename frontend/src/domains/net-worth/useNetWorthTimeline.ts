@@ -19,6 +19,7 @@ type TimelineChartPoint = {
   shortLabel: string;
   fullLabel: string;
   value: number;
+  isCurrent?: boolean;
 };
 
 type CachedTimelineRows = {
@@ -26,7 +27,7 @@ type CachedTimelineRows = {
   rows: PositionTimelinePoint[];
 };
 
-type TimelinePreset = '1m' | '3m' | '6m' | '1a' | 'all';
+type TimelinePreset = '1m' | '3m' | '6m' | '1a' | '5a' | 'all';
 
 function formatMonthYearLabel(date: string): string {
   return new Intl.DateTimeFormat('es-ES', { month: 'short', year: '2-digit' }).format(
@@ -222,6 +223,7 @@ export function useNetWorthTimeline(params: {
     '3m': 3,
     '6m': 6,
     '1a': 12,
+    '5a': 60,
     all: Number.POSITIVE_INFINITY,
   };
 
@@ -245,6 +247,11 @@ export function useNetWorthTimeline(params: {
     visibleTimelineRows.value.slice(timelineWindow.value.start, timelineWindow.value.end + 1),
   );
 
+  const currentYearMonth = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
   const timelineChartPoints = computed<TimelineChartPoint[]>(() =>
     timelineChartRows.value.map((row) => ({
       date: row.date,
@@ -256,6 +263,7 @@ export function useNetWorthTimeline(params: {
               new Date(row.date),
             ),
       value: row.value,
+      isCurrent: row.date !== 'current' && row.date.startsWith(currentYearMonth),
     })),
   );
 

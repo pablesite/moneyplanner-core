@@ -21,6 +21,7 @@ export type NetWorthTimelineChartPoint = {
   shortLabel: string;
   fullLabel: string;
   value: number;
+  isCurrent?: boolean;
 };
 
 type Props = {
@@ -79,10 +80,10 @@ const chartData = computed<ChartData<'line'>>(() => ({
       pointHitRadius: 20,
       pointBorderWidth: 2,
       pointHoverBorderWidth: 3,
-      pointBackgroundColor: '#f6fbff',
-      pointHoverBackgroundColor: '#ffffff',
-      pointBorderColor: props.seriesColor,
-      pointHoverBorderColor: props.seriesColor,
+      pointBackgroundColor: props.points.map((p) => (p.isCurrent ? '#64748b' : '#f6fbff')),
+      pointHoverBackgroundColor: props.points.map((p) => (p.isCurrent ? '#94a3b8' : '#ffffff')),
+      pointBorderColor: props.points.map((p) => (p.isCurrent ? '#64748b' : props.seriesColor)),
+      pointHoverBorderColor: props.points.map((p) => (p.isCurrent ? '#94a3b8' : props.seriesColor)),
     },
   ],
 }));

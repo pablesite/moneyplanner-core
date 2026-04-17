@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { NetWorthDeltaChart, NetWorthDonut, NetWorthTimelineChart } from '@/domains/net-worth';
 import type { NetWorthTimelineChartPoint } from './NetWorthTimelineChart.vue';
 
 type CategoryType = 'asset' | 'liability';
-type TimelinePreset = '1m' | '3m' | '6m' | '1a' | 'all';
+type TimelinePreset = '1m' | '3m' | '6m' | '1a' | '5a' | 'all';
 
 type HeroAnalysis = {
   assets: number;
@@ -44,7 +45,7 @@ type PositionActivityRow = {
   amount: number;
 };
 
-defineProps<{
+const props = defineProps<{
   analysis: HeroAnalysis;
   heroUnitLabel: string;
   effectiveCategoryKeys: string[];
@@ -83,6 +84,20 @@ defineProps<{
   positionActivityLoading: boolean;
   positionActivityRows: PositionActivityRow[];
 }>();
+
+const displayedPoints = computed(() => {
+  const rows = props.timelineChartRows;
+  const last6 = rows.slice(-6);
+  return last6.map((row, i) => {
+    const absIdx = rows.length - last6.length + i;
+    const prev = rows[absIdx - 1];
+    const delta =
+      prev && prev.value !== 0
+        ? ((row.value - prev.value) / Math.abs(prev.value)) * 100
+        : null;
+    return { row, delta };
+  });
+});
 </script>
 
 <template>
@@ -162,12 +177,17 @@ defineProps<{
 
       <div class="ui-nw-timeline-points">
         <div
-          v-for="row in timelineChartRows.slice(-6)"
+          v-for="{ row, delta } in displayedPoints"
           :key="row.date"
           class="ui-nw-timeline-point"
         >
           <span>{{ row.label }}</span>
           <strong>{{ formatNumber(row.value, 0) }} {{ displayedTimelineUnit }}</strong>
+          <span
+            v-if="delta !== null"
+            class="ui-nw-timeline-point-delta"
+            :class="delta >= 0 ? 'ui-nw-timeline-point-delta-pos' : 'ui-nw-timeline-point-delta-neg'"
+          >{{ delta >= 0 ? '+' : '' }}{{ formatNumber(delta, 1) }}%</span>
         </div>
       </div>
     </div>

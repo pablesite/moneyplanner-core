@@ -315,9 +315,9 @@ const selectedPositionId = ref<number | null>(null);
 const createAssetCategory = ref<string | null>(null);
 const createLiabilityCategory = ref<string | null>(null);
 const timelineExpanded = ref(false);
-const selectedTimelinePreset = ref<'1m' | '3m' | '6m' | '1a' | 'all'>('all');
+const selectedTimelinePreset = ref<'1m' | '3m' | '6m' | '1a' | '5a' | 'all'>('5a');
 const customTimelineWindow = ref<{ start: number; end: number } | null>(null);
-const timelinePresetOptions = ['1m', '3m', '6m', '1a', 'all'] as const;
+const timelinePresetOptions = ['1m', '3m', '6m', '1a', '5a', 'all'] as const;
 
 type TimelinePoint = {
   date: string;
