@@ -163,7 +163,7 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
     }
 
     const amount = parseAnnualAmount(draft.amountAnnual);
-    if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
+    if (amount < 0) return { ok: false, error: 'El importe anual no puede ser negativo.' };
 
     loading.value = true;
     error.value = null;
@@ -216,7 +216,7 @@ export function useAnnualExpenseStore(_scope: 'saas' | 'core' = 'saas') {
     }
 
     const amount = parseAnnualAmount(draft.amountAnnual);
-    if (amount <= 0) return { ok: false, error: 'El importe anual debe ser mayor que cero.' };
+    if (amount < 0) return { ok: false, error: 'El importe anual no puede ser negativo.' };
 
     loading.value = true;
     error.value = null;

@@ -136,6 +136,34 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
         self.assertIsNone(res.data["executed_amount"])
         self.assertIsNone(AnnualIncomeMonthlyCheckin.objects.get(id=res.data["id"]).executed_amount)
 
+    def test_income_checkin_recurrent_with_target_month_rejects_other_months(self):
+        income = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Paga extra",
+            category="salary",
+            subcategory="bonus_commission",
+            income_type="recurrent",
+            time_profile="structural_recurrent",
+            target_month=7,
+            amount_annual=Decimal("3000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        res = self.client.post(
+            "/api/budget/annual-income-checkins/",
+            {
+                "annual_income_entry_id": income.id,
+                "fiscal_year": 2026,
+                "month": 6,
+                "status": "confirmed",
+                "executed_amount": "3000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("month", res.data["error"]["details"])
+
     def test_income_checkin_update_preserves_and_clears_confirmed_at_by_status(self):
         income = AnnualIncomeEntry.objects.create(
             user=self.user,

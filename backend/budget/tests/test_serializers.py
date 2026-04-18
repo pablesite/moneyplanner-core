@@ -30,14 +30,14 @@ class BudgetSerializerTests(TestCase):
         self.assertEqual(serializer.validated_data["time_profile"], "structural_recurrent")
         self.assertEqual(serializer.validated_data["cashflow_role"], "operating")
 
-    def test_income_serializer_rejects_invalid_amount_currency_and_year(self):
+    def test_income_serializer_rejects_negative_amount_currency_and_year(self):
         serializer = AnnualIncomeEntrySerializer(
             data={
                 "name": "Nomina",
                 "category": "salary",
                 "subcategory": "employee_salary",
                 "income_type": "recurrent",
-                "amount_annual": "0.00",
+                "amount_annual": "-1.00",
                 "fiscal_year": 1800,
                 "currency": "EURO",
             }
@@ -46,6 +46,20 @@ class BudgetSerializerTests(TestCase):
         self.assertIn("amount_annual", serializer.errors)
         self.assertIn("fiscal_year", serializer.errors)
         self.assertIn("currency", serializer.errors)
+
+    def test_income_serializer_accepts_zero_amount(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Ingreso en pausa",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "income_type": "recurrent",
+                "amount_annual": "0.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_income_serializer_validates_partial_update_with_instance_values(self):
         entry = AnnualIncomeEntry.objects.create(
@@ -97,6 +111,23 @@ class BudgetSerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("target_month", serializer.errors)
+
+    def test_income_serializer_accepts_optional_target_month_for_recurrent(self):
+        serializer = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Paga extra",
+                "category": "salary",
+                "subcategory": "bonus_commission",
+                "income_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "target_month": 7,
+                "amount_annual": "3000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["target_month"], 7)
 
     def test_expense_serializer_accepts_temporary_commitment_fields(self):
         serializer = AnnualExpenseEntrySerializer(

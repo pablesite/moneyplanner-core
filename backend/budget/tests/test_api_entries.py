@@ -109,6 +109,43 @@ class AnnualIncomeApiEntriesTests(APITestCase):
         self.assertEqual(create_res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("target_month", create_res.data["error"]["details"])
 
+    def test_create_recurrent_income_accepts_optional_target_month(self):
+        create_res = self.client.post(
+            "/api/budget/annual-income/",
+            {
+                "name": "Paga extra anual",
+                "category": "salary",
+                "subcategory": "bonus_commission",
+                "income_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "target_month": 7,
+                "amount_annual": "3000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_res.data["target_month"], 7)
+
+    def test_create_income_accepts_zero_amount(self):
+        create_res = self.client.post(
+            "/api/budget/annual-income/",
+            {
+                "name": "Ingreso en pausa",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "income_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "amount_annual": "0.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_res.data["amount_annual"], "0.00")
+
     def test_queryset_is_user_scoped(self):
         other_user = get_user_model().objects.create_user(
             username="income_other_user", password="pass1234"
@@ -173,6 +210,24 @@ class AnnualExpenseApiEntriesTests(APITestCase):
         totals_res = self.client.get("/api/budget/annual-expense/totals/")
         self.assertEqual(totals_res.status_code, status.HTTP_200_OK)
         self.assertEqual(totals_res.data["total_annual"], "5500.00")
+
+    def test_create_expense_accepts_zero_amount(self):
+        create_res = self.client.post(
+            "/api/budget/annual-expense/",
+            {
+                "name": "Partida en pausa",
+                "category": "consumption_expenses",
+                "subcategory": "living_expenses",
+                "expense_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "amount_annual": "0.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_res.data["amount_annual"], "0.00")
 
     def test_list_and_totals_can_be_filtered_by_fiscal_year(self):
         AnnualExpenseEntry.objects.create(

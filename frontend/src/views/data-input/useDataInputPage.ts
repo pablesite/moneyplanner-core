@@ -259,9 +259,6 @@ export function useDataInputPage() {
   type SelectOption = { value: string; label: string };
 
   const incomeTimeProfileOptions = computed<SelectOption[]>(() => {
-    if (annualIncomeForm.category === 'capital_gains') {
-      return [{ value: 'one_off', label: 'Puntual / extraordinario' }];
-    }
     return [
       { value: 'structural_recurrent', label: 'Recurrente estructural (base)' },
       { value: 'term_recurrent', label: 'Recurrente temporal (con fin)' },
@@ -1124,8 +1121,7 @@ export function useDataInputPage() {
       annualIncomeForm.name = entry.name;
       annualIncomeForm.owner = entry.owner || '';
       annualIncomeForm.isRecurrent = entry.incomeType === 'recurrent';
-      annualIncomeForm.timeProfile =
-        entry.category === 'capital_gains' ? 'one_off' : entry.timeProfile;
+      annualIncomeForm.timeProfile = entry.timeProfile;
       annualIncomeForm.cashflowRole = entry.cashflowRole;
       annualIncomeForm.eventGroup = entry.eventGroup || '';
       annualIncomeForm.targetMonth =
@@ -1746,7 +1742,6 @@ export function useDataInputPage() {
       annualIncomeForm.isRecurrent = timeProfile !== 'one_off';
       if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndMonth = '';
       if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndYear = '';
-      if (timeProfile !== 'one_off') annualIncomeForm.targetMonth = '';
     },
   );
   watch(
@@ -1761,9 +1756,6 @@ export function useDataInputPage() {
   );
   watch([() => annualIncomeForm.category], () => {
     if (hydratingAnnualIncomeForm.value) return;
-    if (annualIncomeForm.category === 'capital_gains') {
-      annualIncomeForm.timeProfile = 'one_off';
-    }
     annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
   });
   watch([() => annualExpenseForm.category, () => annualExpenseForm.subcategory], () => {
@@ -1794,10 +1786,9 @@ export function useDataInputPage() {
       timeProfile: annualIncomeForm.timeProfile,
       cashflowRole: defaultIncomeCashflowRole(annualIncomeForm.category),
       eventGroup: annualIncomeForm.eventGroup,
-      targetMonth:
-        annualIncomeForm.timeProfile === 'one_off' && String(annualIncomeForm.targetMonth).trim()
-          ? Number(annualIncomeForm.targetMonth)
-          : null,
+      targetMonth: String(annualIncomeForm.targetMonth).trim()
+        ? Number(annualIncomeForm.targetMonth)
+        : null,
       termEndMonth:
         annualIncomeForm.timeProfile === 'term_recurrent' &&
         String(annualIncomeForm.termEndMonth).trim()
