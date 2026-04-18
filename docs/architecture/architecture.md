@@ -68,6 +68,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. The accounting movement contract is evolving from purchase-only investment support to a bidirectional investment flow with explicit direction (`inflow` / `outflow`), while preserving legacy compatibility for existing `investment_purchase` writers during transition.
 4. Quick-entry investment payloads support optional manual realized metadata (`realized_cost_basis`, `realized_gain_loss`) without enforcing automatic PnL calculation in this phase.
 5. The frontend workspace for accounting consumes this API directly in Core and mirrors the same flow in SaaS.
+6. The accounting timeline API exposes a daily consolidated balance series for active ledger accounts:
+   - `GET /api/accounting/transactions/daily-balance-series/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&status=posted|draft`
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

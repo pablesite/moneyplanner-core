@@ -258,6 +258,22 @@ class BudgetServicesTests(TestCase):
             {8: Decimal("1500.00")},
         )
 
+        recurrent_single_month = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Paga extra",
+            category="salary",
+            subcategory="bonus_commission",
+            time_profile=AnnualIncomeEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            target_month=7,
+            amount_annual=Decimal("3000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        self.assertEqual(
+            planned_income_monthly_distribution(entry=recurrent_single_month, fiscal_year=2026),
+            {7: Decimal("3000.00")},
+        )
+
         term = AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Contrato",

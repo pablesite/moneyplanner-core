@@ -45,8 +45,11 @@ const props = withDefaults(
     showCashflowRoleField?: boolean;
     showEventGroupField?: boolean;
     showTermEndYearField?: boolean;
+    showRecurringTargetMonthField?: boolean;
     namePlaceholder: string;
     amountPlaceholder: string;
+    targetMonthPlaceholder?: string;
+    targetMonthRecurringPlaceholder?: string;
     eventGroupPlaceholder?: string;
     termEndYearPlaceholder?: string;
     termEndMonthPlaceholder?: string;
@@ -61,8 +64,11 @@ const props = withDefaults(
     showCashflowRoleField: true,
     showEventGroupField: true,
     showTermEndYearField: true,
+    showRecurringTargetMonthField: false,
     ownerOptions: () => [],
     timeProfileFieldLabel: '',
+    targetMonthPlaceholder: 'Mes objetivo (1-12)',
+    targetMonthRecurringPlaceholder: 'Mes previsto (opcional, 1-12)',
     eventGroupPlaceholder: 'Grupo de evento (opcional, ej: vivienda_2026)',
     termEndYearPlaceholder: 'Ano fin compromiso (ej: 2027)',
     termEndMonthPlaceholder: 'Mes fin (1-12)',
@@ -178,11 +184,13 @@ const emit = defineEmits<{
       </datalist>
 
       <input
-        v-if="form.timeProfile === 'one_off'"
+        v-if="form.timeProfile === 'one_off' || showRecurringTargetMonthField"
         :value="form.targetMonth"
         class="input ui-data-field"
         inputmode="numeric"
-        placeholder="Mes objetivo (1-12)"
+        :placeholder="
+          form.timeProfile === 'one_off' ? targetMonthPlaceholder : targetMonthRecurringPlaceholder
+        "
         @input="
           emit('patch', { targetMonth: String(($event.target as HTMLInputElement).value ?? '') })
         "

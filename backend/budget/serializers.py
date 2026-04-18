@@ -23,8 +23,8 @@ class AnnualEntryValidationMixin:
         return normalized
 
     def validate_amount_annual(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("El importe anual debe ser mayor que cero.")
+        if value < 0:
+            raise serializers.ValidationError("El importe anual no puede ser negativo.")
         return value
 
     def validate_fiscal_year(self, value: int):
@@ -224,8 +224,6 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
         if attrs["time_profile"] != AnnualIncomeEntry.TimeProfile.TERM_RECURRENT:
             attrs["term_end_month"] = None
             attrs["term_end_year"] = None
-        if attrs["time_profile"] != AnnualIncomeEntry.TimeProfile.ONE_OFF:
-            attrs["target_month"] = None
         return attrs
 
 
@@ -478,14 +476,9 @@ class AnnualIncomeMonthlyCheckinSerializer(AnnualEntryValidationMixin, serialize
                     "fiscal_year": "El ejercicio del check-in debe coincidir con el ejercicio del ingreso anual."
                 }
             )
-        if (
-            entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF
-            and entry.target_month is not None
-            and month is not None
-            and month != entry.target_month
-        ):
+        if entry.target_month is not None and month is not None and month != entry.target_month:
             raise serializers.ValidationError(
-                {"month": "Los ingresos puntuales solo admiten check-in en su mes objetivo."}
+                {"month": "Este ingreso solo admite check-in en su mes objetivo o previsto."}
             )
         if status_value == AnnualIncomeMonthlyCheckin.Status.SKIPPED:
             attrs["executed_amount"] = None

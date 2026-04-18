@@ -507,6 +507,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
     :time-profile-options="incomeTimeProfileOptions"
     :cashflow-role-options="incomeCashflowRoleOptions"
     :show-cashflow-role-field="false"
+    :show-recurring-target-month-field="true"
     :event-group-options="annualEventGroupOptions"
     event-group-datalist-id="income-event-groups"
     name-placeholder="Concepto (ej: CTN, Regalos Pablo)"

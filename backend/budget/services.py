@@ -675,13 +675,16 @@ def planned_income_monthly_distribution(
             return {}
         return {int(entry.target_month): _round_money(amount)}
 
-    base = _round_money(amount / Decimal("12"))
     end_month = 12
     if (
         entry.time_profile == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
         and entry.term_end_year == fiscal_year
     ):
         end_month = entry.term_end_month or 12
+    if entry.target_month and 1 <= int(entry.target_month) <= end_month:
+        return {int(entry.target_month): _round_money(amount)}
+
+    base = _round_money(amount / Decimal("12"))
     distribution = {month: base for month in range(1, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)

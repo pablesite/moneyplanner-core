@@ -241,16 +241,21 @@ function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string
   if (!entries.length) {
     return `${countText} - ${props.formatMoney(row.plannedAnnual / 12)} EUR/mes previsto`;
   }
-  const oneOffEntries = entries.filter((entry) => isOneOffEntry(entry));
-  if (oneOffEntries.length === entries.length) {
-    const uniqueMonths = new Set<number>();
-    for (const entry of oneOffEntries) {
-      if (entry.targetMonth != null) uniqueMonths.add(entry.targetMonth);
-    }
+  const entriesWithTargetMonth = entries.filter((entry) => entry.targetMonth != null);
+  if (entriesWithTargetMonth.length === entries.length) {
+    const uniqueMonths = new Set<number>(
+      entriesWithTargetMonth
+        .map((entry) => Number(entry.targetMonth))
+        .filter((month) => Number.isFinite(month) && month >= 1 && month <= 12),
+    );
     if (uniqueMonths.size === 1) {
       const month = Array.from(uniqueMonths)[0];
       return `${countText} - ${props.formatMoney(total)} EUR en ${targetMonthLabel(month)} previsto`;
     }
+    return `${countText} - ${props.formatMoney(total)} EUR en meses previstos`;
+  }
+  const oneOffEntries = entries.filter((entry) => isOneOffEntry(entry));
+  if (oneOffEntries.length === entries.length) {
     return `${countText} - ${props.formatMoney(total)} EUR puntual previsto`;
   }
   return `${countText} - ${props.formatMoney(total / 12)} EUR/mes previsto`;
@@ -960,6 +965,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     :time-profile-options="annualEntriesPage.incomeTimeProfileOptions.value"
     :cashflow-role-options="annualEntriesPage.incomeCashflowRoleOptions"
     :show-cashflow-role-field="false"
+    :show-recurring-target-month-field="true"
     :event-group-options="annualEntriesPage.annualEventGroupOptions.value"
     event-group-datalist-id="budget-income-event-groups"
     name-placeholder="Concepto (ej: Nomina, Regalo)"
