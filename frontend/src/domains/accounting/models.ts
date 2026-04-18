@@ -146,6 +146,24 @@ export type LedgerAccountBalanceSummary = {
   accounts: LedgerAccountBalanceSummaryItem[];
 };
 
+export type LedgerDailyBalanceSeriesRow = {
+  date: string;
+  assets_total: string;
+  liabilities_total: string;
+  net_balance: string;
+};
+
+export type LedgerDailyBalanceSeries = {
+  filters: {
+    date_from: string;
+    date_to: string;
+    status: LedgerTransactionStatus;
+    base_currency: string;
+  };
+  base_currency: string;
+  rows: LedgerDailyBalanceSeriesRow[];
+};
+
 export type LedgerAccountWritePayload = {
   name: string;
   account_type: LedgerAccountType;

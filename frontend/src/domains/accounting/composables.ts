@@ -19,6 +19,7 @@ import { usePeopleStore, type OwnershipRead } from '@/domains/people/store';
 import type {
   LedgerAccount,
   LedgerAccountBalanceSummaryItem,
+  LedgerDailyBalanceSeriesRow,
   LedgerAccountType,
   LedgerEntrySide,
   LedgerTransaction,
@@ -157,22 +158,17 @@ function roundByCurrency(value: number, currency: string): number {
   return Math.round(value * factor) / factor;
 }
 
+function toIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 export function useAccountingPage() {
   const store = useAccountingStore();
   const incomeStore = useAnnualIncomeStore('core');
   const expenseStore = useAnnualExpenseStore('core');
   const peopleStore = usePeopleStore();
-  const {
-    loading,
-    accountCreationLoading,
-    transactionCreationLoading,
-    error,
-  } = storeToRefs(store);
-  const {
-    accounts,
-    monthlySummary,
-    accountBalancesSummary,
-  } = storeToRefs(store);
+  const { loading, accountCreationLoading, transactionCreationLoading, error } = storeToRefs(store);
+  const { accounts, monthlySummary, accountBalancesSummary } = storeToRefs(store);
 
   const successMessage = ref<string | null>(null);
   const accountActivationLoading = ref(false);
@@ -469,7 +465,9 @@ export function useAccountingPage() {
   }
   function isAutoInvestmentBridgeAccount(account: LedgerAccount): boolean {
     if (account.origin !== 'system') return false;
-    const normalizedName = String(account.name ?? '').trim().toLowerCase();
+    const normalizedName = String(account.name ?? '')
+      .trim()
+      .toLowerCase();
     return normalizedName.startsWith('puente traspasos inversion (auto)');
   }
   const transferOriginOptions = computed(() =>
@@ -532,7 +530,9 @@ export function useAccountingPage() {
     resolveAccountById(quickEntryForm.counterparty_account_id),
   );
   const quickSelectedAdjustmentAccount = computed(() =>
-    quickEntryForm.movement_type === 'adjustment' ? resolveAccountById(quickEntryForm.account_id) : null,
+    quickEntryForm.movement_type === 'adjustment'
+      ? resolveAccountById(quickEntryForm.account_id)
+      : null,
   );
   const quickInvestmentOriginCurrency = computed(() => {
     if (quickEntryForm.movement_type !== 'investment') return '';
@@ -649,8 +649,9 @@ export function useAccountingPage() {
     if (!candidates.length) return null;
     const normalizedCurrency = currency.trim().toUpperCase();
     return (
-      candidates.find((account) => account.currency === normalizedCurrency && account.origin === 'system')
-        ?.id ??
+      candidates.find(
+        (account) => account.currency === normalizedCurrency && account.origin === 'system',
+      )?.id ??
       candidates.find((account) => account.currency === normalizedCurrency)?.id ??
       candidates.find((account) => account.origin === 'system')?.id ??
       candidates[0]?.id ??
@@ -710,7 +711,13 @@ export function useAccountingPage() {
       };
     }
     if (total <= 0) {
-      return { total, principal, interest, valid: false, error: 'El total pagado debe ser mayor que 0.' };
+      return {
+        total,
+        principal,
+        interest,
+        valid: false,
+        error: 'El total pagado debe ser mayor que 0.',
+      };
     }
     if (principal <= 0) {
       return {
@@ -868,7 +875,10 @@ export function useAccountingPage() {
         (row) => row.category === (quickEntryForm.category_key as IncomeCategoryKey),
       );
     }
-    if (quickEntryForm.movement_type === 'expense' || quickEntryForm.movement_type === 'debt_payment') {
+    if (
+      quickEntryForm.movement_type === 'expense' ||
+      quickEntryForm.movement_type === 'debt_payment'
+    ) {
       return expenseSubcategories.filter(
         (row) => row.category === (quickEntryForm.category_key as ExpenseCategoryKey),
       );
@@ -1066,11 +1076,13 @@ export function useAccountingPage() {
     return 'No hay contracuentas disponibles para el tipo seleccionado.';
   });
   const editSelectedLiquidityAccount = computed(() =>
-    editTransactionForm.account_id != null ? accountMap.value.get(editTransactionForm.account_id) ?? null : null,
+    editTransactionForm.account_id != null
+      ? (accountMap.value.get(editTransactionForm.account_id) ?? null)
+      : null,
   );
   const editSelectedInvestmentAccount = computed(() =>
     editTransactionForm.counterparty_account_id != null
-      ? accountMap.value.get(editTransactionForm.counterparty_account_id) ?? null
+      ? (accountMap.value.get(editTransactionForm.counterparty_account_id) ?? null)
       : null,
   );
   const editSelectedDebtLiabilityCategory = computed<LiabilityCategoryKey | null>(() => {
@@ -1336,9 +1348,7 @@ export function useAccountingPage() {
         }
         if (quickEntryForm.subcategory_key === 'mortgage_principal') {
           quickEntryForm.subcategory_key =
-            quickEntryForm.category_key === 'consumption_expenses'
-              ? 'financial_commitments'
-              : '';
+            quickEntryForm.category_key === 'consumption_expenses' ? 'financial_commitments' : '';
         }
       }
     },
@@ -1563,6 +1573,129 @@ export function useAccountingPage() {
   const liquidityBalanceTotal = computed(() =>
     toNumber(accountBalancesSummary.value?.totals_by_account_type.asset ?? '0'),
   );
+  const today = new Date();
+  const dailyBalanceDateTo = ref(toIsoDate(today));
+  const dailyBalanceDateFrom = ref('');
+  const dailyBalanceSeriesRows = ref<LedgerDailyBalanceSeriesRow[]>([]);
+  const dailyBalanceSeriesLoading = ref(false);
+  const dailyBalanceSeriesError = ref<string | null>(null);
+  const dailyBalanceSeriesUnit = ref('EUR');
+  type DailyTimelinePreset = '1m' | '3m' | '6m' | '1a' | '5a' | 'all';
+  const dailyTimelinePresetOptions = ['1m', '3m', '6m', '1a', '5a', 'all'] as const;
+  const selectedDailyTimelinePreset = ref<DailyTimelinePreset>('1a');
+  const dailyTimelineCustomWindow = ref<{ start: number; end: number } | null>(null);
+  const dailyTimelineExpanded = ref(false);
+  const dailyTimelinePresetPointCount: Record<DailyTimelinePreset, number> = {
+    '1m': 31,
+    '3m': 92,
+    '6m': 183,
+    '1a': 365,
+    '5a': 1825,
+    all: Number.POSITIVE_INFINITY,
+  };
+  const dailyBalanceTimelineRows = computed(() => {
+    const shortFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' });
+    return dailyBalanceSeriesRows.value.map((row) => {
+      const date = new Date(`${row.date}T00:00:00`);
+      return {
+        date: row.date,
+        label: shortFormatter.format(date),
+        value: toNumber(row.net_balance),
+      };
+    });
+  });
+  const dailyTimelineDefaultWindow = computed(() => {
+    const end = Math.max(0, dailyBalanceTimelineRows.value.length - 1);
+    const count = dailyTimelinePresetPointCount[selectedDailyTimelinePreset.value];
+    if (!Number.isFinite(count)) return { start: 0, end };
+    return { start: Math.max(0, end - count + 1), end };
+  });
+  const dailyTimelineWindow = computed(() => {
+    const length = dailyBalanceTimelineRows.value.length;
+    if (length === 0) return { start: 0, end: 0 };
+    const source = dailyTimelineCustomWindow.value ?? dailyTimelineDefaultWindow.value;
+    const start = Math.min(Math.max(0, source.start), length - 1);
+    const end = Math.min(Math.max(start, source.end), length - 1);
+    return { start, end };
+  });
+  const dailyBalanceSeriesChartRows = computed(() =>
+    dailyBalanceTimelineRows.value.slice(
+      dailyTimelineWindow.value.start,
+      dailyTimelineWindow.value.end + 1,
+    ),
+  );
+  const dailyBalanceSeriesMonthlyRows = computed(() => {
+    const byMonth = new Map<string, { date: string; label: string; value: number }>();
+    const monthFormatter = new Intl.DateTimeFormat('es-ES', { month: 'short', year: '2-digit' });
+    for (const row of dailyBalanceSeriesChartRows.value) {
+      const monthKey = row.date.slice(0, 7);
+      const monthDate = `${monthKey}-01`;
+      byMonth.set(monthKey, {
+        date: monthDate,
+        label: monthFormatter.format(new Date(`${monthDate}T00:00:00`)),
+        value: row.value,
+      });
+    }
+    return Array.from(byMonth.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, value]) => value);
+  });
+  const dailyBalanceSeriesChartPoints = computed(() => {
+    const shortFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' });
+    const fullFormatter = new Intl.DateTimeFormat('es-ES', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    return dailyBalanceSeriesChartRows.value.map((row, index, rows) => {
+      const date = new Date(`${row.date}T00:00:00`);
+      const isBoundary = index === 0 || index === rows.length - 1;
+      return {
+        date: row.date,
+        shortLabel: isBoundary ? fullFormatter.format(date) : shortFormatter.format(date),
+        fullLabel: fullFormatter.format(date),
+        value: row.value,
+        isCurrent: row.date === dailyBalanceDateTo.value,
+      };
+    });
+  });
+  const dailyBalanceSeriesRangeLabel = computed(() => {
+    if (!dailyBalanceSeriesChartPoints.value.length) return 'Sin datos';
+    const first = dailyBalanceSeriesChartPoints.value[0];
+    const last =
+      dailyBalanceSeriesChartPoints.value[dailyBalanceSeriesChartPoints.value.length - 1];
+    if (!first || !last) return 'Sin datos';
+    return `${first.fullLabel} - ${last.fullLabel}`;
+  });
+  const dailyBalanceLatestChartPoint = computed(
+    () =>
+      dailyBalanceSeriesChartPoints.value[dailyBalanceSeriesChartPoints.value.length - 1] ?? null,
+  );
+
+  function setDailyTimelinePreset(preset: DailyTimelinePreset): void {
+    selectedDailyTimelinePreset.value = preset;
+    dailyTimelineCustomWindow.value = null;
+  }
+
+  function updateDailyTimelineWindowStart(rawValue: string): void {
+    const parsed = Number(rawValue);
+    const currentEnd = dailyTimelineWindow.value.end;
+    dailyTimelineCustomWindow.value = {
+      start: Number.isFinite(parsed)
+        ? Math.min(parsed, currentEnd)
+        : dailyTimelineWindow.value.start,
+      end: currentEnd,
+    };
+  }
+
+  function updateDailyTimelineWindowEnd(rawValue: string): void {
+    const parsed = Number(rawValue);
+    const currentStart = dailyTimelineWindow.value.start;
+    dailyTimelineCustomWindow.value = {
+      start: currentStart,
+      end: Number.isFinite(parsed) ? Math.max(parsed, currentStart) : dailyTimelineWindow.value.end,
+    };
+  }
 
   // ── Tab state & per-account/all-movements pagination ──────────────
   type MovementsTab = 'cuentas' | 'todos' | 'estadisticas';
@@ -1969,14 +2102,18 @@ export function useAccountingPage() {
     }
     if (transaction.activity_kind === 'investment_purchase') {
       const creditEntry =
-        transaction.entries.find((entry) => entry.side === 'credit') ?? transaction.entries[1] ?? null;
+        transaction.entries.find((entry) => entry.side === 'credit') ??
+        transaction.entries[1] ??
+        null;
       if (creditEntry) {
         return toNumber(creditEntry.amount).toFixed(currencyDecimals(creditEntry.currency));
       }
     }
     if (transaction.activity_kind === 'transfer') {
       const creditEntry =
-        transaction.entries.find((entry) => entry.side === 'credit') ?? transaction.entries[1] ?? null;
+        transaction.entries.find((entry) => entry.side === 'credit') ??
+        transaction.entries[1] ??
+        null;
       if (creditEntry) {
         return toNumber(creditEntry.amount).toFixed(currencyDecimals(creditEntry.currency));
       }
@@ -2018,7 +2155,8 @@ export function useAccountingPage() {
     return {
       principalAmount: principalValue > 0 ? principalValue.toFixed(decimals) : '',
       interestAmount: interestValue > 0 ? interestValue.toFixed(decimals) : '',
-      interestAccountId: interestEntries.length === 1 ? interestEntries[0]?.account_id ?? null : null,
+      interestAccountId:
+        interestEntries.length === 1 ? (interestEntries[0]?.account_id ?? null) : null,
     };
   }
 
@@ -2943,6 +3081,27 @@ export function useAccountingPage() {
     transactionForm.entries = transactionForm.entries.filter((entry) => entry.key !== key);
   }
 
+  async function reloadDailyBalanceSeries() {
+    dailyBalanceSeriesLoading.value = true;
+    dailyBalanceSeriesError.value = null;
+    try {
+      const response = await coreAccountingApi.getDailyBalanceSeries({
+        date_from: dailyBalanceDateFrom.value,
+        date_to: dailyBalanceDateTo.value,
+        status: 'posted',
+      });
+      dailyBalanceSeriesUnit.value = String(response.data.base_currency || 'EUR')
+        .trim()
+        .toUpperCase();
+      dailyBalanceSeriesRows.value = response.data.rows ?? [];
+    } catch (error: unknown) {
+      dailyBalanceSeriesRows.value = [];
+      dailyBalanceSeriesError.value = toApiErrorMessage(error);
+    } finally {
+      dailyBalanceSeriesLoading.value = false;
+    }
+  }
+
   async function reloadPeriod() {
     successMessage.value = null;
     await Promise.all([
@@ -3101,13 +3260,14 @@ export function useAccountingPage() {
       await fetchTodosPage(false);
     }
 
-    if (!hasSelectedAccount) return;
-
-    await fetchCuentasPage(true);
-    const desiredCuentas = Math.min(previousCuentasLoaded, cuentasTotalCount.value);
-    while (cuentasHasMore.value && cuentasTransactions.value.length < desiredCuentas) {
-      await fetchCuentasPage(false);
+    if (hasSelectedAccount) {
+      await fetchCuentasPage(true);
+      const desiredCuentas = Math.min(previousCuentasLoaded, cuentasTotalCount.value);
+      while (cuentasHasMore.value && cuentasTransactions.value.length < desiredCuentas) {
+        await fetchCuentasPage(false);
+      }
     }
+    await reloadDailyBalanceSeries();
   }
 
   async function submitTransaction() {
@@ -3152,9 +3312,7 @@ export function useAccountingPage() {
     if (!validated) return false;
     const hasMixedCurrencyEntries =
       new Set(
-        editTransactionPersistedEntries.value.map((entry) =>
-          entry.currency.trim().toUpperCase(),
-        ),
+        editTransactionPersistedEntries.value.map((entry) => entry.currency.trim().toUpperCase()),
       ).size > 1;
     if (hasMixedCurrencyEntries) {
       let compatibilityEntries = scaleLegacyMixedCurrencyEntries(
@@ -3189,7 +3347,9 @@ export function useAccountingPage() {
         (editTransactionForm.kind === 'investment' || editTransactionForm.kind === 'transfer') &&
         editInvestmentIsCrossCurrency.value
       ) {
-        const destinationAmount = Number(formatDecimalInput(editTransactionForm.destination_amount));
+        const destinationAmount = Number(
+          formatDecimalInput(editTransactionForm.destination_amount),
+        );
         const debitEntry = compatibilityEntries.find((entry) => entry.side === 'debit') ?? null;
         const creditEntry = compatibilityEntries.find((entry) => entry.side === 'credit') ?? null;
         if (debitEntry) {
@@ -3198,9 +3358,10 @@ export function useAccountingPage() {
           );
         }
         if (creditEntry) {
-          creditEntry.amount = roundByCurrency(validated.parsedAmount, creditEntry.currency).toFixed(
-            currencyDecimals(creditEntry.currency),
-          );
+          creditEntry.amount = roundByCurrency(
+            validated.parsedAmount,
+            creditEntry.currency,
+          ).toFixed(currencyDecimals(creditEntry.currency));
         }
       } else {
         compatibilityEntries = scaleEntriesToAmount(
@@ -3502,6 +3663,7 @@ export function useAccountingPage() {
         expenseStore.loadAll(selectedYear.value),
         peopleStore.fetchOwnerships(),
         refreshManualPositionOptions(),
+        reloadDailyBalanceSeries(),
       ]);
       await fetchTodosPage(true);
       if (cuentasSelectedAccountId.value != null) {
@@ -3530,7 +3692,8 @@ export function useAccountingPage() {
     else if (rawKind === 'expense') movementType = 'expense';
     else if (rawKind === 'transfer') movementType = 'transfer';
     else if (rawKind === 'adjustment') movementType = 'adjustment';
-    else if (rawKind === 'investment' || rawKind === 'investment_purchase') movementType = 'investment';
+    else if (rawKind === 'investment' || rawKind === 'investment_purchase')
+      movementType = 'investment';
     else if (rawKind === 'debt_payment') movementType = 'debt_payment';
     else if (rawKind === 'revaluation') movementType = 'revaluation';
 
@@ -3696,6 +3859,23 @@ export function useAccountingPage() {
     creditTotal,
     transactionBalanced,
     summaryRows,
+    dailyBalanceSeriesRows,
+    dailyBalanceSeriesLoading,
+    dailyBalanceSeriesError,
+    dailyBalanceSeriesUnit,
+    dailyBalanceSeriesChartPoints,
+    dailyBalanceSeriesChartRows,
+    dailyBalanceSeriesMonthlyRows,
+    dailyBalanceSeriesRangeLabel,
+    dailyBalanceLatestChartPoint,
+    dailyTimelinePresetOptions,
+    selectedDailyTimelinePreset,
+    dailyTimelineCustomWindow,
+    dailyTimelineWindow,
+    dailyTimelineExpanded,
+    setDailyTimelinePreset,
+    updateDailyTimelineWindowStart,
+    updateDailyTimelineWindowEnd,
     hasImportedTransactions,
     activeTab,
     cuentasSelectedAccountId,

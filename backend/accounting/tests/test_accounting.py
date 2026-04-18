@@ -22,6 +22,7 @@ from accounting.services_summaries import (
     build_monthly_accounting_summary,
 )
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from core.models import FxRate
 from net_worth.models import Asset, Liability
 
 
@@ -3206,7 +3207,9 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["investment_direction"], "reinvestment")
         debit_entry = next(
-            entry for entry in response.data["entries"] if entry["account_id"] == destination_account.id
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == destination_account.id
         )
         credit_entry = next(
             entry for entry in response.data["entries"] if entry["account_id"] == source_account.id
@@ -3651,6 +3654,201 @@ class AccountingApiTests(APITestCase):
         response = self.client.get("/api/accounting/accounts/balances/?month=4")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("year", response.data["error"]["details"])
+
+    def test_daily_balance_series_endpoint_returns_consolidated_daily_rows(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            currency="EUR",
+            amount=Decimal("3000.00"),
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo prestamo coche",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos movilidad",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+        opening_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Saldo inicial pasivo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+        )
+
+        payment_tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 2),
+            value_date=date(2026, 1, 2),
+            description="Cuota",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=payment_tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("200.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=payment_tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("150.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=payment_tx,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("50.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2026-01-01&date_to=2026-01-03"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["filters"]["status"], LedgerTransaction.Status.POSTED)
+        self.assertEqual(len(response.data["rows"]), 3)
+
+        first_row = response.data["rows"][0]
+        second_row = response.data["rows"][1]
+        third_row = response.data["rows"][2]
+
+        self.assertEqual(first_row["date"], "2026-01-01")
+        self.assertEqual(first_row["assets_total"], "1000.00")
+        self.assertEqual(first_row["liabilities_total"], "1000.00")
+        self.assertEqual(first_row["net_balance"], "0.00")
+
+        self.assertEqual(second_row["date"], "2026-01-02")
+        self.assertEqual(second_row["assets_total"], "800.00")
+        self.assertEqual(second_row["liabilities_total"], "850.00")
+        self.assertEqual(second_row["net_balance"], "-50.00")
+
+        self.assertEqual(third_row["date"], "2026-01-03")
+        self.assertEqual(third_row["assets_total"], "800.00")
+        self.assertEqual(third_row["liabilities_total"], "850.00")
+        self.assertEqual(third_row["net_balance"], "-50.00")
+
+    def test_daily_balance_series_endpoint_validates_query_params(self):
+        invalid_date = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2026-13-01"
+        )
+        self.assertEqual(invalid_date.status_code, status.HTTP_400_BAD_REQUEST, invalid_date.data)
+        self.assertIn("date_from", invalid_date.data["error"]["details"])
+
+        invalid_status = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?status=archived"
+        )
+        self.assertEqual(
+            invalid_status.status_code,
+            status.HTTP_400_BAD_REQUEST,
+            invalid_status.data,
+        )
+        self.assertIn("status", invalid_status.data["error"]["details"])
+
+    def test_daily_balance_series_without_date_from_uses_earliest_registered_movement(self):
+        tx_old = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 9, 10),
+            value_date=date(2024, 9, 10),
+            description="Movimiento antiguo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_old,
+            account=self.cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx_old,
+            account=self.income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/accounting/transactions/daily-balance-series/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["filters"]["date_from"], "2024-09-10")
+        self.assertGreaterEqual(len(response.data["rows"]), 1)
+        self.assertEqual(response.data["rows"][0]["date"], "2024-09-10")
+
+    def test_daily_balance_series_converts_foreign_currency_to_user_base(self):
+        usd_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        usd_income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingreso USD",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="USD",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.80000000"),
+            rate_date=date(2026, 1, 1),
+            source="test",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso en USD",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2026-01-01&date_to=2026-01-01"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["base_currency"], "EUR")
+        self.assertEqual(response.data["rows"][0]["assets_total"], "80.00")
+        self.assertEqual(response.data["rows"][0]["net_balance"], "80.00")
 
     def test_budget_suggestions_endpoint_returns_historical_series(self):
         AnnualIncomeEntry.objects.create(
