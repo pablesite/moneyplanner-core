@@ -71,6 +71,23 @@ export function useAccountingMovementsPage() {
     quickEntryReady,
     editEntryReady,
     summaryRows,
+    dailyBalanceSeriesRows,
+    dailyBalanceSeriesLoading,
+    dailyBalanceSeriesError,
+    dailyBalanceSeriesUnit,
+    dailyBalanceSeriesChartPoints,
+    dailyBalanceSeriesChartRows,
+    dailyBalanceSeriesMonthlyRows,
+    dailyBalanceSeriesRangeLabel,
+    dailyBalanceLatestChartPoint,
+    dailyTimelinePresetOptions,
+    selectedDailyTimelinePreset,
+    dailyTimelineCustomWindow,
+    dailyTimelineWindow,
+    dailyTimelineExpanded,
+    setDailyTimelinePreset,
+    updateDailyTimelineWindowStart,
+    updateDailyTimelineWindowEnd,
     hasImportedTransactions,
     activeTab,
     cuentasSelectedAccountId,
@@ -236,7 +253,9 @@ export function useAccountingMovementsPage() {
       }
       const group = groups.get(key)!;
       group.accounts.push(account);
-      const accountCurrency = String(account.currency ?? '').trim().toUpperCase();
+      const accountCurrency = String(account.currency ?? '')
+        .trim()
+        .toUpperCase();
       const currentBalance = toNumber(account.current_balance);
       const amountBase = meta?.amount_base != null ? toNumber(meta.amount_base) : null;
       const subtotalContribution =
@@ -484,7 +503,9 @@ export function useAccountingMovementsPage() {
     }
   }
 
-  async function openDuplicateFromTransaction(transaction: Parameters<typeof fillQuickEntryFromTransaction>[0]) {
+  async function openDuplicateFromTransaction(
+    transaction: Parameters<typeof fillQuickEntryFromTransaction>[0],
+  ) {
     await fillQuickEntryFromTransaction(transaction);
     showQuickEntryModal.value = true;
   }
@@ -565,6 +586,23 @@ export function useAccountingMovementsPage() {
     quickEntryReady,
     editEntryReady,
     summaryRows,
+    dailyBalanceSeriesRows,
+    dailyBalanceSeriesLoading,
+    dailyBalanceSeriesError,
+    dailyBalanceSeriesUnit,
+    dailyBalanceSeriesChartPoints,
+    dailyBalanceSeriesChartRows,
+    dailyBalanceSeriesMonthlyRows,
+    dailyBalanceSeriesRangeLabel,
+    dailyBalanceLatestChartPoint,
+    dailyTimelinePresetOptions,
+    selectedDailyTimelinePreset,
+    dailyTimelineCustomWindow,
+    dailyTimelineWindow,
+    dailyTimelineExpanded,
+    setDailyTimelinePreset,
+    updateDailyTimelineWindowStart,
+    updateDailyTimelineWindowEnd,
     hasImportedTransactions,
     activeTab,
     groupedCuentasAccounts,

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
+from datetime import date, timedelta
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Min
 from rest_framework.exceptions import ValidationError
 
-from .models import LedgerAccount, LedgerEntry
+from accounts.models import UserSettings
+from core.services import build_fx_cache, convert_currency_cached
+
+from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services_ledger import (
     LedgerBalanceTotals,
     ZERO,
@@ -147,6 +154,163 @@ def build_account_balances_summary(
     }
 
 
+def build_daily_balance_series(
+    *,
+    user_id: int,
+    date_from: date | None,
+    date_to: date,
+    status: str = LedgerTransaction.Status.POSTED,
+) -> dict:
+    account_rows = list(
+        LedgerAccount.objects.filter(
+            user_id=user_id,
+            is_active=True,
+            account_type__in=[LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.LIABILITY],
+        )
+        .values("id", "account_type", "currency")
+        .order_by("id")
+    )
+    account_data_by_id = {
+        int(row["id"]): {"account_type": str(row["account_type"]), "currency": str(row["currency"])}
+        for row in account_rows
+    }
+    account_ids = list(account_data_by_id.keys())
+    base_currency = (
+        (
+            UserSettings.objects.filter(user_id=user_id)
+            .values_list("base_currency", flat=True)
+            .first()
+            or "EUR"
+        )
+        .strip()
+        .upper()
+    )
+    fx_pivot = (os.getenv("FX_PIVOT", "USD") or "USD").strip().upper()
+    currencies_for_fx = {base_currency, *{meta["currency"] for meta in account_data_by_id.values()}}
+    if fx_pivot:
+        currencies_for_fx.add(fx_pivot)
+    fx_cache = build_fx_cache(currencies_for_fx)
+
+    if date_from is None and account_ids:
+        date_from = (
+            LedgerEntry.objects.filter(
+                transaction__user_id=user_id,
+                account_id__in=account_ids,
+                transaction__status=status,
+            ).aggregate(min_booking_date=Min("transaction__booking_date"))["min_booking_date"]
+            or date_to
+        )
+    if date_from is None:
+        date_from = date_to
+    if date_from > date_to:
+        raise ValidationError({"date_from": "'date_from' no puede ser posterior a 'date_to'."})
+
+    if not account_ids:
+        return {
+            "filters": {
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+                "status": status,
+                "base_currency": base_currency,
+            },
+            "rows": _build_empty_daily_rows(date_from=date_from, date_to=date_to),
+            "base_currency": base_currency,
+        }
+
+    historical_entries = LedgerEntry.objects.filter(
+        transaction__user_id=user_id,
+        account_id__in=account_ids,
+        transaction__booking_date__lt=date_from,
+        transaction__status=status,
+    ).select_related("transaction")
+    ranged_entries = LedgerEntry.objects.filter(
+        transaction__user_id=user_id,
+        account_id__in=account_ids,
+        transaction__booking_date__gte=date_from,
+        transaction__booking_date__lte=date_to,
+        transaction__status=status,
+    ).select_related("transaction")
+
+    assets_total = ZERO
+    liabilities_total = ZERO
+    for entry in historical_entries:
+        account_data = account_data_by_id.get(entry.account_id)
+        if account_data is None:
+            continue
+        account_type = account_data["account_type"]
+        entry_amount_base = _convert_entry_amount_to_base_currency(
+            amount=entry.amount,
+            currency=entry.currency,
+            booking_date=entry.transaction.booking_date,
+            base_currency=base_currency,
+            fx_cache=fx_cache,
+        )
+        signed_impact = _entry_balance_impact(
+            account_type=account_type,
+            side=entry.side,
+            amount=entry_amount_base,
+        )
+        if account_type == LedgerAccount.AccountType.ASSET:
+            assets_total += signed_impact
+        else:
+            liabilities_total += signed_impact
+
+    deltas_by_date: dict[date, dict[str, Decimal]] = defaultdict(
+        lambda: {"assets": ZERO, "liabilities": ZERO}
+    )
+    for entry in ranged_entries:
+        account_data = account_data_by_id.get(entry.account_id)
+        if account_data is None:
+            continue
+        account_type = account_data["account_type"]
+        entry_amount_base = _convert_entry_amount_to_base_currency(
+            amount=entry.amount,
+            currency=entry.currency,
+            booking_date=entry.transaction.booking_date,
+            base_currency=base_currency,
+            fx_cache=fx_cache,
+        )
+        signed_impact = _entry_balance_impact(
+            account_type=account_type,
+            side=entry.side,
+            amount=entry_amount_base,
+        )
+        booking_date = entry.transaction.booking_date
+        if account_type == LedgerAccount.AccountType.ASSET:
+            deltas_by_date[booking_date]["assets"] += signed_impact
+        else:
+            deltas_by_date[booking_date]["liabilities"] += signed_impact
+
+    rows: list[dict] = []
+    cursor = date_from
+    while cursor <= date_to:
+        delta = deltas_by_date.get(cursor)
+        if delta:
+            assets_total += delta["assets"]
+            liabilities_total += delta["liabilities"]
+        net_balance = assets_total - liabilities_total
+        rows.append(
+            {
+                "date": cursor.isoformat(),
+                "assets_total": serialize_decimal(assets_total),
+                "liabilities_total": serialize_decimal(liabilities_total),
+                "net_balance": serialize_decimal(net_balance),
+            }
+        )
+        cursor += timedelta(days=1)
+
+    return {
+        "filters": {
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "status": status,
+            "base_currency": base_currency,
+        },
+        "rows": rows,
+        "base_currency": base_currency,
+    }
+
+
 def validate_budget_suggestion_filters(*, lookback_years: int) -> None:
     if lookback_years < 1 or lookback_years > 5:
         raise ValidationError({"lookback_years": "Query param 'lookback_years' invalido."})
@@ -199,3 +363,57 @@ def _serialize_series(
         }
         for year, month in period_keys
     ]
+
+
+def _entry_balance_impact(*, account_type: str, side: str, amount: Decimal) -> Decimal:
+    if account_type == LedgerAccount.AccountType.ASSET:
+        return amount if side == LedgerEntry.Side.DEBIT else -amount
+    if account_type == LedgerAccount.AccountType.LIABILITY:
+        return amount if side == LedgerEntry.Side.CREDIT else -amount
+    return ZERO
+
+
+def _convert_entry_amount_to_base_currency(
+    *,
+    amount: Decimal,
+    currency: str,
+    booking_date: date,
+    base_currency: str,
+    fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]],
+) -> Decimal:
+    normalized_currency = str(currency or "").strip().upper() or base_currency
+    if normalized_currency == base_currency:
+        return amount
+    try:
+        return convert_currency_cached(
+            amount,
+            normalized_currency,
+            base_currency,
+            rate_date=booking_date,
+            fx_cache=fx_cache,
+        )
+    except DjangoValidationError as exc:
+        raise ValidationError(
+            {
+                "fx": (
+                    "No se pudo convertir importes de "
+                    f"{normalized_currency} a {base_currency} para {booking_date.isoformat()}."
+                )
+            }
+        ) from exc
+
+
+def _build_empty_daily_rows(*, date_from: date, date_to: date) -> list[dict]:
+    rows: list[dict] = []
+    cursor = date_from
+    while cursor <= date_to:
+        rows.append(
+            {
+                "date": cursor.isoformat(),
+                "assets_total": serialize_decimal(ZERO),
+                "liabilities_total": serialize_decimal(ZERO),
+                "net_balance": serialize_decimal(ZERO),
+            }
+        )
+        cursor += timedelta(days=1)
+    return rows

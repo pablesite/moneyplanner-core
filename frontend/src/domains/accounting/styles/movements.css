@@ -122,6 +122,167 @@
   grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
+.ui-accounting-daily-chart {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 16px 4px;
+  margin-bottom: 14px;
+}
+
+.ui-accounting-timeline-main {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ui-accounting-timeline-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.ui-accounting-timeline-range-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ui-accounting-timeline-range-button,
+.ui-accounting-timeline-expand-button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.ui-accounting-timeline-range-button:hover,
+.ui-accounting-timeline-expand-button:hover {
+  border-color: rgba(76, 195, 255, 0.28);
+  background: rgba(76, 195, 255, 0.12);
+  color: #fff;
+}
+
+.ui-accounting-timeline-range-button-active {
+  border-color: rgba(76, 195, 255, 0.42);
+  background: rgba(76, 195, 255, 0.18);
+  color: #fff;
+}
+
+.ui-accounting-timeline-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-left: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ui-accounting-timeline-range-caption {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(100%, 26rem);
+}
+
+.ui-accounting-timeline-chart-shell {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-accounting-timeline-modal {
+  display: grid;
+  gap: 16px;
+}
+
+.ui-accounting-timeline-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.ui-accounting-timeline-modal-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(241, 245, 249, 0.98);
+}
+
+.ui-accounting-timeline-modal-copy {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: rgba(148, 163, 184, 0.94);
+}
+
+.ui-accounting-timeline-modal-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: rgba(241, 245, 249, 0.98);
+  white-space: nowrap;
+}
+
+.ui-accounting-timeline-modal-ranges {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ui-accounting-timeline-slider-group {
+  display: grid;
+  gap: 6px;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.74rem;
+}
+
+.ui-accounting-timeline-slider {
+  width: 100%;
+}
+
+.ui-accounting-timeline-slider-group strong {
+  font-size: 0.82rem;
+  color: rgba(226, 232, 240, 0.95);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .ui-accounting-daily-chart {
+    padding: 8px 12px 4px;
+  }
+
+  .ui-accounting-timeline-modal-head {
+    flex-direction: column;
+  }
+
+  .ui-accounting-timeline-modal-ranges {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Active month highlight in cashflow strip */
 .ui-cashflow-month-active {
   border-color: rgba(45, 212, 191, 0.32);

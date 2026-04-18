@@ -31,6 +31,7 @@ from .services_quick_entry import (  # noqa: F401
 )
 from .services_summaries import (  # noqa: F401
     _build_period_keys,
+    build_daily_balance_series,
     _group_balance_totals_by_account,
     _serialize_series,
     build_account_balances_summary,

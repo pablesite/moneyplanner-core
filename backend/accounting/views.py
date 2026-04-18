@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from django.db.models import Prefetch
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -21,6 +23,7 @@ from .services import (
     apply_transaction_list_filters,
     build_account_balances_summary,
     build_budget_derived_suggestions,
+    build_daily_balance_series,
     build_monthly_accounting_summary,
     validate_balance_summary_filters,
     validate_budget_suggestion_filters,
@@ -200,6 +203,43 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         fiscal_year = parse_required_int_query_param(request.query_params, "year")
         return Response(
             build_monthly_accounting_summary(user_id=request.user.id, fiscal_year=fiscal_year)
+        )
+
+    @action(detail=False, methods=["get"], url_path="daily-balance-series")
+    def daily_balance_series(self, request):
+        today = timezone.localdate()
+        date_from_raw = (request.query_params.get("date_from") or "").strip()
+        date_to_raw = (request.query_params.get("date_to") or "").strip()
+        status_raw = (request.query_params.get("status") or "").strip()
+        try:
+            date_from = parse_date(date_from_raw) if date_from_raw else None
+        except ValueError as exc:
+            raise ValidationError(
+                {"date_from": "Query param 'date_from' invalido (YYYY-MM-DD)."}
+            ) from exc
+        try:
+            date_to = parse_date(date_to_raw) if date_to_raw else today
+        except ValueError as exc:
+            raise ValidationError({"date_to": "Query param 'date_to' invalido (YYYY-MM-DD)."}) from exc
+        status_value = status_raw or LedgerTransaction.Status.POSTED
+
+        if date_from_raw and date_from is None:
+            raise ValidationError({"date_from": "Query param 'date_from' invalido (YYYY-MM-DD)."})
+        if date_to is None:
+            raise ValidationError({"date_to": "Query param 'date_to' invalido (YYYY-MM-DD)."})
+        if status_value not in {
+            LedgerTransaction.Status.POSTED,
+            LedgerTransaction.Status.DRAFT,
+        }:
+            raise ValidationError({"status": "Query param 'status' invalido."})
+
+        return Response(
+            build_daily_balance_series(
+                user_id=request.user.id,
+                date_from=date_from,
+                date_to=date_to,
+                status=status_value,
+            )
         )
 
     @action(detail=False, methods=["get"], url_path="budget-suggestions")
