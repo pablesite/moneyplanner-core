@@ -25,7 +25,11 @@ Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capac
 
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
-| _(sin tareas Agente abiertas)_ | - | Net Worth Phase 1 (backend) + Phase 2 (frontend) completadas y archivadas en `terminados/`. | `core/docs/tasks/net-worth/phase-1-contribution-intervals-backend/terminados/backend.md` + `core/docs/tasks/net-worth/phase-2-contribution-intervals-frontend/terminados/frontend.md` |
+| Informe Fiscal Crypto — Phase 0 | Manual | Explorar APIs Pionex + Binance con credenciales reales; rellenar tabla de cobertura antes de iniciar Phase 1. | `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md` |
+| Informe Fiscal Crypto — Phase 1 | Agente | Backend Pionex: nueva app `broker_integrations`, modelos, API client, CSV importers. | `core/docs/tasks/fiscal-report/phase-1-pionex/backend.md` |
+| Informe Fiscal Crypto — Phase 2 | Agente | Backend Binance: API client + CSV importers (extender Phase 1). | `core/docs/tasks/fiscal-report/phase-2-binance/backend.md` |
+| Informe Fiscal Crypto — Phase 3 | Agente | Motor FIFO global cross-exchange + endpoint informe fiscal. | `core/docs/tasks/fiscal-report/phase-3-fiscal-engine/backend.md` |
+| Informe Fiscal Crypto — Phase 4 | Agente | Frontend Core: gestión credenciales, sync, CSV upload, visualización informe. | `core/docs/tasks/fiscal-report/phase-4-frontend/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -37,6 +41,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
+| Informe Fiscal Crypto | Media | ⚪ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
