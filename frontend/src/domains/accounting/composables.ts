@@ -122,6 +122,7 @@ type AccountTimelineTransaction = LedgerTransaction & {
   accountBalanceAfterValue: number | null;
   tone: 'positive' | 'negative' | 'neutral';
 };
+type DailyBalanceOwnershipFilter = 'all' | number | null;
 const EXPENSE_MOVEMENT_CATEGORY_KEYS: ExpenseCategoryKey[] = [
   'consumption_expenses',
   'real_estate_assets',
@@ -359,6 +360,17 @@ export function useAccountingPage() {
       }));
     return [{ value: null as number | null, label: 'Sin titularidad' }, ...options];
   });
+  const ownershipFilterOptions = computed(() => {
+    const options = peopleStore.ownerships
+      .filter((ownership) => ownership.kind === 'individual')
+      .slice()
+      .sort((left, right) => left.id - right.id)
+      .map((ownership) => ({
+        value: ownership.id,
+        label: ownershipLabel(ownership),
+      }));
+    return [{ value: null as number | null, label: 'Sin titularidad' }, ...options];
+  });
 
   const accountMap = computed(
     () => new Map(accounts.value.map((account) => [account.id, account])),
@@ -529,6 +541,19 @@ export function useAccountingPage() {
   const quickSelectedInvestmentAccount = computed(() =>
     resolveAccountById(quickEntryForm.counterparty_account_id),
   );
+  const quickTransferOriginCurrency = computed(() => {
+    if (quickEntryForm.movement_type !== 'transfer') return '';
+    return quickSelectedLiquidityAccount.value?.currency ?? '';
+  });
+  const quickTransferDestinationCurrency = computed(() => {
+    if (quickEntryForm.movement_type !== 'transfer') return '';
+    return quickSelectedInvestmentAccount.value?.currency ?? '';
+  });
+  const quickTransferIsCrossCurrency = computed(() => {
+    const origin = quickTransferOriginCurrency.value.trim().toUpperCase();
+    const destination = quickTransferDestinationCurrency.value.trim().toUpperCase();
+    return Boolean(origin && destination && origin !== destination);
+  });
   const quickSelectedAdjustmentAccount = computed(() =>
     quickEntryForm.movement_type === 'adjustment'
       ? resolveAccountById(quickEntryForm.account_id)
@@ -819,7 +844,10 @@ export function useAccountingPage() {
       return false;
     }
     if (quickEntryForm.movement_type === 'transfer') {
-      return normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
+      const hasCounterparty = normalizeAccountId(quickEntryForm.counterparty_account_id) != null;
+      if (!hasCounterparty) return false;
+      if (!quickTransferIsCrossCurrency.value) return true;
+      return toNumber(quickEntryForm.destination_amount) > 0;
     }
     if (quickEntryForm.movement_type === 'investment') {
       return quickInvestmentEntryReady();
@@ -1580,6 +1608,7 @@ export function useAccountingPage() {
   const dailyBalanceSeriesLoading = ref(false);
   const dailyBalanceSeriesError = ref<string | null>(null);
   const dailyBalanceSeriesUnit = ref('EUR');
+  const dailyBalanceOwnershipFilter = ref<DailyBalanceOwnershipFilter>('all');
   type DailyTimelinePreset = '1m' | '3m' | '6m' | '1a' | '5a' | 'all';
   const dailyTimelinePresetOptions = ['1m', '3m', '6m', '1a', '5a', 'all'] as const;
   const selectedDailyTimelinePreset = ref<DailyTimelinePreset>('1a');
@@ -3085,10 +3114,17 @@ export function useAccountingPage() {
     dailyBalanceSeriesLoading.value = true;
     dailyBalanceSeriesError.value = null;
     try {
+      const ownershipIdParam =
+        dailyBalanceOwnershipFilter.value === 'all'
+          ? undefined
+          : dailyBalanceOwnershipFilter.value === null
+            ? ('null' as const)
+            : dailyBalanceOwnershipFilter.value;
       const response = await coreAccountingApi.getDailyBalanceSeries({
         date_from: dailyBalanceDateFrom.value,
         date_to: dailyBalanceDateTo.value,
         status: 'posted',
+        ownership_id: ownershipIdParam,
       });
       dailyBalanceSeriesUnit.value = String(response.data.base_currency || 'EUR')
         .trim()
@@ -3101,6 +3137,9 @@ export function useAccountingPage() {
       dailyBalanceSeriesLoading.value = false;
     }
   }
+  watch(dailyBalanceOwnershipFilter, () => {
+    void reloadDailyBalanceSeries();
+  });
 
   async function reloadPeriod() {
     successMessage.value = null;
@@ -3607,6 +3646,9 @@ export function useAccountingPage() {
       ...(quickEntryForm.movement_type === 'transfer'
         ? {
             counterparty_account_id: normalizeAccountId(quickEntryForm.counterparty_account_id),
+            ...(quickEntryForm.destination_amount.trim()
+              ? { destination_amount: formatDecimalInput(quickEntryForm.destination_amount) }
+              : {}),
           }
         : {}),
       ...(quickEntryForm.movement_type === 'income'
@@ -3810,6 +3852,7 @@ export function useAccountingPage() {
     accountForm,
     activationForm,
     ownershipOptions,
+    ownershipFilterOptions,
     quickEntryForm,
     transactionForm,
     editTransactionId,
@@ -3844,6 +3887,9 @@ export function useAccountingPage() {
     quickInvestmentOriginCurrency,
     quickInvestmentDestinationCurrency,
     quickInvestmentIsCrossCurrency,
+    quickTransferOriginCurrency,
+    quickTransferDestinationCurrency,
+    quickTransferIsCrossCurrency,
     liabilityCounterpartyOptions,
     debtInterestOptions,
     revaluationAccountOptions,
@@ -3863,6 +3909,7 @@ export function useAccountingPage() {
     dailyBalanceSeriesLoading,
     dailyBalanceSeriesError,
     dailyBalanceSeriesUnit,
+    dailyBalanceOwnershipFilter,
     dailyBalanceSeriesChartPoints,
     dailyBalanceSeriesChartRows,
     dailyBalanceSeriesMonthlyRows,

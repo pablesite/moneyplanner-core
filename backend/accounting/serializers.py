@@ -810,6 +810,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 counterparty_account=counterparty_account,
                 annual_income_entry=annual_income_entry,
                 annual_expense_entry=annual_expense_entry,
+                destination_amount=destination_amount,
             )
         elif movement_type == "adjustment":
             self._validate_adjustment_movement(
@@ -934,10 +935,10 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         amount: Decimal,
         destination_amount: Decimal | None,
     ) -> None:
-        if movement_type != "investment":
+        if movement_type not in {"investment", "transfer"}:
             if destination_amount is not None:
                 raise serializers.ValidationError(
-                    {"destination_amount": "Solo aplica a movimientos de inversion."}
+                    {"destination_amount": "Solo aplica a movimientos de inversion o transferencia."}
                 )
             return
         if amount <= 0:
@@ -1237,6 +1238,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         counterparty_account: LedgerAccount | None,
         annual_income_entry: AnnualIncomeEntry | None,
         annual_expense_entry: AnnualExpenseEntry | None,
+        destination_amount: Decimal | None,
     ) -> None:
         if annual_income_entry is not None:
             raise serializers.ValidationError(
@@ -1260,11 +1262,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"counterparty_account_id": "La cuenta destino debe ser distinta a la origen."}
             )
-        if account.currency != counterparty_account.currency:
+        if account.currency != counterparty_account.currency and destination_amount is None:
             raise serializers.ValidationError(
                 {
-                    "counterparty_account_id": (
-                        "La transferencia interna exige la misma moneda en ambas cuentas."
+                    "destination_amount": (
+                        "Indica el importe destino cuando origen y destino usan distinta moneda."
                     )
                 }
             )

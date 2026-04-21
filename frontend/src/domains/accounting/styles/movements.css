@@ -21,6 +21,31 @@
   gap: 14px;
 }
 
+.ui-accounting-hero-panel .ui-hero-context {
+  min-width: 220px;
+}
+
+.ui-accounting-ownership-popover {
+  width: 100%;
+}
+
+.ui-accounting-ownership-menu {
+  left: auto;
+  right: 0;
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: min(320px, 52vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.ui-accounting-ownership-menu .ui-select-popover-option {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .ui-accounting-hero-value-note {
   margin: 0;
   color: rgba(226, 232, 240, 0.72);

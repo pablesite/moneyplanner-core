@@ -97,6 +97,17 @@ class CoreServicesTests(TestCase):
         amount = convert_currency(Decimal("125"), "USD", "EUR", date=date(2026, 2, 15))
         self.assertEqual(amount, Decimal("100.00"))
 
+    def test_convert_currency_falls_back_to_first_available_rate_when_date_is_too_old(self):
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.80"),
+            rate_date=date(2020, 1, 1),
+        )
+
+        amount = convert_currency(Decimal("100"), "USD", "EUR", date=date(2016, 2, 21))
+        self.assertEqual(amount, Decimal("80.00"))
+
     @override_settings()
     def test_convert_currency_uses_pivot_triangulation(self):
         FxRate.objects.create(

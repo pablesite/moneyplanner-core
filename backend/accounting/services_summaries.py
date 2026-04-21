@@ -11,6 +11,7 @@ from rest_framework.exceptions import ValidationError
 
 from accounts.models import UserSettings
 from core.services import build_fx_cache, convert_currency_cached
+from memberships.models import Ownership, OwnershipLink, OwnershipSplit
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
 from .services_ledger import (
@@ -160,6 +161,8 @@ def build_daily_balance_series(
     date_from: date | None,
     date_to: date,
     status: str = LedgerTransaction.Status.POSTED,
+    ownership_id: int | None = None,
+    ownership_is_null: bool | None = None,
 ) -> dict:
     account_rows = list(
         LedgerAccount.objects.filter(
@@ -167,9 +170,103 @@ def build_daily_balance_series(
             is_active=True,
             account_type__in=[LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.LIABILITY],
         )
-        .values("id", "account_type", "currency")
+        .values("id", "account_type", "currency", "asset_id", "liability_id")
         .order_by("id")
     )
+    account_multiplier_by_id: dict[int, Decimal] = {
+        int(row["id"]): Decimal("1") for row in account_rows
+    }
+    if ownership_id is not None or ownership_is_null:
+        links = list(
+            OwnershipLink.objects.filter(
+                user_id=user_id,
+                target_type__in=[OwnershipLink.TargetType.ASSET, OwnershipLink.TargetType.LIABILITY],
+            ).values("ownership_id", "target_type", "target_id")
+        )
+        asset_owner_by_target_id = {
+            int(link["target_id"]): int(link["ownership_id"])
+            for link in links
+            if str(link["target_type"]) == OwnershipLink.TargetType.ASSET
+        }
+        liability_owner_by_target_id = {
+            int(link["target_id"]): int(link["ownership_id"])
+            for link in links
+            if str(link["target_type"]) == OwnershipLink.TargetType.LIABILITY
+        }
+        ownership_ids_in_links = {
+            int(link["ownership_id"]) for link in links if link.get("ownership_id") is not None
+        }
+        if ownership_id is not None:
+            ownership_ids_in_links.add(ownership_id)
+        ownership_rows = list(
+            Ownership.objects.filter(
+                user_id=user_id,
+                id__in=ownership_ids_in_links,
+            ).values("id", "kind", "member_id")
+        )
+        ownership_by_id = {int(row["id"]): row for row in ownership_rows}
+
+        selected_ownership = ownership_by_id.get(ownership_id) if ownership_id is not None else None
+        shared_ratio_by_ownership_id: dict[int, Decimal] = {}
+        selected_member_id = (
+            int(selected_ownership["member_id"])
+            if selected_ownership
+            and str(selected_ownership["kind"]) == Ownership.Kind.INDIVIDUAL
+            and selected_ownership.get("member_id") is not None
+            else None
+        )
+        if selected_member_id is not None:
+            split_rows = list(
+                OwnershipSplit.objects.filter(
+                    ownership__user_id=user_id,
+                    ownership__kind=Ownership.Kind.SHARED,
+                    member_id=selected_member_id,
+                ).values("ownership_id", "percent")
+            )
+            shared_ratio_by_ownership_id = {
+                int(row["ownership_id"]): Decimal(row["percent"]) / Decimal("100")
+                for row in split_rows
+            }
+
+        filtered_rows: list[dict] = []
+        for row in account_rows:
+            account_type = str(row["account_type"])
+            if account_type == LedgerAccount.AccountType.ASSET:
+                target_id = row.get("asset_id")
+                owner_id = (
+                    asset_owner_by_target_id.get(int(target_id))
+                    if target_id is not None
+                    else None
+                )
+            else:
+                target_id = row.get("liability_id")
+                owner_id = (
+                    liability_owner_by_target_id.get(int(target_id))
+                    if target_id is not None
+                    else None
+                )
+
+            if ownership_is_null:
+                if owner_id is None:
+                    filtered_rows.append(row)
+                continue
+            if ownership_id is None:
+                continue
+            if owner_id is None:
+                continue
+
+            multiplier = Decimal("0")
+            if owner_id == ownership_id:
+                multiplier = Decimal("1")
+            else:
+                shared_multiplier = shared_ratio_by_ownership_id.get(owner_id)
+                if shared_multiplier is not None and shared_multiplier > Decimal("0"):
+                    multiplier = shared_multiplier
+            if multiplier > Decimal("0"):
+                filtered_rows.append(row)
+                account_multiplier_by_id[int(row["id"])] = multiplier
+
+        account_rows = filtered_rows
     account_data_by_id = {
         int(row["id"]): {"account_type": str(row["account_type"]), "currency": str(row["currency"])}
         for row in account_rows
@@ -192,14 +289,14 @@ def build_daily_balance_series(
     fx_cache = build_fx_cache(currencies_for_fx)
 
     if date_from is None and account_ids:
-        date_from = (
-            LedgerEntry.objects.filter(
-                transaction__user_id=user_id,
-                account_id__in=account_ids,
-                transaction__status=status,
-            ).aggregate(min_booking_date=Min("transaction__booking_date"))["min_booking_date"]
-            or date_to
+        earliest_entries = LedgerEntry.objects.filter(
+            transaction__user_id=user_id,
+            account_id__in=account_ids,
+            transaction__status=status,
         )
+        date_from = earliest_entries.aggregate(min_booking_date=Min("transaction__booking_date"))[
+            "min_booking_date"
+        ] or date_to
     if date_from is None:
         date_from = date_to
     if date_from > date_to:
@@ -211,6 +308,8 @@ def build_daily_balance_series(
                 "date_from": date_from.isoformat(),
                 "date_to": date_to.isoformat(),
                 "status": status,
+                "ownership_id": ownership_id,
+                "ownership_is_null": ownership_is_null,
                 "base_currency": base_currency,
             },
             "rows": _build_empty_daily_rows(date_from=date_from, date_to=date_to),
@@ -231,63 +330,69 @@ def build_daily_balance_series(
         transaction__status=status,
     ).select_related("transaction")
 
-    assets_total = ZERO
-    liabilities_total = ZERO
+    # Keep running balances by account in account currency and revalue each day to base currency
+    # using the latest available FX rate at that specific date (mark-to-market daily).
+    running_balance_by_account: dict[int, Decimal] = {account_id: ZERO for account_id in account_ids}
     for entry in historical_entries:
-        account_data = account_data_by_id.get(entry.account_id)
+        account_id = int(entry.account_id)
+        account_data = account_data_by_id.get(account_id)
         if account_data is None:
             continue
-        account_type = account_data["account_type"]
-        entry_amount_base = _convert_entry_amount_to_base_currency(
-            amount=entry.amount,
-            currency=entry.currency,
-            booking_date=entry.transaction.booking_date,
-            base_currency=base_currency,
-            fx_cache=fx_cache,
-        )
         signed_impact = _entry_balance_impact(
-            account_type=account_type,
+            account_type=account_data["account_type"],
             side=entry.side,
-            amount=entry_amount_base,
+            amount=entry.amount,
         )
-        if account_type == LedgerAccount.AccountType.ASSET:
-            assets_total += signed_impact
-        else:
-            liabilities_total += signed_impact
+        running_balance_by_account[account_id] = running_balance_by_account.get(account_id, ZERO) + signed_impact
 
-    deltas_by_date: dict[date, dict[str, Decimal]] = defaultdict(
-        lambda: {"assets": ZERO, "liabilities": ZERO}
-    )
+    deltas_by_date: dict[date, dict[int, Decimal]] = defaultdict(dict)
     for entry in ranged_entries:
-        account_data = account_data_by_id.get(entry.account_id)
+        account_id = int(entry.account_id)
+        account_data = account_data_by_id.get(account_id)
         if account_data is None:
             continue
-        account_type = account_data["account_type"]
-        entry_amount_base = _convert_entry_amount_to_base_currency(
-            amount=entry.amount,
-            currency=entry.currency,
-            booking_date=entry.transaction.booking_date,
-            base_currency=base_currency,
-            fx_cache=fx_cache,
-        )
         signed_impact = _entry_balance_impact(
-            account_type=account_type,
+            account_type=account_data["account_type"],
             side=entry.side,
-            amount=entry_amount_base,
+            amount=entry.amount,
         )
         booking_date = entry.transaction.booking_date
-        if account_type == LedgerAccount.AccountType.ASSET:
-            deltas_by_date[booking_date]["assets"] += signed_impact
-        else:
-            deltas_by_date[booking_date]["liabilities"] += signed_impact
+        day_deltas = deltas_by_date[booking_date]
+        day_deltas[account_id] = day_deltas.get(account_id, ZERO) + signed_impact
 
     rows: list[dict] = []
     cursor = date_from
     while cursor <= date_to:
-        delta = deltas_by_date.get(cursor)
-        if delta:
-            assets_total += delta["assets"]
-            liabilities_total += delta["liabilities"]
+        day_delta_by_account = deltas_by_date.get(cursor)
+        if day_delta_by_account:
+            for account_id, delta in day_delta_by_account.items():
+                running_balance_by_account[account_id] = (
+                    running_balance_by_account.get(account_id, ZERO) + delta
+                )
+
+        assets_total = ZERO
+        liabilities_total = ZERO
+        for account_id, running_balance in running_balance_by_account.items():
+            account_data = account_data_by_id.get(account_id)
+            if account_data is None:
+                continue
+            account_multiplier = account_multiplier_by_id.get(account_id, Decimal("1"))
+            if account_multiplier <= Decimal("0"):
+                continue
+            account_currency = account_data["currency"]
+            amount_base = _convert_entry_amount_to_base_currency(
+                amount=running_balance,
+                currency=account_currency,
+                booking_date=cursor,
+                base_currency=base_currency,
+                fx_cache=fx_cache,
+            )
+            amount_base *= account_multiplier
+            if account_data["account_type"] == LedgerAccount.AccountType.ASSET:
+                assets_total += amount_base
+            else:
+                liabilities_total += amount_base
+
         net_balance = assets_total - liabilities_total
         rows.append(
             {
@@ -304,6 +409,8 @@ def build_daily_balance_series(
             "date_from": date_from.isoformat(),
             "date_to": date_to.isoformat(),
             "status": status,
+            "ownership_id": ownership_id,
+            "ownership_is_null": ownership_is_null,
             "base_currency": base_currency,
         },
         "rows": rows,

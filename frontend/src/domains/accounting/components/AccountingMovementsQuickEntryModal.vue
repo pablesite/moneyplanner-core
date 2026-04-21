@@ -72,9 +72,7 @@ const revaluationGroups = computed(() =>
   groupAndSortAccounts(props.page.revaluationAccountOptions),
 );
 const transferGroups = computed(() => groupAndSortAccounts(props.page.transferCounterpartyOptions));
-const transferOriginGroups = computed(() =>
-  groupAndSortAccounts(props.page.transferOriginOptions),
-);
+const transferOriginGroups = computed(() => groupAndSortAccounts(props.page.transferOriginOptions));
 const adjustmentGroups = computed(() =>
   groupAndSortAccounts(props.page.quickAdjustmentAccountOptions),
 );
@@ -209,12 +207,7 @@ const quickMainAccountGroups = computed(() => {
         <label v-else class="ui-accounting-field">
           <span>Fecha valor</span>
           <div class="ui-accounting-value-date-input-row">
-            <input
-              v-model="page.quickEntryForm.value_date"
-              type="date"
-              class="input"
-              required
-            />
+            <input v-model="page.quickEntryForm.value_date" type="date" class="input" required />
             <button
               type="button"
               class="ui-accounting-value-date-close"
@@ -249,7 +242,8 @@ const quickMainAccountGroups = computed(() => {
         <p class="ui-accounting-balance-feedback">
           <template v-if="page.revaluationCurrentBalance != null">
             Saldo actual:
-            <strong>{{ page.revaluationCurrentBalance.toFixed(2) }}</strong>.
+            <strong>{{ page.revaluationCurrentBalance.toFixed(2) }}</strong
+            >.
             <template v-if="page.revaluationDelta != null">
               Revalorización:
               <strong
@@ -274,7 +268,10 @@ const quickMainAccountGroups = computed(() => {
           <button
             type="button"
             class="ui-accounting-segmented-btn"
-            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'inflow' }"
+            :class="{
+              'ui-accounting-segmented-btn-active':
+                page.quickEntryForm.investment_direction === 'inflow',
+            }"
             @click="page.quickEntryForm.investment_direction = 'inflow'"
           >
             Aporte
@@ -282,7 +279,10 @@ const quickMainAccountGroups = computed(() => {
           <button
             type="button"
             class="ui-accounting-segmented-btn"
-            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'reinvestment' }"
+            :class="{
+              'ui-accounting-segmented-btn-active':
+                page.quickEntryForm.investment_direction === 'reinvestment',
+            }"
             @click="page.quickEntryForm.investment_direction = 'reinvestment'"
           >
             Reinversion
@@ -290,7 +290,10 @@ const quickMainAccountGroups = computed(() => {
           <button
             type="button"
             class="ui-accounting-segmented-btn"
-            :class="{ 'ui-accounting-segmented-btn-active': page.quickEntryForm.investment_direction === 'outflow' }"
+            :class="{
+              'ui-accounting-segmented-btn-active':
+                page.quickEntryForm.investment_direction === 'outflow',
+            }"
             @click="page.quickEntryForm.investment_direction = 'outflow'"
           >
             Retirada
@@ -309,10 +312,9 @@ const quickMainAccountGroups = computed(() => {
             <select v-model="page.quickEntryForm.account_id" class="select" required>
               <option :value="null">Seleccionar</option>
               <optgroup
-                v-for="group in
-                  page.quickEntryForm.investment_direction === 'reinvestment'
-                    ? groupAndSortAccounts(page.investmentOriginOptions)
-                    : liquidityGroups"
+                v-for="group in page.quickEntryForm.investment_direction === 'reinvestment'
+                  ? groupAndSortAccounts(page.investmentOriginOptions)
+                  : liquidityGroups"
                 :key="group.key"
                 :label="group.label"
               >
@@ -325,7 +327,9 @@ const quickMainAccountGroups = computed(() => {
           <label class="ui-accounting-field">
             <span>
               Cuenta de inversión
-              {{ page.quickEntryForm.investment_direction === 'outflow' ? '(origen)' : '(destino)' }}
+              {{
+                page.quickEntryForm.investment_direction === 'outflow' ? '(origen)' : '(destino)'
+              }}
             </span>
             <select v-model="page.quickEntryForm.counterparty_account_id" class="select" required>
               <option :value="null">Seleccionar</option>
@@ -455,8 +459,7 @@ const quickMainAccountGroups = computed(() => {
             }}
           </option>
           <optgroup
-            v-for="group in
-            page.quickEntryForm.movement_type === 'adjustment'
+            v-for="group in page.quickEntryForm.movement_type === 'adjustment'
               ? adjustmentGroups
               : quickMainAccountGroups"
             :key="group.key"
@@ -473,11 +476,19 @@ const quickMainAccountGroups = computed(() => {
           class="input"
           inputmode="decimal"
           :placeholder="
-            page.quickEntryForm.movement_type === 'adjustment'
-              ? 'Saldo final objetivo'
-              : '0.00'
+            page.quickEntryForm.movement_type === 'adjustment' ? 'Saldo final objetivo' : '0.00'
           "
           required
+        />
+        <input
+          v-if="
+            page.quickEntryForm.movement_type === 'transfer' &&
+            page.quickEntryForm.counterparty_account_id != null
+          "
+          v-model="page.quickEntryForm.destination_amount"
+          class="input"
+          inputmode="decimal"
+          :placeholder="`Importe destino (${page.quickTransferDestinationCurrency || 'moneda destino'}) - obligatorio si moneda distinta`"
         />
 
         <select
@@ -494,10 +505,15 @@ const quickMainAccountGroups = computed(() => {
           </optgroup>
         </select>
       </div>
-      <p v-if="page.quickEntryForm.movement_type === 'adjustment'" class="ui-accounting-balance-feedback">
+      <p
+        v-if="page.quickEntryForm.movement_type === 'adjustment'"
+        class="ui-accounting-balance-feedback"
+      >
         <template v-if="page.quickAdjustmentCurrentBalance != null">
           Saldo actual:
-          <strong>{{ page.quickAdjustmentCurrentBalance.toFixed(page.quickAdjustmentDisplayDecimals) }}</strong
+          <strong>{{
+            page.quickAdjustmentCurrentBalance.toFixed(page.quickAdjustmentDisplayDecimals)
+          }}</strong
           >.
           <template v-if="page.quickAdjustmentDelta != null">
             Ajuste calculado:
@@ -510,7 +526,8 @@ const quickMainAccountGroups = computed(() => {
                     : ''
               "
             >
-              {{ page.quickAdjustmentDelta >= 0 ? '+' : '' }}{{ page.quickAdjustmentDelta.toFixed(page.quickAdjustmentDisplayDecimals) }}
+              {{ page.quickAdjustmentDelta >= 0 ? '+' : ''
+              }}{{ page.quickAdjustmentDelta.toFixed(page.quickAdjustmentDisplayDecimals) }}
             </strong>
           </template>
         </template>
@@ -591,11 +608,7 @@ const quickMainAccountGroups = computed(() => {
           </option>
         </select>
 
-        <select
-          v-else
-          v-model="page.quickEntryForm.annual_expense_entry_id"
-          class="select"
-        >
+        <select v-else v-model="page.quickEntryForm.annual_expense_entry_id" class="select">
           <option :value="null">Sin vincular al plan anual</option>
           <option
             v-for="entry in page.annualExpenseOptionsCompatible"
@@ -625,15 +638,17 @@ const quickMainAccountGroups = computed(() => {
         <p class="subtle">
           {{
             page.quickEntryForm.movement_type === 'transfer'
-              ? 'Crea un asiento balanceado entre dos cuentas de liquidez.'
+              ? page.quickTransferIsCrossCurrency
+                ? 'Transferencia multimoneda: informa importe origen e importe destino segun ejecucion real.'
+                : 'Crea un asiento balanceado entre dos cuentas de liquidez.'
               : page.quickEntryForm.movement_type === 'investment'
                 ? page.quickInvestmentIsCrossCurrency
                   ? 'Inversión multimoneda: informa importe origen e importe destino según ejecución real.'
                   : page.quickEntryForm.investment_direction === 'reinvestment'
                     ? 'La reinversión mueve capital entre dos cuentas de inversión sin usar cuenta puente.'
-                  : page.quickEntryForm.investment_direction === 'outflow'
-                  ? 'La desinversión devuelve liquidez al activo de caja.'
-                  : 'El aporte registra el alta en la cuenta de inversión.'
+                    : page.quickEntryForm.investment_direction === 'outflow'
+                      ? 'La desinversión devuelve liquidez al activo de caja.'
+                      : 'El aporte registra el alta en la cuenta de inversión.'
                 : 'Las partidas contables se generan automáticamente.'
           }}
         </p>
