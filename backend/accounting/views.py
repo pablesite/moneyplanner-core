@@ -211,6 +211,9 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         date_from_raw = (request.query_params.get("date_from") or "").strip()
         date_to_raw = (request.query_params.get("date_to") or "").strip()
         status_raw = (request.query_params.get("status") or "").strip()
+        ownership_id_raw = (request.query_params.get("ownership_id") or "").strip()
+        ownership_is_null = None
+        ownership_id = None
         try:
             date_from = parse_date(date_from_raw) if date_from_raw else None
         except ValueError as exc:
@@ -232,6 +235,20 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             LedgerTransaction.Status.DRAFT,
         }:
             raise ValidationError({"status": "Query param 'status' invalido."})
+        if ownership_id_raw:
+            if ownership_id_raw.lower() in {"null", "none"}:
+                ownership_is_null = True
+            else:
+                try:
+                    ownership_id = int(ownership_id_raw)
+                except ValueError as exc:
+                    raise ValidationError(
+                        {"ownership_id": "Query param 'ownership_id' invalido."}
+                    ) from exc
+                if ownership_id < 1:
+                    raise ValidationError(
+                        {"ownership_id": "Query param 'ownership_id' invalido."}
+                    )
 
         return Response(
             build_daily_balance_series(
@@ -239,6 +256,8 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
                 date_from=date_from,
                 date_to=date_to,
                 status=status_value,
+                ownership_id=ownership_id,
+                ownership_is_null=ownership_is_null,
             )
         )
 

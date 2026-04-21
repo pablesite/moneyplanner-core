@@ -33,6 +33,7 @@ export function useAccountingMovementsPage() {
     editSubcategoryOptions,
     activationForm,
     ownershipOptions,
+    ownershipFilterOptions,
     quickEntryForm,
     editTransactionForm,
     activityFilters,
@@ -59,6 +60,9 @@ export function useAccountingMovementsPage() {
     quickInvestmentOriginCurrency,
     quickInvestmentDestinationCurrency,
     quickInvestmentIsCrossCurrency,
+    quickTransferOriginCurrency,
+    quickTransferDestinationCurrency,
+    quickTransferIsCrossCurrency,
     liabilityCounterpartyOptions,
     debtInterestOptions,
     revaluationAccountOptions,
@@ -75,6 +79,7 @@ export function useAccountingMovementsPage() {
     dailyBalanceSeriesLoading,
     dailyBalanceSeriesError,
     dailyBalanceSeriesUnit,
+    dailyBalanceOwnershipFilter,
     dailyBalanceSeriesChartPoints,
     dailyBalanceSeriesChartRows,
     dailyBalanceSeriesMonthlyRows,
@@ -189,20 +194,42 @@ export function useAccountingMovementsPage() {
     });
     return groups;
   });
-  const accountingAssetsTotal = computed(() =>
+  const dailyBalanceLatestRow = computed(
+    () => dailyBalanceSeriesRows.value[dailyBalanceSeriesRows.value.length - 1] ?? null,
+  );
+  const fallbackAccountingAssetsTotal = computed(() =>
     (accountsByType.value.get('asset') ?? []).reduce(
       (total, account) => total + accountBalanceInBase(account),
       0,
     ),
   );
-  const accountingLiabilitiesTotal = computed(() =>
+  const fallbackAccountingLiabilitiesTotal = computed(() =>
     (accountsByType.value.get('liability') ?? []).reduce(
       (total, account) => total + accountBalanceInBase(account),
       0,
     ),
   );
-  const accountingNetBalance = computed(
-    () => accountingAssetsTotal.value - accountingLiabilitiesTotal.value,
+  const canUseUnfilteredFallbackTotals = computed(
+    () => dailyBalanceLatestRow.value == null && dailyBalanceOwnershipFilter.value === 'all',
+  );
+  const accountingAssetsTotal = computed(() =>
+    dailyBalanceLatestRow.value
+      ? toNumber(dailyBalanceLatestRow.value.assets_total)
+      : canUseUnfilteredFallbackTotals.value
+        ? fallbackAccountingAssetsTotal.value
+        : 0,
+  );
+  const accountingLiabilitiesTotal = computed(() =>
+    dailyBalanceLatestRow.value
+      ? toNumber(dailyBalanceLatestRow.value.liabilities_total)
+      : canUseUnfilteredFallbackTotals.value
+        ? fallbackAccountingLiabilitiesTotal.value
+        : 0,
+  );
+  const accountingNetBalance = computed(() =>
+    dailyBalanceLatestRow.value
+      ? toNumber(dailyBalanceLatestRow.value.net_balance)
+      : accountingAssetsTotal.value - accountingLiabilitiesTotal.value,
   );
   const operationalAccountTypeOptions = computed(() =>
     accountTypeOptions.filter((type) => type.value === 'asset' || type.value === 'liability'),
@@ -548,6 +575,7 @@ export function useAccountingMovementsPage() {
     editSubcategoryOptions,
     activationForm,
     ownershipOptions,
+    ownershipFilterOptions,
     quickEntryForm,
     editTransactionForm,
     activityFilters,
@@ -574,6 +602,9 @@ export function useAccountingMovementsPage() {
     quickInvestmentOriginCurrency,
     quickInvestmentDestinationCurrency,
     quickInvestmentIsCrossCurrency,
+    quickTransferOriginCurrency,
+    quickTransferDestinationCurrency,
+    quickTransferIsCrossCurrency,
     liabilityCounterpartyOptions,
     debtInterestOptions,
     revaluationAccountOptions,
@@ -590,6 +621,7 @@ export function useAccountingMovementsPage() {
     dailyBalanceSeriesLoading,
     dailyBalanceSeriesError,
     dailyBalanceSeriesUnit,
+    dailyBalanceOwnershipFilter,
     dailyBalanceSeriesChartPoints,
     dailyBalanceSeriesChartRows,
     dailyBalanceSeriesMonthlyRows,

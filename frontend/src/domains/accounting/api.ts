@@ -143,18 +143,19 @@ export const coreAccountingApi = {
     date_from?: string;
     date_to?: string;
     status?: 'posted' | 'draft';
+    ownership_id?: number | 'null';
   }) {
     return coreApi.get<LedgerDailyBalanceSeries>(
       '/api/accounting/transactions/daily-balance-series/',
       {
-        params:
-          params && (params.date_from || params.date_to || params.status)
-            ? {
-                ...(params.date_from ? { date_from: params.date_from } : {}),
-                ...(params.date_to ? { date_to: params.date_to } : {}),
-                ...(params.status ? { status: params.status } : {}),
-              }
-            : undefined,
+        params: params
+          ? {
+              ...(params.date_from ? { date_from: params.date_from } : {}),
+              ...(params.date_to ? { date_to: params.date_to } : {}),
+              ...(params.status ? { status: params.status } : {}),
+              ...(params.ownership_id != null ? { ownership_id: params.ownership_id } : {}),
+            }
+          : undefined,
       },
     );
   },

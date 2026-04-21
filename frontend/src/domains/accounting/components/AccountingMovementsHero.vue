@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { Doughnut } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -20,8 +20,6 @@ type OwnershipOption = { value: number | null; label: string };
 const props = defineProps<{ page: AccountingMovementsPageState }>();
 const state = props.page;
 
-const ownershipFilter = ref<OwnershipFilterValue>('all');
-
 const accountingAssets = computed(() => Math.max(Number(state.accountingAssetsTotal ?? 0), 0));
 const accountingLiabilities = computed(() =>
   Math.max(Number(state.accountingLiabilitiesTotal ?? 0), 0),
@@ -32,10 +30,10 @@ const hasDonutData = computed(
 );
 
 const selectedOwnershipFilterLabel = computed(() => {
-  if (ownershipFilter.value === 'all') return 'Todos';
-  if (ownershipFilter.value === null) return 'Sin titularidad';
-  const option = (state.ownershipOptions as OwnershipOption[]).find(
-    (entry) => entry.value === ownershipFilter.value,
+  if (state.dailyBalanceOwnershipFilter === 'all') return 'Todos';
+  if (state.dailyBalanceOwnershipFilter === null) return 'Sin titularidad';
+  const option = (state.ownershipFilterOptions as OwnershipOption[]).find(
+    (entry) => entry.value === state.dailyBalanceOwnershipFilter,
   );
   return option?.label ?? 'Titularidad';
 });
@@ -47,7 +45,7 @@ function closePopoverFromClick(event: Event): void {
 }
 
 function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event): void {
-  ownershipFilter.value = value;
+  state.dailyBalanceOwnershipFilter = value;
   closePopoverFromClick(event);
 }
 
@@ -165,27 +163,34 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
           <div class="ui-hero-summary-controls">
             <label class="ui-hero-context">
               <span class="ui-hero-context-label">Titularidad</span>
-              <details class="ui-select-popover ui-hero-context-popover">
+              <details class="ui-select-popover ui-hero-context-popover ui-accounting-ownership-popover">
                 <summary class="ui-select-popover-trigger ui-hero-context-trigger">
                   <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
                   <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
                 </summary>
-                <div class="ui-select-popover-menu" role="listbox" aria-label="Titularidad">
+                <div
+                  class="ui-select-popover-menu ui-accounting-ownership-menu"
+                  role="listbox"
+                  aria-label="Titularidad"
+                >
                   <button
                     type="button"
                     class="ui-select-popover-option"
-                    :class="{ 'ui-select-popover-option-active': ownershipFilter === 'all' }"
+                    :class="{
+                      'ui-select-popover-option-active': state.dailyBalanceOwnershipFilter === 'all',
+                    }"
                     @click="selectOwnershipFilterOption('all', $event)"
                   >
                     Todos
                   </button>
                   <button
-                    v-for="option in state.ownershipOptions"
+                    v-for="option in state.ownershipFilterOptions"
                     :key="String(option.value)"
                     type="button"
                     class="ui-select-popover-option"
                     :class="{
-                      'ui-select-popover-option-active': ownershipFilter === option.value,
+                      'ui-select-popover-option-active':
+                        state.dailyBalanceOwnershipFilter === option.value,
                     }"
                     @click="selectOwnershipFilterOption(option.value, $event)"
                   >

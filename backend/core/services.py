@@ -106,28 +106,12 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
     rate_date = date or timezone.localdate()
 
     # 1) Directo
-    direct = (
-        FxRate.objects.filter(
-            from_currency=from_c,
-            to_currency=to_c,
-            rate_date__lte=rate_date,
-        )
-        .order_by("-rate_date")
-        .first()
-    )
+    direct = _fx_lookup_with_fallback(from_c, to_c, rate_date)
     if direct:
         return _quantize_2(amount * direct.rate)
 
     # 2) Inverso
-    inverse = (
-        FxRate.objects.filter(
-            from_currency=to_c,
-            to_currency=from_c,
-            rate_date__lte=rate_date,
-        )
-        .order_by("-rate_date")
-        .first()
-    )
+    inverse = _fx_lookup_with_fallback(to_c, from_c, rate_date)
     if inverse:
         if inverse.rate == 0:
             raise ValidationError(f"Invalid FX rate: {to_c}->{from_c} is 0.")
@@ -140,32 +124,16 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
         raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
 
     # Buscar from -> pivot (directo o inverso)
-    leg1 = (
-        FxRate.objects.filter(from_currency=from_c, to_currency=pivot, rate_date__lte=rate_date)
-        .order_by("-rate_date")
-        .first()
-    )
+    leg1 = _fx_lookup_with_fallback(from_c, pivot, rate_date)
     leg1_inv = None
     if not leg1:
-        leg1_inv = (
-            FxRate.objects.filter(from_currency=pivot, to_currency=from_c, rate_date__lte=rate_date)
-            .order_by("-rate_date")
-            .first()
-        )
+        leg1_inv = _fx_lookup_with_fallback(pivot, from_c, rate_date)
 
     # Buscar pivot -> to (directo o inverso)
-    leg2 = (
-        FxRate.objects.filter(from_currency=pivot, to_currency=to_c, rate_date__lte=rate_date)
-        .order_by("-rate_date")
-        .first()
-    )
+    leg2 = _fx_lookup_with_fallback(pivot, to_c, rate_date)
     leg2_inv = None
     if not leg2:
-        leg2_inv = (
-            FxRate.objects.filter(from_currency=to_c, to_currency=pivot, rate_date__lte=rate_date)
-            .order_by("-rate_date")
-            .first()
-        )
+        leg2_inv = _fx_lookup_with_fallback(to_c, pivot, rate_date)
 
     if (leg1 or leg1_inv) and (leg2 or leg2_inv):
         # calcular factor de conversión leg1
@@ -224,7 +192,13 @@ def _cache_lookup(
     to_c: str,
     rate_date: date,
 ) -> Decimal | None:
-    """Return the latest rate <= *rate_date* from the cache, or ``None``."""
+    """
+    Return the latest rate <= *rate_date* from the cache.
+
+    If *rate_date* is older than the earliest known row, fallback to the
+    earliest available rate for that pair to avoid hard failures on very old
+    timelines with partial FX history.
+    """
     entries = cache.get((from_c, to_c))
     if not entries:
         return None
@@ -232,7 +206,34 @@ def _cache_lookup(
     for rd, rate in entries:
         if rd <= rate_date:
             return rate
-    return None
+    return entries[-1][1]
+
+
+def _fx_lookup_with_fallback(from_c: str, to_c: str, rate_date: date):
+    """
+    Lookup an FX row with the same fallback semantics as cached conversions:
+    latest <= rate_date, or earliest available if the requested date is older
+    than the first known quote.
+    """
+    row = (
+        FxRate.objects.filter(
+            from_currency=from_c,
+            to_currency=to_c,
+            rate_date__lte=rate_date,
+        )
+        .order_by("-rate_date")
+        .first()
+    )
+    if row:
+        return row
+    return (
+        FxRate.objects.filter(
+            from_currency=from_c,
+            to_currency=to_c,
+        )
+        .order_by("rate_date")
+        .first()
+    )
 
 
 def convert_currency_cached(

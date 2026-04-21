@@ -69,7 +69,7 @@ def create_quick_transaction(
     )
     validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
     allow_unbalanced_multicurrency = (
-        normalized_movement_type == "investment"
+        normalized_movement_type in {"investment", "transfer"}
         and account.currency.strip().upper() != counterparty_account.currency.strip().upper()
     )
     validate_transaction_entries(
@@ -156,6 +156,24 @@ def _build_quick_entry_payload(
                 "currency": counterparty_account.currency,
                 "annual_expense_entry": annual_expense_entry,
                 **classification,
+            },
+            {
+                "account": account,
+                "side": LedgerEntry.Side.CREDIT,
+                "amount": base_amount,
+                "currency": account.currency,
+            },
+        ]
+    if movement_type == "transfer":
+        destination_value = (
+            Decimal(destination_amount) if destination_amount is not None else base_amount
+        )
+        return [
+            {
+                "account": counterparty_account,
+                "side": LedgerEntry.Side.DEBIT,
+                "amount": destination_value,
+                "currency": counterparty_account.currency,
             },
             {
                 "account": account,

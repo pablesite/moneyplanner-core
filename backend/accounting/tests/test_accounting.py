@@ -23,6 +23,7 @@ from accounting.services_summaries import (
 )
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from core.models import FxRate
+from memberships.models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
 from net_worth.models import Asset, Liability
 
 
@@ -2694,6 +2695,68 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(liability_entry["side"], "debit")
         self.assertEqual(origin_entry["side"], "credit")
 
+    def test_quick_entry_transfer_allows_cross_currency_with_destination_amount(self):
+        usd_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Spot Binance",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-20",
+                "value_date": "2026-04-20",
+                "description": "Traspaso a Spot Binance",
+                "amount": "250.00",
+                "destination_amount": "270.15",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": usd_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        eur_credit = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == self.cash_account.id
+        )
+        usd_debit = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == usd_account.id
+        )
+        self.assertEqual(eur_credit["side"], "credit")
+        self.assertEqual(eur_credit["currency"], "EUR")
+        self.assertEqual(eur_credit["amount"], "250.00000000")
+        self.assertEqual(usd_debit["side"], "debit")
+        self.assertEqual(usd_debit["currency"], "USD")
+        self.assertEqual(usd_debit["amount"], "270.15000000")
+
+    def test_quick_entry_transfer_cross_currency_requires_destination_amount(self):
+        usd_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Spot Binance",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "transfer",
+                "booking_date": "2026-04-20",
+                "value_date": "2026-04-20",
+                "description": "Traspaso a Spot Binance",
+                "amount": "250.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": usd_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("destination_amount", response.data["error"]["details"])
+
     def test_quick_entry_income_rejects_foreign_account_reference(self):
         other_user = get_user_model().objects.create_user(
             username="acct_foreign_income",
@@ -3849,6 +3912,324 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.data["base_currency"], "EUR")
         self.assertEqual(response.data["rows"][0]["assets_total"], "80.00")
         self.assertEqual(response.data["rows"][0]["net_balance"], "80.00")
+
+    def test_daily_balance_series_revalues_running_balance_with_latest_fx_per_day(self):
+        usd_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        usd_income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingreso USD",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="USD",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.80000000"),
+            rate_date=date(2026, 1, 1),
+            source="test",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.90000000"),
+            rate_date=date(2026, 1, 2),
+            source="test",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso en USD",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2026-01-01&date_to=2026-01-02"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["base_currency"], "EUR")
+        self.assertEqual(response.data["rows"][0]["assets_total"], "80.00")
+        self.assertEqual(response.data["rows"][0]["net_balance"], "80.00")
+        self.assertEqual(response.data["rows"][1]["assets_total"], "90.00")
+        self.assertEqual(response.data["rows"][1]["net_balance"], "90.00")
+
+    def test_daily_balance_series_uses_earliest_fx_when_request_date_is_older_than_fx_history(self):
+        usd_cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        usd_income = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingreso USD",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="USD",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.85000000"),
+            rate_date=date(2020, 1, 1),
+            source="test",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2016, 2, 21),
+            value_date=date(2016, 2, 21),
+            description="Ingreso USD antiguo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_cash,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_income,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100.00"),
+            currency="USD",
+        )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2016-02-21&date_to=2016-02-21"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["rows"][0]["assets_total"], "85.00")
+        self.assertEqual(response.data["rows"][0]["net_balance"], "85.00")
+
+    def test_daily_balance_series_filters_by_ownership_id(self):
+        member = FamilyMember.objects.create(user=self.user, name="Pablo")
+        member_ana = FamilyMember.objects.create(user=self.user, name="Ana")
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+        ownership_shared = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.SHARED,
+        )
+        OwnershipSplit.objects.create(
+            ownership=ownership_shared,
+            member=member,
+            percent=Decimal("50.00"),
+        )
+        OwnershipSplit.objects.create(
+            ownership=ownership_shared,
+            member=member_ana,
+            percent=Decimal("50.00"),
+        )
+        owned_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta Pablo",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        unowned_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta sin titularidad",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        shared_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta compartida",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        owned_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Activo Pablo",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=owned_asset,
+        )
+        shared_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Activo compartido",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=shared_asset,
+        )
+        unowned_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Activo sin titularidad",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=unowned_asset,
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=ownership,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=owned_asset.id,
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=ownership_shared,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=shared_asset.id,
+        )
+        tx_owned = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso cuenta Pablo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        tx_shared = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso cuenta compartida",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        tx_unowned = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso cuenta sin titularidad",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        for tx, account, amount in (
+            (tx_owned, owned_asset_account, Decimal("100.00")),
+            (tx_shared, shared_asset_account, Decimal("80.00")),
+            (tx_unowned, unowned_asset_account, Decimal("60.00")),
+        ):
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=self.income_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        response = self.client.get(
+            f"/api/accounting/transactions/daily-balance-series/?date_from=2026-01-01&date_to=2026-01-01&ownership_id={ownership.id}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["rows"][0]["assets_total"], "140.00")
+        self.assertEqual(response.data["rows"][0]["net_balance"], "140.00")
+
+    def test_daily_balance_series_filters_by_missing_ownership(self):
+        member = FamilyMember.objects.create(user=self.user, name="Ana")
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+        owned_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta Ana",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        unowned_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta sin titularidad",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0.00"),
+        )
+        owned_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Activo Ana",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=owned_asset,
+        )
+        unowned_asset_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Activo sin titularidad",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=unowned_asset,
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=ownership,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=owned_asset.id,
+        )
+        tx_owned = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso cuenta Ana",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        tx_unowned = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 1, 1),
+            value_date=date(2026, 1, 1),
+            description="Ingreso cuenta sin titularidad",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        for tx, account, amount in (
+            (tx_owned, owned_asset_account, Decimal("140.00")),
+            (tx_unowned, unowned_asset_account, Decimal("70.00")),
+        ):
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=tx,
+                account=self.income_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/?date_from=2026-01-01&date_to=2026-01-01&ownership_id=null"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["rows"][0]["assets_total"], "70.00")
+        self.assertEqual(response.data["rows"][0]["net_balance"], "70.00")
 
     def test_budget_suggestions_endpoint_returns_historical_series(self):
         AnnualIncomeEntry.objects.create(
