@@ -1182,6 +1182,17 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+  position: relative;
+}
+
+.ui-budget-hero .ui-hero-summary-head {
+  align-items: center;
+}
+
+.ui-budget-filter-segment-hero {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
 }
 
 .ui-budget-filter-segment {
@@ -2163,6 +2174,12 @@
 
   .ui-budget-filter-segment {
     flex-wrap: wrap;
+  }
+
+  .ui-budget-filter-segment-hero {
+    position: static;
+    top: auto;
+    right: auto;
   }
 
   .ui-budget-kpi {

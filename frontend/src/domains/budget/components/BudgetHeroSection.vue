@@ -122,7 +122,7 @@ const chartOptions = computed<ChartOptions<'doughnut'>>(() => ({
         label: (ctx) => {
           const label = ctx.label ?? '';
           const v = typeof ctx.raw === 'number' ? ctx.raw : 0;
-          return `${label}: ${formatMoneyLocal(v, 2)} EUR`;
+          return `${label}: ${formatMoneyLocal(v, 2)} €`;
         },
       },
     },
@@ -156,7 +156,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
     ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.60)';
-    ctx.fillText('EUR', cx, cy + 26);
+    ctx.fillText('€', cx, cy + 26);
 
     ctx.restore();
   },
@@ -319,7 +319,11 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                 </details>
               </label>
             </div>
-            <div class="ui-budget-filter-segment" role="tablist" aria-label="Tipo de partida">
+            <div
+              class="ui-budget-filter-segment ui-budget-filter-segment-hero"
+              role="tablist"
+              aria-label="Tipo de partida"
+            >
               <button
                 type="button"
                 class="ui-budget-filter-btn"
@@ -358,19 +362,19 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
         </div>
 
         <div class="ui-hero-summary-body">
-          <div class="ui-hero-value">{{ formatMoney(plannedBalanceTotal) }} EUR</div>
+          <div class="ui-hero-value">{{ formatMoney(plannedBalanceTotal) }} €</div>
           <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
             <div class="ui-hero-stat ui-hero-stat-assets">
               <span class="ui-hero-stat-label">Ingresos previstos</span>
               <strong class="ui-hero-stat-value">
-                {{ formatMoney(plannedIncomeTotal) }} EUR
+                {{ formatMoney(plannedIncomeTotal) }} €
               </strong>
             </div>
 
             <div class="ui-hero-stat ui-hero-stat-liabilities">
               <span class="ui-hero-stat-label">Gastos previstos</span>
               <strong class="ui-hero-stat-value">
-                {{ formatMoney(plannedExpenseTotal) }} EUR
+                {{ formatMoney(plannedExpenseTotal) }} €
               </strong>
             </div>
           </div>
