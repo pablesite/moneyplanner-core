@@ -71,6 +71,23 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 6. The accounting timeline API exposes a daily consolidated balance series for active ledger accounts:
    - `GET /api/accounting/transactions/daily-balance-series/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&status=posted|draft`
 
+## Broker Integrations API (Fiscal Report)
+1. Core exposes broker integrations endpoints under `api/v1/broker/` for credential management, sync, and CSV ingest.
+2. Current Phase 1 (Pionex) endpoints:
+   - `POST /api/v1/broker/credentials/`
+   - `GET /api/v1/broker/credentials/`
+   - `DELETE /api/v1/broker/credentials/{id}/`
+   - `POST /api/v1/broker/sync/{id}/`
+   - `GET /api/v1/broker/sync/{id}/status/`
+   - `POST /api/v1/broker/csv-import/`
+3. Secrets are encrypted at rest using Fernet (`BROKER_ENCRYPTION_KEY`).
+4. Pionex sync is API-first with CSV fallback importers for:
+   - `trading.csv`
+   - `position_futures.csv`
+   - `staking.csv`
+   - `others.csv`
+   - `dust-collector.csv`
+
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
 2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`.

@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-04-16 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-04-22 | **Versión Core:** 0.23.2
 
 ---
 
@@ -23,10 +23,11 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
 
+Nota: `Informe Fiscal Crypto — Phase 0` cerrada el 2026-04-22 (tabla de cobertura API/CSV completada en `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md`).
+Nota: `Informe Fiscal Crypto — Phase 1` implementada el 2026-04-22 (app `broker_integrations`, modelos, cliente Pionex, importadores CSV y endpoints base).
+
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
-| Informe Fiscal Crypto — Phase 0 | Manual | Explorar APIs Pionex + Binance con credenciales reales; rellenar tabla de cobertura antes de iniciar Phase 1. | `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md` |
-| Informe Fiscal Crypto — Phase 1 | Agente | Backend Pionex: nueva app `broker_integrations`, modelos, API client, CSV importers. | `core/docs/tasks/fiscal-report/phase-1-pionex/backend.md` |
 | Informe Fiscal Crypto — Phase 2 | Agente | Backend Binance: API client + CSV importers (extender Phase 1). | `core/docs/tasks/fiscal-report/phase-2-binance/backend.md` |
 | Informe Fiscal Crypto — Phase 3 | Agente | Motor FIFO global cross-exchange + endpoint informe fiscal. | `core/docs/tasks/fiscal-report/phase-3-fiscal-engine/backend.md` |
 | Informe Fiscal Crypto — Phase 4 | Agente | Frontend Core: gestión credenciales, sync, CSV upload, visualización informe. | `core/docs/tasks/fiscal-report/phase-4-frontend/frontend.md` |

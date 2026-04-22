@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "accounts.apps.AccountsConfig",
     "memberships.apps.MembershipsConfig",
     "net_worth",
+    "broker_integrations.apps.BrokerIntegrationsConfig",
 ]
 
 MIDDLEWARE = [

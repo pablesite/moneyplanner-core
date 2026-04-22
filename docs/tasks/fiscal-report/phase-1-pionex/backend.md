@@ -141,28 +141,37 @@ def decrypt(encrypted: bytes) -> str:
     return get_fernet().decrypt(encrypted).decode()
 ```
 
-**`services/pionex_client.py`** (HMAC-SHA256)
+**`services/pionex_client.py`** (HMAC-SHA256, alineado con docs oficiales)
 ```python
-# Auth: params sorted alphabetically + timestamp (ms) + api_key
-# Signature: HMAC-SHA256(secret, query_string)
-# Header: X-PIONEX-KEY, X-PIONEX-SIGNATURE, X-PIONEX-TIMESTAMP
+# Auth (private endpoints):
+# - Query param required: timestamp (ms)
+# - Required headers: PIONEX-KEY, PIONEX-SIGNATURE
+# - GET signature payload: METHOD + PATH_URL + QUERY + TIMESTAMP
+# - Add explicit User-Agent header in client session
 
 class PionexClient:
     BASE_URL = 'https://api.pionex.com'
 
     def get_fills(self, symbol: str, start_ms: int, end_ms: int) -> list[dict]:
-        # GET /api/v1/trade/fills — paginar con cursor hasta cubrir rango
+        # GET /api/v1/trade/fills
+        # Ventanas temporales + iteracion hasta cubrir rango anual.
+        # El endpoint retorna ultimos fills al exceder maximo por request.
 
     def get_bot_summary(self, bot_id: str) -> dict:
         # GET /api/v1/bot/orders/spotGrid/order?botId=...
 
     def get_dual_invest_records(self, start_ms: int, end_ms: int) -> list[dict]:
         # GET /api/v1/earn/dual/records
+        # Paginacion por endTime + limit (startTime opcional)
 
-    # Añadir según Phase 0:
+    # Anadir segun Phase 0:
     # def get_staking_history(self, ...) -> list[dict]   # si existe
     # def get_futures_positions(self, ...) -> list[dict]  # si existe
 ```
+
+Implementacion recomendada adicional:
+- Reintentos con backoff exponencial en 429.
+- Throttling defensivo para no superar 10 req/s por IP y 10 req/s por account.
 
 **`csv_importers/pionex_trading.py`**
 - Leer `trading.csv`: `date(UTC+0), executed_qty, amount, price, side, symbol, fee, fee_coin, market_type, tax_id`
@@ -241,9 +250,20 @@ Smoke tests manuales:
 - [ ] `core/docs/project-status.md` — marcar Phase 1 completada
 
 ## Risks
-1. Pionex API rate limits / ventanas de tiempo → implementar paginación por rangos mensuales con backoff
+1. Pionex API rate limits / ventanas de tiempo -> implementar paginacion por rangos temporales con backoff
+   y control de throughput (10 req/s IP + 10 req/s account segun docs).
 2. Fechas en CSV en UTC+0 sin timezone info → parsear como UTC explícitamente (`datetime.fromisoformat(...).replace(tzinfo=timezone.utc)`)
 3. `trade_id` no existe en `trading.csv` → usar hash determinístico; documentar en raw el campo fuente
+
+## Revision post-Phase 1 (2026-04-22)
+1. Mantener la estrategia API-first + CSV fallback, pero continuar la exploracion de Pionex API para reducir dependencia de CSV.
+2. Abrir linea de investigacion para endpoints alternativos que cubran:
+   - eventos staking/rebase
+   - comisiones `CommissionIn`
+   - historico de futures cerrados
+3. Ajustar `PionexClient` para variantes de parametros por endpoint cuando la doc sea inconsistente con respuesta real
+   (ejemplo observado: `dual/records` exige `base`, con valores validos como `BTC`, `ETH`, `SOL`, `BNB`).
+4. Registrar en cada sync los gaps por endpoint con codigo/mensaje para retroalimentar la matriz de cobertura de Phase 0.
 
 ## Completion Criteria
 - [ ] Migraciones aplicadas y verificadas con `showmigrations`

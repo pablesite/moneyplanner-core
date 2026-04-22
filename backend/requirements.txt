@@ -17,6 +17,7 @@ psycopg[binary]>=3.2
 
 # Utils
 python-dotenv>=1.0
+cryptography>=43.0
 
 # Dev / quality (opcional pero recomendable)
 ruff>=0.4

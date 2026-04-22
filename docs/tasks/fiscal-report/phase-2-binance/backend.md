@@ -52,7 +52,8 @@ class BinanceClient:
 
     def get_earn_flexible_rewards(self, asset: str, start_ms: int, end_ms: int) -> list[dict]:
         # GET /sapi/v1/simple-earn/flexible/history/rewardsRecord
-        # Params: asset, startTime, endTime, size=100
+        # Params: asset, type=ALL, startTime, endTime, size=100
+        # Ventana maxima: 90 dias por request
 
     # Añadir según Phase 0:
     # def get_pay_transactions(self, ...) → Transaction Buy DCA
@@ -83,6 +84,7 @@ Procesar por tipo de Operación:
 
 - `Referral Commission`:
   → `IncomeEvent` (source=binance_referral_csv, income_type=commission)
+  → fuente canonica cuando `GET /sapi/v1/rebate/taxQuery` devuelva `100001003 Verification failed`
 
 - `Binance Convert`: **OMITIR** — cubierto por binance_convert.py
 - `Simple Earn Flexible Subscription/Redemption`: ignorar (movimientos de capital)
@@ -120,7 +122,7 @@ def sync_binance(credential: BrokerCredential, year: int) -> SyncStats:
     # client.get_convert_history → upsert BrokerTrade
     # client.get_earn_flexible_rewards para cada asset [USDT, BTC, ETH] → upsert IncomeEvent
     # Endpoints adicionales según Phase 0
-    # Si endpoint no disponible: loggear gap, continuar
+    # Si endpoint no disponible / verification failed (ej. rebate taxQuery): loggear gap y continuar
 ```
 
 ### 3. Validation
@@ -148,7 +150,10 @@ Smoke tests manuales:
 ## Risks
 1. Triplets Transaction Buy/Spend/Fee: si el timestamp no es exactamente el mismo segundo en todos los rows, el agrupamiento falla → usar ventana de ±2s y validar que el triplet tenga exactamente Spend + Buy + Fee del mismo par antes de crear BrokerTrade
 2. Dedup entre `binance_convert` y `binance_recurring`: trade_id determinístico basado en timestamp+par+amount garantiza idempotencia; si coinciden exactamente es el mismo trade
-3. Binance API ventana máxima por request para `/convert/tradeFlow` es 30 días → paginar por meses
+3. Binance API:
+   - `/sapi/v1/simple-earn/flexible/history/rewardsRecord` admite max 90 dias por request.
+   - `/sapi/v1/capital/deposit/hisrec` admite max 90 dias por request.
+   - `/sapi/v1/convert/tradeFlow`: usar paginacion mensual (30 dias) como estrategia defensiva.
 
 ## Completion Criteria
 - [ ] `BinanceClient` conecta con API real y devuelve datos para año 2025
