@@ -24,7 +24,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
 
 Nota: `Informe Fiscal Crypto — Phase 0` cerrada el 2026-04-22 (tabla de cobertura API/CSV completada en `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md`).
-Nota: `Informe Fiscal Crypto — Phase 1` implementada el 2026-04-22 (app `broker_integrations`, modelos, cliente Pionex, importadores CSV y endpoints base).
+Nota: `Informe Fiscal Crypto — Phase 1` cerrada el 2026-04-23 (app `broker_integrations`, modelos, cliente Pionex API-first + CSV fallback, auto-discovery de bots spot grid y endpoints base). Spec archivada en `core/docs/tasks/fiscal-report/phase-1-pionex/terminados/backend.md`.
 
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|

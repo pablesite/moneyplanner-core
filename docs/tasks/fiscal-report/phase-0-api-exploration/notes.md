@@ -66,7 +66,7 @@ API key con permisos: Read Info, Spot & Margin Trading, Convert History, Earn.
 ## Resultado esperado
 
 1. Tabla de cobertura rellena con: endpoint disponible sí/no, cobertura histórica 2024, decisión API/CSV/ambos.
-2. Actualizar las specs de Phase 1 (`phase-1-pionex/backend.md`) y Phase 2 (`phase-2-binance/backend.md`)
+2. Actualizar las specs de Phase 1 (`phase-1-pionex/terminados/backend.md`) y Phase 2 (`phase-2-binance/backend.md`)
    con los endpoints confirmados que implementar en cada cliente.
 3. Anotar límites de paginación descubiertos (ventanas máximas de tiempo, límite de registros por request).
 

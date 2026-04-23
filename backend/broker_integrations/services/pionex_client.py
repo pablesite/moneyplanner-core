@@ -111,6 +111,31 @@ class PionexClient:
         data = self._extract_data(payload)
         return data if isinstance(data, dict) else {}
 
+    def get_bot_orders(
+        self,
+        *,
+        status: str = "running",
+        page_token: str | None = None,
+        limit: int = 100,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        params: dict[str, str] = {
+            "status": status,
+            "limit": str(limit),
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        payload = self._signed_get("/api/v1/bot/orders", params)
+        data = self._extract_data(payload)
+        if not isinstance(data, dict):
+            return [], None
+        rows = data.get("results")
+        next_page_token = data.get("nextPageToken")
+        if not isinstance(rows, list):
+            rows = []
+        if not isinstance(next_page_token, str) or not next_page_token.strip():
+            next_page_token = None
+        return [row for row in rows if isinstance(row, dict)], next_page_token
+
     def get_dual_invest_records(
         self, *, base: str, start_ms: int, end_ms: int, limit: int = 100
     ) -> list[dict]:

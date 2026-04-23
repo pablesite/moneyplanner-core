@@ -155,6 +155,93 @@ def _record_dual_income(
         stats.updated_income_events += 1
 
 
+def _discover_spot_grid_bots(client: PionexClient, stats: SyncStats) -> dict[str, dict[str, Any]]:
+    discovered_bots: dict[str, dict[str, Any]] = {}
+    max_pages = 50
+    for status in ("running", "finished"):
+        page_token: str | None = None
+        for _ in range(max_pages):
+            try:
+                rows, next_page_token = client.get_bot_orders(
+                    status=status,
+                    page_token=page_token,
+                    limit=100,
+                )
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"bot_orders:{status}", "reason": str(exc), "code": exc.code or ""}
+                )
+                break
+            for row in rows:
+                bot_order_type = str(row.get("buOrderType") or "").strip().lower()
+                if bot_order_type != "spot_grid":
+                    continue
+                bot_id = str(row.get("buOrderId") or "").strip()
+                if bot_id:
+                    discovered_bots[bot_id] = row
+            if not next_page_token:
+                break
+            page_token = next_page_token
+    return discovered_bots
+
+
+def _upsert_bot_result(
+    *,
+    credential: BrokerCredential,
+    bot_id: str,
+    payload: dict[str, Any],
+    start_ms: int,
+    end_ms: int,
+    stats: SyncStats,
+) -> None:
+    raw_data = payload.get("buOrderData") if isinstance(payload.get("buOrderData"), dict) else {}
+    symbol = str(payload.get("symbol") or payload.get("base") or "BTC")
+    if "_" in symbol:
+        pair_symbol = symbol
+    else:
+        quote = str(payload.get("quote") or "USDT")
+        pair_symbol = f"{symbol}_{quote}"
+    base_asset, quote_asset = _split_symbol(pair_symbol)
+    defaults = {
+        "bot_type": str(payload.get("buOrderType") or payload.get("botType") or "spot_grid"),
+        "label": str(payload.get("customizeName") or payload.get("botName") or f"Bot {bot_id}"),
+        "base_asset": base_asset,
+        "quote_asset": quote_asset,
+        "realized_profit": _to_decimal(
+            raw_data.get("realizedProfit")
+            or payload.get("realizedProfit")
+            or raw_data.get("totalProfit")
+            or payload.get("totalProfit")
+            or raw_data.get("gridProfit")
+            or payload.get("gridProfit")
+        ),
+        "total_fee_base": _to_decimal(
+            raw_data.get("totalFeeInBase")
+            or raw_data.get("totalFeeBase")
+            or payload.get("totalFeeBase")
+        ),
+        "total_fee_quote": _to_decimal(
+            raw_data.get("totalFeeInQuote")
+            or raw_data.get("totalFeeQuote")
+            or payload.get("totalFeeQuote")
+        ),
+        "period_start": _timestamp_to_dt(
+            payload.get("createTime") or raw_data.get("createTime") or start_ms
+        ),
+        "period_end": _timestamp_to_dt(payload.get("closeTime") or raw_data.get("closeTime") or end_ms),
+        "raw": payload,
+    }
+    _, created = BotNetResult.objects.update_or_create(
+        credential=credential,
+        bot_id=bot_id,
+        defaults=defaults,
+    )
+    if created:
+        stats.new_bot_results += 1
+    else:
+        stats.updated_bot_results += 1
+
+
 def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
     stats = SyncStats()
     client = PionexClient(
@@ -208,41 +295,33 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                 {"source": f"dual_records:{base}", "reason": str(exc), "code": exc.code or ""}
             )
 
-    bot_ids = [
+    discovered_bots = _discover_spot_grid_bots(client, stats)
+    env_bot_ids = {
         value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
-    ]
-    for bot_id in bot_ids:
+    }
+    for bot_id, payload in sorted(discovered_bots.items()):
+        _upsert_bot_result(
+            credential=credential,
+            bot_id=bot_id,
+            payload=payload,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            stats=stats,
+        )
+
+    for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
         try:
             summary = client.get_bot_summary(bot_id=bot_id)
-            symbol = str(summary.get("symbol") or summary.get("quoteSymbol") or "BTC_USDT")
-            base_asset, quote_asset = _split_symbol(symbol)
-            defaults = {
-                "bot_type": str(summary.get("botType") or "spot_grid"),
-                "label": str(summary.get("name") or f"Bot {bot_id}"),
-                "base_asset": base_asset,
-                "quote_asset": quote_asset,
-                "realized_profit": _to_decimal(
-                    summary.get("realizedProfit") or summary.get("totalProfit")
-                ),
-                "total_fee_base": _to_decimal(summary.get("totalFeeBase")),
-                "total_fee_quote": _to_decimal(summary.get("totalFeeQuote")),
-                "period_start": _timestamp_to_dt(summary.get("startTime") or start_ms),
-                "period_end": _timestamp_to_dt(summary.get("endTime") or end_ms),
-                "raw": summary,
-            }
-            _, created = BotNetResult.objects.update_or_create(
+            _upsert_bot_result(
                 credential=credential,
                 bot_id=bot_id,
-                defaults=defaults,
+                payload=summary,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                stats=stats,
             )
-            if created:
-                stats.new_bot_results += 1
-            else:
-                stats.updated_bot_results += 1
         except PionexApiError as exc:
-            stats.gaps.append(
-                {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
-            )
+            stats.gaps.append({"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""})
 
     payload = stats.to_dict()
     credential.last_sync_at = django_timezone.now()

@@ -1,4 +1,4 @@
-# Phase 1 — Informe fiscal: backend Pionex (API-first + CSV fallback)
+﻿# Phase 1 — Informe fiscal: backend Pionex (API-first + CSV fallback)
 
 ## Context
 
@@ -245,9 +245,9 @@ Smoke tests manuales:
 4. Upload `position_futures.csv` → verificar FuturesPosition con net_pnl calculado
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` — añadir sección `broker_integrations` con API pública
-- [ ] `core/docs/architecture/api-registry.md` — registrar los 5 endpoints nuevos
-- [ ] `core/docs/project-status.md` — marcar Phase 1 completada
+- [x] `core/docs/architecture/architecture.md` — añadir sección `broker_integrations` con API pública
+- [x] `core/docs/architecture/architecture.md` — endpoints públicos de `broker_integrations` registrados en la sección de API
+- [x] `core/docs/project-status.md` — marcar Phase 1 completada
 
 ## Risks
 1. Pionex API rate limits / ventanas de tiempo -> implementar paginacion por rangos temporales con backoff
@@ -264,13 +264,15 @@ Smoke tests manuales:
 3. Ajustar `PionexClient` para variantes de parametros por endpoint cuando la doc sea inconsistente con respuesta real
    (ejemplo observado: `dual/records` exige `base`, con valores validos como `BTC`, `ETH`, `SOL`, `BNB`).
 4. Registrar en cada sync los gaps por endpoint con codigo/mensaje para retroalimentar la matriz de cobertura de Phase 0.
+5. Auto-discovery de bots spot grid via `GET /api/v1/bot/orders` (running + finished, paginado) con
+   fallback opcional `PIONEX_BOT_IDS` para IDs no descubiertos.
 
 ## Completion Criteria
-- [ ] Migraciones aplicadas y verificadas con `showmigrations`
-- [ ] `PionexClient` conecta con API real y devuelve datos para año 2025
-- [ ] CSV importers cargan los 5 ficheros de `finance_data/pionex/` sin errores
-- [ ] Dedup funciona: importar el mismo CSV dos veces no duplica registros
-- [ ] Todos los comandos de validación pasan
-- [ ] Documentation updates done
-- [ ] Spec movida a `terminados/`
-- [ ] Commit: `feat(broker-integrations): add pionex data layer with API + CSV fallback`
+- [x] Migraciones aplicadas y verificadas con `showmigrations`
+- [x] `PionexClient` conecta con API real y devuelve datos para año 2025
+- [x] CSV importers cargan los 5 ficheros de `finance_data/pionex/` sin errores
+- [x] Dedup funciona: importar el mismo CSV dos veces no duplica registros
+- [x] Todos los comandos de validación pasan
+- [x] Documentation updates done
+- [x] Spec movida a `terminados/`
+- [x] Commit: `feat(broker-integrations): add pionex data layer with API + CSV fallback`
