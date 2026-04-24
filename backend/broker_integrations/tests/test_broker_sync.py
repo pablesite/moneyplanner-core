@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from broker_integrations.models import BotNetResult, BrokerCredential
+from broker_integrations.models import BotNetResult, BrokerCredential, BrokerTrade
 from broker_integrations.services.broker_sync import sync_binance, sync_credential, sync_pionex
 from broker_integrations.services.binance_client import BinanceApiError
 from broker_integrations.services.encryption import encrypt
@@ -50,6 +50,9 @@ class _FakePionexClient:
             "endTime": 1767225599000,
         }
 
+    def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
+        return []
+
 
 class _FakePionexClientNoDiscovery(_FakePionexClient):
     def get_bot_orders(self, *, status: str = "running", page_token=None, limit: int = 100):
@@ -90,6 +93,36 @@ class _FakePionexClientGridProfit:
 
     def get_bot_summary(self, *, bot_id: str):
         return {}
+
+    def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
+        return []
+
+
+class _FakePionexClientBotFills(_FakePionexClient):
+    def get_balances(self):
+        return [
+            {"coin": "BTC", "amount": "2"},
+            {"coin": "USDT", "amount": "0"},
+        ]
+
+    def get_bot_orders(self, *, status: str = "running", page_token=None, limit: int = 100):
+        if status == "running":
+            return ([{"buOrderId": "bot-running-1", "buOrderType": "spot_grid"}], None)
+        return ([], None)
+
+    def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
+        return [
+            {
+                "id": f"{bot_id}-fill-1",
+                "symbol": "BTC_USDT",
+                "side": "BUY",
+                "price": "50000",
+                "size": "1",
+                "fee": "0.001",
+                "feeCoin": "BTC",
+                "timestamp": 1735689600000,
+            }
+        ]
 
 
 class _FakeBinanceClient:
@@ -195,6 +228,25 @@ class BrokerSyncTests(TestCase):
         self.assertEqual(stats["new_bot_results"], 1)
         bot = BotNetResult.objects.get(credential=self.credential, bot_id="bot-grid-profit-1")
         self.assertEqual(str(bot.realized_profit), "4.2000000000")
+
+    @patch("broker_integrations.services.broker_sync.PionexClient", _FakePionexClientBotFills)
+    def test_sync_pionex_persists_bot_fills_and_balance_reconciliation_gaps(self):
+        stats = sync_pionex(credential=self.credential, year=2025)
+        bot = BotNetResult.objects.get(credential=self.credential, bot_id="bot-running-1")
+        trade = BrokerTrade.objects.get(
+            credential=self.credential,
+            source=BrokerTrade.Source.PIONEX_BOT_API,
+            trade_id="bot-running-1-fill-1",
+        )
+        self.assertEqual(trade.bot_id, bot.id)
+        self.assertTrue(
+            any(
+                gap.get("source") == "balance_reconciliation"
+                and gap.get("reason") == "balance_mismatch"
+                and gap.get("asset") == "BTC"
+                for gap in stats["gaps"]
+            )
+        )
 
     @patch("broker_integrations.services.broker_sync.BinanceClient", _FakeBinanceClient)
     def test_sync_binance_collects_trades_income_and_gap(self):

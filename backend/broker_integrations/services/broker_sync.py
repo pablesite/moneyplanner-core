@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -78,12 +79,153 @@ def _split_symbol(symbol: str) -> tuple[str, str]:
     return clean, "USDT"
 
 
+def _parse_csv_env(name: str) -> list[str]:
+    return [item.strip().upper() for item in os.getenv(name, "").split(",") if item.strip()]
+
+
+def _normalize_symbol(value: str) -> str:
+    clean = value.strip().upper().replace("-", "_").replace("/", "_")
+    return clean
+
+
+def _discover_spot_symbols(
+    *,
+    credential: BrokerCredential,
+    balances: list[dict[str, Any]],
+) -> list[str]:
+    symbols: set[str] = set()
+    ownership_symbols = BrokerTrade.objects.filter(
+        credential__ownership=credential.ownership,
+        source__in=(
+            BrokerTrade.Source.PIONEX_API,
+            BrokerTrade.Source.PIONEX_BOT_API,
+            BrokerTrade.Source.PIONEX_CSV,
+        ),
+    ).values_list("symbol", flat=True)
+    for symbol in ownership_symbols:
+        normalized = _normalize_symbol(str(symbol))
+        if normalized:
+            symbols.add(normalized)
+
+    stable_assets = {"USDT", "USDC", "EUR"}
+    for row in balances:
+        if not isinstance(row, dict):
+            continue
+        symbol = row.get("symbol") or row.get("pair")
+        if symbol:
+            symbols.add(_normalize_symbol(str(symbol)))
+            continue
+        raw_asset = row.get("coin") or row.get("asset") or row.get("currency")
+        if not raw_asset:
+            continue
+        asset = str(raw_asset).strip().upper()
+        if asset in stable_assets:
+            continue
+        amount = _to_decimal(row.get("total") or row.get("amount") or row.get("available"))
+        if amount <= 0:
+            continue
+        symbols.add(f"{asset}_USDT")
+
+    symbols.update(_parse_csv_env("PIONEX_SPOT_SYMBOLS"))
+    if not symbols:
+        symbols.update({"BTC_USDT", "ETH_USDT"})
+    return sorted(symbol for symbol in symbols if symbol)
+
+
+def _discover_dual_bases(*, balances: list[dict[str, Any]]) -> list[str]:
+    env_bases = _parse_csv_env("PIONEX_DUAL_BASES")
+    if env_bases:
+        return env_bases
+    discovered: set[str] = set()
+    for row in balances:
+        if not isinstance(row, dict):
+            continue
+        asset = str(row.get("coin") or row.get("asset") or row.get("currency") or "").upper()
+        if not asset:
+            continue
+        amount = _to_decimal(row.get("total") or row.get("amount") or row.get("available"))
+        if amount > 0:
+            discovered.add(asset)
+    if discovered:
+        return sorted(discovered)
+    return ["BTC", "ETH", "SOL", "BNB"]
+
+
+def _compute_expected_balances(*, credential: BrokerCredential) -> dict[str, Decimal]:
+    expected: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for trade in BrokerTrade.objects.filter(
+        credential=credential,
+        source__in=(
+            BrokerTrade.Source.PIONEX_API,
+            BrokerTrade.Source.PIONEX_BOT_API,
+            BrokerTrade.Source.PIONEX_CSV,
+        ),
+    ).only("base_asset", "quote_asset", "side", "quantity", "price", "fee", "fee_asset"):
+        base_asset = trade.base_asset.upper()
+        quote_asset = trade.quote_asset.upper()
+        quantity = trade.quantity
+        quote_amount = trade.quantity * trade.price
+        fee = trade.fee
+        fee_asset = trade.fee_asset.upper()
+        if trade.side == BrokerTrade.Side.BUY:
+            expected[base_asset] += quantity
+            expected[quote_asset] -= quote_amount
+        else:
+            expected[base_asset] -= quantity
+            expected[quote_asset] += quote_amount
+        if fee_asset:
+            expected[fee_asset] -= fee
+    for income in IncomeEvent.objects.filter(credential=credential).only("asset", "amount"):
+        expected[income.asset.upper()] += income.amount
+    return dict(expected)
+
+
+def _compute_balance_reconciliation(
+    *,
+    credential: BrokerCredential,
+    balances: list[dict[str, Any]],
+    stats: SyncStats,
+) -> None:
+    expected_balances = _compute_expected_balances(credential=credential)
+    actual_balances: dict[str, Decimal] = {}
+    for row in balances:
+        if not isinstance(row, dict):
+            continue
+        asset = str(row.get("coin") or row.get("asset") or row.get("currency") or "").upper()
+        if not asset:
+            continue
+        actual_balances[asset] = _to_decimal(
+            row.get("total")
+            or row.get("amount")
+            or (_to_decimal(row.get("available")) + _to_decimal(row.get("frozen")))
+        )
+    tolerance = _to_decimal(os.getenv("PIONEX_BALANCE_RECONCILIATION_TOLERANCE", "0.00000001"))
+    for asset in sorted(set(expected_balances) | set(actual_balances)):
+        expected = expected_balances.get(asset, Decimal("0"))
+        actual = actual_balances.get(asset, Decimal("0"))
+        diff = actual - expected
+        if abs(diff) <= tolerance:
+            continue
+        stats.gaps.append(
+            {
+                "source": "balance_reconciliation",
+                "reason": "balance_mismatch",
+                "asset": asset,
+                "expected": str(expected),
+                "actual": str(actual),
+                "diff": str(diff),
+            }
+        )
+
+
 def _record_trade_fill(
     *,
     credential: BrokerCredential,
     fill: dict[str, Any],
     symbol_fallback: str,
     stats: SyncStats,
+    source: str = BrokerTrade.Source.PIONEX_API,
+    bot_result: BotNetResult | None = None,
 ) -> None:
     symbol = str(fill.get("symbol") or symbol_fallback or "").upper()
     base_asset, quote_asset = _split_symbol(symbol)
@@ -101,6 +243,7 @@ def _record_trade_fill(
     )
     defaults = {
         "credential": credential,
+        "bot": bot_result,
         "symbol": symbol,
         "base_asset": base_asset,
         "quote_asset": quote_asset,
@@ -115,7 +258,7 @@ def _record_trade_fill(
         "raw": fill,
     }
     _, created = BrokerTrade.objects.update_or_create(
-        source=BrokerTrade.Source.PIONEX_API,
+        source=source,
         trade_id=str(trade_id),
         defaults=defaults,
     )
@@ -195,7 +338,7 @@ def _upsert_bot_result(
     start_ms: int,
     end_ms: int,
     stats: SyncStats,
-) -> None:
+) -> BotNetResult:
     raw_data = payload.get("buOrderData") if isinstance(payload.get("buOrderData"), dict) else {}
     symbol = str(payload.get("symbol") or payload.get("base") or "BTC")
     if "_" in symbol:
@@ -204,6 +347,7 @@ def _upsert_bot_result(
         quote = str(payload.get("quote") or "USDT")
         pair_symbol = f"{symbol}_{quote}"
     base_asset, quote_asset = _split_symbol(pair_symbol)
+
     def pick_profit() -> Decimal:
         # Pionex spot-grid payloads often expose meaningful value in `gridProfit`
         # while `realizedProfit` remains the string "0".
@@ -245,7 +389,7 @@ def _upsert_bot_result(
         ),
         "raw": payload,
     }
-    _, created = BotNetResult.objects.update_or_create(
+    bot_result, created = BotNetResult.objects.update_or_create(
         credential=credential,
         bot_id=bot_id,
         defaults=defaults,
@@ -254,6 +398,7 @@ def _upsert_bot_result(
         stats.new_bot_results += 1
     else:
         stats.updated_bot_results += 1
+    return bot_result
 
 
 def _record_binance_convert_trade(
@@ -499,13 +644,14 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
     end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
     start_ms = int(start.timestamp() * 1000)
     end_ms = int(end.timestamp() * 1000) - 1
-
+    balances: list[dict[str, Any]] = []
     try:
-        client.get_balances()
+        balances = client.get_balances()
     except PionexApiError as exc:
         stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
 
-    for symbol in ("BTC_USDT", "ETH_USDT"):
+    symbols = _discover_spot_symbols(credential=credential, balances=balances)
+    for symbol in symbols:
         try:
             fills = client.get_fills(symbol=symbol, start_ms=start_ms, end_ms=end_ms, limit=100)
             for fill in fills:
@@ -521,11 +667,7 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                 {"source": f"fills:{symbol}", "reason": str(exc), "code": exc.code or ""}
             )
 
-    dual_bases = [
-        item.strip().upper()
-        for item in os.getenv("PIONEX_DUAL_BASES", "BTC,ETH,SOL,BNB").split(",")
-        if item.strip()
-    ]
+    dual_bases = _discover_dual_bases(balances=balances)
     for base in dual_bases:
         try:
             dual_records = client.get_dual_invest_records(
@@ -547,7 +689,7 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
         value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
     }
     for bot_id, payload in sorted(discovered_bots.items()):
-        _upsert_bot_result(
+        bot_result = _upsert_bot_result(
             credential=credential,
             bot_id=bot_id,
             payload=payload,
@@ -555,11 +697,35 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
             end_ms=end_ms,
             stats=stats,
         )
+        try:
+            bot_fills = client.get_bot_spot_grid_orders(
+                bot_id=bot_id,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                limit=100,
+            )
+            symbol_fallback = str(
+                payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+            )
+            for fill in bot_fills:
+                if isinstance(fill, dict):
+                    _record_trade_fill(
+                        credential=credential,
+                        fill=fill,
+                        symbol_fallback=symbol_fallback,
+                        stats=stats,
+                        source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                        bot_result=bot_result,
+                    )
+        except PionexApiError as exc:
+            stats.gaps.append(
+                {"source": f"bot_fills:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+            )
 
     for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
         try:
             summary = client.get_bot_summary(bot_id=bot_id)
-            _upsert_bot_result(
+            bot_result = _upsert_bot_result(
                 credential=credential,
                 bot_id=bot_id,
                 payload=summary,
@@ -567,10 +733,36 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                 end_ms=end_ms,
                 stats=stats,
             )
+            bot_fills = client.get_bot_spot_grid_orders(
+                bot_id=bot_id,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                limit=100,
+            )
+            symbol_fallback = str(
+                summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+            )
+            for fill in bot_fills:
+                if isinstance(fill, dict):
+                    _record_trade_fill(
+                        credential=credential,
+                        fill=fill,
+                        symbol_fallback=symbol_fallback,
+                        stats=stats,
+                        source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                        bot_result=bot_result,
+                    )
         except PionexApiError as exc:
             stats.gaps.append(
                 {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
             )
+
+    if balances:
+        _compute_balance_reconciliation(
+            credential=credential,
+            balances=balances,
+            stats=stats,
+        )
 
     payload = stats.to_dict()
     credential.last_sync_at = django_timezone.now()

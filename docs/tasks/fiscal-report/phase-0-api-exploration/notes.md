@@ -23,6 +23,7 @@ Autenticacion (confirmada en docs oficiales):
 |---|---|---|---|---|
 | GET /api/v1/trade/fills | Fills signal bots spot | Si (docs) | Pendiente validacion con key real | Params: symbol, startTime, endTime. Endpoint devuelve ultimos 100 fills si se excede limite. |
 | GET /api/v1/bot/orders/spotGrid/order | Bot summary: realizedProfit, fechas | | | Params: botId |
+| GET /api/v1/bot/order/spotGrid/orders | Fills individuales de bot spot-grid | Parcial (implementado en cliente, pendiente confirmacion con key real) | Pendiente validacion con key real | Params usados en cliente: `botId`, `startTime`, `endTime`, `limit`, `pageToken`. Parsing defensivo de `orders/results/list/rows/items` y paginacion por `nextPageToken` o ventana temporal. |
 | GET /api/v1/earn/dual/records | Dual Investment yields | Si (docs) | Pendiente validacion con key real | Sin CSV fallback disponible. Paginado: `limit`, `endTime` (required), `startTime` opcional. |
 | GET /api/v1/account/balances | Verificar conexion basica | Si (docs) | Pendiente validacion con key real | Requiere permiso `Enable reading`. |
 | ❓ /api/v1/earn/history | Staking/Rebase issued/claimed profit | | | Fallback: `staking.csv` (130 filas) |
@@ -91,3 +92,9 @@ API key con permisos: Read Info, Spot & Margin Trading, Convert History, Earn.
    (usar ventanas temporales y paginacion defensiva por tramos).
 4. `GET /api/v1/earn/dual/records` permite paginado por `endTime` + `limit`; incorporar iteracion
    hasta cubrir rango fiscal anual.
+
+## Hallazgos tecnicos Phase 5A (2026-04-24)
+
+1. Se habilita en Core el consumo de `GET /api/v1/bot/order/spotGrid/orders` para traer fills individuales de bots spot-grid.
+2. La respuesta del endpoint no esta validada aun con credencial real en entorno del proyecto, por lo que el cliente usa parseo tolerante y fallback de paginacion por ventana temporal.
+3. Pendiente smoke test real para confirmar contrato final de campos antes de cerrar Phase 5A.

@@ -136,6 +136,69 @@ class PionexClient:
             next_page_token = None
         return [row for row in rows if isinstance(row, dict)], next_page_token
 
+    def get_bot_spot_grid_orders(
+        self,
+        bot_id: str,
+        *,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        rows: list[dict] = []
+        path = "/api/v1/bot/order/spotGrid/orders"
+        page_token: str | None = None
+        current_start_ms = start_ms
+        max_iterations = 200
+
+        for _ in range(max_iterations):
+            params: dict[str, str] = {"botId": str(bot_id), "limit": str(limit)}
+            if current_start_ms is not None:
+                params["startTime"] = str(current_start_ms)
+            if end_ms is not None:
+                params["endTime"] = str(end_ms)
+            if page_token:
+                params["pageToken"] = page_token
+
+            payload = self._signed_get(path, params)
+            data = self._extract_data(payload)
+            if not isinstance(data, dict):
+                break
+
+            batch: list[dict[str, Any]] = []
+            for key in ("orders", "results", "list", "rows", "items"):
+                candidate = data.get(key)
+                if isinstance(candidate, list):
+                    batch = [item for item in candidate if isinstance(item, dict)]
+                    break
+
+            rows.extend(batch)
+
+            next_page_token = data.get("nextPageToken")
+            if isinstance(next_page_token, str) and next_page_token.strip():
+                page_token = next_page_token
+                continue
+
+            if start_ms is not None and end_ms is not None and len(batch) >= limit:
+                last_timestamp: int | None = None
+                for row in reversed(batch):
+                    for key in ("filledTime", "timestamp", "time", "createTime", "updateTime"):
+                        raw = row.get(key)
+                        if raw is None:
+                            continue
+                        text = str(raw).strip()
+                        if text.isdigit():
+                            last_timestamp = int(text)
+                            break
+                    if last_timestamp is not None:
+                        break
+                if last_timestamp is None or last_timestamp >= end_ms:
+                    break
+                current_start_ms = last_timestamp + 1
+                page_token = None
+                continue
+            break
+        return rows
+
     def get_dual_invest_records(
         self, *, base: str, start_ms: int, end_ms: int, limit: int = 100
     ) -> list[dict]:

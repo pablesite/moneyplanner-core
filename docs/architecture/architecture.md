@@ -96,9 +96,13 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - attempts exact `trade_date` FX first,
    - can trigger on-demand FX backfill for the requested pair/date range,
    - falls back to nearest persisted market date when the exact day is unavailable (for example weekends/holidays).
-7. Spot-grid bot rows are currently informational in report payloads:
-   - Pionex bot sync persists `gridProfit` when `realizedProfit` is reported as `0`,
-   - bot section is not included in fiscal summary totals until per-operation traceability is available.
+7. Pionex spot-grid sync now persists per-fill trades for fiscal traceability:
+   - `BrokerTrade.source` includes `pionex_bot_api`,
+   - `BrokerTrade.bot` links each bot fill to its `BotNetResult`,
+   - sync auto-discovers spot symbols (`balances + historical symbols + env override`) instead of hardcoded BTC/ETH.
+8. Pionex sync runs `balance_reconciliation` at the end of each import:
+   - compares computed balances from persisted Pionex trades/income vs `GET /api/v1/account/balances`,
+   - emits `balance_mismatch` gaps with `{asset, expected, actual, diff}` when tolerance is exceeded.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

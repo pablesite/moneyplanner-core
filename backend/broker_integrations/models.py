@@ -44,6 +44,7 @@ class BrokerCredential(models.Model):
 class BrokerTrade(models.Model):
     class Source(models.TextChoices):
         PIONEX_API = "pionex_api", "Pionex API"
+        PIONEX_BOT_API = "pionex_bot_api", "Pionex Bot API"
         PIONEX_CSV = "pionex_csv", "Pionex CSV"
         BINANCE_API = "binance_api", "Binance API"
         BINANCE_CSV = "binance_csv", "Binance CSV"
@@ -58,6 +59,13 @@ class BrokerTrade(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="trades",
+    )
+    bot = models.ForeignKey(
+        "BotNetResult",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fills",
     )
     source = models.CharField(max_length=20, choices=Source.choices)
     trade_id = models.CharField(max_length=100)
