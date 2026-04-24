@@ -7,7 +7,7 @@ import {
   setRefreshToken,
 } from '@/domains/auth/session';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002';
 const coreBaseURL = import.meta.env.VITE_CORE_API_BASE_URL || baseURL;
 
 export const api = axios.create({ baseURL });

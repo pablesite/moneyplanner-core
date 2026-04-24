@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from broker_integrations.models import BrokerCredential, IncomeEvent
+from core.models import FxRate
 from memberships.models import FamilyMember, Ownership
 
 
@@ -75,3 +76,36 @@ class BrokerIntegrationsApiTests(APITestCase):
             IncomeEvent.objects.filter(source=IncomeEvent.Source.PIONEX_STAKING_CSV).count(),
             2,
         )
+
+    def test_csv_import_binance_convert_supported(self):
+        content = (
+            "Hora,Billetera,Par,Tipo,Vender,Comprar,Precio,Precio inverso,Fecha actualizada,Estado\n"
+            "25-11-23 21:57:59,SPOT,ETHUSDC,Instant,20.00000000 USDC,0.00704773 ETH,x,x,x,Successful\n"
+        ).encode("utf-8")
+        uploaded = SimpleUploadedFile("binance-convert.csv", content, content_type="text/csv")
+        response = self.client.post(
+            "/api/v1/broker/csv-import/",
+            {"broker": "binance", "file_type": "binance_convert", "file": uploaded},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["created"], 1)
+
+    def test_get_fiscal_report_returns_payload(self):
+        BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Fiscal",
+            api_key="fiscal-key",
+            api_secret_encrypted=b"secret",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate="0.90",
+            rate_date="2025-01-01",
+        )
+        response = self.client.get("/api/v1/broker/fiscal-report/?year=2025")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["fiscal_year"], 2025)
+        self.assertIn("resumen", response.data)

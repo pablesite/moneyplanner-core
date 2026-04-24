@@ -27,6 +27,11 @@ def parse_pionex_datetime(raw: str) -> datetime:
     return dt.replace(tzinfo=timezone.utc)
 
 
+def parse_binance_datetime(raw: str) -> datetime:
+    dt = datetime.strptime(raw.strip(), "%y-%m-%d %H:%M:%S")
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def parse_pionex_timestamp(raw: Any) -> datetime:
     if raw is None:
         raise ValueError("timestamp vacío")
@@ -68,7 +73,9 @@ def split_symbol(symbol: str) -> tuple[str, str]:
     return text, "USDT"
 
 
-def upsert_income_event_dedup(*, lookup: dict[str, Any], defaults: dict[str, Any]) -> tuple[Any, bool]:
+def upsert_income_event_dedup(
+    *, lookup: dict[str, Any], defaults: dict[str, Any]
+) -> tuple[Any, bool]:
     from ..models import IncomeEvent
 
     queryset = IncomeEvent.objects.filter(**lookup).order_by("id")

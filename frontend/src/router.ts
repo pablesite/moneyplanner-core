@@ -9,6 +9,7 @@ import AuxDataView from './views/AuxDataView.vue';
 import AccountView from './views/AccountView.vue';
 import PeopleView from './views/PeopleView.vue';
 import AccountingMovementsView from './views/AccountingMovementsView.vue';
+import { FiscalInformeView, FiscalLandingView } from '@/domains/fiscal-report';
 import { registerAuthGuard } from '@/domains/auth';
 
 const routes: RouteRecordRaw[] = [
@@ -25,6 +26,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/account', name: 'account', component: AccountView },
   { path: '/people', name: 'people', component: PeopleView },
   { path: '/movimientos', name: 'accounting-movements', component: AccountingMovementsView },
+  { path: '/informe-fiscal', name: 'fiscal-landing', component: FiscalLandingView },
+  { path: '/informe-fiscal/informe', name: 'fiscal-informe', component: FiscalInformeView },
 ];
 
 export const router = createRouter({

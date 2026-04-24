@@ -10,7 +10,9 @@ from typing import Any
 
 from django.utils import timezone as django_timezone
 
+from ..csv_importers.common import deterministic_id, upsert_income_event_dedup
 from ..models import BotNetResult, BrokerCredential, BrokerTrade, IncomeEvent
+from .binance_client import BinanceApiError, BinanceClient
 from .encryption import decrypt
 from .pionex_client import PionexApiError, PionexClient
 
@@ -202,19 +204,29 @@ def _upsert_bot_result(
         quote = str(payload.get("quote") or "USDT")
         pair_symbol = f"{symbol}_{quote}"
     base_asset, quote_asset = _split_symbol(pair_symbol)
+    def pick_profit() -> Decimal:
+        # Pionex spot-grid payloads often expose meaningful value in `gridProfit`
+        # while `realizedProfit` remains the string "0".
+        candidates = [
+            raw_data.get("totalProfit"),
+            payload.get("totalProfit"),
+            raw_data.get("gridProfit"),
+            payload.get("gridProfit"),
+            raw_data.get("realizedProfit"),
+            payload.get("realizedProfit"),
+        ]
+        parsed_values = [_to_decimal(value) for value in candidates if value not in (None, "")]
+        for value in parsed_values:
+            if value != 0:
+                return value
+        return parsed_values[0] if parsed_values else Decimal("0")
+
     defaults = {
         "bot_type": str(payload.get("buOrderType") or payload.get("botType") or "spot_grid"),
         "label": str(payload.get("customizeName") or payload.get("botName") or f"Bot {bot_id}"),
         "base_asset": base_asset,
         "quote_asset": quote_asset,
-        "realized_profit": _to_decimal(
-            raw_data.get("realizedProfit")
-            or payload.get("realizedProfit")
-            or raw_data.get("totalProfit")
-            or payload.get("totalProfit")
-            or raw_data.get("gridProfit")
-            or payload.get("gridProfit")
-        ),
+        "realized_profit": pick_profit(),
         "total_fee_base": _to_decimal(
             raw_data.get("totalFeeInBase")
             or raw_data.get("totalFeeBase")
@@ -228,7 +240,9 @@ def _upsert_bot_result(
         "period_start": _timestamp_to_dt(
             payload.get("createTime") or raw_data.get("createTime") or start_ms
         ),
-        "period_end": _timestamp_to_dt(payload.get("closeTime") or raw_data.get("closeTime") or end_ms),
+        "period_end": _timestamp_to_dt(
+            payload.get("closeTime") or raw_data.get("closeTime") or end_ms
+        ),
         "raw": payload,
     }
     _, created = BotNetResult.objects.update_or_create(
@@ -240,6 +254,239 @@ def _upsert_bot_result(
         stats.new_bot_results += 1
     else:
         stats.updated_bot_results += 1
+
+
+def _record_binance_convert_trade(
+    *,
+    credential: BrokerCredential,
+    record: dict[str, Any],
+    stats: SyncStats,
+) -> None:
+    from_asset = str(
+        record.get("fromAsset") or record.get("quoteAsset") or record.get("baseAsset") or "USDC"
+    ).upper()
+    to_asset = str(
+        record.get("toAsset") or record.get("targetAsset") or record.get("symbol") or "BTC"
+    ).upper()
+    from_amount = _to_decimal(
+        record.get("fromAmount")
+        or record.get("quoteQty")
+        or record.get("quoteAmount")
+        or record.get("amount")
+    )
+    to_amount = _to_decimal(
+        record.get("toAmount")
+        or record.get("toQuantity")
+        or record.get("baseQty")
+        or record.get("quantity")
+    )
+    if to_amount <= 0:
+        return
+    symbol = str(record.get("symbol") or f"{to_asset}{from_asset}").upper()
+    trade_id = str(
+        record.get("orderId") or deterministic_id(record.get("createTime"), symbol, from_amount)
+    )
+    defaults = {
+        "credential": credential,
+        "symbol": symbol,
+        "base_asset": to_asset,
+        "quote_asset": from_asset,
+        "side": BrokerTrade.Side.BUY,
+        "price": abs(from_amount) / abs(to_amount),
+        "quantity": abs(to_amount),
+        "fee": Decimal("0"),
+        "fee_asset": "",
+        "timestamp": _timestamp_to_dt(record.get("createTime") or record.get("timestamp")),
+        "raw": record,
+    }
+    _, created = BrokerTrade.objects.update_or_create(
+        source=BrokerTrade.Source.BINANCE_API,
+        trade_id=trade_id,
+        defaults=defaults,
+    )
+    if created:
+        stats.new_trades += 1
+    else:
+        stats.updated_trades += 1
+
+
+def _record_binance_earn_income(
+    *,
+    credential: BrokerCredential,
+    record: dict[str, Any],
+    stats: SyncStats,
+) -> None:
+    asset = str(record.get("asset") or record.get("rewardAsset") or "USDC").upper()
+    amount = _to_decimal(
+        record.get("rewards") or record.get("amount") or record.get("totalRewardAmount")
+    )
+    timestamp = _timestamp_to_dt(
+        record.get("time")
+        or record.get("createTime")
+        or record.get("timestamp")
+        or record.get("rewardTime")
+    )
+    lookup = {
+        "source": IncomeEvent.Source.BINANCE_EARN_API,
+        "income_type": IncomeEvent.IncomeType.BINANCE_EARN,
+        "asset": asset,
+        "amount": amount,
+        "timestamp": timestamp,
+    }
+    defaults = {
+        "credential": credential,
+        "description": "Binance Earn",
+        "raw": record,
+    }
+    _, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
+    if created:
+        stats.new_income_events += 1
+    else:
+        stats.updated_income_events += 1
+
+
+def _record_binance_pay_trade(
+    *,
+    credential: BrokerCredential,
+    record: dict[str, Any],
+    stats: SyncStats,
+) -> None:
+    fiat_asset = str(
+        record.get("currency") or record.get("sourceAsset") or record.get("quoteAsset") or "USDC"
+    ).upper()
+    crypto_asset = str(
+        record.get("fundsDetail", {}).get("currency")
+        if isinstance(record.get("fundsDetail"), dict)
+        else record.get("targetAsset") or record.get("baseAsset") or "BTC"
+    ).upper()
+    quote_amount = _to_decimal(
+        record.get("amount") or record.get("sourceAmount") or record.get("totalAmount")
+    )
+    quantity = _to_decimal(
+        record.get("obtainAmount")
+        or (
+            record.get("fundsDetail", {}) if isinstance(record.get("fundsDetail"), dict) else {}
+        ).get("amount")
+        or record.get("quantity")
+        or record.get("targetAmount")
+    )
+    fee_amount = _to_decimal(record.get("fee") or record.get("commission"))
+    if quantity <= 0:
+        return
+    trade_id = str(record.get("orderId") or record.get("transactionId") or record.get("id"))
+    if not trade_id:
+        trade_id = deterministic_id(
+            record.get("transactionTime"),
+            record.get("transactionType"),
+            crypto_asset,
+            quantity,
+        )
+    defaults = {
+        "credential": credential,
+        "symbol": f"{crypto_asset}{fiat_asset}",
+        "base_asset": crypto_asset,
+        "quote_asset": fiat_asset,
+        "side": BrokerTrade.Side.BUY,
+        "price": abs(quote_amount) / abs(quantity),
+        "quantity": abs(quantity),
+        "fee": abs(fee_amount),
+        "fee_asset": crypto_asset,
+        "timestamp": _timestamp_to_dt(record.get("transactionTime") or record.get("timestamp")),
+        "raw": record,
+    }
+    _, created = BrokerTrade.objects.update_or_create(
+        source=BrokerTrade.Source.BINANCE_API,
+        trade_id=trade_id,
+        defaults=defaults,
+    )
+    if created:
+        stats.new_trades += 1
+    else:
+        stats.updated_trades += 1
+
+
+def sync_binance(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
+    stats = SyncStats()
+    client = BinanceClient(
+        api_key=credential.api_key,
+        api_secret=decrypt(bytes(credential.api_secret_encrypted)),
+    )
+    start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    start_ms = int(start.timestamp() * 1000)
+    end_ms = int(end.timestamp() * 1000) - 1
+
+    try:
+        convert_rows = client.get_convert_history(start_ms=start_ms, end_ms=end_ms)
+        for row in convert_rows:
+            _record_binance_convert_trade(credential=credential, record=row, stats=stats)
+    except BinanceApiError as exc:
+        stats.gaps.append({"source": "convert", "reason": str(exc), "code": exc.code or ""})
+
+    earn_assets = [
+        item.strip().upper()
+        for item in os.getenv("BINANCE_EARN_ASSETS", "USDT,USDC,BTC,ETH").split(",")
+        if item.strip()
+    ]
+    for asset in earn_assets:
+        try:
+            rewards = client.get_earn_flexible_rewards(
+                asset=asset,
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+            for reward in rewards:
+                _record_binance_earn_income(credential=credential, record=reward, stats=stats)
+        except BinanceApiError as exc:
+            stats.gaps.append(
+                {"source": f"earn:{asset}", "reason": str(exc), "code": exc.code or ""}
+            )
+
+    try:
+        transactions = client.get_pay_transactions(start_ms=start_ms, end_ms=end_ms)
+        for record in transactions:
+            _record_binance_pay_trade(credential=credential, record=record, stats=stats)
+    except BinanceApiError as exc:
+        stats.gaps.append(
+            {"source": "pay_transactions", "reason": str(exc), "code": exc.code or ""}
+        )
+
+    try:
+        referral_rows = client.get_referral_rebates(start_ms=start_ms, end_ms=end_ms)
+        for row in referral_rows:
+            asset = str(row.get("asset") or row.get("rebateAsset") or "USDC").upper()
+            amount = _to_decimal(row.get("amount") or row.get("rebateAmount"))
+            timestamp = _timestamp_to_dt(row.get("updateTime") or row.get("time"))
+            lookup = {
+                "source": IncomeEvent.Source.BINANCE_REFERRAL_CSV,
+                "income_type": IncomeEvent.IncomeType.COMMISSION,
+                "asset": asset,
+                "amount": amount,
+                "timestamp": timestamp,
+            }
+            defaults = {
+                "credential": credential,
+                "description": "Binance Referral",
+                "raw": row,
+            }
+            _, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
+            if created:
+                stats.new_income_events += 1
+            else:
+                stats.updated_income_events += 1
+    except BinanceApiError as exc:
+        stats.gaps.append(
+            {"source": "rebate_tax_query", "reason": str(exc), "code": exc.code or ""}
+        )
+
+    payload = stats.to_dict()
+    credential.last_sync_at = django_timezone.now()
+    credential.last_sync_stats = payload
+    credential.last_sync_gaps = payload["gaps"]
+    credential.save(
+        update_fields=["last_sync_at", "last_sync_stats", "last_sync_gaps", "updated_at"]
+    )
+    return payload
 
 
 def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
@@ -321,7 +568,9 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                 stats=stats,
             )
         except PionexApiError as exc:
-            stats.gaps.append({"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""})
+            stats.gaps.append(
+                {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+            )
 
     payload = stats.to_dict()
     credential.last_sync_at = django_timezone.now()
@@ -336,4 +585,6 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
 def sync_credential(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
     if credential.broker == BrokerCredential.Broker.PIONEX:
         return sync_pionex(credential=credential, year=year)
+    if credential.broker == BrokerCredential.Broker.BINANCE:
+        return sync_binance(credential=credential, year=year)
     raise ValueError(f"Broker no soportado en esta fase: {credential.broker}")

@@ -4,6 +4,7 @@ from .views import (
     BrokerCredentialDeleteView,
     BrokerCredentialListCreateView,
     BrokerCsvImportView,
+    BrokerFiscalReportView,
     BrokerSyncStatusView,
     BrokerSyncTriggerView,
 )
@@ -14,4 +15,5 @@ urlpatterns = [
     path("sync/<int:credential_id>/", BrokerSyncTriggerView.as_view()),
     path("sync/<int:credential_id>/status/", BrokerSyncStatusView.as_view()),
     path("csv-import/", BrokerCsvImportView.as_view()),
+    path("fiscal-report/", BrokerFiscalReportView.as_view()),
 ]

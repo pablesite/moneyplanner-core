@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from broker_integrations.models import BotNetResult, BrokerCredential
-from broker_integrations.services.broker_sync import sync_pionex
+from broker_integrations.services.broker_sync import sync_binance, sync_credential, sync_pionex
+from broker_integrations.services.binance_client import BinanceApiError
 from broker_integrations.services.encryption import encrypt
 from memberships.models import FamilyMember, Ownership
 
@@ -55,6 +56,87 @@ class _FakePionexClientNoDiscovery(_FakePionexClient):
         return ([], None)
 
 
+class _FakePionexClientGridProfit:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_balances(self):
+        return []
+
+    def get_fills(self, **kwargs):
+        return []
+
+    def get_dual_invest_records(self, **kwargs):
+        return []
+
+    def get_bot_orders(self, *, status: str = "running", page_token=None, limit: int = 100):
+        if status == "running":
+            return (
+                [
+                    {
+                        "buOrderId": "bot-grid-profit-1",
+                        "buOrderType": "spot_grid",
+                        "base": "ETH",
+                        "quote": "USDT",
+                        "buOrderData": {
+                            "realizedProfit": "0",
+                            "gridProfit": "4.2",
+                        },
+                    }
+                ],
+                None,
+            )
+        return ([], None)
+
+    def get_bot_summary(self, *, bot_id: str):
+        return {}
+
+
+class _FakeBinanceClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_convert_history(self, *, start_ms: int, end_ms: int):
+        return [
+            {
+                "orderId": "convert-1",
+                "fromAsset": "USDC",
+                "fromAmount": "20",
+                "toAsset": "ETH",
+                "toAmount": "0.006",
+                "createTime": 1735689600000,
+                "symbol": "ETHUSDC",
+            }
+        ]
+
+    def get_earn_flexible_rewards(self, *, asset: str, start_ms: int, end_ms: int):
+        if asset != "USDC":
+            return []
+        return [
+            {
+                "asset": "USDC",
+                "rewards": "1.5",
+                "time": 1735689600000,
+            }
+        ]
+
+    def get_pay_transactions(self, *, start_ms: int, end_ms: int):
+        return [
+            {
+                "transactionId": "pay-1",
+                "transactionTime": 1735689600000,
+                "currency": "USDC",
+                "amount": "50",
+                "targetAsset": "BTC",
+                "targetAmount": "0.0005",
+                "fee": "0.000001",
+            }
+        ]
+
+    def get_referral_rebates(self, *, start_ms: int, end_ms: int):
+        raise BinanceApiError("Verification failed", code="100001003")
+
+
 class BrokerSyncTests(TestCase):
     def setUp(self):
         os.environ["BROKER_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
@@ -88,7 +170,9 @@ class BrokerSyncTests(TestCase):
         self.assertEqual(BotNetResult.objects.filter(credential=self.credential).count(), 2)
         self.assertSetEqual(
             set(
-                BotNetResult.objects.filter(credential=self.credential).values_list("bot_id", flat=True)
+                BotNetResult.objects.filter(credential=self.credential).values_list(
+                    "bot_id", flat=True
+                )
             ),
             {"bot-running-1", "bot-finished-1"},
         )
@@ -99,6 +183,44 @@ class BrokerSyncTests(TestCase):
         stats = sync_pionex(credential=self.credential, year=2025)
         self.assertEqual(stats["new_bot_results"], 1)
         self.assertEqual(
-            BotNetResult.objects.filter(credential=self.credential).values_list("bot_id", flat=True).first(),
+            BotNetResult.objects.filter(credential=self.credential)
+            .values_list("bot_id", flat=True)
+            .first(),
             "env-bot-1",
         )
+
+    @patch("broker_integrations.services.broker_sync.PionexClient", _FakePionexClientGridProfit)
+    def test_sync_pionex_prefers_grid_profit_when_realized_profit_is_zero(self):
+        stats = sync_pionex(credential=self.credential, year=2025)
+        self.assertEqual(stats["new_bot_results"], 1)
+        bot = BotNetResult.objects.get(credential=self.credential, bot_id="bot-grid-profit-1")
+        self.assertEqual(str(bot.realized_profit), "4.2000000000")
+
+    @patch("broker_integrations.services.broker_sync.BinanceClient", _FakeBinanceClient)
+    def test_sync_binance_collects_trades_income_and_gap(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.credential.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="sync-binance",
+            api_key="binance-key",
+            api_secret_encrypted=encrypt("binance-secret"),
+        )
+        os.environ["BINANCE_EARN_ASSETS"] = "USDC,BTC"
+        stats = sync_binance(credential=credential, year=2025)
+        self.assertEqual(stats["new_trades"], 2)
+        self.assertEqual(stats["new_income_events"], 1)
+        self.assertTrue(any(gap["source"] == "rebate_tax_query" for gap in stats["gaps"]))
+
+    @patch("broker_integrations.services.broker_sync.BinanceClient", _FakeBinanceClient)
+    def test_sync_credential_routes_to_binance(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.credential.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="sync-router-binance",
+            api_key="binance-key-2",
+            api_secret_encrypted=encrypt("binance-secret-2"),
+        )
+        stats = sync_credential(credential=credential, year=2025)
+        self.assertEqual(stats["new_trades"], 2)

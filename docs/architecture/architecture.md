@@ -73,13 +73,14 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 
 ## Broker Integrations API (Fiscal Report)
 1. Core exposes broker integrations endpoints under `api/v1/broker/` for credential management, sync, and CSV ingest.
-2. Current Phase 1 (Pionex) endpoints:
+2. Current endpoints (Phase 1 + 2 + 3):
    - `POST /api/v1/broker/credentials/`
    - `GET /api/v1/broker/credentials/`
    - `DELETE /api/v1/broker/credentials/{id}/`
    - `POST /api/v1/broker/sync/{id}/`
    - `GET /api/v1/broker/sync/{id}/status/`
    - `POST /api/v1/broker/csv-import/`
+   - `GET /api/v1/broker/fiscal-report/?year=YYYY`
 3. Secrets are encrypted at rest using Fernet (`BROKER_ENCRYPTION_KEY`).
 4. Pionex sync is API-first with CSV fallback importers for:
    - `trading.csv`
@@ -87,6 +88,17 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `staking.csv`
    - `others.csv`
    - `dust-collector.csv`
+5. Binance sync is API-first with CSV fallback importers for:
+   - `Historial-de-transacciones-*.csv`
+   - `Historial-de-ordenes-de-Convert-*.csv`
+   - `Historial-de-Recurrente-de-compras-recurrentes-de-Convert-*.csv`
+6. Fiscal EUR conversion uses `EurConverter` with same-day priority and controlled fallback:
+   - attempts exact `trade_date` FX first,
+   - can trigger on-demand FX backfill for the requested pair/date range,
+   - falls back to nearest persisted market date when the exact day is unavailable (for example weekends/holidays).
+7. Spot-grid bot rows are currently informational in report payloads:
+   - Pionex bot sync persists `gridProfit` when `realizedProfit` is reported as `0`,
+   - bot section is not included in fiscal summary totals until per-operation traceability is available.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

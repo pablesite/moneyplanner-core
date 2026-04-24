@@ -9,6 +9,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from .csv_importers import (
+    import_binance_convert,
+    import_binance_recurring,
+    import_binance_transactions,
     import_pionex_dust,
     import_pionex_futures,
     import_pionex_others,
@@ -19,9 +22,11 @@ from .models import BrokerCredential
 from .serializers import (
     BrokerCredentialSerializer,
     BrokerCsvImportSerializer,
+    BrokerFiscalReportQuerySerializer,
     BrokerSyncRequestSerializer,
 )
 from .services.broker_sync import sync_credential
+from .services.fiscal_report import generate_fiscal_report
 
 
 class BrokerCredentialListCreateView(APIView):
@@ -84,6 +89,9 @@ IMPORTER_BY_TYPE = {
     "pionex_staking": import_pionex_staking,
     "pionex_others": import_pionex_others,
     "pionex_dust": import_pionex_dust,
+    "binance_transactions": import_binance_transactions,
+    "binance_convert": import_binance_convert,
+    "binance_recurring": import_binance_recurring,
 }
 
 
@@ -103,6 +111,39 @@ class BrokerCsvImportView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class BrokerFiscalReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = BrokerFiscalReportQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        year = serializer.validated_data.get("year") or date.today().year
+        ownership = serializer.validated_data.get("ownership")
+        if ownership is not None and ownership.user_id != request.user.id:
+            return Response(
+                {"detail": "La ownership no pertenece al usuario autenticado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        resolved_ownership = ownership
+        if resolved_ownership is None:
+            credential = (
+                BrokerCredential.objects.filter(user=request.user)
+                .select_related("ownership")
+                .order_by("id")
+                .first()
+            )
+            resolved_ownership = credential.ownership if credential else None
+        if resolved_ownership is None:
+            return Response(
+                {"detail": "No hay ownership disponible para generar informe fiscal."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = generate_fiscal_report(ownership=resolved_ownership, year=year)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 # Create your views here.

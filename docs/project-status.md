@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-04-22 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-04-24 | **Versión Core:** 0.23.2
 
 ---
 
@@ -25,12 +25,15 @@ Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capac
 
 Nota: `Informe Fiscal Crypto — Phase 0` cerrada el 2026-04-22 (tabla de cobertura API/CSV completada en `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md`).
 Nota: `Informe Fiscal Crypto — Phase 1` cerrada el 2026-04-23 (app `broker_integrations`, modelos, cliente Pionex API-first + CSV fallback, auto-discovery de bots spot grid y endpoints base). Spec archivada en `core/docs/tasks/fiscal-report/phase-1-pionex/terminados/backend.md`.
+Nota: `Informe Fiscal Crypto — Phase 2` cerrada el 2026-04-24 (cliente Binance API-first con firma HMAC, CSV importers de transacciones/convert/recurring, y sync con fallback y captura de gaps). Spec archivada en `core/docs/tasks/fiscal-report/phase-2-binance/terminados/backend.md`.
+Nota: `Informe Fiscal Crypto — Phase 3` cerrada el 2026-04-24 (motor FIFO global cross-exchange, conversión EUR para fiscalidad y endpoint `GET /api/v1/broker/fiscal-report/`). Spec archivada en `core/docs/tasks/fiscal-report/phase-3-fiscal-engine/terminados/backend.md`.
+Nota: `Informe Fiscal Crypto — Phase 4` cerrada el 2026-04-24 (UI Core para credenciales, sync, import CSV e informe fiscal anual en `/informe-fiscal` y `/informe-fiscal/informe`). Spec archivada en `core/docs/tasks/fiscal-report/phase-4-frontend/terminados/frontend.md`.
+Nota: `Informe Fiscal Crypto — Hardening post-Phase 4` aplicado el 2026-04-24 (fallback de `VITE_API_BASE_URL` a `http://localhost:8002`, selector de año también en Integraciones, bloque "Últimos datos importados", conversión EUR robusta con backfill on-demand para fecha de movimiento, y ajuste de bots Pionex para evitar `0` falsos usando `gridProfit` cuando `realizedProfit` llega a `0`).
+Nota: Fiscalidad bots actual (2026-04-24): la tabla de bots se mantiene como vista informativa y no se suma al resumen fiscal agregado. El resumen fiscal usa detalle FIFO y posiciones/fuentes con trazabilidad de movimientos.
+Nota: espejo SaaS diferido por scope explícito de la fase (MVP Core-only), documentado en `core/docs/frontend/fiscal-report-ux-notes.md`.
 
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
-| Informe Fiscal Crypto — Phase 2 | Agente | Backend Binance: API client + CSV importers (extender Phase 1). | `core/docs/tasks/fiscal-report/phase-2-binance/backend.md` |
-| Informe Fiscal Crypto — Phase 3 | Agente | Motor FIFO global cross-exchange + endpoint informe fiscal. | `core/docs/tasks/fiscal-report/phase-3-fiscal-engine/backend.md` |
-| Informe Fiscal Crypto — Phase 4 | Agente | Frontend Core: gestión credenciales, sync, CSV upload, visualización informe. | `core/docs/tasks/fiscal-report/phase-4-frontend/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -42,7 +45,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
-| Informe Fiscal Crypto | Media | ⚪ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. |
+| Informe Fiscal Crypto | Media | 🔄 | MVP operativo en Core: Pionex + Binance, FIFO global cross-exchange y pantalla de informe. Pendiente para cierre v1 fiscal: trazabilidad completa por operación de bots (sin simplificación agregada) y hardening de cobertura FX/UX final. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |

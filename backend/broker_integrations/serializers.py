@@ -83,6 +83,19 @@ class BrokerCsvImportSerializer(serializers.Serializer):
             "pionex_staking",
             "pionex_others",
             "pionex_dust",
+            "binance_transactions",
+            "binance_convert",
+            "binance_recurring",
         ]
     )
     file = serializers.FileField()
+
+
+class BrokerFiscalReportQuerySerializer(serializers.Serializer):
+    year = serializers.IntegerField(min_value=2000, max_value=2100, required=False)
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        required=False,
+        allow_null=True,
+    )

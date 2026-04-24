@@ -36,4 +36,11 @@ export const appShellNavItems: NavItem[] = [
     hint: 'Libro diario y cuentas contables',
     to: '/movimientos',
   },
+  {
+    id: 'fiscal-report',
+    icon: 'IR',
+    label: 'Informe fiscal',
+    hint: 'Casillas 029 y 332',
+    to: '/informe-fiscal',
+  },
 ];
