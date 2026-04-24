@@ -146,9 +146,12 @@ class BrokerTradeSerializer(serializers.ModelSerializer):
             "quote_asset",
             "side",
             "price",
+            "price_eur",
             "quantity",
             "fee",
+            "fee_eur",
             "fee_asset",
+            "eur_rate_source",
             "timestamp",
         ]
 

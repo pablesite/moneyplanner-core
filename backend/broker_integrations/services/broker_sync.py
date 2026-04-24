@@ -15,6 +15,7 @@ from ..csv_importers.common import deterministic_id, upsert_income_event_dedup
 from ..models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
 from .binance_client import BinanceApiError, BinanceClient
 from .encryption import decrypt
+from .intraday_fx import IntradayFxError, get_rate_at, prefetch_pairs_for_trades
 from .pionex_client import PionexApiError, PionexClient
 
 
@@ -266,6 +267,20 @@ def _discover_dual_bases(*, balances: list[dict[str, Any]]) -> list[str]:
     return ["BTC", "ETH", "SOL", "BNB"]
 
 
+def _prefetch_for_symbols(
+    *,
+    symbols: list[str],
+    start: datetime,
+    end: datetime,
+) -> None:
+    trades: list[dict[str, datetime | str]] = []
+    for symbol in symbols:
+        _, quote_asset = _split_symbol(symbol)
+        trades.append({"timestamp": start, "quote_asset": quote_asset})
+        trades.append({"timestamp": end, "quote_asset": quote_asset})
+    prefetch_pairs_for_trades(trades=trades)
+
+
 def _compute_expected_balances(*, credential: BrokerCredential) -> dict[str, Decimal]:
     expected: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for trade in BrokerTrade.objects.filter(
@@ -377,7 +392,30 @@ def _record_trade_fill(
         trade_id=str(trade_id),
         defaults=defaults,
     )
+    _apply_trade_eur_values(trade=trade, stats=stats)
     stats.track_trade(object_id=trade.id, created=created)
+
+
+def _apply_trade_eur_values(*, trade: BrokerTrade, stats: SyncStats) -> None:
+    try:
+        quote_rate, quote_source = get_rate_at(timestamp=trade.timestamp, asset=trade.quote_asset)
+        price_eur = trade.price * quote_rate
+        fee_eur = Decimal("0")
+        if trade.fee and trade.fee_asset:
+            fee_rate, _ = get_rate_at(timestamp=trade.timestamp, asset=trade.fee_asset)
+            fee_eur = trade.fee * fee_rate
+        trade.price_eur = price_eur
+        trade.fee_eur = fee_eur
+        trade.eur_rate_source = quote_source
+        trade.save(update_fields=["price_eur", "fee_eur", "eur_rate_source"])
+    except (IntradayFxError, ValueError) as exc:
+        stats.gaps.append(
+            {
+                "source": "trade_eur",
+                "reason": str(exc),
+                "trade_id": str(trade.trade_id),
+            }
+        )
 
 
 def _record_dual_income(
@@ -555,6 +593,7 @@ def _record_binance_convert_trade(
         trade_id=trade_id,
         defaults=defaults,
     )
+    _apply_trade_eur_values(trade=trade, stats=stats)
     stats.track_trade(object_id=trade.id, created=created)
 
 
@@ -644,6 +683,7 @@ def _record_binance_pay_trade(
         trade_id=trade_id,
         defaults=defaults,
     )
+    _apply_trade_eur_values(trade=trade, stats=stats)
     stats.track_trade(object_id=trade.id, created=created)
 
 
@@ -664,6 +704,9 @@ def sync_binance(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
         end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         start_ms = int(start.timestamp() * 1000)
         end_ms = int(end.timestamp() * 1000) - 1
+        _prefetch_for_symbols(
+            symbols=["BTC_USDT", "ETH_USDT", "SOL_USDT", "BNB_USDT"], start=start, end=end
+        )
 
         try:
             convert_rows = client.get_convert_history(start_ms=start_ms, end_ms=end_ms)
@@ -763,6 +806,7 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
             stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
 
         symbols = _discover_spot_symbols(credential=credential, balances=balances)
+        _prefetch_for_symbols(symbols=symbols, start=start, end=end)
         for symbol in symbols:
             try:
                 fills = client.get_fills(symbol=symbol, start_ms=start_ms, end_ms=end_ms, limit=100)

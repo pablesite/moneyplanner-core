@@ -77,6 +77,9 @@ class BrokerTrade(models.Model):
     quantity = models.DecimalField(max_digits=24, decimal_places=10)
     fee = models.DecimalField(max_digits=24, decimal_places=10, default=0)
     fee_asset = models.CharField(max_length=10, blank=True, default="")
+    price_eur = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
+    fee_eur = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
+    eur_rate_source = models.CharField(max_length=30, blank=True, default="")
     timestamp = models.DateTimeField(db_index=True)
     raw = models.JSONField(default=dict, blank=True)
 
@@ -89,6 +92,32 @@ class BrokerTrade(models.Model):
             )
         ]
         ordering = ["timestamp", "id"]
+
+
+class MarketRateSnapshot(models.Model):
+    class Interval(models.TextChoices):
+        MINUTE_1 = "1m", "1m"
+        HOUR_1 = "1h", "1h"
+        DAY_1 = "1d", "1d"
+
+    pair = models.CharField(max_length=20)
+    interval = models.CharField(max_length=4, choices=Interval.choices)
+    open_time = models.DateTimeField(db_index=True)
+    close = models.DecimalField(max_digits=24, decimal_places=10)
+    high = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
+    low = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
+    source = models.CharField(max_length=30)
+    raw = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pair", "interval", "open_time"],
+                name="uniq_market_rate_snapshot_pair_interval_open_time",
+            )
+        ]
+        indexes = [models.Index(fields=["pair", "interval", "open_time"])]
+        ordering = ["pair", "interval", "open_time", "id"]
 
 
 class BrokerSyncRun(models.Model):

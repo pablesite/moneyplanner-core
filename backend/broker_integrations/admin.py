@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     BotNetResult,
     BrokerCredential,
+    MarketRateSnapshot,
     BrokerSyncRun,
     BrokerTrade,
     FuturesPosition,
@@ -29,6 +30,13 @@ class BrokerSyncRunAdmin(admin.ModelAdmin):
     list_display = ("id", "credential", "year", "status", "started_at", "finished_at")
     list_filter = ("status", "year")
     search_fields = ("credential__label", "credential__user__username")
+
+
+@admin.register(MarketRateSnapshot)
+class MarketRateSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("id", "pair", "interval", "open_time", "close", "source")
+    list_filter = ("interval", "source")
+    search_fields = ("pair",)
 
 
 @admin.register(BotNetResult)

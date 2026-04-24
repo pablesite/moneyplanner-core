@@ -107,6 +107,10 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - each sync stores start/end, status (`running|ok|partial|failed`), stats and gaps,
    - touched records are tracked by id (`new_*` and `updated_*`) for drill-down and auditing,
    - legacy `BrokerCredential.last_sync_*` fields remain as compatibility layer for existing UI.
+10. Trade EUR valuation now supports intraday minute granularity:
+   - `MarketRateSnapshot` stores cached market candles (`pair`, `interval`, `open_time`, `close`) from Binance klines,
+   - broker sync pre-computes and persists `BrokerTrade.price_eur`, `BrokerTrade.fee_eur`, `BrokerTrade.eur_rate_source`,
+   - valuation resolves `asset/EUR` directly when available, with `asset/USDT -> USDT/EUR` and daily fallback when intraday data is missing.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
@@ -114,6 +118,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. Persisted datasets in Core are:
    - `FxRate` (daily FX and supported crypto crosses)
    - `InflationIndex` (monthly IPC national + CCAA)
+   - `MarketRateSnapshot` (lazy-loaded intraday klines cache for broker trade valuation)
 4. Sync coverage and operational status are tracked in `MarketDataSyncState`.
 5. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
 

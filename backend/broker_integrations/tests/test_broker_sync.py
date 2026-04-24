@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from unittest.mock import patch
 
 from cryptography.fernet import Fernet
@@ -193,6 +194,15 @@ class BrokerSyncTests(TestCase):
             api_key="key",
             api_secret_encrypted=encrypt("secret"),
         )
+        self.fx_patcher = patch(
+            "broker_integrations.services.broker_sync.get_rate_at",
+            return_value=(Decimal("1"), "test_fx"),
+        )
+        self.fx_patcher.start()
+
+    def tearDown(self):
+        self.fx_patcher.stop()
+        super().tearDown()
 
     @patch("broker_integrations.services.broker_sync.PionexClient", _FakePionexClient)
     def test_sync_pionex_discovers_bot_ids_automatically(self):

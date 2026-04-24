@@ -6,10 +6,12 @@ Keep Core market datasets synchronized and observable without manual CRUD flows.
 Current managed datasets:
 1. `FX` daily rates in `FxRate`
 2. `IPC` monthly index (Spain + CCAA) in `InflationIndex`
+3. `Broker intraday FX` minute cache in `broker_integrations.MarketRateSnapshot` (lazy on-demand)
 
 Provider notes:
 1. Fiat FX uses `frankfurter`.
 2. Crypto FX uses `coingecko` with automatic fallback to `cryptocompare` when CoinGecko rejects/rate-limits historical requests.
+3. Intraday broker valuation uses public Binance klines (`/api/v3/klines`) persisted only for traded minutes.
 
 ## Canonical Command
 From `core/`:
@@ -70,3 +72,16 @@ Returns:
 3. latest synced rows for `FX` and `IPC`
 
 Frontend `/data` consumes this endpoint and is now an observational dashboard (no manual add/delete flow for FX/IPC).
+
+## Broker Trade EUR Recompute
+
+If intraday valuation logic changes or historical trades need backfill:
+
+```bash
+cd core
+docker compose exec backend python manage.py recompute_trade_eur --credential <id> --year <YYYY>
+```
+
+Notes:
+1. The command is idempotent for existing rows.
+2. It recomputes `BrokerTrade.price_eur`, `BrokerTrade.fee_eur`, and `BrokerTrade.eur_rate_source`.
