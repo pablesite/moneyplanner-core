@@ -4,6 +4,12 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 
 **Última revisión:** 2026-04-24 | **Versión Core:** 0.23.2
 
+> Phase 5 Informe Fiscal Crypto — Pionex v2 (fiabilidad AEAT) planificada el
+> 2026-04-24. Specs en `core/docs/tasks/fiscal-report/phase-5-pionex-v2/`.
+> Decisiones clave: FX por minuto (klines Binance + caché), bots grid en FIFO
+> estricto, matching venta→lotes y export CSV/PDF. Binance queda para fase
+> posterior.
+
 ---
 
 ## En curso y próximas tareas
@@ -18,6 +24,12 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
 | Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
+| Informe Fiscal Crypto — Phase 5A Pionex v2 | Agente | Ampliar cobertura Pionex: auto-descubrimiento de símbolos, fills individuales de bot vía API, `balance_reconciliation`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-a-cobertura-pionex.md` |
+| Informe Fiscal Crypto — Phase 5B Pionex v2 | Agente | Persistir `BrokerSyncRun` con historial y añadir endpoints de drill-down. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-b-sync-runs.md` |
+| Informe Fiscal Crypto — Phase 5C Pionex v2 | Agente | FX intradía 1m con `intraday_fx` + `MarketRateSnapshot` y `price_eur`/`fee_eur` en `BrokerTrade`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-c-fx-intradia.md` |
+| Informe Fiscal Crypto — Phase 5D Pionex v2 | Agente | FIFO con matching venta→lotes, `gap_reason` tipado y `ManualCostBasis`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-d-fifo-matching.md` |
+| Informe Fiscal Crypto — Phase 5E Pionex v2 | Agente | Export CSV/PDF anexo AEAT. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-e-export-aeat.md` |
+| Informe Fiscal Crypto — Phase 5F Pionex v2 | Manual | Frontend drill-down de sync runs, matching visible y export. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-f-frontend-drilldown.md` |
 
 ### Siguiente tarea disponible
 
@@ -45,7 +57,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
-| Informe Fiscal Crypto | Media | 🔄 | MVP operativo en Core: Pionex + Binance, FIFO global cross-exchange y pantalla de informe. Pendiente para cierre v1 fiscal: trazabilidad completa por operación de bots (sin simplificación agregada) y hardening de cobertura FX/UX final. |
+| Informe Fiscal Crypto | Media | 🔄 | MVP operativo en Core: Pionex + Binance, FIFO global cross-exchange y pantalla de informe. Phase 5 Pionex v2 (fiabilidad AEAT) planificada: FX por minuto, fills individuales de bot en FIFO, matching venta→lotes, trazabilidad de syncs y export CSV/PDF. Binance queda para fase posterior. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
