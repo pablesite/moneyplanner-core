@@ -32,7 +32,7 @@ Phase 5 resuelve estos puntos sólo para Pionex. Binance queda para Phase 6.
 | 3 | [fase-c-fx-intradia.md](fase-c-fx-intradia.md) | Agente | backend | `intraday_fx` con klines 1m + `MarketRateSnapshot` + `price_eur`/`fee_eur` en `BrokerTrade` |
 | 4 | [terminados/fase-d-fifo-matching.md](terminados/fase-d-fifo-matching.md) | Agente | backend | Matching venta→lotes, `gap_reason` tipado, `ManualCostBasis` |
 | 5 | [terminados/fase-e-export-aeat.md](terminados/fase-e-export-aeat.md) | Agente | backend | Export CSV/PDF anexo AEAT |
-| 6 | [fase-f-frontend-drilldown.md](fase-f-frontend-drilldown.md) | Manual | frontend | Drill-down sync runs, matching visible, modal de coste manual |
+| 6 | [terminados/fase-f-frontend-drilldown.md](terminados/fase-f-frontend-drilldown.md) | Manual | frontend | Drill-down sync runs, matching visible, modal de coste manual |
 
 El orden es secuencial para backend (A→B→C→D→E). Fase F puede arrancar en
 paralelo con D/E una vez el contrato API de D esté cerrado.

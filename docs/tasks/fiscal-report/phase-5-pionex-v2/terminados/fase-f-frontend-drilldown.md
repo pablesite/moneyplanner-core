@@ -111,11 +111,11 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/frontend/fiscal-report-ux-notes.md` — actualizar con el nuevo
+- [x] `core/docs/frontend/fiscal-report-ux-notes.md` — actualizar con el nuevo
       flujo drill-down y matching.
-- [ ] `core/docs/frontend/domain-map.md` (si aplica) — registrar componentes
+- [x] `core/docs/frontend/domain-map.md` (si aplica) — no aplica en Core (documento canónico de domain map está en SaaS).
       nuevos.
-- [ ] `core/docs/project-status.md` — marcar Phase 5F cerrada y completar el
+- [x] `core/docs/project-status.md` — marcar Phase 5F cerrada y completar el
       ciclo de mejora.
 
 ## Risks
@@ -130,11 +130,19 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 
 ## Completion Criteria
 
-- [ ] Todas las vistas y componentes nuevos implementados.
-- [ ] Ningún renderizado del literal `"missing"` en el frontend.
-- [ ] Exportar CSV/PDF funciona end-to-end.
-- [ ] `ManualCostBasis` gestionable vía modal.
-- [ ] Lint, format, typecheck verdes.
-- [ ] Documentation updates done.
-- [ ] Spec movida a `terminados/`.
-- [ ] Commit: `feat(fiscal-report-ui): add drill-down, FIFO matching and export to Pionex fiscal report`.
+- [x] Todas las vistas y componentes nuevos implementados.
+- [x] Ningún renderizado del literal `"missing"` en el frontend.
+- [x] Exportar CSV/PDF funciona end-to-end.
+- [x] `ManualCostBasis` gestionable vía modal.
+- [ ] Lint, format, typecheck verdes. *(Bloqueado por errores preexistentes fuera de `fiscal-report` en `accounting`/`net-worth`; lint del dominio fiscal sí está verde.)*
+- [x] Documentation updates done.
+- [x] Spec movida a `terminados/`.
+- [x] Commit: `feat(fiscal-report-ui): add drill-down, FIFO matching and export to Pionex fiscal report`.
+
+## Cierre real (2026-04-24)
+
+- Implementación Core-only (sin mirror SaaS por scope explícito de la fase).
+- Validación ejecutada en Docker (Core frontend):
+  - `npm run lint` ✅
+  - `npm run format:check` ⚠️ falla por archivos no relacionados (`accounting`, `budget`, `net-worth`, etc.)
+  - `npm run typecheck` ⚠️ falla por errores TS preexistentes no relacionados (`accounting`, `net-worth`)

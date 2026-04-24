@@ -32,7 +32,7 @@ export type BrokerSyncStats = {
   updated_bot_results: number;
   new_income_events: number;
   updated_income_events: number;
-  gaps: { source: string; reason: string; code?: string }[];
+  gaps: BrokerSyncGap[];
 };
 
 export type BrokerSyncTriggerResponse = {
@@ -44,7 +44,7 @@ export type BrokerSyncStatusResponse = {
   last_sync: string | null;
   stats: Partial<BrokerSyncStats>;
   gaps_detected: boolean;
-  gaps: { source: string; reason: string; code?: string }[];
+  gaps: BrokerSyncGap[];
 };
 
 export type BrokerCsvImportResponse = {
@@ -82,18 +82,131 @@ export type FiscalFuturesRow = {
   aviso_derivados: boolean;
 };
 
-export type FiscalTradeLotRow = {
-  buy_date: string | null;
-  sell_date: string;
-  exchange_buy: string;
-  exchange_sell: string;
+export type BrokerSyncGap = {
+  source: string;
+  reason: string;
+  code?: string;
+  asset?: string;
+  expected?: number;
+  actual?: number;
+  diff?: number;
+};
+
+export type PaginatedResponse<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+export type BrokerSyncRunStatus = 'running' | 'ok' | 'partial' | 'failed';
+
+export type SyncRunSummary = {
+  id: number;
+  credential_id: number;
+  year: number;
+  status: BrokerSyncRunStatus;
+  started_at: string;
+  finished_at: string | null;
+  stats: Partial<BrokerSyncStats>;
+  gaps: BrokerSyncGap[];
+  new_trade_ids: number[];
+  updated_trade_ids: number[];
+  new_income_event_ids: number[];
+  updated_income_event_ids: number[];
+  new_bot_result_ids: number[];
+  updated_bot_result_ids: number[];
+};
+
+export type BrokerTradeDrilldownRow = {
+  id: number;
+  credential_id: number;
+  bot_id: string | null;
+  source: string;
+  trade_id: string;
   symbol: string;
-  quantity: number;
+  base_asset: string;
+  quote_asset: string;
+  side: 'buy' | 'sell';
+  price: string;
+  price_eur: string | null;
+  quantity: string;
+  fee: string;
+  fee_eur: string | null;
+  fee_asset: string;
+  eur_rate_source: string;
+  timestamp: string;
+};
+
+export type IncomeEventDrilldownRow = {
+  id: number;
+  credential_id: number;
+  source: string;
+  income_type: string;
+  asset: string;
+  amount: string;
+  timestamp: string;
+  description: string;
+};
+
+export type BotResultDrilldownRow = {
+  id: number;
+  credential_id: number;
+  bot_id: string;
+  bot_type: string;
+  label: string;
+  base_asset: string;
+  quote_asset: string;
+  realized_profit: string;
+  total_fee_base: string;
+  total_fee_quote: string;
+  period_start: string;
+  period_end: string;
+  synced_at: string;
+  fill_count: number;
+};
+
+export type BotResultDetail = BotResultDrilldownRow & {
+  fills: PaginatedResponse<BrokerTradeDrilldownRow>;
+};
+
+export type BalanceReconciliationEntry = {
+  asset: string;
+  expected: number;
+  actual: number;
+  diff: number;
+  status: 'ok' | 'mismatch';
+  sync_run_id: number;
+  sync_run_finished_at: string | null;
+};
+
+export type FiscalMatchedLotRow = {
+  buy_trade_id: number | null;
+  manual_cost_basis_id: number | null;
+  buy_date: string | null;
+  buy_exchange: string | null;
+  buy_symbol: string | null;
+  quantity_consumed: number;
+  unit_price_eur: number;
   cost_eur: number;
-  proceeds_eur: number;
+  fee_eur_allocated: number;
   gain_loss_eur: number;
   hold_days: number;
-  casilla: string;
+};
+
+export type GapReason = 'pre_period_buy' | 'missing_data' | 'balance_transfer_in';
+
+export type FifoSaleMatch = {
+  sell_trade_id: number;
+  sell_date: string;
+  sell_exchange: string;
+  sell_symbol: string;
+  quantity_sold: number;
+  proceeds_eur: number;
+  fee_eur: number;
+  matched_lots: FiscalMatchedLotRow[];
+  gap_quantity: number;
+  gap_reason: GapReason | null;
 };
 
 export type FiscalTradeSectionRow = {
@@ -103,7 +216,7 @@ export type FiscalTradeSectionRow = {
   valor_adquisicion_eur: number;
   ganancia_eur: number;
   perdida_eur: number;
-  lotes: FiscalTradeLotRow[];
+  sales: FifoSaleMatch[];
 };
 
 export type FiscalDataSources = {
@@ -121,6 +234,7 @@ export type FiscalResumen = {
 };
 
 export type FiscalReportPayload = {
+  schema_version?: number;
   fiscal_year: number;
   capital_mobiliario: FiscalCapitalMobiliarioRow[];
   ganancias_perdidas_bots: FiscalBotResultRow[];
@@ -129,6 +243,35 @@ export type FiscalReportPayload = {
   avisos: string[];
   data_sources: FiscalDataSources;
   resumen: FiscalResumen;
+};
+
+export type SyncRunDetail = SyncRunSummary & {
+  trades: PaginatedResponse<BrokerTradeDrilldownRow>;
+  income_events: PaginatedResponse<IncomeEventDrilldownRow>;
+  bot_results: PaginatedResponse<BotResultDrilldownRow>;
+};
+
+export type ManualCostBasisRow = {
+  id: number;
+  ownership_id: number;
+  asset: string;
+  quantity: string;
+  quantity_remaining: string;
+  acquired_at: string;
+  cost_eur: string;
+  exchange_origin: string;
+  notes: string;
+  created_at: string;
+};
+
+export type ManualCostBasisInput = {
+  ownership_id?: number;
+  asset: string;
+  quantity: string;
+  acquired_at: string;
+  cost_eur: string;
+  exchange_origin?: string;
+  notes?: string;
 };
 
 export const fiscalReportApi = {
@@ -158,6 +301,62 @@ export const fiscalReportApi = {
   getSyncStatus(credentialId: number) {
     return coreApi.get<BrokerSyncStatusResponse>(`/api/v1/broker/sync/${credentialId}/status/`);
   },
+  getSyncRuns(params: { credential?: number; year?: number; page?: number }) {
+    return coreApi.get<PaginatedResponse<SyncRunSummary>>('/api/v1/broker/sync-runs/', {
+      params: {
+        ...(typeof params.credential === 'number' ? { credential: params.credential } : {}),
+        ...(typeof params.year === 'number' ? { year: params.year } : {}),
+        ...(typeof params.page === 'number' ? { page: params.page } : {}),
+      },
+    });
+  },
+  getSyncRun(syncRunId: number) {
+    return coreApi.get<SyncRunDetail>(`/api/v1/broker/sync-runs/${syncRunId}/`);
+  },
+  getTrades(params: {
+    credential?: number;
+    year?: number;
+    source?: string;
+    symbol?: string;
+    side?: 'buy' | 'sell';
+    bot_id?: string;
+    sync_run?: number;
+    page?: number;
+  }) {
+    return coreApi.get<PaginatedResponse<BrokerTradeDrilldownRow>>('/api/v1/broker/trades/', {
+      params,
+    });
+  },
+  getIncomeEvents(params: {
+    credential?: number;
+    year?: number;
+    source?: string;
+    sync_run?: number;
+    page?: number;
+  }) {
+    return coreApi.get<PaginatedResponse<IncomeEventDrilldownRow>>(
+      '/api/v1/broker/income-events/',
+      {
+        params,
+      },
+    );
+  },
+  getBotResults(params: {
+    credential?: number;
+    year?: number;
+    bot_id?: string;
+    sync_run?: number;
+    page?: number;
+  }) {
+    return coreApi.get<PaginatedResponse<BotResultDrilldownRow>>('/api/v1/broker/bot-results/', {
+      params,
+    });
+  },
+  getBotResult(botResultId: number, page?: number) {
+    return coreApi.get<BotResultDetail>(`/api/v1/broker/bot-results/${botResultId}/`, {
+      params: typeof page === 'number' ? { page } : undefined,
+    });
+  },
   importCsv(payload: { broker: BrokerName; file_type: BrokerCsvFileType; file: File }) {
     const formData = new FormData();
     formData.append('broker', payload.broker);
@@ -171,6 +370,31 @@ export const fiscalReportApi = {
         year: params.year,
         ...(params.ownership_id ? { ownership_id: params.ownership_id } : {}),
       },
+    });
+  },
+  getManualCostBasis(asset?: string) {
+    return coreApi.get<PaginatedResponse<ManualCostBasisRow>>('/api/v1/broker/manual-cost-basis/', {
+      params: asset ? { asset } : undefined,
+    });
+  },
+  createManualCostBasis(payload: ManualCostBasisInput) {
+    return coreApi.post<ManualCostBasisRow>('/api/v1/broker/manual-cost-basis/', payload);
+  },
+  deleteManualCostBasis(id: number) {
+    return coreApi.delete<void>(`/api/v1/broker/manual-cost-basis/${id}/`);
+  },
+  downloadFiscalReportExport(params: {
+    year: number;
+    format: 'csv' | 'pdf';
+    ownership_id?: number | null;
+  }) {
+    return coreApi.get<Blob>('/api/v1/broker/fiscal-report/export/', {
+      params: {
+        year: params.year,
+        format: params.format,
+        ...(params.ownership_id ? { ownership_id: params.ownership_id } : {}),
+      },
+      responseType: 'blob',
     });
   },
 };

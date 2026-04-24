@@ -2096,6 +2096,79 @@ body {
   line-height: 1.3;
 }
 
+.fiscal-row-active {
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.fiscal-badge-ok {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.fiscal-badge-danger {
+  border-color: rgba(248, 113, 113, 0.48);
+  color: rgba(248, 113, 113, 0.95);
+}
+
+.fiscal-sale-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.fiscal-sale-group {
+  display: grid;
+  gap: 10px;
+}
+
+.fiscal-sale-group-head {
+  display: grid;
+  gap: 8px;
+}
+
+.fiscal-sale-group-head h4 {
+  margin: 0;
+}
+
+.fiscal-sale-group-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fiscal-sale-gap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fiscal-total-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fiscal-gap-chip {
+  border-color: rgba(245, 158, 11, 0.5);
+  color: rgba(245, 158, 11, 0.96);
+}
+
+.fiscal-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.fiscal-field-full {
+  grid-column: 1 / -1;
+}
+
+.fiscal-text-ok {
+  color: rgba(34, 197, 94, 0.95);
+}
+
 .fiscal-year-select {
   min-width: 120px;
 }

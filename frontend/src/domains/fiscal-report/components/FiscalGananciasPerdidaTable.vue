@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { formatAmount, formatMoney } from '@/lib/format';
+import { computed } from 'vue';
+import { formatMoney } from '@/lib/format';
 import type { FiscalTradeSectionRow } from '@/domains/fiscal-report/api';
+import FifoSaleMatchRow from './FifoSaleMatchRow.vue';
 
 const props = defineProps<{
   rows: FiscalTradeSectionRow[];
 }>();
 
-const expandedByAsset = ref<Record<string, boolean>>({});
+const emit = defineEmits<{
+  manualCostBasis: [asset: string];
+}>();
 
 const totals = computed(() => {
   return props.rows.reduce(
@@ -21,17 +24,6 @@ const totals = computed(() => {
     { adquisicion: 0, transmision: 0, ganancia: 0, perdida: 0 },
   );
 });
-
-function isExpanded(asset: string): boolean {
-  return Boolean(expandedByAsset.value[asset]);
-}
-
-function toggleAsset(asset: string) {
-  expandedByAsset.value = {
-    ...expandedByAsset.value,
-    [asset]: !expandedByAsset.value[asset],
-  };
-}
 </script>
 
 <template>
@@ -39,7 +31,7 @@ function toggleAsset(asset: string) {
     <header class="ui-section-head">
       <div class="ui-section-copy">
         <h3 class="ui-section-title">Ganancias/perdidas por transmisiones</h3>
-        <p class="ui-section-subtitle">Agrupado por denominacion y expandible por lotes FIFO</p>
+        <p class="ui-section-subtitle">Detalle FIFO por venta y lotes consumidos.</p>
       </div>
     </header>
 
@@ -47,75 +39,60 @@ function toggleAsset(asset: string) {
       No hay transmisiones sujetas a FIFO para este año.
     </div>
 
-    <table v-else class="fiscal-table">
-      <thead>
-        <tr>
-          <th>Denominacion</th>
-          <th>V. Adquisicion EUR</th>
-          <th>V. Transmision EUR</th>
-          <th>Ganancia</th>
-          <th>Perdida</th>
-          <th>Casilla</th>
-          <th>Lotes</th>
-        </tr>
-      </thead>
-      <tbody>
-        <template v-for="row in props.rows" :key="row.denominacion">
-          <tr>
-            <td>{{ row.denominacion }}</td>
-            <td>{{ formatMoney(row.valor_adquisicion_eur, 'EUR') }}</td>
-            <td>{{ formatMoney(row.valor_transmision_eur, 'EUR') }}</td>
-            <td>{{ formatMoney(row.ganancia_eur, 'EUR') }}</td>
-            <td>{{ formatMoney(row.perdida_eur, 'EUR') }}</td>
-            <td>{{ row.casilla }}</td>
-            <td>
-              <button class="btn btn-sm" type="button" @click="toggleAsset(row.denominacion)">
-                {{ isExpanded(row.denominacion) ? 'Ocultar' : 'Ver lotes' }}
-              </button>
-            </td>
-          </tr>
-          <tr v-if="isExpanded(row.denominacion)" class="fiscal-lot-row">
-            <td colspan="7">
-              <table class="fiscal-lot-table">
-                <thead>
-                  <tr>
-                    <th>Buy date</th>
-                    <th>Sell date</th>
-                    <th>Exchange buy</th>
-                    <th>Exchange sell</th>
-                    <th>Qty</th>
-                    <th>Cost EUR</th>
-                    <th>Proceeds EUR</th>
-                    <th>Gain/Loss EUR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(lot, lotIndex) in row.lotes" :key="lotIndex">
-                    <td>{{ lot.buy_date ?? '-' }}</td>
-                    <td>{{ lot.sell_date }}</td>
-                    <td>{{ lot.exchange_buy }}</td>
-                    <td>{{ lot.exchange_sell }}</td>
-                    <td>{{ formatAmount(lot.quantity, { maxDecimals: 8 }) }}</td>
-                    <td>{{ formatMoney(lot.cost_eur, 'EUR') }}</td>
-                    <td>{{ formatMoney(lot.proceeds_eur, 'EUR') }}</td>
-                    <td>{{ formatMoney(lot.gain_loss_eur, 'EUR') }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-      <tfoot>
-        <tr>
-          <td><strong>Totales</strong></td>
-          <td>{{ formatMoney(totals.adquisicion, 'EUR') }}</td>
-          <td>{{ formatMoney(totals.transmision, 'EUR') }}</td>
-          <td>{{ formatMoney(totals.ganancia, 'EUR') }}</td>
-          <td>{{ formatMoney(totals.perdida, 'EUR') }}</td>
-          <td colspan="2">332</td>
-        </tr>
-      </tfoot>
-    </table>
+    <div v-else class="fiscal-sale-groups">
+      <section v-for="row in props.rows" :key="row.denominacion" class="fiscal-sale-group">
+        <div class="fiscal-sale-group-head">
+          <h4>{{ row.denominacion }}</h4>
+          <div class="fiscal-sale-group-metrics">
+            <span class="badge"
+              >Adquisición: {{ formatMoney(row.valor_adquisicion_eur, 'EUR') }}</span
+            >
+            <span class="badge"
+              >Transmisión: {{ formatMoney(row.valor_transmision_eur, 'EUR') }}</span
+            >
+            <span class="badge">Ganancia: {{ formatMoney(row.ganancia_eur, 'EUR') }}</span>
+            <span class="badge">Pérdida: {{ formatMoney(row.perdida_eur, 'EUR') }}</span>
+          </div>
+        </div>
+        <table class="fiscal-table">
+          <thead>
+            <tr>
+              <th>Fecha venta</th>
+              <th>Exchange venta</th>
+              <th>Símbolo</th>
+              <th>Cantidad venta</th>
+              <th>Proceeds EUR</th>
+              <th>Fee EUR</th>
+              <th>Gap</th>
+              <th>Lotes</th>
+            </tr>
+          </thead>
+          <FifoSaleMatchRow
+            v-for="sale in row.sales"
+            :key="sale.sell_trade_id"
+            :asset="row.denominacion"
+            :sale="sale"
+            @manual-cost-basis="emit('manualCostBasis', $event)"
+          />
+          <tfoot>
+            <tr>
+              <td>
+                <strong>Total {{ row.denominacion }}</strong>
+              </td>
+              <td colspan="3"></td>
+              <td>{{ formatMoney(row.valor_transmision_eur, 'EUR') }}</td>
+              <td colspan="3">{{ row.casilla }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </section>
+    </div>
+
+    <footer v-if="props.rows.length" class="fiscal-total-summary">
+      <span class="badge">Total adquisición: {{ formatMoney(totals.adquisicion, 'EUR') }}</span>
+      <span class="badge">Total transmisión: {{ formatMoney(totals.transmision, 'EUR') }}</span>
+      <span class="badge">Total ganancia: {{ formatMoney(totals.ganancia, 'EUR') }}</span>
+      <span class="badge">Total pérdida: {{ formatMoney(totals.perdida, 'EUR') }}</span>
+    </footer>
   </section>
 </template>

@@ -47,4 +47,15 @@ No mirror was implemented in `frontend/` for this phase.
 ## Export Status (Phase 5E/5F)
 1. Backend export endpoint is available in Core:
    - `GET /api/v1/broker/fiscal-report/export/?year=YYYY&format=csv|pdf`
-2. Download button and final UX integration remain in Phase 5F frontend scope.
+2. Phase 5F frontend integration is now available in Core:
+   - export buttons CSV/PDF in `/informe-fiscal/informe`,
+   - sync run history + drill-down in `/informe-fiscal`,
+   - balance reconciliation table from `balance_reconciliation` gaps,
+   - FIFO sale-level expandable rows with `matched_lots`,
+   - typed `gap_reason` chip (no literal `"missing"` rendered),
+   - manual cost-basis modal with create/delete and report recalculation,
+   - bot fill drill-down with reconciliation between report net EUR and `sum(fills_eur)`.
+
+## Phase 5F Scope Note
+1. This phase remains Core-only by explicit scope.
+2. SaaS mirror is deferred.

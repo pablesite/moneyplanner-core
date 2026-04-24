@@ -5,6 +5,9 @@ import FiscalCredentialForm from '@/domains/fiscal-report/components/FiscalCrede
 import FiscalAccountList from '@/domains/fiscal-report/components/FiscalAccountList.vue';
 import FiscalLatestImports from '@/domains/fiscal-report/components/FiscalLatestImports.vue';
 import FiscalCsvImport from '@/domains/fiscal-report/components/FiscalCsvImport.vue';
+import SyncRunHistoryTable from '@/domains/fiscal-report/components/SyncRunHistoryTable.vue';
+import SyncRunDetailPanel from '@/domains/fiscal-report/components/SyncRunDetailPanel.vue';
+import BalanceReconciliationTable from '@/domains/fiscal-report/components/BalanceReconciliationTable.vue';
 import type { BrokerCsvFileType, BrokerName } from '@/domains/fiscal-report/api';
 
 const { store, selectedYear } = useFiscalReport();
@@ -36,9 +39,18 @@ async function onSyncCredential(credentialId: number) {
   await sync(credentialId, selectedYear.value);
 }
 
+async function onOpenSyncRun(syncRunId: number) {
+  await store.openSyncRun(syncRunId);
+}
+
+async function onRefreshDrilldown() {
+  await store.fetchActiveRunDrilldown();
+}
+
 function onYearChange(event: Event) {
   const target = event.target as HTMLSelectElement;
   selectedYear.value = Number(target.value);
+  void store.fetchSyncRuns();
 }
 
 async function onCsvSubmit(payload: {
@@ -104,6 +116,32 @@ async function onCsvSubmit(payload: {
       <FiscalLatestImports
         :credentials="store.credentials"
         :sync-status-by-credential="store.syncStatusByCredential"
+      />
+
+      <SyncRunHistoryTable
+        :rows="store.syncRuns"
+        :loading="store.loadingSyncRuns"
+        :active-run-id="store.activeSyncRunId"
+        @open="onOpenSyncRun"
+      />
+
+      <SyncRunDetailPanel
+        :active-run="store.activeSyncRun"
+        :loading="store.loadingSyncRunDrilldown"
+        :filters="store.syncRunFilters"
+        :trades="store.syncRunTrades"
+        :trades-count="store.syncRunTradesCount"
+        :income-events="store.syncRunIncomeEvents"
+        :income-events-count="store.syncRunIncomeEventsCount"
+        :bot-results="store.syncRunBotResults"
+        :bot-results-count="store.syncRunBotResultsCount"
+        @update-filters="store.setSyncRunFilters"
+        @refresh="onRefreshDrilldown"
+      />
+
+      <BalanceReconciliationTable
+        :rows="store.balanceReconciliation"
+        :loading="store.loadingSyncRuns || store.loadingBalanceReconciliation"
       />
 
       <FiscalCsvImport
