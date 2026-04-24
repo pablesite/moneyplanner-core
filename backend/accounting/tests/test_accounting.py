@@ -2720,7 +2720,9 @@ class AccountingApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         eur_credit = next(
-            entry for entry in response.data["entries"] if entry["account_id"] == self.cash_account.id
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == self.cash_account.id
         )
         usd_debit = next(
             entry for entry in response.data["entries"] if entry["account_id"] == usd_account.id

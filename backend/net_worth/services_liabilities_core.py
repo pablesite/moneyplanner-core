@@ -585,7 +585,10 @@ def estimate_liability_outstanding_amount_simple(
 
 
 def get_effective_liability_amount(
-    *, liability: Liability, as_of_date: date | None = None, position_cache=None,
+    *,
+    liability: Liability,
+    as_of_date: date | None = None,
+    position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
@@ -618,9 +621,9 @@ def get_effective_liability_amount(
                 if dates:
                     idx = bisect_right(dates, ref_date) - 1
                     if idx >= 0:
-                        debit_total = position_cache.accounting_prefix_debits[accounting_account.id][
-                            idx
-                        ]
+                        debit_total = position_cache.accounting_prefix_debits[
+                            accounting_account.id
+                        ][idx]
                         credit_total = position_cache.accounting_prefix_credits[
                             accounting_account.id
                         ][idx]
@@ -630,9 +633,9 @@ def get_effective_liability_amount(
                             liability.id
                         )
                         if opening_date is not None and ref_date >= opening_date:
-                            before_opening_idx = bisect_right(
-                                dates, opening_date - timedelta(days=1)
-                            ) - 1
+                            before_opening_idx = (
+                                bisect_right(dates, opening_date - timedelta(days=1)) - 1
+                            )
                             if before_opening_idx >= 0:
                                 before_debit_total = position_cache.accounting_prefix_debits[
                                     accounting_account.id
@@ -686,7 +689,8 @@ def get_effective_liability_amount(
     if position_cache is not None:
         cached_vals = position_cache.liability_valuations.get(liability.id, [])
         valuation = next(
-            (v for v in cached_vals if v.valuation_date <= ref_date), None,
+            (v for v in cached_vals if v.valuation_date <= ref_date),
+            None,
         )
     else:
         valuation = (
@@ -750,7 +754,8 @@ def get_liability_events_delta(
     if position_cache is not None:
         all_events = position_cache.liability_events.get(liability.id, [])
         events = [
-            e for e in all_events
+            e
+            for e in all_events
             if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
         ]
     else:

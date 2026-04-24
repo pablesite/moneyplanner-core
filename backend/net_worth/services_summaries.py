@@ -72,8 +72,7 @@ def _build_net_worth_summary_impl(
             total_liabilities_real = _adjust(totals.total_liabilities)
             net_worth_real = _adjust(net_worth)
             assets_by_category_real = {
-                category: _adjust(amount)
-                for category, amount in totals.assets_by_category.items()
+                category: _adjust(amount) for category, amount in totals.assets_by_category.items()
             }
             liabilities_by_category_real = {
                 category: _adjust(amount)

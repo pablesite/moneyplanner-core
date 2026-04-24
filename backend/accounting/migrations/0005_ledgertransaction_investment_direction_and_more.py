@@ -4,30 +4,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounting', '0004_add_member_tag_to_ledger_transaction'),
+        ("accounting", "0004_add_member_tag_to_ledger_transaction"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='investment_direction',
-            field=models.CharField(blank=True, default='', max_length=16),
+            model_name="ledgertransaction",
+            name="investment_direction",
+            field=models.CharField(blank=True, default="", max_length=16),
         ),
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='quick_entry_kind',
-            field=models.CharField(blank=True, default='', max_length=24),
+            model_name="ledgertransaction",
+            name="quick_entry_kind",
+            field=models.CharField(blank=True, default="", max_length=24),
         ),
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='realized_cost_basis',
+            model_name="ledgertransaction",
+            name="realized_cost_basis",
             field=models.DecimalField(blank=True, decimal_places=8, max_digits=20, null=True),
         ),
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='realized_gain_loss',
+            model_name="ledgertransaction",
+            name="realized_gain_loss",
             field=models.DecimalField(blank=True, decimal_places=8, max_digits=20, null=True),
         ),
     ]

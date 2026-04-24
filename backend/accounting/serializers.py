@@ -938,7 +938,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         if movement_type not in {"investment", "transfer"}:
             if destination_amount is not None:
                 raise serializers.ValidationError(
-                    {"destination_amount": "Solo aplica a movimientos de inversion o transferencia."}
+                    {
+                        "destination_amount": "Solo aplica a movimientos de inversion o transferencia."
+                    }
                 )
             return
         if amount <= 0:

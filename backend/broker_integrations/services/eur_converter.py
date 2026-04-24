@@ -32,11 +32,7 @@ class EurConverter:
             filters["rate_date"] = rate_date
         else:
             filters["rate_date__lte"] = rate_date
-        row = (
-            FxRate.objects.filter(**filters)
-            .order_by("-rate_date")
-            .first()
-        )
+        row = FxRate.objects.filter(**filters).order_by("-rate_date").first()
         return Decimal(row.rate) if row else None
 
     @staticmethod
@@ -54,7 +50,9 @@ class EurConverter:
         except MarketDataSyncError:
             return
 
-    def _resolve_pair_rate(self, *, from_currency: str, to_currency: str, rate_date: date) -> Decimal | None:
+    def _resolve_pair_rate(
+        self, *, from_currency: str, to_currency: str, rate_date: date
+    ) -> Decimal | None:
         exact = self._lookup_direct(
             from_currency=from_currency,
             to_currency=to_currency,

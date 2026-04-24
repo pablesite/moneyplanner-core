@@ -49,7 +49,8 @@ class PositionDataCache:
 
 
 def _build_position_data_cache(
-    assets: list[Asset], liabilities: list[Liability],
+    assets: list[Asset],
+    liabilities: list[Liability],
 ) -> PositionDataCache:
     cache = PositionDataCache()
     asset_ids = [a.id for a in assets]
@@ -85,7 +86,11 @@ def _build_position_data_cache(
     accounting_account_ids = {
         int(account_id)
         for account_id in [
-            *(a.accounting_account_id for a in assets if a.tracking_mode == Asset.TrackingMode.ACCOUNTING),
+            *(
+                a.accounting_account_id
+                for a in assets
+                if a.tracking_mode == Asset.TrackingMode.ACCOUNTING
+            ),
             *(
                 li.accounting_account_id
                 for li in liabilities
@@ -327,8 +332,11 @@ def build_asset_timeline(*, asset: Asset, end_date: date | None = None) -> dict[
     for point_date in _iter_month_ends(start_date=asset.start_date, end_date=timeline_end_date):
         native_value = get_effective_asset_amount(asset=asset, as_of_date=point_date)
         base_value = convert_currency_cached(
-            native_value, asset.currency, base_currency,
-            rate_date=point_date, fx_cache=fx_cache,
+            native_value,
+            asset.currency,
+            base_currency,
+            rate_date=point_date,
+            fx_cache=fx_cache,
         )
         rows.append(
             {
@@ -357,8 +365,11 @@ def build_liability_timeline(
     for point_date in _iter_month_ends(start_date=liability.start_date, end_date=timeline_end_date):
         native_value = get_effective_liability_amount(liability=liability, as_of_date=point_date)
         base_value = convert_currency_cached(
-            native_value, liability.currency, base_currency,
-            rate_date=point_date, fx_cache=fx_cache,
+            native_value,
+            liability.currency,
+            base_currency,
+            rate_date=point_date,
+            fx_cache=fx_cache,
         )
         rows.append(
             {

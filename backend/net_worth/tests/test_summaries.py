@@ -19,6 +19,7 @@ from ..serializers import (
     LiquidityAssetEventSerializer,
 )
 
+
 class NetWorthSerializerUnitTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -249,4 +250,3 @@ class NetWorthSerializerUnitTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         valuation = serializer.save()
         self.assertEqual(valuation.user_id, self.user.id)
-

@@ -155,6 +155,106 @@ def build_account_balances_summary(
     }
 
 
+def _filter_accounts_by_ownership(
+    *,
+    account_rows: list[dict],
+    user_id: int,
+    ownership_id: int | None,
+    ownership_is_null: bool | None,
+) -> tuple[list[dict], dict[int, Decimal]]:
+    account_multiplier_by_id: dict[int, Decimal] = {
+        int(row["id"]): Decimal("1") for row in account_rows
+    }
+    links = list(
+        OwnershipLink.objects.filter(
+            user_id=user_id,
+            target_type__in=[
+                OwnershipLink.TargetType.ASSET,
+                OwnershipLink.TargetType.LIABILITY,
+            ],
+        ).values("ownership_id", "target_type", "target_id")
+    )
+    asset_owner_by_target_id = {
+        int(link["target_id"]): int(link["ownership_id"])
+        for link in links
+        if str(link["target_type"]) == OwnershipLink.TargetType.ASSET
+    }
+    liability_owner_by_target_id = {
+        int(link["target_id"]): int(link["ownership_id"])
+        for link in links
+        if str(link["target_type"]) == OwnershipLink.TargetType.LIABILITY
+    }
+    ownership_ids_in_links = {
+        int(link["ownership_id"]) for link in links if link.get("ownership_id") is not None
+    }
+    if ownership_id is not None:
+        ownership_ids_in_links.add(ownership_id)
+    ownership_rows = list(
+        Ownership.objects.filter(
+            user_id=user_id,
+            id__in=ownership_ids_in_links,
+        ).values("id", "kind", "member_id")
+    )
+    ownership_by_id = {int(row["id"]): row for row in ownership_rows}
+
+    selected_ownership = ownership_by_id.get(ownership_id) if ownership_id is not None else None
+    shared_ratio_by_ownership_id: dict[int, Decimal] = {}
+    selected_member_id = (
+        int(selected_ownership["member_id"])
+        if selected_ownership
+        and str(selected_ownership["kind"]) == Ownership.Kind.INDIVIDUAL
+        and selected_ownership.get("member_id") is not None
+        else None
+    )
+    if selected_member_id is not None:
+        split_rows = list(
+            OwnershipSplit.objects.filter(
+                ownership__user_id=user_id,
+                ownership__kind=Ownership.Kind.SHARED,
+                member_id=selected_member_id,
+            ).values("ownership_id", "percent")
+        )
+        shared_ratio_by_ownership_id = {
+            int(row["ownership_id"]): Decimal(row["percent"]) / Decimal("100") for row in split_rows
+        }
+
+    filtered_rows: list[dict] = []
+    for row in account_rows:
+        account_type = str(row["account_type"])
+        if account_type == LedgerAccount.AccountType.ASSET:
+            target_id = row.get("asset_id")
+            owner_id = (
+                asset_owner_by_target_id.get(int(target_id)) if target_id is not None else None
+            )
+        else:
+            target_id = row.get("liability_id")
+            owner_id = (
+                liability_owner_by_target_id.get(int(target_id)) if target_id is not None else None
+            )
+
+        if ownership_is_null:
+            if owner_id is None:
+                filtered_rows.append(row)
+            continue
+        if ownership_id is None:
+            continue
+        if owner_id is None:
+            continue
+
+        multiplier = Decimal("0")
+        if owner_id == ownership_id:
+            multiplier = Decimal("1")
+        else:
+            shared_multiplier = shared_ratio_by_ownership_id.get(owner_id)
+            if shared_multiplier is not None and shared_multiplier > Decimal("0"):
+                multiplier = shared_multiplier
+        if multiplier > Decimal("0"):
+            filtered_rows.append(row)
+            account_multiplier_by_id[int(row["id"])] = multiplier
+
+    return filtered_rows, account_multiplier_by_id
+
+
 def build_daily_balance_series(
     *,
     user_id: int,
@@ -177,96 +277,12 @@ def build_daily_balance_series(
         int(row["id"]): Decimal("1") for row in account_rows
     }
     if ownership_id is not None or ownership_is_null:
-        links = list(
-            OwnershipLink.objects.filter(
-                user_id=user_id,
-                target_type__in=[OwnershipLink.TargetType.ASSET, OwnershipLink.TargetType.LIABILITY],
-            ).values("ownership_id", "target_type", "target_id")
+        account_rows, account_multiplier_by_id = _filter_accounts_by_ownership(
+            account_rows=account_rows,
+            user_id=user_id,
+            ownership_id=ownership_id,
+            ownership_is_null=ownership_is_null,
         )
-        asset_owner_by_target_id = {
-            int(link["target_id"]): int(link["ownership_id"])
-            for link in links
-            if str(link["target_type"]) == OwnershipLink.TargetType.ASSET
-        }
-        liability_owner_by_target_id = {
-            int(link["target_id"]): int(link["ownership_id"])
-            for link in links
-            if str(link["target_type"]) == OwnershipLink.TargetType.LIABILITY
-        }
-        ownership_ids_in_links = {
-            int(link["ownership_id"]) for link in links if link.get("ownership_id") is not None
-        }
-        if ownership_id is not None:
-            ownership_ids_in_links.add(ownership_id)
-        ownership_rows = list(
-            Ownership.objects.filter(
-                user_id=user_id,
-                id__in=ownership_ids_in_links,
-            ).values("id", "kind", "member_id")
-        )
-        ownership_by_id = {int(row["id"]): row for row in ownership_rows}
-
-        selected_ownership = ownership_by_id.get(ownership_id) if ownership_id is not None else None
-        shared_ratio_by_ownership_id: dict[int, Decimal] = {}
-        selected_member_id = (
-            int(selected_ownership["member_id"])
-            if selected_ownership
-            and str(selected_ownership["kind"]) == Ownership.Kind.INDIVIDUAL
-            and selected_ownership.get("member_id") is not None
-            else None
-        )
-        if selected_member_id is not None:
-            split_rows = list(
-                OwnershipSplit.objects.filter(
-                    ownership__user_id=user_id,
-                    ownership__kind=Ownership.Kind.SHARED,
-                    member_id=selected_member_id,
-                ).values("ownership_id", "percent")
-            )
-            shared_ratio_by_ownership_id = {
-                int(row["ownership_id"]): Decimal(row["percent"]) / Decimal("100")
-                for row in split_rows
-            }
-
-        filtered_rows: list[dict] = []
-        for row in account_rows:
-            account_type = str(row["account_type"])
-            if account_type == LedgerAccount.AccountType.ASSET:
-                target_id = row.get("asset_id")
-                owner_id = (
-                    asset_owner_by_target_id.get(int(target_id))
-                    if target_id is not None
-                    else None
-                )
-            else:
-                target_id = row.get("liability_id")
-                owner_id = (
-                    liability_owner_by_target_id.get(int(target_id))
-                    if target_id is not None
-                    else None
-                )
-
-            if ownership_is_null:
-                if owner_id is None:
-                    filtered_rows.append(row)
-                continue
-            if ownership_id is None:
-                continue
-            if owner_id is None:
-                continue
-
-            multiplier = Decimal("0")
-            if owner_id == ownership_id:
-                multiplier = Decimal("1")
-            else:
-                shared_multiplier = shared_ratio_by_ownership_id.get(owner_id)
-                if shared_multiplier is not None and shared_multiplier > Decimal("0"):
-                    multiplier = shared_multiplier
-            if multiplier > Decimal("0"):
-                filtered_rows.append(row)
-                account_multiplier_by_id[int(row["id"])] = multiplier
-
-        account_rows = filtered_rows
     account_data_by_id = {
         int(row["id"]): {"account_type": str(row["account_type"]), "currency": str(row["currency"])}
         for row in account_rows
@@ -294,9 +310,12 @@ def build_daily_balance_series(
             account_id__in=account_ids,
             transaction__status=status,
         )
-        date_from = earliest_entries.aggregate(min_booking_date=Min("transaction__booking_date"))[
-            "min_booking_date"
-        ] or date_to
+        date_from = (
+            earliest_entries.aggregate(min_booking_date=Min("transaction__booking_date"))[
+                "min_booking_date"
+            ]
+            or date_to
+        )
     if date_from is None:
         date_from = date_to
     if date_from > date_to:
@@ -332,7 +351,9 @@ def build_daily_balance_series(
 
     # Keep running balances by account in account currency and revalue each day to base currency
     # using the latest available FX rate at that specific date (mark-to-market daily).
-    running_balance_by_account: dict[int, Decimal] = {account_id: ZERO for account_id in account_ids}
+    running_balance_by_account: dict[int, Decimal] = {
+        account_id: ZERO for account_id in account_ids
+    }
     for entry in historical_entries:
         account_id = int(entry.account_id)
         account_data = account_data_by_id.get(account_id)
@@ -343,7 +364,9 @@ def build_daily_balance_series(
             side=entry.side,
             amount=entry.amount,
         )
-        running_balance_by_account[account_id] = running_balance_by_account.get(account_id, ZERO) + signed_impact
+        running_balance_by_account[account_id] = (
+            running_balance_by_account.get(account_id, ZERO) + signed_impact
+        )
 
     deltas_by_date: dict[date, dict[int, Decimal]] = defaultdict(dict)
     for entry in ranged_entries:

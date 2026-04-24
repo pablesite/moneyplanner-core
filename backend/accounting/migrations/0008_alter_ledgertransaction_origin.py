@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounting', '0007_ledgertransaction_ownership'),
+        ("accounting", "0007_ledgertransaction_ownership"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='ledgertransaction',
-            name='origin',
-            field=models.CharField(choices=[('manual', 'Manual'), ('import', 'Importación'), ('system', 'Sistema')], default='manual', max_length=16),
+            model_name="ledgertransaction",
+            name="origin",
+            field=models.CharField(
+                choices=[("manual", "Manual"), ("import", "Importación"), ("system", "Sistema")],
+                default="manual",
+                max_length=16,
+            ),
         ),
     ]

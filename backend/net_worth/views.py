@@ -286,7 +286,6 @@ class LiabilityValuationViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         return ctx
 
 
-
 class NetWorthSummaryAPIView(APIView):
     permission_classes = [IsAuthenticated]
 

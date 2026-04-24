@@ -188,7 +188,9 @@ def build_net_worth_opening_balance_note(*, position_kind: str, position_id: int
     return f"{NET_WORTH_OPENING_NOTE_PREFIX}:{position_kind}:{position_id}"
 
 
-def _resolve_opening_balance_sides(*, account_type: str, opening_amount: Decimal) -> tuple[str, str]:
+def _resolve_opening_balance_sides(
+    *, account_type: str, opening_amount: Decimal
+) -> tuple[str, str]:
     if account_type == LedgerAccount.AccountType.ASSET:
         position_side = (
             cast(str, LedgerEntry.Side.DEBIT)

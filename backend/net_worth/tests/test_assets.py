@@ -907,9 +907,7 @@ class NetWorthServicesTests(TestCase):
             description="Saldo inicial Kutxa",
             status=LedgerTransaction.Status.POSTED,
             origin=LedgerTransaction.Origin.SYSTEM,
-            notes=build_net_worth_opening_balance_note(
-                position_kind="asset", position_id=asset.id
-            ),
+            notes=build_net_worth_opening_balance_note(position_kind="asset", position_id=asset.id),
         )
         LedgerEntry.objects.create(
             transaction=opening_tx,
@@ -1235,9 +1233,7 @@ class NetWorthServicesTests(TestCase):
             description="Saldo inicial contable: Cuenta liquidez",
             status=LedgerTransaction.Status.POSTED,
             origin=LedgerTransaction.Origin.SYSTEM,
-            notes=build_net_worth_opening_balance_note(
-                position_kind="asset", position_id=asset.id
-            ),
+            notes=build_net_worth_opening_balance_note(position_kind="asset", position_id=asset.id),
         )
         LedgerEntry.objects.create(
             transaction=opening_tx,
@@ -1347,9 +1343,7 @@ class NetWorthServicesTests(TestCase):
             description="Saldo inicial inversion",
             status=LedgerTransaction.Status.POSTED,
             origin=LedgerTransaction.Origin.SYSTEM,
-            notes=build_net_worth_opening_balance_note(
-                position_kind="asset", position_id=asset.id
-            ),
+            notes=build_net_worth_opening_balance_note(position_kind="asset", position_id=asset.id),
         )
         LedgerEntry.objects.create(
             transaction=opening_tx,

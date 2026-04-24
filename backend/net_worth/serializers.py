@@ -42,6 +42,7 @@ from .services_liabilities_core import (
     validate_liability_payload,
 )
 
+
 class EmptySerializer(serializers.Serializer):
     pass
 
@@ -356,10 +357,7 @@ class AssetSerializer(serializers.ModelSerializer):
             has_contribution_intervals=bool(
                 attrs.get("contribution_intervals")
                 if "contribution_intervals" in attrs
-                else (
-                    self.instance is not None
-                    and self.instance.contribution_intervals.exists()
-                )
+                else (self.instance is not None and self.instance.contribution_intervals.exists())
             ),
         )
         return attrs
@@ -431,15 +429,15 @@ class AssetSerializer(serializers.ModelSerializer):
         return asset
 
     def _normalize_contribution_intervals(
-        self, *, contribution_intervals: list[dict],
+        self,
+        *,
+        contribution_intervals: list[dict],
     ) -> list[dict]:
         normalized: list[dict] = []
         for row in contribution_intervals:
             payload = dict(row)
             payload.pop("id", None)
-            payload["currency"] = (
-                str(payload.get("currency") or "").strip().upper() or None
-            )
+            payload["currency"] = str(payload.get("currency") or "").strip().upper() or None
             normalized.append(payload)
         return normalized
 
@@ -481,19 +479,14 @@ class AssetSerializer(serializers.ModelSerializer):
         if any(interval.get("end_date") is None for interval in intervals_data):
             attrs["expected_end_date"] = None
         else:
-            attrs["expected_end_date"] = max(
-                interval["end_date"] for interval in intervals_data
-            )
+            attrs["expected_end_date"] = max(interval["end_date"] for interval in intervals_data)
 
     def _sync_contribution_intervals(self, *, asset: Asset, intervals_data: list[dict]) -> None:
         asset.contribution_intervals.all().delete()
         if not intervals_data:
             return
         InvestmentContributionInterval.objects.bulk_create(
-            [
-                InvestmentContributionInterval(asset=asset, **row)
-                for row in intervals_data
-            ]
+            [InvestmentContributionInterval(asset=asset, **row) for row in intervals_data]
         )
 
     def _ensure_accounting_opening_balance(self, *, asset: Asset) -> None:
@@ -553,7 +546,6 @@ class AssetSerializer(serializers.ModelSerializer):
         for improvement_id, current in existing_by_id.items():
             if improvement_id not in seen_ids:
                 current.delete()
-
 
 
 class AssetMiniSerializer(serializers.ModelSerializer):

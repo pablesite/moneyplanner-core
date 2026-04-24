@@ -7,25 +7,50 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0037_delete_networthsnapshot'),
+        ("net_worth", "0037_delete_networthsnapshot"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='InvestmentContributionInterval',
+            name="InvestmentContributionInterval",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField(blank=True, null=True)),
-                ('amount', models.DecimalField(decimal_places=8, max_digits=20, validators=[django.core.validators.MinValueValidator(Decimal('0'))])),
-                ('frequency', models.CharField(choices=[('monthly', 'Mensual'), ('weekly', 'Semanal')], default='monthly', max_length=20)),
-                ('currency', models.CharField(blank=True, max_length=3, null=True)),
-                ('asset', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='contribution_intervals', to='net_worth.asset')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField(blank=True, null=True)),
+                (
+                    "amount",
+                    models.DecimalField(
+                        decimal_places=8,
+                        max_digits=20,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0"))],
+                    ),
+                ),
+                (
+                    "frequency",
+                    models.CharField(
+                        choices=[("monthly", "Mensual"), ("weekly", "Semanal")],
+                        default="monthly",
+                        max_length=20,
+                    ),
+                ),
+                ("currency", models.CharField(blank=True, max_length=3, null=True)),
+                (
+                    "asset",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="contribution_intervals",
+                        to="net_worth.asset",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['start_date', 'id'],
+                "ordering": ["start_date", "id"],
             },
         ),
     ]
