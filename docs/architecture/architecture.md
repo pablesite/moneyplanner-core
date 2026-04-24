@@ -111,6 +111,12 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `MarketRateSnapshot` stores cached market candles (`pair`, `interval`, `open_time`, `close`) from Binance klines,
    - broker sync pre-computes and persists `BrokerTrade.price_eur`, `BrokerTrade.fee_eur`, `BrokerTrade.eur_rate_source`,
    - valuation resolves `asset/EUR` directly when available, with `asset/USDT -> USDT/EUR` and daily fallback when intraday data is missing.
+11. FIFO report output uses sale-to-lot matching with typed gap reasons:
+   - each SELL yields `sales[]` with `matched_lots[]`, `gap_quantity`, `gap_reason`,
+   - gap reasons are explicit (`pre_period_buy`, `missing_data`, `balance_transfer_in`) instead of plain `"missing"` placeholders.
+12. `ManualCostBasis` provides optional pre-period acquisition lots:
+   - ownership-scoped rows are injected into FIFO pool before trade lots by `acquired_at`,
+   - FIFO resets and recomputes `quantity_remaining` on each report generation for deterministic results.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

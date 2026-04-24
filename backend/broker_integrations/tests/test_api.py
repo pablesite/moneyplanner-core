@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from broker_integrations.models import (
     BotNetResult,
     BrokerCredential,
+    ManualCostBasis,
     BrokerSyncRun,
     BrokerTrade,
     IncomeEvent,
@@ -113,8 +114,35 @@ class BrokerIntegrationsApiTests(APITestCase):
         )
         response = self.client.get("/api/v1/broker/fiscal-report/?year=2025")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["schema_version"], 2)
         self.assertEqual(response.data["fiscal_year"], 2025)
         self.assertIn("resumen", response.data)
+
+    def test_manual_cost_basis_crud(self):
+        create_res = self.client.post(
+            "/api/v1/broker/manual-cost-basis/",
+            {
+                "ownership_id": self.ownership.id,
+                "asset": "btc",
+                "quantity": "0.5",
+                "acquired_at": "2024-01-01T00:00:00Z",
+                "cost_eur": "10000",
+                "exchange_origin": "external",
+                "notes": "legacy",
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+        row_id = create_res.data["id"]
+        self.assertEqual(create_res.data["asset"], "BTC")
+
+        list_res = self.client.get("/api/v1/broker/manual-cost-basis/?asset=BTC")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK, list_res.data)
+        self.assertEqual(list_res.data["count"], 1)
+
+        delete_res = self.client.delete(f"/api/v1/broker/manual-cost-basis/{row_id}/")
+        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT, delete_res.data)
+        self.assertFalse(ManualCostBasis.objects.filter(id=row_id).exists())
 
     def test_sync_runs_and_drilldown_endpoints(self):
         credential = BrokerCredential.objects.create(

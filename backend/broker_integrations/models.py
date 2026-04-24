@@ -120,6 +120,26 @@ class MarketRateSnapshot(models.Model):
         ordering = ["pair", "interval", "open_time", "id"]
 
 
+class ManualCostBasis(models.Model):
+    ownership = models.ForeignKey(
+        Ownership,
+        on_delete=models.CASCADE,
+        related_name="manual_cost_basis_entries",
+    )
+    asset = models.CharField(max_length=10)
+    quantity = models.DecimalField(max_digits=24, decimal_places=10)
+    quantity_remaining = models.DecimalField(max_digits=24, decimal_places=10)
+    acquired_at = models.DateTimeField()
+    cost_eur = models.DecimalField(max_digits=24, decimal_places=10)
+    exchange_origin = models.CharField(max_length=20, default="external")
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["ownership", "asset", "acquired_at"])]
+        ordering = ["acquired_at", "id"]
+
+
 class BrokerSyncRun(models.Model):
     class Status(models.TextChoices):
         RUNNING = "running", "Running"

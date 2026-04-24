@@ -18,6 +18,7 @@ Phase 4 frontend for `Informe Fiscal Crypto` in Core:
 4. Keep warnings as informative, not blocking:
    - futures and bot warnings use soft warning styling.
 5. Keep lot-level FIFO detail collapsible under each asset to preserve readability.
+6. Never show raw `"missing"` placeholders for buy-side provenance; use typed gap reasons from backend (`pre_period_buy`, `missing_data`, `balance_transfer_in`) with human-readable labels.
 
 ## Data/State UX
 1. Credential screen includes:
@@ -34,6 +35,10 @@ Phase 4 frontend for `Informe Fiscal Crypto` in Core:
 3. Bot table policy:
    - bot rows are informational and explicitly excluded from fiscal summary totals,
    - fiscal summary is computed from FIFO-traceable movement datasets.
+4. Trade FIFO detail policy:
+   - consume backend `schema_version` to adapt rendering contracts,
+   - render `sales[].matched_lots[]` as the canonical traceability dataset,
+   - render `gap_reason` badges and CTA path to `ManualCostBasis` inputs when coverage gaps exist.
 
 ## Mirror Decision (Core -> SaaS)
 Phase 4 spec explicitly marks SaaS mirror as out of MVP scope.

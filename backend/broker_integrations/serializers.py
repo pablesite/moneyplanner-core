@@ -4,7 +4,14 @@ from rest_framework import serializers
 
 from memberships.models import Ownership
 
-from .models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
+from .models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    IncomeEvent,
+    ManualCostBasis,
+)
 from .services.encryption import encrypt
 
 
@@ -128,6 +135,61 @@ class BrokerBotResultListQuerySerializer(serializers.Serializer):
     year = serializers.IntegerField(required=False, min_value=2000, max_value=2100)
     bot_id = serializers.CharField(required=False, max_length=100)
     sync_run = serializers.IntegerField(required=False, min_value=1)
+
+
+class ManualCostBasisQuerySerializer(serializers.Serializer):
+    asset = serializers.CharField(required=False, max_length=10)
+
+
+class ManualCostBasisSerializer(serializers.ModelSerializer):
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        required=False,
+    )
+
+    class Meta:
+        model = ManualCostBasis
+        fields = [
+            "id",
+            "ownership_id",
+            "asset",
+            "quantity",
+            "quantity_remaining",
+            "acquired_at",
+            "cost_eur",
+            "exchange_origin",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["id", "quantity_remaining", "created_at"]
+
+    def validate_asset(self, value: str) -> str:
+        return value.strip().upper()
+
+    def validate_ownership_id(self, ownership: Ownership) -> Ownership:
+        request = self.context["request"]
+        if ownership.user_id != request.user.id:
+            raise serializers.ValidationError("La ownership no pertenece al usuario autenticado.")
+        return ownership
+
+    def create(self, validated_data: dict) -> ManualCostBasis:
+        request = self.context["request"]
+        ownership = validated_data.get("ownership")
+        if ownership is None:
+            credential = (
+                BrokerCredential.objects.filter(user=request.user)
+                .select_related("ownership")
+                .order_by("id")
+                .first()
+            )
+            if credential is None:
+                raise serializers.ValidationError(
+                    {"ownership_id": "No hay ownership disponible para el usuario autenticado."}
+                )
+            validated_data["ownership"] = credential.ownership
+        validated_data["quantity_remaining"] = validated_data["quantity"]
+        return super().create(validated_data)
 
 
 class BrokerTradeSerializer(serializers.ModelSerializer):

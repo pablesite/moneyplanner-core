@@ -191,15 +191,55 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
             year=year,
             eur_converter=eur_converter,
         )
-        lots = fifo_result["lots"]
+        sales = fifo_result["sales"]
         for warning in fifo_result["warnings"]:
             avisos.append(warning)
             fifo_has_gaps = True
-        if not lots:
+        if not sales:
             continue
-        valor_transmision = sum((lot["proceeds_eur"] for lot in lots), Decimal("0"))
-        valor_adquisicion = sum((lot["cost_eur"] for lot in lots), Decimal("0"))
+        valor_transmision = sum((Decimal(sale["proceeds_eur"]) for sale in sales), Decimal("0"))
+        valor_adquisicion = sum(
+            (
+                sum(
+                    (
+                        Decimal(lot["cost_eur"]) + Decimal(lot["fee_eur_allocated"])
+                        for lot in sale["matched_lots"]
+                    ),
+                    Decimal("0"),
+                )
+                for sale in sales
+            ),
+            Decimal("0"),
+        )
         neto = valor_transmision - valor_adquisicion
+
+        normalized_sales: list[dict[str, Any]] = []
+        for sale in sales:
+            normalized_sale = {
+                **sale,
+                "quantity_sold": float(Decimal(sale["quantity_sold"])),
+                "proceeds_eur": _to_float(Decimal(sale["proceeds_eur"])),
+                "fee_eur": _to_float(Decimal(sale["fee_eur"])),
+                "gap_quantity": float(Decimal(sale["gap_quantity"])),
+                "matched_lots": [],
+            }
+            for lot in sale["matched_lots"]:
+                normalized_sale["matched_lots"].append(
+                    {
+                        **lot,
+                        "quantity_consumed": float(Decimal(lot["quantity_consumed"])),
+                        "unit_price_eur": _to_float(Decimal(lot["unit_price_eur"])),
+                        "cost_eur": _to_float(Decimal(lot["cost_eur"])),
+                        "fee_eur_allocated": _to_float(Decimal(lot["fee_eur_allocated"])),
+                        "gain_loss_eur": _to_float(Decimal(lot["gain_loss_eur"])),
+                    }
+                )
+            if sale.get("gap_reason"):
+                avisos.append(
+                    f"Gap FIFO en {base_asset} venta {sale['sell_trade_id']}: {sale['gap_reason']}."
+                )
+            normalized_sales.append(normalized_sale)
+
         ganancias_perdidas_trades.append(
             {
                 "denominacion": base_asset,
@@ -208,16 +248,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
                 "valor_adquisicion_eur": _to_float(valor_adquisicion),
                 "ganancia_eur": _to_float(neto if neto > 0 else Decimal("0")),
                 "perdida_eur": _to_float(abs(neto) if neto < 0 else Decimal("0")),
-                "lotes": [
-                    {
-                        **lot,
-                        "quantity": float(Decimal(lot["quantity"])),
-                        "cost_eur": _to_float(Decimal(lot["cost_eur"])),
-                        "proceeds_eur": _to_float(Decimal(lot["proceeds_eur"])),
-                        "gain_loss_eur": _to_float(Decimal(lot["gain_loss_eur"])),
-                    }
-                    for lot in lots
-                ],
+                "sales": normalized_sales,
             }
         )
 
@@ -252,6 +283,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
     )
 
     return {
+        "schema_version": 2,
         "fiscal_year": year,
         "capital_mobiliario": capital_mobiliario,
         "ganancias_perdidas_bots": ganancias_perdidas_bots,

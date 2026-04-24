@@ -12,6 +12,9 @@
 ### CSV and Fiscal Report
 1. `POST /api/v1/broker/csv-import/`
 2. `GET /api/v1/broker/fiscal-report/?year=YYYY`
+3. `POST /api/v1/broker/manual-cost-basis/`
+4. `GET /api/v1/broker/manual-cost-basis/?asset=<ASSET>`
+5. `DELETE /api/v1/broker/manual-cost-basis/{id}/`
 
 ### Sync Run Drill-Down (Phase 5B)
 1. `GET /api/v1/broker/sync-runs/?credential=<id>&year=YYYY`
@@ -25,3 +28,4 @@
 1. All endpoints require authenticated user context.
 2. Drill-down endpoints are ownership-scoped through `credential.user`.
 3. Pagination uses DRF page-number format (`count`, `next`, `previous`, `results`).
+4. Fiscal report response uses `schema_version: 2` with trade detail in `ganancias_perdidas_trades[].sales[].matched_lots[]` and typed `gap_reason`.

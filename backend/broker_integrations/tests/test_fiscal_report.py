@@ -13,6 +13,7 @@ from broker_integrations.models import (
     BrokerTrade,
     FuturesPosition,
     IncomeEvent,
+    ManualCostBasis,
 )
 from broker_integrations.services.eur_converter import EurConverter
 from broker_integrations.services.fifo_calculator import calculate_fifo_for_asset
@@ -86,8 +87,10 @@ class FiscalReportServicesTests(TestCase):
             quote_asset="USDC",
             side=BrokerTrade.Side.BUY,
             price=Decimal("50000"),
+            price_eur=Decimal("45000"),
             quantity=Decimal("0.01"),
             fee=Decimal("0"),
+            fee_eur=Decimal("0"),
             fee_asset="",
             timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
             raw={},
@@ -101,8 +104,10 @@ class FiscalReportServicesTests(TestCase):
             quote_asset="USDC",
             side=BrokerTrade.Side.SELL,
             price=Decimal("60000"),
+            price_eur=Decimal("55200"),
             quantity=Decimal("0.005"),
             fee=Decimal("0"),
+            fee_eur=Decimal("0"),
             fee_asset="",
             timestamp=datetime(2025, 2, 1, tzinfo=timezone.utc),
             raw={},
@@ -115,13 +120,16 @@ class FiscalReportServicesTests(TestCase):
             eur_converter=EurConverter(),
         )
         self.assertEqual(len(result["warnings"]), 0)
-        self.assertEqual(len(result["lots"]), 1)
-        lot = result["lots"][0]
-        self.assertEqual(lot["exchange_buy"], "binance")
-        self.assertEqual(lot["exchange_sell"], "pionex")
-        self.assertEqual(lot["quantity"], Decimal("0.005"))
+        self.assertEqual(len(result["sales"]), 1)
+        sale = result["sales"][0]
+        self.assertEqual(sale["sell_exchange"], "pionex")
+        self.assertEqual(sale["quantity_sold"], Decimal("0.005"))
+        self.assertEqual(sale["proceeds_eur"], Decimal("276.0000"))
+        self.assertEqual(len(sale["matched_lots"]), 1)
+        lot = sale["matched_lots"][0]
+        self.assertEqual(lot["buy_exchange"], "binance")
+        self.assertEqual(lot["quantity_consumed"], Decimal("0.005"))
         self.assertEqual(lot["cost_eur"], Decimal("225.000"))
-        self.assertEqual(lot["proceeds_eur"], Decimal("276.000"))
 
     def test_fifo_gap_creates_warning_and_zero_cost(self):
         BrokerTrade.objects.create(
@@ -133,8 +141,10 @@ class FiscalReportServicesTests(TestCase):
             quote_asset="USDC",
             side=BrokerTrade.Side.SELL,
             price=Decimal("2000"),
+            price_eur=Decimal("1840"),
             quantity=Decimal("1"),
             fee=Decimal("0"),
+            fee_eur=Decimal("0"),
             fee_asset="",
             timestamp=datetime(2025, 2, 1, tzinfo=timezone.utc),
             raw={},
@@ -146,7 +156,126 @@ class FiscalReportServicesTests(TestCase):
             eur_converter=EurConverter(),
         )
         self.assertEqual(len(result["warnings"]), 1)
-        self.assertEqual(result["lots"][0]["cost_eur"], Decimal("0"))
+        sale = result["sales"][0]
+        self.assertEqual(sale["gap_quantity"], Decimal("1"))
+        self.assertEqual(sale["gap_reason"], "balance_transfer_in")
+
+    def test_fifo_allocates_sell_fee_proportionally(self):
+        BrokerTrade.objects.create(
+            credential=self.binance_credential,
+            source=BrokerTrade.Source.BINANCE_API,
+            trade_id="buy-fee-a",
+            symbol="SOLUSDT",
+            base_asset="SOL",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("100"),
+            price_eur=Decimal("90"),
+            quantity=Decimal("2"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            raw={},
+        )
+        BrokerTrade.objects.create(
+            credential=self.binance_credential,
+            source=BrokerTrade.Source.BINANCE_API,
+            trade_id="buy-fee-b",
+            symbol="SOLUSDT",
+            base_asset="SOL",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("120"),
+            price_eur=Decimal("108"),
+            quantity=Decimal("2"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
+            raw={},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_API,
+            trade_id="sell-fee",
+            symbol="SOLUSDT",
+            base_asset="SOL",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("130"),
+            price_eur=Decimal("117"),
+            quantity=Decimal("3"),
+            fee=Decimal("0.3"),
+            fee_eur=Decimal("9"),
+            fee_asset="USDT",
+            timestamp=datetime(2025, 2, 1, tzinfo=timezone.utc),
+            raw={},
+        )
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="SOL",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+        sale = result["sales"][0]
+        self.assertEqual(len(sale["matched_lots"]), 2)
+        self.assertEqual(sale["matched_lots"][0]["fee_eur_allocated"], Decimal("6"))
+        self.assertEqual(sale["matched_lots"][1]["fee_eur_allocated"], Decimal("3"))
+
+    def test_manual_cost_basis_is_consumed_before_trade_lots_when_older(self):
+        ManualCostBasis.objects.create(
+            ownership=self.ownership,
+            asset="ETH",
+            quantity=Decimal("0.50"),
+            quantity_remaining=Decimal("0.50"),
+            acquired_at=datetime(2024, 12, 20, tzinfo=timezone.utc),
+            cost_eur=Decimal("500"),
+            exchange_origin="external",
+            notes="legacy wallet",
+        )
+        BrokerTrade.objects.create(
+            credential=self.binance_credential,
+            source=BrokerTrade.Source.BINANCE_API,
+            trade_id="buy-eth",
+            symbol="ETHUSDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("2000"),
+            price_eur=Decimal("1800"),
+            quantity=Decimal("1.0"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 1, 10, tzinfo=timezone.utc),
+            raw={},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_API,
+            trade_id="sell-eth",
+            symbol="ETHUSDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("2200"),
+            price_eur=Decimal("1980"),
+            quantity=Decimal("0.6"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 2, 5, tzinfo=timezone.utc),
+            raw={},
+        )
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="ETH",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+        sale = result["sales"][0]
+        self.assertIsNotNone(sale["matched_lots"][0]["manual_cost_basis_id"])
 
     def test_generate_fiscal_report_returns_complete_payload(self):
         IncomeEvent.objects.create(
@@ -190,6 +319,7 @@ class FiscalReportServicesTests(TestCase):
         )
 
         payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["fiscal_year"], 2025)
         self.assertIn("capital_mobiliario", payload)
         self.assertIn("ganancias_perdidas_bots", payload)
@@ -199,6 +329,7 @@ class FiscalReportServicesTests(TestCase):
         self.assertTrue(payload["data_sources"]["binance_csv_fallback"])
         self.assertEqual(payload["ganancias_perdidas_bots"][0]["incluido_en_resumen_fiscal"], False)
         self.assertEqual(payload["resumen"]["total_ganancias_eur"], 0.72)
+        self.assertIsInstance(payload["ganancias_perdidas_trades"], list)
 
     @patch("core.market_data.sync_market_history", autospec=True)
     def test_eur_converter_uses_previous_available_rate_when_exact_day_missing(self, sync_mock):

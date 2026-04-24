@@ -20,7 +20,14 @@ from .csv_importers import (
     import_pionex_staking,
     import_pionex_trading,
 )
-from .models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
+from .models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    IncomeEvent,
+    ManualCostBasis,
+)
 from .serializers import (
     BotNetResultSerializer,
     BrokerBotResultListQuerySerializer,
@@ -34,6 +41,8 @@ from .serializers import (
     BrokerTradeListQuerySerializer,
     BrokerTradeSerializer,
     IncomeEventSerializer,
+    ManualCostBasisQuerySerializer,
+    ManualCostBasisSerializer,
 )
 from .services.broker_sync import sync_credential
 from .services.fiscal_report import generate_fiscal_report
@@ -322,6 +331,40 @@ class BrokerBotResultDetailView(APIView):
         ).order_by("-timestamp", "-id")
         payload["fills"] = _paginate(request, fills, BrokerTradeSerializer).data
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class ManualCostBasisListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = ManualCostBasisQuerySerializer(
+            data=_clean_query_data(asset=request.query_params.get("asset"))
+        )
+        serializer.is_valid(raise_exception=True)
+        queryset = ManualCostBasis.objects.filter(ownership__user=request.user)
+        asset = serializer.validated_data.get("asset")
+        if asset:
+            queryset = queryset.filter(asset=asset.strip().upper())
+        queryset = queryset.order_by("acquired_at", "id")
+        return _paginate(request, queryset, ManualCostBasisSerializer)
+
+    def post(self, request):
+        serializer = ManualCostBasisSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        row = serializer.save()
+        return Response(
+            ManualCostBasisSerializer(row).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ManualCostBasisDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, row_id: int):
+        row = get_object_or_404(ManualCostBasis, id=row_id, ownership__user=request.user)
+        row.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 IMPORTER_BY_TYPE = {

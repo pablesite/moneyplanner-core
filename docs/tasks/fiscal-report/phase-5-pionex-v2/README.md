@@ -30,7 +30,7 @@ Phase 5 resuelve estos puntos sólo para Pionex. Binance queda para Phase 6.
 | 1 | [fase-a-cobertura-pionex.md](fase-a-cobertura-pionex.md) | Agente | backend | Auto-descubrimiento de símbolos, fills de bot vía API, validación de saldos |
 | 2 | [fase-b-sync-runs.md](fase-b-sync-runs.md) | Agente | backend | Historial `BrokerSyncRun` + endpoints drill-down |
 | 3 | [fase-c-fx-intradia.md](fase-c-fx-intradia.md) | Agente | backend | `intraday_fx` con klines 1m + `MarketRateSnapshot` + `price_eur`/`fee_eur` en `BrokerTrade` |
-| 4 | [fase-d-fifo-matching.md](fase-d-fifo-matching.md) | Agente | backend | Matching venta→lotes, `gap_reason` tipado, `ManualCostBasis` |
+| 4 | [terminados/fase-d-fifo-matching.md](terminados/fase-d-fifo-matching.md) | Agente | backend | Matching venta→lotes, `gap_reason` tipado, `ManualCostBasis` |
 | 5 | [fase-e-export-aeat.md](fase-e-export-aeat.md) | Agente | backend | Export CSV/PDF anexo AEAT |
 | 6 | [fase-f-frontend-drilldown.md](fase-f-frontend-drilldown.md) | Manual | frontend | Drill-down sync runs, matching visible, modal de coste manual |
 

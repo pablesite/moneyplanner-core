@@ -4,6 +4,7 @@ from .models import (
     BotNetResult,
     BrokerCredential,
     MarketRateSnapshot,
+    ManualCostBasis,
     BrokerSyncRun,
     BrokerTrade,
     FuturesPosition,
@@ -37,6 +38,22 @@ class MarketRateSnapshotAdmin(admin.ModelAdmin):
     list_display = ("id", "pair", "interval", "open_time", "close", "source")
     list_filter = ("interval", "source")
     search_fields = ("pair",)
+
+
+@admin.register(ManualCostBasis)
+class ManualCostBasisAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "ownership",
+        "asset",
+        "quantity",
+        "quantity_remaining",
+        "acquired_at",
+        "cost_eur",
+        "exchange_origin",
+    )
+    list_filter = ("asset", "exchange_origin")
+    search_fields = ("ownership__user__username", "asset", "notes")
 
 
 @admin.register(BotNetResult)

@@ -8,6 +8,8 @@ from .views import (
     BrokerCsvImportView,
     BrokerFiscalReportView,
     BrokerIncomeEventListView,
+    ManualCostBasisDeleteView,
+    ManualCostBasisListCreateView,
     BrokerSyncRunDetailView,
     BrokerSyncRunListView,
     BrokerSyncStatusView,
@@ -26,6 +28,8 @@ urlpatterns = [
     path("income-events/", BrokerIncomeEventListView.as_view()),
     path("bot-results/", BrokerBotResultListView.as_view()),
     path("bot-results/<int:bot_result_id>/", BrokerBotResultDetailView.as_view()),
+    path("manual-cost-basis/", ManualCostBasisListCreateView.as_view()),
+    path("manual-cost-basis/<int:row_id>/", ManualCostBasisDeleteView.as_view()),
     path("csv-import/", BrokerCsvImportView.as_view()),
     path("fiscal-report/", BrokerFiscalReportView.as_view()),
 ]
