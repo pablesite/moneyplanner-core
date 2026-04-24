@@ -6,7 +6,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from broker_integrations.models import BrokerCredential, IncomeEvent
+from broker_integrations.models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    IncomeEvent,
+)
 from core.models import FxRate
 from memberships.models import FamilyMember, Ownership
 
@@ -109,3 +115,93 @@ class BrokerIntegrationsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["fiscal_year"], 2025)
         self.assertIn("resumen", response.data)
+
+    def test_sync_runs_and_drilldown_endpoints(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.PIONEX,
+            label="Drilldown",
+            api_key="key",
+            api_secret_encrypted=b"secret",
+        )
+        bot_result = BotNetResult.objects.create(
+            credential=credential,
+            bot_id="bot-1",
+            bot_type="spot_grid",
+            label="Bot 1",
+            base_asset="BTC",
+            quote_asset="USDT",
+            realized_profit="1.0",
+            period_start="2025-01-01T00:00:00Z",
+            period_end="2025-01-02T00:00:00Z",
+            raw={},
+        )
+        trade = BrokerTrade.objects.create(
+            credential=credential,
+            bot=bot_result,
+            source=BrokerTrade.Source.PIONEX_BOT_API,
+            trade_id="trade-1",
+            symbol="BTC_USDT",
+            base_asset="BTC",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price="100",
+            quantity="0.1",
+            fee="0.001",
+            fee_asset="BTC",
+            timestamp="2025-01-01T00:00:00Z",
+            raw={},
+        )
+        income = IncomeEvent.objects.create(
+            credential=credential,
+            source=IncomeEvent.Source.PIONEX_DUAL_INVEST_API,
+            income_type=IncomeEvent.IncomeType.DUAL_INVEST_YIELD,
+            asset="USDT",
+            amount="5",
+            timestamp="2025-01-01T00:00:00Z",
+            raw={},
+        )
+        sync_run = BrokerSyncRun.objects.create(
+            credential=credential,
+            year=2025,
+            status=BrokerSyncRun.Status.OK,
+            stats={"new_trades": 1},
+            gaps=[],
+            new_trade_ids=[trade.id],
+            updated_trade_ids=[],
+            new_income_event_ids=[income.id],
+            updated_income_event_ids=[],
+            new_bot_result_ids=[bot_result.id],
+            updated_bot_result_ids=[],
+        )
+
+        runs_res = self.client.get(
+            f"/api/v1/broker/sync-runs/?credential={credential.id}&year=2025"
+        )
+        self.assertEqual(runs_res.status_code, status.HTTP_200_OK, runs_res.data)
+        self.assertEqual(runs_res.data["count"], 1)
+
+        run_detail_res = self.client.get(f"/api/v1/broker/sync-runs/{sync_run.id}/")
+        self.assertEqual(run_detail_res.status_code, status.HTTP_200_OK, run_detail_res.data)
+        self.assertEqual(run_detail_res.data["id"], sync_run.id)
+        self.assertEqual(run_detail_res.data["trades"]["count"], 1)
+        self.assertEqual(run_detail_res.data["income_events"]["count"], 1)
+        self.assertEqual(run_detail_res.data["bot_results"]["count"], 1)
+
+        trade_res = self.client.get(f"/api/v1/broker/trades/?sync_run={sync_run.id}")
+        self.assertEqual(trade_res.status_code, status.HTTP_200_OK, trade_res.data)
+        self.assertEqual(trade_res.data["count"], 1)
+
+        income_res = self.client.get(f"/api/v1/broker/income-events/?sync_run={sync_run.id}")
+        self.assertEqual(income_res.status_code, status.HTTP_200_OK, income_res.data)
+        self.assertEqual(income_res.data["count"], 1)
+
+        bot_list_res = self.client.get(f"/api/v1/broker/bot-results/?sync_run={sync_run.id}")
+        self.assertEqual(bot_list_res.status_code, status.HTTP_200_OK, bot_list_res.data)
+        self.assertEqual(bot_list_res.data["count"], 1)
+
+        bot_detail_res = self.client.get(f"/api/v1/broker/bot-results/{bot_result.id}/")
+        self.assertEqual(bot_detail_res.status_code, status.HTTP_200_OK, bot_detail_res.data)
+        self.assertEqual(bot_detail_res.data["id"], bot_result.id)
+        self.assertEqual(bot_detail_res.data["fills"]["count"], 1)

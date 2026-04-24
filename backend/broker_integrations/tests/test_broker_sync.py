@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from broker_integrations.models import BotNetResult, BrokerCredential, BrokerTrade
+from broker_integrations.models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade
 from broker_integrations.services.broker_sync import sync_binance, sync_credential, sync_pionex
 from broker_integrations.services.binance_client import BinanceApiError
 from broker_integrations.services.encryption import encrypt
@@ -200,6 +200,10 @@ class BrokerSyncTests(TestCase):
         stats = sync_pionex(credential=self.credential, year=2025)
         self.assertEqual(stats["new_bot_results"], 2)
         self.assertEqual(stats["updated_bot_results"], 0)
+        sync_run = BrokerSyncRun.objects.filter(credential=self.credential).latest("id")
+        self.assertEqual(sync_run.status, BrokerSyncRun.Status.OK)
+        self.assertEqual(sync_run.year, 2025)
+        self.assertEqual(len(sync_run.new_bot_result_ids), 2)
         self.assertEqual(BotNetResult.objects.filter(credential=self.credential).count(), 2)
         self.assertSetEqual(
             set(
@@ -247,6 +251,9 @@ class BrokerSyncTests(TestCase):
                 for gap in stats["gaps"]
             )
         )
+        sync_run = BrokerSyncRun.objects.filter(credential=self.credential).latest("id")
+        self.assertEqual(sync_run.status, BrokerSyncRun.Status.PARTIAL)
+        self.assertGreaterEqual(len(sync_run.new_trade_ids), 1)
 
     @patch("broker_integrations.services.broker_sync.BinanceClient", _FakeBinanceClient)
     def test_sync_binance_collects_trades_income_and_gap(self):

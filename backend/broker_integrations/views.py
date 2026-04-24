@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .csv_importers import (
     import_binance_convert,
@@ -18,15 +20,66 @@ from .csv_importers import (
     import_pionex_staking,
     import_pionex_trading,
 )
-from .models import BrokerCredential
+from .models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
 from .serializers import (
+    BotNetResultSerializer,
+    BrokerBotResultListQuerySerializer,
     BrokerCredentialSerializer,
     BrokerCsvImportSerializer,
     BrokerFiscalReportQuerySerializer,
+    BrokerIncomeEventListQuerySerializer,
     BrokerSyncRequestSerializer,
+    BrokerSyncRunListQuerySerializer,
+    BrokerSyncRunSerializer,
+    BrokerTradeListQuerySerializer,
+    BrokerTradeSerializer,
+    IncomeEventSerializer,
 )
 from .services.broker_sync import sync_credential
 from .services.fiscal_report import generate_fiscal_report
+
+
+class BrokerPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+def _start_of_year(year: int):
+    return date(year, 1, 1)
+
+
+def _start_of_next_year(year: int):
+    return date(year + 1, 1, 1)
+
+
+def _paginate(request, queryset, serializer_class):
+    paginator = BrokerPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    serializer = serializer_class(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
+
+
+def _clean_query_data(**kwargs):
+    return {key: value for key, value in kwargs.items() if value is not None}
+
+
+def _resolve_sync_run_for_user(*, sync_run_id: int, user_id: int) -> BrokerSyncRun:
+    return get_object_or_404(
+        BrokerSyncRun.objects.select_related("credential"),
+        id=sync_run_id,
+        credential__user_id=user_id,
+    )
+
+
+def _collect_run_ids(sync_run: BrokerSyncRun, *, model: str) -> list[int]:
+    if model == "trade":
+        return [*sync_run.new_trade_ids, *sync_run.updated_trade_ids]
+    if model == "income_event":
+        return [*sync_run.new_income_event_ids, *sync_run.updated_income_event_ids]
+    if model == "bot_result":
+        return [*sync_run.new_bot_result_ids, *sync_run.updated_bot_result_ids]
+    return []
 
 
 class BrokerCredentialListCreateView(APIView):
@@ -81,6 +134,194 @@ class BrokerSyncStatusView(APIView):
                 "gaps": gaps,
             }
         )
+
+
+class BrokerSyncRunListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = BrokerSyncRunListQuerySerializer(
+            data=_clean_query_data(
+                credential_id=request.query_params.get("credential"),
+                year=request.query_params.get("year"),
+            )
+        )
+        serializer.is_valid(raise_exception=True)
+        queryset = BrokerSyncRun.objects.filter(credential__user=request.user).select_related(
+            "credential"
+        )
+        credential_id = serializer.validated_data.get("credential_id")
+        year = serializer.validated_data.get("year")
+        if credential_id:
+            queryset = queryset.filter(credential_id=credential_id)
+        if year:
+            queryset = queryset.filter(year=year)
+        return _paginate(request, queryset, BrokerSyncRunSerializer)
+
+
+class BrokerSyncRunDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, sync_run_id: int):
+        sync_run = _resolve_sync_run_for_user(sync_run_id=sync_run_id, user_id=request.user.id)
+        payload = BrokerSyncRunSerializer(sync_run).data
+
+        trades = BrokerTrade.objects.filter(
+            credential__user=request.user,
+            id__in=_collect_run_ids(sync_run, model="trade"),
+        ).order_by("-timestamp", "-id")
+        income_events = IncomeEvent.objects.filter(
+            credential__user=request.user,
+            id__in=_collect_run_ids(sync_run, model="income_event"),
+        ).order_by("-timestamp", "-id")
+        bot_results = (
+            BotNetResult.objects.filter(
+                credential__user=request.user,
+                id__in=_collect_run_ids(sync_run, model="bot_result"),
+            )
+            .annotate(fill_count=Count("fills"))
+            .order_by("-period_end", "-id")
+        )
+
+        payload["trades"] = _paginate(request, trades, BrokerTradeSerializer).data
+        payload["income_events"] = _paginate(request, income_events, IncomeEventSerializer).data
+        payload["bot_results"] = _paginate(request, bot_results, BotNetResultSerializer).data
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class BrokerTradeListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = BrokerTradeListQuerySerializer(
+            data=_clean_query_data(
+                credential_id=request.query_params.get("credential"),
+                year=request.query_params.get("year"),
+                source=request.query_params.get("source"),
+                symbol=request.query_params.get("symbol"),
+                side=request.query_params.get("side"),
+                bot_id=request.query_params.get("bot_id"),
+                sync_run=request.query_params.get("sync_run"),
+            )
+        )
+        serializer.is_valid(raise_exception=True)
+        queryset = BrokerTrade.objects.filter(credential__user=request.user).select_related("bot")
+        credential_id = serializer.validated_data.get("credential_id")
+        year = serializer.validated_data.get("year")
+        source = serializer.validated_data.get("source")
+        symbol = serializer.validated_data.get("symbol")
+        side = serializer.validated_data.get("side")
+        bot_id = serializer.validated_data.get("bot_id")
+        sync_run_id = serializer.validated_data.get("sync_run")
+        if credential_id:
+            queryset = queryset.filter(credential_id=credential_id)
+        if year:
+            queryset = queryset.filter(
+                timestamp__date__gte=_start_of_year(year),
+                timestamp__date__lt=_start_of_next_year(year),
+            )
+        if source:
+            queryset = queryset.filter(source=source)
+        if symbol:
+            queryset = queryset.filter(symbol=symbol.upper())
+        if side:
+            queryset = queryset.filter(side=side)
+        if bot_id:
+            queryset = queryset.filter(bot__bot_id=bot_id)
+        if sync_run_id:
+            sync_run = _resolve_sync_run_for_user(sync_run_id=sync_run_id, user_id=request.user.id)
+            queryset = queryset.filter(id__in=_collect_run_ids(sync_run, model="trade"))
+        queryset = queryset.order_by("-timestamp", "-id")
+        return _paginate(request, queryset, BrokerTradeSerializer)
+
+
+class BrokerIncomeEventListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = BrokerIncomeEventListQuerySerializer(
+            data=_clean_query_data(
+                credential_id=request.query_params.get("credential"),
+                year=request.query_params.get("year"),
+                source=request.query_params.get("source"),
+                sync_run=request.query_params.get("sync_run"),
+            )
+        )
+        serializer.is_valid(raise_exception=True)
+        queryset = IncomeEvent.objects.filter(credential__user=request.user)
+        credential_id = serializer.validated_data.get("credential_id")
+        year = serializer.validated_data.get("year")
+        source = serializer.validated_data.get("source")
+        sync_run_id = serializer.validated_data.get("sync_run")
+        if credential_id:
+            queryset = queryset.filter(credential_id=credential_id)
+        if year:
+            queryset = queryset.filter(
+                timestamp__date__gte=_start_of_year(year),
+                timestamp__date__lt=_start_of_next_year(year),
+            )
+        if source:
+            queryset = queryset.filter(source=source)
+        if sync_run_id:
+            sync_run = _resolve_sync_run_for_user(sync_run_id=sync_run_id, user_id=request.user.id)
+            queryset = queryset.filter(id__in=_collect_run_ids(sync_run, model="income_event"))
+        queryset = queryset.order_by("-timestamp", "-id")
+        return _paginate(request, queryset, IncomeEventSerializer)
+
+
+class BrokerBotResultListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = BrokerBotResultListQuerySerializer(
+            data=_clean_query_data(
+                credential_id=request.query_params.get("credential"),
+                year=request.query_params.get("year"),
+                bot_id=request.query_params.get("bot_id"),
+                sync_run=request.query_params.get("sync_run"),
+            )
+        )
+        serializer.is_valid(raise_exception=True)
+        queryset = BotNetResult.objects.filter(credential__user=request.user).annotate(
+            fill_count=Count("fills")
+        )
+        credential_id = serializer.validated_data.get("credential_id")
+        year = serializer.validated_data.get("year")
+        bot_id = serializer.validated_data.get("bot_id")
+        sync_run_id = serializer.validated_data.get("sync_run")
+        if credential_id:
+            queryset = queryset.filter(credential_id=credential_id)
+        if year:
+            queryset = queryset.filter(
+                period_end__date__gte=_start_of_year(year),
+                period_end__date__lt=_start_of_next_year(year),
+            )
+        if bot_id:
+            queryset = queryset.filter(bot_id=bot_id)
+        if sync_run_id:
+            sync_run = _resolve_sync_run_for_user(sync_run_id=sync_run_id, user_id=request.user.id)
+            queryset = queryset.filter(id__in=_collect_run_ids(sync_run, model="bot_result"))
+        queryset = queryset.order_by("-period_end", "-id")
+        return _paginate(request, queryset, BotNetResultSerializer)
+
+
+class BrokerBotResultDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, bot_result_id: int):
+        bot_result = get_object_or_404(
+            BotNetResult.objects.filter(credential__user=request.user).annotate(
+                fill_count=Count("fills")
+            ),
+            id=bot_result_id,
+        )
+        payload = BotNetResultSerializer(bot_result).data
+        fills = BrokerTrade.objects.filter(
+            credential__user=request.user,
+            bot=bot_result,
+        ).order_by("-timestamp", "-id")
+        payload["fills"] = _paginate(request, fills, BrokerTradeSerializer).data
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 IMPORTER_BY_TYPE = {
@@ -144,6 +385,3 @@ class BrokerFiscalReportView(APIView):
 
         payload = generate_fiscal_report(ownership=resolved_ownership, year=year)
         return Response(payload, status=status.HTTP_200_OK)
-
-
-# Create your views here.

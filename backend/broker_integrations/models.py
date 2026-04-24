@@ -91,6 +91,40 @@ class BrokerTrade(models.Model):
         ordering = ["timestamp", "id"]
 
 
+class BrokerSyncRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        OK = "ok", "OK"
+        PARTIAL = "partial", "Partial"
+        FAILED = "failed", "Failed"
+
+    credential = models.ForeignKey(
+        BrokerCredential,
+        on_delete=models.CASCADE,
+        related_name="sync_runs",
+    )
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    year = models.IntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.RUNNING,
+    )
+    stats = models.JSONField(default=dict, blank=True)
+    gaps = models.JSONField(default=list, blank=True)
+    new_trade_ids = models.JSONField(default=list, blank=True)
+    updated_trade_ids = models.JSONField(default=list, blank=True)
+    new_income_event_ids = models.JSONField(default=list, blank=True)
+    updated_income_event_ids = models.JSONField(default=list, blank=True)
+    new_bot_result_ids = models.JSONField(default=list, blank=True)
+    updated_bot_result_ids = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["credential", "year", "started_at"])]
+        ordering = ["-started_at", "-id"]
+
+
 class BotNetResult(models.Model):
     credential = models.ForeignKey(
         BrokerCredential,

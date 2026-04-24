@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import BotNetResult, BrokerCredential, BrokerTrade, FuturesPosition, IncomeEvent
+from .models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    FuturesPosition,
+    IncomeEvent,
+)
 
 
 @admin.register(BrokerCredential)
@@ -15,6 +22,13 @@ class BrokerTradeAdmin(admin.ModelAdmin):
     list_display = ("id", "source", "trade_id", "symbol", "side", "quantity", "timestamp")
     list_filter = ("source", "side")
     search_fields = ("trade_id", "symbol")
+
+
+@admin.register(BrokerSyncRun)
+class BrokerSyncRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "credential", "year", "status", "started_at", "finished_at")
+    list_filter = ("status", "year")
+    search_fields = ("credential__label", "credential__user__username")
 
 
 @admin.register(BotNetResult)

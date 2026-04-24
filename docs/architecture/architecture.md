@@ -103,6 +103,10 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 8. Pionex sync runs `balance_reconciliation` at the end of each import:
    - compares computed balances from persisted Pionex trades/income vs `GET /api/v1/account/balances`,
    - emits `balance_mismatch` gaps with `{asset, expected, actual, diff}` when tolerance is exceeded.
+9. Sync execution history is persisted in `BrokerSyncRun`:
+   - each sync stores start/end, status (`running|ok|partial|failed`), stats and gaps,
+   - touched records are tracked by id (`new_*` and `updated_*`) for drill-down and auditing,
+   - legacy `BrokerCredential.last_sync_*` fields remain as compatibility layer for existing UI.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

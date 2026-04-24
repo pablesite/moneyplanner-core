@@ -12,7 +12,7 @@ from typing import Any
 from django.utils import timezone as django_timezone
 
 from ..csv_importers.common import deterministic_id, upsert_income_event_dedup
-from ..models import BotNetResult, BrokerCredential, BrokerTrade, IncomeEvent
+from ..models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
 from .binance_client import BinanceApiError, BinanceClient
 from .encryption import decrypt
 from .pionex_client import PionexApiError, PionexClient
@@ -20,6 +20,7 @@ from .pionex_client import PionexApiError, PionexClient
 
 @dataclass
 class SyncStats:
+    max_tracked_ids: int = 5000
     new_trades: int = 0
     updated_trades: int = 0
     new_bot_results: int = 0
@@ -27,6 +28,69 @@ class SyncStats:
     new_income_events: int = 0
     updated_income_events: int = 0
     gaps: list[dict[str, str]] = field(default_factory=list)
+    new_trade_ids: list[int] = field(default_factory=list)
+    updated_trade_ids: list[int] = field(default_factory=list)
+    new_income_event_ids: list[int] = field(default_factory=list)
+    updated_income_event_ids: list[int] = field(default_factory=list)
+    new_bot_result_ids: list[int] = field(default_factory=list)
+    updated_bot_result_ids: list[int] = field(default_factory=list)
+    _overflow_flags: set[str] = field(default_factory=set, init=False, repr=False)
+
+    def _append_id(self, bucket: list[int], value: int, *, overflow_key: str) -> None:
+        if len(bucket) < self.max_tracked_ids:
+            bucket.append(value)
+            return
+        if overflow_key in self._overflow_flags:
+            return
+        self._overflow_flags.add(overflow_key)
+        self.gaps.append(
+            {
+                "source": "sync_run_tracking",
+                "reason": "ids_overflow",
+                "bucket": overflow_key,
+                "max_tracked_ids": str(self.max_tracked_ids),
+            }
+        )
+
+    def track_trade(self, *, object_id: int, created: bool) -> None:
+        if created:
+            self.new_trades += 1
+            self._append_id(self.new_trade_ids, object_id, overflow_key="new_trade_ids")
+            return
+        self.updated_trades += 1
+        self._append_id(self.updated_trade_ids, object_id, overflow_key="updated_trade_ids")
+
+    def track_income_event(self, *, object_id: int, created: bool) -> None:
+        if created:
+            self.new_income_events += 1
+            self._append_id(
+                self.new_income_event_ids,
+                object_id,
+                overflow_key="new_income_event_ids",
+            )
+            return
+        self.updated_income_events += 1
+        self._append_id(
+            self.updated_income_event_ids,
+            object_id,
+            overflow_key="updated_income_event_ids",
+        )
+
+    def track_bot_result(self, *, object_id: int, created: bool) -> None:
+        if created:
+            self.new_bot_results += 1
+            self._append_id(
+                self.new_bot_result_ids,
+                object_id,
+                overflow_key="new_bot_result_ids",
+            )
+            return
+        self.updated_bot_results += 1
+        self._append_id(
+            self.updated_bot_result_ids,
+            object_id,
+            overflow_key="updated_bot_result_ids",
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +102,57 @@ class SyncStats:
             "updated_income_events": self.updated_income_events,
             "gaps": self.gaps,
         }
+
+
+def _resolve_run_status(*, stats: SyncStats, failed: bool) -> str:
+    if failed:
+        return str(BrokerSyncRun.Status.FAILED)
+    if stats.gaps:
+        return str(BrokerSyncRun.Status.PARTIAL)
+    return str(BrokerSyncRun.Status.OK)
+
+
+def _persist_sync_metadata(
+    *,
+    credential: BrokerCredential,
+    run: BrokerSyncRun | None,
+    stats: SyncStats,
+    status: str,
+) -> dict[str, Any]:
+    payload = stats.to_dict()
+    now = django_timezone.now()
+    credential.last_sync_at = now
+    credential.last_sync_stats = payload
+    credential.last_sync_gaps = payload["gaps"]
+    credential.save(
+        update_fields=["last_sync_at", "last_sync_stats", "last_sync_gaps", "updated_at"]
+    )
+    if run is not None:
+        run.finished_at = now
+        run.status = status
+        run.stats = payload
+        run.gaps = stats.gaps
+        run.new_trade_ids = stats.new_trade_ids
+        run.updated_trade_ids = stats.updated_trade_ids
+        run.new_income_event_ids = stats.new_income_event_ids
+        run.updated_income_event_ids = stats.updated_income_event_ids
+        run.new_bot_result_ids = stats.new_bot_result_ids
+        run.updated_bot_result_ids = stats.updated_bot_result_ids
+        run.save(
+            update_fields=[
+                "finished_at",
+                "status",
+                "stats",
+                "gaps",
+                "new_trade_ids",
+                "updated_trade_ids",
+                "new_income_event_ids",
+                "updated_income_event_ids",
+                "new_bot_result_ids",
+                "updated_bot_result_ids",
+            ]
+        )
+    return payload
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -257,15 +372,12 @@ def _record_trade_fill(
         "timestamp": timestamp,
         "raw": fill,
     }
-    _, created = BrokerTrade.objects.update_or_create(
+    trade, created = BrokerTrade.objects.update_or_create(
         source=source,
         trade_id=str(trade_id),
         defaults=defaults,
     )
-    if created:
-        stats.new_trades += 1
-    else:
-        stats.updated_trades += 1
+    stats.track_trade(object_id=trade.id, created=created)
 
 
 def _record_dual_income(
@@ -286,7 +398,7 @@ def _record_dual_income(
         "description": "Pionex Dual Investment",
         "raw": record,
     }
-    _, created = IncomeEvent.objects.update_or_create(
+    income_event, created = IncomeEvent.objects.update_or_create(
         source=IncomeEvent.Source.PIONEX_DUAL_INVEST_API,
         income_type=IncomeEvent.IncomeType.DUAL_INVEST_YIELD,
         asset=asset,
@@ -294,10 +406,7 @@ def _record_dual_income(
         timestamp=timestamp,
         defaults=defaults,
     )
-    if created:
-        stats.new_income_events += 1
-    else:
-        stats.updated_income_events += 1
+    stats.track_income_event(object_id=income_event.id, created=created)
 
 
 def _discover_spot_grid_bots(client: PionexClient, stats: SyncStats) -> dict[str, dict[str, Any]]:
@@ -394,10 +503,7 @@ def _upsert_bot_result(
         bot_id=bot_id,
         defaults=defaults,
     )
-    if created:
-        stats.new_bot_results += 1
-    else:
-        stats.updated_bot_results += 1
+    stats.track_bot_result(object_id=bot_result.id, created=created)
     return bot_result
 
 
@@ -444,15 +550,12 @@ def _record_binance_convert_trade(
         "timestamp": _timestamp_to_dt(record.get("createTime") or record.get("timestamp")),
         "raw": record,
     }
-    _, created = BrokerTrade.objects.update_or_create(
+    trade, created = BrokerTrade.objects.update_or_create(
         source=BrokerTrade.Source.BINANCE_API,
         trade_id=trade_id,
         defaults=defaults,
     )
-    if created:
-        stats.new_trades += 1
-    else:
-        stats.updated_trades += 1
+    stats.track_trade(object_id=trade.id, created=created)
 
 
 def _record_binance_earn_income(
@@ -483,11 +586,8 @@ def _record_binance_earn_income(
         "description": "Binance Earn",
         "raw": record,
     }
-    _, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
-    if created:
-        stats.new_income_events += 1
-    else:
-        stats.updated_income_events += 1
+    income_event, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
+    stats.track_income_event(object_id=income_event.id, created=created)
 
 
 def _record_binance_pay_trade(
@@ -539,238 +639,254 @@ def _record_binance_pay_trade(
         "timestamp": _timestamp_to_dt(record.get("transactionTime") or record.get("timestamp")),
         "raw": record,
     }
-    _, created = BrokerTrade.objects.update_or_create(
+    trade, created = BrokerTrade.objects.update_or_create(
         source=BrokerTrade.Source.BINANCE_API,
         trade_id=trade_id,
         defaults=defaults,
     )
-    if created:
-        stats.new_trades += 1
-    else:
-        stats.updated_trades += 1
+    stats.track_trade(object_id=trade.id, created=created)
 
 
 def sync_binance(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
     stats = SyncStats()
-    client = BinanceClient(
-        api_key=credential.api_key,
-        api_secret=decrypt(bytes(credential.api_secret_encrypted)),
+    sync_run = BrokerSyncRun.objects.create(
+        credential=credential,
+        year=year,
+        status=BrokerSyncRun.Status.RUNNING,
     )
-    start = datetime(year, 1, 1, tzinfo=timezone.utc)
-    end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-    start_ms = int(start.timestamp() * 1000)
-    end_ms = int(end.timestamp() * 1000) - 1
-
+    failed = False
     try:
-        convert_rows = client.get_convert_history(start_ms=start_ms, end_ms=end_ms)
-        for row in convert_rows:
-            _record_binance_convert_trade(credential=credential, record=row, stats=stats)
-    except BinanceApiError as exc:
-        stats.gaps.append({"source": "convert", "reason": str(exc), "code": exc.code or ""})
+        client = BinanceClient(
+            api_key=credential.api_key,
+            api_secret=decrypt(bytes(credential.api_secret_encrypted)),
+        )
+        start = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        start_ms = int(start.timestamp() * 1000)
+        end_ms = int(end.timestamp() * 1000) - 1
 
-    earn_assets = [
-        item.strip().upper()
-        for item in os.getenv("BINANCE_EARN_ASSETS", "USDT,USDC,BTC,ETH").split(",")
-        if item.strip()
-    ]
-    for asset in earn_assets:
         try:
-            rewards = client.get_earn_flexible_rewards(
-                asset=asset,
-                start_ms=start_ms,
-                end_ms=end_ms,
-            )
-            for reward in rewards:
-                _record_binance_earn_income(credential=credential, record=reward, stats=stats)
+            convert_rows = client.get_convert_history(start_ms=start_ms, end_ms=end_ms)
+            for row in convert_rows:
+                _record_binance_convert_trade(credential=credential, record=row, stats=stats)
+        except BinanceApiError as exc:
+            stats.gaps.append({"source": "convert", "reason": str(exc), "code": exc.code or ""})
+
+        earn_assets = [
+            item.strip().upper()
+            for item in os.getenv("BINANCE_EARN_ASSETS", "USDT,USDC,BTC,ETH").split(",")
+            if item.strip()
+        ]
+        for asset in earn_assets:
+            try:
+                rewards = client.get_earn_flexible_rewards(
+                    asset=asset,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                )
+                for reward in rewards:
+                    _record_binance_earn_income(credential=credential, record=reward, stats=stats)
+            except BinanceApiError as exc:
+                stats.gaps.append(
+                    {"source": f"earn:{asset}", "reason": str(exc), "code": exc.code or ""}
+                )
+
+        try:
+            transactions = client.get_pay_transactions(start_ms=start_ms, end_ms=end_ms)
+            for record in transactions:
+                _record_binance_pay_trade(credential=credential, record=record, stats=stats)
         except BinanceApiError as exc:
             stats.gaps.append(
-                {"source": f"earn:{asset}", "reason": str(exc), "code": exc.code or ""}
+                {"source": "pay_transactions", "reason": str(exc), "code": exc.code or ""}
             )
 
-    try:
-        transactions = client.get_pay_transactions(start_ms=start_ms, end_ms=end_ms)
-        for record in transactions:
-            _record_binance_pay_trade(credential=credential, record=record, stats=stats)
-    except BinanceApiError as exc:
-        stats.gaps.append(
-            {"source": "pay_transactions", "reason": str(exc), "code": exc.code or ""}
+        try:
+            referral_rows = client.get_referral_rebates(start_ms=start_ms, end_ms=end_ms)
+            for row in referral_rows:
+                asset = str(row.get("asset") or row.get("rebateAsset") or "USDC").upper()
+                amount = _to_decimal(row.get("amount") or row.get("rebateAmount"))
+                timestamp = _timestamp_to_dt(row.get("updateTime") or row.get("time"))
+                lookup = {
+                    "source": IncomeEvent.Source.BINANCE_REFERRAL_CSV,
+                    "income_type": IncomeEvent.IncomeType.COMMISSION,
+                    "asset": asset,
+                    "amount": amount,
+                    "timestamp": timestamp,
+                }
+                defaults = {
+                    "credential": credential,
+                    "description": "Binance Referral",
+                    "raw": row,
+                }
+                income_event, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
+                stats.track_income_event(object_id=income_event.id, created=created)
+        except BinanceApiError as exc:
+            stats.gaps.append(
+                {"source": "rebate_tax_query", "reason": str(exc), "code": exc.code or ""}
+            )
+    except Exception as exc:  # pragma: no cover - defensive persistence path
+        failed = True
+        stats.gaps.append({"source": "sync", "reason": str(exc), "code": ""})
+        raise
+    finally:
+        status_value = _resolve_run_status(stats=stats, failed=failed)
+        payload = _persist_sync_metadata(
+            credential=credential,
+            run=sync_run,
+            stats=stats,
+            status=status_value,
         )
-
-    try:
-        referral_rows = client.get_referral_rebates(start_ms=start_ms, end_ms=end_ms)
-        for row in referral_rows:
-            asset = str(row.get("asset") or row.get("rebateAsset") or "USDC").upper()
-            amount = _to_decimal(row.get("amount") or row.get("rebateAmount"))
-            timestamp = _timestamp_to_dt(row.get("updateTime") or row.get("time"))
-            lookup = {
-                "source": IncomeEvent.Source.BINANCE_REFERRAL_CSV,
-                "income_type": IncomeEvent.IncomeType.COMMISSION,
-                "asset": asset,
-                "amount": amount,
-                "timestamp": timestamp,
-            }
-            defaults = {
-                "credential": credential,
-                "description": "Binance Referral",
-                "raw": row,
-            }
-            _, created = upsert_income_event_dedup(lookup=lookup, defaults=defaults)
-            if created:
-                stats.new_income_events += 1
-            else:
-                stats.updated_income_events += 1
-    except BinanceApiError as exc:
-        stats.gaps.append(
-            {"source": "rebate_tax_query", "reason": str(exc), "code": exc.code or ""}
-        )
-
-    payload = stats.to_dict()
-    credential.last_sync_at = django_timezone.now()
-    credential.last_sync_stats = payload
-    credential.last_sync_gaps = payload["gaps"]
-    credential.save(
-        update_fields=["last_sync_at", "last_sync_stats", "last_sync_gaps", "updated_at"]
-    )
     return payload
 
 
 def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
     stats = SyncStats()
-    client = PionexClient(
-        api_key=credential.api_key,
-        api_secret=decrypt(bytes(credential.api_secret_encrypted)),
+    sync_run = BrokerSyncRun.objects.create(
+        credential=credential,
+        year=year,
+        status=BrokerSyncRun.Status.RUNNING,
     )
-    start = datetime(year, 1, 1, tzinfo=timezone.utc)
-    end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-    start_ms = int(start.timestamp() * 1000)
-    end_ms = int(end.timestamp() * 1000) - 1
-    balances: list[dict[str, Any]] = []
+    failed = False
     try:
-        balances = client.get_balances()
-    except PionexApiError as exc:
-        stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
-
-    symbols = _discover_spot_symbols(credential=credential, balances=balances)
-    for symbol in symbols:
-        try:
-            fills = client.get_fills(symbol=symbol, start_ms=start_ms, end_ms=end_ms, limit=100)
-            for fill in fills:
-                if isinstance(fill, dict):
-                    _record_trade_fill(
-                        credential=credential,
-                        fill=fill,
-                        symbol_fallback=symbol,
-                        stats=stats,
-                    )
-        except PionexApiError as exc:
-            stats.gaps.append(
-                {"source": f"fills:{symbol}", "reason": str(exc), "code": exc.code or ""}
-            )
-
-    dual_bases = _discover_dual_bases(balances=balances)
-    for base in dual_bases:
-        try:
-            dual_records = client.get_dual_invest_records(
-                base=base,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                limit=100,
-            )
-            for record in dual_records:
-                if isinstance(record, dict):
-                    _record_dual_income(credential=credential, record=record, stats=stats)
-        except PionexApiError as exc:
-            stats.gaps.append(
-                {"source": f"dual_records:{base}", "reason": str(exc), "code": exc.code or ""}
-            )
-
-    discovered_bots = _discover_spot_grid_bots(client, stats)
-    env_bot_ids = {
-        value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
-    }
-    for bot_id, payload in sorted(discovered_bots.items()):
-        bot_result = _upsert_bot_result(
-            credential=credential,
-            bot_id=bot_id,
-            payload=payload,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            stats=stats,
+        client = PionexClient(
+            api_key=credential.api_key,
+            api_secret=decrypt(bytes(credential.api_secret_encrypted)),
         )
+        start = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        start_ms = int(start.timestamp() * 1000)
+        end_ms = int(end.timestamp() * 1000) - 1
+        balances: list[dict[str, Any]] = []
         try:
-            bot_fills = client.get_bot_spot_grid_orders(
-                bot_id=bot_id,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                limit=100,
-            )
-            symbol_fallback = str(
-                payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-            )
-            for fill in bot_fills:
-                if isinstance(fill, dict):
-                    _record_trade_fill(
-                        credential=credential,
-                        fill=fill,
-                        symbol_fallback=symbol_fallback,
-                        stats=stats,
-                        source=str(BrokerTrade.Source.PIONEX_BOT_API),
-                        bot_result=bot_result,
-                    )
+            balances = client.get_balances()
         except PionexApiError as exc:
-            stats.gaps.append(
-                {"source": f"bot_fills:{bot_id}", "reason": str(exc), "code": exc.code or ""}
-            )
+            stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
 
-    for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
-        try:
-            summary = client.get_bot_summary(bot_id=bot_id)
+        symbols = _discover_spot_symbols(credential=credential, balances=balances)
+        for symbol in symbols:
+            try:
+                fills = client.get_fills(symbol=symbol, start_ms=start_ms, end_ms=end_ms, limit=100)
+                for fill in fills:
+                    if isinstance(fill, dict):
+                        _record_trade_fill(
+                            credential=credential,
+                            fill=fill,
+                            symbol_fallback=symbol,
+                            stats=stats,
+                        )
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"fills:{symbol}", "reason": str(exc), "code": exc.code or ""}
+                )
+
+        dual_bases = _discover_dual_bases(balances=balances)
+        for base in dual_bases:
+            try:
+                dual_records = client.get_dual_invest_records(
+                    base=base,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    limit=100,
+                )
+                for record in dual_records:
+                    if isinstance(record, dict):
+                        _record_dual_income(credential=credential, record=record, stats=stats)
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"dual_records:{base}", "reason": str(exc), "code": exc.code or ""}
+                )
+
+        discovered_bots = _discover_spot_grid_bots(client, stats)
+        env_bot_ids = {
+            value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
+        }
+        for bot_id, payload in sorted(discovered_bots.items()):
             bot_result = _upsert_bot_result(
                 credential=credential,
                 bot_id=bot_id,
-                payload=summary,
+                payload=payload,
                 start_ms=start_ms,
                 end_ms=end_ms,
                 stats=stats,
             )
-            bot_fills = client.get_bot_spot_grid_orders(
-                bot_id=bot_id,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                limit=100,
-            )
-            symbol_fallback = str(
-                summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-            )
-            for fill in bot_fills:
-                if isinstance(fill, dict):
-                    _record_trade_fill(
-                        credential=credential,
-                        fill=fill,
-                        symbol_fallback=symbol_fallback,
-                        stats=stats,
-                        source=str(BrokerTrade.Source.PIONEX_BOT_API),
-                        bot_result=bot_result,
-                    )
-        except PionexApiError as exc:
-            stats.gaps.append(
-                {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
-            )
+            try:
+                bot_fills = client.get_bot_spot_grid_orders(
+                    bot_id=bot_id,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    limit=100,
+                )
+                symbol_fallback = str(
+                    payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+                )
+                for fill in bot_fills:
+                    if isinstance(fill, dict):
+                        _record_trade_fill(
+                            credential=credential,
+                            fill=fill,
+                            symbol_fallback=symbol_fallback,
+                            stats=stats,
+                            source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                            bot_result=bot_result,
+                        )
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"bot_fills:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+                )
 
-    if balances:
-        _compute_balance_reconciliation(
+        for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
+            try:
+                summary = client.get_bot_summary(bot_id=bot_id)
+                bot_result = _upsert_bot_result(
+                    credential=credential,
+                    bot_id=bot_id,
+                    payload=summary,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    stats=stats,
+                )
+                bot_fills = client.get_bot_spot_grid_orders(
+                    bot_id=bot_id,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    limit=100,
+                )
+                symbol_fallback = str(
+                    summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+                )
+                for fill in bot_fills:
+                    if isinstance(fill, dict):
+                        _record_trade_fill(
+                            credential=credential,
+                            fill=fill,
+                            symbol_fallback=symbol_fallback,
+                            stats=stats,
+                            source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                            bot_result=bot_result,
+                        )
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+                )
+
+        if balances:
+            _compute_balance_reconciliation(
+                credential=credential,
+                balances=balances,
+                stats=stats,
+            )
+    except Exception as exc:  # pragma: no cover - defensive persistence path
+        failed = True
+        stats.gaps.append({"source": "sync", "reason": str(exc), "code": ""})
+        raise
+    finally:
+        status_value = _resolve_run_status(stats=stats, failed=failed)
+        payload = _persist_sync_metadata(
             credential=credential,
-            balances=balances,
+            run=sync_run,
             stats=stats,
+            status=status_value,
         )
-
-    payload = stats.to_dict()
-    credential.last_sync_at = django_timezone.now()
-    credential.last_sync_stats = payload
-    credential.last_sync_gaps = payload["gaps"]
-    credential.save(
-        update_fields=["last_sync_at", "last_sync_stats", "last_sync_gaps", "updated_at"]
-    )
     return payload
 
 
