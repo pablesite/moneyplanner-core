@@ -43,3 +43,8 @@ Phase 4 frontend for `Informe Fiscal Crypto` in Core:
 ## Mirror Decision (Core -> SaaS)
 Phase 4 spec explicitly marks SaaS mirror as out of MVP scope.
 No mirror was implemented in `frontend/` for this phase.
+
+## Export Status (Phase 5E/5F)
+1. Backend export endpoint is available in Core:
+   - `GET /api/v1/broker/fiscal-report/export/?year=YYYY&format=csv|pdf`
+2. Download button and final UX integration remain in Phase 5F frontend scope.

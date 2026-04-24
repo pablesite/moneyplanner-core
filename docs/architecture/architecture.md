@@ -81,6 +81,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `GET /api/v1/broker/sync/{id}/status/`
    - `POST /api/v1/broker/csv-import/`
    - `GET /api/v1/broker/fiscal-report/?year=YYYY`
+   - `GET /api/v1/broker/fiscal-report/export/?year=YYYY&format=csv|pdf`
 3. Secrets are encrypted at rest using Fernet (`BROKER_ENCRYPTION_KEY`).
 4. Pionex sync is API-first with CSV fallback importers for:
    - `trading.csv`

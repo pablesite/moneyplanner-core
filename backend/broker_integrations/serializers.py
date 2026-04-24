@@ -108,6 +108,10 @@ class BrokerFiscalReportQuerySerializer(serializers.Serializer):
     )
 
 
+class BrokerFiscalReportExportQuerySerializer(BrokerFiscalReportQuerySerializer):
+    format = serializers.ChoiceField(choices=["csv", "pdf"], required=False, default="csv")
+
+
 class BrokerSyncRunListQuerySerializer(serializers.Serializer):
     credential_id = serializers.IntegerField(required=False, min_value=1)
     year = serializers.IntegerField(required=False, min_value=2000, max_value=2100)

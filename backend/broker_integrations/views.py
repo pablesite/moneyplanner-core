@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import date
 
 from django.db.models import Count
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import exceptions, status
+from rest_framework.negotiation import DefaultContentNegotiation, _MediaType, order_by_precedence
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.utils.mediatypes import media_type_matches
 from rest_framework.views import APIView
 
 from .csv_importers import (
@@ -33,6 +36,7 @@ from .serializers import (
     BrokerBotResultListQuerySerializer,
     BrokerCredentialSerializer,
     BrokerCsvImportSerializer,
+    BrokerFiscalReportExportQuerySerializer,
     BrokerFiscalReportQuerySerializer,
     BrokerIncomeEventListQuerySerializer,
     BrokerSyncRequestSerializer,
@@ -46,12 +50,43 @@ from .serializers import (
 )
 from .services.broker_sync import sync_credential
 from .services.fiscal_report import generate_fiscal_report
+from .services.fiscal_report_export import export_csv, export_pdf
 
 
 class BrokerPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = "page_size"
     max_page_size = 200
+
+
+class IgnoreQueryFormatNegotiation(DefaultContentNegotiation):
+    """Avoid DRF taking `?format=` as renderer override for this module endpoints."""
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        format_value = format_suffix
+        if format_value:
+            renderers = self.filter_renderers(renderers, format_value)
+
+        accepts = self.get_accept_list(request)
+        for media_type_set in order_by_precedence(accepts):
+            for renderer in renderers:
+                for media_type in media_type_set:
+                    if media_type_matches(renderer.media_type, media_type):
+                        media_type_wrapper = _MediaType(media_type)
+                        if (
+                            _MediaType(renderer.media_type).precedence
+                            > media_type_wrapper.precedence
+                        ):
+                            full_media_type = ";".join(
+                                (renderer.media_type,)
+                                + tuple(
+                                    f"{key}={value}"
+                                    for key, value in media_type_wrapper.params.items()
+                                )
+                            )
+                            return renderer, full_media_type
+                        return renderer, media_type
+        raise exceptions.NotAcceptable(available_renderers=renderers)
 
 
 def _start_of_year(year: int):
@@ -89,6 +124,20 @@ def _collect_run_ids(sync_run: BrokerSyncRun, *, model: str) -> list[int]:
     if model == "bot_result":
         return [*sync_run.new_bot_result_ids, *sync_run.updated_bot_result_ids]
     return []
+
+
+def _resolve_report_ownership(*, user, ownership):
+    if ownership is not None:
+        if ownership.user_id != user.id:
+            return None
+        return ownership
+    credential = (
+        BrokerCredential.objects.filter(user=user)
+        .select_related("ownership")
+        .order_by("id")
+        .first()
+    )
+    return credential.ownership if credential else None
 
 
 class BrokerCredentialListCreateView(APIView):
@@ -410,16 +459,7 @@ class BrokerFiscalReportView(APIView):
                 {"detail": "La ownership no pertenece al usuario autenticado."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        resolved_ownership = ownership
-        if resolved_ownership is None:
-            credential = (
-                BrokerCredential.objects.filter(user=request.user)
-                .select_related("ownership")
-                .order_by("id")
-                .first()
-            )
-            resolved_ownership = credential.ownership if credential else None
+        resolved_ownership = _resolve_report_ownership(user=request.user, ownership=ownership)
         if resolved_ownership is None:
             return Response(
                 {"detail": "No hay ownership disponible para generar informe fiscal."},
@@ -428,3 +468,46 @@ class BrokerFiscalReportView(APIView):
 
         payload = generate_fiscal_report(ownership=resolved_ownership, year=year)
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class BrokerFiscalReportExportView(APIView):
+    permission_classes = [IsAuthenticated]
+    content_negotiation_class = IgnoreQueryFormatNegotiation
+
+    def get(self, request):
+        serializer = BrokerFiscalReportExportQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        year = serializer.validated_data.get("year") or date.today().year
+        ownership = serializer.validated_data.get("ownership")
+        if ownership is not None and ownership.user_id != request.user.id:
+            return Response(
+                {"detail": "La ownership no pertenece al usuario autenticado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        resolved_ownership = _resolve_report_ownership(user=request.user, ownership=ownership)
+        if resolved_ownership is None:
+            return Response(
+                {"detail": "No hay ownership disponible para generar informe fiscal."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        report = generate_fiscal_report(ownership=resolved_ownership, year=year)
+        fmt = serializer.validated_data.get("format", "csv")
+        if fmt == "csv":
+            content = export_csv(report)
+            return HttpResponse(
+                content,
+                content_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="fiscal-{year}.csv"'},
+            )
+        if fmt == "pdf":
+            content = export_pdf(report)
+            return HttpResponse(
+                content,
+                content_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="fiscal-{year}.pdf"'},
+            )
+        return Response(
+            {"detail": "unsupported format. use csv or pdf."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )

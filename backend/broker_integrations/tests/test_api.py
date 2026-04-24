@@ -118,6 +118,47 @@ class BrokerIntegrationsApiTests(APITestCase):
         self.assertEqual(response.data["fiscal_year"], 2025)
         self.assertIn("resumen", response.data)
 
+    def test_get_fiscal_report_export_returns_csv_and_pdf(self):
+        BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Fiscal export",
+            api_key="fiscal-export-key",
+            api_secret_encrypted=b"secret",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate="0.90",
+            rate_date="2025-01-01",
+        )
+
+        csv_response = self.client.get("/api/v1/broker/fiscal-report/export/?year=2025&format=csv")
+        self.assertEqual(csv_response.status_code, status.HTTP_200_OK, csv_response.content)
+        self.assertTrue(csv_response["Content-Type"].startswith("text/csv"))
+        self.assertIn('attachment; filename="fiscal-2025.csv"', csv_response["Content-Disposition"])
+        self.assertIn("denominacion,fecha_adquisicion", csv_response.content.decode("utf-8"))
+
+        pdf_response = self.client.get("/api/v1/broker/fiscal-report/export/?year=2025&format=pdf")
+        self.assertEqual(pdf_response.status_code, status.HTTP_200_OK, pdf_response.content)
+        self.assertEqual(pdf_response["Content-Type"], "application/pdf")
+        self.assertIn('attachment; filename="fiscal-2025.pdf"', pdf_response["Content-Disposition"])
+        self.assertTrue(pdf_response.content.startswith(b"%PDF-"))
+
+    def test_get_fiscal_report_export_rejects_unsupported_format(self):
+        BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Fiscal unsupported",
+            api_key="fiscal-unsupported",
+            api_secret_encrypted=b"secret",
+        )
+        response = self.client.get("/api/v1/broker/fiscal-report/export/?year=2025&format=xlsx")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("format", response.data["error"]["details"])
+
     def test_manual_cost_basis_crud(self):
         create_res = self.client.post(
             "/api/v1/broker/manual-cost-basis/",

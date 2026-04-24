@@ -12,9 +12,10 @@
 ### CSV and Fiscal Report
 1. `POST /api/v1/broker/csv-import/`
 2. `GET /api/v1/broker/fiscal-report/?year=YYYY`
-3. `POST /api/v1/broker/manual-cost-basis/`
-4. `GET /api/v1/broker/manual-cost-basis/?asset=<ASSET>`
-5. `DELETE /api/v1/broker/manual-cost-basis/{id}/`
+3. `GET /api/v1/broker/fiscal-report/export/?year=YYYY&format=csv|pdf`
+4. `POST /api/v1/broker/manual-cost-basis/`
+5. `GET /api/v1/broker/manual-cost-basis/?asset=<ASSET>`
+6. `DELETE /api/v1/broker/manual-cost-basis/{id}/`
 
 ### Sync Run Drill-Down (Phase 5B)
 1. `GET /api/v1/broker/sync-runs/?credential=<id>&year=YYYY`

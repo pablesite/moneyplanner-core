@@ -7,6 +7,7 @@ from .views import (
     BrokerCredentialListCreateView,
     BrokerCsvImportView,
     BrokerFiscalReportView,
+    BrokerFiscalReportExportView,
     BrokerIncomeEventListView,
     ManualCostBasisDeleteView,
     ManualCostBasisListCreateView,
@@ -32,4 +33,5 @@ urlpatterns = [
     path("manual-cost-basis/<int:row_id>/", ManualCostBasisDeleteView.as_view()),
     path("csv-import/", BrokerCsvImportView.as_view()),
     path("fiscal-report/", BrokerFiscalReportView.as_view()),
+    path("fiscal-report/export/", BrokerFiscalReportExportView.as_view()),
 ]

@@ -28,7 +28,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 | Informe Fiscal Crypto — Phase 5B Pionex v2 | Agente | Persistir `BrokerSyncRun` con historial y añadir endpoints de drill-down. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-b-sync-runs.md` |
 | Informe Fiscal Crypto — Phase 5C Pionex v2 | Agente | FX intradía 1m con `intraday_fx` + `MarketRateSnapshot` y `price_eur`/`fee_eur` en `BrokerTrade`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-c-fx-intradia.md` |
 | Informe Fiscal Crypto — Phase 5D Pionex v2 | Agente | FIFO con matching venta→lotes, `gap_reason` tipado y `ManualCostBasis`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-d-fifo-matching.md` |
-| Informe Fiscal Crypto — Phase 5E Pionex v2 | Agente | Export CSV/PDF anexo AEAT. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-e-export-aeat.md` |
+| Informe Fiscal Crypto — Phase 5E Pionex v2 | Agente | Export CSV/PDF anexo AEAT. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-e-export-aeat.md` |
 | Informe Fiscal Crypto — Phase 5F Pionex v2 | Manual | Frontend drill-down de sync runs, matching visible y export. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-f-frontend-drilldown.md` |
 
 ### Siguiente tarea disponible
@@ -42,6 +42,7 @@ Nota: `Informe Fiscal Crypto — Phase 3` cerrada el 2026-04-24 (motor FIFO glob
 Nota: `Informe Fiscal Crypto — Phase 4` cerrada el 2026-04-24 (UI Core para credenciales, sync, import CSV e informe fiscal anual en `/informe-fiscal` y `/informe-fiscal/informe`). Spec archivada en `core/docs/tasks/fiscal-report/phase-4-frontend/terminados/frontend.md`.
 Nota: `Informe Fiscal Crypto — Hardening post-Phase 4` aplicado el 2026-04-24 (fallback de `VITE_API_BASE_URL` a `http://localhost:8002`, selector de año también en Integraciones, bloque "Últimos datos importados", conversión EUR robusta con backfill on-demand para fecha de movimiento, y ajuste de bots Pionex para evitar `0` falsos usando `gridProfit` cuando `realizedProfit` llega a `0`).
 Nota: `Informe Fiscal Crypto — Phase 5D` cerrada el 2026-04-24 (FIFO con matching venta→lotes, `gap_reason` tipado, soporte `ManualCostBasis`, contrato `schema_version=2` en `fiscal-report` y endpoints CRUD de base de coste manual).
+Nota: `Informe Fiscal Crypto — Phase 5E` cerrada el 2026-04-24 (endpoint `GET /api/v1/broker/fiscal-report/export/` con formatos CSV/PDF, columnas AEAT por `MatchedLot` y dossier PDF anual con resumen, FIFO, capital mobiliario, conciliación de bots y avisos).
 Nota: Fiscalidad bots actual (2026-04-24): la tabla de bots se mantiene como vista informativa y no se suma al resumen fiscal agregado. El resumen fiscal usa detalle FIFO y posiciones/fuentes con trazabilidad de movimientos.
 Nota: espejo SaaS diferido por scope explícito de la fase (MVP Core-only), documentado en `core/docs/frontend/fiscal-report-ux-notes.md`.
 
