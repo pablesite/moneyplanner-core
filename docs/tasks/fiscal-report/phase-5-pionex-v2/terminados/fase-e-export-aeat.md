@@ -123,10 +123,10 @@ docker compose -f core/docker-compose.yml exec backend python manage.py test bro
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/architecture/api-registry.md` — endpoint de export.
-- [ ] `core/docs/frontend/fiscal-report-ux-notes.md` — mencionar que el botón
+- [x] `core/docs/architecture/api-registry.md` — endpoint de export.
+- [x] `core/docs/frontend/fiscal-report-ux-notes.md` — mencionar que el botón
       de export llegará en Phase 5F.
-- [ ] `core/docs/project-status.md` — marcar Phase 5E cerrada.
+- [x] `core/docs/project-status.md` — marcar Phase 5E cerrada.
 
 ## Risks
 
@@ -139,10 +139,20 @@ docker compose -f core/docker-compose.yml exec backend python manage.py test bro
 
 ## Completion Criteria
 
-- [ ] Endpoint `/fiscal-report/export/` responde en CSV y PDF.
-- [ ] CSV abrible en hoja de cálculo con las columnas listadas.
-- [ ] PDF legible.
-- [ ] Tests unitarios pasan.
-- [ ] Documentation updates done.
-- [ ] Spec movida a `terminados/`.
-- [ ] Commit: `feat(broker-integrations): export fiscal report as CSV and PDF`.
+- [x] Endpoint `/fiscal-report/export/` responde en CSV y PDF.
+- [x] CSV abrible en hoja de cálculo con las columnas listadas.
+- [x] PDF legible.
+- [x] Tests unitarios pasan.
+- [x] Documentation updates done.
+- [x] Spec movida a `terminados/`.
+- [x] Commit: `feat(broker-integrations): export fiscal report as CSV and PDF`.
+
+## Cierre real (2026-04-24)
+
+- Implementación backend cerrada en commit:
+  - `c4283f8 feat(broker-integrations): export fiscal report as CSV and PDF`
+- Validación ejecutada en Docker (Core backend):
+  - `ruff check .`
+  - `ruff format --check .`
+  - `mypy .`
+  - `python manage.py test broker_integrations --keepdb --noinput`
