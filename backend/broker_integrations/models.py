@@ -53,6 +53,10 @@ class BrokerTrade(models.Model):
         BUY = "BUY", "BUY"
         SELL = "SELL", "SELL"
 
+    class FiscalProvenance(models.TextChoices):
+        API = "api", "API"
+        CSV_FALLBACK = "csv_fallback", "CSV Fallback"
+
     credential = models.ForeignKey(
         BrokerCredential,
         null=True,
@@ -81,6 +85,13 @@ class BrokerTrade(models.Model):
     fee_eur = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
     eur_rate_source = models.CharField(max_length=30, blank=True, default="")
     timestamp = models.DateTimeField(db_index=True)
+    fiscal_provenance = models.CharField(
+        max_length=12,
+        choices=FiscalProvenance.choices,
+        blank=True,
+        default="",
+    )
+    fiscal_identity_key = models.CharField(max_length=16, blank=True, default="", db_index=True)
     raw = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -281,4 +292,39 @@ class IncomeEvent(models.Model):
         ordering = ["timestamp", "id"]
 
 
-# Create your models here.
+class DepositWithdrawal(models.Model):
+    class Direction(models.TextChoices):
+        DEPOSIT = "deposit", "Deposit"
+        WITHDRAWAL = "withdrawal", "Withdrawal"
+
+    class Source(models.TextChoices):
+        PIONEX_API = "pionex_api", "Pionex API"
+        PIONEX_CSV = "pionex_csv", "Pionex CSV"
+        MANUAL = "manual", "Manual"
+
+    credential = models.ForeignKey(
+        BrokerCredential,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deposit_withdrawals",
+    )
+    source = models.CharField(max_length=20, choices=Source.choices)
+    transaction_id = models.CharField(max_length=200)
+    direction = models.CharField(max_length=12, choices=Direction.choices)
+    asset = models.CharField(max_length=10)
+    amount = models.DecimalField(max_digits=24, decimal_places=10)
+    timestamp = models.DateTimeField(db_index=True)
+    cost_eur_per_unit = models.DecimalField(max_digits=24, decimal_places=10, null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    raw = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "transaction_id"],
+                name="uniq_deposit_withdrawal_source_transaction_id",
+            )
+        ]
+        indexes = [models.Index(fields=["source", "timestamp"])]
+        ordering = ["timestamp", "id"]

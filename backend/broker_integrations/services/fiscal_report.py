@@ -8,9 +8,14 @@ from django.db.models import QuerySet
 
 from memberships.models import Ownership
 
-from ..models import BotNetResult, BrokerTrade, FuturesPosition, IncomeEvent
+from ..models import BotNetResult, BrokerSyncRun, BrokerTrade, FuturesPosition, IncomeEvent
 from .eur_converter import EurConverter
-from .fifo_calculator import calculate_fifo_for_asset
+from .fifo_calculator import (
+    GAP_REASON_BALANCE_TRANSFER_IN,
+    GAP_REASON_MISSING_DATA,
+    GAP_REASON_PRE_PERIOD_BUY,
+    calculate_fifo_for_asset,
+)
 
 
 def _to_float(value: Decimal) -> float:
@@ -81,6 +86,148 @@ def _build_data_sources(
 
 def _filter_year(queryset: QuerySet, *, field: str, year: int) -> QuerySet:
     return queryset.filter(**{f"{field}__year": year})
+
+
+def _build_source_comparison(*, ownership: Ownership) -> dict[str, Any]:
+    api_sources = (BrokerTrade.Source.PIONEX_API, BrokerTrade.Source.PIONEX_BOT_API)
+    api_map: dict[str, dict[str, Any]] = {}
+    for t in BrokerTrade.objects.filter(
+        credential__ownership=ownership,
+        source__in=api_sources,
+    ).values("fiscal_identity_key", "quantity", "price", "timestamp"):
+        key = t["fiscal_identity_key"]
+        if key:
+            api_map[key] = t
+
+    csv_map: dict[str, dict[str, Any]] = {}
+    for t in BrokerTrade.objects.filter(
+        credential__ownership=ownership,
+        source=BrokerTrade.Source.PIONEX_CSV,
+    ).values("fiscal_identity_key", "quantity", "price", "timestamp"):
+        key = t["fiscal_identity_key"]
+        if key:
+            csv_map[key] = t
+
+    matched = api_only = csv_only = conflicting_amount = conflicting_timestamp = 0
+    for key in set(api_map) | set(csv_map):
+        api = api_map.get(key)
+        csv = csv_map.get(key)
+        if api and csv:
+            matched += 1
+            qty_diff = abs(Decimal(str(api["quantity"])) - Decimal(str(csv["quantity"])))
+            if qty_diff > Decimal("0.0001"):
+                conflicting_amount += 1
+            api_ts = api["timestamp"].replace(second=0, microsecond=0)
+            csv_ts = csv["timestamp"].replace(second=0, microsecond=0)
+            if abs((api_ts - csv_ts).total_seconds()) > 120:
+                conflicting_timestamp += 1
+        elif api:
+            api_only += 1
+        else:
+            csv_only += 1
+
+    return {
+        "matched": matched,
+        "api_only": api_only,
+        "csv_only": csv_only,
+        "conflicting_amount": conflicting_amount,
+        "conflicting_timestamp": conflicting_timestamp,
+    }
+
+
+def _compute_resumen_declarable(
+    *,
+    ganancias_perdidas_trades: list[dict[str, Any]],
+    ganancias_perdidas_futuros: list[dict[str, Any]],
+    total_capital: Decimal,
+) -> dict[str, Any]:
+    decl_ganancias = Decimal("0")
+    decl_perdidas = Decimal("0")
+    for section in ganancias_perdidas_trades:
+        for sale in section.get("sales", []):
+            if sale.get("gap_quantity", 0) > 0:
+                continue
+            lot_cost = sum(
+                Decimal(str(lot["cost_eur"])) + Decimal(str(lot["fee_eur_allocated"]))
+                for lot in sale.get("matched_lots", [])
+            )
+            neto_sale = Decimal(str(sale["proceeds_eur"])) - lot_cost
+            if neto_sale >= 0:
+                decl_ganancias += neto_sale
+            else:
+                decl_perdidas += abs(neto_sale)
+    for future in ganancias_perdidas_futuros:
+        value = Decimal(str(future["net_pnl_eur"]))
+        if value >= 0:
+            decl_ganancias += value
+        else:
+            decl_perdidas += abs(value)
+    return {
+        "total_capital_mobiliario_eur": _to_float(total_capital),
+        "total_ganancias_eur": _to_float(decl_ganancias),
+        "total_perdidas_eur": _to_float(decl_perdidas),
+        "neto_ganancias_perdidas_eur": _to_float(decl_ganancias - decl_perdidas),
+    }
+
+
+def _build_reliability(
+    *,
+    ownership: Ownership,
+    ganancias_perdidas_trades: list[dict[str, Any]],
+    data_sources: dict[str, Any],
+) -> dict[str, Any]:
+    fifo_gaps: list[dict[str, Any]] = []
+    for section in ganancias_perdidas_trades:
+        for sale in section.get("sales", []):
+            gap_qty = sale.get("gap_quantity", 0)
+            gap_reason = sale.get("gap_reason")
+            if gap_qty and gap_qty > 0 and gap_reason:
+                fifo_gaps.append(
+                    {
+                        "type": "fifo_gap",
+                        "asset": section["denominacion"],
+                        "sell_trade_id": sale["sell_trade_id"],
+                        "gap_quantity": gap_qty,
+                        "gap_reason": gap_reason,
+                    }
+                )
+
+    recon_gaps: list[dict[str, Any]] = []
+    for run in BrokerSyncRun.objects.filter(credential__ownership=ownership).only("gaps"):
+        for gap in run.gaps if isinstance(run.gaps, list) else []:
+            if (
+                isinstance(gap, dict)
+                and gap.get("source") == "balance_reconciliation"
+                and gap.get("reason") == "balance_mismatch"
+            ):
+                recon_gaps.append(gap)
+
+    blocking_gaps_material = [
+        g
+        for g in fifo_gaps
+        if g["gap_reason"] in (GAP_REASON_BALANCE_TRANSFER_IN, GAP_REASON_MISSING_DATA)
+    ]
+    pre_period_gaps = [g for g in fifo_gaps if g["gap_reason"] == GAP_REASON_PRE_PERIOD_BUY]
+
+    if blocking_gaps_material:
+        status = "blocked_missing_cost_basis"
+        blocking_gaps_out: list[dict[str, Any]] = blocking_gaps_material
+    elif recon_gaps:
+        status = "blocked_unreconciled_balances"
+        blocking_gaps_out = recon_gaps
+    elif pre_period_gaps:
+        status = "provisional"
+        blocking_gaps_out = pre_period_gaps
+    else:
+        status = "declarable"
+        blocking_gaps_out = []
+
+    return {
+        "status": status,
+        "blocking_gaps": blocking_gaps_out,
+        "input_coverage": data_sources,
+        "source_comparison": _build_source_comparison(ownership=ownership),
+    }
 
 
 def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]:
@@ -282,23 +429,49 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
         )
     )
 
+    data_sources = _build_data_sources(
+        trade_sources=trade_sources,
+        income_sources=income_sources,
+        futures_sources=futures_sources,
+    )
+
+    reliability = _build_reliability(
+        ownership=ownership,
+        ganancias_perdidas_trades=ganancias_perdidas_trades,
+        data_sources=data_sources,
+    )
+
+    # resumen_diagnostico: all trades including gap sales (full picture).
+    resumen_diagnostico = {
+        "total_capital_mobiliario_eur": _to_float(total_capital),
+        "total_ganancias_eur": _to_float(total_ganancias),
+        "total_perdidas_eur": _to_float(total_perdidas),
+        "neto_ganancias_perdidas_eur": _to_float(total_ganancias - total_perdidas),
+    }
+
+    # resumen_declarable: only gap-free sales; null when status is blocked.
+    blocked_statuses = {"blocked_missing_cost_basis", "blocked_unreconciled_balances"}
+    if reliability["status"] in blocked_statuses:
+        resumen_declarable = None
+    else:
+        resumen_declarable = _compute_resumen_declarable(
+            ganancias_perdidas_trades=ganancias_perdidas_trades,
+            ganancias_perdidas_futuros=ganancias_perdidas_futuros,
+            total_capital=total_capital,
+        )
+
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "fiscal_year": year,
         "capital_mobiliario": capital_mobiliario,
         "ganancias_perdidas_bots": ganancias_perdidas_bots,
         "ganancias_perdidas_futuros": ganancias_perdidas_futuros,
         "ganancias_perdidas_trades": ganancias_perdidas_trades,
         "avisos": avisos,
-        "data_sources": _build_data_sources(
-            trade_sources=trade_sources,
-            income_sources=income_sources,
-            futures_sources=futures_sources,
-        ),
-        "resumen": {
-            "total_capital_mobiliario_eur": _to_float(total_capital),
-            "total_ganancias_eur": _to_float(total_ganancias),
-            "total_perdidas_eur": _to_float(total_perdidas),
-            "neto_ganancias_perdidas_eur": _to_float(total_ganancias - total_perdidas),
-        },
+        "data_sources": data_sources,
+        "reliability": reliability,
+        "resumen_diagnostico": resumen_diagnostico,
+        "resumen_declarable": resumen_declarable,
+        # backward-compatible alias kept for schema_version <3 consumers
+        "resumen": resumen_diagnostico,
     }

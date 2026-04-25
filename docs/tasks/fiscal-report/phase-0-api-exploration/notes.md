@@ -57,7 +57,7 @@ API key con permisos: Read Info, Spot & Margin Trading, Convert History, Earn.
 | Pionex Staking/Rebase | No confirmado en API durante Phase 0 | `staking.csv` (completo) | CSV obligatorio (API opcional si se confirma endpoint) |
 | Pionex CommissionIn | No confirmado en API durante Phase 0 | `others.csv` (6178 filas) | CSV obligatorio |
 | Pionex Futures positions | No confirmado en API durante Phase 0 | `position_futures.csv` (~10 filas) | CSV obligatorio (API opcional si se confirma endpoint) |
-| Pionex deposits/withdrawals | No confirmado en API durante Phase 0 | `deposit-withdraw.csv` | Requiere Phase 5G: modelar como transferencia/gap de base externa, no como ganancia con coste cero |
+| Pionex deposits/withdrawals | No confirmado en API durante Phase 0 | `deposit-withdraw.csv` | Phase 5G: modelo `DepositWithdrawal` + importer `pionex_deposit_withdraw`; incluido en balance reconciliation |
 | Binance Convert orders | Sí (probado: `/sapi/v1/convert/tradeFlow`) | `órdenes-de-Convert.csv` (27 filas) | API-first + CSV fallback |
 | Binance Simple Earn Interest | Sí (probado: `/sapi/v1/simple-earn/flexible/history/rewardsRecord`, `type` requerido, ventana 90d) | `transacciones.csv` (619 filas) | API-first + CSV fallback |
 | Binance Transaction Buy | Sí (probado: `/sapi/v1/pay/transactions`) | `transacciones.csv` (triplets ×13) | API-first + CSV fallback |
@@ -100,9 +100,22 @@ API key con permisos: Read Info, Spot & Margin Trading, Convert History, Earn.
 2. La respuesta del endpoint no esta validada aun con credencial real en entorno del proyecto, por lo que el cliente usa parseo tolerante y fallback de paginacion por ventana temporal.
 3. Pendiente smoke test real para confirmar contrato final de campos antes de cerrar Phase 5A.
 
-## Hallazgos de simulacion Phase 5G (2026-04-25)
+## Resultado Phase 5G (2026-04-25)
 
-1. La simulacion local uso CSV porque no habia credenciales reales Pionex disponibles; el producto debe seguir siendo API-first mediante `sync_pionex`.
-2. `CommissionIn`, staking/rebase, futuros cerrados y depositos/retiros siguen siendo categorias sin cobertura API confirmada en la matriz historica.
-3. Ventas USDC procedentes de depositos pueden inflar ganancias si el deposito no se transforma en transferencia auditable o base de coste manual.
-4. Phase 5G debe comparar API/CSV cuando ambas fuentes existan y bloquear `resumen_declarable` si hay gaps materiales de coste o conciliacion.
+Cobertura API Pionex confirmada como implementada:
+
+| Categoria | Cobertura | Mecanismo |
+|---|---|---|
+| Fills spot/bot | API-first (`pionex_api`, `pionex_bot_api`) | `sync_pionex` → `_record_trade_fill` con `fiscal_provenance=api` |
+| Dual Investment yields | API-first (`pionex_dual_invest_api`) | `sync_pionex` → `_record_dual_income` |
+| Staking/Rebase | CSV fallback (`pionex_staking_csv`) | `import_pionex_staking` |
+| CommissionIn | CSV fallback (`pionex_commission_csv`) | `import_pionex_others` |
+| Futures positions | CSV fallback (`pionex_csv`) | `import_pionex_futures` |
+| Deposits/Withdrawals | CSV fallback (`pionex_csv`) | `import_pionex_deposit_withdraw` → `DepositWithdrawal` |
+
+Dedup API/CSV implementado en Phase 5G:
+- `BrokerTrade.fiscal_identity_key` = SHA-256[:16] de `(symbol|side|qty|price|ts_minute)`.
+- FIFO pool deduplica por esta clave; API gana sobre CSV cuando coinciden.
+- `source_comparison` en `reliability` informa de `matched/api_only/csv_only/conflicting_*`.
+- Ventas sin coste completo (`gap_reason=balance_transfer_in`) bloquean `resumen_declarable`; `ManualCostBasis` lo desbloquea.
+- `schema_version=3`: payload añade `reliability`, `resumen_declarable`, `resumen_diagnostico`.

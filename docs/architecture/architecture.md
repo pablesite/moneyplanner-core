@@ -118,11 +118,16 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 12. `ManualCostBasis` provides optional pre-period acquisition lots:
    - ownership-scoped rows are injected into FIFO pool before trade lots by `acquired_at`,
    - FIFO resets and recomputes `quantity_remaining` on each report generation for deterministic results.
-13. Planned Pionex reliability gates keep API as the primary ingestion path and CSV as an audited fallback:
-   - API/CSV records must be deduplicated by normalized fiscal identity, not only by broker source id,
-   - source comparison must distinguish `matched`, `api_only`, `csv_only`, `conflicting_amount`, and `conflicting_timestamp`,
-   - external transfers such as deposits/withdrawals must be represented as auditable transfer gaps or resolved with manual cost basis,
-   - `fiscal-report` should expose `reliability`, `resumen_declarable`, and `resumen_diagnostico` so material gaps do not inflate declarable totals.
+13. Pionex reliability gates (Phase 5G) keep API as the primary ingestion path and CSV as an audited fallback:
+   - `BrokerTrade.fiscal_provenance` tracks origin: `api` (API sync) or `csv_fallback` (CSV import).
+   - `BrokerTrade.fiscal_identity_key` is a 16-char SHA-256 of `(symbol|side|qty|price|ts_minute)` for economic deduplication.
+   - FIFO pool deduplicates by `fiscal_identity_key`; when API and CSV records share a key, the API version is preferred.
+   - `source_comparison` in `reliability` distinguishes `matched`, `api_only`, `csv_only`, `conflicting_amount`, and `conflicting_timestamp`.
+   - `DepositWithdrawal` model records explicit external deposits/withdrawals; these are included in balance reconciliation.
+   - `fiscal-report` (schema_version=3) exposes `reliability`, `resumen_declarable`, and `resumen_diagnostico`:
+     - `reliability.status`: `declarable | blocked_missing_cost_basis | blocked_unreconciled_balances | provisional`
+     - `resumen_declarable` is `null` when status is `blocked_*` (material gaps present); non-null otherwise.
+     - `resumen_diagnostico` and the backward-compatible `resumen` always contain full diagnostic totals including gap sales.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

@@ -11,8 +11,19 @@ from typing import Any
 
 from django.utils import timezone as django_timezone
 
-from ..csv_importers.common import deterministic_id, upsert_income_event_dedup
-from ..models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade, IncomeEvent
+from ..csv_importers.common import (
+    compute_fiscal_identity_key,
+    deterministic_id,
+    upsert_income_event_dedup,
+)
+from ..models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    DepositWithdrawal,
+    IncomeEvent,
+)
 from .binance_client import BinanceApiError, BinanceClient
 from .encryption import decrypt
 from .intraday_fx import IntradayFxError, get_rate_at, prefetch_pairs_for_trades
@@ -332,6 +343,14 @@ def _compute_expected_balances(*, credential: BrokerCredential) -> dict[str, Dec
             expected[fee_asset] -= fee
     for income in IncomeEvent.objects.filter(credential=credential).only("asset", "amount"):
         expected[income.asset.upper()] += income.amount
+    for dw in DepositWithdrawal.objects.filter(credential=credential).only(
+        "asset", "amount", "direction"
+    ):
+        asset = dw.asset.upper()
+        if dw.direction == DepositWithdrawal.Direction.DEPOSIT:
+            expected[asset] += Decimal(dw.amount)
+        else:
+            expected[asset] -= Decimal(dw.amount)
     return dict(expected)
 
 
@@ -396,20 +415,31 @@ def _record_trade_fill(
         or fill.get("createTime")
         or fill.get("filledTime")
     )
+    side = str(fill.get("side") or "BUY").upper()
+    quantity = _to_decimal(
+        fill.get("quantity") or fill.get("size") or fill.get("amount") or fill.get("filledQty")
+    )
+    price = _to_decimal(fill.get("price") or fill.get("avgPrice"))
     defaults = {
         "credential": credential,
         "bot": bot_result,
         "symbol": symbol,
         "base_asset": base_asset,
         "quote_asset": quote_asset,
-        "side": str(fill.get("side") or "BUY").upper(),
-        "price": _to_decimal(fill.get("price") or fill.get("avgPrice")),
-        "quantity": _to_decimal(
-            fill.get("quantity") or fill.get("size") or fill.get("amount") or fill.get("filledQty")
-        ),
+        "side": side,
+        "price": price,
+        "quantity": quantity,
         "fee": _to_decimal(fill.get("fee") or fill.get("commission")),
         "fee_asset": str(fill.get("feeCoin") or fill.get("commissionAsset") or quote_asset).upper(),
         "timestamp": timestamp,
+        "fiscal_provenance": BrokerTrade.FiscalProvenance.API,
+        "fiscal_identity_key": compute_fiscal_identity_key(
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            timestamp=timestamp,
+        ),
         "raw": fill,
     }
     trade, created = BrokerTrade.objects.update_or_create(

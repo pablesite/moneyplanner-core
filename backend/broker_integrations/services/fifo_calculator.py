@@ -15,6 +15,34 @@ GAP_REASON_PRE_PERIOD_BUY = "pre_period_buy"
 GAP_REASON_MISSING_DATA = "missing_data"
 GAP_REASON_BALANCE_TRANSFER_IN = "balance_transfer_in"
 
+_CSV_SOURCES = frozenset({BrokerTrade.Source.PIONEX_CSV, BrokerTrade.Source.BINANCE_CSV})
+
+
+def _trade_provenance(trade: BrokerTrade) -> str:
+    if trade.fiscal_provenance:
+        return trade.fiscal_provenance
+    return "csv_fallback" if trade.source in _CSV_SOURCES else "api"
+
+
+def _dedup_trades_by_fiscal_key(trades: list[BrokerTrade]) -> list[BrokerTrade]:
+    """For trades sharing a fiscal_identity_key, keep only one (API preferred over CSV)."""
+    key_to_best: dict[str, BrokerTrade] = {}
+    no_key: list[BrokerTrade] = []
+    for trade in trades:
+        key = trade.fiscal_identity_key
+        if not key:
+            no_key.append(trade)
+            continue
+        existing = key_to_best.get(key)
+        if existing is None:
+            key_to_best[key] = trade
+            continue
+        if _trade_provenance(existing) == "csv_fallback" and _trade_provenance(trade) == "api":
+            key_to_best[key] = trade
+    deduped = no_key + list(key_to_best.values())
+    deduped.sort(key=lambda t: (t.timestamp, t.id))
+    return deduped
+
 
 @dataclass
 class _PoolLot:
@@ -138,12 +166,13 @@ def calculate_fifo_for_asset(
     eur_converter: EurConverter,
 ) -> dict[str, Any]:
     asset = (base_asset or "").strip().upper()
-    trades = list(
+    raw_trades = list(
         BrokerTrade.objects.filter(
             credential__ownership=ownership,
             base_asset=asset,
         ).order_by("timestamp", "id")
     )
+    trades = _dedup_trades_by_fiscal_key(raw_trades)
 
     manual_rows = list(
         ManualCostBasis.objects.filter(ownership=ownership, asset=asset).order_by(

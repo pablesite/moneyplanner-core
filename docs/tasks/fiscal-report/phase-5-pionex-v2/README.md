@@ -33,7 +33,7 @@ Phase 5 resuelve estos puntos sólo para Pionex. Binance queda para Phase 6.
 | 4 | [terminados/fase-d-fifo-matching.md](terminados/fase-d-fifo-matching.md) | Agente | backend | Matching venta→lotes, `gap_reason` tipado, `ManualCostBasis` |
 | 5 | [terminados/fase-e-export-aeat.md](terminados/fase-e-export-aeat.md) | Agente | backend | Export CSV/PDF anexo AEAT |
 | 6 | [terminados/fase-f-frontend-drilldown.md](terminados/fase-f-frontend-drilldown.md) | Manual | frontend | Drill-down sync runs, matching visible, modal de coste manual |
-| 7 | [fase-g-api-first-reliability.md](fase-g-api-first-reliability.md) | Agente | backend | API-first reliability gates, CSV fallback auditado y bloqueo de resumen declarable con gaps materiales |
+| 7 | [terminados/fase-g-api-first-reliability.md](terminados/fase-g-api-first-reliability.md) | Agente | backend | API-first reliability gates, CSV fallback auditado y bloqueo de resumen declarable con gaps materiales |
 
 El orden es secuencial para backend (A→B→C→D→E). Fase F puede arrancar en
 paralelo con D/E una vez el contrato API de D esté cerrado.

@@ -58,6 +58,26 @@ def deterministic_id(*parts: Any) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def compute_fiscal_identity_key(
+    *,
+    symbol: str,
+    side: str,
+    quantity: Decimal,
+    price: Decimal,
+    timestamp: datetime,
+) -> str:
+    """Short hash identifying the same economic event regardless of source (API vs CSV).
+
+    Truncates timestamp to the minute to tolerate minor timing differences between
+    API and CSV representations of the same fill.
+    """
+    ts_minute = timestamp.replace(second=0, microsecond=0)
+    qty_str = str(quantity.quantize(Decimal("0.00001"), rounding=ROUND_HALF_UP))
+    price_str = str(price.quantize(Decimal("0.00001"), rounding=ROUND_HALF_UP))
+    payload = f"{symbol.upper()}|{side.upper()}|{qty_str}|{price_str}|{ts_minute.isoformat()}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def split_symbol(symbol: str) -> tuple[str, str]:
     text = symbol.strip().upper()
     if "_" in text:

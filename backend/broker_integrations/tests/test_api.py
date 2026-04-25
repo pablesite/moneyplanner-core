@@ -114,9 +114,11 @@ class BrokerIntegrationsApiTests(APITestCase):
         )
         response = self.client.get("/api/v1/broker/fiscal-report/?year=2025")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["schema_version"], 2)
+        self.assertEqual(response.data["schema_version"], 3)
         self.assertEqual(response.data["fiscal_year"], 2025)
         self.assertIn("resumen", response.data)
+        self.assertIn("reliability", response.data)
+        self.assertIn("resumen_declarable", response.data)
 
     def test_get_fiscal_report_export_returns_csv_and_pdf(self):
         BrokerCredential.objects.create(

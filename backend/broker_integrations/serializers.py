@@ -90,6 +90,7 @@ class BrokerCsvImportSerializer(serializers.Serializer):
             "pionex_staking",
             "pionex_others",
             "pionex_dust",
+            "pionex_deposit_withdraw",
             "binance_transactions",
             "binance_convert",
             "binance_recurring",

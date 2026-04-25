@@ -15,6 +15,7 @@ from broker_integrations.models import (
     IncomeEvent,
     ManualCostBasis,
 )
+from broker_integrations.services.fifo_calculator import _dedup_trades_by_fiscal_key
 from broker_integrations.services.eur_converter import EurConverter
 from broker_integrations.services.fifo_calculator import calculate_fifo_for_asset
 from broker_integrations.services.fiscal_report import generate_fiscal_report
@@ -319,13 +320,15 @@ class FiscalReportServicesTests(TestCase):
         )
 
         payload = generate_fiscal_report(ownership=self.ownership, year=2025)
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
         self.assertEqual(payload["fiscal_year"], 2025)
         self.assertIn("capital_mobiliario", payload)
         self.assertIn("ganancias_perdidas_bots", payload)
         self.assertIn("ganancias_perdidas_futuros", payload)
         self.assertIn("ganancias_perdidas_trades", payload)
         self.assertIn("resumen", payload)
+        self.assertIn("resumen_diagnostico", payload)
+        self.assertIn("reliability", payload)
         self.assertTrue(payload["data_sources"]["binance_csv_fallback"])
         self.assertEqual(payload["ganancias_perdidas_bots"][0]["incluido_en_resumen_fiscal"], False)
         self.assertEqual(payload["resumen"]["total_ganancias_eur"], 0.72)
@@ -347,3 +350,295 @@ class FiscalReportServicesTests(TestCase):
         )
         self.assertEqual(rate, Decimal("0.89"))
         self.assertTrue(sync_mock.called)
+
+
+class Phase5GReliabilityTests(TestCase):
+    """Tests for Phase 5G: API-first reliability gates."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="5g_user", password="pass1234")
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Primary",
+            role=FamilyMember.Role.ADULT,
+        )
+        self.ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+        self.credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.PIONEX,
+            label="pionex-5g",
+            api_key="k",
+            api_secret_encrypted=b"s",
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.90"),
+            rate_date=datetime(2025, 1, 1, tzinfo=timezone.utc).date(),
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("0.92"),
+            rate_date=datetime(2025, 6, 1, tzinfo=timezone.utc).date(),
+        )
+
+    def _make_trade(
+        self,
+        *,
+        trade_id,
+        source,
+        side,
+        symbol="BTC_USDT",
+        base_asset="BTC",
+        quantity="0.1",
+        price="50000",
+        timestamp=None,
+        fiscal_provenance="",
+        fiscal_identity_key="",
+    ):
+        if timestamp is None:
+            timestamp = datetime(2025, 1, 10, tzinfo=timezone.utc)
+        return BrokerTrade.objects.create(
+            credential=self.credential,
+            source=source,
+            trade_id=trade_id,
+            symbol=symbol,
+            base_asset=base_asset,
+            quote_asset="USDT",
+            side=side,
+            price=Decimal(price),
+            price_eur=Decimal(price) * Decimal("0.90"),
+            quantity=Decimal(quantity),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=timestamp,
+            fiscal_provenance=fiscal_provenance,
+            fiscal_identity_key=fiscal_identity_key,
+            raw={},
+        )
+
+    def test_schema_version_is_3(self):
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["schema_version"], 3)
+
+    def test_reliability_block_present(self):
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertIn("reliability", payload)
+        rel = payload["reliability"]
+        self.assertIn("status", rel)
+        self.assertIn("blocking_gaps", rel)
+        self.assertIn("input_coverage", rel)
+        self.assertIn("source_comparison", rel)
+
+    def test_reliability_declarable_when_no_gaps(self):
+        self._make_trade(
+            trade_id="buy-1",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 1, 5, tzinfo=timezone.utc),
+        )
+        self._make_trade(
+            trade_id="sell-1",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["reliability"]["status"], "declarable")
+        self.assertIsNotNone(payload["resumen_declarable"])
+
+    def test_usdc_sale_without_cost_basis_blocks_declarable(self):
+        # SELL USDC with no BUY → gap_reason=balance_transfer_in → blocked
+        self._make_trade(
+            trade_id="sell-usdc",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quantity="1000",
+            price="1",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["reliability"]["status"], "blocked_missing_cost_basis")
+        self.assertIsNone(payload["resumen_declarable"])
+        self.assertTrue(len(payload["reliability"]["blocking_gaps"]) > 0)
+
+    def test_manual_cost_basis_unblocks_declarable(self):
+        # Same scenario: SELL USDC, but user provided ManualCostBasis
+        ManualCostBasis.objects.create(
+            ownership=self.ownership,
+            asset="USDC",
+            quantity=Decimal("1000"),
+            quantity_remaining=Decimal("1000"),
+            acquired_at=datetime(2024, 12, 1, tzinfo=timezone.utc),
+            cost_eur=Decimal("900"),
+            exchange_origin="external",
+        )
+        self._make_trade(
+            trade_id="sell-usdc-2",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quantity="1000",
+            price="1",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["reliability"]["status"], "declarable")
+        self.assertIsNotNone(payload["resumen_declarable"])
+
+    def test_api_csv_dedup_does_not_double_count_in_fifo(self):
+        # Same economic event as API trade and CSV trade: should count only once in pool
+        key = "abc123dedup01"
+        self._make_trade(
+            trade_id="api-buy",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            fiscal_identity_key=key,
+            quantity="0.1",
+            timestamp=datetime(2025, 1, 5, tzinfo=timezone.utc),
+        )
+        self._make_trade(
+            trade_id="csv-buy",
+            source=BrokerTrade.Source.PIONEX_CSV,
+            side=BrokerTrade.Side.BUY,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.CSV_FALLBACK,
+            fiscal_identity_key=key,
+            quantity="0.1",
+            timestamp=datetime(2025, 1, 5, tzinfo=timezone.utc),
+        )
+        self._make_trade(
+            trade_id="sell-1",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            fiscal_identity_key="",
+            quantity="0.1",
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="BTC",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+        # Only one BUY in pool (deduped), so sell of 0.1 should be fully matched
+        self.assertEqual(len(result["warnings"]), 0)
+        self.assertEqual(len(result["sales"]), 1)
+        self.assertEqual(result["sales"][0]["gap_quantity"], Decimal("0"))
+
+    def test_dedup_prefers_api_over_csv(self):
+        key = "dedup_pref_key1"
+        api_trade = self._make_trade(
+            trade_id="api-t",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            fiscal_identity_key=key,
+        )
+        csv_trade = self._make_trade(
+            trade_id="csv-t",
+            source=BrokerTrade.Source.PIONEX_CSV,
+            side=BrokerTrade.Side.BUY,
+            fiscal_provenance=BrokerTrade.FiscalProvenance.CSV_FALLBACK,
+            fiscal_identity_key=key,
+        )
+        trades = list(
+            BrokerTrade.objects.filter(id__in=[api_trade.id, csv_trade.id]).order_by("id")
+        )
+        deduped = _dedup_trades_by_fiscal_key(trades)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0].fiscal_provenance, BrokerTrade.FiscalProvenance.API)
+
+    def test_source_comparison_counts_matched_and_unmatched(self):
+        shared_key = "shared1234567890"
+        api_only_key = "apionly12345678"
+        csv_only_key = "csvonly12345678"
+        self._make_trade(
+            trade_id="api-shared",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            fiscal_identity_key=shared_key,
+        )
+        self._make_trade(
+            trade_id="csv-shared",
+            source=BrokerTrade.Source.PIONEX_CSV,
+            side=BrokerTrade.Side.BUY,
+            fiscal_identity_key=shared_key,
+        )
+        self._make_trade(
+            trade_id="api-only",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            fiscal_identity_key=api_only_key,
+        )
+        self._make_trade(
+            trade_id="csv-only",
+            source=BrokerTrade.Source.PIONEX_CSV,
+            side=BrokerTrade.Side.BUY,
+            fiscal_identity_key=csv_only_key,
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        sc = payload["reliability"]["source_comparison"]
+        self.assertEqual(sc["matched"], 1)
+        self.assertEqual(sc["api_only"], 1)
+        self.assertEqual(sc["csv_only"], 1)
+
+    def test_resumen_declarable_excludes_gap_sales(self):
+        # One clean sell (matched) and one gap sell (unmatched) in the same report
+        self._make_trade(
+            trade_id="buy-eth",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quantity="1",
+            price="2000",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 1, 5, tzinfo=timezone.utc),
+        )
+        self._make_trade(
+            trade_id="sell-eth",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quantity="1",
+            price="2200",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        # USDC gap sell (no buy → balance_transfer_in → blocks declarable)
+        self._make_trade(
+            trade_id="sell-usdc-gap",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quantity="500",
+            price="1",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        # blocked_missing_cost_basis → declarable is null
+        self.assertEqual(payload["reliability"]["status"], "blocked_missing_cost_basis")
+        self.assertIsNone(payload["resumen_declarable"])
+        # diagnostico still shows all numbers
+        self.assertIsNotNone(payload["resumen_diagnostico"])
+        self.assertGreater(payload["resumen_diagnostico"]["total_ganancias_eur"], 0)
