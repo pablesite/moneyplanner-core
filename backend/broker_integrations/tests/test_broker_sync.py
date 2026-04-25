@@ -5,11 +5,19 @@ from unittest.mock import patch
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
-from broker_integrations.models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade
+from broker_integrations.models import (
+    BotNetResult,
+    BrokerCredential,
+    BrokerSyncRun,
+    BrokerTrade,
+    IncomeEvent,
+)
 from broker_integrations.services.broker_sync import sync_binance, sync_credential, sync_pionex
 from broker_integrations.services.binance_client import BinanceApiError
 from broker_integrations.services.encryption import encrypt
+from broker_integrations.services.pionex_client import PionexApiError
 from memberships.models import FamilyMember, Ownership
 
 
@@ -124,6 +132,94 @@ class _FakePionexClientBotFills(_FakePionexClient):
                 "timestamp": 1735689600000,
             }
         ]
+
+
+class _FakePionexClientBotSymbolsFromHistory(_FakePionexClient):
+    def get_balances(self):
+        return []
+
+    def get_bot_orders(self, *, status: str = "running", page_token=None, limit: int = 100):
+        if status == "finished":
+            return (
+                [
+                    {
+                        "buOrderId": "bot-history-1",
+                        "buOrderType": "spot_grid",
+                        "symbol": "ADA_USDT",
+                    }
+                ],
+                None,
+            )
+        return ([], None)
+
+    def get_fills(self, **kwargs):
+        if kwargs.get("symbol") != "ADA_USDT":
+            return []
+        return [
+            {
+                "id": "ada-fill-1",
+                "symbol": "ADA_USDT",
+                "side": "BUY",
+                "price": "0.5",
+                "size": "100",
+                "fee": "0.1",
+                "feeCoin": "ADA",
+                "timestamp": 1706745600000,  # 2024-02-01 UTC
+            }
+        ]
+
+    def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
+        return []
+
+
+class _FakePionexClientBot404Independence(_FakePionexClient):
+    """bot-first raises HTTP 404; bot-second should still receive its fills."""
+
+    def get_bot_orders(self, *, status: str = "running", page_token=None, limit: int = 100):
+        if status == "running":
+            return (
+                [
+                    {"buOrderId": "bot-first", "buOrderType": "spot_grid"},
+                    {"buOrderId": "bot-second", "buOrderType": "spot_grid"},
+                ],
+                None,
+            )
+        return ([], None)
+
+    def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
+        if bot_id == "bot-first":
+            raise PionexApiError("Pionex HTTP 404")
+        return [
+            {
+                "id": f"{bot_id}-fill-1",
+                "symbol": "ETH_USDT",
+                "side": "BUY",
+                "price": "2000",
+                "size": "1",
+                "fee": "0.001",
+                "feeCoin": "ETH",
+                "timestamp": 1735689600000,
+            }
+        ]
+
+
+class _FakePionexClientDualFromDB(_FakePionexClient):
+    """Empty balances but returns a SOL dual record when base=SOL is requested."""
+
+    def get_balances(self):
+        return []
+
+    def get_dual_invest_records(self, **kwargs):
+        if kwargs.get("base") == "SOL":
+            return [
+                {
+                    "recordId": "sol-dual-1",
+                    "settleTime": 1735689600000,
+                    "yieldAmount": "0.5",
+                    "asset": "SOL",
+                }
+            ]
+        return []
 
 
 class _FakeBinanceClient:
@@ -265,6 +361,22 @@ class BrokerSyncTests(TestCase):
         self.assertEqual(sync_run.status, BrokerSyncRun.Status.PARTIAL)
         self.assertGreaterEqual(len(sync_run.new_trade_ids), 1)
 
+    @patch(
+        "broker_integrations.services.broker_sync.PionexClient",
+        _FakePionexClientBotSymbolsFromHistory,
+    )
+    def test_sync_pionex_uses_finished_bot_symbols_for_spot_fills(self):
+        stats = sync_pionex(credential=self.credential, year=2024)
+        self.assertEqual(stats["new_trades"], 1)
+        self.assertTrue(
+            BrokerTrade.objects.filter(
+                credential=self.credential,
+                source=BrokerTrade.Source.PIONEX_API,
+                trade_id="ada-fill-1",
+                symbol="ADA_USDT",
+            ).exists()
+        )
+
     @patch("broker_integrations.services.broker_sync.BinanceClient", _FakeBinanceClient)
     def test_sync_binance_collects_trades_income_and_gap(self):
         credential = BrokerCredential.objects.create(
@@ -293,3 +405,52 @@ class BrokerSyncTests(TestCase):
         )
         stats = sync_credential(credential=credential, year=2025)
         self.assertEqual(stats["new_trades"], 2)
+
+    @patch(
+        "broker_integrations.services.broker_sync.PionexClient",
+        _FakePionexClientBot404Independence,
+    )
+    def test_sync_pionex_bot_404_does_not_block_other_bots(self):
+        """A 404 on bot-first's fills must not prevent bot-second from being processed."""
+        stats = sync_pionex(credential=self.credential, year=2025)
+        # bot-second's fill is recorded despite bot-first's 404
+        self.assertTrue(
+            BrokerTrade.objects.filter(
+                credential=self.credential,
+                source=BrokerTrade.Source.PIONEX_BOT_API,
+                trade_id="bot-second-fill-1",
+            ).exists()
+        )
+        # The gap for bot-first is recorded with the right reason
+        self.assertTrue(
+            any(
+                gap.get("source") == "bot_fills:bot-first"
+                and gap.get("reason") == "endpoint_unavailable"
+                for gap in stats["gaps"]
+            )
+        )
+
+    @patch(
+        "broker_integrations.services.broker_sync.PionexClient",
+        _FakePionexClientDualFromDB,
+    )
+    def test_sync_pionex_discovers_dual_bases_from_db_history(self):
+        """A SOL IncomeEvent already in DB should cause SOL to be queried even with no balance."""
+        IncomeEvent.objects.create(
+            credential=self.credential,
+            source=IncomeEvent.Source.PIONEX_DUAL_INVEST_API,
+            income_type=IncomeEvent.IncomeType.DUAL_INVEST_YIELD,
+            asset="SOL",
+            amount=Decimal("0.1"),
+            timestamp=timezone.now(),
+        )
+        stats = sync_pionex(credential=self.credential, year=2025)
+        self.assertEqual(stats["new_income_events"], 1)
+        self.assertTrue(
+            IncomeEvent.objects.filter(
+                credential=self.credential,
+                source=IncomeEvent.Source.PIONEX_DUAL_INVEST_API,
+                asset="SOL",
+                amount=Decimal("0.5"),
+            ).exists()
+        )

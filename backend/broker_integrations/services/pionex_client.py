@@ -17,6 +17,15 @@ class PionexApiError(Exception):
         self.response = response or {}
 
 
+class PionexTruncatedError(Exception):
+    """Raised when max_iterations is exhausted before the full range is covered."""
+
+    def __init__(self, rows: list[dict], *, source: str) -> None:
+        super().__init__(f"max_iterations reached for {source}; data may be incomplete")
+        self.rows = rows
+        self.source = source
+
+
 class PionexClient:
     BASE_URL = "https://api.pionex.com"
 
@@ -73,6 +82,37 @@ class PionexClient:
             )
         return payload.get("data", {})
 
+    @staticmethod
+    def _extract_rows(data: Any, *, keys: tuple[str, ...]) -> list[dict[str, Any]]:
+        if isinstance(data, dict):
+            for key in keys:
+                rows = data.get(key)
+                if isinstance(rows, list):
+                    return [row for row in rows if isinstance(row, dict)]
+        if isinstance(data, list):
+            return [row for row in data if isinstance(row, dict)]
+        return []
+
+    @staticmethod
+    def _row_timestamp_ms(row: dict[str, Any], *, keys: tuple[str, ...]) -> int | None:
+        for key in keys:
+            value = row.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text.isdigit():
+                return int(text)
+        return None
+
+    @staticmethod
+    def _row_key(row: dict[str, Any]) -> str | None:
+        for key in ("id", "tradeId", "orderId", "filledId", "incomeId", "recordId"):
+            value = row.get(key)
+            if value in (None, ""):
+                continue
+            return f"{key}:{value}"
+        return None
+
     def get_balances(self) -> list[dict]:
         payload = self._signed_get("/api/v1/account/balances")
         data = self._extract_data(payload)
@@ -85,23 +125,62 @@ class PionexClient:
         return []
 
     def get_fills(self, *, symbol: str, start_ms: int, end_ms: int, limit: int = 100) -> list[dict]:
-        payload = self._signed_get(
-            "/api/v1/trade/fills",
-            {
-                "symbol": symbol,
-                "startTime": str(start_ms),
-                "endTime": str(end_ms),
-                "limit": str(limit),
-            },
-        )
-        data = self._extract_data(payload)
-        if isinstance(data, dict):
-            for key in ("fills", "list", "rows", "items"):
-                if isinstance(data.get(key), list):
-                    return data[key]
-        if isinstance(data, list):
-            return data
-        return []
+        # Endpoint returns the latest N rows in a range; walk backwards by endTime.
+        rows: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        cursor_end_ms = end_ms
+        max_iterations = 500
+
+        for _ in range(max_iterations):
+            payload = self._signed_get(
+                "/api/v1/trade/fills",
+                {
+                    "symbol": symbol,
+                    "startTime": str(start_ms),
+                    "endTime": str(cursor_end_ms),
+                    "limit": str(limit),
+                },
+            )
+            data = self._extract_data(payload)
+            batch = self._extract_rows(data, keys=("fills", "list", "rows", "items"))
+            if not batch:
+                break
+
+            for row in batch:
+                row_key = self._row_key(row)
+                if row_key and row_key in seen_keys:
+                    continue
+                if row_key:
+                    seen_keys.add(row_key)
+                rows.append(row)
+
+            if len(batch) < limit:
+                break
+
+            oldest_ms: int | None = None
+            for row in batch:
+                timestamp_ms = self._row_timestamp_ms(
+                    row,
+                    keys=("time", "timestamp", "createTime", "filledTime", "updateTime"),
+                )
+                if timestamp_ms is None:
+                    continue
+                oldest_ms = timestamp_ms if oldest_ms is None else min(oldest_ms, timestamp_ms)
+
+            if oldest_ms is None or oldest_ms <= start_ms:
+                break
+            # Use oldest_ms (not oldest_ms-1) so records sharing that exact timestamp
+            # are included in the next page; _row_key dedup prevents duplicates.
+            if oldest_ms == cursor_end_ms:
+                # Cursor did not advance: all records share the same timestamp.
+                # Dedup already handles any overlap; stop to avoid infinite loop.
+                break
+            cursor_end_ms = oldest_ms
+        else:
+            # for-loop exhausted max_iterations without a break => range not fully covered.
+            raise PionexTruncatedError(rows, source=f"fills:{symbol}")
+
+        return rows
 
     def get_bot_summary(self, *, bot_id: str) -> dict:
         payload = self._signed_get(
@@ -148,6 +227,7 @@ class PionexClient:
         path = "/api/v1/bot/order/spotGrid/orders"
         page_token: str | None = None
         current_start_ms = start_ms
+        prev_last_timestamp: int | None = None
         max_iterations = 200
 
         for _ in range(max_iterations):
@@ -193,29 +273,69 @@ class PionexClient:
                         break
                 if last_timestamp is None or last_timestamp >= end_ms:
                     break
+                # Detect stagnation: timestamp did not advance between pages.
+                if last_timestamp == prev_last_timestamp:
+                    raise PionexTruncatedError(rows, source=f"bot_fills:{bot_id}")
+                prev_last_timestamp = last_timestamp
                 current_start_ms = last_timestamp + 1
                 page_token = None
                 continue
             break
+        else:
+            raise PionexTruncatedError(rows, source=f"bot_fills:{bot_id}")
+
         return rows
 
     def get_dual_invest_records(
         self, *, base: str, start_ms: int, end_ms: int, limit: int = 100
     ) -> list[dict]:
-        payload = self._signed_get(
-            "/api/v1/earn/dual/records",
-            {
-                "base": base,
-                "startTime": str(start_ms),
-                "endTime": str(end_ms),
-                "limit": str(limit),
-            },
-        )
-        data = self._extract_data(payload)
-        if isinstance(data, dict):
-            for key in ("records", "list", "rows", "items"):
-                if isinstance(data.get(key), list):
-                    return data[key]
-        if isinstance(data, list):
-            return data
-        return []
+        rows: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        cursor_end_ms = end_ms
+        max_iterations = 500
+
+        for _ in range(max_iterations):
+            payload = self._signed_get(
+                "/api/v1/earn/dual/records",
+                {
+                    "base": base,
+                    "startTime": str(start_ms),
+                    "endTime": str(cursor_end_ms),
+                    "limit": str(limit),
+                },
+            )
+            data = self._extract_data(payload)
+            batch = self._extract_rows(data, keys=("records", "list", "rows", "items"))
+            if not batch:
+                break
+
+            for row in batch:
+                row_key = self._row_key(row)
+                if row_key and row_key in seen_keys:
+                    continue
+                if row_key:
+                    seen_keys.add(row_key)
+                rows.append(row)
+
+            if len(batch) < limit:
+                break
+
+            oldest_ms: int | None = None
+            for row in batch:
+                timestamp_ms = self._row_timestamp_ms(
+                    row,
+                    keys=("settleTime", "time", "timestamp", "createTime", "updateTime"),
+                )
+                if timestamp_ms is None:
+                    continue
+                oldest_ms = timestamp_ms if oldest_ms is None else min(oldest_ms, timestamp_ms)
+
+            if oldest_ms is None or oldest_ms <= start_ms:
+                break
+            if oldest_ms == cursor_end_ms:
+                break
+            cursor_end_ms = oldest_ms
+        else:
+            raise PionexTruncatedError(rows, source=f"dual_records:{base}")
+
+        return rows

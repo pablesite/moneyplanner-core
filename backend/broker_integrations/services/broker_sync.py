@@ -16,7 +16,7 @@ from ..models import BotNetResult, BrokerCredential, BrokerSyncRun, BrokerTrade,
 from .binance_client import BinanceApiError, BinanceClient
 from .encryption import decrypt
 from .intraday_fx import IntradayFxError, get_rate_at, prefetch_pairs_for_trades
-from .pionex_client import PionexApiError, PionexClient
+from .pionex_client import PionexApiError, PionexClient, PionexTruncatedError
 
 
 @dataclass
@@ -248,11 +248,36 @@ def _discover_spot_symbols(
     return sorted(symbol for symbol in symbols if symbol)
 
 
-def _discover_dual_bases(*, balances: list[dict[str, Any]]) -> list[str]:
+def _extract_bot_symbol(payload: dict[str, Any]) -> str:
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    if symbol:
+        return _normalize_symbol(symbol)
+    base = str(payload.get("base") or "").strip().upper()
+    quote = str(payload.get("quote") or "").strip().upper()
+    if base and quote:
+        return f"{base}_{quote}"
+    return ""
+
+
+def _discover_dual_bases(
+    *, credential: BrokerCredential, balances: list[dict[str, Any]]
+) -> list[str]:
     env_bases = _parse_csv_env("PIONEX_DUAL_BASES")
     if env_bases:
         return env_bases
     discovered: set[str] = set()
+    # Include assets seen in past Dual Investment income events so bases that no
+    # longer have a balance are still queried (avoids silently missing history).
+    for asset in (
+        IncomeEvent.objects.filter(
+            credential=credential,
+            source=IncomeEvent.Source.PIONEX_DUAL_INVEST_API,
+        )
+        .values_list("asset", flat=True)
+        .distinct()
+    ):
+        if asset:
+            discovered.add(str(asset).upper())
     for row in balances:
         if not isinstance(row, dict):
             continue
@@ -545,6 +570,125 @@ def _upsert_bot_result(
     return bot_result
 
 
+def _fetch_and_record_bot_fills(
+    *,
+    client: PionexClient,
+    credential: BrokerCredential,
+    bot_id: str,
+    bot_result: BotNetResult,
+    symbol_fallback: str,
+    start_ms: int,
+    end_ms: int,
+    stats: SyncStats,
+) -> None:
+    """Fetch individual fills for one bot and persist them. Each bot is independent."""
+    try:
+        bot_fills = client.get_bot_spot_grid_orders(
+            bot_id=bot_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            limit=100,
+        )
+        for fill in bot_fills:
+            if isinstance(fill, dict):
+                _record_trade_fill(
+                    credential=credential,
+                    fill=fill,
+                    symbol_fallback=symbol_fallback,
+                    stats=stats,
+                    source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                    bot_result=bot_result,
+                )
+    except PionexTruncatedError as exc:
+        for fill in exc.rows:
+            if isinstance(fill, dict):
+                _record_trade_fill(
+                    credential=credential,
+                    fill=fill,
+                    symbol_fallback=symbol_fallback,
+                    stats=stats,
+                    source=str(BrokerTrade.Source.PIONEX_BOT_API),
+                    bot_result=bot_result,
+                )
+        stats.gaps.append(
+            {"source": f"bot_fills:{bot_id}", "reason": "max_iterations_reached", "code": ""}
+        )
+    except PionexApiError as exc:
+        # A 404 means this specific bot has no fills via this endpoint.
+        # It does NOT mean the endpoint is unavailable for other bots.
+        reason = "endpoint_unavailable" if "HTTP 404" in str(exc) else str(exc)
+        stats.gaps.append(
+            {"source": f"bot_fills:{bot_id}", "reason": reason, "code": exc.code or ""}
+        )
+
+
+def _sync_pionex_bot_results_and_fills(
+    *,
+    client: PionexClient,
+    credential: BrokerCredential,
+    stats: SyncStats,
+    start_ms: int,
+    end_ms: int,
+    discovered_bots: dict[str, dict[str, Any]],
+) -> None:
+    env_bot_ids = {
+        value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
+    }
+
+    for bot_id, payload in sorted(discovered_bots.items()):
+        bot_result = _upsert_bot_result(
+            credential=credential,
+            bot_id=bot_id,
+            payload=payload,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            stats=stats,
+        )
+        symbol_fallback = str(
+            payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+        )
+        _fetch_and_record_bot_fills(
+            client=client,
+            credential=credential,
+            bot_id=bot_id,
+            bot_result=bot_result,
+            symbol_fallback=symbol_fallback,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            stats=stats,
+        )
+
+    for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
+        try:
+            summary = client.get_bot_summary(bot_id=bot_id)
+        except PionexApiError as exc:
+            stats.gaps.append(
+                {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+            )
+            continue
+        bot_result = _upsert_bot_result(
+            credential=credential,
+            bot_id=bot_id,
+            payload=summary,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            stats=stats,
+        )
+        symbol_fallback = str(
+            summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
+        )
+        _fetch_and_record_bot_fills(
+            client=client,
+            credential=credential,
+            bot_id=bot_id,
+            bot_result=bot_result,
+            symbol_fallback=symbol_fallback,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            stats=stats,
+        )
+
+
 def _record_binance_convert_trade(
     *,
     credential: BrokerCredential,
@@ -805,9 +949,15 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
         except PionexApiError as exc:
             stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
 
-        symbols = _discover_spot_symbols(credential=credential, balances=balances)
-        _prefetch_for_symbols(symbols=symbols, start=start, end=end)
-        for symbol in symbols:
+        discovered_bots = _discover_spot_grid_bots(client, stats)
+        symbols = set(_discover_spot_symbols(credential=credential, balances=balances))
+        for bot_payload in discovered_bots.values():
+            bot_symbol = _extract_bot_symbol(bot_payload)
+            if bot_symbol:
+                symbols.add(bot_symbol)
+        sorted_symbols = sorted(symbol for symbol in symbols if symbol)
+        _prefetch_for_symbols(symbols=sorted_symbols, start=start, end=end)
+        for symbol in sorted_symbols:
             try:
                 fills = client.get_fills(symbol=symbol, start_ms=start_ms, end_ms=end_ms, limit=100)
                 for fill in fills:
@@ -818,12 +968,24 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                             symbol_fallback=symbol,
                             stats=stats,
                         )
+            except PionexTruncatedError as exc:
+                for fill in exc.rows:
+                    if isinstance(fill, dict):
+                        _record_trade_fill(
+                            credential=credential,
+                            fill=fill,
+                            symbol_fallback=symbol,
+                            stats=stats,
+                        )
+                stats.gaps.append(
+                    {"source": f"fills:{symbol}", "reason": "max_iterations_reached", "code": ""}
+                )
             except PionexApiError as exc:
                 stats.gaps.append(
                     {"source": f"fills:{symbol}", "reason": str(exc), "code": exc.code or ""}
                 )
 
-        dual_bases = _discover_dual_bases(balances=balances)
+        dual_bases = _discover_dual_bases(credential=credential, balances=balances)
         for base in dual_bases:
             try:
                 dual_records = client.get_dual_invest_records(
@@ -835,83 +997,30 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
                 for record in dual_records:
                     if isinstance(record, dict):
                         _record_dual_income(credential=credential, record=record, stats=stats)
+            except PionexTruncatedError as exc:
+                for record in exc.rows:
+                    if isinstance(record, dict):
+                        _record_dual_income(credential=credential, record=record, stats=stats)
+                stats.gaps.append(
+                    {
+                        "source": f"dual_records:{base}",
+                        "reason": "max_iterations_reached",
+                        "code": "",
+                    }
+                )
             except PionexApiError as exc:
                 stats.gaps.append(
                     {"source": f"dual_records:{base}", "reason": str(exc), "code": exc.code or ""}
                 )
 
-        discovered_bots = _discover_spot_grid_bots(client, stats)
-        env_bot_ids = {
-            value.strip() for value in os.getenv("PIONEX_BOT_IDS", "").split(",") if value.strip()
-        }
-        for bot_id, payload in sorted(discovered_bots.items()):
-            bot_result = _upsert_bot_result(
-                credential=credential,
-                bot_id=bot_id,
-                payload=payload,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                stats=stats,
-            )
-            try:
-                bot_fills = client.get_bot_spot_grid_orders(
-                    bot_id=bot_id,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    limit=100,
-                )
-                symbol_fallback = str(
-                    payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-                )
-                for fill in bot_fills:
-                    if isinstance(fill, dict):
-                        _record_trade_fill(
-                            credential=credential,
-                            fill=fill,
-                            symbol_fallback=symbol_fallback,
-                            stats=stats,
-                            source=str(BrokerTrade.Source.PIONEX_BOT_API),
-                            bot_result=bot_result,
-                        )
-            except PionexApiError as exc:
-                stats.gaps.append(
-                    {"source": f"bot_fills:{bot_id}", "reason": str(exc), "code": exc.code or ""}
-                )
-
-        for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
-            try:
-                summary = client.get_bot_summary(bot_id=bot_id)
-                bot_result = _upsert_bot_result(
-                    credential=credential,
-                    bot_id=bot_id,
-                    payload=summary,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    stats=stats,
-                )
-                bot_fills = client.get_bot_spot_grid_orders(
-                    bot_id=bot_id,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                    limit=100,
-                )
-                symbol_fallback = str(
-                    summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-                )
-                for fill in bot_fills:
-                    if isinstance(fill, dict):
-                        _record_trade_fill(
-                            credential=credential,
-                            fill=fill,
-                            symbol_fallback=symbol_fallback,
-                            stats=stats,
-                            source=str(BrokerTrade.Source.PIONEX_BOT_API),
-                            bot_result=bot_result,
-                        )
-            except PionexApiError as exc:
-                stats.gaps.append(
-                    {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
-                )
+        _sync_pionex_bot_results_and_fills(
+            client=client,
+            credential=credential,
+            stats=stats,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            discovered_bots=discovered_bots,
+        )
 
         if balances:
             _compute_balance_reconciliation(
