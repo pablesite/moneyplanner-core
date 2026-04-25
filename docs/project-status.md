@@ -30,6 +30,7 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 | Informe Fiscal Crypto — Phase 5D Pionex v2 | Agente | FIFO con matching venta→lotes, `gap_reason` tipado y `ManualCostBasis`. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-d-fifo-matching.md` |
 | Informe Fiscal Crypto — Phase 5E Pionex v2 | Agente | Export CSV/PDF anexo AEAT. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-e-export-aeat.md` |
 | Informe Fiscal Crypto — Phase 5F Pionex v2 | Manual | Frontend drill-down de sync runs, matching visible y export. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-f-frontend-drilldown.md` |
+| Informe Fiscal Crypto — Phase 5G Pionex v2 | Agente | API-first reliability gates: CSV fallback auditado, depositos/retiros, dedupe API/CSV y bloqueo de resumen declarable con gaps materiales. | `core/docs/tasks/fiscal-report/phase-5-pionex-v2/fase-g-api-first-reliability.md` |
 
 ### Siguiente tarea disponible
 
@@ -45,6 +46,7 @@ Nota: `Informe Fiscal Crypto — Phase 5D` cerrada el 2026-04-24 (FIFO con match
 Nota: `Informe Fiscal Crypto — Phase 5E` cerrada el 2026-04-24 (endpoint `GET /api/v1/broker/fiscal-report/export/` con formatos CSV/PDF, columnas AEAT por `MatchedLot` y dossier PDF anual con resumen, FIFO, capital mobiliario, conciliación de bots y avisos).
 Nota: `Informe Fiscal Crypto — Phase 5F` cerrada el 2026-04-24 (frontend Core con historial y drill-down de sync runs, conciliación de saldos, FIFO por venta con `matched_lots`, chip de `gap_reason`, modal de `ManualCostBasis`, panel de fills por bot y descarga CSV/PDF desde el informe).
 Nota: Fiscalidad bots actual (2026-04-24): la tabla de bots se mantiene como vista informativa y no se suma al resumen fiscal agregado. El resumen fiscal usa detalle FIFO y posiciones/fuentes con trazabilidad de movimientos.
+Nota: `Informe Fiscal Crypto — Phase 5G` planificada el 2026-04-25 para convertir Pionex en flujo API-first fiable, mantener CSV solo como fallback auditado y bloquear el resumen declarable si faltan bases de coste o conciliacion material.
 Nota: espejo SaaS diferido por scope explícito de la fase (MVP Core-only), documentado en `core/docs/frontend/fiscal-report-ux-notes.md`.
 
 | Modulo | Tipo | Descripcion | Spec |
@@ -60,7 +62,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
-| Informe Fiscal Crypto | Media | 🔄 | MVP operativo en Core: Pionex + Binance, FIFO global cross-exchange y pantalla de informe. Phase 5 Pionex v2 (fiabilidad AEAT) planificada: FX por minuto, fills individuales de bot en FIFO, matching venta→lotes, trazabilidad de syncs y export CSV/PDF. Binance queda para fase posterior. |
+| Informe Fiscal Crypto | Media | 🔄 | MVP operativo en Core: Pionex + Binance, FIFO global cross-exchange y pantalla de informe. Phase 5 Pionex v2 (fiabilidad AEAT) planificada: FX por minuto, fills individuales de bot en FIFO, matching venta→lotes, trazabilidad de syncs, export CSV/PDF y reliability gates API-first con CSV fallback auditado. Binance queda para fase posterior. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |

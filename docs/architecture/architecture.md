@@ -118,6 +118,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 12. `ManualCostBasis` provides optional pre-period acquisition lots:
    - ownership-scoped rows are injected into FIFO pool before trade lots by `acquired_at`,
    - FIFO resets and recomputes `quantity_remaining` on each report generation for deterministic results.
+13. Planned Pionex reliability gates keep API as the primary ingestion path and CSV as an audited fallback:
+   - API/CSV records must be deduplicated by normalized fiscal identity, not only by broker source id,
+   - source comparison must distinguish `matched`, `api_only`, `csv_only`, `conflicting_amount`, and `conflicting_timestamp`,
+   - external transfers such as deposits/withdrawals must be represented as auditable transfer gaps or resolved with manual cost basis,
+   - `fiscal-report` should expose `reliability`, `resumen_declarable`, and `resumen_diagnostico` so material gaps do not inflate declarable totals.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
