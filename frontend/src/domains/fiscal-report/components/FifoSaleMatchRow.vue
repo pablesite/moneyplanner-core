@@ -78,6 +78,18 @@ const lotsCount = computed(() => props.sale.matched_lots.length);
             Asignar coste manual
           </button>
         </div>
+        <div
+          v-if="
+            props.sale.matched_lots.some(
+              (lot) => lot.deposit_withdrawal_id && lot.has_complete_cost_basis === false,
+            )
+          "
+          class="fiscal-sale-gap"
+        >
+          <span class="fiscal-text-warning">
+            Hay lotes externos usados en esta venta cuyo coste base sigue pendiente.
+          </span>
+        </div>
       </td>
     </tr>
   </tbody>

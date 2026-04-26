@@ -258,6 +258,7 @@ class BrokerTradeListView(APIView):
                 year=request.query_params.get("year"),
                 source=request.query_params.get("source"),
                 symbol=request.query_params.get("symbol"),
+                tax_id=request.query_params.get("tax_id"),
                 side=request.query_params.get("side"),
                 bot_id=request.query_params.get("bot_id"),
                 sync_run=request.query_params.get("sync_run"),
@@ -269,6 +270,7 @@ class BrokerTradeListView(APIView):
         year = serializer.validated_data.get("year")
         source = serializer.validated_data.get("source")
         symbol = serializer.validated_data.get("symbol")
+        tax_id = serializer.validated_data.get("tax_id")
         side = serializer.validated_data.get("side")
         bot_id = serializer.validated_data.get("bot_id")
         sync_run_id = serializer.validated_data.get("sync_run")
@@ -283,6 +285,8 @@ class BrokerTradeListView(APIView):
             queryset = queryset.filter(source=source)
         if symbol:
             queryset = queryset.filter(symbol=symbol.upper())
+        if tax_id:
+            queryset = queryset.filter(raw__tax_id=tax_id)
         if side:
             queryset = queryset.filter(side=side)
         if bot_id:
@@ -434,13 +438,15 @@ class BrokerCsvImportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = BrokerCsvImportSerializer(data=request.data)
+        serializer = BrokerCsvImportSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         importer = IMPORTER_BY_TYPE[serializer.validated_data["file_type"]]
-        result = importer(uploaded_file=serializer.validated_data["file"], credential=None)
+        credential = serializer.validated_data.get("credential")
+        result = importer(uploaded_file=serializer.validated_data["file"], credential=credential)
         return Response(
             {
                 "broker": serializer.validated_data["broker"],
+                "credential_id": credential.id if credential is not None else None,
                 "file_type": serializer.validated_data["file_type"],
                 **result,
             },

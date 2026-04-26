@@ -192,3 +192,21 @@ class PionexClientPaginationTests(SimpleTestCase):
 
         self.assertIn("bot_fills:", ctx.exception.source)
         self.assertGreater(len(ctx.exception.rows), 0)
+
+    def test_get_bot_summary_uses_official_bu_order_id_parameter(self):
+        client = _FakePionexClient(
+            responses={
+                ("/api/v1/bot/orders/spotGrid/order", None): {
+                    "result": True,
+                    "data": {"buOrderId": "bot-123", "base": "ETH", "quote": "USDT"},
+                }
+            }
+        )
+
+        payload = client.get_bot_summary(bot_id="bot-123")
+
+        self.assertEqual(payload["buOrderId"], "bot-123")
+        self.assertEqual(
+            client.calls[0],
+            ("/api/v1/bot/orders/spotGrid/order", {"buOrderId": "bot-123"}),
+        )

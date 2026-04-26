@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 from .common import csv_rows, deterministic_id, parse_pionex_datetime, to_decimal
+from ..services.eur_converter import EurConverter
 from ..models import BrokerCredential, DepositWithdrawal
+
+
+_AUTO_COST_ASSETS = {"USDC", "USDT"}
+
+
+def _infer_cost_eur_per_unit(*, asset: str, timestamp, direction: str):
+    if direction != DepositWithdrawal.Direction.DEPOSIT or asset not in _AUTO_COST_ASSETS:
+        return None
+    try:
+        return EurConverter().get_eur_rate(trade_date=timestamp.date(), asset=asset)
+    except ValueError:
+        return None
 
 
 def import_pionex_deposit_withdraw(
@@ -18,7 +31,14 @@ def import_pionex_deposit_withdraw(
     skipped = 0
     for row in csv_rows(uploaded_file):
         raw_direction = (
-            (row.get("direction") or row.get("type") or row.get("tag") or row.get("side") or "")
+            (
+                row.get("direction")
+                or row.get("tx_type")
+                or row.get("type")
+                or row.get("tag")
+                or row.get("side")
+                or ""
+            )
             .strip()
             .lower()
         )
@@ -57,6 +77,11 @@ def import_pionex_deposit_withdraw(
                 "asset": asset,
                 "amount": amount,
                 "timestamp": timestamp,
+                "cost_eur_per_unit": _infer_cost_eur_per_unit(
+                    asset=asset,
+                    timestamp=timestamp,
+                    direction=str(direction),
+                ),
                 "raw": row,
             },
         )

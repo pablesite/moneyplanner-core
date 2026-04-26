@@ -170,6 +170,12 @@ def _compute_resumen_declarable(
     }
 
 
+def _sale_has_pending_cost_basis(sale: dict[str, Any]) -> bool:
+    if sale.get("gap_quantity", 0) > 0:
+        return True
+    return any(not lot.get("has_complete_cost_basis", True) for lot in sale.get("matched_lots", []))
+
+
 def _build_reliability(
     *,
     ownership: Ownership,
@@ -177,6 +183,7 @@ def _build_reliability(
     data_sources: dict[str, Any],
 ) -> dict[str, Any]:
     fifo_gaps: list[dict[str, Any]] = []
+    missing_external_cost_basis: list[dict[str, Any]] = []
     for section in ganancias_perdidas_trades:
         for sale in section.get("sales", []):
             gap_qty = sale.get("gap_quantity", 0)
@@ -189,6 +196,21 @@ def _build_reliability(
                         "sell_trade_id": sale["sell_trade_id"],
                         "gap_quantity": gap_qty,
                         "gap_reason": gap_reason,
+                    }
+                )
+            for lot in sale.get("matched_lots", []):
+                deposit_withdrawal_id = lot.get("deposit_withdrawal_id")
+                has_complete_cost_basis = lot.get("has_complete_cost_basis", True)
+                if not deposit_withdrawal_id or has_complete_cost_basis:
+                    continue
+                missing_external_cost_basis.append(
+                    {
+                        "type": "external_deposit_missing_cost_basis",
+                        "asset": section["denominacion"],
+                        "sell_trade_id": sale["sell_trade_id"],
+                        "deposit_withdrawal_id": deposit_withdrawal_id,
+                        "buy_date": lot.get("buy_date"),
+                        "quantity_consumed": lot.get("quantity_consumed"),
                     }
                 )
 
@@ -209,9 +231,12 @@ def _build_reliability(
     ]
     pre_period_gaps = [g for g in fifo_gaps if g["gap_reason"] == GAP_REASON_PRE_PERIOD_BUY]
 
-    if blocking_gaps_material:
+    if blocking_gaps_material or missing_external_cost_basis:
         status = "blocked_missing_cost_basis"
-        blocking_gaps_out: list[dict[str, Any]] = blocking_gaps_material
+        blocking_gaps_out: list[dict[str, Any]] = [
+            *blocking_gaps_material,
+            *missing_external_cost_basis,
+        ]
     elif recon_gaps:
         status = "blocked_unreconciled_balances"
         blocking_gaps_out = recon_gaps
@@ -283,7 +308,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
         )
     if ganancias_perdidas_bots:
         avisos.append(
-            "Grid bots: la vista de bots es solo informativa y no se suma al resumen fiscal. "
+            "Bots automáticos: la vista de bots es solo informativa y no se suma al resumen fiscal. "
             "Para declaracion, usar el detalle FIFO por operaciones."
         )
 
@@ -344,6 +369,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
             fifo_has_gaps = True
         if not sales:
             continue
+        has_pending_cost_basis = any(_sale_has_pending_cost_basis(sale) for sale in sales)
         valor_transmision = sum((Decimal(sale["proceeds_eur"]) for sale in sales), Decimal("0"))
         valor_adquisicion = sum(
             (
@@ -385,6 +411,12 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
                 avisos.append(
                     f"Gap FIFO en {base_asset} venta {sale['sell_trade_id']}: {sale['gap_reason']}."
                 )
+            for lot in normalized_sale["matched_lots"]:
+                if lot.get("deposit_withdrawal_id") and not lot.get("has_complete_cost_basis", True):
+                    avisos.append(
+                        "Deposito externo usado en FIFO sin coste base informado: "
+                        f"{base_asset} venta {sale['sell_trade_id']} deposito {lot['deposit_withdrawal_id']}."
+                    )
             normalized_sales.append(normalized_sale)
 
         ganancias_perdidas_trades.append(
@@ -395,6 +427,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
                 "valor_adquisicion_eur": _to_float(valor_adquisicion),
                 "ganancia_eur": _to_float(neto if neto > 0 else Decimal("0")),
                 "perdida_eur": _to_float(abs(neto) if neto < 0 else Decimal("0")),
+                "has_pending_cost_basis": has_pending_cost_basis,
                 "sales": normalized_sales,
             }
         )

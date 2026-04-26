@@ -15,15 +15,23 @@ const emit = defineEmits<{
 const totals = computed(() => {
   return props.rows.reduce(
     (acc, row) => {
-      acc.adquisicion += row.valor_adquisicion_eur;
       acc.transmision += row.valor_transmision_eur;
+      if (row.has_pending_cost_basis) {
+        acc.hasPending = true;
+        return acc;
+      }
+      acc.adquisicion += row.valor_adquisicion_eur;
       acc.ganancia += row.ganancia_eur;
       acc.perdida += row.perdida_eur;
       return acc;
     },
-    { adquisicion: 0, transmision: 0, ganancia: 0, perdida: 0 },
+    { adquisicion: 0, transmision: 0, ganancia: 0, perdida: 0, hasPending: false },
   );
 });
+
+function metricLabel(value: number, pending?: boolean) {
+  return pending ? 'Pendiente' : formatMoney(value, 'EUR');
+}
 </script>
 
 <template>
@@ -36,7 +44,7 @@ const totals = computed(() => {
     </header>
 
     <div v-if="!props.rows.length" class="ui-state-block ui-state-empty">
-      No hay transmisiones sujetas a FIFO para este año.
+      No hay transmisiones sujetas a FIFO para este ano.
     </div>
 
     <div v-else class="fiscal-sale-groups">
@@ -45,21 +53,32 @@ const totals = computed(() => {
           <h4>{{ row.denominacion }}</h4>
           <div class="fiscal-sale-group-metrics">
             <span class="badge"
-              >Adquisición: {{ formatMoney(row.valor_adquisicion_eur, 'EUR') }}</span
+              >Adquisicion:
+              {{ metricLabel(row.valor_adquisicion_eur, row.has_pending_cost_basis) }}</span
             >
             <span class="badge"
-              >Transmisión: {{ formatMoney(row.valor_transmision_eur, 'EUR') }}</span
+              >Transmision: {{ formatMoney(row.valor_transmision_eur, 'EUR') }}</span
             >
-            <span class="badge">Ganancia: {{ formatMoney(row.ganancia_eur, 'EUR') }}</span>
-            <span class="badge">Pérdida: {{ formatMoney(row.perdida_eur, 'EUR') }}</span>
+            <span class="badge"
+              >Ganancia: {{ metricLabel(row.ganancia_eur, row.has_pending_cost_basis) }}</span
+            >
+            <span class="badge"
+              >Perdida: {{ metricLabel(row.perdida_eur, row.has_pending_cost_basis) }}</span
+            >
           </div>
         </div>
+
+        <div v-if="row.has_pending_cost_basis" class="ui-state-block ui-state-empty">
+          Esta seccion usa lotes externos sin coste base completo o todavia tiene gap. La
+          transmision es visible, pero la adquisicion y la ganancia no son definitivas.
+        </div>
+
         <table class="fiscal-table">
           <thead>
             <tr>
               <th>Fecha venta</th>
               <th>Exchange venta</th>
-              <th>Símbolo</th>
+              <th>Simbolo</th>
               <th>Cantidad venta</th>
               <th>Proceeds EUR</th>
               <th>Fee EUR</th>
@@ -89,10 +108,19 @@ const totals = computed(() => {
     </div>
 
     <footer v-if="props.rows.length" class="fiscal-total-summary">
-      <span class="badge">Total adquisición: {{ formatMoney(totals.adquisicion, 'EUR') }}</span>
-      <span class="badge">Total transmisión: {{ formatMoney(totals.transmision, 'EUR') }}</span>
-      <span class="badge">Total ganancia: {{ formatMoney(totals.ganancia, 'EUR') }}</span>
-      <span class="badge">Total pérdida: {{ formatMoney(totals.perdida, 'EUR') }}</span>
+      <span class="badge"
+        >Total adquisicion:
+        {{ totals.hasPending ? 'Parcial' : formatMoney(totals.adquisicion, 'EUR') }}</span
+      >
+      <span class="badge">Total transmision: {{ formatMoney(totals.transmision, 'EUR') }}</span>
+      <span class="badge"
+        >Total ganancia:
+        {{ totals.hasPending ? 'Parcial' : formatMoney(totals.ganancia, 'EUR') }}</span
+      >
+      <span class="badge"
+        >Total perdida:
+        {{ totals.hasPending ? 'Parcial' : formatMoney(totals.perdida, 'EUR') }}</span
+      >
     </footer>
   </section>
 </template>

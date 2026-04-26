@@ -49,6 +49,7 @@ export type BrokerSyncStatusResponse = {
 
 export type BrokerCsvImportResponse = {
   broker: BrokerName;
+  credential_id: number | null;
   file_type: BrokerCsvFileType;
   created: number;
   updated: number;
@@ -134,8 +135,17 @@ export type BrokerTradeDrilldownRow = {
   fee: string;
   fee_eur: string | null;
   fee_asset: string;
+  tax_id: string;
   eur_rate_source: string;
   timestamp: string;
+};
+
+export type CsvTaxIdGroup = {
+  tax_id: string;
+  count: number;
+  symbols: string[];
+  first_timestamp: string;
+  last_timestamp: string;
 };
 
 export type IncomeEventDrilldownRow = {
@@ -158,6 +168,9 @@ export type BotResultDrilldownRow = {
   base_asset: string;
   quote_asset: string;
   realized_profit: string;
+  bot_profit_quote: string;
+  grid_profit: string;
+  total_profit_quote: string | null;
   total_fee_base: string;
   total_fee_quote: string;
   period_start: string;
@@ -183,6 +196,7 @@ export type BalanceReconciliationEntry = {
 export type FiscalMatchedLotRow = {
   buy_trade_id: number | null;
   manual_cost_basis_id: number | null;
+  deposit_withdrawal_id?: number | null;
   buy_date: string | null;
   buy_exchange: string | null;
   buy_symbol: string | null;
@@ -192,6 +206,7 @@ export type FiscalMatchedLotRow = {
   fee_eur_allocated: number;
   gain_loss_eur: number;
   hold_days: number;
+  has_complete_cost_basis?: boolean;
 };
 
 export type GapReason = 'pre_period_buy' | 'missing_data' | 'balance_transfer_in';
@@ -216,6 +231,7 @@ export type FiscalTradeSectionRow = {
   valor_adquisicion_eur: number;
   ganancia_eur: number;
   perdida_eur: number;
+  has_pending_cost_basis?: boolean;
   sales: FifoSaleMatch[];
 };
 
@@ -318,6 +334,7 @@ export const fiscalReportApi = {
     year?: number;
     source?: string;
     symbol?: string;
+    tax_id?: string;
     side?: 'buy' | 'sell';
     bot_id?: string;
     sync_run?: number;
@@ -357,9 +374,17 @@ export const fiscalReportApi = {
       params: typeof page === 'number' ? { page } : undefined,
     });
   },
-  importCsv(payload: { broker: BrokerName; file_type: BrokerCsvFileType; file: File }) {
+  importCsv(payload: {
+    broker: BrokerName;
+    credential_id?: number;
+    file_type: BrokerCsvFileType;
+    file: File;
+  }) {
     const formData = new FormData();
     formData.append('broker', payload.broker);
+    if (typeof payload.credential_id === 'number') {
+      formData.append('credential_id', String(payload.credential_id));
+    }
     formData.append('file_type', payload.file_type);
     formData.append('file', payload.file);
     return coreApi.post<BrokerCsvImportResponse>('/api/v1/broker/csv-import/', formData);

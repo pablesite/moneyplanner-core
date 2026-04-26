@@ -6,8 +6,9 @@ from decimal import Decimal
 from typing import Any
 
 from memberships.models import Ownership
+from django.db.models import Q
 
-from ..models import BrokerSyncRun, BrokerTrade, ManualCostBasis
+from ..models import BrokerSyncRun, BrokerTrade, DepositWithdrawal, ManualCostBasis
 from .eur_converter import EurConverter
 
 
@@ -48,18 +49,21 @@ def _dedup_trades_by_fiscal_key(trades: list[BrokerTrade]) -> list[BrokerTrade]:
 class _PoolLot:
     buy_trade_id: int | None
     manual_cost_basis_id: int | None
+    deposit_withdrawal_id: int | None
     buy_date: datetime | None
     buy_exchange: str | None
     buy_symbol: str | None
     quantity_remaining: Decimal
     unit_price_eur: Decimal
-    source_kind: str  # trade | manual
+    source_kind: str  # trade | manual | deposit
+    has_complete_cost_basis: bool
 
 
 @dataclass
 class MatchedLot:
     buy_trade_id: int | None
     manual_cost_basis_id: int | None
+    deposit_withdrawal_id: int | None
     buy_date: str | None
     buy_exchange: str | None
     buy_symbol: str | None
@@ -69,6 +73,7 @@ class MatchedLot:
     fee_eur_allocated: Decimal
     gain_loss_eur: Decimal
     hold_days: int
+    has_complete_cost_basis: bool
 
 
 @dataclass
@@ -112,6 +117,118 @@ def _trade_fee_eur(*, trade: BrokerTrade, eur_converter: EurConverter) -> Decima
     return Decimal(trade.fee) * eur_converter.get_eur_rate(
         trade_date=trade.timestamp.date(),
         asset=trade.fee_asset,
+    )
+
+
+def _quote_asset_lot_from_trade(
+    *,
+    trade: BrokerTrade,
+    asset: str,
+    eur_converter: EurConverter,
+) -> _PoolLot | None:
+    if trade.quote_asset.upper() != asset or trade.side != BrokerTrade.Side.SELL:
+        return None
+    gross_quantity = Decimal(trade.quantity) * Decimal(trade.price)
+    fee_in_asset = Decimal(trade.fee) if trade.fee_asset.upper() == asset else Decimal("0")
+    net_quantity = gross_quantity - fee_in_asset
+    if net_quantity <= 0:
+        return None
+    gross_proceeds_eur = Decimal(trade.quantity) * _trade_unit_price_eur(
+        trade=trade,
+        eur_converter=eur_converter,
+    )
+    fee_eur = _trade_fee_eur(trade=trade, eur_converter=eur_converter)
+    total_cost_basis_eur = gross_proceeds_eur - fee_eur
+    unit_price_eur = total_cost_basis_eur / net_quantity if net_quantity else Decimal("0")
+    return _PoolLot(
+        buy_trade_id=trade.id,
+        manual_cost_basis_id=None,
+        deposit_withdrawal_id=None,
+        buy_date=trade.timestamp,
+        buy_exchange=_exchange_from_source(trade.source),
+        buy_symbol=trade.symbol,
+        quantity_remaining=net_quantity,
+        unit_price_eur=unit_price_eur,
+        source_kind="trade",
+        has_complete_cost_basis=True,
+    )
+
+
+def _match_sale_against_pool(
+    *,
+    trade: BrokerTrade,
+    pool: list[_PoolLot],
+    asset: str,
+    ownership: Ownership,
+    year: int,
+    eur_converter: EurConverter,
+    missing_data_assets: set[str],
+) -> tuple[FifoSaleMatch, str | None]:
+    unit_price_eur = _trade_unit_price_eur(trade=trade, eur_converter=eur_converter)
+    quantity_sold = Decimal(trade.quantity)
+    proceeds_eur_total = quantity_sold * unit_price_eur
+    fee_eur_total = _trade_fee_eur(trade=trade, eur_converter=eur_converter)
+    remaining_sell_qty = quantity_sold
+    matched_lots: list[MatchedLot] = []
+
+    for lot in pool:
+        if remaining_sell_qty <= 0:
+            break
+        if lot.quantity_remaining <= 0:
+            continue
+        qty_consumed = min(remaining_sell_qty, lot.quantity_remaining)
+        if qty_consumed <= 0:
+            continue
+        lot_proceeds = proceeds_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
+        fee_alloc = fee_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
+        cost_eur = qty_consumed * lot.unit_price_eur
+        gain_loss = lot_proceeds - cost_eur - fee_alloc
+        hold_days = 0
+        if lot.buy_date is not None:
+            hold_days = (trade.timestamp.date() - lot.buy_date.date()).days
+        matched_lots.append(
+            MatchedLot(
+                buy_trade_id=lot.buy_trade_id,
+                manual_cost_basis_id=lot.manual_cost_basis_id,
+                deposit_withdrawal_id=lot.deposit_withdrawal_id,
+                buy_date=lot.buy_date.date().isoformat() if lot.buy_date else None,
+                buy_exchange=lot.buy_exchange,
+                buy_symbol=lot.buy_symbol,
+                quantity_consumed=qty_consumed,
+                unit_price_eur=lot.unit_price_eur,
+                cost_eur=cost_eur,
+                fee_eur_allocated=fee_alloc,
+                gain_loss_eur=gain_loss,
+                hold_days=hold_days,
+                has_complete_cost_basis=lot.has_complete_cost_basis,
+            )
+        )
+        lot.quantity_remaining -= qty_consumed
+        remaining_sell_qty -= qty_consumed
+
+    gap_reason = None
+    if remaining_sell_qty > 0:
+        gap_reason = _determine_gap_reason(
+            base_asset=asset,
+            ownership=ownership,
+            missing_data_assets=missing_data_assets,
+            fiscal_year=year,
+        )
+
+    return (
+        FifoSaleMatch(
+            sell_trade_id=trade.id,
+            sell_date=trade.timestamp.date().isoformat(),
+            sell_exchange=_exchange_from_source(trade.source),
+            sell_symbol=trade.symbol,
+            quantity_sold=quantity_sold,
+            proceeds_eur=proceeds_eur_total,
+            fee_eur=fee_eur_total,
+            matched_lots=matched_lots,
+            gap_quantity=remaining_sell_qty,
+            gap_reason=gap_reason,
+        ),
+        gap_reason,
     )
 
 
@@ -169,8 +286,9 @@ def calculate_fifo_for_asset(
     raw_trades = list(
         BrokerTrade.objects.filter(
             credential__ownership=ownership,
-            base_asset=asset,
-        ).order_by("timestamp", "id")
+        )
+        .filter(Q(base_asset=asset) | Q(quote_asset=asset))
+        .order_by("timestamp", "id")
     )
     trades = _dedup_trades_by_fiscal_key(raw_trades)
 
@@ -178,6 +296,13 @@ def calculate_fifo_for_asset(
         ManualCostBasis.objects.filter(ownership=ownership, asset=asset).order_by(
             "acquired_at", "id"
         )
+    )
+    deposit_rows = list(
+        DepositWithdrawal.objects.filter(
+            credential__ownership=ownership,
+            asset=asset,
+            direction=DepositWithdrawal.Direction.DEPOSIT,
+        ).order_by("timestamp", "id")
     )
     for row in manual_rows:
         row.quantity_remaining = row.quantity
@@ -193,12 +318,32 @@ def calculate_fifo_for_asset(
             _PoolLot(
                 buy_trade_id=None,
                 manual_cost_basis_id=row.id,
+                deposit_withdrawal_id=None,
                 buy_date=row.acquired_at,
                 buy_exchange="manual",
                 buy_symbol=asset,
                 quantity_remaining=Decimal(row.quantity_remaining),
                 unit_price_eur=unit_price,
                 source_kind="manual",
+                has_complete_cost_basis=True,
+            )
+        )
+
+    for row in deposit_rows:
+        if row.amount <= 0:
+            continue
+        pool.append(
+            _PoolLot(
+                buy_trade_id=None,
+                manual_cost_basis_id=None,
+                deposit_withdrawal_id=row.id,
+                buy_date=row.timestamp,
+                buy_exchange="external_deposit",
+                buy_symbol=asset,
+                quantity_remaining=Decimal(row.amount),
+                unit_price_eur=Decimal(row.cost_eur_per_unit or 0),
+                source_kind="deposit",
+                has_complete_cost_basis=row.cost_eur_per_unit is not None,
             )
         )
 
@@ -207,18 +352,34 @@ def calculate_fifo_for_asset(
     missing_data_assets = _build_missing_data_assets(ownership=ownership)
 
     for trade in trades:
-        unit_price_eur = _trade_unit_price_eur(trade=trade, eur_converter=eur_converter)
+        quote_asset_lot = _quote_asset_lot_from_trade(
+            trade=trade,
+            asset=asset,
+            eur_converter=eur_converter,
+        )
+        if quote_asset_lot is not None:
+            pool.append(quote_asset_lot)
+            min_dt = datetime.min.replace(tzinfo=timezone.utc)
+            pool.sort(key=lambda item: (item.buy_date or min_dt, item.buy_trade_id or 0))
+            continue
+
+        if trade.base_asset.upper() != asset:
+            continue
+
         if trade.side == BrokerTrade.Side.BUY:
+            unit_price_eur = _trade_unit_price_eur(trade=trade, eur_converter=eur_converter)
             pool.append(
                 _PoolLot(
                     buy_trade_id=trade.id,
                     manual_cost_basis_id=None,
+                    deposit_withdrawal_id=None,
                     buy_date=trade.timestamp,
                     buy_exchange=_exchange_from_source(trade.source),
                     buy_symbol=trade.symbol,
                     quantity_remaining=Decimal(trade.quantity),
                     unit_price_eur=unit_price_eur,
                     source_kind="trade",
+                    has_complete_cost_basis=True,
                 )
             )
             min_dt = datetime.min.replace(tzinfo=timezone.utc)
@@ -228,48 +389,15 @@ def calculate_fifo_for_asset(
         if trade.side != BrokerTrade.Side.SELL or trade.timestamp.year != year:
             continue
 
-        quantity_sold = Decimal(trade.quantity)
-        proceeds_eur_total = quantity_sold * unit_price_eur
-        fee_eur_total = _trade_fee_eur(trade=trade, eur_converter=eur_converter)
-        remaining_sell_qty = quantity_sold
-        matched_lots: list[MatchedLot] = []
-
-        for lot in pool:
-            if remaining_sell_qty <= 0:
-                break
-            if lot.quantity_remaining <= 0:
-                continue
-            qty_consumed = min(remaining_sell_qty, lot.quantity_remaining)
-            if qty_consumed <= 0:
-                continue
-            lot_proceeds = (
-                proceeds_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
-            )
-            fee_alloc = (
-                fee_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
-            )
-            cost_eur = qty_consumed * lot.unit_price_eur
-            gain_loss = lot_proceeds - cost_eur - fee_alloc
-            hold_days = 0
-            if lot.buy_date is not None:
-                hold_days = (trade.timestamp.date() - lot.buy_date.date()).days
-            matched_lots.append(
-                MatchedLot(
-                    buy_trade_id=lot.buy_trade_id,
-                    manual_cost_basis_id=lot.manual_cost_basis_id,
-                    buy_date=lot.buy_date.date().isoformat() if lot.buy_date else None,
-                    buy_exchange=lot.buy_exchange,
-                    buy_symbol=lot.buy_symbol,
-                    quantity_consumed=qty_consumed,
-                    unit_price_eur=lot.unit_price_eur,
-                    cost_eur=cost_eur,
-                    fee_eur_allocated=fee_alloc,
-                    gain_loss_eur=gain_loss,
-                    hold_days=hold_days,
-                )
-            )
-            lot.quantity_remaining -= qty_consumed
-            remaining_sell_qty -= qty_consumed
+        sale_match, gap_reason = _match_sale_against_pool(
+            trade=trade,
+            pool=pool,
+            asset=asset,
+            ownership=ownership,
+            year=year,
+            eur_converter=eur_converter,
+            missing_data_assets=missing_data_assets,
+        )
 
         # Keep manual rows in sync with consumed pool quantities.
         if manual_rows:
@@ -283,32 +411,12 @@ def calculate_fifo_for_asset(
                 row.quantity_remaining = max(Decimal("0"), lot.quantity_remaining)
             ManualCostBasis.objects.bulk_update(manual_rows, ["quantity_remaining"])
 
-        gap_reason = None
-        if remaining_sell_qty > 0:
-            gap_reason = _determine_gap_reason(
-                base_asset=asset,
-                ownership=ownership,
-                missing_data_assets=missing_data_assets,
-                fiscal_year=year,
-            )
+        if sale_match.gap_quantity > 0:
             warnings.append(
-                f"FIFO gap {asset}: venta {trade.id} con cantidad no cubierta={remaining_sell_qty} ({gap_reason})."
+                f"FIFO gap {asset}: venta {trade.id} con cantidad no cubierta={sale_match.gap_quantity} ({gap_reason})."
             )
 
-        sale_matches.append(
-            FifoSaleMatch(
-                sell_trade_id=trade.id,
-                sell_date=trade.timestamp.date().isoformat(),
-                sell_exchange=_exchange_from_source(trade.source),
-                sell_symbol=trade.symbol,
-                quantity_sold=quantity_sold,
-                proceeds_eur=proceeds_eur_total,
-                fee_eur=fee_eur_total,
-                matched_lots=matched_lots,
-                gap_quantity=remaining_sell_qty,
-                gap_reason=gap_reason,
-            )
-        )
+        sale_matches.append(sale_match)
 
     return {
         "asset": asset,

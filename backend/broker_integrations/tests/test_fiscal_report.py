@@ -11,6 +11,7 @@ from broker_integrations.models import (
     BotNetResult,
     BrokerCredential,
     BrokerTrade,
+    DepositWithdrawal,
     FuturesPosition,
     IncomeEvent,
     ManualCostBasis,
@@ -278,6 +279,95 @@ class FiscalReportServicesTests(TestCase):
         sale = result["sales"][0]
         self.assertIsNotNone(sale["matched_lots"][0]["manual_cost_basis_id"])
 
+    def test_external_deposit_is_consumed_as_fifo_lot(self):
+        DepositWithdrawal.objects.create(
+            credential=self.pionex_credential,
+            source=DepositWithdrawal.Source.PIONEX_CSV,
+            transaction_id="dep-usdc-1",
+            direction=DepositWithdrawal.Direction.DEPOSIT,
+            asset="USDC",
+            amount=Decimal("100"),
+            timestamp=datetime(2025, 1, 20, tzinfo=timezone.utc),
+            cost_eur_per_unit=Decimal("0.92"),
+            raw={},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="sell-usdc-dep",
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("1"),
+            price_eur=Decimal("0.92"),
+            quantity=Decimal("100"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 2, 1, tzinfo=timezone.utc),
+            raw={},
+        )
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="USDC",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+        self.assertEqual(len(result["warnings"]), 0)
+        sale = result["sales"][0]
+        self.assertEqual(sale["gap_quantity"], Decimal("0"))
+        self.assertIsNone(sale["gap_reason"])
+        self.assertEqual(sale["matched_lots"][0]["deposit_withdrawal_id"], DepositWithdrawal.objects.get(transaction_id="dep-usdc-1").id)
+        self.assertTrue(sale["matched_lots"][0]["has_complete_cost_basis"])
+
+    def test_quote_asset_received_from_sell_becomes_fifo_lot(self):
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="sell-eth-into-usdc",
+            symbol="ETH_USDC",
+            base_asset="ETH",
+            quote_asset="USDC",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("2500"),
+            price_eur=Decimal("2300"),
+            quantity=Decimal("0.1"),
+            fee=Decimal("0.1"),
+            fee_eur=Decimal("0.09"),
+            fee_asset="USDC",
+            timestamp=datetime(2025, 1, 20, tzinfo=timezone.utc),
+            raw={},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="sell-usdc-after-eth",
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("1"),
+            price_eur=Decimal("0.92"),
+            quantity=Decimal("249.9"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="USDT",
+            timestamp=datetime(2025, 1, 21, tzinfo=timezone.utc),
+            raw={},
+        )
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="USDC",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+        sale = result["sales"][0]
+        self.assertEqual(sale["gap_quantity"], Decimal("0"))
+        self.assertIsNone(sale["gap_reason"])
+        self.assertEqual(sale["matched_lots"][0]["buy_trade_id"], BrokerTrade.objects.get(trade_id="sell-eth-into-usdc").id)
+        self.assertTrue(sale["matched_lots"][0]["has_complete_cost_basis"])
+
     def test_generate_fiscal_report_returns_complete_payload(self):
         IncomeEvent.objects.create(
             credential=self.binance_credential,
@@ -333,6 +423,7 @@ class FiscalReportServicesTests(TestCase):
         self.assertEqual(payload["ganancias_perdidas_bots"][0]["incluido_en_resumen_fiscal"], False)
         self.assertEqual(payload["resumen"]["total_ganancias_eur"], 0.72)
         self.assertIsInstance(payload["ganancias_perdidas_trades"], list)
+        self.assertIn("has_pending_cost_basis", payload["ganancias_perdidas_trades"][0] if payload["ganancias_perdidas_trades"] else {"has_pending_cost_basis": False})
 
     @patch("core.market_data.sync_market_history", autospec=True)
     def test_eur_converter_uses_previous_available_rate_when_exact_day_missing(self, sync_mock):
@@ -488,6 +579,68 @@ class Phase5GReliabilityTests(TestCase):
         )
         self._make_trade(
             trade_id="sell-usdc-2",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quantity="1000",
+            price="1",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["reliability"]["status"], "declarable")
+        self.assertIsNotNone(payload["resumen_declarable"])
+
+    def test_external_deposit_without_cost_basis_still_blocks_declarable(self):
+        deposit = DepositWithdrawal.objects.create(
+            credential=self.credential,
+            source=DepositWithdrawal.Source.PIONEX_CSV,
+            transaction_id="dep-usdc-no-cost",
+            direction=DepositWithdrawal.Direction.DEPOSIT,
+            asset="USDC",
+            amount=Decimal("1000"),
+            timestamp=datetime(2025, 5, 30, tzinfo=timezone.utc),
+            cost_eur_per_unit=None,
+            raw={},
+        )
+        self._make_trade(
+            trade_id="sell-usdc-deposit",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="USDC_USDT",
+            base_asset="USDC",
+            quantity="1000",
+            price="1",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+        self.assertEqual(payload["reliability"]["status"], "blocked_missing_cost_basis")
+        self.assertIsNone(payload["resumen_declarable"])
+        self.assertTrue(payload["ganancias_perdidas_trades"][0]["has_pending_cost_basis"])
+        self.assertTrue(
+            any(
+                gap.get("type") == "external_deposit_missing_cost_basis"
+                and gap.get("deposit_withdrawal_id") == deposit.id
+                for gap in payload["reliability"]["blocking_gaps"]
+            )
+        )
+
+    def test_external_deposit_with_cost_basis_unblocks_declarable(self):
+        DepositWithdrawal.objects.create(
+            credential=self.credential,
+            source=DepositWithdrawal.Source.PIONEX_CSV,
+            transaction_id="dep-usdc-costed",
+            direction=DepositWithdrawal.Direction.DEPOSIT,
+            asset="USDC",
+            amount=Decimal("1000"),
+            timestamp=datetime(2025, 5, 30, tzinfo=timezone.utc),
+            cost_eur_per_unit=Decimal("0.91"),
+            raw={},
+        )
+        self._make_trade(
+            trade_id="sell-usdc-deposit-costed",
             source=BrokerTrade.Source.PIONEX_API,
             side=BrokerTrade.Side.SELL,
             symbol="USDC_USDT",

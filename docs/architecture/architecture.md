@@ -79,7 +79,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `DELETE /api/v1/broker/credentials/{id}/`
    - `POST /api/v1/broker/sync/{id}/`
    - `GET /api/v1/broker/sync/{id}/status/`
-   - `POST /api/v1/broker/csv-import/`
+   - `POST /api/v1/broker/csv-import/` with optional `credential_id` to attach imported CSV rows to a visible broker credential
    - `GET /api/v1/broker/fiscal-report/?year=YYYY`
    - `GET /api/v1/broker/fiscal-report/export/?year=YYYY&format=csv|pdf`
 3. Secrets are encrypted at rest using Fernet (`BROKER_ENCRYPTION_KEY`).
@@ -122,6 +122,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `BrokerTrade.fiscal_provenance` tracks origin: `api` (API sync) or `csv_fallback` (CSV import).
    - `BrokerTrade.fiscal_identity_key` is a 16-char SHA-256 of `(symbol|side|qty|price|ts_minute)` for economic deduplication.
    - FIFO pool deduplicates by `fiscal_identity_key`; when API and CSV records share a key, the API version is preferred.
+   - External `DepositWithdrawal` deposits can feed FIFO as acquisition lots; `USDC`/`USDT` deposits auto-infer `cost_eur_per_unit` from the EUR FX rate on deposit date, while other assets still block `resumen_declarable` until the user provides the cost basis.
    - `source_comparison` in `reliability` distinguishes `matched`, `api_only`, `csv_only`, `conflicting_amount`, and `conflicting_timestamp`.
    - `DepositWithdrawal` model records explicit external deposits/withdrawals; these are included in balance reconciliation.
    - `fiscal-report` (schema_version=3) exposes `reliability`, `resumen_declarable`, and `resumen_diagnostico`:

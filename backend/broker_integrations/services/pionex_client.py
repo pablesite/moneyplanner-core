@@ -185,7 +185,7 @@ class PionexClient:
     def get_bot_summary(self, *, bot_id: str) -> dict:
         payload = self._signed_get(
             "/api/v1/bot/orders/spotGrid/order",
-            {"botId": bot_id},
+            {"buOrderId": bot_id},
         )
         data = self._extract_data(payload)
         return data if isinstance(data, dict) else {}

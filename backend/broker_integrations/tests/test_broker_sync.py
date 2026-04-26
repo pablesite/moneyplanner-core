@@ -39,6 +39,26 @@ class _FakePionexClient:
             return (
                 [
                     {"buOrderId": "bot-running-1", "buOrderType": "spot_grid"},
+                    {
+                        "buOrderId": "signal-running-1",
+                        "buOrderType": "smart_copy",
+                        "base": "-",
+                        "quote": "USDT",
+                        "customizeName": "Signal ETH",
+                        "buOrderData": {
+                            "signalName": "Signal ETH",
+                            "profit": "-0.5",
+                            "quoteTotalInvestment": "50",
+                            "currentQuoteAmount": "49.5",
+                            "portfolio": [
+                                {
+                                    "base": "ETH",
+                                    "tradeBase": "ETH.PERP",
+                                    "totalFeeInQuote": "1.2",
+                                }
+                            ],
+                        },
+                    },
                     {"buOrderId": "future-ignored", "buOrderType": "futures_grid"},
                 ],
                 None,
@@ -50,6 +70,7 @@ class _FakePionexClient:
     def get_bot_summary(self, *, bot_id: str):
         return {
             "symbol": "ETH_USDT",
+            "buOrderId": bot_id,
             "botType": "spot_grid",
             "name": f"Bot {bot_id}",
             "realizedProfit": "12.34",
@@ -120,18 +141,7 @@ class _FakePionexClientBotFills(_FakePionexClient):
         return ([], None)
 
     def get_bot_spot_grid_orders(self, bot_id: str, **kwargs):
-        return [
-            {
-                "id": f"{bot_id}-fill-1",
-                "symbol": "BTC_USDT",
-                "side": "BUY",
-                "price": "50000",
-                "size": "1",
-                "fee": "0.001",
-                "feeCoin": "BTC",
-                "timestamp": 1735689600000,
-            }
-        ]
+        raise PionexApiError("Pionex HTTP 404")
 
 
 class _FakePionexClientBotSymbolsFromHistory(_FakePionexClient):
@@ -304,21 +314,32 @@ class BrokerSyncTests(TestCase):
     def test_sync_pionex_discovers_bot_ids_automatically(self):
         os.environ.pop("PIONEX_BOT_IDS", None)
         stats = sync_pionex(credential=self.credential, year=2025)
-        self.assertEqual(stats["new_bot_results"], 2)
+        self.assertEqual(stats["new_bot_results"], 3)
         self.assertEqual(stats["updated_bot_results"], 0)
         sync_run = BrokerSyncRun.objects.filter(credential=self.credential).latest("id")
         self.assertEqual(sync_run.status, BrokerSyncRun.Status.OK)
         self.assertEqual(sync_run.year, 2025)
-        self.assertEqual(len(sync_run.new_bot_result_ids), 2)
-        self.assertEqual(BotNetResult.objects.filter(credential=self.credential).count(), 2)
+        self.assertEqual(len(sync_run.new_bot_result_ids), 3)
+        self.assertEqual(BotNetResult.objects.filter(credential=self.credential).count(), 3)
+        self.assertFalse(
+            any(gap.get("reason") == "public_api_no_fill_history" for gap in stats["gaps"])
+        )
+        self.assertFalse(any(gap.get("source") == "fills:-_USDT" for gap in stats["gaps"]))
         self.assertSetEqual(
             set(
                 BotNetResult.objects.filter(credential=self.credential).values_list(
                     "bot_id", flat=True
                 )
             ),
-            {"bot-running-1", "bot-finished-1"},
+            {"bot-running-1", "bot-finished-1", "signal-running-1"},
         )
+        signal_bot = BotNetResult.objects.get(credential=self.credential, bot_id="signal-running-1")
+        self.assertEqual(signal_bot.bot_type, "smart_copy")
+        self.assertEqual(signal_bot.label, "Signal ETH")
+        self.assertEqual(signal_bot.base_asset, "ETH")
+        self.assertEqual(signal_bot.quote_asset, "USDT")
+        self.assertEqual(str(signal_bot.realized_profit), "-0.5000000000")
+        self.assertEqual(str(signal_bot.total_fee_quote), "1.2000000000")
 
     @patch("broker_integrations.services.broker_sync.PionexClient", _FakePionexClientNoDiscovery)
     def test_sync_pionex_uses_env_bot_ids_as_fallback(self):
@@ -340,15 +361,19 @@ class BrokerSyncTests(TestCase):
         self.assertEqual(str(bot.realized_profit), "4.2000000000")
 
     @patch("broker_integrations.services.broker_sync.PionexClient", _FakePionexClientBotFills)
-    def test_sync_pionex_persists_bot_fills_and_balance_reconciliation_gaps(self):
+    def test_sync_pionex_records_bot_api_limitation_and_balance_reconciliation_gaps(self):
         stats = sync_pionex(credential=self.credential, year=2025)
         bot = BotNetResult.objects.get(credential=self.credential, bot_id="bot-running-1")
-        trade = BrokerTrade.objects.get(
-            credential=self.credential,
-            source=BrokerTrade.Source.PIONEX_BOT_API,
-            trade_id="bot-running-1-fill-1",
+        self.assertEqual(bot.base_asset, "ETH")
+        self.assertFalse(
+            BrokerTrade.objects.filter(
+                credential=self.credential,
+                source=BrokerTrade.Source.PIONEX_BOT_API,
+            ).exists()
         )
-        self.assertEqual(trade.bot_id, bot.id)
+        self.assertTrue(
+            any(gap.get("reason") == "public_api_no_fill_history" for gap in stats["gaps"])
+        )
         self.assertTrue(
             any(
                 gap.get("source") == "balance_reconciliation"
@@ -359,7 +384,7 @@ class BrokerSyncTests(TestCase):
         )
         sync_run = BrokerSyncRun.objects.filter(credential=self.credential).latest("id")
         self.assertEqual(sync_run.status, BrokerSyncRun.Status.PARTIAL)
-        self.assertGreaterEqual(len(sync_run.new_trade_ids), 1)
+        self.assertEqual(len(sync_run.new_trade_ids), 0)
 
     @patch(
         "broker_integrations.services.broker_sync.PionexClient",
@@ -410,22 +435,18 @@ class BrokerSyncTests(TestCase):
         "broker_integrations.services.broker_sync.PionexClient",
         _FakePionexClientBot404Independence,
     )
-    def test_sync_pionex_bot_404_does_not_block_other_bots(self):
-        """A 404 on bot-first's fills must not prevent bot-second from being processed."""
+    def test_sync_pionex_keeps_other_bots_even_when_summary_fails_for_one(self):
         stats = sync_pionex(credential=self.credential, year=2025)
-        # bot-second's fill is recorded despite bot-first's 404
         self.assertTrue(
-            BrokerTrade.objects.filter(
+            BotNetResult.objects.filter(
                 credential=self.credential,
-                source=BrokerTrade.Source.PIONEX_BOT_API,
-                trade_id="bot-second-fill-1",
+                bot_id="bot-second",
             ).exists()
         )
-        # The gap for bot-first is recorded with the right reason
         self.assertTrue(
             any(
                 gap.get("source") == "bot_fills:bot-first"
-                and gap.get("reason") == "endpoint_unavailable"
+                and gap.get("reason") == "public_api_no_fill_history"
                 for gap in stats["gaps"]
             )
         )

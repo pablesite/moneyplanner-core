@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import serializers
 
 from memberships.models import Ownership
@@ -83,6 +85,12 @@ class BrokerSyncRequestSerializer(serializers.Serializer):
 
 class BrokerCsvImportSerializer(serializers.Serializer):
     broker = serializers.ChoiceField(choices=BrokerCredential.Broker.choices)
+    credential_id = serializers.PrimaryKeyRelatedField(
+        source="credential",
+        queryset=BrokerCredential.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     file_type = serializers.ChoiceField(
         choices=[
             "pionex_trading",
@@ -97,6 +105,22 @@ class BrokerCsvImportSerializer(serializers.Serializer):
         ]
     )
     file = serializers.FileField()
+
+    def validate(self, attrs: dict) -> dict:
+        request = self.context["request"]
+        broker = attrs.get("broker")
+        credential = attrs.get("credential")
+        if credential is None:
+            return attrs
+        if credential.user_id != request.user.id:
+            raise serializers.ValidationError(
+                {"credential_id": "La credencial no pertenece al usuario autenticado."}
+            )
+        if credential.broker != broker:
+            raise serializers.ValidationError(
+                {"credential_id": "La credencial no corresponde al broker seleccionado."}
+            )
+        return attrs
 
 
 class BrokerFiscalReportQuerySerializer(serializers.Serializer):
@@ -123,6 +147,7 @@ class BrokerTradeListQuerySerializer(serializers.Serializer):
     year = serializers.IntegerField(required=False, min_value=2000, max_value=2100)
     source = serializers.ChoiceField(choices=BrokerTrade.Source.choices, required=False)
     symbol = serializers.CharField(required=False, max_length=20)
+    tax_id = serializers.CharField(required=False, max_length=100)
     side = serializers.ChoiceField(choices=BrokerTrade.Side.choices, required=False)
     bot_id = serializers.CharField(required=False, max_length=100)
     sync_run = serializers.IntegerField(required=False, min_value=1)
@@ -199,6 +224,12 @@ class ManualCostBasisSerializer(serializers.ModelSerializer):
 
 class BrokerTradeSerializer(serializers.ModelSerializer):
     bot_id = serializers.CharField(source="bot.bot_id", read_only=True)
+    tax_id = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_tax_id(obj: BrokerTrade) -> str:
+        raw = obj.raw if isinstance(obj.raw, dict) else {}
+        return str(raw.get("tax_id") or "").strip()
 
     class Meta:
         model = BrokerTrade
@@ -218,6 +249,7 @@ class BrokerTradeSerializer(serializers.ModelSerializer):
             "fee",
             "fee_eur",
             "fee_asset",
+            "tax_id",
             "eur_rate_source",
             "timestamp",
         ]
@@ -240,6 +272,81 @@ class IncomeEventSerializer(serializers.ModelSerializer):
 
 class BotNetResultSerializer(serializers.ModelSerializer):
     fill_count = serializers.IntegerField(read_only=True)
+    bot_profit_quote = serializers.SerializerMethodField()
+    grid_profit = serializers.SerializerMethodField()
+    total_profit_quote = serializers.SerializerMethodField()
+
+    @staticmethod
+    def _decimal_from_raw(value) -> Decimal | None:
+        if value in (None, ""):
+            return None
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _bot_raw_data(obj: BotNetResult) -> dict:
+        raw = obj.raw if isinstance(obj.raw, dict) else {}
+        nested = raw.get("buOrderData")
+        return nested if isinstance(nested, dict) else raw
+
+    def get_grid_profit(self, obj: BotNetResult) -> str:
+        raw = self._bot_raw_data(obj)
+        root_raw = obj.raw if isinstance(obj.raw, dict) else {}
+        grid_profit = self._decimal_from_raw(raw.get("gridProfit"))
+        if grid_profit is None:
+            grid_profit = self._decimal_from_raw(root_raw.get("gridProfit"))
+        if grid_profit is not None:
+            return format(grid_profit, "f")
+        return format(obj.realized_profit, "f")
+
+    def get_bot_profit_quote(self, obj: BotNetResult) -> str:
+        raw = self._bot_raw_data(obj)
+        root_raw = obj.raw if isinstance(obj.raw, dict) else {}
+        bot_type = str(obj.bot_type or "").strip().lower()
+        if bot_type == "smart_copy":
+            profit = self._decimal_from_raw(raw.get("profit"))
+            if profit is None:
+                profit = self._decimal_from_raw(root_raw.get("profit"))
+            if profit is not None:
+                return format(profit, "f")
+        return self.get_grid_profit(obj)
+
+    def get_total_profit_quote(self, obj: BotNetResult) -> str | None:
+        raw = self._bot_raw_data(obj)
+        root_raw = obj.raw if isinstance(obj.raw, dict) else {}
+        bot_type = str(obj.bot_type or "").strip().lower()
+        if bot_type == "smart_copy":
+            profit = self._decimal_from_raw(raw.get("profit"))
+            if profit is None:
+                profit = self._decimal_from_raw(root_raw.get("profit"))
+            if profit is not None:
+                return format(profit, "f")
+            quote_amount = self._decimal_from_raw(raw.get("currentQuoteAmount"))
+            invested_quote = self._decimal_from_raw(raw.get("quoteTotalInvestment"))
+            if quote_amount is not None and invested_quote is not None:
+                return format(quote_amount - invested_quote, "f")
+            return None
+        quote_amount = self._decimal_from_raw(raw.get("quoteAmount"))
+        base_amount = self._decimal_from_raw(raw.get("baseAmount"))
+        invested_quote = self._decimal_from_raw(raw.get("quoteTotalInvestment"))
+        closed_price = self._decimal_from_raw(raw.get("closedPrice"))
+        open_price = self._decimal_from_raw(raw.get("openPrice"))
+
+        if quote_amount is None or base_amount is None or invested_quote is None:
+            return None
+
+        mark_price = None
+        if closed_price is not None and closed_price > 0:
+            mark_price = closed_price
+        elif open_price is not None and open_price > 0:
+            mark_price = open_price
+        if mark_price is None:
+            return None
+
+        total_profit = quote_amount + (base_amount * mark_price) - invested_quote
+        return format(total_profit, "f")
 
     class Meta:
         model = BotNetResult
@@ -252,6 +359,9 @@ class BotNetResultSerializer(serializers.ModelSerializer):
             "base_asset",
             "quote_asset",
             "realized_profit",
+            "bot_profit_quote",
+            "grid_profit",
+            "total_profit_quote",
             "total_fee_base",
             "total_fee_quote",
             "period_start",

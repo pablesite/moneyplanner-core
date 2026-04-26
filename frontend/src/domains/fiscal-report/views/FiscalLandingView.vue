@@ -55,16 +55,40 @@ function onYearChange(event: Event) {
 
 async function onCsvSubmit(payload: {
   broker: BrokerName;
+  credential_id?: number;
   file_type: BrokerCsvFileType;
   files: File[];
 }) {
   for (const file of payload.files) {
     await store.importCsv({
       broker: payload.broker,
+      credential_id: payload.credential_id,
       file_type: payload.file_type,
       file,
     });
   }
+}
+
+async function onCsvPreview(payload: {
+  broker: BrokerName;
+  credential_id?: number;
+  file_type: BrokerCsvFileType;
+}) {
+  if (!payload.credential_id) {
+    store.clearRecentImportedTrades();
+    return;
+  }
+  const isTradeFile =
+    payload.file_type === 'pionex_trading' ||
+    payload.file_type === 'binance_transactions' ||
+    payload.file_type === 'binance_convert' ||
+    payload.file_type === 'binance_recurring';
+  if (!isTradeFile) {
+    store.clearRecentImportedTrades();
+    return;
+  }
+  const tradeSource = payload.broker === 'pionex' ? 'pionex_csv' : 'binance_csv';
+  await store.fetchRecentImportedTrades(payload.credential_id, tradeSource);
 }
 </script>
 
@@ -145,9 +169,14 @@ async function onCsvSubmit(payload: {
       />
 
       <FiscalCsvImport
+        :credentials="store.credentials"
         :importing="store.importingCsv"
+        :loading-trades="store.loadingRecentImportedTrades"
+        :trades="store.recentImportedTrades"
+        :trades-count="store.recentImportedTradesCount"
         :results="store.csvImportResults"
         @submit="onCsvSubmit"
+        @preview="onCsvPreview"
       />
     </template>
   </div>

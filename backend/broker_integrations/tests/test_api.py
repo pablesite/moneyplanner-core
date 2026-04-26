@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from broker_integrations.models import (
     BotNetResult,
     BrokerCredential,
+    DepositWithdrawal,
     ManualCostBasis,
     BrokerSyncRun,
     BrokerTrade,
@@ -65,6 +66,14 @@ class BrokerIntegrationsApiTests(APITestCase):
         self.assertFalse(BrokerCredential.objects.filter(id=credential_id).exists())
 
     def test_csv_import_staking_creates_income_events(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.PIONEX,
+            label="Pionex CSV",
+            api_key="pionex-key",
+            api_secret_encrypted=b"secret",
+        )
         content = (
             "date(UTC+0),Received Quantity,Received Currency,Sent Quantity,Sent Currency,tag\n"
             "2025-01-01 00:00:00,0.1,USDT,,,issued_profit\n"
@@ -74,17 +83,34 @@ class BrokerIntegrationsApiTests(APITestCase):
         uploaded = SimpleUploadedFile("staking.csv", content, content_type="text/csv")
         response = self.client.post(
             "/api/v1/broker/csv-import/",
-            {"broker": "pionex", "file_type": "pionex_staking", "file": uploaded},
+            {
+                "broker": "pionex",
+                "credential_id": credential.id,
+                "file_type": "pionex_staking",
+                "file": uploaded,
+            },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["created"], 2)
         self.assertEqual(response.data["skipped"], 1)
+        self.assertEqual(response.data["credential_id"], credential.id)
         self.assertEqual(
-            IncomeEvent.objects.filter(source=IncomeEvent.Source.PIONEX_STAKING_CSV).count(),
+            IncomeEvent.objects.filter(
+                credential=credential,
+                source=IncomeEvent.Source.PIONEX_STAKING_CSV,
+            ).count(),
             2,
         )
 
     def test_csv_import_binance_convert_supported(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Binance CSV",
+            api_key="binance-key",
+            api_secret_encrypted=b"secret",
+        )
         content = (
             "Hora,Billetera,Par,Tipo,Vender,Comprar,Precio,Precio inverso,Fecha actualizada,Estado\n"
             "25-11-23 21:57:59,SPOT,ETHUSDC,Instant,20.00000000 USDC,0.00704773 ETH,x,x,x,Successful\n"
@@ -92,10 +118,79 @@ class BrokerIntegrationsApiTests(APITestCase):
         uploaded = SimpleUploadedFile("binance-convert.csv", content, content_type="text/csv")
         response = self.client.post(
             "/api/v1/broker/csv-import/",
-            {"broker": "binance", "file_type": "binance_convert", "file": uploaded},
+            {
+                "broker": "binance",
+                "credential_id": credential.id,
+                "file_type": "binance_convert",
+                "file": uploaded,
+            },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["created"], 1)
+        self.assertEqual(response.data["credential_id"], credential.id)
+
+    def test_csv_import_pionex_deposit_withdraw_creates_deposit_rows(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.PIONEX,
+            label="Pionex deposits",
+            api_key="pionex-key",
+            api_secret_encrypted=b"secret",
+        )
+        content = (
+            "date(UTC+0),tx_type,amount,coin,network,txid,fee\n"
+            "2025-07-10 20:11:14,DEPOSIT,99.98000000,USDC,BEP20,tx-1,0.00000000\n"
+            "2025-10-17 07:29:50,WITHDRAW,0.00429415,BTC,BEP20,tx-2,0.00000700\n"
+        ).encode("utf-8")
+        uploaded = SimpleUploadedFile(
+            "deposit-withdraw.csv",
+            content,
+            content_type="text/csv",
+        )
+        response = self.client.post(
+            "/api/v1/broker/csv-import/",
+            {
+                "broker": "pionex",
+                "credential_id": credential.id,
+                "file_type": "pionex_deposit_withdraw",
+                "file": uploaded,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(response.data["skipped"], 0)
+        self.assertEqual(
+            DepositWithdrawal.objects.filter(credential=credential).count(),
+            2,
+        )
+        usdc_deposit = DepositWithdrawal.objects.get(
+            credential=credential,
+            transaction_id="tx-1",
+        )
+        self.assertIsNotNone(usdc_deposit.cost_eur_per_unit)
+
+    def test_csv_import_rejects_credential_from_other_broker(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Wrong broker",
+            api_key="binance-key",
+            api_secret_encrypted=b"secret",
+        )
+        uploaded = SimpleUploadedFile("staking.csv", b"date(UTC+0)\n", content_type="text/csv")
+        response = self.client.post(
+            "/api/v1/broker/csv-import/",
+            {
+                "broker": "pionex",
+                "credential_id": credential.id,
+                "file_type": "pionex_staking",
+                "file": uploaded,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("credential_id", response.data["error"]["details"])
 
     def test_get_fiscal_report_returns_payload(self):
         BrokerCredential.objects.create(
@@ -206,7 +301,15 @@ class BrokerIntegrationsApiTests(APITestCase):
             realized_profit="1.0",
             period_start="2025-01-01T00:00:00Z",
             period_end="2025-01-02T00:00:00Z",
-            raw={},
+            raw={
+                "buOrderData": {
+                    "gridProfit": "1.0",
+                    "quoteAmount": "20",
+                    "baseAmount": "0.1",
+                    "quoteTotalInvestment": "100",
+                    "closedPrice": "900",
+                }
+            },
         )
         trade = BrokerTrade.objects.create(
             credential=credential,
@@ -271,8 +374,60 @@ class BrokerIntegrationsApiTests(APITestCase):
         bot_list_res = self.client.get(f"/api/v1/broker/bot-results/?sync_run={sync_run.id}")
         self.assertEqual(bot_list_res.status_code, status.HTTP_200_OK, bot_list_res.data)
         self.assertEqual(bot_list_res.data["count"], 1)
+        self.assertEqual(bot_list_res.data["results"][0]["bot_profit_quote"], "1.0")
+        self.assertEqual(bot_list_res.data["results"][0]["grid_profit"], "1.0")
+        self.assertEqual(bot_list_res.data["results"][0]["total_profit_quote"], "10.0")
 
         bot_detail_res = self.client.get(f"/api/v1/broker/bot-results/{bot_result.id}/")
         self.assertEqual(bot_detail_res.status_code, status.HTTP_200_OK, bot_detail_res.data)
         self.assertEqual(bot_detail_res.data["id"], bot_result.id)
         self.assertEqual(bot_detail_res.data["fills"]["count"], 1)
+        self.assertEqual(bot_detail_res.data["bot_profit_quote"], "1.0")
+        self.assertEqual(bot_detail_res.data["grid_profit"], "1.0")
+        self.assertEqual(bot_detail_res.data["total_profit_quote"], "10.0")
+
+    def test_trades_endpoint_supports_tax_id_filter(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.PIONEX,
+            label="Trades filter",
+            api_key="key",
+            api_secret_encrypted=b"secret",
+        )
+        BrokerTrade.objects.create(
+            credential=credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="trade-tax-1",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price="100",
+            quantity="1",
+            fee="0",
+            fee_asset="ETH",
+            timestamp="2025-01-01T00:00:00Z",
+            raw={"tax_id": "s_163"},
+        )
+        BrokerTrade.objects.create(
+            credential=credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="trade-tax-2",
+            symbol="BTC_USDT",
+            base_asset="BTC",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price="200",
+            quantity="1",
+            fee="0",
+            fee_asset="USDT",
+            timestamp="2025-01-02T00:00:00Z",
+            raw={"tax_id": "s_999"},
+        )
+
+        response = self.client.get("/api/v1/broker/trades/?credential=%s&tax_id=s_163" % credential.id)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["trade_id"], "trade-tax-1")
+        self.assertEqual(response.data["results"][0]["tax_id"], "s_163")

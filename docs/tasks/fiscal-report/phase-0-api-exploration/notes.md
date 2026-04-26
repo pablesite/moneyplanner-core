@@ -22,8 +22,8 @@ Autenticacion (confirmada en docs oficiales):
 | Endpoint | Esperado | ¿Disponible? | ¿Cobertura 2024? | Notas |
 |---|---|---|---|---|
 | GET /api/v1/trade/fills | Fills signal bots spot | Si (docs) | Pendiente validacion con key real | Params: symbol, startTime, endTime. Endpoint devuelve ultimos 100 fills si se excede limite. |
-| GET /api/v1/bot/orders/spotGrid/order | Bot summary: realizedProfit, fechas | | | Params: botId |
-| GET /api/v1/bot/order/spotGrid/orders | Fills individuales de bot spot-grid | Parcial (implementado en cliente, pendiente confirmacion con key real) | Pendiente validacion con key real | Params usados en cliente: `botId`, `startTime`, `endTime`, `limit`, `pageToken`. Parsing defensivo de `orders/results/list/rows/items` y paginacion por `nextPageToken` o ventana temporal. |
+| GET /api/v1/bot/orders/spotGrid/order | Bot summary: realizedProfit, fechas | Si (docs) | Pendiente validacion con key real | Docs oficiales BOT API usan `buOrderId` como query param. |
+| GET /api/v1/bot/order/spotGrid/orders | Fills individuales de bot spot-grid | No confirmado en docs oficiales | Pendiente validacion con key real | El endpoint no aparece en `openapi_bot.yaml` ni en la seccion Spot Grid a fecha 2026-04-25. Mantenerlo como intento best-effort y tratar 404 como ausencia de historial publico; fallback operativo: `trading.csv`. |
 | GET /api/v1/earn/dual/records | Dual Investment yields | Si (docs) | Pendiente validacion con key real | Sin CSV fallback disponible. Paginado: `limit`, `endTime` (required), `startTime` opcional. |
 | GET /api/v1/account/balances | Verificar conexion basica | Si (docs) | Pendiente validacion con key real | Requiere permiso `Enable reading`. |
 | ❓ /api/v1/earn/history | Staking/Rebase issued/claimed profit | | | Fallback: `staking.csv` (130 filas) |
@@ -96,9 +96,9 @@ API key con permisos: Read Info, Spot & Margin Trading, Convert History, Earn.
 
 ## Hallazgos tecnicos Phase 5A (2026-04-24)
 
-1. Se habilita en Core el consumo de `GET /api/v1/bot/order/spotGrid/orders` para traer fills individuales de bots spot-grid.
-2. La respuesta del endpoint no esta validada aun con credencial real en entorno del proyecto, por lo que el cliente usa parseo tolerante y fallback de paginacion por ventana temporal.
-3. Pendiente smoke test real para confirmar contrato final de campos antes de cerrar Phase 5A.
+1. Se habilita en Core un intento best-effort de consumo de `GET /api/v1/bot/order/spotGrid/orders` para traer fills individuales de bots spot-grid.
+2. A fecha 2026-04-25 ese endpoint no aparece en la documentacion oficial de BOT API (`openapi_bot.yaml` / seccion Spot Grid), por lo que un `HTTP 404` debe interpretarse como ausencia de historial publico de fills por bot.
+3. La UI debe guiar al usuario a `trading.csv` como fallback auditado cuando falten fills de bot por API.
 
 ## Resultado Phase 5G (2026-04-25)
 

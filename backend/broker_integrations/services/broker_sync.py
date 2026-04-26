@@ -260,12 +260,15 @@ def _discover_spot_symbols(
 
 
 def _extract_bot_symbol(payload: dict[str, Any]) -> str:
+    bot_type = str(payload.get("buOrderType") or payload.get("botType") or "").strip().lower()
+    if bot_type != "spot_grid":
+        return ""
     symbol = str(payload.get("symbol") or "").strip().upper()
     if symbol:
         return _normalize_symbol(symbol)
     base = str(payload.get("base") or "").strip().upper()
     quote = str(payload.get("quote") or "").strip().upper()
-    if base and quote:
+    if base and quote and base != "-":
         return f"{base}_{quote}"
     return ""
 
@@ -502,7 +505,10 @@ def _record_dual_income(
     stats.track_income_event(object_id=income_event.id, created=created)
 
 
-def _discover_spot_grid_bots(client: PionexClient, stats: SyncStats) -> dict[str, dict[str, Any]]:
+SUPPORTED_PIONEX_BOT_TYPES = {"spot_grid", "smart_copy"}
+
+
+def _discover_supported_bots(client: PionexClient, stats: SyncStats) -> dict[str, dict[str, Any]]:
     discovered_bots: dict[str, dict[str, Any]] = {}
     max_pages = 50
     for status in ("running", "finished"):
@@ -521,7 +527,7 @@ def _discover_spot_grid_bots(client: PionexClient, stats: SyncStats) -> dict[str
                 break
             for row in rows:
                 bot_order_type = str(row.get("buOrderType") or "").strip().lower()
-                if bot_order_type != "spot_grid":
+                if bot_order_type not in SUPPORTED_PIONEX_BOT_TYPES:
                     continue
                 bot_id = str(row.get("buOrderId") or "").strip()
                 if bot_id:
@@ -542,20 +548,33 @@ def _upsert_bot_result(
     stats: SyncStats,
 ) -> BotNetResult:
     raw_data = payload.get("buOrderData") if isinstance(payload.get("buOrderData"), dict) else {}
-    symbol = str(payload.get("symbol") or payload.get("base") or "BTC")
+    portfolio = raw_data.get("portfolio") if isinstance(raw_data.get("portfolio"), list) else []
+    first_portfolio = portfolio[0] if portfolio and isinstance(portfolio[0], dict) else {}
+    payload_base = str(payload.get("base") or "").strip()
+    symbol = str(
+        payload.get("symbol")
+        or payload_base
+        or first_portfolio.get("tradeBase")
+        or first_portfolio.get("base")
+        or "BTC"
+    )
     if "_" in symbol:
         pair_symbol = symbol
     else:
-        quote = str(payload.get("quote") or "USDT")
-        pair_symbol = f"{symbol}_{quote}"
+        quote = str(payload.get("quote") or "USDT").strip() or "USDT"
+        clean_symbol = symbol.replace(".PERP", "")
+        if clean_symbol in {"", "-"}:
+            clean_symbol = str(first_portfolio.get("base") or "BTC").strip()
+        pair_symbol = f"{clean_symbol}_{quote}"
     base_asset, quote_asset = _split_symbol(pair_symbol)
 
     def pick_profit() -> Decimal:
-        # Pionex spot-grid payloads often expose meaningful value in `gridProfit`
-        # while `realizedProfit` remains the string "0".
+        # Normalize the main bot-level profit shown by Pionex across bot families.
         candidates = [
             raw_data.get("totalProfit"),
             payload.get("totalProfit"),
+            raw_data.get("profit"),
+            payload.get("profit"),
             raw_data.get("gridProfit"),
             payload.get("gridProfit"),
             raw_data.get("realizedProfit"),
@@ -567,9 +586,27 @@ def _upsert_bot_result(
                 return value
         return parsed_values[0] if parsed_values else Decimal("0")
 
+    def sum_portfolio_fee(field_name: str) -> Decimal:
+        total = Decimal("0")
+        found = False
+        for row in portfolio:
+            if not isinstance(row, dict):
+                continue
+            value = row.get(field_name)
+            if value in (None, ""):
+                continue
+            total += _to_decimal(value)
+            found = True
+        return total if found else Decimal("0")
+
     defaults = {
         "bot_type": str(payload.get("buOrderType") or payload.get("botType") or "spot_grid"),
-        "label": str(payload.get("customizeName") or payload.get("botName") or f"Bot {bot_id}"),
+        "label": str(
+            payload.get("customizeName")
+            or raw_data.get("signalName")
+            or payload.get("botName")
+            or f"Bot {bot_id}"
+        ),
         "base_asset": base_asset,
         "quote_asset": quote_asset,
         "realized_profit": pick_profit(),
@@ -577,11 +614,13 @@ def _upsert_bot_result(
             raw_data.get("totalFeeInBase")
             or raw_data.get("totalFeeBase")
             or payload.get("totalFeeBase")
+            or sum_portfolio_fee("totalFeeInBase")
         ),
         "total_fee_quote": _to_decimal(
             raw_data.get("totalFeeInQuote")
             or raw_data.get("totalFeeQuote")
             or payload.get("totalFeeQuote")
+            or sum_portfolio_fee("totalFeeInQuote")
         ),
         "period_start": _timestamp_to_dt(
             payload.get("createTime") or raw_data.get("createTime") or start_ms
@@ -644,9 +683,10 @@ def _fetch_and_record_bot_fills(
             {"source": f"bot_fills:{bot_id}", "reason": "max_iterations_reached", "code": ""}
         )
     except PionexApiError as exc:
-        # A 404 means this specific bot has no fills via this endpoint.
-        # It does NOT mean the endpoint is unavailable for other bots.
-        reason = "endpoint_unavailable" if "HTTP 404" in str(exc) else str(exc)
+        # Pionex documents bot summaries, but not a public bot fill-history endpoint.
+        # In practice a 404 here means we cannot fetch per-bot fills from the Bot API,
+        # so the user should fall back to trading.csv for auditable movements.
+        reason = "public_api_no_fill_history" if "HTTP 404" in str(exc) else str(exc)
         stats.gaps.append(
             {"source": f"bot_fills:{bot_id}", "reason": reason, "code": exc.code or ""}
         )
@@ -666,27 +706,37 @@ def _sync_pionex_bot_results_and_fills(
     }
 
     for bot_id, payload in sorted(discovered_bots.items()):
+        summary_payload = payload
+        bot_type = str(payload.get("buOrderType") or "").strip().lower()
+        if bot_type == "spot_grid":
+            try:
+                official_summary = client.get_bot_summary(bot_id=bot_id)
+            except PionexApiError as exc:
+                stats.gaps.append(
+                    {"source": f"bot:{bot_id}", "reason": str(exc), "code": exc.code or ""}
+                )
+            else:
+                if isinstance(official_summary, dict) and official_summary:
+                    summary_payload = official_summary
         bot_result = _upsert_bot_result(
             credential=credential,
             bot_id=bot_id,
-            payload=payload,
+            payload=summary_payload,
             start_ms=start_ms,
             end_ms=end_ms,
             stats=stats,
         )
-        symbol_fallback = str(
-            payload.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-        )
-        _fetch_and_record_bot_fills(
-            client=client,
-            credential=credential,
-            bot_id=bot_id,
-            bot_result=bot_result,
-            symbol_fallback=symbol_fallback,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            stats=stats,
-        )
+        if bot_type == "spot_grid":
+            _fetch_and_record_bot_fills(
+                client=client,
+                credential=credential,
+                bot_id=bot_id,
+                bot_result=bot_result,
+                symbol_fallback=_extract_bot_symbol(payload),
+                start_ms=start_ms,
+                end_ms=end_ms,
+                stats=stats,
+            )
 
     for bot_id in sorted(env_bot_ids - set(discovered_bots.keys())):
         try:
@@ -704,19 +754,17 @@ def _sync_pionex_bot_results_and_fills(
             end_ms=end_ms,
             stats=stats,
         )
-        symbol_fallback = str(
-            summary.get("symbol") or f"{bot_result.base_asset}_{bot_result.quote_asset}"
-        )
-        _fetch_and_record_bot_fills(
-            client=client,
-            credential=credential,
-            bot_id=bot_id,
-            bot_result=bot_result,
-            symbol_fallback=symbol_fallback,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            stats=stats,
-        )
+        if bot_result.bot_type == "spot_grid":
+            _fetch_and_record_bot_fills(
+                client=client,
+                credential=credential,
+                bot_id=bot_id,
+                bot_result=bot_result,
+                symbol_fallback=f"{bot_result.base_asset}_{bot_result.quote_asset}",
+                start_ms=start_ms,
+                end_ms=end_ms,
+                stats=stats,
+            )
 
 
 def _record_binance_convert_trade(
@@ -979,7 +1027,7 @@ def sync_pionex(*, credential: BrokerCredential, year: int) -> dict[str, Any]:
         except PionexApiError as exc:
             stats.gaps.append({"source": "balances", "reason": str(exc), "code": exc.code or ""})
 
-        discovered_bots = _discover_spot_grid_bots(client, stats)
+        discovered_bots = _discover_supported_bots(client, stats)
         symbols = set(_discover_spot_symbols(credential=credential, balances=balances))
         for bot_payload in discovered_bots.values():
             bot_symbol = _extract_bot_symbol(bot_payload)

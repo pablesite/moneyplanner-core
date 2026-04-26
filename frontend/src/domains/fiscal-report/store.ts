@@ -30,6 +30,7 @@ type CredentialCreatePayload = {
 
 type CsvImportPayload = {
   broker: BrokerName;
+  credential_id?: number;
   file_type: BrokerCsvFileType;
   file: File;
 };
@@ -37,6 +38,7 @@ type CsvImportPayload = {
 type SyncRunDrilldownFilters = {
   source: string;
   symbol: string;
+  tax_id: string;
   side: '' | 'buy' | 'sell';
 };
 
@@ -99,6 +101,8 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
     syncStatusByCredential: {} as Record<number, BrokerSyncStatusResponse | undefined>,
     lastSyncRunByCredential: {} as Record<number, BrokerSyncTriggerResponse | undefined>,
     csvImportResults: [] as BrokerCsvImportResponse[],
+    recentImportedTrades: [] as BrokerTradeDrilldownRow[],
+    recentImportedTradesCount: 0 as number,
     report: null as FiscalReportPayload | null,
 
     syncRuns: [] as SyncRunSummary[],
@@ -109,6 +113,7 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
     syncRunFilters: {
       source: '',
       symbol: '',
+      tax_id: '',
       side: '',
     } as SyncRunDrilldownFilters,
     syncRunTrades: [] as BrokerTradeDrilldownRow[],
@@ -132,6 +137,7 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
     deletingByCredential: {} as Record<number, boolean>,
     creatingCredential: false as boolean,
     importingCsv: false as boolean,
+    loadingRecentImportedTrades: false as boolean,
     loadingSyncRuns: false as boolean,
     loadingSyncRunDrilldown: false as boolean,
     loadingBalanceReconciliation: false as boolean,
@@ -167,6 +173,11 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
       this.landingError = null;
       this.reportError = null;
       this.successMessage = null;
+    },
+
+    clearRecentImportedTrades() {
+      this.recentImportedTrades = [];
+      this.recentImportedTradesCount = 0;
     },
 
     setSelectedYear(year: number) {
@@ -242,6 +253,7 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
             sync_run: this.activeSyncRunId,
             source: this.syncRunFilters.source || undefined,
             symbol: this.syncRunFilters.symbol || undefined,
+            tax_id: this.syncRunFilters.tax_id || undefined,
             side: this.syncRunFilters.side || undefined,
             page: this.syncRunTradesPage,
           }),
@@ -447,11 +459,37 @@ export const useFiscalReportStore = defineStore('fiscal-report', {
       try {
         const response = await fiscalReportApi.importCsv(payload);
         this.csvImportResults = [response.data, ...this.csvImportResults].slice(0, 12);
+        if (
+          payload.credential_id &&
+          (payload.file_type === 'pionex_trading' ||
+            payload.file_type === 'binance_transactions' ||
+            payload.file_type === 'binance_convert' ||
+            payload.file_type === 'binance_recurring')
+        ) {
+          const tradeSource = payload.broker === 'pionex' ? 'pionex_csv' : 'binance_csv';
+          await this.fetchRecentImportedTrades(payload.credential_id, tradeSource);
+        }
         this.successMessage = 'CSV procesado correctamente.';
       } catch (error) {
         this.landingError = toApiErrorMessage(error);
       } finally {
         this.importingCsv = false;
+      }
+    },
+
+    async fetchRecentImportedTrades(credentialId: number, source: string) {
+      this.loadingRecentImportedTrades = true;
+      try {
+        const { data } = await fiscalReportApi.getTrades({
+          credential: credentialId,
+          year: this.selectedYear,
+          source,
+          page: 1,
+        });
+        this.recentImportedTrades = data.results.slice(0, 50);
+        this.recentImportedTradesCount = data.count;
+      } finally {
+        this.loadingRecentImportedTrades = false;
       }
     },
 
