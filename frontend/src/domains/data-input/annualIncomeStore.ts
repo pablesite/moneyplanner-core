@@ -83,6 +83,10 @@ type TotalsResponse = {
   currency_hint: string;
 };
 
+type StoreScope = 'saas' | 'core';
+
+type AnnualIncomeStore = ReturnType<typeof createAnnualIncomeStore>;
+
 function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
   const timeProfile =
     item.time_profile ?? (item.income_type === 'one_off' ? 'one_off' : 'structural_recurrent');
@@ -109,7 +113,7 @@ function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
   };
 }
 
-export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'saas') {
+function createAnnualIncomeStore() {
   const entries = ref<AnnualIncomeEntry[]>([]);
   const totalAnnual = ref(0);
   const loading = ref(false);
@@ -260,4 +264,15 @@ export function useAnnualIncomeStore(_scope: 'saas' | 'core' = 'saas') {
     updateEntry,
     deleteEntry,
   };
+}
+
+const annualIncomeStoreCache = new Map<StoreScope, AnnualIncomeStore>();
+
+export function useAnnualIncomeStore(scope: StoreScope = 'saas') {
+  let store = annualIncomeStoreCache.get(scope);
+  if (!store) {
+    store = createAnnualIncomeStore();
+    annualIncomeStoreCache.set(scope, store);
+  }
+  return store;
 }

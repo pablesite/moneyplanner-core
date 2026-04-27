@@ -111,4 +111,33 @@ describe('annual expense store (core)', () => {
     await store.deleteEntry(10, 2026);
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/budget/annual-expense/10/');
   });
+
+  it('shares reactive state across consumers in the same scope', async () => {
+    mocks.api.get
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            name: 'Alimentacion',
+            category: 'consumption_expenses',
+            subcategory: 'living_expenses',
+            owner_name: 'Pablo',
+            expense_type: 'recurrent',
+            amount_annual: '5500.00',
+            fiscal_year: 2026,
+            currency: 'EUR',
+            notes: '',
+            created_at: '2026-02-20T00:00:00Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: { total_annual: '5500.00', currency_hint: 'mixed' } });
+
+    const firstConsumer = useAnnualExpenseStore('core');
+    const secondConsumer = useAnnualExpenseStore('core');
+    await firstConsumer.loadAll(2026);
+
+    expect(secondConsumer.entries.value).toHaveLength(1);
+    expect(secondConsumer.entries.value[0]?.name).toBe('Alimentacion');
+  });
 });
