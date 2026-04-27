@@ -134,4 +134,33 @@ describe('annual income store (core)', () => {
     expect(result.ok).toBe(false);
     expect(mocks.api.post).not.toHaveBeenCalled();
   });
+
+  it('shares reactive state across consumers in the same scope', async () => {
+    mocks.api.get
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            name: 'CTN',
+            category: 'salary',
+            subcategory: 'employee_salary',
+            owner_name: 'Pablo',
+            income_type: 'recurrent',
+            amount_annual: '32460.00',
+            fiscal_year: 2026,
+            currency: 'EUR',
+            notes: '',
+            created_at: '2026-02-20T00:00:00Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: { total_annual: '32460.00', currency_hint: 'mixed' } });
+
+    const firstConsumer = useAnnualIncomeStore('core');
+    const secondConsumer = useAnnualIncomeStore('core');
+    await firstConsumer.loadAll(2026);
+
+    expect(secondConsumer.entries.value).toHaveLength(1);
+    expect(secondConsumer.entries.value[0]?.name).toBe('CTN');
+  });
 });

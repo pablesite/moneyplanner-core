@@ -333,8 +333,8 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             <strong>{{ formatMoney(expenseExecutionYtdTotals.executedTotal) }} EUR</strong>
           </div>
           <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">En presupuesto (YTD)</span>
-            <strong>{{ formatMoney(expenseExecutionYtdTotals.executedBudgeted) }} EUR</strong>
+            <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
+            <strong>{{ formatMoney(expenseExecutionYtdTotals.planned) }} EUR</strong>
           </div>
           <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
             <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
@@ -347,8 +347,8 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             <strong>{{ formatMoney(incomeExecutionYtdTotals.executedTotal) }} EUR</strong>
           </div>
           <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">En presupuesto (YTD)</span>
-            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedBudgeted) }} EUR</strong>
+            <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
+            <strong>{{ formatMoney(incomeExecutionYtdTotals.planned) }} EUR</strong>
           </div>
           <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
             <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
