@@ -100,6 +100,8 @@ class BrokerCsvImportSerializer(serializers.Serializer):
             "pionex_dust",
             "pionex_deposit_withdraw",
             "binance_transactions",
+            "binance_fiat_deposits",
+            "binance_simple_earn_flexible",
             "binance_convert",
             "binance_recurring",
         ]

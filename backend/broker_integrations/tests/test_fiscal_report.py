@@ -10,6 +10,7 @@ from django.test import TestCase
 from broker_integrations.models import (
     BotNetResult,
     BrokerCredential,
+    BrokerSyncRun,
     BrokerTrade,
     DepositWithdrawal,
     FuturesPosition,
@@ -368,6 +369,174 @@ class FiscalReportServicesTests(TestCase):
         self.assertEqual(sale["matched_lots"][0]["buy_trade_id"], BrokerTrade.objects.get(trade_id="sell-eth-into-usdc").id)
         self.assertTrue(sale["matched_lots"][0]["has_complete_cost_basis"])
 
+    def test_pionex_tax_scopes_do_not_consume_each_other_inventory(self):
+        trade_a_buy = BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="scope-a-buy",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("2000"),
+            price_eur=Decimal("1800"),
+            quantity=Decimal("0.02"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 7, 20, 6, 29, 8, tzinfo=timezone.utc),
+            raw={"tax_id": "s_90"},
+        )
+        trade_b_buy = BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="scope-b-buy",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("2000"),
+            price_eur=Decimal("1800"),
+            quantity=Decimal("0.03"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 7, 20, 6, 29, 9, tzinfo=timezone.utc),
+            raw={"tax_id": "s_91"},
+        )
+        trade_b_sell = BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="scope-b-sell",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("2100"),
+            price_eur=Decimal("1890"),
+            quantity=Decimal("0.03"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 7, 20, 6, 29, 10, tzinfo=timezone.utc),
+            raw={"tax_id": "s_91"},
+        )
+        trade_a_sell = BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="scope-a-sell",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("2100"),
+            price_eur=Decimal("1890"),
+            quantity=Decimal("0.02"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 7, 20, 6, 29, 11, tzinfo=timezone.utc),
+            raw={"tax_id": "s_90"},
+        )
+
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="ETH",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+
+        self.assertEqual(len(result["warnings"]), 0)
+        sales_by_id = {sale["sell_trade_id"]: sale for sale in result["sales"]}
+        self.assertEqual(sales_by_id[trade_a_sell.id]["gap_quantity"], Decimal("0"))
+        self.assertEqual(sales_by_id[trade_b_sell.id]["gap_quantity"], Decimal("0"))
+        self.assertEqual(sales_by_id[trade_a_sell.id]["matched_lots"][0]["buy_trade_id"], trade_a_buy.id)
+        self.assertEqual(sales_by_id[trade_b_sell.id]["matched_lots"][0]["buy_trade_id"], trade_b_buy.id)
+
+    def test_pionex_tax_scope_residual_moves_to_global_pool_for_manual_sell(self):
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="bot-buy-1",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("4800"),
+            price_eur=Decimal("4320"),
+            quantity=Decimal("0.08252"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 8, 22, 17, 15, 18, tzinfo=timezone.utc),
+            raw={"tax_id": "s_154"},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="bot-buy-2",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.BUY,
+            price=Decimal("4800"),
+            price_eur=Decimal("4320"),
+            quantity=Decimal("0.01108"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 8, 22, 17, 15, 19, tzinfo=timezone.utc),
+            raw={"tax_id": "s_154"},
+        )
+        BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="bot-sell",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("4830"),
+            price_eur=Decimal("4347"),
+            quantity=Decimal("0.01010"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 8, 23, 14, 41, 22, tzinfo=timezone.utc),
+            raw={"tax_id": "s_154"},
+        )
+        manual_sell = BrokerTrade.objects.create(
+            credential=self.pionex_credential,
+            source=BrokerTrade.Source.PIONEX_CSV,
+            trade_id="manual-sell-after-bot",
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            side=BrokerTrade.Side.SELL,
+            price=Decimal("4825"),
+            price_eur=Decimal("4342.5"),
+            quantity=Decimal("0.08346"),
+            fee=Decimal("0"),
+            fee_eur=Decimal("0"),
+            fee_asset="",
+            timestamp=datetime(2025, 8, 24, 19, 40, 32, tzinfo=timezone.utc),
+            raw={"tax_id": "s_0"},
+        )
+
+        result = calculate_fifo_for_asset(
+            ownership=self.ownership,
+            base_asset="ETH",
+            year=2025,
+            eur_converter=EurConverter(),
+        )
+
+        sales_by_id = {sale["sell_trade_id"]: sale for sale in result["sales"]}
+        self.assertEqual(sales_by_id[manual_sell.id]["gap_quantity"], Decimal("0"))
+        self.assertEqual(
+            sum(lot["quantity_consumed"] for lot in sales_by_id[manual_sell.id]["matched_lots"]),
+            Decimal("0.08346"),
+        )
+
     def test_generate_fiscal_report_returns_complete_payload(self):
         IncomeEvent.objects.create(
             credential=self.binance_credential,
@@ -654,6 +823,55 @@ class Phase5GReliabilityTests(TestCase):
         self.assertEqual(payload["reliability"]["status"], "declarable")
         self.assertIsNotNone(payload["resumen_declarable"])
 
+    def test_reconciled_assets_hide_balance_reconciliation_noise(self):
+        self._make_trade(
+            trade_id="buy-eth-clean",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.BUY,
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quantity="1",
+            price="2000",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 1, 5, tzinfo=timezone.utc),
+        )
+        self._make_trade(
+            trade_id="sell-eth-clean",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="ETH_USDT",
+            base_asset="ETH",
+            quantity="1",
+            price="2200",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
+        for idx in range(2):
+            BrokerSyncRun.objects.create(
+                credential=self.credential,
+                year=2025,
+                status=BrokerSyncRun.Status.OK,
+                finished_at=datetime(2025, 6, 2, 10, idx, 30, tzinfo=timezone.utc),
+                gaps=[
+                    {
+                        "asset": "ETH",
+                        "diff": "0.0417579233",
+                        "actual": "0",
+                        "reason": "balance_mismatch",
+                        "source": "balance_reconciliation",
+                        "expected": "-0.0417579233",
+                    }
+                ],
+                stats={},
+            )
+
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+
+        self.assertEqual(payload["reliability"]["status"], "declarable")
+        self.assertEqual(payload["reliability"]["blocking_gaps"], [])
+        self.assertIsNotNone(payload["resumen_declarable"])
+        self.assertEqual(payload["reliability"]["reconciliation_warnings"], [])
+
     def test_api_csv_dedup_does_not_double_count_in_fifo(self):
         # Same economic event as API trade and CSV trade: should count only once in pool
         key = "abc123dedup01"
@@ -795,3 +1013,79 @@ class Phase5GReliabilityTests(TestCase):
         # diagnostico still shows all numbers
         self.assertIsNotNone(payload["resumen_diagnostico"])
         self.assertGreater(payload["resumen_diagnostico"]["total_ganancias_eur"], 0)
+
+    @patch("broker_integrations.services.fiscal_report.calculate_fifo_for_asset")
+    def test_resumen_declarable_uses_precise_sale_values_not_rounded_display(
+        self, calculate_fifo_mock
+    ):
+        self._make_trade(
+            trade_id="buy-btc-placeholder",
+            source=BrokerTrade.Source.PIONEX_API,
+            side=BrokerTrade.Side.SELL,
+            symbol="BTC_USDT",
+            base_asset="BTC",
+            quantity="1",
+            price="50000",
+            fiscal_provenance=BrokerTrade.FiscalProvenance.API,
+            timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        calculate_fifo_mock.return_value = {
+            "warnings": [],
+            "sales": [
+                {
+                    "sell_trade_id": "sell-1",
+                    "sell_date": "2025-02-01T00:00:00+00:00",
+                    "sell_exchange": "pionex",
+                    "quantity_sold": Decimal("1"),
+                    "proceeds_eur": Decimal("10.004"),
+                    "fee_eur": Decimal("0"),
+                    "gap_quantity": Decimal("0"),
+                    "gap_reason": None,
+                    "matched_lots": [
+                        {
+                            "buy_trade_id": "buy-1",
+                            "buy_date": "2025-01-01T00:00:00+00:00",
+                            "buy_exchange": "pionex",
+                            "quantity_consumed": Decimal("1"),
+                            "unit_price_eur": Decimal("9.995"),
+                            "cost_eur": Decimal("9.995"),
+                            "fee_eur_allocated": Decimal("0"),
+                            "gain_loss_eur": Decimal("0.009"),
+                            "has_complete_cost_basis": True,
+                        }
+                    ],
+                },
+                {
+                    "sell_trade_id": "sell-2",
+                    "sell_date": "2025-02-02T00:00:00+00:00",
+                    "sell_exchange": "pionex",
+                    "quantity_sold": Decimal("1"),
+                    "proceeds_eur": Decimal("9.995"),
+                    "fee_eur": Decimal("0"),
+                    "gap_quantity": Decimal("0"),
+                    "gap_reason": None,
+                    "matched_lots": [
+                        {
+                            "buy_trade_id": "buy-2",
+                            "buy_date": "2025-01-02T00:00:00+00:00",
+                            "buy_exchange": "pionex",
+                            "quantity_consumed": Decimal("1"),
+                            "unit_price_eur": Decimal("10.004"),
+                            "cost_eur": Decimal("10.004"),
+                            "fee_eur_allocated": Decimal("0"),
+                            "gain_loss_eur": Decimal("-0.009"),
+                            "has_complete_cost_basis": True,
+                        }
+                    ],
+                },
+            ],
+        }
+
+        payload = generate_fiscal_report(ownership=self.ownership, year=2025)
+
+        self.assertEqual(payload["reliability"]["status"], "declarable")
+        self.assertEqual(payload["ganancias_perdidas_trades"][0]["sales"][0]["proceeds_eur"], 10.0)
+        self.assertEqual(payload["ganancias_perdidas_trades"][0]["sales"][1]["proceeds_eur"], 10.0)
+        self.assertEqual(payload["resumen_declarable"]["total_ganancias_eur"], 0.01)
+        self.assertEqual(payload["resumen_declarable"]["total_perdidas_eur"], 0.01)
+        self.assertEqual(payload["resumen_declarable"]["neto_ganancias_perdidas_eur"], 0.0)

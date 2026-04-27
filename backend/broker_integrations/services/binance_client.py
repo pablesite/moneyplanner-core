@@ -24,12 +24,43 @@ class BinanceClient:
     def __init__(self, *, api_key: str, api_secret: str):
         self.api_key = api_key
         self.api_secret = api_secret
+        self._server_time_offset_ms = 0
+        self._server_time_synced_at = 0.0
+
+    def _get_server_time_offset_ms(self) -> int:
+        now = time.time()
+        if now - self._server_time_synced_at < 300:
+            return self._server_time_offset_ms
+
+        request = urllib.request.Request(
+            f"{self.BASE_URL}/api/v3/time",
+            method="GET",
+            headers={
+                "User-Agent": "moneyplanner-core/broker-integrations",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload_raw = response.read().decode("utf-8", errors="ignore")
+                payload = json.loads(payload_raw)
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+            return self._server_time_offset_ms
+
+        server_time = payload.get("serverTime") if isinstance(payload, dict) else None
+        if isinstance(server_time, int):
+            self._server_time_offset_ms = server_time - int(now * 1000)
+            self._server_time_synced_at = now
+        return self._server_time_offset_ms
 
     def _signed_get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         request_params = {
             key: str(value) for key, value in (params or {}).items() if value is not None
         }
-        request_params["timestamp"] = str(int(time.time() * 1000))
+        request_params["timestamp"] = str(
+            int(time.time() * 1000) + self._get_server_time_offset_ms()
+        )
+        request_params.setdefault("recvWindow", "10000")
         query_string = urllib.parse.urlencode(sorted(request_params.items()))
         signature = hmac.new(
             self.api_secret.encode(),

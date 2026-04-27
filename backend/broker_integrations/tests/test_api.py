@@ -129,6 +129,74 @@ class BrokerIntegrationsApiTests(APITestCase):
         self.assertEqual(response.data["created"], 1)
         self.assertEqual(response.data["credential_id"], credential.id)
 
+    def test_csv_import_binance_fiat_deposits_supported(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Binance Fiat CSV",
+            api_key="binance-key",
+            api_secret_encrypted=b"secret",
+        )
+        content = (
+            "Hora,Método,Monto de depósito,Monto a recibir,Tarifa,Estado,ID de transacción (TXID)\n"
+            "25-02-15 00:49:14,Pay by bank app,498.00 EUR,497.5 EUR,0.50 EUR,Successful,dep-1\n"
+        ).encode("utf-8")
+        uploaded = SimpleUploadedFile(
+            "binance-fiat-deposits.csv",
+            content,
+            content_type="text/csv",
+        )
+        response = self.client.post(
+            "/api/v1/broker/csv-import/",
+            {
+                "broker": "binance",
+                "credential_id": credential.id,
+                "file_type": "binance_fiat_deposits",
+                "file": uploaded,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["created"], 1)
+        self.assertEqual(response.data["credential_id"], credential.id)
+        self.assertEqual(
+            DepositWithdrawal.objects.filter(
+                credential=credential,
+                source=DepositWithdrawal.Source.BINANCE_CSV,
+            ).count(),
+            1,
+        )
+
+    def test_csv_import_binance_simple_earn_flexible_supported(self):
+        credential = BrokerCredential.objects.create(
+            user=self.user,
+            ownership=self.ownership,
+            broker=BrokerCredential.Broker.BINANCE,
+            label="Binance Flexible CSV",
+            api_key="binance-key",
+            api_secret_encrypted=b"secret",
+        )
+        content = (
+            "Fecha de reembolso/canje,Nombre del Producto,Moneda,Principal reembolsado,Método,Canjear en,Estado\n"
+            "25-02-07 13:29:20,GMT,GMT,1.02574955,Fast redemption,SPOT,Success\n"
+        ).encode("utf-8")
+        uploaded = SimpleUploadedFile(
+            "binance-simple-earn-flexible.csv",
+            content,
+            content_type="text/csv",
+        )
+        response = self.client.post(
+            "/api/v1/broker/csv-import/",
+            {
+                "broker": "binance",
+                "credential_id": credential.id,
+                "file_type": "binance_simple_earn_flexible",
+                "file": uploaded,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["created"], 1)
+
     def test_csv_import_pionex_deposit_withdraw_creates_deposit_rows(self):
         credential = BrokerCredential.objects.create(
             user=self.user,

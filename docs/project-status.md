@@ -46,6 +46,8 @@ Nota: `Informe Fiscal Crypto — Phase 5E` cerrada el 2026-04-24 (endpoint `GET 
 Nota: `Informe Fiscal Crypto — Phase 5F` cerrada el 2026-04-24 (frontend Core con historial y drill-down de sync runs, conciliación de saldos, FIFO por venta con `matched_lots`, chip de `gap_reason`, modal de `ManualCostBasis`, panel de fills por bot y descarga CSV/PDF desde el informe).
 Nota: Fiscalidad bots actual (2026-04-24): la tabla de bots se mantiene como vista informativa y no se suma al resumen fiscal agregado. El resumen fiscal usa detalle FIFO y posiciones/fuentes con trazabilidad de movimientos.
 Nota: `Informe Fiscal Crypto — Phase 5G` cerrada el 2026-04-25 (`fiscal_provenance`/`fiscal_identity_key` en `BrokerTrade`, modelo `DepositWithdrawal`, dedup API/CSV en FIFO, bloque `reliability` en `fiscal-report` con `resumen_declarable`/`resumen_diagnostico`, schema_version=3). Spec archivada en `core/docs/tasks/fiscal-report/phase-5-pionex-v2/terminados/fase-g-api-first-reliability.md`.
+Nota: Fiscalidad Pionex bot→spot afinada el 2026-04-27: el FIFO aísla temporalmente los grupos `tax_id` de `spot_grid` importados por CSV para que bots concurrentes no se consuman entre sí, y traspasa el remanente del grupo al pool spot global al finalizar. Esto cubre cierres donde el usuario conserva `ETH/BTC` del bot antes de venderlo manualmente.
+Nota: Reliability fiscal afinada el 2026-04-27: los `balance_reconciliation` repetidos de sync runs históricos ya no bloquean `resumen_declarable`, y además se ocultan del informe fiscal cuando el asset afectado ya queda totalmente cubierto por FIFO.
 Nota: espejo SaaS diferido por scope explícito de la fase (MVP Core-only), documentado en `core/docs/frontend/fiscal-report-ux-notes.md`.
 
 | Modulo | Tipo | Descripcion | Spec |

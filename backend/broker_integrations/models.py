@@ -300,6 +300,7 @@ class DepositWithdrawal(models.Model):
     class Source(models.TextChoices):
         PIONEX_API = "pionex_api", "Pionex API"
         PIONEX_CSV = "pionex_csv", "Pionex CSV"
+        BINANCE_CSV = "binance_csv", "Binance CSV"
         MANUAL = "manual", "Manual"
 
     credential = models.ForeignKey(

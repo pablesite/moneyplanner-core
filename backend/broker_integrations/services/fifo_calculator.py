@@ -8,7 +8,7 @@ from typing import Any
 from memberships.models import Ownership
 from django.db.models import Q
 
-from ..models import BrokerSyncRun, BrokerTrade, DepositWithdrawal, ManualCostBasis
+from ..models import BotNetResult, BrokerSyncRun, BrokerTrade, DepositWithdrawal, ManualCostBasis
 from .eur_converter import EurConverter
 
 
@@ -23,6 +23,23 @@ def _trade_provenance(trade: BrokerTrade) -> str:
     if trade.fiscal_provenance:
         return trade.fiscal_provenance
     return "csv_fallback" if trade.source in _CSV_SOURCES else "api"
+
+
+def _pionex_tax_scope(trade: BrokerTrade) -> str | None:
+    """Keep Pionex CSV tax batches isolated until the batch is finished.
+
+    Pionex spot-grid exports often contain multiple concurrent bot batches for the
+    same asset. Treating every ETH/BTC fill as one global pool can make one bot
+    consume another bot's inventory. We keep non-manual tax groups local first and
+    only transfer any remainder to the spot pool when the batch ends.
+    """
+    if trade.source != BrokerTrade.Source.PIONEX_CSV:
+        return None
+    raw = trade.raw if isinstance(trade.raw, dict) else {}
+    tax_id = str(raw.get("tax_id") or "").strip()
+    if not tax_id or tax_id == "s_0":
+        return None
+    return tax_id
 
 
 def _dedup_trades_by_fiscal_key(trades: list[BrokerTrade]) -> list[BrokerTrade]:
@@ -154,10 +171,67 @@ def _quote_asset_lot_from_trade(
     )
 
 
+def _append_sorted_lot(pool: list[_PoolLot], lot: _PoolLot) -> None:
+    pool.append(lot)
+    min_dt = datetime.min.replace(tzinfo=timezone.utc)
+    pool.sort(key=lambda item: (item.buy_date or min_dt, item.buy_trade_id or 0))
+
+
+def _trade_base_asset_lot(
+    *,
+    trade: BrokerTrade,
+    eur_converter: EurConverter,
+) -> _PoolLot:
+    return _PoolLot(
+        buy_trade_id=trade.id,
+        manual_cost_basis_id=None,
+        deposit_withdrawal_id=None,
+        buy_date=trade.timestamp,
+        buy_exchange=_exchange_from_source(trade.source),
+        buy_symbol=trade.symbol,
+        quantity_remaining=Decimal(trade.quantity),
+        unit_price_eur=_trade_unit_price_eur(trade=trade, eur_converter=eur_converter),
+        source_kind="trade",
+        has_complete_cost_basis=True,
+    )
+
+
+def _bot_open_base_lot(
+    *,
+    bot_result: BotNetResult,
+    asset: str,
+    eur_converter: EurConverter,
+) -> _PoolLot | None:
+    raw = bot_result.raw.get("buOrderData", {}) if isinstance(bot_result.raw, dict) else {}
+    open_base_amount = Decimal(str(raw.get("openBaseAmount") or "0"))
+    if open_base_amount <= 0:
+        return None
+    open_base_price = Decimal(str(raw.get("openBasePrice") or raw.get("initPrice") or "0"))
+    if open_base_price <= 0:
+        return None
+    unit_price_eur = open_base_price * eur_converter.get_eur_rate(
+        trade_date=bot_result.period_start.date(),
+        asset=bot_result.quote_asset,
+    )
+    return _PoolLot(
+        buy_trade_id=None,
+        manual_cost_basis_id=None,
+        deposit_withdrawal_id=None,
+        buy_date=bot_result.period_start,
+        buy_exchange=_exchange_from_source(bot_result.credential.broker),
+        buy_symbol=f"{bot_result.base_asset}_{bot_result.quote_asset}",
+        quantity_remaining=open_base_amount,
+        unit_price_eur=unit_price_eur,
+        source_kind="trade",
+        has_complete_cost_basis=True,
+    )
+
+
 def _match_sale_against_pool(
     *,
     trade: BrokerTrade,
-    pool: list[_PoolLot],
+    primary_pool: list[_PoolLot],
+    fallback_pool: list[_PoolLot] | None,
     asset: str,
     ownership: Ownership,
     year: int,
@@ -171,40 +245,48 @@ def _match_sale_against_pool(
     remaining_sell_qty = quantity_sold
     matched_lots: list[MatchedLot] = []
 
-    for lot in pool:
-        if remaining_sell_qty <= 0:
-            break
-        if lot.quantity_remaining <= 0:
-            continue
-        qty_consumed = min(remaining_sell_qty, lot.quantity_remaining)
-        if qty_consumed <= 0:
-            continue
-        lot_proceeds = proceeds_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
-        fee_alloc = fee_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
-        cost_eur = qty_consumed * lot.unit_price_eur
-        gain_loss = lot_proceeds - cost_eur - fee_alloc
-        hold_days = 0
-        if lot.buy_date is not None:
-            hold_days = (trade.timestamp.date() - lot.buy_date.date()).days
-        matched_lots.append(
-            MatchedLot(
-                buy_trade_id=lot.buy_trade_id,
-                manual_cost_basis_id=lot.manual_cost_basis_id,
-                deposit_withdrawal_id=lot.deposit_withdrawal_id,
-                buy_date=lot.buy_date.date().isoformat() if lot.buy_date else None,
-                buy_exchange=lot.buy_exchange,
-                buy_symbol=lot.buy_symbol,
-                quantity_consumed=qty_consumed,
-                unit_price_eur=lot.unit_price_eur,
-                cost_eur=cost_eur,
-                fee_eur_allocated=fee_alloc,
-                gain_loss_eur=gain_loss,
-                hold_days=hold_days,
-                has_complete_cost_basis=lot.has_complete_cost_basis,
+    def consume_from_pool(pool: list[_PoolLot]) -> None:
+        nonlocal remaining_sell_qty
+        for lot in pool:
+            if remaining_sell_qty <= 0:
+                break
+            if lot.quantity_remaining <= 0:
+                continue
+            qty_consumed = min(remaining_sell_qty, lot.quantity_remaining)
+            if qty_consumed <= 0:
+                continue
+            lot_proceeds = (
+                proceeds_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
             )
-        )
-        lot.quantity_remaining -= qty_consumed
-        remaining_sell_qty -= qty_consumed
+            fee_alloc = fee_eur_total * qty_consumed / quantity_sold if quantity_sold else Decimal("0")
+            cost_eur = qty_consumed * lot.unit_price_eur
+            gain_loss = lot_proceeds - cost_eur - fee_alloc
+            hold_days = 0
+            if lot.buy_date is not None:
+                hold_days = (trade.timestamp.date() - lot.buy_date.date()).days
+            matched_lots.append(
+                MatchedLot(
+                    buy_trade_id=lot.buy_trade_id,
+                    manual_cost_basis_id=lot.manual_cost_basis_id,
+                    deposit_withdrawal_id=lot.deposit_withdrawal_id,
+                    buy_date=lot.buy_date.date().isoformat() if lot.buy_date else None,
+                    buy_exchange=lot.buy_exchange,
+                    buy_symbol=lot.buy_symbol,
+                    quantity_consumed=qty_consumed,
+                    unit_price_eur=lot.unit_price_eur,
+                    cost_eur=cost_eur,
+                    fee_eur_allocated=fee_alloc,
+                    gain_loss_eur=gain_loss,
+                    hold_days=hold_days,
+                    has_complete_cost_basis=lot.has_complete_cost_basis,
+                )
+            )
+            lot.quantity_remaining -= qty_consumed
+            remaining_sell_qty -= qty_consumed
+
+    consume_from_pool(primary_pool)
+    if remaining_sell_qty > 0 and fallback_pool is not None:
+        consume_from_pool(fallback_pool)
 
     gap_reason = None
     if remaining_sell_qty > 0:
@@ -273,6 +355,144 @@ def _determine_gap_reason(
     if has_pre_year_buy or has_manual_pre_year:
         return GAP_REASON_PRE_PERIOD_BUY
     return GAP_REASON_BALANCE_TRANSFER_IN
+
+
+def _transfer_scope_residual_to_global(
+    *,
+    scope: str | None,
+    scope_last_trade_id: dict[str, int],
+    trade: BrokerTrade,
+    tax_scoped_pools: dict[str, list[_PoolLot]],
+    global_pool: list[_PoolLot],
+) -> None:
+    if not scope or scope_last_trade_id.get(scope) != trade.id:
+        return
+    scoped_pool = tax_scoped_pools.get(scope)
+    if not scoped_pool:
+        return
+    for lot in scoped_pool:
+        if lot.quantity_remaining > 0:
+            _append_sorted_lot(global_pool, lot)
+    tax_scoped_pools.pop(scope, None)
+
+
+def _process_asset_trade(
+    *,
+    trade: BrokerTrade,
+    asset: str,
+    year: int,
+    ownership: Ownership,
+    eur_converter: EurConverter,
+    missing_data_assets: set[str],
+    global_pool: list[_PoolLot],
+    tax_scoped_pools: dict[str, list[_PoolLot]],
+    scope_last_trade_id: dict[str, int],
+) -> FifoSaleMatch | None:
+    scope = _pionex_tax_scope(trade)
+    scoped_pool = tax_scoped_pools.setdefault(scope, []) if scope else None
+    target_pool = scoped_pool if scoped_pool is not None else global_pool
+
+    quote_asset_lot = _quote_asset_lot_from_trade(
+        trade=trade,
+        asset=asset,
+        eur_converter=eur_converter,
+    )
+    if quote_asset_lot is not None:
+        _append_sorted_lot(target_pool, quote_asset_lot)
+        _transfer_scope_residual_to_global(
+            scope=scope,
+            scope_last_trade_id=scope_last_trade_id,
+            trade=trade,
+            tax_scoped_pools=tax_scoped_pools,
+            global_pool=global_pool,
+        )
+        return None
+
+    if trade.base_asset.upper() != asset:
+        _transfer_scope_residual_to_global(
+            scope=scope,
+            scope_last_trade_id=scope_last_trade_id,
+            trade=trade,
+            tax_scoped_pools=tax_scoped_pools,
+            global_pool=global_pool,
+        )
+        return None
+
+    if trade.side == BrokerTrade.Side.BUY:
+        _append_sorted_lot(target_pool, _trade_base_asset_lot(trade=trade, eur_converter=eur_converter))
+        _transfer_scope_residual_to_global(
+            scope=scope,
+            scope_last_trade_id=scope_last_trade_id,
+            trade=trade,
+            tax_scoped_pools=tax_scoped_pools,
+            global_pool=global_pool,
+        )
+        return None
+
+    if trade.side != BrokerTrade.Side.SELL or trade.timestamp.year != year:
+        _transfer_scope_residual_to_global(
+            scope=scope,
+            scope_last_trade_id=scope_last_trade_id,
+            trade=trade,
+            tax_scoped_pools=tax_scoped_pools,
+            global_pool=global_pool,
+        )
+        return None
+
+    sale_match, _ = _match_sale_against_pool(
+        trade=trade,
+        primary_pool=target_pool,
+        fallback_pool=global_pool if scoped_pool is not None else None,
+        asset=asset,
+        ownership=ownership,
+        year=year,
+        eur_converter=eur_converter,
+        missing_data_assets=missing_data_assets,
+    )
+    _transfer_scope_residual_to_global(
+        scope=scope,
+        scope_last_trade_id=scope_last_trade_id,
+        trade=trade,
+        tax_scoped_pools=tax_scoped_pools,
+        global_pool=global_pool,
+    )
+    return sale_match
+
+
+def _match_scope_bot_results(
+    *,
+    ownership: Ownership,
+    asset: str,
+    scope_bounds: dict[str, tuple[datetime, datetime, str]],
+    eur_converter: EurConverter,
+) -> dict[str, _PoolLot]:
+    if not scope_bounds:
+        return {}
+    candidates = list(
+        BotNetResult.objects.filter(
+            credential__ownership=ownership,
+            bot_type="spot_grid",
+            base_asset=asset,
+        )
+        .select_related("credential")
+        .order_by("period_start", "id")
+    )
+    matched: dict[str, _PoolLot] = {}
+    used_bot_ids: set[int] = set()
+    for scope, (first_ts, last_ts, quote_asset) in scope_bounds.items():
+        for bot in candidates:
+            if bot.id in used_bot_ids or bot.quote_asset.upper() != quote_asset.upper():
+                continue
+            if abs((bot.period_start - first_ts).total_seconds()) > 180:
+                continue
+            if abs((bot.period_end - last_ts).total_seconds()) > 180:
+                continue
+            lot = _bot_open_base_lot(bot_result=bot, asset=asset, eur_converter=eur_converter)
+            if lot is not None:
+                matched[scope] = lot
+            used_bot_ids.add(bot.id)
+            break
+    return matched
 
 
 def calculate_fifo_for_asset(
@@ -350,54 +570,42 @@ def calculate_fifo_for_asset(
     sale_matches: list[FifoSaleMatch] = []
     warnings: list[str] = []
     missing_data_assets = _build_missing_data_assets(ownership=ownership)
+    tax_scoped_pools: dict[str, list[_PoolLot]] = {}
+    scope_last_trade_id: dict[str, int] = {}
+    scope_bounds: dict[str, tuple[datetime, datetime, str]] = {}
+    for trade in trades:
+        scope = _pionex_tax_scope(trade)
+        if scope:
+            scope_last_trade_id[scope] = trade.id
+            existing = scope_bounds.get(scope)
+            if existing is None:
+                scope_bounds[scope] = (trade.timestamp, trade.timestamp, trade.quote_asset)
+            else:
+                scope_bounds[scope] = (existing[0], trade.timestamp, existing[2])
+    scope_seed_lots = _match_scope_bot_results(
+        ownership=ownership,
+        asset=asset,
+        scope_bounds=scope_bounds,
+        eur_converter=eur_converter,
+    )
 
     for trade in trades:
-        quote_asset_lot = _quote_asset_lot_from_trade(
+        scope = _pionex_tax_scope(trade)
+        if scope and scope in scope_seed_lots and scope not in tax_scoped_pools:
+            tax_scoped_pools[scope] = [scope_seed_lots[scope]]
+        sale_match = _process_asset_trade(
             trade=trade,
             asset=asset,
-            eur_converter=eur_converter,
-        )
-        if quote_asset_lot is not None:
-            pool.append(quote_asset_lot)
-            min_dt = datetime.min.replace(tzinfo=timezone.utc)
-            pool.sort(key=lambda item: (item.buy_date or min_dt, item.buy_trade_id or 0))
-            continue
-
-        if trade.base_asset.upper() != asset:
-            continue
-
-        if trade.side == BrokerTrade.Side.BUY:
-            unit_price_eur = _trade_unit_price_eur(trade=trade, eur_converter=eur_converter)
-            pool.append(
-                _PoolLot(
-                    buy_trade_id=trade.id,
-                    manual_cost_basis_id=None,
-                    deposit_withdrawal_id=None,
-                    buy_date=trade.timestamp,
-                    buy_exchange=_exchange_from_source(trade.source),
-                    buy_symbol=trade.symbol,
-                    quantity_remaining=Decimal(trade.quantity),
-                    unit_price_eur=unit_price_eur,
-                    source_kind="trade",
-                    has_complete_cost_basis=True,
-                )
-            )
-            min_dt = datetime.min.replace(tzinfo=timezone.utc)
-            pool.sort(key=lambda item: (item.buy_date or min_dt, item.buy_trade_id or 0))
-            continue
-
-        if trade.side != BrokerTrade.Side.SELL or trade.timestamp.year != year:
-            continue
-
-        sale_match, gap_reason = _match_sale_against_pool(
-            trade=trade,
-            pool=pool,
-            asset=asset,
-            ownership=ownership,
             year=year,
+            ownership=ownership,
             eur_converter=eur_converter,
             missing_data_assets=missing_data_assets,
+            global_pool=pool,
+            tax_scoped_pools=tax_scoped_pools,
+            scope_last_trade_id=scope_last_trade_id,
         )
+        if sale_match is None:
+            continue
 
         # Keep manual rows in sync with consumed pool quantities.
         if manual_rows:
@@ -413,7 +621,7 @@ def calculate_fifo_for_asset(
 
         if sale_match.gap_quantity > 0:
             warnings.append(
-                f"FIFO gap {asset}: venta {trade.id} con cantidad no cubierta={sale_match.gap_quantity} ({gap_reason})."
+                f"FIFO gap {asset}: venta {trade.id} con cantidad no cubierta={sale_match.gap_quantity} ({sale_match.gap_reason})."
             )
 
         sale_matches.append(sale_match)

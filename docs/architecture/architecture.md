@@ -126,9 +126,14 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `source_comparison` in `reliability` distinguishes `matched`, `api_only`, `csv_only`, `conflicting_amount`, and `conflicting_timestamp`.
    - `DepositWithdrawal` model records explicit external deposits/withdrawals; these are included in balance reconciliation.
    - `fiscal-report` (schema_version=3) exposes `reliability`, `resumen_declarable`, and `resumen_diagnostico`:
-     - `reliability.status`: `declarable | blocked_missing_cost_basis | blocked_unreconciled_balances | provisional`
+     - `reliability.status`: `declarable | blocked_missing_cost_basis | provisional`
      - `resumen_declarable` is `null` when status is `blocked_*` (material gaps present); non-null otherwise.
+     - repeated `balance_reconciliation` mismatches from sync history are exposed as `reconciliation_warnings` only for assets that still have unresolved fiscal exposure; once an asset is fully covered in FIFO, that sync noise is hidden from the fiscal report.
      - `resumen_diagnostico` and the backward-compatible `resumen` always contain full diagnostic totals including gap sales.
+14. Pionex `spot_grid` CSV batches now keep temporary bot-local FIFO pools:
+   - non-manual `tax_id` groups from `pionex_csv` are matched locally first so concurrent bots do not consume each other's `base_asset` inventory,
+   - when a batch ends with leftover base inventory, the remainder is transferred to the global spot pool,
+   - this lets the fiscal report represent the common flow "bot ends, user keeps remaining base asset in spot and sells it later" without inventing fake deposits.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

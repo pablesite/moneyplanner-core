@@ -176,6 +176,135 @@ def _sale_has_pending_cost_basis(sale: dict[str, Any]) -> bool:
     return any(not lot.get("has_complete_cost_basis", True) for lot in sale.get("matched_lots", []))
 
 
+def _build_trade_sections(
+    *,
+    base_asset: str,
+    sales: list[dict[str, Any]],
+    avisos: list[str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    has_pending_cost_basis = any(_sale_has_pending_cost_basis(sale) for sale in sales)
+    valor_transmision = sum((Decimal(sale["proceeds_eur"]) for sale in sales), Decimal("0"))
+    valor_adquisicion = sum(
+        (
+            sum(
+                (
+                    Decimal(lot["cost_eur"]) + Decimal(lot["fee_eur_allocated"])
+                    for lot in sale["matched_lots"]
+                ),
+                Decimal("0"),
+            )
+            for sale in sales
+        ),
+        Decimal("0"),
+    )
+    neto = valor_transmision - valor_adquisicion
+
+    normalized_sales: list[dict[str, Any]] = []
+    precise_sales: list[dict[str, Any]] = []
+    for sale in sales:
+        precise_matched_lots: list[dict[str, Any]] = []
+        for lot in sale["matched_lots"]:
+            precise_matched_lots.append(
+                {
+                    **lot,
+                    "quantity_consumed": Decimal(lot["quantity_consumed"]),
+                    "unit_price_eur": Decimal(lot["unit_price_eur"]),
+                    "cost_eur": Decimal(lot["cost_eur"]),
+                    "fee_eur_allocated": Decimal(lot["fee_eur_allocated"]),
+                    "gain_loss_eur": Decimal(lot["gain_loss_eur"]),
+                }
+            )
+        precise_sales.append(
+            {
+                **sale,
+                "quantity_sold": Decimal(sale["quantity_sold"]),
+                "proceeds_eur": Decimal(sale["proceeds_eur"]),
+                "fee_eur": Decimal(sale["fee_eur"]),
+                "gap_quantity": Decimal(sale["gap_quantity"]),
+                "matched_lots": precise_matched_lots,
+            }
+        )
+        normalized_sale = {
+            **sale,
+            "quantity_sold": float(Decimal(sale["quantity_sold"])),
+            "proceeds_eur": _to_float(Decimal(sale["proceeds_eur"])),
+            "fee_eur": _to_float(Decimal(sale["fee_eur"])),
+            "gap_quantity": float(Decimal(sale["gap_quantity"])),
+            "matched_lots": [],
+        }
+        for lot in sale["matched_lots"]:
+            normalized_sale["matched_lots"].append(
+                {
+                    **lot,
+                    "quantity_consumed": float(Decimal(lot["quantity_consumed"])),
+                    "unit_price_eur": _to_float(Decimal(lot["unit_price_eur"])),
+                    "cost_eur": _to_float(Decimal(lot["cost_eur"])),
+                    "fee_eur_allocated": _to_float(Decimal(lot["fee_eur_allocated"])),
+                    "gain_loss_eur": _to_float(Decimal(lot["gain_loss_eur"])),
+                }
+            )
+        if sale.get("gap_reason"):
+            avisos.append(f"Gap FIFO en {base_asset} venta {sale['sell_trade_id']}: {sale['gap_reason']}.")
+        for lot in normalized_sale["matched_lots"]:
+            if lot.get("deposit_withdrawal_id") and not lot.get("has_complete_cost_basis", True):
+                avisos.append(
+                    "Deposito externo usado en FIFO sin coste base informado: "
+                    f"{base_asset} venta {sale['sell_trade_id']} deposito {lot['deposit_withdrawal_id']}."
+                )
+        normalized_sales.append(normalized_sale)
+
+    precise_section = {
+        "denominacion": base_asset,
+        "casilla": "332",
+        "valor_transmision_eur": valor_transmision,
+        "valor_adquisicion_eur": valor_adquisicion,
+        "ganancia_eur": neto if neto > 0 else Decimal("0"),
+        "perdida_eur": abs(neto) if neto < 0 else Decimal("0"),
+        "has_pending_cost_basis": has_pending_cost_basis,
+        "sales": precise_sales,
+    }
+    normalized_section = {
+        "denominacion": base_asset,
+        "casilla": "332",
+        "valor_transmision_eur": _to_float(valor_transmision),
+        "valor_adquisicion_eur": _to_float(valor_adquisicion),
+        "ganancia_eur": _to_float(neto if neto > 0 else Decimal("0")),
+        "perdida_eur": _to_float(abs(neto) if neto < 0 else Decimal("0")),
+        "has_pending_cost_basis": has_pending_cost_basis,
+        "sales": normalized_sales,
+    }
+    return precise_section, normalized_section
+
+
+def _dedupe_reconciliation_gaps(recon_gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for gap in recon_gaps:
+        key = (
+            str(gap.get("asset") or "").strip().upper(),
+            str(gap.get("diff") or ""),
+            str(gap.get("expected") or ""),
+            str(gap.get("actual") or ""),
+        )
+        existing = grouped.get(key)
+        if existing is None:
+            grouped[key] = {
+                **gap,
+                "asset": key[0],
+                "repeated_runs": 1,
+            }
+            continue
+        existing["repeated_runs"] += 1
+    return sorted(
+        grouped.values(),
+        key=lambda gap: (
+            str(gap.get("asset") or ""),
+            str(gap.get("diff") or ""),
+            str(gap.get("expected") or ""),
+            str(gap.get("actual") or ""),
+        ),
+    )
+
+
 def _build_reliability(
     *,
     ownership: Ownership,
@@ -223,6 +352,16 @@ def _build_reliability(
                 and gap.get("reason") == "balance_mismatch"
             ):
                 recon_gaps.append(gap)
+    reconciled_assets = {
+        str(section.get("denominacion") or "").strip().upper()
+        for section in ganancias_perdidas_trades
+        if section.get("denominacion") and not section.get("has_pending_cost_basis", False)
+    }
+    recon_gap_warnings = [
+        gap
+        for gap in _dedupe_reconciliation_gaps(recon_gaps)
+        if str(gap.get("asset") or "").strip().upper() not in reconciled_assets
+    ]
 
     blocking_gaps_material = [
         g
@@ -237,10 +376,7 @@ def _build_reliability(
             *blocking_gaps_material,
             *missing_external_cost_basis,
         ]
-    elif recon_gaps:
-        status = "blocked_unreconciled_balances"
-        blocking_gaps_out = recon_gaps
-    elif pre_period_gaps:
+    elif pre_period_gaps or recon_gap_warnings:
         status = "provisional"
         blocking_gaps_out = pre_period_gaps
     else:
@@ -250,6 +386,7 @@ def _build_reliability(
     return {
         "status": status,
         "blocking_gaps": blocking_gaps_out,
+        "reconciliation_warnings": recon_gap_warnings,
         "input_coverage": data_sources,
         "source_comparison": _build_source_comparison(ownership=ownership),
     }
@@ -355,6 +492,7 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
         )
     )
     ganancias_perdidas_trades: list[dict[str, Any]] = []
+    ganancias_perdidas_trades_precise: list[dict[str, Any]] = []
     fifo_has_gaps = False
     for base_asset in base_assets:
         fifo_result = calculate_fifo_for_asset(
@@ -369,68 +507,13 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
             fifo_has_gaps = True
         if not sales:
             continue
-        has_pending_cost_basis = any(_sale_has_pending_cost_basis(sale) for sale in sales)
-        valor_transmision = sum((Decimal(sale["proceeds_eur"]) for sale in sales), Decimal("0"))
-        valor_adquisicion = sum(
-            (
-                sum(
-                    (
-                        Decimal(lot["cost_eur"]) + Decimal(lot["fee_eur_allocated"])
-                        for lot in sale["matched_lots"]
-                    ),
-                    Decimal("0"),
-                )
-                for sale in sales
-            ),
-            Decimal("0"),
+        precise_section, normalized_section = _build_trade_sections(
+            base_asset=base_asset,
+            sales=sales,
+            avisos=avisos,
         )
-        neto = valor_transmision - valor_adquisicion
-
-        normalized_sales: list[dict[str, Any]] = []
-        for sale in sales:
-            normalized_sale = {
-                **sale,
-                "quantity_sold": float(Decimal(sale["quantity_sold"])),
-                "proceeds_eur": _to_float(Decimal(sale["proceeds_eur"])),
-                "fee_eur": _to_float(Decimal(sale["fee_eur"])),
-                "gap_quantity": float(Decimal(sale["gap_quantity"])),
-                "matched_lots": [],
-            }
-            for lot in sale["matched_lots"]:
-                normalized_sale["matched_lots"].append(
-                    {
-                        **lot,
-                        "quantity_consumed": float(Decimal(lot["quantity_consumed"])),
-                        "unit_price_eur": _to_float(Decimal(lot["unit_price_eur"])),
-                        "cost_eur": _to_float(Decimal(lot["cost_eur"])),
-                        "fee_eur_allocated": _to_float(Decimal(lot["fee_eur_allocated"])),
-                        "gain_loss_eur": _to_float(Decimal(lot["gain_loss_eur"])),
-                    }
-                )
-            if sale.get("gap_reason"):
-                avisos.append(
-                    f"Gap FIFO en {base_asset} venta {sale['sell_trade_id']}: {sale['gap_reason']}."
-                )
-            for lot in normalized_sale["matched_lots"]:
-                if lot.get("deposit_withdrawal_id") and not lot.get("has_complete_cost_basis", True):
-                    avisos.append(
-                        "Deposito externo usado en FIFO sin coste base informado: "
-                        f"{base_asset} venta {sale['sell_trade_id']} deposito {lot['deposit_withdrawal_id']}."
-                    )
-            normalized_sales.append(normalized_sale)
-
-        ganancias_perdidas_trades.append(
-            {
-                "denominacion": base_asset,
-                "casilla": "332",
-                "valor_transmision_eur": _to_float(valor_transmision),
-                "valor_adquisicion_eur": _to_float(valor_adquisicion),
-                "ganancia_eur": _to_float(neto if neto > 0 else Decimal("0")),
-                "perdida_eur": _to_float(abs(neto) if neto < 0 else Decimal("0")),
-                "has_pending_cost_basis": has_pending_cost_basis,
-                "sales": normalized_sales,
-            }
-        )
+        ganancias_perdidas_trades_precise.append(precise_section)
+        ganancias_perdidas_trades.append(normalized_section)
 
     if base_assets and not fifo_has_gaps:
         avisos.append(
@@ -473,6 +556,13 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
         ganancias_perdidas_trades=ganancias_perdidas_trades,
         data_sources=data_sources,
     )
+    for gap in reliability.get("reconciliation_warnings", []):
+        avisos.append(
+            "Reconciliacion historica pendiente detectada en sync: "
+            f"{gap.get('asset')} diff {gap.get('diff')} "
+            f"(repetido en {gap.get('repeated_runs')} sync runs). "
+            "No bloquea el resumen declarable si el FIFO ya queda cubierto."
+        )
 
     # resumen_diagnostico: all trades including gap sales (full picture).
     resumen_diagnostico = {
@@ -483,12 +573,12 @@ def generate_fiscal_report(*, ownership: Ownership, year: int) -> dict[str, Any]
     }
 
     # resumen_declarable: only gap-free sales; null when status is blocked.
-    blocked_statuses = {"blocked_missing_cost_basis", "blocked_unreconciled_balances"}
+    blocked_statuses = {"blocked_missing_cost_basis"}
     if reliability["status"] in blocked_statuses:
         resumen_declarable = None
     else:
         resumen_declarable = _compute_resumen_declarable(
-            ganancias_perdidas_trades=ganancias_perdidas_trades,
+            ganancias_perdidas_trades=ganancias_perdidas_trades_precise,
             ganancias_perdidas_futuros=ganancias_perdidas_futuros,
             total_capital=total_capital,
         )

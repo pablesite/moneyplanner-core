@@ -1,3 +1,5 @@
+from .binance_fiat_deposits import import_binance_fiat_deposits
+from .binance_simple_earn_flexible import import_binance_simple_earn_flexible
 from .binance_convert import import_binance_convert
 from .binance_recurring import import_binance_recurring
 from .binance_transactions import import_binance_transactions
@@ -16,6 +18,8 @@ __all__ = [
     "import_pionex_dust",
     "import_pionex_deposit_withdraw",
     "import_binance_transactions",
+    "import_binance_fiat_deposits",
+    "import_binance_simple_earn_flexible",
     "import_binance_convert",
     "import_binance_recurring",
 ]
