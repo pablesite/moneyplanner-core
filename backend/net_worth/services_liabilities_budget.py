@@ -11,6 +11,7 @@ from .models import Asset, Liability
 from .services_liabilities_core import (
     FURNISHINGS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY,
     INVESTMENTS_SUBCATEGORY_TO_EXPENSE_SUBCATEGORY,
+    _last_day_of_month,
     build_liability_installment_schedule_simple,
     estimate_liability_outstanding_amount_simple,
 )
@@ -169,6 +170,42 @@ def _get_generated_liability_owner_name(*, liability: Liability) -> str:
     return ""
 
 
+def _should_include_installment_in_cancellation_month(*, liability: Liability) -> bool:
+    return bool(getattr(liability, "cancellation_include_payment_month", True))
+
+
+def _is_due_before_cancellation(*, liability: Liability, due_date, cancellation_date) -> bool:
+    due_month_key = (due_date.year, due_date.month)
+    cancellation_month_key = (cancellation_date.year, cancellation_date.month)
+    if _should_include_installment_in_cancellation_month(liability=liability):
+        return due_month_key <= cancellation_month_key
+    return due_month_key < cancellation_month_key
+
+
+def _cancellation_principal_reference_date(*, liability: Liability, cancellation_date):
+    if _should_include_installment_in_cancellation_month(liability=liability):
+        return cancellation_date.replace(
+            day=_last_day_of_month(cancellation_date.year, cancellation_date.month)
+        )
+    return cancellation_date.replace(day=1) - timedelta(days=1)
+
+
+def _estimate_cancellation_remaining_principal(*, liability: Liability, cancellation_date):
+    reference_date = _cancellation_principal_reference_date(
+        liability=liability,
+        cancellation_date=cancellation_date,
+    )
+    original_flag = liability.cancellation_forecast_enabled
+    liability.cancellation_forecast_enabled = False
+    try:
+        return estimate_liability_outstanding_amount_simple(
+            liability=liability,
+            as_of_date=reference_date,
+        )
+    finally:
+        liability.cancellation_forecast_enabled = original_flag
+
+
 @transaction.atomic
 def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> None:
     from budget.models import AnnualExpenseEntry
@@ -182,7 +219,13 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
     if liability.cancellation_forecast_enabled and liability.cancellation_date is not None:
         cancellation_date = liability.cancellation_date
         schedule = [
-            (due_date, amount) for due_date, amount in full_schedule if due_date < cancellation_date
+            (due_date, amount)
+            for due_date, amount in full_schedule
+            if _is_due_before_cancellation(
+                liability=liability,
+                due_date=due_date,
+                cancellation_date=cancellation_date,
+            )
         ]
     if not full_schedule:
         return
@@ -237,7 +280,6 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             "expense_type",
             "time_profile",
             "cashflow_role",
-            "notes",
         )
         is_customized = any(
             getattr(row, field_name) != generated_defaults[field_name]
@@ -264,8 +306,9 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             row.save(update_fields=update_fields)
 
     if cancellation_date is not None and cancellation_date >= liability.start_date:
-        remaining_principal = estimate_liability_outstanding_amount_simple(
-            liability=liability, as_of_date=cancellation_date - timedelta(days=1)
+        remaining_principal = _estimate_cancellation_remaining_principal(
+            liability=liability,
+            cancellation_date=cancellation_date,
         )
         if remaining_principal is not None and remaining_principal > 0:
             principal_defaults = {

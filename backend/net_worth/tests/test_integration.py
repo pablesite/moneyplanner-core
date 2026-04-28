@@ -1529,6 +1529,103 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(fee_row.target_month, 6)
         self.assertGreater(fee_row.amount_annual, Decimal("0.00"))
 
+    def test_mortgage_cancellation_can_omit_installment_for_cancellation_month(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca sin cuota del mes de cancelacion",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "120000.00",
+                "principal_amount": "120000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "cancellation_forecast_enabled": True,
+                "cancellation_date": "2027-06-15",
+                "cancellation_include_payment_month": False,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        liability_id = response.data["id"]
+
+        recurrent_2027 = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+            fiscal_year=2027,
+            event_group=f"liability_{liability_id}",
+        )
+        principal_row = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+            fiscal_year=2027,
+            event_group=f"liability_{liability_id}_cancellation_principal",
+        )
+
+        monthly_installment = Decimal(response.data["estimated_monthly_payment_amount"])
+        self.assertEqual(recurrent_2027.term_end_month, 5)
+        self.assertEqual(
+            recurrent_2027.amount_annual,
+            (monthly_installment * Decimal("5")).quantize(Decimal("0.01")),
+        )
+        self.assertGreater(principal_row.amount_annual, Decimal("0.00"))
+
+    def test_generated_mortgage_recurrent_amount_still_recalculates_when_only_notes_were_edited(self):
+        response = self.client.post(
+            "/api/net-worth/liabilities/",
+            {
+                "name": "Hipoteca notas editadas",
+                "category": Liability.Category.MORTGAGE,
+                "tracking_mode": Liability.TrackingMode.MANUAL,
+                "currency": "EUR",
+                "start_date": "2026-01-15",
+                "annual_interest_tae": "2.50",
+                "amount": "120000.00",
+                "principal_amount": "120000.00",
+                "term_months": 360,
+                "rate_type": "fixed",
+                "payment_frequency": "monthly",
+                "amortization_system": "french",
+                "cancellation_forecast_enabled": True,
+                "cancellation_date": "2027-06-15",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        liability_id = response.data["id"]
+        recurrent = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            source_liability_id=liability_id,
+            is_system_generated=True,
+            fiscal_year=2027,
+            event_group=f"liability_{liability_id}",
+        )
+        recurrent.notes = "Editado por el usuario para dejar contexto."
+        recurrent.save(update_fields=["notes"])
+
+        patch_response = self.client.patch(
+            f"/api/net-worth/liabilities/{liability_id}/",
+            {"cancellation_include_payment_month": False},
+            format="json",
+        )
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK, patch_response.data)
+
+        recurrent.refresh_from_db()
+        monthly_installment = Decimal(patch_response.data["estimated_monthly_payment_amount"])
+        self.assertEqual(recurrent.notes, "Editado por el usuario para dejar contexto.")
+        self.assertEqual(recurrent.term_end_month, 5)
+        self.assertEqual(
+            recurrent.amount_annual,
+            (monthly_installment * Decimal("5")).quantize(Decimal("0.01")),
+        )
+
     def test_mortgage_with_cancellation_fee_amount_uses_fixed_fee(self):
         response = self.client.post(
             "/api/net-worth/liabilities/",

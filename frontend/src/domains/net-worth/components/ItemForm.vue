@@ -52,6 +52,7 @@ type Props = {
     linked_products_monthly_cost?: string | null;
     cancellation_forecast_enabled?: boolean;
     cancellation_date?: string | null;
+    cancellation_include_payment_month?: boolean;
     cancellation_fee_amount?: string | null;
     amortization_method?: string;
     amortization_term_years?: number | string | null;
@@ -300,6 +301,7 @@ const form = reactive({
   linked_products_monthly_cost: '',
   cancellation_forecast_enabled: false,
   cancellation_date: '',
+  cancellation_include_payment_month: true,
   cancellation_fee_amount: '',
   expense_subcategory_override: '',
   amortization_method: 'none',
@@ -1027,7 +1029,8 @@ function buildInvestmentPayload(normalizedAmount: string): Partial<ItemFormPaylo
             ...(row.id ? { id: row.id } : {}),
             start_date: String(row.start_date).trim(),
             end_date: String(row.end_date ?? '').trim() ? String(row.end_date).trim() : null,
-            amount: sanitizeAmount(row.amount, maxDecimals.value).value ?? String(row.amount).trim(),
+            amount:
+              sanitizeAmount(row.amount, maxDecimals.value).value ?? String(row.amount).trim(),
             frequency: row.frequency === 'weekly' ? 'weekly' : 'monthly',
             currency: String(row.currency ?? '').trim() || null,
           }))
@@ -1092,6 +1095,10 @@ function buildLiabilityPayload(): Partial<ItemFormPayload> {
       String(form.cancellation_date ?? '').trim()
         ? String(form.cancellation_date).trim()
         : null,
+    cancellation_include_payment_month:
+      showMortgageCancellationForecastFields.value && form.cancellation_forecast_enabled
+        ? !!form.cancellation_include_payment_month
+        : undefined,
     cancellation_fee_amount:
       showMortgageCancellationForecastFields.value &&
       form.cancellation_forecast_enabled &&
@@ -1167,6 +1174,7 @@ function resetFormAfterSubmit(): void {
   form.linked_products_monthly_cost = '';
   form.cancellation_forecast_enabled = false;
   form.cancellation_date = '';
+  form.cancellation_include_payment_month = true;
   form.cancellation_fee_amount = '';
   form.expense_subcategory_override = 'financial_commitments';
   form.amortization_method = 'none';
@@ -1200,6 +1208,7 @@ function applyLiabilityCategoryDefaults(category: string): void {
     form.linked_products_monthly_cost = '';
     form.cancellation_forecast_enabled = false;
     form.cancellation_date = '';
+    form.cancellation_include_payment_month = true;
     form.cancellation_fee_amount = '';
   }
   if (category === 'mortgage') {
@@ -1260,6 +1269,7 @@ function populateFormFromInitial(initial: NonNullable<Props['initial']>): void {
   form.linked_products_monthly_cost = initial.linked_products_monthly_cost ?? '';
   form.cancellation_forecast_enabled = !!initial.cancellation_forecast_enabled;
   form.cancellation_date = initial.cancellation_date ?? '';
+  form.cancellation_include_payment_month = initial.cancellation_include_payment_month ?? true;
   form.cancellation_fee_amount = initial.cancellation_fee_amount ?? '';
   form.amortization_method = initial.amortization_method ?? 'none';
   form.amortization_term_years =
@@ -1367,8 +1377,8 @@ const investmentContributionError = computed(() => {
   for (const interval of contributionIntervals.value) {
     const hasAnyValue = Boolean(
       String(interval.start_date ?? '').trim() ||
-        String(interval.end_date ?? '').trim() ||
-        String(interval.amount ?? '').trim(),
+      String(interval.end_date ?? '').trim() ||
+      String(interval.amount ?? '').trim(),
     );
     if (!hasAnyValue) continue;
     if (!String(interval.start_date ?? '').trim()) return 'Cada intervalo requiere fecha inicio.';
@@ -1564,6 +1574,7 @@ watch(
   (enabled) => {
     if (!enabled) {
       form.cancellation_date = '';
+      form.cancellation_include_payment_month = true;
       form.cancellation_fee_amount = '';
     } else if (!String(form.cancellation_date ?? '').trim()) {
       form.cancellation_date = getLiabilityScheduleAnchorDate() || todayIsoDate();
@@ -2318,6 +2329,13 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
             <input v-model="form.cancellation_date" type="date" class="input ui-data-field" />
           </label>
           <label class="ui-item-form-field">
+            <span class="ui-item-form-label">Cuota del mes de cancelación</span>
+            <select v-model="form.cancellation_include_payment_month" class="select ui-data-field">
+              <option :value="true">Sí, se paga</option>
+              <option :value="false">No, se omite</option>
+            </select>
+          </label>
+          <label class="ui-item-form-field">
             <span class="ui-item-form-label">Comision cancelacion (importe)</span>
             <input
               v-model="form.cancellation_fee_amount"
@@ -2329,7 +2347,8 @@ watch([() => form.start_date, () => form.payment_start_date], () => {
         </div>
         <div v-if="form.cancellation_forecast_enabled" class="ui-form-help">
           Si no indicas importe, se estimará con "Amortización anticipada (%)" sobre el saldo
-          pendiente.
+          pendiente. La opción de cuota decide si el mes de cancelación sigue contando como pago
+          recurrente o si el presupuesto corta un mes antes.
         </div>
       </details>
 

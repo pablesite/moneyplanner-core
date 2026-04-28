@@ -178,6 +178,7 @@ def validate_liability_payload(
     term_months=None,
     cancellation_forecast_enabled: bool | None = None,
     cancellation_date=None,
+    cancellation_include_payment_month: bool | None = None,
     cancellation_fee_amount=None,
     expense_subcategory_override: str | None = None,
     financed_asset=None,
@@ -212,27 +213,13 @@ def validate_liability_payload(
             {"expected_end_date": "Debe ser igual o posterior a payment_start_date."}
         )
 
-    if cancellation_forecast_enabled:
-        if category != Liability.Category.MORTGAGE:
-            raise DRFValidationError(
-                {
-                    "cancellation_forecast_enabled": (
-                        "La prevision de cancelacion anticipada solo aplica a hipotecas."
-                    )
-                }
-            )
-        if cancellation_date is None:
-            raise DRFValidationError(
-                {"cancellation_date": "Requerida si cancellation_forecast_enabled=true."}
-            )
-        if start_date and cancellation_date < start_date:
-            raise DRFValidationError(
-                {"cancellation_date": "Debe ser igual o posterior a start_date."}
-            )
-    elif cancellation_date is not None:
-        raise DRFValidationError(
-            {"cancellation_date": "Solo se permite si cancellation_forecast_enabled=true."}
-        )
+    _validate_liability_cancellation_payload(
+        category=category,
+        start_date=start_date,
+        cancellation_forecast_enabled=cancellation_forecast_enabled,
+        cancellation_date=cancellation_date,
+        cancellation_include_payment_month=cancellation_include_payment_month,
+    )
 
     if cancellation_fee_amount not in (None, ""):
         try:
@@ -279,6 +266,46 @@ def validate_liability_payload(
                     )
                 }
             )
+
+
+def _validate_liability_cancellation_payload(
+    *,
+    category: str | None,
+    start_date,
+    cancellation_forecast_enabled: bool | None,
+    cancellation_date,
+    cancellation_include_payment_month: bool | None,
+) -> None:
+    if cancellation_forecast_enabled:
+        if category != Liability.Category.MORTGAGE:
+            raise DRFValidationError(
+                {
+                    "cancellation_forecast_enabled": (
+                        "La prevision de cancelacion anticipada solo aplica a hipotecas."
+                    )
+                }
+            )
+        if cancellation_date is None:
+            raise DRFValidationError(
+                {"cancellation_date": "Requerida si cancellation_forecast_enabled=true."}
+            )
+        if start_date and cancellation_date < start_date:
+            raise DRFValidationError(
+                {"cancellation_date": "Debe ser igual o posterior a start_date."}
+            )
+        return
+    if cancellation_date is not None:
+        raise DRFValidationError(
+            {"cancellation_date": "Solo se permite si cancellation_forecast_enabled=true."}
+        )
+    if cancellation_include_payment_month not in (None, True):
+        raise DRFValidationError(
+            {
+                "cancellation_include_payment_month": (
+                    "Solo se permite si cancellation_forecast_enabled=true."
+                )
+            }
+        )
 
 
 def infer_liability_is_asset_backed(*, financed_asset) -> bool:

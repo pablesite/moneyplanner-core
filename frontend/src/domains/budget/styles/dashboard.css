@@ -1711,7 +1711,7 @@
 .ui-budget-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-areas: "main metrics" "context context";
+  grid-template-areas: 'main metrics' 'context context';
   gap: 12px;
   padding: 8px 12px 8px 28px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -1918,7 +1918,10 @@
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .ui-budget-group-add-btn:hover {
@@ -1963,8 +1966,43 @@
 
 .ui-budget-detail-toggle-bar {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
   justify-content: flex-start;
   padding: 8px 0 0;
+}
+
+.ui-budget-section-rollup {
+  flex: 1 1 420px;
+  min-width: min(100%, 420px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ui-budget-section-rollup-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.ui-budget-detail-month-bar-inline {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ui-budget-detail-month-bar-inline .ui-budget-filter-segment {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 @media (max-width: 980px) {
@@ -2009,7 +2047,7 @@
 
   .ui-budget-row {
     grid-template-columns: 1fr;
-    grid-template-areas: "main" "metrics" "context";
+    grid-template-areas: 'main' 'metrics' 'context';
     gap: 8px;
   }
 
@@ -2023,6 +2061,11 @@
 
   .ui-budget-inline-progress-row {
     max-width: none;
+  }
+
+  .ui-budget-section-rollup-controls {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

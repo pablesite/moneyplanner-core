@@ -69,6 +69,7 @@ export type Asset = {
   linked_products_monthly_cost?: string | null;
   cancellation_forecast_enabled?: boolean;
   cancellation_date?: string | null;
+  cancellation_include_payment_month?: boolean;
   cancellation_fee_amount?: string | null;
   amount_base?: string;
   is_active: boolean;

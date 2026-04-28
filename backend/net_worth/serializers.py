@@ -610,6 +610,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             "linked_products_monthly_cost",
             "cancellation_forecast_enabled",
             "cancellation_date",
+            "cancellation_include_payment_month",
             "cancellation_fee_amount",
             "amount_base",
             "is_active",
@@ -656,6 +657,10 @@ class LiabilitySerializer(serializers.ModelSerializer):
         cancellation_date = attrs.get(
             "cancellation_date", getattr(self.instance, "cancellation_date", None)
         )
+        cancellation_include_payment_month = attrs.get(
+            "cancellation_include_payment_month",
+            getattr(self.instance, "cancellation_include_payment_month", True),
+        )
         cancellation_fee_amount = attrs.get(
             "cancellation_fee_amount", getattr(self.instance, "cancellation_fee_amount", None)
         )
@@ -668,14 +673,18 @@ class LiabilitySerializer(serializers.ModelSerializer):
         if category != Liability.Category.MORTGAGE:
             cancellation_forecast_enabled = False
             cancellation_date = None
+            cancellation_include_payment_month = True
             cancellation_fee_amount = None
             attrs["cancellation_forecast_enabled"] = False
             attrs["cancellation_date"] = None
+            attrs["cancellation_include_payment_month"] = True
             attrs["cancellation_fee_amount"] = None
         elif not cancellation_forecast_enabled:
             cancellation_date = None
+            cancellation_include_payment_month = True
             cancellation_fee_amount = None
             attrs["cancellation_date"] = None
+            attrs["cancellation_include_payment_month"] = True
             attrs["cancellation_fee_amount"] = None
 
         if financed_asset is not None or category == Liability.Category.MORTGAGE:
@@ -694,6 +703,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
             term_months=term_months,
             cancellation_forecast_enabled=cancellation_forecast_enabled,
             cancellation_date=cancellation_date,
+            cancellation_include_payment_month=cancellation_include_payment_month,
             cancellation_fee_amount=cancellation_fee_amount,
             expense_subcategory_override=expense_subcategory_override,
             financed_asset=financed_asset,

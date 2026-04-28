@@ -584,6 +584,13 @@ class Liability(models.Model):
         blank=True,
         help_text="Fecha prevista de cancelacion anticipada (si aplica).",
     )
+    cancellation_include_payment_month = models.BooleanField(
+        default=True,
+        help_text=(
+            "Si true, incluye la cuota periodica del mismo mes en el que se cancela "
+            "anticipadamente el pasivo."
+        ),
+    )
     cancellation_fee_amount = models.DecimalField(
         max_digits=20,
         decimal_places=8,

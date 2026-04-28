@@ -12,6 +12,7 @@ from budget.models import (
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
 )
+from net_worth.models import Liability
 from budget.services import (
     EXPENSE_TAXONOMY,
     INCOME_TAXONOMY,
@@ -175,8 +176,9 @@ class BudgetServicesTests(TestCase):
             fiscal_year=2026,
             currency="EUR",
         )
-        self.assertTrue(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
+        self.assertTrue(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2026))
         self.assertFalse(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2028))
+        self.assertFalse(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
 
     def test_income_entry_applies_to_fiscal_year_for_one_off_and_term(self):
         one_off = AnnualIncomeEntry.objects.create(
@@ -204,8 +206,9 @@ class BudgetServicesTests(TestCase):
             fiscal_year=2026,
             currency="EUR",
         )
-        self.assertTrue(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
+        self.assertTrue(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2026))
         self.assertFalse(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2028))
+        self.assertFalse(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
 
     def test_planned_expense_distribution_handles_one_off_and_term_end(self):
         one_off = AnnualExpenseEntry.objects.create(
@@ -238,8 +241,89 @@ class BudgetServicesTests(TestCase):
         )
         distribution = planned_expense_monthly_distribution(entry=term, fiscal_year=2026)
         self.assertEqual(len(distribution), 6)
-        self.assertEqual(distribution[1], Decimal("100.00"))
+        self.assertEqual(distribution[1], Decimal("200.00"))
         self.assertEqual(sum(distribution.values()), Decimal("1200.00"))
+
+    def test_planned_expense_distribution_uses_term_end_month_when_end_year_missing(self):
+        term = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso temporal sin fin anual",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_month=10,
+            term_end_year=None,
+            amount_annual=Decimal("2810.39"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        distribution = planned_expense_monthly_distribution(entry=term, fiscal_year=2026)
+        self.assertEqual(len(distribution), 10)
+        self.assertEqual(distribution[1], Decimal("281.04"))
+        self.assertEqual(distribution[10], Decimal("281.03"))
+        self.assertEqual(sum(distribution.values()), Decimal("2810.39"))
+
+    def test_planned_expense_distribution_uses_expense_type_for_legacy_one_off_rows(self):
+        legacy_one_off = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cancelacion anticipada",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            target_month=11,
+            amount_annual=Decimal("15453.77"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+        self.assertEqual(
+            planned_expense_monthly_distribution(entry=legacy_one_off, fiscal_year=2026),
+            {11: Decimal("15453.77")},
+        )
+
+    def test_expense_summary_ignores_historical_rows_from_other_fiscal_years(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso antiguo",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            amount_annual=Decimal("964.46"),
+            fiscal_year=2025,
+            term_end_year=2026,
+            term_end_month=11,
+            currency="EUR",
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso actual",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            amount_annual=Decimal("2810.39"),
+            fiscal_year=2026,
+            term_end_year=2026,
+            term_end_month=11,
+            currency="EUR",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        subcategories = {
+            row["subcategory"]: row
+            for row in categories["real_estate_assets"]["subcategories"]
+        }
+        mortgage = subcategories["mortgage_principal"]
+        self.assertEqual(mortgage["planned_total"], "2810.39")
+        self.assertEqual(mortgage["months"][0]["planned"], "255.49")
+        self.assertEqual(mortgage["months"][1]["planned"], "255.49")
+        self.assertEqual(mortgage["months"][2]["planned"], "255.49")
 
     def test_planned_income_distribution_handles_one_off_and_term_end(self):
         one_off = AnnualIncomeEntry.objects.create(
@@ -495,6 +579,82 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(subcategories["living_expenses"]["executed_unbudgeted_total"], "0.00")
         self.assertEqual(subcategories["health_wellbeing"]["has_budgeted_line"], False)
         self.assertEqual(subcategories["health_wellbeing"]["executed_unbudgeted_total"], "45.00")
+
+    def test_expense_summary_groups_mortgage_interest_into_mortgage_principal_budget_line(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            amount_annual=Decimal("3000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Hipoteca vivienda",
+            category=Liability.Category.MORTGAGE,
+            currency="EUR",
+            amount=Decimal("120000.00"),
+            is_active=True,
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Pasivo hipoteca",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=liability,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 15),
+            value_date=date(2026, 3, 15),
+            description="Cuota hipoteca marzo",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=liability_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("200.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="real_estate_assets",
+            subcategory_key="mortgage_principal",
+            liability=liability,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("50.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="financial_commitments",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("250.00"),
+            currency="EUR",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+
+        self.assertEqual(summary["executed_total"], "250.00")
+        self.assertEqual(summary["executed_budgeted_total"], "250.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "0.00")
+
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        mortgage = categories["real_estate_assets"]
+        subcategories = {row["subcategory"]: row for row in mortgage["subcategories"]}
+        self.assertEqual(subcategories["mortgage_principal"]["executed_total"], "250.00")
+        self.assertEqual(subcategories["mortgage_principal"]["executed_unbudgeted_total"], "0.00")
 
     def test_expense_summary_includes_fully_unbudgeted_category_without_double_counting(self):
         AnnualExpenseEntry.objects.create(
