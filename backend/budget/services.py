@@ -149,7 +149,20 @@ def _round_money(value: Decimal) -> Decimal:
 
 def _resolve_ledger_budget_classification(
     row: LedgerEntry,
+    *,
+    mortgage_payment_transaction_ids: set[int] | None = None,
 ) -> tuple[str, str, str, bool]:
+    if (
+        mortgage_payment_transaction_ids
+        and row.transaction_id in mortgage_payment_transaction_ids
+        and row.flow_family == LedgerEntry.FlowFamily.EXPENSE
+    ):
+        return (
+            cast(str, LedgerEntry.FlowFamily.EXPENSE),
+            "real_estate_assets",
+            "mortgage_principal",
+            True,
+        )
     if row.flow_family and row.category_key and row.subcategory_key:
         return row.flow_family, row.category_key, row.subcategory_key, True
     if row.annual_income_entry_id is not None and row.annual_income_entry is not None:
@@ -183,8 +196,9 @@ def _build_ledger_monthly_execution_maps(
             transaction__status=LedgerTransaction.Status.POSTED,
             transaction__booking_date__year=fiscal_year,
         )
-        .select_related("transaction", "annual_income_entry", "annual_expense_entry")
+        .select_related("transaction", "annual_income_entry", "annual_expense_entry", "liability")
         .only(
+            "transaction_id",
             "side",
             "amount",
             "flow_family",
@@ -192,6 +206,8 @@ def _build_ledger_monthly_execution_maps(
             "subcategory_key",
             "annual_income_entry_id",
             "annual_expense_entry_id",
+            "liability_id",
+            "liability__category",
             "transaction__booking_date",
             "annual_income_entry__category",
             "annual_income_entry__subcategory",
@@ -199,11 +215,23 @@ def _build_ledger_monthly_execution_maps(
             "annual_expense_entry__subcategory",
         )
     )
+    rows = list(queryset)
+    mortgage_payment_transaction_ids = {
+        row.transaction_id
+        for row in rows
+        if row.liability_id is not None
+        and row.liability is not None
+        and row.liability.category == "mortgage"
+        and row.flow_family == LedgerEntry.FlowFamily.EXPENSE
+    }
     categorized_totals: dict[tuple[str, str, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
     legacy_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
-    for row in queryset:
+    for row in rows:
         resolved_flow_family, category_key, subcategory_key, is_primary_classification = (
-            _resolve_ledger_budget_classification(row)
+            _resolve_ledger_budget_classification(
+                row,
+                mortgage_payment_transaction_ids=mortgage_payment_transaction_ids,
+            )
         )
         if resolved_flow_family != flow_family:
             continue
@@ -406,15 +434,13 @@ def _build_expense_execution_breakdown(
 
 
 def expense_entry_applies_to_fiscal_year(*, entry: AnnualExpenseEntry, fiscal_year: int) -> bool:
-    if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
-        return entry.fiscal_year == fiscal_year
-    if entry.fiscal_year > fiscal_year:
+    if entry.fiscal_year != fiscal_year:
         return False
     if entry.time_profile != AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
         return True
     if entry.term_end_year is None:
-        return False
-    return fiscal_year <= entry.term_end_year
+        return True
+    return entry.term_end_year >= fiscal_year
 
 
 def planned_expense_monthly_distribution(
@@ -425,18 +451,21 @@ def planned_expense_monthly_distribution(
         return {}
     if not expense_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
         return {}
-    if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
+    if (
+        entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
+        or entry.expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
+    ):
         if not entry.target_month:
             return {}
         return {int(entry.target_month): _round_money(amount)}
 
-    base = _round_money(amount / Decimal("12"))
     end_month = 12
     if (
         entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
-        and entry.term_end_year == fiscal_year
+        and (entry.term_end_year is None or entry.term_end_year == fiscal_year)
     ):
         end_month = entry.term_end_month or 12
+    base = _round_money(amount / Decimal(end_month))
     distribution = {month: base for month in range(1, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)
@@ -447,10 +476,11 @@ def planned_expense_monthly_distribution(
 
 def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
     entries = list(
-        AnnualExpenseEntry.objects.filter(user=user, is_active=True)
+        AnnualExpenseEntry.objects.filter(user=user, is_active=True, fiscal_year=fiscal_year)
         .only(
             "id",
             "fiscal_year",
+            "expense_type",
             "time_profile",
             "target_month",
             "term_end_month",
@@ -651,15 +681,13 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
 
 
 def income_entry_applies_to_fiscal_year(*, entry: AnnualIncomeEntry, fiscal_year: int) -> bool:
-    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
-        return entry.fiscal_year == fiscal_year
-    if entry.fiscal_year > fiscal_year:
+    if entry.fiscal_year != fiscal_year:
         return False
     if entry.time_profile != AnnualIncomeEntry.TimeProfile.TERM_RECURRENT:
         return True
     if entry.term_end_year is None:
-        return False
-    return fiscal_year <= entry.term_end_year
+        return True
+    return entry.term_end_year >= fiscal_year
 
 
 def planned_income_monthly_distribution(
@@ -695,7 +723,7 @@ def planned_income_monthly_distribution(
 
 def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
     entries = list(
-        AnnualIncomeEntry.objects.filter(user=user, is_active=True)
+        AnnualIncomeEntry.objects.filter(user=user, is_active=True, fiscal_year=fiscal_year)
         .only(
             "id",
             "fiscal_year",

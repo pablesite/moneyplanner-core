@@ -429,6 +429,20 @@ class NetWorthServicesTests(TestCase):
                 cancellation_date=None,
             )
 
+    def test_validate_liability_payload_rejects_cancellation_month_flag_without_forecast(self):
+        with self.assertRaises(DRFValidationError):
+            validate_liability_payload(
+                tracking_mode=Liability.TrackingMode.MANUAL,
+                accounting_account_id=None,
+                category=Liability.Category.MORTGAGE,
+                annual_interest_tae=Decimal("2.50"),
+                start_date=date(2026, 2, 1),
+                expected_end_date=None,
+                cancellation_forecast_enabled=False,
+                cancellation_date=None,
+                cancellation_include_payment_month=False,
+            )
+
     def test_validate_liability_payload_rejects_cancellation_forecast_for_non_mortgage(self):
         with self.assertRaises(DRFValidationError):
             validate_liability_payload(

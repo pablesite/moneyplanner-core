@@ -526,6 +526,10 @@ describe('BudgetDashboardView', () => {
     const wrapper = mountBudgetView();
     await flushPromises();
 
+    const expenseSection = wrapper.find('.ui-budget-section-expense');
+    expect(expenseSection.text()).toContain('Previsto vs Ejecutado acumulado');
+    expect(expenseSection.text()).toContain('250,00 EUR ejecutado');
+
     const toggleDetail = wrapper
       .findAll('button')
       .find((candidate) => candidate.text().includes('Ver detalle'));
@@ -838,6 +842,8 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const incomeSection = wrapper.find('.ui-budget-section-income');
+    expect(incomeSection.text()).toContain('Previsto vs Ejecutado acumulado');
+    expect(incomeSection.text()).toContain('165,00 EUR ejecutado');
     expect(incomeSection.text()).toContain('En presupuesto (YTD)');
     expect(incomeSection.text()).toContain('Fuera de presupuesto (YTD)');
     expect(incomeSection.text()).toContain('45,00 EUR');

@@ -45,6 +45,12 @@ type BudgetExecutionPreview = {
   tone: BudgetExecutionTone;
   overflow: boolean;
 };
+type BudgetActualExecution = BudgetExecutionPreview & {
+  planned: number;
+  executed: number;
+  deviation: number;
+  completionRatio: number;
+};
 
 const props = defineProps<{
   isMonthlyCloseView: boolean;
@@ -61,6 +67,7 @@ const props = defineProps<{
   budgetDetailMonth: number;
   budgetDetailMonthLabel: string;
   updateBudgetDetailMonth: (month: number) => void;
+  budgetSectionActualExecution: (sectionId: 'income' | 'expense') => BudgetActualExecution | null;
   formatMoney: (value: number, decimals?: number) => string;
   formatCompactMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
@@ -109,11 +116,7 @@ function toggleGroup(categoryKey: string): void {
   };
 }
 
-function goToMovements(
-  sectionId: 'income' | 'expense',
-  categoryKey: string,
-  subcategoryKey?: string,
-): void {
+function goToMovements(categoryKey: string, subcategoryKey?: string): void {
   const fmt = (d: Date) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -126,7 +129,6 @@ function goToMovements(
     tab: 'todos',
     date_from: dateFrom,
     date_to: dateTo,
-    kind: sectionId,
     category_key: categoryKey,
   };
   if (subcategoryKey) query.subcategory_key = subcategoryKey;
@@ -226,8 +228,19 @@ function targetMonthLabel(targetMonth?: number | null): string {
   return 'mes objetivo';
 }
 
+function recurringMonthlyPlannedAmount(entry: RowEntry): number {
+  const annual = Number(entry.amountAnnual ?? 0);
+  if (!Number.isFinite(annual) || annual <= 0 || isOneOffEntry(entry)) return 0;
+  if ('timeProfile' in entry && entry.timeProfile === 'term_recurrent') {
+    const months = Math.min(12, Math.max(1, Number(entry.termEndMonth ?? 12)));
+    return annual / months;
+  }
+  return annual / 12;
+}
+
 function entriesForRow(sectionId: 'income' | 'expense', row: BudgetRow): RowEntry[] {
-  const source = sectionId === 'income' ? props.filteredIncomeEntries : props.filteredExpenseEntries;
+  const source =
+    sectionId === 'income' ? props.filteredIncomeEntries : props.filteredExpenseEntries;
   return source.filter(
     (entry) => entry.category === row.categoryKey && entry.subcategory === row.subcategoryKey,
   );
@@ -240,6 +253,42 @@ function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string
   const countText = `${count} registro${count === 1 ? '' : 's'}`;
   if (!entries.length) {
     return `${countText} - ${props.formatMoney(row.plannedAnnual / 12)} EUR/mes previsto`;
+  }
+  const oneOffEntries = entries.filter((entry) => isOneOffEntry(entry));
+  if (oneOffEntries.length === entries.length) {
+    const uniqueMonths = new Set<number>(
+      oneOffEntries
+        .map((entry) => Number(entry.targetMonth))
+        .filter((month) => Number.isFinite(month) && month >= 1 && month <= 12),
+    );
+    if (uniqueMonths.size === 1) {
+      const month = Array.from(uniqueMonths)[0];
+      return `${countText} - ${props.formatMoney(total)} EUR en ${targetMonthLabel(month)} previsto`;
+    }
+    return `${countText} - ${props.formatMoney(total)} EUR puntual previsto`;
+  }
+  if (oneOffEntries.length > 0) {
+    const recurringEntries = entries.filter((entry) => !isOneOffEntry(entry));
+    const recurringMonthly = recurringEntries.reduce(
+      (sum, entry) => sum + recurringMonthlyPlannedAmount(entry),
+      0,
+    );
+    const oneOffTotal = oneOffEntries.reduce(
+      (sum, entry) => sum + Number(entry.amountAnnual ?? 0),
+      0,
+    );
+    const uniqueMonths = new Set<number>(
+      oneOffEntries
+        .map((entry) => Number(entry.targetMonth))
+        .filter((month) => Number.isFinite(month) && month >= 1 && month <= 12),
+    );
+    if (recurringMonthly > 0 && uniqueMonths.size === 1) {
+      const month = Array.from(uniqueMonths)[0];
+      return `${countText} - ${props.formatMoney(recurringMonthly)} EUR/mes + ${props.formatMoney(oneOffTotal)} EUR en ${targetMonthLabel(month)}`;
+    }
+    if (recurringMonthly > 0) {
+      return `${countText} - ${props.formatMoney(recurringMonthly)} EUR/mes + ${props.formatMoney(oneOffTotal)} EUR puntual`;
+    }
   }
   const entriesWithTargetMonth = entries.filter((entry) => entry.targetMonth != null);
   if (entriesWithTargetMonth.length === entries.length) {
@@ -254,10 +303,6 @@ function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string
     }
     return `${countText} - ${props.formatMoney(total)} EUR en meses previstos`;
   }
-  const oneOffEntries = entries.filter((entry) => isOneOffEntry(entry));
-  if (oneOffEntries.length === entries.length) {
-    return `${countText} - ${props.formatMoney(total)} EUR puntual previsto`;
-  }
   return `${countText} - ${props.formatMoney(total / 12)} EUR/mes previsto`;
 }
 
@@ -269,6 +314,10 @@ function groupExecutionPreview(
     return { ratio: 0, widthPct: 0, tone: 'neutral', overflow: false };
   }
   return props.executionPreview(sectionId, `group:${group.categoryKey}`) as BudgetExecutionPreview;
+}
+
+function sectionYtdTotals(sectionId: 'income' | 'expense') {
+  return sectionId === 'income' ? props.incomeExecutionYtdTotals : props.expenseExecutionYtdTotals;
 }
 
 function openEditIncome(entry: AnnualIncomeEntry): void {
@@ -445,45 +494,84 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     </div>
 
     <div v-if="section.groups.length" class="ui-budget-detail-toggle-bar">
-      <button
-        type="button"
-        class="ui-budget-detail-toggle"
-        :aria-expanded="isSectionExpanded(section.id)"
-        @click="toggleSectionExpanded(section.id)"
-      >
-        <span class="ui-budget-detail-toggle-icon" aria-hidden="true">
-          {{ isSectionExpanded(section.id) ? '-' : '+' }}
-        </span>
-        <span>
-          {{
-            isSectionExpanded(section.id)
-              ? 'Ocultar detalle'
-              : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
-          }}
-        </span>
-      </button>
+      <div class="ui-budget-section-rollup" :aria-label="`Resumen YTD ${section.title}`">
+        <div class="ui-budget-inline-progress">
+          <template v-if="budgetSectionActualExecution(section.id)">
+            <div class="ui-budget-inline-progress-labels">
+              <span>Previsto vs Ejecutado acumulado (YTD hasta {{ budgetDetailMonthLabel }})</span>
+              <span>
+                {{ formatMoney(sectionYtdTotals(section.id).executedTotal) }} EUR ejecutado
+                <span
+                  class="ui-budget-inline-progress-preview-pill"
+                  :class="`ui-budget-inline-progress-preview-pill-${budgetSectionActualExecution(section.id)?.tone}`"
+                >
+                  {{ formatPercent(budgetSectionActualExecution(section.id)?.ratio ?? null, 0) }}
+                </span>
+              </span>
+            </div>
+            <div class="ui-budget-inline-progress-track ui-budget-inline-progress-track-lg">
+              <div
+                class="ui-budget-inline-progress-fill"
+                :class="`ui-budget-inline-progress-fill-${budgetSectionActualExecution(section.id)?.tone}`"
+                :style="{
+                  width: `${budgetSectionActualExecution(section.id)?.widthPct ?? 8}%`,
+                }"
+              />
+              <span
+                v-if="budgetSectionActualExecution(section.id)?.overflow"
+                class="ui-budget-inline-progress-overflow-marker"
+                aria-hidden="true"
+              />
+            </div>
+            <div class="ui-budget-inline-progress-caption">
+              Previsto YTD {{ formatMoney(sectionYtdTotals(section.id).planned) }} EUR · Fuera de
+              presupuesto {{ formatMoney(sectionYtdTotals(section.id).executedUnbudgeted) }} EUR
+            </div>
+          </template>
+        </div>
+
+        <div class="ui-budget-section-rollup-controls">
+          <div class="ui-budget-detail-month-bar ui-budget-detail-month-bar-inline">
+            <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
+            <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
+              <button
+                v-for="(label, i) in monthLabels"
+                :key="i"
+                type="button"
+                class="ui-budget-filter-btn"
+                :class="{ 'ui-budget-filter-btn-active': budgetDetailMonth === i + 1 }"
+                @click="updateBudgetDetailMonth(i + 1)"
+              >
+                {{ label }}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="ui-budget-detail-toggle"
+            :aria-expanded="isSectionExpanded(section.id)"
+            @click="toggleSectionExpanded(section.id)"
+          >
+            <span class="ui-budget-detail-toggle-icon" aria-hidden="true">
+              {{ isSectionExpanded(section.id) ? '-' : '+' }}
+            </span>
+            <span>
+              {{
+                isSectionExpanded(section.id)
+                  ? 'Ocultar detalle'
+                  : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
+              }}
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div
       v-if="section.groups.length && isSectionExpanded(section.id)"
       class="ui-budget-detail-area"
     >
-      <div class="ui-budget-detail-month-bar">
-        <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
-        <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
-          <button
-            v-for="(label, i) in monthLabels"
-            :key="i"
-            type="button"
-            class="ui-budget-filter-btn"
-            :class="{ 'ui-budget-filter-btn-active': budgetDetailMonth === i + 1 }"
-            @click="updateBudgetDetailMonth(i + 1)"
-          >
-            {{ label }}
-          </button>
-        </div>
-      </div>
-
       <div class="ui-budget-groups">
         <article
           v-for="group in section.groups"
@@ -491,8 +579,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           class="ui-budget-group"
           :class="{
             'ui-budget-group-catalog':
-              group.plannedAnnual === 0 &&
-              !group.rows.some((r: any) => r.detectedUnbudgeted),
+              group.plannedAnnual === 0 && !group.rows.some((r: any) => r.detectedUnbudgeted),
           }"
         >
           <header
@@ -507,10 +594,9 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
             <div class="ui-budget-group-title-wrap">
               <div class="ui-budget-group-kicker">Categoría</div>
               <div class="ui-budget-group-name-row">
-                <h3
-                  class="ui-budget-name-link"
-                  @click.stop="goToMovements(section.id, group.categoryKey)"
-                >{{ group.categoryLabel }}</h3>
+                <h3 class="ui-budget-name-link" @click.stop="goToMovements(group.categoryKey)">
+                  {{ group.categoryLabel }}
+                </h3>
                 <button
                   type="button"
                   class="ui-budget-group-add-btn"
@@ -524,26 +610,30 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 {{ group.rows.length }} subcategorías -
                 {{ formatPercent(group.shareOfSection, 0) }} de {{ section.title.toLowerCase() }}
                 <span
-                  v-if="group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted).length > 0"
+                  v-if="
+                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted)
+                      .length > 0
+                  "
                   class="ui-budget-group-empty-badge"
                 >
                   {{
-                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted).length
+                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted)
+                      .length
                   }}
                   sin presupuesto
                 </span>
               </p>
               <p
                 v-if="
-                  (incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ?? 0) >
-                  0
+                  (incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ??
+                    0) > 0
                 "
                 class="subtle mb-0"
               >
-                Neto de rotación aplicado (YTD):
-                -{{
+                Neto de rotación aplicado (YTD): -{{
                   formatMoney(
-                    incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ?? 0,
+                    incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ??
+                      0,
                   )
                 }}
                 EUR
@@ -598,7 +688,9 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               </div>
 
               <div
-                v-else-if="group.plannedAnnual > 0 || group.rows.some((r: any) => r.detectedUnbudgeted)"
+                v-else-if="
+                  group.plannedAnnual > 0 || group.rows.some((r: any) => r.detectedUnbudgeted)
+                "
                 class="ui-budget-inline-progress"
                 aria-label="Placeholder ejecución categoría"
               >
@@ -610,12 +702,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                       class="ui-budget-inline-progress-preview-pill"
                       :class="`ui-budget-inline-progress-preview-pill-${groupExecutionPreview(section.id, group).tone}`"
                     >
-                      {{
-                        formatPercent(
-                          groupExecutionPreview(section.id, group).ratio,
-                          0,
-                        )
-                      }}
+                      {{ formatPercent(groupExecutionPreview(section.id, group).ratio, 0) }}
                     </span>
                   </span>
                 </div>
@@ -684,15 +771,22 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div class="ui-budget-row-title">
                   <span
                     class="ui-budget-name-link"
-                    @click="goToMovements(section.id, group.categoryKey, row.subcategoryKey)"
-                  >{{ row.subcategoryLabel }}</span>
+                    @click="goToMovements(group.categoryKey, row.subcategoryKey)"
+                    >{{ row.subcategoryLabel }}</span
+                  >
                   <button
                     type="button"
                     class="ui-budget-row-inline-add"
                     :title="`Añadir en ${row.subcategoryLabel}`"
                     @click="openCreateDirect(section.id, row)"
                   >
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">
+                    <svg
+                      width="8"
+                      height="8"
+                      viewBox="0 0 8 8"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
                       <rect x="3.5" y="0" width="1" height="8" />
                       <rect x="0" y="3.5" width="8" height="1" />
                     </svg>
@@ -713,8 +807,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   "
                   class="ui-budget-row-meta"
                 >
-                  Neto de rotación aplicado (YTD):
-                  -{{
+                  Neto de rotación aplicado (YTD): -{{
                     formatMoney(
                       incomeInvestmentRotationSubcategoryAdjustment?.(section.id, row.key) ?? 0,
                     )
@@ -797,7 +890,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                     Añadir al presupuesto
                   </button>
                 </div>
-
               </div>
 
               <div class="ui-budget-row-metrics">
@@ -999,6 +1091,8 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     :notes-placeholder="annualEntriesPage.expenseBulkEditHint.value"
     @patch="annualEntriesPage.patchAnnualExpenseForm"
     @close="annualEntriesPage.closeExpenseModal"
-    @submit="onSubmitAnnualExpense ? onSubmitAnnualExpense() : annualEntriesPage.submitAnnualExpense()"
+    @submit="
+      onSubmitAnnualExpense ? onSubmitAnnualExpense() : annualEntriesPage.submitAnnualExpense()
+    "
   />
 </template>

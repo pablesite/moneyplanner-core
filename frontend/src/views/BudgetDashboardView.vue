@@ -95,6 +95,7 @@ const {
   budgetDetailMonth,
   budgetDetailMonthLabel,
   updateBudgetDetailMonth,
+  budgetSectionActualExecution,
   budgetCategoryActualExecution,
   budgetSubcategoryActualExecution,
   incomeInvestmentRotationCategoryAdjustment,
@@ -407,6 +408,7 @@ async function submitAnnualExpenseAndRefresh(): Promise<void> {
       :budget-detail-month="budgetDetailMonth"
       :budget-detail-month-label="budgetDetailMonthLabel"
       :update-budget-detail-month="updateBudgetDetailMonth"
+      :budget-section-actual-execution="budgetSectionActualExecution"
       :format-money="formatMoney"
       :format-compact-money="formatCompactMoney"
       :format-percent="formatPercent"
