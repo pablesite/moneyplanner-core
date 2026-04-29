@@ -167,6 +167,47 @@ describe('computeGuidePhaseDiagnostics', () => {
     );
   });
 
+  it('treats monthly temporary commitments as active-month totals when they end this fiscal year', () => {
+    const fromMonthlyInput = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 36000 }],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'term_recurrent',
+          cashflowRole: 'temporary_commitment',
+          amountInputPeriod: 'monthly',
+          termEndMonth: 9,
+          termEndYear: 2026,
+          fiscalYear: 2026,
+          amountAnnual: 16488,
+        },
+      ],
+    });
+
+    const fromEffectiveAnnual = computeGuidePhaseDiagnostics({
+      summary: null,
+      assets: [],
+      liabilities: [],
+      annualIncomeEntries: [{ incomeType: 'recurrent', amountAnnual: 36000 }],
+      annualExpenseEntries: [
+        {
+          category: 'consumption_expenses',
+          expenseType: 'recurrent',
+          timeProfile: 'term_recurrent',
+          cashflowRole: 'temporary_commitment',
+          amountAnnual: 12366,
+        },
+      ],
+    });
+
+    expect(fromMonthlyInput.phase2GlobalScore).toBe(fromEffectiveAnnual.phase2GlobalScore);
+    expect(fromMonthlyInput.phase3GlobalScore).toBe(fromEffectiveAnnual.phase3GlobalScore);
+  });
+
   it('keeps diagnostics finite when liabilities exist but there is no recurrent income', () => {
     const diagnostics = computeGuidePhaseDiagnostics({
       summary: {

@@ -3085,6 +3085,48 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(debit_entry["side"], "debit")
         self.assertEqual(credit_entry["side"], "credit")
 
+    def test_quick_entry_investment_deposit_forces_deposit_budget_subcategory(self):
+        deposit_asset = Asset.objects.create(
+            user=self.user,
+            name="Deposito 1M",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            currency="EUR",
+            amount=Decimal("5000.00"),
+            deposit_term_months=1,
+            is_active=True,
+        )
+        deposit_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Deposito 1M cuenta",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=deposit_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "inflow",
+                "booking_date": "2026-04-16",
+                "value_date": "2026-04-16",
+                "description": "Alta deposito",
+                "amount": "1000.00",
+                "account_id": self.cash_account.id,
+                "counterparty_account_id": deposit_account.id,
+                "category_key": "financial_investments",
+                "subcategory_key": "other_financial_investments",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        deposit_entry = next(
+            entry for entry in response.data["entries"] if entry["account_id"] == deposit_account.id
+        )
+        self.assertEqual(deposit_entry["subcategory_key"], "deposits_fixed_income")
+
     def test_quick_entry_investment_allows_cross_currency_with_destination_amount(self):
         btc_asset = Asset.objects.create(
             user=self.user,

@@ -12,7 +12,8 @@ from budget.models import (
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
 )
-from net_worth.models import Liability
+from core.models import FxRate
+from net_worth.models import Asset, Liability
 from budget.services import (
     EXPENSE_TAXONOMY,
     INCOME_TAXONOMY,
@@ -94,6 +95,7 @@ class BudgetServicesTests(TestCase):
         category_key: str = "",
         subcategory_key: str = "",
         legacy: AnnualExpenseEntry | None = None,
+        asset: Asset | None = None,
     ) -> None:
         tx = LedgerTransaction.objects.create(
             user=self.user,
@@ -112,6 +114,7 @@ class BudgetServicesTests(TestCase):
             category_key=category_key,
             subcategory_key=subcategory_key,
             annual_expense_entry=legacy,
+            asset=asset,
         )
         LedgerEntry.objects.create(
             transaction=tx,
@@ -265,6 +268,28 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(distribution[10], Decimal("281.03"))
         self.assertEqual(sum(distribution.values()), Decimal("2810.39"))
 
+    def test_planned_expense_distribution_scales_monthly_term_rows_to_active_months(self):
+        term = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuota mensual temporal",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_month=9,
+            term_end_year=2026,
+            amount_input_period=AnnualExpenseEntry.AmountInputPeriod.MONTHLY,
+            amount_annual=Decimal("16488.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        distribution = planned_expense_monthly_distribution(entry=term, fiscal_year=2026)
+        self.assertEqual(len(distribution), 9)
+        self.assertEqual(distribution[1], Decimal("1374.00"))
+        self.assertEqual(distribution[9], Decimal("1374.00"))
+        self.assertEqual(sum(distribution.values()), Decimal("12366.00"))
+
     def test_planned_expense_distribution_uses_expense_type_for_legacy_one_off_rows(self):
         legacy_one_off = AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -316,8 +341,7 @@ class BudgetServicesTests(TestCase):
             row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
         }
         subcategories = {
-            row["subcategory"]: row
-            for row in categories["real_estate_assets"]["subcategories"]
+            row["subcategory"]: row for row in categories["real_estate_assets"]["subcategories"]
         }
         mortgage = subcategories["mortgage_principal"]
         self.assertEqual(mortgage["planned_total"], "2810.39")
@@ -695,6 +719,100 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(investments["has_budgeted_lines"], False)
         self.assertEqual(investments["has_unbudgeted_execution"], True)
 
+    def test_expense_summary_normalizes_legacy_investment_subcategory_aliases(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="ETF budget legacy",
+            category="financial_investments",
+            subcategory="index_funds_etf",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        self._post_expense_entry(
+            amount="100.00",
+            month=1,
+            category_key="financial_investments",
+            subcategory_key="etf_indexed",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        self.assertEqual(summary["executed_budgeted_total"], "100.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "0.00")
+
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        investments = categories["financial_investments"]
+        subcategories = {row["subcategory"]: row for row in investments["subcategories"]}
+        self.assertIn("etf_indexed", subcategories)
+        self.assertNotIn("index_funds_etf", subcategories)
+        self.assertEqual(subcategories["etf_indexed"]["planned_total"], "1200.00")
+        self.assertEqual(subcategories["etf_indexed"]["executed_budgeted_total"], "100.00")
+        self.assertEqual(subcategories["etf_indexed"]["executed_unbudgeted_total"], "0.00")
+
+    def test_expense_summary_accepts_deposit_fixed_income_subcategory(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Depositos",
+            category="financial_investments",
+            subcategory="deposits_fixed_income",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        self._post_expense_entry(
+            amount="100.00",
+            month=1,
+            category_key="financial_investments",
+            subcategory_key="deposits_fixed_income",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        self.assertEqual(summary["executed_budgeted_total"], "100.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "0.00")
+
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        investments = categories["financial_investments"]
+        subcategories = {row["subcategory"]: row for row in investments["subcategories"]}
+        self.assertIn("deposits_fixed_income", subcategories)
+        self.assertEqual(subcategories["deposits_fixed_income"]["planned_total"], "1200.00")
+        self.assertEqual(
+            subcategories["deposits_fixed_income"]["executed_budgeted_total"], "100.00"
+        )
+
+    def test_expense_summary_reclassifies_deposit_asset_history_from_other_investments(self):
+        deposit_asset = Asset.objects.create(
+            user=self.user,
+            name="Deposito 1M",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            deposit_term_months=1,
+            is_active=True,
+        )
+        self._post_expense_entry(
+            amount="250.00",
+            month=1,
+            category_key="financial_investments",
+            subcategory_key="other_financial_investments",
+            asset=deposit_asset,
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        categories = {
+            row["category"]: row for row in summary["expense_execution_breakdown"]["categories"]
+        }
+        investments = categories["financial_investments"]
+        subcategories = {row["subcategory"]: row for row in investments["subcategories"]}
+        self.assertEqual(subcategories["deposits_fixed_income"]["executed_unbudgeted_total"], "250.00")
+        self.assertNotIn("other_financial_investments", subcategories)
+
     def test_expense_summary_handles_user_without_fiscal_year_entries(self):
         AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -753,3 +871,74 @@ class BudgetServicesTests(TestCase):
         )
         self.assertEqual(income_summary["coverage_mode"], "ledger")
         self.assertEqual(expense_summary["coverage_mode"], "ledger")
+
+    def test_expense_summary_converts_foreign_currency_investment_to_base_currency(self):
+        """Investment purchased in USD shows EUR-converted executed amount in budget."""
+        usd_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Spot Binance / USD",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="USD",
+        )
+        btc_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            currency="BTC",
+            amount=Decimal("0"),
+            is_active=True,
+        )
+        btc_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cripto - Bitcoin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=btc_asset,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Criptomonedas",
+            category="financial_investments",
+            subcategory="crypto",
+            amount_annual=Decimal("600.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        FxRate.objects.create(
+            from_currency="USD",
+            to_currency="EUR",
+            rate_date=date(2026, 4, 1),
+            rate=Decimal("0.95"),
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 21),
+            value_date=date(2026, 4, 21),
+            description="Inversión en BTC",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=btc_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("0.00032784"),
+            currency="BTC",
+            asset=btc_asset,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=usd_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("25.00"),
+            currency="USD",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="financial_investments",
+            subcategory_key="crypto",
+        )
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        breakdown = summary["expense_execution_breakdown"]
+        fi_cat = next(c for c in breakdown["categories"] if c["category"] == "financial_investments")
+        crypto_sub = next(s for s in fi_cat["subcategories"] if s["subcategory"] == "crypto")
+        april = next(m for m in crypto_sub["months"] if m["month"] == 4)
+        self.assertEqual(Decimal(april["executed_budgeted"]), Decimal("23.75"))  # 25 USD * 0.95

@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAnnualExpenseStore, useAnnualIncomeStore } from '@/domains/data-input';
+import { effectiveAnnualAmountForEntry } from '@/domains/data-input/annualEntryUtils';
 import { useNetWorthStore } from '@/domains/net-worth';
 import {
   findGuidePhaseById,
@@ -932,7 +933,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
     annualExpenseStore.entries.value.reduce((acc, entry) => {
       if (resolveExpenseTimeProfile(entry) !== 'structural_recurrent') return acc;
       return resolveExpenseRole(entry) === 'operating'
-        ? acc + Number(entry.amountAnnual ?? 0)
+        ? acc + effectiveAnnualAmountForEntry(entry, entry.fiscalYear)
         : acc;
     }, 0),
   );
@@ -940,7 +941,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
     annualExpenseStore.entries.value.reduce((acc, entry) => {
       if (resolveExpenseTimeProfile(entry) !== 'term_recurrent') return acc;
       return resolveExpenseRole(entry) === 'temporary_commitment'
-        ? acc + Number(entry.amountAnnual ?? 0)
+        ? acc + effectiveAnnualAmountForEntry(entry, entry.fiscalYear)
         : acc;
     }, 0),
   );

@@ -50,6 +50,10 @@ import {
   toPortableLiabilityRecord,
   toPortableOwnershipRecord,
 } from '@/domains/data-input/portableBundle';
+import {
+  amountInputValueFromStoredAnnual,
+  effectiveAnnualAmountForEntry,
+} from '@/domains/data-input/annualEntryUtils';
 import { dataInputPageApi, toApiErrorMessage } from '@/domains/data-input/pageApi';
 
 export function useDataInputPage() {
@@ -232,6 +236,9 @@ export function useDataInputPage() {
   function normalizeExpenseSubcategoryForUi(category: string, subcategory: string): string {
     if (category === 'savings_allocation' && LEGACY_SAVINGS_SUBCATEGORIES.has(subcategory)) {
       return 'other_savings_allocation';
+    }
+    if (category === 'financial_investments' && subcategory === 'index_funds_etf') {
+      return 'etf_indexed';
     }
     return subcategory;
   }
@@ -511,23 +518,18 @@ export function useDataInputPage() {
       .filter((entry): entry is T => entry != null && entry.amountAnnual > 0);
   }
 
-  function roundToMoney(value: number): number {
-    return Math.round(value * 100) / 100;
-  }
-
   function effectiveAnnualAmountForSelectedYear(
     entry: {
       amountAnnual: number;
+      amountInputPeriod?: 'annual' | 'monthly';
       timeProfile: IncomeTimeProfile | ExpenseTimeProfile;
       termEndYear: number | null;
       termEndMonth: number | null;
+      fiscalYear?: number | null;
     },
     selectedYear: number,
   ): number {
-    if (entry.timeProfile !== 'term_recurrent') return entry.amountAnnual;
-    if (entry.termEndYear == null || entry.termEndYear !== selectedYear) return entry.amountAnnual;
-    const months = Math.min(12, Math.max(1, Number(entry.termEndMonth ?? 12)));
-    return roundToMoney((entry.amountAnnual * months) / 12);
+    return effectiveAnnualAmountForEntry(entry, selectedYear);
   }
 
   function isVisibleByFilterMode(isActive: boolean | undefined): boolean {
@@ -876,11 +878,6 @@ export function useDataInputPage() {
     return `Fin ${String(termEndMonth).padStart(2, '0')}/${termEndYear}`;
   }
 
-  function amountInputValueFromAnnual(annualAmount: number, period: 'annual' | 'monthly'): string {
-    if (period === 'monthly') return String(Math.round((annualAmount / 12) * 100) / 100);
-    return String(annualAmount);
-  }
-
   function shouldHideExpenseCashflowRoleLabel(params: {
     timeProfile: ExpenseTimeProfile;
     cashflowRole: AnnualExpenseCashflowRole;
@@ -1131,9 +1128,10 @@ export function useDataInputPage() {
       annualIncomeForm.termEndYear =
         entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
       annualIncomeForm.amountInputPeriod = entry.amountInputPeriod ?? 'annual';
-      annualIncomeForm.amountAnnual = amountInputValueFromAnnual(
-        entry.amountAnnual,
+      annualIncomeForm.amountAnnual = amountInputValueFromStoredAnnual(
+        entry,
         annualIncomeForm.amountInputPeriod,
+        fiscalYear.value,
       );
       annualIncomeForm.currency = entry.currency;
       annualIncomeForm.notes = entry.notes || '';
@@ -1150,31 +1148,33 @@ export function useDataInputPage() {
     annualExpenseError.value = null;
     hydratingAnnualExpenseForm.value = true;
     if (entry) {
-      editingExpenseId.value = entry.id;
-      annualExpenseForm.category = entry.category;
+      const sourceEntry = annualExpenseEntries.value.find((row) => row.id === entry.id) ?? entry;
+      editingExpenseId.value = sourceEntry.id;
+      annualExpenseForm.category = sourceEntry.category;
       annualExpenseForm.subcategory = normalizeExpenseSubcategoryForUi(
-        entry.category,
-        entry.subcategory,
+        sourceEntry.category,
+        sourceEntry.subcategory,
       );
-      annualExpenseForm.name = entry.name;
-      annualExpenseForm.owner = entry.owner || '';
-      annualExpenseForm.isRecurrent = entry.expenseType === 'recurrent';
-      annualExpenseForm.timeProfile = entry.timeProfile;
-      annualExpenseForm.cashflowRole = entry.cashflowRole;
-      annualExpenseForm.eventGroup = entry.eventGroup || '';
+      annualExpenseForm.name = sourceEntry.name;
+      annualExpenseForm.owner = sourceEntry.owner || '';
+      annualExpenseForm.isRecurrent = sourceEntry.expenseType === 'recurrent';
+      annualExpenseForm.timeProfile = sourceEntry.timeProfile;
+      annualExpenseForm.cashflowRole = sourceEntry.cashflowRole;
+      annualExpenseForm.eventGroup = sourceEntry.eventGroup || '';
       annualExpenseForm.targetMonth =
-        entry.targetMonth == null ? '' : String(Number(entry.targetMonth));
+        sourceEntry.targetMonth == null ? '' : String(Number(sourceEntry.targetMonth));
       annualExpenseForm.termEndMonth =
-        entry.termEndMonth == null ? '' : String(Number(entry.termEndMonth));
+        sourceEntry.termEndMonth == null ? '' : String(Number(sourceEntry.termEndMonth));
       annualExpenseForm.termEndYear =
-        entry.termEndYear == null ? '' : String(Number(entry.termEndYear));
-      annualExpenseForm.amountInputPeriod = entry.amountInputPeriod ?? 'annual';
-      annualExpenseForm.amountAnnual = amountInputValueFromAnnual(
-        entry.amountAnnual,
+        sourceEntry.termEndYear == null ? '' : String(Number(sourceEntry.termEndYear));
+      annualExpenseForm.amountInputPeriod = sourceEntry.amountInputPeriod ?? 'annual';
+      annualExpenseForm.amountAnnual = amountInputValueFromStoredAnnual(
+        sourceEntry,
         annualExpenseForm.amountInputPeriod,
+        fiscalYear.value,
       );
-      annualExpenseForm.currency = entry.currency;
-      annualExpenseForm.notes = entry.notes || '';
+      annualExpenseForm.currency = sourceEntry.currency;
+      annualExpenseForm.notes = sourceEntry.notes || '';
       normalizeExpenseCashflowRoleForCurrentTimeProfile();
     } else {
       editingExpenseId.value = null;
@@ -1431,9 +1431,10 @@ export function useDataInputPage() {
     annualExpenseForm.termEndYear =
       first.termEndYear == null ? '' : String(Number(first.termEndYear));
     annualExpenseForm.amountInputPeriod = first.amountInputPeriod ?? 'annual';
-    annualExpenseForm.amountAnnual = amountInputValueFromAnnual(
-      first.amountAnnual,
+    annualExpenseForm.amountAnnual = amountInputValueFromStoredAnnual(
+      first,
       annualExpenseForm.amountInputPeriod,
+      fiscalYear.value,
     );
     annualExpenseForm.currency = first.currency;
     annualExpenseForm.notes = first.notes || '';

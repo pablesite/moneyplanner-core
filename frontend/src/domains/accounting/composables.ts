@@ -134,6 +134,7 @@ const DEBT_PAYMENT_ALLOWED_CATEGORY_KEYS: ExpenseCategoryKey[] = [
   'tangible_assets',
   'financial_investments',
 ];
+const ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES = new Set(['deposits', 'short_term_deposit']);
 
 function formatDecimalInput(raw: string): string {
   return raw.replace(',', '.').trim();
@@ -665,6 +666,14 @@ export function useAccountingPage() {
     }
     if (financedAsset.category === 'investments') return 'financial_investments';
     return 'consumption_expenses';
+  }
+  function resolveInvestmentExpenseSubcategoryFromAccount(accountId: number | null): string {
+    if (accountId == null) return '';
+    const meta = accountPositionMetaByAccountId.value.get(accountId);
+    if (!meta || meta.position_type !== 'asset') return '';
+    return ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES.has(meta.subcategory)
+      ? 'deposits_fixed_income'
+      : '';
   }
   const debtInterestOptions = computed(() =>
     accounts.value.filter((account) => account.account_type === 'expense'),
@@ -1356,6 +1365,31 @@ export function useAccountingPage() {
     { immediate: true },
   );
   watch(
+    () =>
+      [
+        quickEntryForm.movement_type,
+        quickEntryForm.investment_direction,
+        quickEntryForm.category_key,
+        quickEntryForm.counterparty_account_id,
+      ] as const,
+    () => {
+      if (quickEntryForm.movement_type !== 'investment') return;
+      if (quickEntryForm.investment_direction === 'reinvestment') return;
+      if (quickEntryForm.category_key !== 'financial_investments') return;
+      const inferredSubcategory = resolveInvestmentExpenseSubcategoryFromAccount(
+        normalizeAccountId(quickEntryForm.counterparty_account_id),
+      );
+      if (inferredSubcategory) {
+        quickEntryForm.subcategory_key = inferredSubcategory;
+        return;
+      }
+      if (quickEntryForm.subcategory_key === 'deposits_fixed_income') {
+        quickEntryForm.subcategory_key = '';
+      }
+    },
+    { immediate: true },
+  );
+  watch(
     () => [quickEntryForm.movement_type, quickEntryForm.liability_account_id] as const,
     () => {
       if (quickEntryForm.movement_type !== 'debt_payment') return;
@@ -1522,6 +1556,31 @@ export function useAccountingPage() {
               ? 'financial_commitments'
               : '';
         }
+      }
+    },
+    { immediate: true },
+  );
+  watch(
+    () =>
+      [
+        editTransactionForm.kind,
+        editTransactionForm.investment_direction,
+        editTransactionForm.category_key,
+        editTransactionForm.counterparty_account_id,
+      ] as const,
+    () => {
+      if (editTransactionForm.kind !== 'investment') return;
+      if (editTransactionForm.investment_direction === 'reinvestment') return;
+      if (editTransactionForm.category_key !== 'financial_investments') return;
+      const inferredSubcategory = resolveInvestmentExpenseSubcategoryFromAccount(
+        editTransactionForm.counterparty_account_id,
+      );
+      if (inferredSubcategory) {
+        editTransactionForm.subcategory_key = inferredSubcategory;
+        return;
+      }
+      if (editTransactionForm.subcategory_key === 'deposits_fixed_income') {
+        editTransactionForm.subcategory_key = '';
       }
     },
     { immediate: true },

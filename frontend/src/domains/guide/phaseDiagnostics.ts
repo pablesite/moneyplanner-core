@@ -1,4 +1,5 @@
 import type { Asset, Liability, Summary } from '@/domains/net-worth/models';
+import { effectiveAnnualAmountForEntry } from '@/domains/data-input/annualEntryUtils';
 
 type SummaryExtended = Summary & {
   liabilities_unbacked?: string | null;
@@ -30,7 +31,10 @@ type AnnualExpenseLike = {
     | 'transfer'
     | 'other';
   subcategory?: string;
+  termEndMonth?: number | null;
   termEndYear?: number | null;
+  amountInputPeriod?: 'annual' | 'monthly';
+  fiscalYear?: number | null;
   amountAnnual: number;
 };
 
@@ -315,7 +319,7 @@ function computePhase3ExpenseCoverageMetrics(params: {
   const temporaryCommitmentExpense = annualExpenseEntries.reduce((acc, entry) => {
     if (expenseTimeProfile(entry) !== 'term_recurrent') return acc;
     return expenseCashflowRole(entry) === 'temporary_commitment'
-      ? acc + Number(entry.amountAnnual ?? 0)
+      ? acc + effectiveAnnualAmountForEntry(entry, entry.fiscalYear)
       : acc;
   }, 0);
 
@@ -359,7 +363,7 @@ function computePhase2CashFlowAdjustedScore(input: {
   const temporaryCommitmentExpense = input.annualExpenseEntries.reduce((acc, entry) => {
     if (expenseTimeProfile(entry) !== 'term_recurrent') return acc;
     return expenseCashflowRole(entry) === 'temporary_commitment'
-      ? acc + Number(entry.amountAnnual ?? 0)
+      ? acc + effectiveAnnualAmountForEntry(entry, entry.fiscalYear)
       : acc;
   }, 0);
   const structuralOperatingRatio =

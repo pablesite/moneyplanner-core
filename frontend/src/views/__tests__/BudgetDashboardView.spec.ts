@@ -8,6 +8,7 @@ const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
 const mockUseRoute = vi.fn(() => ({ name: 'budget', path: '/presupuesto' }));
+const mockUseRouter = vi.fn(() => ({ push: vi.fn() }));
 const mockCoreApiGet = vi.hoisted(() => vi.fn());
 const mockIncomeStore = vi.hoisted(() => ({
   entries: { value: [] as unknown[] },
@@ -50,7 +51,10 @@ const mockDataInputPage = vi.hoisted(() => ({
   incomeSubmitLabel: { value: 'Guardar ingreso' },
   expenseSubmitLabel: { value: 'Guardar gasto' },
   incomeCategories: [{ value: 'salary', label: 'Salario' }],
-  expenseCategories: [{ value: 'consumption_expenses', label: 'Gastos' }],
+  expenseCategories: [
+    { value: 'consumption_expenses', label: 'Gastos' },
+    { value: 'financial_investments', label: 'Inversion financiera' },
+  ],
   annualSubcategoryOptions: { value: [{ value: 'employee_salary', label: 'Nomina' }] },
   annualExpenseSubcategoryOptions: { value: [{ value: 'living_expenses', label: 'Alimentacion' }] },
   showOwnerField: { value: false },
@@ -79,6 +83,7 @@ const mockDataInputPage = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockUseRoute(),
+  useRouter: () => mockUseRouter(),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -95,15 +100,56 @@ vi.mock('@/domains/accounting', () => ({
 }));
 
 vi.mock('@/domains/data-input', () => ({
-  incomeCategories: [{ value: 'salary', label: 'Salario' }],
-  incomeSubcategories: [{ category: 'salary', value: 'employee_salary', label: 'Nomina' }],
+  incomeCategories: [
+    { value: 'salary', label: 'Salario' },
+    { value: 'capital_gains', label: 'Ganancias de capital' },
+  ],
+  incomeSubcategories: [
+    { category: 'salary', value: 'employee_salary', label: 'Nomina' },
+    {
+      category: 'capital_gains',
+      value: 'sale_financial_assets',
+      label: 'Venta de activos financieros',
+    },
+  ],
   expenseCategories: [{ value: 'consumption_expenses', label: 'Gastos' }],
   expenseSubcategories: [
     { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
+    {
+      category: 'financial_investments',
+      value: 'deposits_fixed_income',
+      label: 'Depositos / renta fija',
+    },
   ],
   AnnualEntryModalForm: defineComponent({
     name: 'AnnualEntryModalForm',
     template: '<div />',
+  }),
+  effectiveAnnualAmountForEntry: (entry: {
+    amountAnnual: number;
+    amountInputPeriod?: 'annual' | 'monthly';
+    timeProfile?: string;
+    termEndMonth?: number | null;
+    termEndYear?: number | null;
+    fiscalYear?: number | null;
+  }) => {
+    const annual = Number(entry.amountAnnual ?? 0);
+    if (
+      entry.amountInputPeriod === 'monthly' &&
+      entry.timeProfile === 'term_recurrent' &&
+      entry.fiscalYear != null &&
+      (entry.termEndYear == null || entry.termEndYear === entry.fiscalYear)
+    ) {
+      return Math.round(((annual * Number(entry.termEndMonth ?? 12)) / 12) * 100) / 100;
+    }
+    return annual;
+  },
+  normalizeExpenseTaxonomy: (category: string, subcategory: string) => ({
+    category,
+    subcategory:
+      category === 'financial_investments' && subcategory === 'index_funds_etf'
+        ? 'etf_indexed'
+        : subcategory,
   }),
   useAnnualIncomeStore: () => mockIncomeStore,
   useAnnualExpenseStore: () => mockExpenseStore,
@@ -155,6 +201,7 @@ function makeLiquiditySummary() {
 function configureCoreApi(overrides?: {
   incomeCheckins?: unknown[];
   expenseCheckins?: unknown[];
+  assets?: unknown[];
   incomeSummaryExecuted?: string;
   expenseSummaryExecuted?: string;
   incomeSummary?: Record<string, unknown>;
@@ -179,6 +226,9 @@ function configureCoreApi(overrides?: {
     }
     if (url === '/api/net-worth/liquidity/monthly-summary/') {
       return { data: makeLiquiditySummary() };
+    }
+    if (url === '/api/net-worth/assets/') {
+      return { data: overrides?.assets ?? [] };
     }
     throw new Error(`Unexpected GET ${url}`);
   });
@@ -856,6 +906,398 @@ describe('BudgetDashboardView', () => {
 
     expect(incomeSection.text()).toContain('Detectado en movimientos');
     expect(incomeSection.text()).toContain('Añadir al presupuesto');
+  });
+
+  it('nets only rotatory deposit sales out of the income KPI', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 7,
+        name: 'Venta de activos financieros',
+        category: 'capital_gains',
+        subcategory: 'sale_financial_assets',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'asset_sale',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 1200,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 1200;
+    configureCoreApi({
+      assets: [{ id: 101, category: 'investments', subcategory: 'deposits' }],
+      incomeSummary: {
+        fiscal_year: currentYear,
+        planned_total: '1200.00',
+        executed_total: '1000.00',
+        executed_budgeted_total: '1000.00',
+        executed_unbudgeted_total: '0.00',
+        pending_total: '0.00',
+        variance_total: '-200.00',
+        completion_ratio: 1,
+        months_with_checkins: 0,
+        has_executed_data: true,
+        months: [
+          {
+            month: currentMonth,
+            planned: '100.00',
+            executed: '1000.00',
+            executed_budgeted: '1000.00',
+            executed_unbudgeted: '0.00',
+            executed_total: '1000.00',
+            pending: '0.00',
+            completion_ratio: 1,
+            checkins_confirmed: 1,
+            checkins_expected: 1,
+          },
+        ],
+        income_execution_breakdown: {
+          categories: [
+            {
+              category: 'capital_gains',
+              planned_total: '1200.00',
+              executed_budgeted_total: '1000.00',
+              executed_unbudgeted_total: '0.00',
+              executed_total: '1000.00',
+              has_budgeted_lines: true,
+              has_unbudgeted_execution: false,
+              subcategories: [
+                {
+                  subcategory: 'sale_financial_assets',
+                  planned_total: '1200.00',
+                  executed_budgeted_total: '1000.00',
+                  executed_unbudgeted_total: '0.00',
+                  executed_total: '1000.00',
+                  has_budgeted_line: true,
+                  has_unbudgeted_execution: false,
+                  months: Array.from({ length: 12 }, (_, idx) => ({
+                    month: idx + 1,
+                    planned: idx + 1 === currentMonth ? '100.00' : '100.00',
+                    executed_budgeted: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                    executed_unbudgeted: '0.00',
+                    executed_total: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                  })),
+                },
+              ],
+            },
+          ],
+          executed_budgeted_total: '1000.00',
+          executed_unbudgeted_total: '0.00',
+          executed_total: '1000.00',
+        },
+      },
+      expenseSummary: {
+        fiscal_year: currentYear,
+        planned_total: '0.00',
+        executed_total: '1000.00',
+        executed_budgeted_total: '0.00',
+        executed_unbudgeted_total: '1000.00',
+        pending_total: '0.00',
+        variance_total: '1000.00',
+        completion_ratio: 1,
+        months_with_checkins: 0,
+        has_executed_data: true,
+        months: [
+          {
+            month: currentMonth,
+            planned: '0.00',
+            executed: '1000.00',
+            executed_budgeted: '0.00',
+            executed_unbudgeted: '1000.00',
+            executed_total: '1000.00',
+            pending: '0.00',
+            completion_ratio: 1,
+            checkins_confirmed: 1,
+            checkins_expected: 0,
+          },
+        ],
+        expense_execution_breakdown: {
+          categories: [
+            {
+              category: 'financial_investments',
+              planned_total: '0.00',
+              executed_budgeted_total: '0.00',
+              executed_unbudgeted_total: '1000.00',
+              executed_total: '1000.00',
+              has_budgeted_lines: false,
+              has_unbudgeted_execution: true,
+              subcategories: [
+                {
+                  subcategory: 'deposits_fixed_income',
+                  planned_total: '0.00',
+                  executed_budgeted_total: '0.00',
+                  executed_unbudgeted_total: '1000.00',
+                  executed_total: '1000.00',
+                  has_budgeted_line: false,
+                  has_unbudgeted_execution: true,
+                  months: Array.from({ length: 12 }, (_, idx) => ({
+                    month: idx + 1,
+                    planned: '0.00',
+                    executed_budgeted: '0.00',
+                    executed_unbudgeted: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                    executed_total: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                  })),
+                },
+              ],
+            },
+          ],
+          executed_budgeted_total: '0.00',
+          executed_unbudgeted_total: '1000.00',
+          executed_total: '1000.00',
+        },
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: {
+        results: [
+          {
+            id: 31,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-05`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-05`,
+            description: 'Renovacion deposito',
+            status: 'posted',
+            origin: 'manual',
+            member_tag: '',
+            ownership_id: null,
+            quick_entry_kind: 'investment',
+            investment_direction: 'inflow',
+            realized_cost_basis: null,
+            realized_gain_loss: null,
+            activity_kind: 'investment',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 311,
+                account_id: 3,
+                account_name: 'Depositos',
+                side: 'debit',
+                amount: '1000.00',
+                currency: 'EUR',
+                flow_family: 'expense',
+                category_key: 'financial_investments',
+                subcategory_key: 'deposits_fixed_income',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: 101,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+          {
+            id: 32,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-07`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-07`,
+            description: 'Vencimiento deposito',
+            status: 'posted',
+            origin: 'manual',
+            member_tag: '',
+            ownership_id: null,
+            quick_entry_kind: 'investment',
+            investment_direction: 'outflow',
+            realized_cost_basis: null,
+            realized_gain_loss: null,
+            activity_kind: 'investment',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 321,
+                account_id: 3,
+                account_name: 'Depositos',
+                side: 'credit',
+                amount: '1000.00',
+                currency: 'EUR',
+                flow_family: 'income',
+                category_key: 'capital_gains',
+                subcategory_key: 'sale_financial_assets',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: 101,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+        ],
+        next_cursor: null,
+        total_count: 2,
+      },
+    } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const incomeSection = wrapper.find('.ui-budget-section-income');
+    expect(incomeSection.text()).toContain(
+      'Cambio neto en depósitos aplicado (YTD): -1.000,00 EUR',
+    );
+    expect(incomeSection.text()).toContain('Cambio neto dep. YTD');
+    expect(incomeSection.text()).toContain('0,00 EUR');
+  });
+
+  it('keeps non-deposit investment sales on the gross income KPI', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 8,
+        name: 'Venta de cripto',
+        category: 'capital_gains',
+        subcategory: 'sale_financial_assets',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'asset_sale',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 1200,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 1200;
+    configureCoreApi({
+      assets: [{ id: 202, category: 'investments', subcategory: 'cryptocurrencies' }],
+      incomeSummary: {
+        fiscal_year: currentYear,
+        planned_total: '1200.00',
+        executed_total: '1000.00',
+        executed_budgeted_total: '1000.00',
+        executed_unbudgeted_total: '0.00',
+        pending_total: '0.00',
+        variance_total: '-200.00',
+        completion_ratio: 1,
+        months_with_checkins: 0,
+        has_executed_data: true,
+        months: [
+          {
+            month: currentMonth,
+            planned: '100.00',
+            executed: '1000.00',
+            executed_budgeted: '1000.00',
+            executed_unbudgeted: '0.00',
+            executed_total: '1000.00',
+            pending: '0.00',
+            completion_ratio: 1,
+            checkins_confirmed: 1,
+            checkins_expected: 1,
+          },
+        ],
+        income_execution_breakdown: {
+          categories: [
+            {
+              category: 'capital_gains',
+              planned_total: '1200.00',
+              executed_budgeted_total: '1000.00',
+              executed_unbudgeted_total: '0.00',
+              executed_total: '1000.00',
+              has_budgeted_lines: true,
+              has_unbudgeted_execution: false,
+              subcategories: [
+                {
+                  subcategory: 'sale_financial_assets',
+                  planned_total: '1200.00',
+                  executed_budgeted_total: '1000.00',
+                  executed_unbudgeted_total: '0.00',
+                  executed_total: '1000.00',
+                  has_budgeted_line: true,
+                  has_unbudgeted_execution: false,
+                  months: Array.from({ length: 12 }, (_, idx) => ({
+                    month: idx + 1,
+                    planned: idx + 1 === currentMonth ? '100.00' : '100.00',
+                    executed_budgeted: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                    executed_unbudgeted: '0.00',
+                    executed_total: idx + 1 === currentMonth ? '1000.00' : '0.00',
+                  })),
+                },
+              ],
+            },
+          ],
+          executed_budgeted_total: '1000.00',
+          executed_unbudgeted_total: '0.00',
+          executed_total: '1000.00',
+        },
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: {
+        results: [
+          {
+            id: 41,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-07`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-07`,
+            description: 'Venta cripto',
+            status: 'posted',
+            origin: 'manual',
+            member_tag: '',
+            ownership_id: null,
+            quick_entry_kind: 'investment',
+            investment_direction: 'outflow',
+            realized_cost_basis: null,
+            realized_gain_loss: null,
+            activity_kind: 'investment',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 411,
+                account_id: 4,
+                account_name: 'Cripto',
+                side: 'credit',
+                amount: '1000.00',
+                currency: 'EUR',
+                flow_family: 'income',
+                category_key: 'capital_gains',
+                subcategory_key: 'sale_financial_assets',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: 202,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+        ],
+        next_cursor: null,
+        total_count: 1,
+      },
+    } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const incomeSection = wrapper.find('.ui-budget-section-income');
+    expect(incomeSection.text()).not.toContain('Cambio neto en depósitos aplicado');
+    expect(incomeSection.text()).not.toContain('Cambio neto dep. YTD');
+    expect(incomeSection.text()).toContain('1.000,00 EUR');
   });
 
   it('updates income evolution executed bars when switching recurrent/one-off filter', async () => {
