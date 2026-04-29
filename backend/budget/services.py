@@ -1,10 +1,13 @@
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
 from django.core.exceptions import ValidationError
 
 from accounting.models import LedgerEntry, LedgerTransaction
+from accounts.models import UserSettings
+from core.services import build_fx_cache, convert_currency_cached
 
 from .models import (
     AnnualExpenseEntry,
@@ -80,6 +83,7 @@ EXPENSE_TAXONOMY: dict[str, set[str]] = {
     "financial_investments": {
         "index_funds",
         "etf_indexed",
+        "deposits_fixed_income",
         "index_funds_etf",
         "crowdfunding_real_estate",
         "pension_plan",
@@ -119,6 +123,11 @@ EXPENSE_TAXONOMY: dict[str, set[str]] = {
     },
 }
 
+EXPENSE_SUBCATEGORY_ALIASES: dict[tuple[str, str], str] = {
+    ("financial_investments", "index_funds_etf"): "etf_indexed",
+}
+ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES = {"deposits", "short_term_deposit"}
+
 
 def normalize_currency_code(value: str | None) -> str:
     return (value or "").upper().strip()
@@ -133,11 +142,24 @@ def validate_annual_income_taxonomy(*, category: str, subcategory: str) -> None:
 
 
 def validate_annual_expense_taxonomy(*, category: str, subcategory: str) -> None:
-    options = EXPENSE_TAXONOMY.get((category or "").strip())
+    category, subcategory = normalize_annual_expense_taxonomy_keys(
+        category=category,
+        subcategory=subcategory,
+    )
+    options = EXPENSE_TAXONOMY.get(category)
     if not options:
         raise ValidationError("Categoria de gasto anual no valida.")
-    if (subcategory or "").strip() not in options:
+    if subcategory not in options:
         raise ValidationError("Subcategoria de gasto anual no valida para la categoria dada.")
+
+
+def normalize_annual_expense_taxonomy_keys(*, category: str, subcategory: str) -> tuple[str, str]:
+    normalized_category = (category or "").strip()
+    normalized_subcategory = (subcategory or "").strip()
+    alias = EXPENSE_SUBCATEGORY_ALIASES.get((normalized_category, normalized_subcategory))
+    if alias:
+        normalized_subcategory = alias
+    return normalized_category, normalized_subcategory
 
 
 TWOPLACES = Decimal("0.01")
@@ -145,6 +167,27 @@ TWOPLACES = Decimal("0.01")
 
 def _round_money(value: Decimal) -> Decimal:
     return value.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+
+
+def _effective_annual_amount_for_term_entry(
+    *,
+    amount: Decimal,
+    amount_input_period: str,
+    time_profile: str,
+    term_end_year: int | None,
+    term_end_month: int | None,
+    fiscal_year: int,
+) -> Decimal:
+    if amount <= 0:
+        return Decimal("0.00")
+    if amount_input_period != AnnualExpenseEntry.AmountInputPeriod.MONTHLY:
+        return amount
+    if time_profile != AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
+        return amount
+    if term_end_year is not None and term_end_year != fiscal_year:
+        return amount
+    months = max(1, min(12, int(term_end_month or 12)))
+    return _round_money((amount * Decimal(months)) / Decimal("12"))
 
 
 def _resolve_ledger_budget_classification(
@@ -164,6 +207,20 @@ def _resolve_ledger_budget_classification(
             True,
         )
     if row.flow_family and row.category_key and row.subcategory_key:
+        if row.flow_family == LedgerEntry.FlowFamily.EXPENSE:
+            category_key, subcategory_key = normalize_annual_expense_taxonomy_keys(
+                category=row.category_key,
+                subcategory=row.subcategory_key,
+            )
+            if (
+                category_key == "financial_investments"
+                and subcategory_key == "other_financial_investments"
+                and row.asset_id is not None
+                and row.asset is not None
+                and row.asset.subcategory in ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES
+            ):
+                subcategory_key = "deposits_fixed_income"
+            return row.flow_family, category_key, subcategory_key, True
         return row.flow_family, row.category_key, row.subcategory_key, True
     if row.annual_income_entry_id is not None and row.annual_income_entry is not None:
         return (
@@ -173,13 +230,39 @@ def _resolve_ledger_budget_classification(
             False,
         )
     if row.annual_expense_entry_id is not None and row.annual_expense_entry is not None:
+        category, subcategory = normalize_annual_expense_taxonomy_keys(
+            category=row.annual_expense_entry.category,
+            subcategory=row.annual_expense_entry.subcategory,
+        )
         return (
             cast(str, LedgerEntry.FlowFamily.EXPENSE),
-            row.annual_expense_entry.category,
-            row.annual_expense_entry.subcategory,
+            category,
+            subcategory,
             False,
         )
     return "", "", "", False
+
+
+def _get_base_currency(user) -> str:
+    settings, _ = UserSettings.objects.get_or_create(user=user)
+    return str(settings.base_currency or "EUR").upper().strip()
+
+
+def _convert_to_base(
+    amount: Decimal,
+    from_currency: str,
+    base_currency: str,
+    rate_date: date,
+    fx_cache: dict,
+) -> Decimal:
+    from_c = (from_currency or "").upper().strip()
+    to_c = (base_currency or "EUR").upper().strip()
+    if from_c == to_c:
+        return amount
+    try:
+        return convert_currency_cached(amount, from_c, to_c, rate_date=rate_date, fx_cache=fx_cache)
+    except (ValidationError, Exception):
+        return amount
 
 
 def _build_ledger_monthly_execution_maps(
@@ -189,6 +272,7 @@ def _build_ledger_monthly_execution_maps(
     flow_family: str,
     legacy_fk_name: str,
     positive_side: str,
+    base_currency: str,
 ) -> tuple[dict[tuple[str, str, int], Decimal], dict[tuple[int, int], Decimal]]:
     queryset = (
         LedgerEntry.objects.filter(
@@ -196,14 +280,23 @@ def _build_ledger_monthly_execution_maps(
             transaction__status=LedgerTransaction.Status.POSTED,
             transaction__booking_date__year=fiscal_year,
         )
-        .select_related("transaction", "annual_income_entry", "annual_expense_entry", "liability")
+        .select_related(
+            "transaction",
+            "annual_income_entry",
+            "annual_expense_entry",
+            "asset",
+            "liability",
+        )
         .only(
             "transaction_id",
             "side",
             "amount",
+            "currency",
             "flow_family",
             "category_key",
             "subcategory_key",
+            "asset_id",
+            "asset__subcategory",
             "annual_income_entry_id",
             "annual_expense_entry_id",
             "liability_id",
@@ -216,6 +309,9 @@ def _build_ledger_monthly_execution_maps(
         )
     )
     rows = list(queryset)
+    entry_currencies = {(row.currency or "EUR").upper().strip() for row in rows}
+    entry_currencies.add(base_currency)
+    fx_cache = build_fx_cache(entry_currencies)
     mortgage_payment_transaction_ids = {
         row.transaction_id
         for row in rows
@@ -235,7 +331,19 @@ def _build_ledger_monthly_execution_maps(
         )
         if resolved_flow_family != flow_family:
             continue
-        signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+        # CREDIT entries on non-asset accounts classified as expense = investment purchase source
+        # (source account credited to fund asset acquisition). Treat as positive so amount counts.
+        if row.side != positive_side and row.asset_id is None and flow_family == LedgerEntry.FlowFamily.EXPENSE:
+            signed_amount = Decimal(row.amount)
+        else:
+            signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+        signed_amount = _convert_to_base(
+            signed_amount,
+            row.currency or "EUR",
+            base_currency,
+            row.transaction.booking_date,
+            fx_cache,
+        )
         if is_primary_classification and category_key and subcategory_key:
             key = (category_key, subcategory_key, row.transaction.booking_date.month)
             categorized_totals[key] += signed_amount
@@ -446,7 +554,14 @@ def expense_entry_applies_to_fiscal_year(*, entry: AnnualExpenseEntry, fiscal_ye
 def planned_expense_monthly_distribution(
     *, entry: AnnualExpenseEntry, fiscal_year: int
 ) -> dict[int, Decimal]:
-    amount = Decimal(entry.amount_annual or 0)
+    amount = _effective_annual_amount_for_term_entry(
+        amount=Decimal(entry.amount_annual or 0),
+        amount_input_period=entry.amount_input_period,
+        time_profile=entry.time_profile,
+        term_end_year=entry.term_end_year,
+        term_end_month=entry.term_end_month,
+        fiscal_year=fiscal_year,
+    )
     if amount <= 0:
         return {}
     if not expense_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
@@ -460,9 +575,8 @@ def planned_expense_monthly_distribution(
         return {int(entry.target_month): _round_money(amount)}
 
     end_month = 12
-    if (
-        entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
-        and (entry.term_end_year is None or entry.term_end_year == fiscal_year)
+    if entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT and (
+        entry.term_end_year is None or entry.term_end_year == fiscal_year
     ):
         end_month = entry.term_end_month or 12
     base = _round_money(amount / Decimal(end_month))
@@ -482,6 +596,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             "fiscal_year",
             "expense_type",
             "time_profile",
+            "amount_input_period",
             "target_month",
             "term_end_month",
             "term_end_year",
@@ -501,12 +616,14 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         for item in checkins
         if 1 <= item.month <= 12
     }
+    base_currency = _get_base_currency(user)
     categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
         legacy_fk_name="annual_expense_entry",
         positive_side=cast(str, LedgerEntry.Side.DEBIT),
+        base_currency=base_currency,
     )
 
     planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}
@@ -527,11 +644,15 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
 
     for entry in entries:
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year)
+        entry_category, entry_subcategory = normalize_annual_expense_taxonomy_keys(
+            category=entry.category,
+            subcategory=entry.subcategory,
+        )
         for month, planned_amount in distribution.items():
             planned_by_month[month] += planned_amount
             expected_entries_by_month[month] += 1
             planned_entry_amounts_by_key[(entry.id, month)] = planned_amount
-            slot_key = (entry.category, entry.subcategory, month)
+            slot_key = (entry_category, entry_subcategory, month)
             slot = planned_slots.get(slot_key)
             if slot is None:
                 slot = {"entry_ids": [], "month": month}
@@ -556,7 +677,10 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
                 confirmed_entries_by_month[month] += 1
                 executed_by_month[month] += legacy_ledger_amount
                 entry = entries_by_id[entry_id]
-                budget_key = (entry.category, entry.subcategory, month)
+                budget_key = normalize_annual_expense_taxonomy_keys(
+                    category=entry.category,
+                    subcategory=entry.subcategory,
+                ) + (month,)
                 executed_budgeted_by_slot_month[budget_key] += legacy_ledger_amount
                 continue
             checkin = checkins_by_key.get((entry_id, month))
@@ -571,7 +695,10 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             resolved_executed = _round_money(executed_amount)
             executed_by_month[month] += resolved_executed
             entry = entries_by_id[entry_id]
-            budget_key = (entry.category, entry.subcategory, month)
+            budget_key = normalize_annual_expense_taxonomy_keys(
+                category=entry.category,
+                subcategory=entry.subcategory,
+            ) + (month,)
             executed_budgeted_by_slot_month[budget_key] += resolved_executed
 
     executed_unbudgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
@@ -693,7 +820,14 @@ def income_entry_applies_to_fiscal_year(*, entry: AnnualIncomeEntry, fiscal_year
 def planned_income_monthly_distribution(
     *, entry: AnnualIncomeEntry, fiscal_year: int
 ) -> dict[int, Decimal]:
-    amount = Decimal(entry.amount_annual or 0)
+    amount = _effective_annual_amount_for_term_entry(
+        amount=Decimal(entry.amount_annual or 0),
+        amount_input_period=entry.amount_input_period,
+        time_profile=entry.time_profile,
+        term_end_year=entry.term_end_year,
+        term_end_month=entry.term_end_month,
+        fiscal_year=fiscal_year,
+    )
     if amount <= 0:
         return {}
     if not income_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
@@ -728,6 +862,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             "id",
             "fiscal_year",
             "time_profile",
+            "amount_input_period",
             "target_month",
             "term_end_month",
             "term_end_year",
@@ -746,12 +881,14 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         for item in checkins
         if 1 <= item.month <= 12
     }
+    base_currency = _get_base_currency(user)
     categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=cast(str, LedgerEntry.FlowFamily.INCOME),
         legacy_fk_name="annual_income_entry",
         positive_side=cast(str, LedgerEntry.Side.CREDIT),
+        base_currency=base_currency,
     )
 
     planned_by_month = {month: Decimal("0.00") for month in range(1, 13)}

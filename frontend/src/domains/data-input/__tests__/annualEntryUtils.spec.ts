@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeOwnerName, parseAnnualAmount } from '../annualEntryUtils';
+import {
+  amountInputValueFromStoredAnnual,
+  effectiveAnnualAmountForEntry,
+  normalizeOwnerName,
+  parseAnnualAmount,
+} from '../annualEntryUtils';
 
 describe('annualEntryUtils (core)', () => {
   it('parses annual amounts with locale/thousand separators', () => {
@@ -15,6 +20,35 @@ describe('annualEntryUtils (core)', () => {
   });
 
   it('normalizes owner name safely', () => {
-    expect(normalizeOwnerName('   Ana   López   ')).toBe('Ana López');
+    expect(normalizeOwnerName('   Ana   LÃ³pez   ')).toBe('Ana LÃ³pez');
+  });
+
+  it('scales monthly temporary commitments to active months in the selected fiscal year', () => {
+    expect(
+      effectiveAnnualAmountForEntry({
+        amountAnnual: 16488,
+        amountInputPeriod: 'monthly',
+        timeProfile: 'term_recurrent',
+        termEndMonth: 9,
+        termEndYear: 2026,
+        fiscalYear: 2026,
+      }),
+    ).toBe(12366);
+  });
+
+  it('recovers the original monthly input for monthly temporary commitments', () => {
+    expect(
+      amountInputValueFromStoredAnnual(
+        {
+          amountAnnual: 16488,
+          amountInputPeriod: 'monthly',
+          timeProfile: 'term_recurrent',
+          termEndMonth: 9,
+          termEndYear: 2026,
+          fiscalYear: 2026,
+        },
+        'monthly',
+      ),
+    ).toBe('1374');
   });
 });

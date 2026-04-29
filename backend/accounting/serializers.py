@@ -8,7 +8,11 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
-from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
+from budget.services import (
+    EXPENSE_TAXONOMY,
+    validate_annual_expense_taxonomy,
+    validate_annual_income_taxonomy,
+)
 from memberships.models import Ownership
 from net_worth.models import Asset, Liability
 
@@ -878,7 +882,8 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
 
         if movement_type == "expense":
             attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
-            attrs["category_key"] = "consumption_expenses"
+            if attrs.get("category_key") not in EXPENSE_TAXONOMY:
+                attrs["category_key"] = "consumption_expenses"
             return
 
         if movement_type == "investment":

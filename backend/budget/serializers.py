@@ -10,6 +10,7 @@ from .models import (
 )
 from .services import (
     normalize_currency_code,
+    normalize_annual_expense_taxonomy_keys,
     validate_annual_expense_taxonomy,
     validate_annual_income_taxonomy,
 )
@@ -267,6 +268,14 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
     def validate(self, attrs):
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
+        category, subcategory = normalize_annual_expense_taxonomy_keys(
+            category=category,
+            subcategory=subcategory,
+        )
+        if "category" in attrs:
+            attrs["category"] = category
+        if "subcategory" in attrs:
+            attrs["subcategory"] = subcategory
         expense_type = attrs.get("expense_type") or getattr(
             self.instance, "expense_type", AnnualExpenseEntry.ExpenseType.RECURRENT
         )

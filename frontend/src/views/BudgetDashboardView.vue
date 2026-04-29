@@ -208,6 +208,30 @@ async function submitAnnualExpenseAndRefresh(): Promise<void> {
     refreshExpenseExecutionData(),
   ]);
 }
+
+async function removeAnnualIncomeAndRefresh(entryId: number): Promise<void> {
+  if (!annualEntriesPage) return;
+  await annualEntriesPage.removeAnnualIncome(entryId);
+  await Promise.all([
+    refreshBudgetData(fiscalYear.value),
+    refreshBudgetSuggestionData(),
+    refreshAccountingExecutionData(),
+    refreshIncomeExecutionData(),
+    refreshExpenseExecutionData(),
+  ]);
+}
+
+async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
+  if (!annualEntriesPage) return;
+  await annualEntriesPage.removeAnnualExpense(entryId);
+  await Promise.all([
+    refreshBudgetData(fiscalYear.value),
+    refreshBudgetSuggestionData(),
+    refreshAccountingExecutionData(),
+    refreshIncomeExecutionData(),
+    refreshExpenseExecutionData(),
+  ]);
+}
 </script>
 
 <template>
@@ -429,6 +453,8 @@ async function submitAnnualExpenseAndRefresh(): Promise<void> {
       :annual-entries-page="annualEntriesPage"
       :on-submit-annual-income="submitAnnualIncomeAndRefresh"
       :on-submit-annual-expense="submitAnnualExpenseAndRefresh"
+      :on-remove-annual-income="removeAnnualIncomeAndRefresh"
+      :on-remove-annual-expense="removeAnnualExpenseAndRefresh"
       :filtered-income-entries="filteredIncomeEntries"
       :filtered-expense-entries="filteredExpenseEntries"
       :ownership-filter="ownershipFilter"

@@ -16,6 +16,7 @@ export {
 } from './annualExpenseStore';
 export * from './incomeTaxonomy';
 export * from './expenseTaxonomy';
+export * from './annualEntryUtils';
 export * from './useDataInputFilters';
 export * from './usePortableDataTransfer';
 export * from './pageApi';

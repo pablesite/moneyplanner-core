@@ -186,6 +186,38 @@ class BudgetSerializerTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["cashflow_role"], "operating")
 
+    def test_expense_serializer_normalizes_legacy_financial_investment_subcategory(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "ETF legado",
+                "category": "financial_investments",
+                "subcategory": "index_funds_etf",
+                "expense_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["subcategory"], "etf_indexed")
+
+    def test_expense_serializer_accepts_deposits_fixed_income_subcategory(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Depositos",
+                "category": "financial_investments",
+                "subcategory": "deposits_fixed_income",
+                "expense_type": "recurrent",
+                "time_profile": "structural_recurrent",
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["subcategory"], "deposits_fixed_income")
+
     def test_expense_serializer_normalizes_invalid_one_off_cashflow_role(self):
         serializer = AnnualExpenseEntrySerializer(
             data={

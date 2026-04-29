@@ -12,6 +12,8 @@ from .services_ledger import ZERO
 from .services_start_dates import sync_position_start_dates_for_transaction
 from .services_transactions import validate_booking_and_value_dates, validate_transaction_entries
 
+ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES = {"deposits", "short_term_deposit"}
+
 
 @transaction.atomic
 def create_quick_transaction(
@@ -122,6 +124,13 @@ def _build_quick_entry_payload(
     destination_amount: Decimal | None = None,
 ) -> list[dict]:
     base_amount = Decimal(amount)
+    category_key, subcategory_key = _normalize_investment_budget_classification(
+        movement_type=movement_type,
+        investment_direction=investment_direction,
+        category_key=category_key,
+        subcategory_key=subcategory_key,
+        counterparty_account=counterparty_account,
+    )
     classification = _resolve_entry_classification(
         movement_type=movement_type,
         flow_family=flow_family,
@@ -227,13 +236,13 @@ def _build_quick_entry_payload(
                 "amount": destination_value,
                 "currency": counterparty_account.currency,
                 "asset": counterparty_account.asset if counterparty_account.asset_id else None,
-                **classification,
             },
             {
                 "account": account,
                 "side": LedgerEntry.Side.CREDIT,
                 "amount": base_amount,
                 "currency": account.currency,
+                **classification,
             },
         ]
     if movement_type == "revaluation":
@@ -383,6 +392,26 @@ def _resolve_entry_classification(
             "subcategory_key": annual_expense_entry.subcategory,
         }
     return {}
+
+
+def _normalize_investment_budget_classification(
+    *,
+    movement_type: str,
+    investment_direction: str,
+    category_key: str,
+    subcategory_key: str,
+    counterparty_account: LedgerAccount,
+) -> tuple[str, str]:
+    if movement_type != "investment":
+        return category_key, subcategory_key
+    if investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT:
+        return category_key, subcategory_key
+    if category_key != "financial_investments":
+        return category_key, subcategory_key
+    asset = counterparty_account.asset if counterparty_account.asset_id else None
+    if asset is None or asset.subcategory not in ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES:
+        return category_key, subcategory_key
+    return category_key, "deposits_fixed_income"
 
 
 def _normalize_quick_movement_type(movement_type: str) -> str:

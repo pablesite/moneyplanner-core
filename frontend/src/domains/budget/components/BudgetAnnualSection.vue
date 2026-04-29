@@ -5,7 +5,9 @@ import {
   type AnnualExpenseEntry,
   type AnnualIncomeEntry,
   AnnualEntryModalForm,
+  normalizeExpenseTaxonomy,
 } from '@/domains/data-input';
+import { effectiveAnnualAmountForEntry } from '@/domains/data-input/annualEntryUtils';
 
 const router = useRouter();
 
@@ -95,6 +97,8 @@ const props = defineProps<{
   updateExpenseViewMode: (mode: 'all' | 'recurrent' | 'one_off') => void;
   onSubmitAnnualIncome?: () => Promise<void> | void;
   onSubmitAnnualExpense?: () => Promise<void> | void;
+  onRemoveAnnualIncome?: (entryId: number) => Promise<void> | void;
+  onRemoveAnnualExpense?: (entryId: number) => Promise<void> | void;
   annualEntriesPage: any | null;
   filteredIncomeEntries: AnnualIncomeEntry[];
   filteredExpenseEntries: AnnualExpenseEntry[];
@@ -116,6 +120,37 @@ function toggleGroup(categoryKey: string): void {
   };
 }
 
+function isDepositRotationIncomeCategory(
+  sectionId: 'income' | 'expense',
+  categoryKey: string,
+): boolean {
+  return sectionId === 'income' && categoryKey === 'capital_gains';
+}
+
+function isDepositRotationIncomeSubcategory(
+  sectionId: 'income' | 'expense',
+  rowKey: string,
+): boolean {
+  return sectionId === 'income' && rowKey === 'capital_gains::sale_financial_assets';
+}
+
+function categoryExecutedLabel(sectionId: 'income' | 'expense', categoryKey: string): string {
+  const adjustment =
+    props.incomeInvestmentRotationCategoryAdjustment?.(sectionId, categoryKey) ?? 0;
+  if (adjustment > 0 && isDepositRotationIncomeCategory(sectionId, categoryKey)) {
+    return 'Cambio neto dep. YTD';
+  }
+  return 'Ejecutado YTD';
+}
+
+function subcategoryExecutedLabel(sectionId: 'income' | 'expense', rowKey: string): string {
+  const adjustment = props.incomeInvestmentRotationSubcategoryAdjustment?.(sectionId, rowKey) ?? 0;
+  if (adjustment > 0 && isDepositRotationIncomeSubcategory(sectionId, rowKey)) {
+    return 'Cambio neto dep. YTD';
+  }
+  return 'Ejecutado YTD';
+}
+
 function goToMovements(categoryKey: string, subcategoryKey?: string): void {
   const fmt = (d: Date) => {
     const y = d.getFullYear();
@@ -135,12 +170,23 @@ function goToMovements(categoryKey: string, subcategoryKey?: string): void {
   router.push({ name: 'accounting-movements', query });
 }
 
+function matchesRowTaxonomy(
+  sectionId: 'income' | 'expense',
+  entry: RowEntry,
+  row: BudgetRow,
+): boolean {
+  if (sectionId === 'income') {
+    return entry.category === row.categoryKey && entry.subcategory === row.subcategoryKey;
+  }
+  const normalized = normalizeExpenseTaxonomy(entry.category, entry.subcategory);
+  return normalized.category === row.categoryKey && normalized.subcategory === row.subcategoryKey;
+}
+
 const contextIncomeEntries = computed(() => {
   const context = activeContext.value;
   if (!context || context.sectionId !== 'income') return [];
   return props.filteredIncomeEntries.filter((entry) => {
-    if (entry.category !== context.row.categoryKey) return false;
-    if (entry.subcategory !== context.row.subcategoryKey) return false;
+    if (!matchesRowTaxonomy('income', entry, context.row)) return false;
     if (props.sections.find((section) => section.id === 'income')?.filterMode === 'recurrent') {
       return entry.incomeType === 'recurrent';
     }
@@ -155,8 +201,7 @@ const contextExpenseEntries = computed(() => {
   const context = activeContext.value;
   if (!context || context.sectionId !== 'expense') return [];
   return props.filteredExpenseEntries.filter((entry) => {
-    if (entry.category !== context.row.categoryKey) return false;
-    if (entry.subcategory !== context.row.subcategoryKey) return false;
+    if (!matchesRowTaxonomy('expense', entry, context.row)) return false;
     if (props.sections.find((section) => section.id === 'expense')?.filterMode === 'recurrent') {
       return entry.expenseType === 'recurrent';
     }
@@ -229,9 +274,13 @@ function targetMonthLabel(targetMonth?: number | null): string {
 }
 
 function recurringMonthlyPlannedAmount(entry: RowEntry): number {
-  const annual = Number(entry.amountAnnual ?? 0);
+  const annual = effectiveAnnualAmountForEntry(entry, entry.fiscalYear);
   if (!Number.isFinite(annual) || annual <= 0 || isOneOffEntry(entry)) return 0;
-  if ('timeProfile' in entry && entry.timeProfile === 'term_recurrent') {
+  if (
+    'timeProfile' in entry &&
+    entry.timeProfile === 'term_recurrent' &&
+    (entry.termEndYear == null || entry.termEndYear === entry.fiscalYear)
+  ) {
     const months = Math.min(12, Math.max(1, Number(entry.termEndMonth ?? 12)));
     return annual / months;
   }
@@ -241,14 +290,15 @@ function recurringMonthlyPlannedAmount(entry: RowEntry): number {
 function entriesForRow(sectionId: 'income' | 'expense', row: BudgetRow): RowEntry[] {
   const source =
     sectionId === 'income' ? props.filteredIncomeEntries : props.filteredExpenseEntries;
-  return source.filter(
-    (entry) => entry.category === row.categoryKey && entry.subcategory === row.subcategoryKey,
-  );
+  return source.filter((entry) => matchesRowTaxonomy(sectionId, entry, row));
 }
 
 function rowPlannedMeta(sectionId: 'income' | 'expense', row: BudgetRow): string {
   const entries = entriesForRow(sectionId, row);
-  const total = entries.reduce((sum, entry) => sum + Number(entry.amountAnnual ?? 0), 0);
+  const total = entries.reduce(
+    (sum, entry) => sum + effectiveAnnualAmountForEntry(entry, entry.fiscalYear),
+    0,
+  );
   const count = entries.length || row.itemsCount;
   const countText = `${count} registro${count === 1 ? '' : 's'}`;
   if (!entries.length) {
@@ -330,11 +380,19 @@ function openEditExpense(entry: AnnualExpenseEntry): void {
 
 async function removeIncome(entry: AnnualIncomeEntry): Promise<void> {
   if (!props.annualEntriesPage) return;
+  if (props.onRemoveAnnualIncome) {
+    await props.onRemoveAnnualIncome(entry.id);
+    return;
+  }
   await props.annualEntriesPage.removeAnnualIncome(entry.id);
 }
 
 async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
   if (!props.annualEntriesPage) return;
+  if (props.onRemoveAnnualExpense) {
+    await props.onRemoveAnnualExpense(entry.id);
+    return;
+  }
   await props.annualEntriesPage.removeAnnualExpense(entry.id);
 }
 </script>
@@ -630,7 +688,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 "
                 class="subtle mb-0"
               >
-                Neto de rotación aplicado (YTD): -{{
+                Cambio neto en depósitos aplicado (YTD): -{{
                   formatMoney(
                     incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ??
                       0,
@@ -727,7 +785,9 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               <div class="ui-budget-group-amounts">
                 <template v-if="budgetCategoryActualExecution(section.id, group.categoryKey)">
                   <div class="ui-budget-group-amount-ytd">
-                    <span class="ui-budget-group-amount-label">Ejecutado YTD</span>
+                    <span class="ui-budget-group-amount-label">{{
+                      categoryExecutedLabel(section.id, group.categoryKey)
+                    }}</span>
                     <strong
                       :class="`ui-budget-pending-text-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
                     >
@@ -807,7 +867,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   "
                   class="ui-budget-row-meta"
                 >
-                  Neto de rotación aplicado (YTD): -{{
+                  Cambio neto en depósitos aplicado (YTD): -{{
                     formatMoney(
                       incomeInvestmentRotationSubcategoryAdjustment?.(section.id, row.key) ?? 0,
                     )
@@ -910,7 +970,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                 <div class="ui-budget-row-metric">
                   <span>{{
                     budgetSubcategoryActualExecution(section.id, row.key)
-                      ? 'Ejecutado YTD'
+                      ? subcategoryExecutedLabel(section.id, row.key)
                       : 'Ejecutado'
                   }}</span>
                   <strong

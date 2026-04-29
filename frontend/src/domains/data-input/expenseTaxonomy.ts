@@ -11,6 +11,12 @@ export type ExpenseSubcategory = {
   label: string;
 };
 
+const expenseSubcategoryAliases: Partial<Record<ExpenseCategoryKey, Record<string, string>>> = {
+  financial_investments: {
+    index_funds_etf: 'etf_indexed',
+  },
+};
+
 export const expenseCategories: { value: ExpenseCategoryKey; label: string }[] = [
   { value: 'savings_allocation', label: 'Ahorro' },
   { value: 'financial_investments', label: 'Inversión financiera' },
@@ -30,6 +36,11 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
 
   { category: 'financial_investments', value: 'index_funds', label: 'Fondos indexados' },
   { category: 'financial_investments', value: 'etf_indexed', label: 'ETF indexados' },
+  {
+    category: 'financial_investments',
+    value: 'deposits_fixed_income',
+    label: 'Depositos / renta fija',
+  },
   { category: 'financial_investments', value: 'pension_plan', label: 'Plan de pensiones' },
   { category: 'financial_investments', value: 'stocks_dividends', label: 'Acciones / dividendos' },
   { category: 'financial_investments', value: 'crypto', label: 'Criptomonedas' },
@@ -111,3 +122,17 @@ export const expenseSubcategories: ExpenseSubcategory[] = [
     label: 'Otros gastos de consumo',
   },
 ];
+
+export function normalizeExpenseTaxonomy(
+  category: string,
+  subcategory: string,
+): { category: string; subcategory: string } {
+  const normalizedCategory = String(category ?? '').trim();
+  const normalizedSubcategory = String(subcategory ?? '').trim();
+  const alias =
+    expenseSubcategoryAliases[normalizedCategory as ExpenseCategoryKey]?.[normalizedSubcategory];
+  return {
+    category: normalizedCategory,
+    subcategory: alias ?? normalizedSubcategory,
+  };
+}

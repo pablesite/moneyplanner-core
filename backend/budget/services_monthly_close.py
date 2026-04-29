@@ -15,6 +15,7 @@ from .models import (
 )
 from .services import (
     _build_ledger_monthly_execution_maps,
+    _get_base_currency,
     _round_money,
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
@@ -84,6 +85,7 @@ def _get_uncovered_income_entries_for_month(
         flow_family=str(LedgerEntry.FlowFamily.INCOME),
         legacy_fk_name="annual_income_entry",
         positive_side=str(LedgerEntry.Side.CREDIT),
+        base_currency=_get_base_currency(user),
     )
 
     existing_checkins = set(
@@ -121,6 +123,7 @@ def _get_uncovered_expense_entries_for_month(
         flow_family=str(LedgerEntry.FlowFamily.EXPENSE),
         legacy_fk_name="annual_expense_entry",
         positive_side=str(LedgerEntry.Side.DEBIT),
+        base_currency=_get_base_currency(user),
     )
 
     existing_checkins = set(
