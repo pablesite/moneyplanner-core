@@ -1074,6 +1074,11 @@
   margin-top: 3px;
 }
 
+.ui-budget-checkin-row-balance {
+  display: inline-block;
+  margin-left: 8px;
+}
+
 .ui-budget-checkin-row-lock-note {
   display: block;
   margin-top: 2px;

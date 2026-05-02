@@ -46,6 +46,7 @@ defineProps<{
   selectedLiquidityMonthDeviation: number;
   liquidityAdjustAmounts: Record<number, string>;
   setLiquidityAdjustAmount: (assetId: number, value: string) => void;
+  isLiquidityLedgerRowUnlocked: (assetId: number) => boolean;
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   checkinStatusLabel: (status: 'confirmed' | 'adjusted' | 'skipped') => string;
@@ -196,20 +197,38 @@ defineProps<{
                   v-if="row.ledger_available && row.coverage_source === 'ledger'"
                   class="ui-budget-checkin-row-state"
                 >
-                  <strong>Libro contable</strong>
+                  <strong>Saldo libro contable:</strong>
                   <template v-if="row.executed != null">
-                    ({{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
+                    {{ formatMoney(row.executed) }}
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }}
                   </template>
+                  <span
+                    v-if="row.executed != null && row.executed !== row.planned"
+                    class="ui-budget-checkin-row-balance"
+                    :class="{
+                      'ui-budget-checkin-group-dev-pos': row.executed > row.planned,
+                      'ui-budget-checkin-group-dev-neg': row.executed < row.planned,
+                    }"
+                  >
+                    Desviación {{ row.executed > row.planned ? '+' : ''
+                    }}{{ formatMoney(row.executed - row.planned) }}
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }}
+                  </span>
+                  <span
+                    v-if="isLiquidityLedgerRowUnlocked(row.asset_id)"
+                    class="ui-budget-checkin-row-lock-note"
+                  >
+                    Ajuste manual abierto. Guarda el saldo o vuelve al libro contable.
+                  </span>
                 </div>
                 <div
                   v-else-if="row.ledger_available && row.checkin"
                   class="ui-budget-checkin-row-state"
                 >
-                  <strong>Manual (sin libro contable)</strong>
+                  <strong>Ajuste manual sobre libro contable:</strong>
                   <template v-if="row.executed != null">
-                    ({{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }})
+                    {{ formatMoney(row.executed) }}
+                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }}
                   </template>
                 </div>
                 <div v-else-if="row.checkin" class="ui-budget-checkin-row-state">
@@ -223,17 +242,21 @@ defineProps<{
 
               <div class="ui-budget-checkin-row-actions">
                 <div
-                  v-if="row.ledger_available && row.coverage_source === 'ledger'"
+                  v-if="
+                    row.ledger_available &&
+                    row.coverage_source === 'ledger' &&
+                    !isLiquidityLedgerRowUnlocked(row.asset_id)
+                  "
                   class="ui-budget-checkin-adjust"
                 >
                   <button
                     type="button"
                     class="btn ui-budget-checkin-mini-btn"
                     :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
-                    title="Abrir candado y ajustar manualmente esta cuenta"
+                    title="Abrir un ajuste manual sin modificar todavia el libro contable"
                     @click="unlockLiquidityLedgerRow(row)"
                   >
-                    🔒 Libro contable
+                    Ajustar manualmente
                   </button>
                 </div>
                 <div v-else class="ui-budget-checkin-adjust">
@@ -261,10 +284,10 @@ defineProps<{
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
                       :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
-                      title="Volver a bloquear y usar el saldo del libro contable"
+                      title="Volver a usar el saldo del libro contable"
                       @click="relockLiquidityLedgerRow(row)"
                     >
-                      ðŸ"" Manual
+                      Volver a libro
                     </button>
                   </div>
                   <input
@@ -290,7 +313,9 @@ defineProps<{
                     :checked="!!row.checkin"
                     :disabled="
                       isCloseLocked ||
-                      (row.ledger_available && row.coverage_source === 'ledger') ||
+                      (row.ledger_available &&
+                        row.coverage_source === 'ledger' &&
+                        !isLiquidityLedgerRowUnlocked(row.asset_id)) ||
                       liquidityExecutionBusyAssetId === row.asset_id
                     "
                     aria-label="Confirmar cierre de liquidez"

@@ -161,6 +161,7 @@ const {
   onExpenseAdjustAmountBlur,
   liquidityCheckinRowSummary,
   ensureLiquidityAdjustAmountPrefilled,
+  isLiquidityLedgerRowUnlocked,
   handleFinalizeClose,
   handleReopenClose,
   handleLockClose,
@@ -333,6 +334,7 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :selected-liquidity-month-deviation="selectedLiquidityMonthDeviation"
       :liquidity-adjust-amounts="liquidityAdjustAmounts"
       :set-liquidity-adjust-amount="setLiquidityAdjustAmount"
+      :is-liquidity-ledger-row-unlocked="isLiquidityLedgerRowUnlocked"
       :format-money="formatMoney"
       :format-percent="formatPercent"
       :checkin-status-label="checkinStatusLabel"

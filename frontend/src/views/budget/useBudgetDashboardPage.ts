@@ -351,6 +351,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const liquidityExecutionBusyAssetId = ref<number | null>(null);
   const liquidityExecutionError = ref<string | null>(null);
   const liquidityAdjustAmounts = ref<Record<number, string>>({});
+  const unlockedLiquidityLedgerAssetIds = ref<Set<number>>(new Set());
   const activeMonthlyCloseStep = ref<MonthlyCloseStepId>('liq');
   const monthlyCloseData = ref<MonthlyCloseStateResponse | null>(null);
   const monthlyCloseLoading = ref(false);
@@ -535,6 +536,17 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   function setLiquidityAdjustAmount(assetId: number, value: string): void {
     liquidityAdjustAmounts.value = { ...liquidityAdjustAmounts.value, [assetId]: value };
+  }
+
+  function isLiquidityLedgerRowUnlocked(assetId: number): boolean {
+    return unlockedLiquidityLedgerAssetIds.value.has(assetId);
+  }
+
+  function setLiquidityLedgerRowUnlocked(assetId: number, unlocked: boolean): void {
+    const next = new Set(unlockedLiquidityLedgerAssetIds.value);
+    if (unlocked) next.add(assetId);
+    else next.delete(assetId);
+    unlockedLiquidityLedgerAssetIds.value = next;
   }
 
   function updateIncomeViewMode(mode: BudgetEntryViewMode): void {
@@ -3513,6 +3525,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       } else {
         await budgetApi.post('/api/net-worth/liquidity-checkins/', payload);
       }
+      setLiquidityLedgerRowUnlocked(row.asset_id, false);
       await refreshLiquidityExecutionData();
     } catch (e: unknown) {
       liquidityExecutionError.value = toBudgetErrorMessage(e);
@@ -3542,14 +3555,15 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     if (!row.ledger_available || row.coverage_source !== 'ledger') return;
     const seed = row.executed ?? row.planned;
     liquidityAdjustAmounts.value[row.asset_id] = seed.toFixed(2);
-    const status = amountsEqualCents(seed, row.planned) ? 'confirmed' : 'adjusted';
-    await upsertLiquidityCheckin(row, status);
+    setLiquidityLedgerRowUnlocked(row.asset_id, true);
   }
 
   async function relockLiquidityLedgerRow(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
   ): Promise<void> {
-    if (!row.ledger_available || row.coverage_source === 'ledger') return;
+    if (!row.ledger_available) return;
+    setLiquidityLedgerRowUnlocked(row.asset_id, false);
+    if (!row.checkin) return;
     await clearLiquidityCheckin(row);
   }
 
@@ -3591,6 +3605,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   watch(
     monthlyLiquidityExecutionRows,
     (rows) => {
+      const currentAssetIds = new Set(rows.map((row) => row.asset_id));
+      unlockedLiquidityLedgerAssetIds.value = new Set(
+        [...unlockedLiquidityLedgerAssetIds.value].filter((assetId) =>
+          currentAssetIds.has(assetId),
+        ),
+      );
       for (const row of rows) {
         ensureLiquidityAdjustAmountPrefilled(row);
       }
@@ -3688,6 +3708,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     liquidityExecutionBusyAssetId,
     liquidityExecutionError,
     liquidityAdjustAmounts,
+    unlockedLiquidityLedgerAssetIds,
     activeMonthlyCloseStep,
     monthlyCloseData,
     monthlyCloseLoading,
@@ -3724,6 +3745,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     setIncomeAdjustAmount,
     setExpenseAdjustAmount,
     setLiquidityAdjustAmount,
+    isLiquidityLedgerRowUnlocked,
     updateIncomeViewMode,
     updateExpenseViewMode,
     ownerAdjustedIncomeEntries,
