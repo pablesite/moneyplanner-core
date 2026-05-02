@@ -197,11 +197,7 @@ defineProps<{
                   v-if="row.ledger_available && row.coverage_source === 'ledger'"
                   class="ui-budget-checkin-row-state"
                 >
-                  <strong>Saldo libro contable:</strong>
-                  <template v-if="row.executed != null">
-                    {{ formatMoney(row.executed) }}
-                    {{ row.currency === 'EUR' ? 'EUR' : row.currency }}
-                  </template>
+                  <strong>Libro contable activo</strong>
                   <span
                     v-if="row.executed != null && row.executed !== row.planned"
                     class="ui-budget-checkin-row-balance"
@@ -249,6 +245,13 @@ defineProps<{
                   "
                   class="ui-budget-checkin-adjust"
                 >
+                  <div v-if="row.executed != null" class="ui-budget-checkin-ledger-readout">
+                    <span>Saldo cierre</span>
+                    <strong>
+                      {{ formatMoney(row.executed) }}
+                      {{ row.currency === 'EUR' ? 'EUR' : row.currency }}
+                    </strong>
+                  </div>
                   <button
                     type="button"
                     class="btn ui-budget-checkin-mini-btn"
@@ -307,7 +310,17 @@ defineProps<{
                     @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
                   />
                 </div>
-                <label class="ui-budget-checkin-confirm" title="Confirmar cierre de liquidez">
+                <label
+                  v-if="
+                    !(
+                      row.ledger_available &&
+                      row.coverage_source === 'ledger' &&
+                      !isLiquidityLedgerRowUnlocked(row.asset_id)
+                    )
+                  "
+                  class="ui-budget-checkin-confirm"
+                  title="Confirmar cierre de liquidez"
+                >
                   <input
                     type="checkbox"
                     :checked="!!row.checkin"
