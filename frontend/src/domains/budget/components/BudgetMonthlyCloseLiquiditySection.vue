@@ -262,8 +262,31 @@ defineProps<{
                     Ajustar manualmente
                   </button>
                 </div>
-                <div v-else class="ui-budget-checkin-adjust">
-                  <div class="ui-budget-checkin-quick-actions">
+                <div
+                  v-else
+                  class="ui-budget-checkin-adjust"
+                  :class="{ 'ui-budget-checkin-adjust-ledger-manual': row.ledger_available }"
+                >
+                  <input
+                    :value="liquidityAdjustAmounts[row.asset_id] ?? ''"
+                    inputmode="decimal"
+                    class="input ui-data-field"
+                    :disabled="isCloseLocked"
+                    placeholder="Saldo real"
+                    @input="
+                      setLiquidityAdjustAmount(
+                        row.asset_id,
+                        ($event.target as HTMLInputElement).value,
+                      )
+                    "
+                    @focus="ensureLiquidityAdjustAmountPrefilled(row)"
+                    @blur="onLiquidityAdjustAmountBlur(row)"
+                    @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
+                  />
+                  <div
+                    class="ui-budget-checkin-quick-actions"
+                    :class="{ 'ui-budget-checkin-quick-actions-inline': row.ledger_available }"
+                  >
                     <button
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
@@ -285,37 +308,21 @@ defineProps<{
                     <button
                       v-if="row.ledger_available"
                       type="button"
-                      class="btn ui-budget-checkin-mini-btn"
+                      class="btn ui-budget-checkin-mini-btn ui-budget-checkin-link-btn"
                       :disabled="isCloseLocked || liquidityExecutionBusyAssetId === row.asset_id"
                       title="Volver a usar el saldo del libro contable"
                       @click="relockLiquidityLedgerRow(row)"
                     >
-                      Volver a libro
+                      Usar libro
                     </button>
                   </div>
-                  <input
-                    :value="liquidityAdjustAmounts[row.asset_id] ?? ''"
-                    inputmode="decimal"
-                    class="input ui-data-field"
-                    :disabled="isCloseLocked"
-                    placeholder="Saldo real"
-                    @input="
-                      setLiquidityAdjustAmount(
-                        row.asset_id,
-                        ($event.target as HTMLInputElement).value,
-                      )
-                    "
-                    @focus="ensureLiquidityAdjustAmountPrefilled(row)"
-                    @blur="onLiquidityAdjustAmountBlur(row)"
-                    @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
-                  />
                 </div>
                 <label
                   v-if="
                     !(
-                      row.ledger_available &&
-                      row.coverage_source === 'ledger' &&
-                      !isLiquidityLedgerRowUnlocked(row.asset_id)
+                      row.ledger_available ||
+                      (row.coverage_source === 'ledger' &&
+                        !isLiquidityLedgerRowUnlocked(row.asset_id))
                     )
                   "
                   class="ui-budget-checkin-confirm"
