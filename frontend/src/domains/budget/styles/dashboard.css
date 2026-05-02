@@ -1085,6 +1085,24 @@
   color: rgba(191, 255, 241, 0.9);
 }
 
+.ui-budget-checkin-ledger-readout {
+  display: grid;
+  gap: 2px;
+  min-width: 120px;
+  text-align: right;
+}
+
+.ui-budget-checkin-ledger-readout span {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.68rem;
+}
+
+.ui-budget-checkin-ledger-readout strong {
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 0.94rem;
+  white-space: nowrap;
+}
+
 .ui-budget-checkin-row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1146,6 +1164,9 @@
   }
   .ui-budget-checkin-row-actions {
     justify-content: flex-start;
+  }
+  .ui-budget-checkin-ledger-readout {
+    text-align: left;
   }
   .ui-budget-checkin-adjust {
     flex-wrap: wrap;

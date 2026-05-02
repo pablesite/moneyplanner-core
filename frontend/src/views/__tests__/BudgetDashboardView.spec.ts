@@ -344,10 +344,12 @@ describe('BudgetDashboardView', () => {
     const wrapper = mountMonthlyCloseView();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Saldo libro contable:189,44 EUR');
+    expect(wrapper.text()).toContain('Libro contable activo');
+    expect(wrapper.text()).toContain('Saldo cierre189,44 EUR');
     expect(wrapper.text()).toContain('Desviación -10,56 EUR');
     expect(wrapper.text()).toContain('Ajustar manualmente');
     expect(wrapper.find('input[placeholder="Saldo real"]').exists()).toBe(false);
+    expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
   });
 
   it('opens ledger liquidity manual editing without persisting until the user confirms', async () => {
