@@ -459,7 +459,7 @@ describe('BudgetDashboardView', () => {
 
     const relockButton = wrapper
       .findAll('button')
-      .find((candidate) => candidate.text().includes('Volver a libro'));
+      .find((candidate) => candidate.text().includes('Usar libro'));
     await relockButton?.trigger('click');
     await flushPromises();
 

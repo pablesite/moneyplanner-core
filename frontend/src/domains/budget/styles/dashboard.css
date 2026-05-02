@@ -1132,10 +1132,24 @@
   gap: 6px;
 }
 
+.ui-budget-checkin-adjust-ledger-manual {
+  align-items: stretch;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 4px;
+}
+
 .ui-budget-checkin-quick-actions {
   display: grid;
   grid-template-rows: repeat(2, minmax(0, auto));
   gap: 4px;
+}
+
+.ui-budget-checkin-quick-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .ui-budget-checkin-mini-btn {
@@ -1146,8 +1160,33 @@
   line-height: 1;
 }
 
+.ui-budget-checkin-quick-actions-inline .ui-budget-checkin-mini-btn {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 7px;
+  border-color: transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.ui-budget-checkin-quick-actions-inline .ui-budget-checkin-mini-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.ui-budget-checkin-quick-actions-inline .ui-budget-checkin-link-btn {
+  color: rgba(191, 255, 241, 0.9);
+}
+
 .ui-budget-checkin-adjust .input {
   width: 132px;
+}
+
+.ui-budget-checkin-adjust-ledger-manual .input {
+  width: 118px;
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 @media (max-width: 900px) {
@@ -1171,9 +1210,15 @@
   .ui-budget-checkin-adjust {
     flex-wrap: wrap;
   }
+  .ui-budget-checkin-adjust-ledger-manual {
+    width: 100%;
+  }
   .ui-budget-checkin-quick-actions {
     grid-template-columns: repeat(2, minmax(0, auto));
     grid-template-rows: none;
+  }
+  .ui-budget-checkin-quick-actions-inline {
+    flex-wrap: wrap;
   }
 }
 
