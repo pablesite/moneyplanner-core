@@ -10,6 +10,9 @@ const currentMonth = new Date().getMonth() + 1;
 const mockUseRoute = vi.fn(() => ({ name: 'budget', path: '/presupuesto' }));
 const mockUseRouter = vi.fn(() => ({ push: vi.fn() }));
 const mockCoreApiGet = vi.hoisted(() => vi.fn());
+const mockCoreApiPost = vi.hoisted(() => vi.fn());
+const mockCoreApiPatch = vi.hoisted(() => vi.fn());
+const mockCoreApiDelete = vi.hoisted(() => vi.fn());
 const mockIncomeStore = vi.hoisted(() => ({
   entries: { value: [] as unknown[] },
   totalAnnual: { value: 0 },
@@ -89,9 +92,9 @@ vi.mock('vue-router', () => ({
 vi.mock('@/lib/api', () => ({
   coreApi: {
     get: mockCoreApiGet,
-    post: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
+    post: mockCoreApiPost,
+    patch: mockCoreApiPatch,
+    delete: mockCoreApiDelete,
   },
 }));
 
@@ -183,7 +186,7 @@ function makeMonthlySummary(executed = '0.00', overrides: Record<string, unknown
   };
 }
 
-function makeLiquiditySummary() {
+function makeLiquiditySummary(overrides: Record<string, unknown> = {}) {
   return {
     fiscal_year: currentYear,
     month: currentMonth,
@@ -195,6 +198,7 @@ function makeLiquiditySummary() {
     checkins_confirmed: 0,
     checkins_expected: 0,
     rows: [],
+    ...overrides,
   };
 }
 
@@ -206,6 +210,7 @@ function configureCoreApi(overrides?: {
   expenseSummaryExecuted?: string;
   incomeSummary?: Record<string, unknown>;
   expenseSummary?: Record<string, unknown>;
+  liquiditySummary?: Record<string, unknown>;
 }) {
   mockCoreApiGet.mockImplementation(async (url: string) => {
     if (url === '/api/budget/annual-income/monthly-summary/') {
@@ -225,7 +230,7 @@ function configureCoreApi(overrides?: {
       return { data: overrides?.expenseCheckins ?? [] };
     }
     if (url === '/api/net-worth/liquidity/monthly-summary/') {
-      return { data: makeLiquiditySummary() };
+      return { data: makeLiquiditySummary(overrides?.liquiditySummary ?? {}) };
     }
     if (url === '/api/net-worth/assets/') {
       return { data: overrides?.assets ?? [] };
@@ -270,6 +275,12 @@ function mountBudgetView() {
 describe('BudgetDashboardView', () => {
   beforeEach(() => {
     mockCoreApiGet.mockReset();
+    mockCoreApiPost.mockReset();
+    mockCoreApiPatch.mockReset();
+    mockCoreApiDelete.mockReset();
+    mockCoreApiPost.mockResolvedValue({ data: {} });
+    mockCoreApiPatch.mockResolvedValue({ data: {} });
+    mockCoreApiDelete.mockResolvedValue({ data: {} });
     mockAccountingApi.getMonthlySummary.mockReset();
     mockAccountingApi.getTransactions.mockReset();
     mockAccountingApi.getBudgetSuggestions.mockReset();
@@ -289,6 +300,168 @@ describe('BudgetDashboardView', () => {
         method_note: '',
       },
     } as never);
+  });
+
+  it('shows ledger liquidity balance without opening manual editing', async () => {
+    configureCoreApi({
+      liquiditySummary: {
+        planned_total: '200.00',
+        executed_total: '189.44',
+        deviation_total: '-10.56',
+        completion_ratio: 1,
+        coverage_confirmed: 1,
+        coverage_expected: 1,
+        ledger_rows_confirmed: 1,
+        fallback_rows_confirmed: 0,
+        has_ledger_data: true,
+        rows: [
+          {
+            asset_id: 42,
+            asset_name: 'Cuenta ledger',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '200.00',
+            executed_closing_balance: '189.44',
+            effective_closing_balance: '189.44',
+            deviation: '-10.56',
+            planned_closing_balance_base: '200.00',
+            executed_closing_balance_base: '189.44',
+            effective_closing_balance_base: '189.44',
+            deviation_base: '-10.56',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+        ],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Saldo libro contable:189,44 EUR');
+    expect(wrapper.text()).toContain('Desviación -10,56 EUR');
+    expect(wrapper.text()).toContain('Ajustar manualmente');
+    expect(wrapper.find('input[placeholder="Saldo real"]').exists()).toBe(false);
+  });
+
+  it('opens ledger liquidity manual editing without persisting until the user confirms', async () => {
+    configureCoreApi({
+      liquiditySummary: {
+        planned_total: '200.00',
+        executed_total: '189.44',
+        deviation_total: '-10.56',
+        completion_ratio: 1,
+        rows: [
+          {
+            asset_id: 42,
+            asset_name: 'Cuenta ledger',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '200.00',
+            executed_closing_balance: '189.44',
+            effective_closing_balance: '189.44',
+            deviation: '-10.56',
+            planned_closing_balance_base: '200.00',
+            executed_closing_balance_base: '189.44',
+            effective_closing_balance_base: '189.44',
+            deviation_base: '-10.56',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+        ],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    const adjustButton = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ajustar manualmente'));
+    await adjustButton?.trigger('click');
+    await flushPromises();
+
+    expect(mockCoreApiPost).not.toHaveBeenCalled();
+    const input = wrapper.find('input[placeholder="Saldo real"]');
+    expect((input.element as HTMLInputElement).value).toBe('189.44');
+
+    await input.setValue('190,50');
+    await input.trigger('blur');
+    await flushPromises();
+
+    expect(mockCoreApiPost).toHaveBeenCalledWith(
+      '/api/net-worth/liquidity-checkins/',
+      expect.objectContaining({
+        asset_id: 42,
+        status: 'adjusted',
+        closing_balance_real: '190.50',
+      }),
+    );
+  });
+
+  it('removes a ledger liquidity manual override when returning to the ledger balance', async () => {
+    configureCoreApi({
+      liquiditySummary: {
+        planned_total: '200.00',
+        executed_total: '190.50',
+        deviation_total: '-9.50',
+        completion_ratio: 1,
+        rows: [
+          {
+            asset_id: 42,
+            asset_name: 'Cuenta ledger',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '200.00',
+            executed_closing_balance: '190.50',
+            effective_closing_balance: '189.44',
+            deviation: '-9.50',
+            planned_closing_balance_base: '200.00',
+            executed_closing_balance_base: '190.50',
+            effective_closing_balance_base: '189.44',
+            deviation_base: '-9.50',
+            coverage_source: 'checkin',
+            ledger_available: true,
+            checkin: {
+              id: 77,
+              status: 'adjusted',
+              closing_balance_real: '190.50',
+              note: '',
+              confirmed_at: null,
+              updated_at: null,
+            },
+          },
+        ],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    const relockButton = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Volver a libro'));
+    await relockButton?.trigger('click');
+    await flushPromises();
+
+    expect(mockCoreApiDelete).toHaveBeenCalledWith('/api/net-worth/liquidity-checkins/77/');
   });
 
   it('uses ledger coverage for income rows and disables legacy check-in editing', async () => {
