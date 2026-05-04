@@ -481,14 +481,11 @@ const quickMainAccountGroups = computed(() => {
           required
         />
         <input
-          v-if="
-            page.quickEntryForm.movement_type === 'transfer' &&
-            page.quickEntryForm.counterparty_account_id != null
-          "
+          v-if="page.quickTransferIsCrossCurrency"
           v-model="page.quickEntryForm.destination_amount"
           class="input"
           inputmode="decimal"
-          :placeholder="`Importe destino (${page.quickTransferDestinationCurrency || 'moneda destino'}) - obligatorio si moneda distinta`"
+          :placeholder="`Importe destino (${page.quickTransferDestinationCurrency})`"
         />
 
         <select
