@@ -74,6 +74,7 @@ const {
   selectedIncomeMonthExecuted,
   selectedIncomeMonthDeviation,
   selectedIncomeMonthCompletionRatio,
+  groupedMonthlyIncomeExecutionEntries,
   incomeEvolutionMonths,
   incomeEvolutionBaseMonthly,
   expenseEvolutionMonths,
@@ -148,12 +149,12 @@ const {
   activeViewSummary,
   ensureExpenseAdjustAmountPrefilled,
   checkinStatusLabel,
-  incomeCheckinRowSummary,
-  ensureIncomeAdjustAmountPrefilled,
-  saveIncomeCheckinFromInput,
-  onIncomeCheckinCheckboxToggle,
-  onIncomeAdjustAmountBlur,
-  resetIncomeCheckinDraftValue,
+  isIncomeGroupUnlocked,
+  ensureIncomeGroupAdjustAmountPrefilled,
+  saveIncomeGroupCheckinFromInput,
+  resetIncomeGroupCheckinDraftValue,
+  unlockIncomeGroupManualAdjustment,
+  relockIncomeGroupManualAdjustment,
   expenseCheckinRowSummary,
   resetExpenseCheckinDraftValue,
   saveExpenseCheckinFromInput,
@@ -354,7 +355,7 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :is-monthly-close-view="isMonthlyCloseView"
       :active-monthly-close-step="activeMonthlyCloseStep"
       :is-close-locked="isCloseLocked"
-      :monthly-income-execution-entries="monthlyIncomeExecutionEntries"
+      :grouped-monthly-income-execution-entries="groupedMonthlyIncomeExecutionEntries"
       :income-execution-loading="incomeExecutionLoading"
       :income-execution-error="incomeExecutionError"
       :income-execution-busy-entry-id="incomeExecutionBusyEntryId"
@@ -370,17 +371,15 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :monthly-income-pending-classification="monthlyIncomePendingClassification"
       :format-money="formatMoney"
       :format-percent="formatPercent"
-      :execution-source-label="executionSourceLabel"
-      :income-checkin-row-summary="incomeCheckinRowSummary"
       :checkin-status-label="checkinStatusLabel"
-      :is-locked-execution-row="isLockedExecutionRow"
+      :is-income-group-unlocked="isIncomeGroupUnlocked"
       :go-to-previous-monthly-close-step="goToPreviousMonthlyCloseStep"
       :go-to-next-monthly-close-step="goToNextMonthlyCloseStep"
-      :reset-income-checkin-draft-value="resetIncomeCheckinDraftValue"
-      :ensure-income-adjust-amount-prefilled="ensureIncomeAdjustAmountPrefilled"
-      :on-income-adjust-amount-blur="onIncomeAdjustAmountBlur"
-      :save-income-checkin-from-input="saveIncomeCheckinFromInput"
-      :on-income-checkin-checkbox-toggle="onIncomeCheckinCheckboxToggle"
+      :reset-income-group-checkin-draft-value="resetIncomeGroupCheckinDraftValue"
+      :ensure-income-group-adjust-amount-prefilled="ensureIncomeGroupAdjustAmountPrefilled"
+      :save-income-group-checkin-from-input="saveIncomeGroupCheckinFromInput"
+      :unlock-income-group-manual-adjustment="unlockIncomeGroupManualAdjustment"
+      :relock-income-group-manual-adjustment="relockIncomeGroupManualAdjustment"
     />
     <BudgetMonthlyCloseResultSection
       :is-monthly-close-view="isMonthlyCloseView"
