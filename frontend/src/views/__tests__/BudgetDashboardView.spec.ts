@@ -714,8 +714,10 @@ describe('BudgetDashboardView', () => {
     await openMonthlyStep(wrapper, 'Ingresos');
 
     expect(wrapper.text()).toContain('Pendiente clasificar');
-    expect(wrapper.text()).toContain('Nomina A');
-    expect(wrapper.text()).toContain('Nomina B');
+    expect(wrapper.text()).toContain('Nómina');
+    expect(wrapper.text()).toContain('2 líneas agrupadas');
+    expect(wrapper.text()).not.toContain('Nomina A');
+    expect(wrapper.text()).not.toContain('Nomina B');
   });
 
   it('renders contextual management actions in budget detail rows', async () => {

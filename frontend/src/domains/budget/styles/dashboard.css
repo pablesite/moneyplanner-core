@@ -965,6 +965,14 @@
   color: rgba(141, 241, 188, 0.95);
 }
 
+.ui-budget-checkin-income-dev-pos {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-checkin-income-dev-neg {
+  color: rgba(255, 132, 132, 0.95);
+}
+
 .ui-budget-checkin-group-rows {
   display: grid;
   gap: 0;
@@ -1085,6 +1093,64 @@
   color: rgba(191, 255, 241, 0.9);
 }
 
+.ui-budget-checkin-subcategory-rows {
+  padding-left: 10px;
+}
+
+.ui-budget-checkin-subcategory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.ui-budget-checkin-subcategory-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 330px;
+}
+
+.ui-budget-checkin-subcategory-metrics span {
+  display: grid;
+  gap: 2px;
+  min-width: 94px;
+  text-align: right;
+}
+
+.ui-budget-checkin-subcategory-metrics small {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 0.68rem;
+}
+
+.ui-budget-checkin-subcategory-metrics strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.ui-budget-checkin-subcategory-metrics .ui-budget-checkin-group-dev-pos strong {
+  color: rgba(255, 132, 132, 0.95);
+}
+
+.ui-budget-checkin-subcategory-metrics .ui-budget-checkin-group-dev-neg strong {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-checkin-subcategory-metrics .ui-budget-checkin-income-dev-pos strong {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-checkin-subcategory-metrics .ui-budget-checkin-income-dev-neg strong {
+  color: rgba(255, 132, 132, 0.95);
+}
+
+.ui-budget-checkin-group-lock {
+  align-self: center;
+  margin-top: 0;
+  text-align: right;
+}
+
 .ui-budget-checkin-ledger-readout {
   display: grid;
   gap: 2px;
@@ -1160,6 +1226,10 @@
   line-height: 1;
 }
 
+.ui-budget-checkin-add-btn {
+  min-width: 112px;
+}
+
 .ui-budget-checkin-quick-actions-inline .ui-budget-checkin-mini-btn {
   min-width: 0;
   min-height: 30px;
@@ -1203,6 +1273,16 @@
   }
   .ui-budget-checkin-row-actions {
     justify-content: flex-start;
+  }
+  .ui-budget-checkin-subcategory-metrics {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+  .ui-budget-checkin-subcategory-metrics span {
+    text-align: left;
+  }
+  .ui-budget-checkin-group-lock {
+    text-align: left;
   }
   .ui-budget-checkin-ledger-readout {
     text-align: left;

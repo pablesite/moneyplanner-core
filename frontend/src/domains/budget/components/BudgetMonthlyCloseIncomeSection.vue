@@ -39,10 +39,26 @@ type IncomeRow = {
   checkin: IncomeCheckin | null;
 };
 
+type IncomeGroup = {
+  key: string;
+  categoryKey: string;
+  categoryLabel: string;
+  subcategoryKey: string;
+  subcategoryLabel: string;
+  plannedTotal: number;
+  ledgerDetectedTotal: number;
+  executedTotal: number;
+  deviation: number;
+  completionRatio: number;
+  checkedCount: number;
+  rows: IncomeRow[];
+  editableRow: IncomeRow | null;
+};
+
 defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
-  monthlyIncomeExecutionEntries: IncomeRow[];
+  groupedMonthlyIncomeExecutionEntries: IncomeGroup[];
   incomeExecutionLoading: boolean;
   incomeExecutionError: string | null;
   incomeExecutionBusyEntryId: number | null;
@@ -58,18 +74,19 @@ defineProps<{
   monthlyIncomePendingClassification: { amount: number; ambiguousRows: number };
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
-  executionSourceLabel: (origin: IncomeExecutionOrigin) => string;
-  incomeCheckinRowSummary: (row: IncomeRow) => string;
   isCloseLocked?: boolean;
   checkinStatusLabel: (status: 'confirmed' | 'adjusted' | 'skipped' | 'estimated') => string;
-  isLockedExecutionRow: (row: IncomeRow) => boolean;
+  isIncomeGroupUnlocked: (groupKey: string) => boolean;
   goToPreviousMonthlyCloseStep: () => void;
   goToNextMonthlyCloseStep: () => void;
-  resetIncomeCheckinDraftValue: (row: IncomeRow, mode: IncomeResetMode) => void | Promise<void>;
-  ensureIncomeAdjustAmountPrefilled: (row: IncomeRow) => void;
-  onIncomeAdjustAmountBlur: (row: IncomeRow) => void | Promise<void>;
-  saveIncomeCheckinFromInput: (row: IncomeRow) => void | Promise<void>;
-  onIncomeCheckinCheckboxToggle: (row: IncomeRow, checked: boolean) => void | Promise<void>;
+  resetIncomeGroupCheckinDraftValue: (
+    group: IncomeGroup,
+    mode: IncomeResetMode,
+  ) => void | Promise<void>;
+  ensureIncomeGroupAdjustAmountPrefilled: (group: IncomeGroup) => void;
+  saveIncomeGroupCheckinFromInput: (group: IncomeGroup) => void | Promise<void>;
+  unlockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
+  relockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
 }>();
 </script>
 
@@ -88,7 +105,7 @@ defineProps<{
           >
             &larr;
           </button>
-          <h2 class="ui-budget-checkin-title">Paso 2 ? Check-in mensual de ingresos</h2>
+          <h2 class="ui-budget-checkin-title">Paso 2 - Check-in mensual de ingresos</h2>
           <button
             type="button"
             class="btn ui-monthly-close-step-nav-btn"
@@ -143,7 +160,7 @@ defineProps<{
       <div v-else-if="incomeExecutionError" class="subtle text-red-400">
         {{ incomeExecutionError }}
       </div>
-      <div v-else-if="!monthlyIncomeExecutionEntries.length" class="subtle">
+      <div v-else-if="!groupedMonthlyIncomeExecutionEntries.length" class="subtle">
         No hay ingresos recurrentes previstos para este mes.
       </div>
       <div v-else class="ui-budget-checkin-groups-box">
@@ -163,10 +180,10 @@ defineProps<{
           v-if="monthlyIncomePendingClassification.amount > 0"
           class="ui-state-block ui-state-error"
         >
-          <strong>Pendiente clasificar</strong>
+          <strong>Sin subcategoría</strong>
           <span>
-            {{ formatMoney(monthlyIncomePendingClassification.amount) }} EUR del libro contable no se puede
-            alinear automaticamente con el presupuesto de este mes.
+            {{ formatMoney(monthlyIncomePendingClassification.amount) }} EUR del libro contable no
+            tiene subcategoría de presupuesto todavía.
           </span>
           <small v-if="monthlyIncomePendingClassification.ambiguousRows > 0">
             {{ monthlyIncomePendingClassification.ambiguousRows }} líneas comparten la misma
@@ -178,7 +195,7 @@ defineProps<{
             <div class="ui-budget-checkin-group-title-wrap">
               <strong class="ui-budget-checkin-group-title">Ingresos recurrentes</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ monthlyIncomeExecutionEntries.length }} líneas -
+                {{ groupedMonthlyIncomeExecutionEntries.length }} subcategorías -
                 {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud
               </span>
             </div>
@@ -187,8 +204,8 @@ defineProps<{
               <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} EUR</span>
               <span
                 :class="{
-                  'ui-budget-checkin-group-dev-pos': selectedIncomeMonthDeviation > 0,
-                  'ui-budget-checkin-group-dev-neg': selectedIncomeMonthDeviation < 0,
+                  'ui-budget-checkin-income-dev-pos': selectedIncomeMonthDeviation > 0,
+                  'ui-budget-checkin-income-dev-neg': selectedIncomeMonthDeviation < 0,
                 }"
               >
                 D {{ selectedIncomeMonthDeviation > 0 ? '+' : ''
@@ -196,128 +213,150 @@ defineProps<{
               </span>
             </div>
           </div>
-          <div class="ui-budget-checkin-group-rows">
+          <div class="ui-budget-checkin-group-rows ui-budget-checkin-subcategory-rows">
             <article
-              v-for="row in monthlyIncomeExecutionEntries"
-              :key="`income-checkin-${row.entry.id}`"
+              v-for="group in groupedMonthlyIncomeExecutionEntries"
+              :key="`income-checkin-group-${group.key}`"
               class="ui-budget-checkin-row"
-              :class="{ 'ui-budget-checkin-row-estimated': row.checkin?.status === 'estimated' }"
+              :class="{
+                'ui-budget-checkin-row-estimated':
+                  group.editableRow?.checkin?.status === 'estimated',
+              }"
             >
               <div class="ui-budget-checkin-row-main">
                 <div
-                  v-if="row.executionSource !== 'none'"
+                  v-if="group.checkedCount > 0"
                   class="ui-budget-execution-chip"
                   :class="{
-                    'ui-budget-execution-chip-ledger': row.executionOrigin === 'categorized_ledger',
+                    'ui-budget-execution-chip-ledger': group.rows.some(
+                      (row) => row.executionOrigin === 'categorized_ledger',
+                    ),
                   }"
                 >
-                  {{ executionSourceLabel(row.executionOrigin) }}
+                  {{
+                    group.rows.some((row) => row.executionOrigin === 'categorized_ledger')
+                      ? 'Ledger categorizado'
+                      : group.rows.some((row) => row.executionOrigin === 'ambiguous_taxonomy')
+                        ? 'Ledger subcategoría'
+                        : 'Fallback legacy'
+                  }}
                 </div>
-                <div class="ui-budget-checkin-row-title" :title="incomeCheckinRowSummary(row)">
+                <div class="ui-budget-checkin-row-title" :title="group.subcategoryLabel">
                   <span
-                    v-if="row.checkin?.status === 'estimated'"
+                    v-if="group.editableRow?.checkin?.status === 'estimated'"
                     class="ui-budget-checkin-estimated-badge"
                     >Estimado</span
                   >
-                  {{ incomeCheckinRowSummary(row) }}
-                  <span class="ui-budget-checkin-row-planned"
-                    >(Previsto {{ formatMoney(row.planned) }} EUR)</span
-                  >
+                  {{ group.subcategoryLabel }}
                 </div>
-                <div
-                  v-if="
-                    row.executionOrigin === 'categorized_ledger' ||
-                    row.executionOrigin === 'legacy_ledger' ||
-                    row.executionOrigin === 'ambiguous_taxonomy'
-                  "
-                  class="ui-budget-checkin-row-state"
-                >
-                  <strong>{{ executionSourceLabel(row.executionOrigin) }}</strong>
-                  <template v-if="row.executed != null"
-                    >({{ formatMoney(row.executed) }} EUR)</template
-                  >
-                  <span
-                    v-if="
-                      row.executionOrigin === 'categorized_ledger' ||
-                      row.executionOrigin === 'legacy_ledger'
-                    "
-                    class="ui-budget-checkin-row-lock-note"
-                  >
-                    Edición legacy bloqueada
+                <div class="ui-budget-checkin-row-state ui-budget-checkin-subcategory-meta">
+                  <span>{{ group.categoryLabel }}</span>
+                  <span v-if="group.rows.length > 1">{{ group.rows.length }} líneas agrupadas</span>
+                  <span v-if="group.editableRow?.checkin">
+                    {{ checkinStatusLabel(group.editableRow.checkin.status) }}
                   </span>
-                  <span v-else class="ui-budget-checkin-row-lock-note">
-                    Varias líneas comparten esta subcategoría.
-                  </span>
-                </div>
-                <div
-                  v-if="row.executionOrigin === 'legacy_checkin' && row.checkin"
-                  class="ui-budget-checkin-row-state"
-                >
-                  <strong>{{ checkinStatusLabel(row.checkin.status) }}</strong>
-                  <template v-if="row.checkin.status !== 'skipped' && row.executed != null">
-                    ({{ formatMoney(row.executed) }} EUR)
-                  </template>
                 </div>
               </div>
               <div class="ui-budget-checkin-row-actions">
-                <div class="ui-budget-checkin-adjust">
-                  <div class="ui-budget-checkin-quick-actions">
-                    <button
-                      type="button"
-                      class="btn ui-budget-checkin-mini-btn"
-                      :disabled="
-                        isCloseLocked ||
-                        isLockedExecutionRow(row) ||
-                        incomeExecutionBusyEntryId === row.entry.id
-                      "
-                      @click="resetIncomeCheckinDraftValue(row, 'zero')"
+                <div class="ui-budget-checkin-subcategory-metrics">
+                  <span>
+                    <small>Previsto</small>
+                    <strong>{{ formatMoney(group.plannedTotal) }} EUR</strong>
+                  </span>
+                  <span>
+                    <small>Ejecutado</small>
+                    <strong>{{ formatMoney(group.executedTotal) }} EUR</strong>
+                  </span>
+                  <span
+                    :class="{
+                      'ui-budget-checkin-income-dev-neg': group.deviation < 0,
+                      'ui-budget-checkin-income-dev-pos': group.deviation > 0,
+                    }"
+                  >
+                    <small>Desv.</small>
+                    <strong
+                      >{{ group.deviation > 0 ? '+' : ''
+                      }}{{ formatMoney(group.deviation) }} EUR</strong
                     >
-                      Borrar
-                    </button>
+                  </span>
+                </div>
+                <div
+                  v-if="group.editableRow && !isIncomeGroupUnlocked(group.key)"
+                  class="ui-budget-checkin-adjust"
+                >
+                  <div class="ui-budget-checkin-ledger-readout">
+                    <span>Base ledger</span>
+                    <strong>{{ formatMoney(group.ledgerDetectedTotal) }} EUR</strong>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn ui-budget-checkin-mini-btn ui-budget-checkin-add-btn"
+                    :disabled="
+                      isCloseLocked || incomeExecutionBusyEntryId === group.editableRow.entry.id
+                    "
+                    title="Añadir un ingreso manual a esta subcategoría sin tocar el libro contable"
+                    @click="unlockIncomeGroupManualAdjustment(group)"
+                  >
+                    Añadir ingreso
+                  </button>
+                </div>
+                <div
+                  v-else-if="group.editableRow"
+                  class="ui-budget-checkin-adjust ui-budget-checkin-adjust-ledger-manual"
+                >
+                  <input
+                    :value="incomeAdjustAmounts[group.editableRow.entry.id] ?? ''"
+                    inputmode="decimal"
+                    class="input ui-data-field"
+                    :disabled="isCloseLocked"
+                    placeholder="Ingreso adicional"
+                    @input="
+                      setIncomeAdjustAmount(
+                        group.editableRow.entry.id,
+                        ($event.target as HTMLInputElement).value,
+                      )
+                    "
+                    @focus="ensureIncomeGroupAdjustAmountPrefilled(group)"
+                    @blur="saveIncomeGroupCheckinFromInput(group)"
+                    @keydown.enter.prevent="saveIncomeGroupCheckinFromInput(group)"
+                  />
+                  <div
+                    class="ui-budget-checkin-quick-actions ui-budget-checkin-quick-actions-inline"
+                  >
                     <button
                       type="button"
                       class="btn ui-budget-checkin-mini-btn"
                       :disabled="
-                        isCloseLocked ||
-                        isLockedExecutionRow(row) ||
-                        incomeExecutionBusyEntryId === row.entry.id
+                        isCloseLocked || incomeExecutionBusyEntryId === group.editableRow.entry.id
                       "
-                      @click="resetIncomeCheckinDraftValue(row, 'planned')"
+                      @click="resetIncomeGroupCheckinDraftValue(group, 'planned')"
                     >
                       Previsto
                     </button>
+                    <button
+                      type="button"
+                      class="btn ui-budget-checkin-mini-btn ui-budget-checkin-link-btn"
+                      :disabled="
+                        isCloseLocked || incomeExecutionBusyEntryId === group.editableRow.entry.id
+                      "
+                      title="Guardar el ingreso adicional"
+                      @click="saveIncomeGroupCheckinFromInput(group)"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn ui-budget-checkin-mini-btn ui-budget-checkin-link-btn"
+                      :disabled="
+                        isCloseLocked || incomeExecutionBusyEntryId === group.editableRow.entry.id
+                      "
+                      title="Volver a usar sólo el importe detectado en el libro contable"
+                      @click="relockIncomeGroupManualAdjustment(group)"
+                    >
+                      Usar ledger
+                    </button>
                   </div>
-                  <input
-                    :value="incomeAdjustAmounts[row.entry.id] ?? ''"
-                    inputmode="decimal"
-                    class="input ui-data-field"
-                    :disabled="isCloseLocked || isLockedExecutionRow(row)"
-                    placeholder="Importe ejecutado"
-                    @input="
-                      setIncomeAdjustAmount(row.entry.id, ($event.target as HTMLInputElement).value)
-                    "
-                    @focus="ensureIncomeAdjustAmountPrefilled(row)"
-                    @blur="onIncomeAdjustAmountBlur(row)"
-                    @keydown.enter.prevent="saveIncomeCheckinFromInput(row)"
-                  />
                 </div>
-                <label class="ui-budget-checkin-confirm" title="Confirmar check-in del mes">
-                  <input
-                    type="checkbox"
-                    :checked="row.executionSource !== 'none'"
-                    :disabled="
-                      isCloseLocked ||
-                      isLockedExecutionRow(row) ||
-                      incomeExecutionBusyEntryId === row.entry.id
-                    "
-                    @change="
-                      onIncomeCheckinCheckboxToggle(
-                        row,
-                        Boolean(($event.target as HTMLInputElement).checked),
-                      )
-                    "
-                  />
-                </label>
               </div>
             </article>
           </div>
