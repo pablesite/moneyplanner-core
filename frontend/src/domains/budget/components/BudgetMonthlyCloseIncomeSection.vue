@@ -119,8 +119,8 @@ defineProps<{
           </button>
         </div>
         <p class="ui-budget-checkin-subtitle">
-          Confirma o ajusta ingresos recurrentes del mes. Los puntuales se integraran cuando tengan
-          mes objetivo.
+          Confirma o ajusta los ingresos previstos para este mes, incluyendo los puntuales con mes
+          objetivo.
         </p>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
           El cierre usa movimientos cuando existen y deja para revisión solo las líneas pendientes.
@@ -164,7 +164,7 @@ defineProps<{
         {{ incomeExecutionError }}
       </div>
       <div v-else-if="!groupedMonthlyIncomeExecutionEntries.length" class="subtle">
-        No hay ingresos recurrentes previstos para este mes.
+        No hay ingresos previstos para este mes.
       </div>
       <div v-else class="ui-budget-checkin-groups-box">
         <div class="ui-budget-execution-note">
@@ -198,7 +198,7 @@ defineProps<{
         <div class="ui-budget-checkin-group">
           <div class="ui-budget-checkin-group-summary">
             <div class="ui-budget-checkin-group-title-wrap">
-              <strong class="ui-budget-checkin-group-title">Ingresos recurrentes</strong>
+              <strong class="ui-budget-checkin-group-title">Ingresos del mes</strong>
               <span class="ui-budget-checkin-group-meta">
                 {{ groupedMonthlyIncomeExecutionEntries.length }} subcategorías -
                 {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud
