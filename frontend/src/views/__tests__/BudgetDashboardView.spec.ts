@@ -549,7 +549,9 @@ describe('BudgetDashboardView', () => {
     await openMonthlyStep(wrapper, 'Ingresos');
 
     expect(wrapper.text()).toContain('1 via ledger');
-    expect(wrapper.text()).toContain('Ledger categorizado');
+    expect(wrapper.text()).toContain('Movimientos');
+    expect(wrapper.text()).not.toContain('Ledger categorizado');
+    expect(wrapper.text()).not.toContain('Ledger subcategoría');
     const input = wrapper.find('input[placeholder="Importe ejecutado"]');
     expect(input.attributes('disabled')).toBeDefined();
   });

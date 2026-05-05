@@ -224,23 +224,6 @@ defineProps<{
               }"
             >
               <div class="ui-budget-checkin-row-main">
-                <div
-                  v-if="group.checkedCount > 0"
-                  class="ui-budget-execution-chip"
-                  :class="{
-                    'ui-budget-execution-chip-ledger': group.rows.some(
-                      (row) => row.executionOrigin === 'categorized_ledger',
-                    ),
-                  }"
-                >
-                  {{
-                    group.rows.some((row) => row.executionOrigin === 'categorized_ledger')
-                      ? 'Ledger categorizado'
-                      : group.rows.some((row) => row.executionOrigin === 'ambiguous_taxonomy')
-                        ? 'Ledger subcategoría'
-                        : 'Fallback legacy'
-                  }}
-                </div>
                 <div class="ui-budget-checkin-row-title" :title="group.subcategoryLabel">
                   <span
                     v-if="group.editableRow?.checkin?.status === 'estimated'"
@@ -285,7 +268,7 @@ defineProps<{
                   class="ui-budget-checkin-adjust"
                 >
                   <div class="ui-budget-checkin-ledger-readout">
-                    <span>Base ledger</span>
+                    <span>Movimientos</span>
                     <strong>{{ formatMoney(group.ledgerDetectedTotal) }} EUR</strong>
                   </div>
                   <button
@@ -353,7 +336,7 @@ defineProps<{
                       title="Volver a usar sólo el importe detectado en el libro contable"
                       @click="relockIncomeGroupManualAdjustment(group)"
                     >
-                      Usar ledger
+                      Usar detectado
                     </button>
                   </div>
                 </div>
