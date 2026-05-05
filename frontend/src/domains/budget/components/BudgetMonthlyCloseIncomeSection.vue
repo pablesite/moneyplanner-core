@@ -119,8 +119,7 @@ defineProps<{
           mes objetivo.
         </p>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          Libro contable categorizado por taxonomía compartida y fallback legacy solo cuando esa
-          clasificación todavía no exista.
+          El cierre usa movimientos cuando existen y deja para revisión solo las líneas pendientes.
         </p>
       </div>
     </div>
@@ -166,10 +165,12 @@ defineProps<{
       <div v-else class="ui-budget-checkin-groups-box">
         <div class="ui-budget-execution-note">
           <div class="ui-budget-execution-note-main">
-            <strong>Cobertura del mes</strong>
+            <strong>Estado del cierre</strong>
             <span>
-              {{ monthlyIncomeCoverageSummary.viaLedger }} vía libro contable -
-              {{ monthlyIncomeCoverageSummary.viaFallback }} via fallback legacy -
+              {{
+                monthlyIncomeCoverageSummary.viaLedger + monthlyIncomeCoverageSummary.viaFallback
+              }}
+              líneas completadas ·
               {{ monthlyIncomeCoverageSummary.pending }} pendientes
             </span>
             <small class="ui-budget-execution-note-detail">{{ monthlyIncomeCoverageDetail }}</small>
