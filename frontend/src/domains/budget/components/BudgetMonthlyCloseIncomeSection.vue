@@ -196,15 +196,6 @@ defineProps<{
           </small>
         </div>
         <div class="ui-budget-checkin-group">
-          <div class="ui-budget-checkin-group-summary">
-            <div class="ui-budget-checkin-group-title-wrap">
-              <strong class="ui-budget-checkin-group-title">Ingresos del mes</strong>
-              <span class="ui-budget-checkin-group-meta">
-                {{ groupedMonthlyIncomeExecutionEntries.length }} subcategorías -
-                {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud
-              </span>
-            </div>
-          </div>
           <div class="ui-budget-checkin-group-rows ui-budget-checkin-subcategory-rows">
             <article
               v-for="group in groupedMonthlyIncomeExecutionEntries"
