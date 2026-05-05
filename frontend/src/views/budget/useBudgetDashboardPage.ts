@@ -3706,6 +3706,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   async function saveLiquidityCheckinFromInput(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
   ): Promise<void> {
+    if (liquidityExecutionBusyAssetId.value === row.asset_id) return;
     ensureLiquidityAdjustAmountPrefilled(row);
     const rawAdjusted = String(liquidityAdjustAmounts.value[row.asset_id] ?? '').trim();
     const parsedAdjusted = parseDecimalInput(rawAdjusted);

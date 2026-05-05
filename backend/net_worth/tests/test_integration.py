@@ -2326,6 +2326,52 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(checkin.note, "Ajuste por saldo real")
         self.assertIsNotNone(checkin.confirmed_at)
 
+    def test_liquidity_checkin_duplicate_post_updates_existing_row(self):
+        bank = Asset.objects.create(
+            user=self.user,
+            name="Cuenta duplicada",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1500.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        first_res = self.client.post(
+            "/api/net-worth/liquidity-checkins/",
+            {
+                "asset_id": bank.id,
+                "fiscal_year": 2026,
+                "month": 1,
+                "status": "confirmed",
+                "closing_balance_real": "1500.00",
+            },
+            format="json",
+        )
+        self.assertEqual(first_res.status_code, status.HTTP_201_CREATED, first_res.data)
+
+        second_res = self.client.post(
+            "/api/net-worth/liquidity-checkins/",
+            {
+                "asset_id": bank.id,
+                "fiscal_year": 2026,
+                "month": 1,
+                "status": "adjusted",
+                "closing_balance_real": "10000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(second_res.status_code, status.HTTP_200_OK, second_res.data)
+        self.assertEqual(second_res.data["id"], first_res.data["id"])
+        self.assertEqual(second_res.data["status"], "adjusted")
+        self.assertEqual(second_res.data["closing_balance_real"], "10000.00000000")
+        self.assertEqual(
+            LiquidityMonthlyCheckin.objects.filter(
+                user=self.user, asset=bank, fiscal_year=2026, month=1
+            ).count(),
+            1,
+        )
+
     def test_liquidity_checkin_belongs_to_user_and_can_be_deleted(self):
         asset = Asset.objects.create(
             user=self.user,
