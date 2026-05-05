@@ -281,7 +281,7 @@ defineProps<{
                     "
                     @focus="ensureLiquidityAdjustAmountPrefilled(row)"
                     @blur="onLiquidityAdjustAmountBlur(row)"
-                    @keydown.enter.prevent="saveLiquidityCheckinFromInput(row)"
+                    @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
                   />
                   <div
                     class="ui-budget-checkin-quick-actions"

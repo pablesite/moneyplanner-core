@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from rest_framework import viewsets
+from django.utils import timezone
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -211,6 +212,32 @@ class LiquidityMonthlyCheckinViewSet(UserScopedQuerySetMixin, viewsets.ModelView
                 user=self.request.user, fiscal_year=fiscal_year, month=month
             )
         serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        fiscal_year = serializer.validated_data["fiscal_year"]
+        month = serializer.validated_data["month"]
+        _assert_liquidity_monthly_close_not_finalized(
+            user=request.user, fiscal_year=fiscal_year, month=month
+        )
+
+        instance, created = LiquidityMonthlyCheckin.objects.update_or_create(
+            user=request.user,
+            asset=serializer.validated_data["asset"],
+            fiscal_year=fiscal_year,
+            month=month,
+            defaults={
+                "status": serializer.validated_data["status"],
+                "closing_balance_real": serializer.validated_data["closing_balance_real"],
+                "note": serializer.validated_data.get("note", ""),
+                "confirmed_at": timezone.now(),
+            },
+        )
+        output_serializer = self.get_serializer(instance)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(output_serializer.data, status=response_status)
 
     def perform_update(self, serializer):
         fiscal_year = serializer.instance.fiscal_year
