@@ -3221,6 +3221,30 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }
   }
 
+  async function clearIncomeGroupCheckins(
+    group: (typeof groupedMonthlyIncomeExecutionEntries.value)[number],
+  ): Promise<void> {
+    const existingCheckins = group.rows
+      .map((row) => incomeCheckinsByEntryId.value[row.entry.id])
+      .filter((checkin): checkin is IncomeMonthlyCheckinApiItem => !!checkin);
+    if (!existingCheckins.length) return;
+    const busyEntryId = group.editableRow?.entry.id ?? existingCheckins[0].annual_income_entry_id;
+    incomeExecutionBusyEntryId.value = busyEntryId;
+    incomeExecutionError.value = null;
+    try {
+      await Promise.all(
+        existingCheckins.map((checkin) =>
+          budgetApi.delete(`/api/budget/annual-income-checkins/${checkin.id}/`),
+        ),
+      );
+      await refreshIncomeExecutionData();
+    } catch (e: unknown) {
+      incomeExecutionError.value = toBudgetErrorMessage(e);
+    } finally {
+      incomeExecutionBusyEntryId.value = null;
+    }
+  }
+
   async function upsertIncomeCheckin(
     row: (typeof monthlyIncomeExecutionEntries.value)[number],
     status: 'confirmed' | 'adjusted',
@@ -3338,7 +3362,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     group: (typeof groupedMonthlyIncomeExecutionEntries.value)[number],
   ): Promise<void> {
     setIncomeGroupUnlocked(group.key, false);
-    if (group.editableRow?.checkin) await clearIncomeCheckin(group.editableRow);
+    await clearIncomeGroupCheckins(group);
   }
 
   function cleanedExpenseCheckinName(name: string): string {
