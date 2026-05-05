@@ -1236,7 +1236,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const expenseEvolutionBaseMonthly = computed(() => plannedExpenseTotal.value / 12);
 
   const selectedLiquidityMonthPlanned = computed(() =>
-    toNumberOrZero(liquidityMonthlySummary.value?.planned_total),
+    monthlyCloseData.value?.liquidity.previous_total != null
+      ? toNumberOrZero(monthlyCloseData.value.liquidity.previous_total)
+      : toNumberOrZero(liquidityMonthlySummary.value?.planned_total),
   );
   const selectedLiquidityMonthExecuted = computed(() =>
     toNumberOrZero(liquidityMonthlySummary.value?.executed_total),

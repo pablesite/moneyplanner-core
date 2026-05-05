@@ -202,6 +202,48 @@ function makeLiquiditySummary(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeMonthlyCloseState(overrides: Record<string, unknown> = {}) {
+  return {
+    monthly_close: {
+      id: 1,
+      fiscal_year: currentYear,
+      month: currentMonth,
+      status: 'draft',
+      finalized_at: null,
+      locked_at: null,
+      income_total_snapshot: null,
+      expense_total_snapshot: null,
+      liquidity_total_snapshot: null,
+      notes: '',
+    },
+    income: {
+      executed: '0.00',
+      planned: '0.00',
+      coverage_mode: 'none',
+      completion_ratio: 0,
+    },
+    expense: {
+      executed: '0.00',
+      planned: '0.00',
+      coverage_mode: 'none',
+      completion_ratio: 0,
+    },
+    liquidity: {
+      current_total: null,
+      previous_total: null,
+      delta: null,
+      completion_ratio: 0,
+      has_checkins: false,
+    },
+    has_gaps: false,
+    suggestions: {
+      income: {},
+      expense: {},
+    },
+    ...overrides,
+  };
+}
+
 function configureCoreApi(overrides?: {
   incomeCheckins?: unknown[];
   expenseCheckins?: unknown[];
@@ -211,8 +253,12 @@ function configureCoreApi(overrides?: {
   incomeSummary?: Record<string, unknown>;
   expenseSummary?: Record<string, unknown>;
   liquiditySummary?: Record<string, unknown>;
+  monthlyCloseState?: Record<string, unknown>;
 }) {
   mockCoreApiGet.mockImplementation(async (url: string) => {
+    if (url.startsWith('/api/budget/monthly-close/')) {
+      return { data: makeMonthlyCloseState(overrides?.monthlyCloseState ?? {}) };
+    }
     if (url === '/api/budget/annual-income/monthly-summary/') {
       return {
         data: overrides?.incomeSummary ?? makeMonthlySummary(overrides?.incomeSummaryExecuted),
@@ -350,6 +396,37 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('Ajustar manualmente');
     expect(wrapper.find('input[placeholder="Saldo real"]').exists()).toBe(false);
     expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
+  });
+
+  it('uses the previous monthly close liquidity as the monthly close starting balance', async () => {
+    configureCoreApi({
+      monthlyCloseState: {
+        liquidity: {
+          current_total: '1200.00',
+          previous_total: '900.00',
+          delta: '300.00',
+          completion_ratio: 1,
+          has_checkins: true,
+        },
+      },
+      liquiditySummary: {
+        planned_total: '200.00',
+        executed_total: '1200.00',
+        deviation_total: '1000.00',
+        completion_ratio: 1,
+        rows: [],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Saldo mes anterior900,00 EUR');
+    expect(wrapper.text()).toContain('Variación liquidez+300,00 EUR');
   });
 
   it('opens ledger liquidity manual editing without persisting until the user confirms', async () => {

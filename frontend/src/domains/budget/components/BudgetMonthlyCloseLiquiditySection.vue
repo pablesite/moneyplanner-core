@@ -118,7 +118,7 @@ defineProps<{
 
     <div v-if="liquidityMonthlySummary" class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
-        <span>Saldo referencia</span>
+        <span>Saldo mes anterior</span>
         <strong>{{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -132,7 +132,7 @@ defineProps<{
           'ui-budget-checkin-kpi-good': selectedLiquidityMonthDeviation > 0,
         }"
       >
-        <span>Desviación liquidez</span>
+        <span>Variación liquidez</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
@@ -165,7 +165,7 @@ defineProps<{
               </span>
             </div>
             <div class="ui-budget-checkin-group-kpis">
-              <span>Ref {{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</span>
+              <span>Anterior {{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</span>
               <span>E {{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</span>
               <span
                 :class="{
