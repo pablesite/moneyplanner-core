@@ -118,12 +118,9 @@ defineProps<{
             &rarr;
           </button>
         </div>
-        <p class="ui-budget-checkin-subtitle">
-          Confirma o ajusta los ingresos previstos para este mes, incluyendo los puntuales con mes
-          objetivo.
-        </p>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          El cierre usa movimientos cuando existen y deja para revisión solo las líneas pendientes.
+          Confirma los ingresos previstos del mes; el cierre usa movimientos y deja pendientes solo
+          las líneas a revisar.
         </p>
       </div>
     </div>

@@ -112,10 +112,8 @@ defineProps<{
           </button>
         </div>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          El cierre usa movimientos cuando existen y deja para revisión solo las líneas pendientes.
-        </p>
-        <p class="ui-budget-checkin-subtitle">
-          Cierre mensual rapido de `Gastos` (14C v1). `Ingresos` se integra con el mismo patron.
+          Confirma los gastos previstos del mes; el cierre usa movimientos y deja pendientes solo
+          las líneas a revisar.
         </p>
       </div>
     </div>
