@@ -204,19 +204,6 @@ defineProps<{
                 {{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }} completitud
               </span>
             </div>
-            <div class="ui-budget-checkin-group-kpis">
-              <span>P {{ formatMoney(selectedIncomeMonthPlanned) }} EUR</span>
-              <span>E {{ formatMoney(selectedIncomeMonthExecuted) }} EUR</span>
-              <span
-                :class="{
-                  'ui-budget-checkin-income-dev-pos': selectedIncomeMonthDeviation > 0,
-                  'ui-budget-checkin-income-dev-neg': selectedIncomeMonthDeviation < 0,
-                }"
-              >
-                D {{ selectedIncomeMonthDeviation > 0 ? '+' : ''
-                }}{{ formatMoney(selectedIncomeMonthDeviation) }} EUR
-              </span>
-            </div>
           </div>
           <div class="ui-budget-checkin-group-rows ui-budget-checkin-subcategory-rows">
             <article
