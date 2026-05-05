@@ -3705,7 +3705,7 @@ export function useAccountingPage() {
       ...(quickEntryForm.movement_type === 'transfer'
         ? {
             counterparty_account_id: normalizeAccountId(quickEntryForm.counterparty_account_id),
-            ...(quickEntryForm.destination_amount.trim()
+            ...(quickTransferIsCrossCurrency.value && quickEntryForm.destination_amount.trim()
               ? { destination_amount: formatDecimalInput(quickEntryForm.destination_amount) }
               : {}),
           }
