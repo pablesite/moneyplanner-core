@@ -41,6 +41,9 @@ const mockAccountingApi = vi.hoisted(() => ({
     },
   })),
 }));
+const mockNetWorthApi = vi.hoisted(() => ({
+  getAssets: vi.fn(async () => ({ data: [] })),
+}));
 const mockDataInputPage = vi.hoisted(() => ({
   fiscalYear: { value: new Date().getFullYear() },
   showIncomeModal: { value: false },
@@ -100,6 +103,10 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/domains/accounting', () => ({
   coreAccountingApi: mockAccountingApi,
+}));
+
+vi.mock('@/domains/net-worth/api', () => ({
+  coreNetWorthApi: mockNetWorthApi,
 }));
 
 vi.mock('@/domains/data-input', () => ({
@@ -586,8 +593,8 @@ describe('BudgetDashboardView', () => {
         results: [
           {
             id: 10,
-            booking_date: `${currentYear}-03-15`,
-            value_date: `${currentYear}-03-15`,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-15`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-15`,
             description: 'Nomina',
             status: 'posted',
             origin: 'manual',
@@ -622,6 +629,35 @@ describe('BudgetDashboardView', () => {
     } as never);
 
     const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+    (
+      wrapper.vm as unknown as {
+        accountingPostedEntries: unknown[];
+      }
+    ).accountingPostedEntries = [
+      {
+        id: 101,
+        account_id: 1,
+        account_name: 'Cuenta corriente',
+        side: 'credit',
+        amount: '20.10',
+        currency: 'EUR',
+        flow_family: 'income',
+        category_key: 'passive_income',
+        subcategory_key: 'interest_income',
+        annual_income_entry_id: null,
+        annual_expense_entry_id: null,
+        asset_id: null,
+        liability_id: null,
+        notes: '',
+        created_at: '',
+        updated_at: '',
+        bookingMonth: currentMonth,
+        transactionMemberTag: '',
+        transactionQuickEntryKind: '',
+        assetSubcategory: '',
+      },
+    ];
     await flushPromises();
     await openMonthlyStep(wrapper, 'Ingresos');
 
@@ -797,6 +833,142 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('2 líneas agrupadas');
     expect(wrapper.text()).not.toContain('Nomina A');
     expect(wrapper.text()).not.toContain('Nomina B');
+  });
+
+  it('clears every grouped income check-in when returning to detected movements', async () => {
+    mockIncomeStore.entries.value = [
+      {
+        id: 1,
+        name: 'Intereses A',
+        category: 'passive_income',
+        subcategory: 'interest_income',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 240,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+      {
+        id: 2,
+        name: 'Intereses B',
+        category: 'passive_income',
+        subcategory: 'interest_income',
+        owner: '',
+        incomeType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 80.52,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockIncomeStore.totalAnnual.value = 320.52;
+    const incomeCheckins = [
+      {
+        id: 77,
+        annual_income_entry_id: 2,
+        fiscal_year: currentYear,
+        month: currentMonth,
+        status: 'adjusted',
+        executed_amount: '14.22',
+        note: '',
+        confirmed_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    ];
+    configureCoreApi({ incomeCheckins });
+    mockCoreApiDelete.mockImplementation(async () => {
+      incomeCheckins.length = 0;
+      return { data: null };
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: {
+        fiscal_year: currentYear,
+        months: [
+          {
+            month: currentMonth,
+            income_total: '20.10',
+            expense_total: '0.00',
+            uncategorized_total: '0.00',
+          },
+        ],
+      },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: {
+        results: [
+          {
+            id: 10,
+            booking_date: `${currentYear}-03-15`,
+            value_date: `${currentYear}-03-15`,
+            description: 'Intereses',
+            status: 'posted',
+            origin: 'manual',
+            notes: '',
+            created_at: '',
+            updated_at: '',
+            entries: [
+              {
+                id: 101,
+                account_id: 1,
+                account_name: 'Cuenta corriente',
+                side: 'credit',
+                amount: '20.10',
+                currency: 'EUR',
+                flow_family: 'income',
+                category_key: 'passive_income',
+                subcategory_key: 'interest_income',
+                annual_income_entry_id: null,
+                annual_expense_entry_id: null,
+                asset_id: null,
+                liability_id: null,
+                notes: '',
+                created_at: '',
+                updated_at: '',
+              },
+            ],
+          },
+        ],
+        next_cursor: null,
+        total_count: 1,
+      },
+    } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+    await openMonthlyStep(wrapper, 'Ingresos');
+
+    expect(wrapper.text()).toContain('Ejecutado14,22 EUR');
+
+    await wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Añadir ingreso'))
+      ?.trigger('click');
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Usar detectado'))
+      ?.trigger('click');
+    await flushPromises();
+
+    expect(mockCoreApiDelete).toHaveBeenCalledWith('/api/budget/annual-income-checkins/77/');
   });
 
   it('renders contextual management actions in budget detail rows', async () => {
