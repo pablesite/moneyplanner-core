@@ -55,6 +55,10 @@ type IncomeGroup = {
   editableRow: IncomeRow | null;
 };
 
+function hasManualIncomeAdjustment(group: IncomeGroup): boolean {
+  return Math.abs(group.executedTotal - group.ledgerDetectedTotal) >= 0.005;
+}
+
 defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
@@ -268,7 +272,10 @@ defineProps<{
                   v-if="group.editableRow && !isIncomeGroupUnlocked(group.key)"
                   class="ui-budget-checkin-adjust"
                 >
-                  <div class="ui-budget-checkin-ledger-readout">
+                  <div
+                    v-if="hasManualIncomeAdjustment(group)"
+                    class="ui-budget-checkin-ledger-readout"
+                  >
                     <span>Movimientos</span>
                     <strong>{{ formatMoney(group.ledgerDetectedTotal) }} EUR</strong>
                   </div>
@@ -288,6 +295,10 @@ defineProps<{
                   v-else-if="group.editableRow"
                   class="ui-budget-checkin-adjust ui-budget-checkin-adjust-ledger-manual"
                 >
+                  <div class="ui-budget-checkin-ledger-readout">
+                    <span>Movimientos</span>
+                    <strong>{{ formatMoney(group.ledgerDetectedTotal) }} EUR</strong>
+                  </div>
                   <input
                     :value="incomeAdjustAmounts[group.editableRow.entry.id] ?? ''"
                     inputmode="decimal"
