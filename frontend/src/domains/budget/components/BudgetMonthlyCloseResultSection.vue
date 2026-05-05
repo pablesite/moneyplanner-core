@@ -107,7 +107,7 @@ defineProps<{
 
     <div class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
-        <span>Liquidez inicio</span>
+        <span>Liquidez mes anterior</span>
         <strong>{{ formatMoney(selectedLiquidityStartBase) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -144,7 +144,7 @@ defineProps<{
         <strong>{{ formatPercent(selectedMonthlyCloseCompletionRatio, 0) }}</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Desviación liquidez</span>
+        <span>Variación liquidez</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
