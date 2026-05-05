@@ -269,6 +269,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   type AccountingPostedEntry = LedgerEntry & {
     bookingMonth: number;
     transactionMemberTag: string;
+    transactionQuickEntryKind: string;
     assetSubcategory: string;
   };
 
@@ -803,6 +804,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     let expenseUnclassifiedTotal = 0;
 
     for (const entry of accountingPostedEntries.value) {
+      if (entry.transactionQuickEntryKind === 'revaluation') continue;
       const flowFamily = resolveLedgerEntryFlowFamily(entry);
       if (!flowFamily || !isPositiveExecutionLedgerEntry(entry, flowFamily)) continue;
 
@@ -2382,6 +2384,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
                 ...entry,
                 bookingMonth,
                 transactionMemberTag: transaction.member_tag ?? '',
+                transactionQuickEntryKind: transaction.quick_entry_kind ?? '',
                 assetSubcategory: '',
               }));
             }),
