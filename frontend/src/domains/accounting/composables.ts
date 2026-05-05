@@ -3845,8 +3845,9 @@ export function useAccountingPage() {
     await nextTick();
 
     quickEntryForm.investment_direction = direction;
-    quickEntryForm.booking_date = transaction.booking_date;
-    quickEntryForm.value_date = transaction.value_date;
+    const today = new Date().toISOString().slice(0, 10);
+    quickEntryForm.booking_date = today;
+    quickEntryForm.value_date = today;
     quickEntryForm.description = transaction.description;
     quickEntryForm.ownership_id = transaction.ownership_id ?? null;
     quickEntryForm.amount = amount;
