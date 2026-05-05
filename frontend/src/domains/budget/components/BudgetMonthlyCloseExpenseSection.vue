@@ -112,8 +112,7 @@ defineProps<{
           </button>
         </div>
         <p class="ui-budget-checkin-subtitle ui-budget-checkin-subtitle-note">
-          Libro contable categorizado por taxonomía compartida y fallback legacy explícito solo cuando falte
-          esa clasificación.
+          El cierre usa movimientos cuando existen y deja para revisión solo las líneas pendientes.
         </p>
         <p class="ui-budget-checkin-subtitle">
           Cierre mensual rapido de `Gastos` (14C v1). `Ingresos` se integra con el mismo patron.
@@ -161,10 +160,12 @@ defineProps<{
       <div v-else class="ui-budget-checkin-groups-box">
         <div class="ui-budget-execution-note">
           <div class="ui-budget-execution-note-main">
-            <strong>Cobertura del mes</strong>
+            <strong>Estado del cierre</strong>
             <span>
-              {{ monthlyExpenseCoverageSummary.viaLedger }} vía libro contable -
-              {{ monthlyExpenseCoverageSummary.viaFallback }} via fallback legacy -
+              {{
+                monthlyExpenseCoverageSummary.viaLedger + monthlyExpenseCoverageSummary.viaFallback
+              }}
+              líneas completadas ·
               {{ monthlyExpenseCoverageSummary.pending }} pendientes
             </span>
             <small class="ui-budget-execution-note-detail">{{
@@ -180,8 +181,8 @@ defineProps<{
         >
           <strong>Pendiente clasificar</strong>
           <span>
-            {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del libro contable no se puede
-            alinear automaticamente con el presupuesto de este mes.
+            {{ formatMoney(monthlyExpensePendingClassification.amount) }} EUR del libro contable no
+            se puede alinear automaticamente con el presupuesto de este mes.
           </span>
           <small v-if="monthlyExpensePendingClassification.ambiguousRows > 0">
             {{ monthlyExpensePendingClassification.ambiguousRows }} líneas comparten la misma

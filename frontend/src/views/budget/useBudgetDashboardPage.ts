@@ -2221,30 +2221,30 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const executionStatusLabel = computed(() => {
-    if (accountingExecutionLoading.value) return 'Sincronizando ledger';
-    if (accountingExecutionError.value) return 'Fallback legacy';
+    if (accountingExecutionLoading.value) return 'Sincronizando movimientos';
+    if (accountingExecutionError.value) return 'Revisión manual';
     const monthsWithLedger = Array.from(accountingSummaryByMonth.value.values()).filter(
       (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
     ).length;
-    if (monthsWithLedger > 0) return 'Ledger categorizado + fallback';
+    if (monthsWithLedger > 0) return 'Movimientos + revisión';
     if (!expenseMonthlySummary.value) return 'Cargando ejecución';
-    if (expenseMonthlySummary.value.has_executed_data) return 'Fallback legacy';
+    if (expenseMonthlySummary.value.has_executed_data) return 'Revisión manual';
     return 'Sin ejecución';
   });
   const executionStatusDetail = computed(() => {
     if (accountingExecutionError.value) {
-      return 'No se pudo leer accounting. El cierre mensual sigue usando check-ins legacy como fallback.';
+      return 'No se pudieron leer los movimientos. Puedes completar el cierre manualmente.';
     }
     const monthsWithLedger = Array.from(accountingSummaryByMonth.value.values()).filter(
       (row) => toNumberOrZero(row.income_total) > 0 || toNumberOrZero(row.expense_total) > 0,
     ).length;
     if (monthsWithLedger > 0) {
-      return `Ledger categorizado en ${monthsWithLedger}/12 meses. BudgetDashboardView usa taxonomía compartida como fuente primaria y fallback legacy solo cuando falta clasificación nueva.`;
+      return `Hay movimientos detectados en ${monthsWithLedger}/12 meses. El cierre los usa automáticamente y deja pendientes las líneas que necesitan revisión.`;
     }
     if (!expenseMonthlySummary.value) {
-      return 'Cargando agregados mensuales para ledger y check-ins legacy.';
+      return 'Cargando importes mensuales.';
     }
-    return `Sin cobertura ledger todavía. Check-ins legacy disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
+    return `Todavía no hay movimientos detectados. Hay datos manuales disponibles en ${expenseMonthlySummary.value.months_with_checkins}/12 meses para gastos.`;
   });
 
   const monthlyIncomeCoverageSummary = computed<MonthlyCoverageSummary>(() => {
@@ -2320,33 +2320,25 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   function coverageBadgeLabel(summary: MonthlyCoverageSummary): string {
     const mode = resolveCoverageMode(summary);
-    if (mode === 'ledger') return 'Cobertura ledger completa';
-    if (mode === 'fallback') return 'Cobertura fallback legacy';
-    if (mode === 'mixed') return 'Cobertura mixta completa';
-    if (mode === 'partial') return 'Cobertura parcial';
-    return 'Sin cobertura';
+    if (mode === 'ledger' || mode === 'fallback' || mode === 'mixed') return 'Completo';
+    if (mode === 'partial') return 'Parcial';
+    return 'Pendiente';
   }
 
   function coverageDetail(summary: MonthlyCoverageSummary): string {
     const mode = resolveCoverageMode(summary);
-    if (mode === 'ledger') {
-      return 'Todas las líneas del mes estan cubiertas por ledger y las acciones legacy quedan bloqueadas.';
-    }
-    if (mode === 'fallback') {
-      return 'Todas las líneas cubiertas usan check-ins legacy; puedes editar cada fila.';
-    }
-    if (mode === 'mixed') {
-      return 'Hay líneas con ledger y líneas legacy; solo se pueden editar las filas en fallback.';
+    if (mode === 'ledger' || mode === 'fallback' || mode === 'mixed') {
+      return 'Todas las líneas del mes tienen importe registrado.';
     }
     if (mode === 'partial') {
-      return 'Hay líneas cubiertas y líneas pendientes; completa solo las filas sin cobertura.';
+      return 'Ya hay importes registrados; revisa solo las líneas pendientes.';
     }
-    return 'Todavía no hay líneas ejecutadas para este mes.';
+    return 'Todavía no hay importes registrados para este mes.';
   }
 
   function executionSourceLabel(origin: BudgetExecutionOrigin): string {
-    if (origin === 'categorized_ledger') return 'Ledger categorizado';
-    if (origin === 'legacy_ledger' || origin === 'legacy_checkin') return 'Fallback legacy';
+    if (origin === 'categorized_ledger') return 'Movimientos';
+    if (origin === 'legacy_ledger' || origin === 'legacy_checkin') return 'Manual';
     if (origin === 'ambiguous_taxonomy') return 'Pendiente clasificar';
     return '';
   }
