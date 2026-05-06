@@ -148,16 +148,24 @@ const {
   hasDistributionSuggestion,
   activeViewSummary,
   ensureExpenseAdjustAmountPrefilled,
+  ensureExpenseGroupAdjustAmountPrefilled,
   checkinStatusLabel,
+  isExpenseGroupUnlocked,
   isIncomeGroupUnlocked,
   ensureIncomeGroupAdjustAmountPrefilled,
   saveIncomeGroupCheckinFromInput,
+  onIncomeGroupReviewedToggle,
   resetIncomeGroupCheckinDraftValue,
   unlockIncomeGroupManualAdjustment,
   relockIncomeGroupManualAdjustment,
   expenseCheckinRowSummary,
   resetExpenseCheckinDraftValue,
+  resetExpenseGroupCheckinDraftValue,
   saveExpenseCheckinFromInput,
+  saveExpenseGroupCheckinFromInput,
+  onExpenseGroupReviewedToggle,
+  unlockExpenseGroupManualAdjustment,
+  relockExpenseGroupManualAdjustment,
   onExpenseCheckinCheckboxToggle,
   onExpenseAdjustAmountBlur,
   liquidityCheckinRowSummary,
@@ -310,13 +318,20 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :expense-checkin-row-summary="expenseCheckinRowSummary"
       :checkin-status-label="checkinStatusLabel"
       :is-locked-execution-row="isLockedExecutionRow"
+      :is-expense-group-unlocked="isExpenseGroupUnlocked"
       :go-to-previous-monthly-close-step="goToPreviousMonthlyCloseStep"
       :go-to-next-monthly-close-step="goToNextMonthlyCloseStep"
       :reset-expense-checkin-draft-value="resetExpenseCheckinDraftValue"
+      :reset-expense-group-checkin-draft-value="resetExpenseGroupCheckinDraftValue"
       :ensure-expense-adjust-amount-prefilled="ensureExpenseAdjustAmountPrefilled"
+      :ensure-expense-group-adjust-amount-prefilled="ensureExpenseGroupAdjustAmountPrefilled"
       :on-expense-adjust-amount-blur="onExpenseAdjustAmountBlur"
       :save-expense-checkin-from-input="saveExpenseCheckinFromInput"
+      :save-expense-group-checkin-from-input="saveExpenseGroupCheckinFromInput"
       :on-expense-checkin-checkbox-toggle="onExpenseCheckinCheckboxToggle"
+      :on-expense-group-reviewed-toggle="onExpenseGroupReviewedToggle"
+      :unlock-expense-group-manual-adjustment="unlockExpenseGroupManualAdjustment"
+      :relock-expense-group-manual-adjustment="relockExpenseGroupManualAdjustment"
     />
 
     <BudgetMonthlyCloseLiquiditySection
@@ -378,6 +393,7 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :reset-income-group-checkin-draft-value="resetIncomeGroupCheckinDraftValue"
       :ensure-income-group-adjust-amount-prefilled="ensureIncomeGroupAdjustAmountPrefilled"
       :save-income-group-checkin-from-input="saveIncomeGroupCheckinFromInput"
+      :on-income-group-reviewed-toggle="onIncomeGroupReviewedToggle"
       :unlock-income-group-manual-adjustment="unlockIncomeGroupManualAdjustment"
       :relock-income-group-manual-adjustment="relockIncomeGroupManualAdjustment"
     />

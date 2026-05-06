@@ -224,6 +224,26 @@ function toggleContext(sectionId: 'income' | 'expense', row: BudgetRow): void {
   activeContext.value = { sectionId, row };
 }
 
+const OVERFLOW_FILL_COLORS: Record<BudgetExecutionTone, [string, string]> = {
+  good: ['hsl(142 71% 48%)', 'hsl(142 50% 65%)'],
+  warn: ['hsl(56 92% 49%)', 'hsl(56 70% 65%)'],
+  danger: ['hsl(0 82% 52%)', 'hsl(0 60% 68%)'],
+  neutral: ['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.15)'],
+};
+
+function overflowFillStyle(
+  exec: { tone: BudgetExecutionTone; ratio: number; overflow: boolean; widthPct: number } | null | undefined,
+  fallbackWidthPct = 8,
+): Record<string, string> {
+  if (!exec?.overflow) return { width: `${exec?.widthPct ?? fallbackWidthPct}%` };
+  const threshold = (1 / exec.ratio) * 100;
+  const [base, over] = OVERFLOW_FILL_COLORS[exec.tone];
+  return {
+    width: '100%',
+    background: `linear-gradient(to right, ${base} ${threshold}%, ${over} ${threshold}%)`,
+  };
+}
+
 function openCreateForCategory(sectionId: 'income' | 'expense', categoryKey: string): void {
   if (!props.annualEntriesPage) return;
   if (sectionId === 'income') {
@@ -553,39 +573,32 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
     <div v-if="section.groups.length" class="ui-budget-detail-toggle-bar">
       <div class="ui-budget-section-rollup" :aria-label="`Resumen YTD ${section.title}`">
-        <div class="ui-budget-inline-progress">
-          <template v-if="budgetSectionActualExecution(section.id)">
-            <div class="ui-budget-inline-progress-labels">
-              <span>Previsto vs Ejecutado acumulado (YTD hasta {{ budgetDetailMonthLabel }})</span>
-              <span>
-                {{ formatMoney(sectionYtdTotals(section.id).executedTotal) }} EUR ejecutado
-                <span
-                  class="ui-budget-inline-progress-preview-pill"
-                  :class="`ui-budget-inline-progress-preview-pill-${budgetSectionActualExecution(section.id)?.tone}`"
-                >
-                  {{ formatPercent(budgetSectionActualExecution(section.id)?.ratio ?? null, 0) }}
-                </span>
-              </span>
-            </div>
-            <div class="ui-budget-inline-progress-track ui-budget-inline-progress-track-lg">
-              <div
-                class="ui-budget-inline-progress-fill"
-                :class="`ui-budget-inline-progress-fill-${budgetSectionActualExecution(section.id)?.tone}`"
-                :style="{
-                  width: `${budgetSectionActualExecution(section.id)?.widthPct ?? 8}%`,
-                }"
-              />
-              <span
-                v-if="budgetSectionActualExecution(section.id)?.overflow"
-                class="ui-budget-inline-progress-overflow-marker"
-                aria-hidden="true"
-              />
-            </div>
-            <div class="ui-budget-inline-progress-caption">
-              Previsto YTD {{ formatMoney(sectionYtdTotals(section.id).planned) }} EUR · Fuera de
-              presupuesto {{ formatMoney(sectionYtdTotals(section.id).executedUnbudgeted) }} EUR
-            </div>
-          </template>
+        <div v-if="budgetSectionActualExecution(section.id)" class="ui-budget-rich-bar-wrap">
+          <div class="ui-budget-rich-bar-track">
+            <div
+              class="ui-budget-rich-bar-fill"
+              :class="`ui-budget-inline-progress-fill-${budgetSectionActualExecution(section.id)?.tone}`"
+              :style="overflowFillStyle(budgetSectionActualExecution(section.id))"
+            />
+            <span
+              v-if="budgetSectionActualExecution(section.id)?.overflow"
+              class="ui-budget-inline-progress-overflow-marker"
+              :style="{ left: `${(1 / budgetSectionActualExecution(section.id)!.ratio) * 100}%` }"
+              aria-hidden="true"
+            />
+            <span class="ui-budget-rich-bar-exec-label">
+              {{ formatMoney(sectionYtdTotals(section.id).executedTotal) }} EUR
+            </span>
+            <span class="ui-budget-rich-bar-plan-label">
+              {{ formatMoney(sectionYtdTotals(section.id).planned) }} EUR
+            </span>
+          </div>
+          <span
+            class="ui-budget-rich-bar-deviation"
+            :class="`ui-budget-pending-text-${budgetSectionActualExecution(section.id)?.tone}`"
+          >
+            {{ formatSignedMoney(budgetSectionActualExecution(section.id)?.deviation ?? 0) }} EUR
+          </span>
         </div>
 
         <div class="ui-budget-section-rollup-controls">
@@ -664,23 +677,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                   +
                 </button>
               </div>
-              <p>
-                {{ group.rows.length }} subcategorías -
-                {{ formatPercent(group.shareOfSection, 0) }} de {{ section.title.toLowerCase() }}
-                <span
-                  v-if="
-                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted)
-                      .length > 0
-                  "
-                  class="ui-budget-group-empty-badge"
-                >
-                  {{
-                    group.rows.filter((r: any) => r.itemsCount === 0 && !r.detectedUnbudgeted)
-                      .length
-                  }}
-                  sin presupuesto
-                </span>
-              </p>
               <p
                 v-if="
                   (incomeInvestmentRotationCategoryAdjustment?.(section.id, group.categoryKey) ??
@@ -699,146 +695,92 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
               <div
                 v-if="budgetCategoryActualExecution(section.id, group.categoryKey)"
-                class="ui-budget-inline-progress"
+                class="ui-budget-rich-bar-wrap"
                 :aria-label="`Ejecución YTD categoría ${group.categoryLabel}`"
               >
-                <div class="ui-budget-inline-progress-labels">
-                  <span
-                    >Previsto vs Ejecutado acumulado (YTD hasta {{ budgetDetailMonthLabel }})</span
-                  >
-                  <span>
-                    {{
-                      formatPercent(
-                        budgetCategoryActualExecution(section.id, group.categoryKey)
-                          ?.completionRatio ?? null,
-                        0,
-                      )
-                    }}
-                    completitud
-                    <span
-                      class="ui-budget-inline-progress-preview-pill"
-                      :class="`ui-budget-inline-progress-preview-pill-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
-                    >
-                      {{
-                        formatPercent(
-                          budgetCategoryActualExecution(section.id, group.categoryKey)?.ratio ??
-                            null,
-                          0,
-                        )
-                      }}
-                    </span>
-                  </span>
-                </div>
-                <div class="ui-budget-inline-progress-track ui-budget-inline-progress-track-lg">
+                <div class="ui-budget-rich-bar-track">
                   <div
-                    class="ui-budget-inline-progress-fill"
+                    class="ui-budget-rich-bar-fill"
                     :class="`ui-budget-inline-progress-fill-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
-                    :style="{
-                      width: `${budgetCategoryActualExecution(section.id, group.categoryKey)?.widthPct ?? 8}%`,
-                    }"
+                    :style="overflowFillStyle(budgetCategoryActualExecution(section.id, group.categoryKey))"
                   />
                   <span
                     v-if="budgetCategoryActualExecution(section.id, group.categoryKey)?.overflow"
                     class="ui-budget-inline-progress-overflow-marker"
+                    :style="{ left: `${(1 / budgetCategoryActualExecution(section.id, group.categoryKey)!.ratio) * 100}%` }"
                     aria-hidden="true"
                   />
+                  <span class="ui-budget-rich-bar-exec-label">
+                    {{ formatMoney(budgetCategoryActualExecution(section.id, group.categoryKey)?.executed ?? 0) }} EUR
+                  </span>
+                  <span class="ui-budget-rich-bar-plan-label">
+                    {{ formatMoney(budgetCategoryActualExecution(section.id, group.categoryKey)?.planned ?? 0) }} EUR
+                  </span>
                 </div>
+                <span
+                  class="ui-budget-rich-bar-deviation"
+                  :class="`ui-budget-pending-text-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
+                >
+                  {{ formatSignedMoney(budgetCategoryActualExecution(section.id, group.categoryKey)?.deviation ?? 0) }} EUR
+                </span>
               </div>
 
               <div
                 v-else-if="
                   group.plannedAnnual > 0 || group.rows.some((r: any) => r.detectedUnbudgeted)
                 "
-                class="ui-budget-inline-progress"
+                class="ui-budget-rich-bar-wrap"
                 aria-label="Placeholder ejecución categoría"
               >
-                <div class="ui-budget-inline-progress-labels">
-                  <span>Previsto vs Ejecutado</span>
-                  <span>
-                    Pendiente contabilidad
-                    <span
-                      class="ui-budget-inline-progress-preview-pill"
-                      :class="`ui-budget-inline-progress-preview-pill-${groupExecutionPreview(section.id, group).tone}`"
-                    >
-                      {{ formatPercent(groupExecutionPreview(section.id, group).ratio, 0) }}
-                    </span>
-                  </span>
-                </div>
-                <div class="ui-budget-inline-progress-track ui-budget-inline-progress-track-lg">
+                <div class="ui-budget-rich-bar-track">
                   <div
-                    class="ui-budget-inline-progress-fill"
+                    class="ui-budget-rich-bar-fill"
                     :class="`ui-budget-inline-progress-fill-${groupExecutionPreview(section.id, group).tone}`"
-                    :style="{
-                      width: `${groupExecutionPreview(section.id, group).widthPct}%`,
-                    }"
+                    :style="overflowFillStyle(groupExecutionPreview(section.id, group))"
                   />
                   <span
                     v-if="groupExecutionPreview(section.id, group).overflow"
                     class="ui-budget-inline-progress-overflow-marker"
+                    :style="{ left: `${(1 / groupExecutionPreview(section.id, group).ratio) * 100}%` }"
                     aria-hidden="true"
                   />
+                  <span class="ui-budget-rich-bar-exec-label ui-budget-rich-bar-exec-label-pending">
+                    Pendiente contabilidad
+                  </span>
+                  <span class="ui-budget-rich-bar-plan-label">
+                    {{ formatMoney(group.plannedAnnual) }} EUR
+                  </span>
                 </div>
               </div>
             </div>
 
             <div class="ui-budget-group-header-right">
-              <div class="ui-budget-group-amounts">
-                <template v-if="budgetCategoryActualExecution(section.id, group.categoryKey)">
-                  <div class="ui-budget-group-amount-ytd">
-                    <span class="ui-budget-group-amount-label">{{
-                      categoryExecutedLabel(section.id, group.categoryKey)
-                    }}</span>
-                    <strong
-                      :class="`ui-budget-pending-text-${budgetCategoryActualExecution(section.id, group.categoryKey)?.tone}`"
-                    >
-                      {{
-                        formatMoney(
-                          budgetCategoryActualExecution(section.id, group.categoryKey)?.executed ??
-                            0,
-                        )
-                      }}
-                      EUR
-                    </strong>
-                  </div>
-                  <div class="ui-budget-group-amount-ytd">
-                    <span class="ui-budget-group-amount-label">Previsto YTD</span>
-                    <strong
-                      >{{
-                        formatMoney(
-                          budgetCategoryActualExecution(section.id, group.categoryKey)?.planned ??
-                            0,
-                        )
-                      }}
-                      EUR</strong
-                    >
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="ui-budget-group-amount-ytd">
-                    <span class="ui-budget-group-amount-label">Previsto anual</span>
-                    <strong>{{ formatMoney(group.plannedAnnual) }} EUR</strong>
-                  </div>
-                </template>
-              </div>
               <span class="ui-budget-group-chevron" aria-hidden="true" />
             </div>
           </header>
 
           <ul v-show="isGroupExpanded(group.categoryKey)" class="ui-budget-rows">
-            <li v-for="row in group.rows" :key="row.key" class="ui-budget-row">
+            <li
+              v-for="row in group.rows"
+              :key="row.key"
+              class="ui-budget-row"
+              :class="{ 'ui-budget-row-expandable': !row.detectedUnbudgeted && row.itemsCount > 0 }"
+              :aria-expanded="(!row.detectedUnbudgeted && row.itemsCount > 0) ? isContextOpen(section.id, row.key) : undefined"
+              @click="!row.detectedUnbudgeted && row.itemsCount > 0 && toggleContext(section.id, row)"
+            >
               <div class="ui-budget-row-main">
                 <div class="ui-budget-row-kicker">Subcategoría</div>
                 <div class="ui-budget-row-title">
                   <span
                     class="ui-budget-name-link"
-                    @click="goToMovements(group.categoryKey, row.subcategoryKey)"
+                    @click.stop="goToMovements(group.categoryKey, row.subcategoryKey)"
                     >{{ row.subcategoryLabel }}</span
                   >
                   <button
                     type="button"
                     class="ui-budget-row-inline-add"
                     :title="`Añadir en ${row.subcategoryLabel}`"
-                    @click="openCreateDirect(section.id, row)"
+                    @click.stop="openCreateDirect(section.id, row)"
                   >
                     <svg
                       width="8"
@@ -877,131 +819,62 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
                 <div
                   v-if="budgetSubcategoryActualExecution(section.id, row.key)"
-                  class="ui-budget-inline-progress ui-budget-inline-progress-row"
+                  class="ui-budget-rich-bar-wrap"
                   :aria-label="`Ejecución YTD subcategoría ${row.subcategoryLabel}`"
                 >
-                  <div class="ui-budget-inline-progress-track">
+                  <div class="ui-budget-rich-bar-track">
                     <div
-                      class="ui-budget-inline-progress-fill"
+                      class="ui-budget-rich-bar-fill"
                       :class="`ui-budget-inline-progress-fill-${budgetSubcategoryActualExecution(section.id, row.key)?.tone}`"
-                      :style="{
-                        width: `${budgetSubcategoryActualExecution(section.id, row.key)?.widthPct ?? 8}%`,
-                      }"
+                      :style="overflowFillStyle(budgetSubcategoryActualExecution(section.id, row.key))"
                     />
                     <span
                       v-if="budgetSubcategoryActualExecution(section.id, row.key)?.overflow"
                       class="ui-budget-inline-progress-overflow-marker"
+                      :style="{ left: `${(1 / budgetSubcategoryActualExecution(section.id, row.key)!.ratio) * 100}%` }"
                       aria-hidden="true"
                     />
-                  </div>
-                  <div class="ui-budget-inline-progress-caption">
-                    YTD hasta {{ budgetDetailMonthLabel }} - completitud
-                    {{
-                      formatPercent(
-                        budgetSubcategoryActualExecution(section.id, row.key)?.completionRatio ??
-                          null,
-                        0,
-                      )
-                    }}
-                    <span
-                      :class="`ui-budget-inline-progress-caption-tone-${budgetSubcategoryActualExecution(section.id, row.key)?.tone}`"
-                    >
-                      {{
-                        formatPercent(
-                          budgetSubcategoryActualExecution(section.id, row.key)?.ratio ?? null,
-                          0,
-                        )
-                      }}
+                    <span class="ui-budget-rich-bar-exec-label">
+                      {{ formatMoney(budgetSubcategoryActualExecution(section.id, row.key)?.executed ?? 0) }} EUR
+                    </span>
+                    <span class="ui-budget-rich-bar-plan-label">
+                      {{ formatMoney(budgetSubcategoryActualExecution(section.id, row.key)?.planned ?? 0) }} EUR
                     </span>
                   </div>
+                  <span
+                    class="ui-budget-rich-bar-deviation"
+                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone}`"
+                  >
+                    {{ formatSignedMoney(budgetSubcategoryActualExecution(section.id, row.key)?.deviation ?? 0) }} EUR
+                  </span>
                 </div>
 
                 <div
                   v-else-if="row.itemsCount > 0 || row.detectedUnbudgeted"
-                  class="ui-budget-inline-progress ui-budget-inline-progress-row"
+                  class="ui-budget-rich-bar-wrap"
                   aria-label="Placeholder ejecución subcategoría"
                 >
-                  <div class="ui-budget-inline-progress-track">
+                  <div class="ui-budget-rich-bar-track">
                     <div
-                      class="ui-budget-inline-progress-fill ui-budget-inline-progress-fill-neutral"
-                      :style="{
-                        width: '0%',
-                      }"
+                      class="ui-budget-rich-bar-fill ui-budget-inline-progress-fill-neutral"
+                      :style="{ width: '0%' }"
                     />
+                    <span class="ui-budget-rich-bar-exec-label ui-budget-rich-bar-exec-label-pending">
+                      Ejecución pendiente
+                    </span>
+                    <span class="ui-budget-rich-bar-plan-label">
+                      {{ formatMoney(row.plannedAnnual) }} EUR
+                    </span>
                   </div>
-                  <div class="ui-budget-inline-progress-caption">Ejecución pendiente</div>
                 </div>
 
-                <div class="ui-budget-row-actions">
-                  <button
-                    v-if="!row.detectedUnbudgeted && row.itemsCount > 0"
-                    type="button"
-                    class="btn btn-ghost btn-sm"
-                    @click="toggleContext(section.id, row)"
-                  >
-                    {{ isContextOpen(section.id, row.key) ? 'Ocultar edición' : 'Ver detalle' }}
-                  </button>
-                  <button
-                    v-else-if="row.detectedUnbudgeted"
-                    type="button"
-                    class="btn btn-ghost btn-sm"
-                    @click="openCreateDirect(section.id, row)"
-                  >
-                    Añadir al presupuesto
-                  </button>
-                </div>
               </div>
+              <span
+                v-if="!row.detectedUnbudgeted && row.itemsCount > 0"
+                class="ui-budget-group-chevron ui-budget-row-chevron"
+                aria-hidden="true"
+              />
 
-              <div class="ui-budget-row-metrics">
-                <div class="ui-budget-row-metric">
-                  <span>{{
-                    budgetSubcategoryActualExecution(section.id, row.key)
-                      ? 'Previsto YTD'
-                      : 'Previsto'
-                  }}</span>
-                  <strong>
-                    {{
-                      budgetSubcategoryActualExecution(section.id, row.key)
-                        ? `${formatMoney(budgetSubcategoryActualExecution(section.id, row.key)?.planned ?? 0)} EUR`
-                        : `${formatMoney(row.plannedAnnual)} EUR`
-                    }}
-                  </strong>
-                </div>
-                <div class="ui-budget-row-metric">
-                  <span>{{
-                    budgetSubcategoryActualExecution(section.id, row.key)
-                      ? subcategoryExecutedLabel(section.id, row.key)
-                      : 'Ejecutado'
-                  }}</span>
-                  <strong
-                    class="ui-budget-pending-text"
-                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? 'neutral'}`"
-                  >
-                    {{
-                      budgetSubcategoryActualExecution(section.id, row.key)
-                        ? `${formatMoney(budgetSubcategoryActualExecution(section.id, row.key)?.executed ?? 0)} EUR`
-                        : `${formatMoney(0)} EUR`
-                    }}
-                  </strong>
-                </div>
-                <div class="ui-budget-row-metric">
-                  <span>{{
-                    budgetSubcategoryActualExecution(section.id, row.key)
-                      ? 'Desviación YTD'
-                      : 'Desviación'
-                  }}</span>
-                  <strong
-                    class="ui-budget-pending-text"
-                    :class="`ui-budget-pending-text-${budgetSubcategoryActualExecution(section.id, row.key)?.tone ?? 'neutral'}`"
-                  >
-                    {{
-                      budgetSubcategoryActualExecution(section.id, row.key)
-                        ? `${formatSignedMoney(budgetSubcategoryActualExecution(section.id, row.key)?.deviation ?? 0)} EUR`
-                        : 'Pendiente'
-                    }}
-                  </strong>
-                </div>
-              </div>
 
               <div
                 v-if="isContextOpen(section.id, row.key) && !row.detectedUnbudgeted"

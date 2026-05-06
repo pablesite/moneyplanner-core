@@ -89,6 +89,7 @@ defineProps<{
   ) => void | Promise<void>;
   ensureIncomeGroupAdjustAmountPrefilled: (group: IncomeGroup) => void;
   saveIncomeGroupCheckinFromInput: (group: IncomeGroup) => void | Promise<void>;
+  onIncomeGroupReviewedToggle: (group: IncomeGroup, checked: boolean) => void | Promise<void>;
   unlockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
   relockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
 }>();
@@ -147,7 +148,7 @@ defineProps<{
         >
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Completitud</span>
+        <span>Revisión</span>
         <strong>{{ formatPercent(selectedIncomeMonthCompletionRatio, 0) }}</strong>
       </article>
     </div>
@@ -164,20 +165,6 @@ defineProps<{
         No hay ingresos previstos para este mes.
       </div>
       <div v-else class="ui-budget-checkin-groups-box">
-        <div class="ui-budget-execution-note">
-          <div class="ui-budget-execution-note-main">
-            <strong>Estado del cierre</strong>
-            <span>
-              {{
-                monthlyIncomeCoverageSummary.viaLedger + monthlyIncomeCoverageSummary.viaFallback
-              }}
-              líneas completadas ·
-              {{ monthlyIncomeCoverageSummary.pending }} pendientes
-            </span>
-            <small class="ui-budget-execution-note-detail">{{ monthlyIncomeCoverageDetail }}</small>
-          </div>
-          <span class="ui-budget-execution-badge">{{ monthlyIncomeCoverageLabel }}</span>
-        </div>
         <div
           v-if="monthlyIncomePendingClassification.amount > 0"
           class="ui-state-block ui-state-error"
@@ -265,6 +252,27 @@ defineProps<{
                   >
                     Añadir ingreso
                   </button>
+                  <label
+                    class="ui-budget-checkin-confirm"
+                    title="Marcar esta subcategoría como revisada"
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="group.checkedCount > 0"
+                      :disabled="
+                        isCloseLocked ||
+                        group.ledgerDetectedTotal > 0 ||
+                        incomeExecutionBusyEntryId === group.editableRow.entry.id
+                      "
+                      aria-label="Marcar subcategoría de ingresos como revisada"
+                      @change="
+                        onIncomeGroupReviewedToggle(
+                          group,
+                          Boolean(($event.target as HTMLInputElement).checked),
+                        )
+                      "
+                    />
+                  </label>
                 </div>
                 <div
                   v-else-if="group.editableRow"

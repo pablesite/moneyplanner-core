@@ -70,7 +70,7 @@ const props = defineProps<{
 const closeStatusLabel = computed(() => {
   if (props.closeStatus === 'finalized') return 'Finalizado';
   if (props.closeStatus === 'locked') return 'Bloqueado';
-  if (props.closeStatus === 'draft') return 'Borrador';
+  if (props.closeStatus === 'draft') return 'En revisión';
   return null;
 });
 const isSuggestionsModalOpen = ref(false);

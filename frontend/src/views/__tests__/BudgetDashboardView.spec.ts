@@ -405,6 +405,76 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
   });
 
+  it('opens linked manual liquidity checkins with the ledger adjustment controls', async () => {
+    configureCoreApi({
+      liquiditySummary: {
+        planned_total: '0.00',
+        executed_total: '10000.00',
+        deviation_total: '10000.00',
+        completion_ratio: 1,
+        coverage_confirmed: 1,
+        coverage_expected: 1,
+        ledger_rows_confirmed: 0,
+        fallback_rows_confirmed: 1,
+        has_ledger_data: false,
+        rows: [
+          {
+            asset_id: 43,
+            asset_name: 'Deposito MyInvestor 3 meses',
+            asset_category: 'cash',
+            asset_subcategory: 'short_term_deposit',
+            currency: 'EUR',
+            planned_closing_balance: '0.00',
+            executed_closing_balance: '10000.00',
+            effective_closing_balance: '10000.00',
+            deviation: '10000.00',
+            planned_closing_balance_base: '0.00',
+            executed_closing_balance_base: '10000.00',
+            effective_closing_balance_base: '10000.00',
+            deviation_base: '10000.00',
+            coverage_source: 'checkin',
+            ledger_available: true,
+            checkin: {
+              id: 9,
+              status: 'confirmed',
+              closing_balance_real: '10000.00',
+              note: '',
+              confirmed_at: '2026-01-31T12:00:00Z',
+              updated_at: '2026-01-31T12:00:00Z',
+            },
+          },
+        ],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Saldo cierre10.000,00 EUR');
+    expect(wrapper.text()).toContain('Ajustar manualmente');
+    expect(wrapper.find('input[placeholder="Saldo real"]').exists()).toBe(false);
+    expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
+
+    const adjustButton = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ajustar manualmente'));
+    await adjustButton?.trigger('click');
+    await flushPromises();
+
+    const input = wrapper.find('input[placeholder="Saldo real"]');
+    expect((input.element as HTMLInputElement).value).toBe('10000.00');
+    expect(wrapper.text()).toContain('Libro contable activo');
+    expect(wrapper.text()).toContain('Ajuste manual abierto');
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Borrar')).toBe(true);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Referencia')).toBe(true);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Usar libro')).toBe(true);
+    expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
+  });
+
   it('uses the previous monthly close liquidity as the monthly close starting balance', async () => {
     configureCoreApi({
       monthlyCloseState: {
@@ -539,6 +609,12 @@ describe('BudgetDashboardView', () => {
     mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
 
     const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    const adjustButton = wrapper
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ajustar manualmente'));
+    await adjustButton?.trigger('click');
     await flushPromises();
 
     const relockButton = wrapper
