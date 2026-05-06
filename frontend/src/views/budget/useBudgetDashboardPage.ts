@@ -341,6 +341,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const incomeExecutionError = ref<string | null>(null);
   const incomeAdjustAmounts = ref<Record<number, string>>({});
   const unlockedIncomeGroupKeys = ref<Set<string>>(new Set());
+  const unlockedExpenseGroupKeys = ref<Set<string>>(new Set());
   const accountingExecutionLoading = ref(false);
   const accountingExecutionError = ref<string | null>(null);
   const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);
@@ -543,6 +544,17 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     unlockedIncomeGroupKeys.value = next;
   }
 
+  function isExpenseGroupUnlocked(groupKey: string): boolean {
+    return unlockedExpenseGroupKeys.value.has(groupKey);
+  }
+
+  function setExpenseGroupUnlocked(groupKey: string, unlocked: boolean): void {
+    const next = new Set(unlockedExpenseGroupKeys.value);
+    if (unlocked) next.add(groupKey);
+    else next.delete(groupKey);
+    unlockedExpenseGroupKeys.value = next;
+  }
+
   function setExpenseAdjustAmount(entryId: number, value: string): void {
     expenseAdjustAmounts.value = { ...expenseAdjustAmounts.value, [entryId]: value };
   }
@@ -641,8 +653,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     ),
   );
   const filteredExpenseEntries = computed(() =>
-    ownerAdjustedExpenseEntries.value.filter((entry) =>
-      matchesExpenseViewMode(entry, expenseViewMode.value),
+    ownerAdjustedExpenseEntries.value.filter(
+      (entry) =>
+        entry.category !== 'savings_allocation' &&
+        matchesExpenseViewMode(entry, expenseViewMode.value),
     ),
   );
 
@@ -983,7 +997,11 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const selectedExpenseMonthPlanned = computed(() =>
-    toNumberOrZero(selectedExpenseSummaryMonth.value?.planned),
+    filteredExpenseEntries.value.reduce(
+      (sum, entry) =>
+        sum + monthlyPlannedAmountForExpenseEntry(entry, selectedExecutionMonth.value),
+      0,
+    ),
   );
   const selectedExpenseMonthDeviation = computed(
     () => selectedExpenseMonthExecuted.value - selectedExpenseMonthPlanned.value,
@@ -1280,6 +1298,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const month = selectedExecutionMonth.value;
     return expenseEntries.value
       .filter((entry) => {
+        if (entry.category === 'savings_allocation') return false;
         if (entry.expenseType === 'one_off') return entry.targetMonth === month;
         return true;
       })
@@ -1314,40 +1333,51 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       );
   });
 
-  const selectedExpenseMonthExecuted = computed(() =>
-    monthlyExpenseExecutionEntries.value.reduce((sum, row) => sum + (row.executed ?? 0), 0),
-  );
-
   const groupedMonthlyExpenseExecutionEntries = computed(() => {
     type Row = (typeof monthlyExpenseExecutionEntries.value)[number];
     const groups = new Map<
       string,
       {
+        key: string;
         categoryKey: string;
         categoryLabel: string;
+        subcategoryKey: string;
+        subcategoryLabel: string;
         rows: Row[];
         plannedTotal: number;
         executedTotal: number;
         checkedCount: number;
+        ledgerDetectedTotal: number;
+        editableRow: Row | null;
       }
     >();
 
     for (const row of monthlyExpenseExecutionEntries.value) {
-      const key = row.entry.category;
+      const categoryKey = row.entry.category;
+      const subcategoryKey = row.entry.subcategory;
+      const key = `${categoryKey}:${subcategoryKey}`;
       let group = groups.get(key);
       if (!group) {
         group = {
-          categoryKey: key,
-          categoryLabel: shortExpenseCategoryLabel(key),
+          key,
+          categoryKey,
+          categoryLabel: shortExpenseCategoryLabel(categoryKey),
+          subcategoryKey,
+          subcategoryLabel: expenseSubcategoryLabels.get(subcategoryKey) ?? subcategoryKey,
           rows: [],
           plannedTotal: 0,
           executedTotal: 0,
           checkedCount: 0,
+          ledgerDetectedTotal: 0,
+          editableRow: null,
         };
         groups.set(key, group);
       }
       group.rows.push(row);
       group.plannedTotal += row.planned;
+      if (row.executed != null && row.executionOrigin !== 'legacy_checkin') {
+        group.ledgerDetectedTotal += row.executed;
+      }
       if (row.executionSource !== 'none') {
         group.checkedCount += 1;
         if (row.executed != null) {
@@ -1357,17 +1387,44 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }
 
     return Array.from(groups.values())
-      .map((group) => ({
-        ...group,
-        deviation: group.executedTotal - group.plannedTotal,
-        completionRatio: group.rows.length ? group.checkedCount / group.rows.length : 0,
-      }))
+      .map((group) => {
+        const manualOverrideTotal = group.rows.reduce((sum, row) => {
+          if (!row.checkin || row.checkin.status === 'skipped') return sum;
+          return sum + toNumberOrZero(row.checkin.executed_amount);
+        }, 0);
+        const hasManualOverride = manualOverrideTotal > 0;
+        const detectedLedgerTotal = group.rows.some(
+          (row) => row.executionSource === 'pending_classification',
+        )
+          ? Math.max(...group.rows.map((row) => row.categorizedLedgerExecuted ?? 0))
+          : group.ledgerDetectedTotal;
+        const executedTotal = hasManualOverride
+          ? manualOverrideTotal
+          : group.executedTotal +
+            (detectedLedgerTotal === group.ledgerDetectedTotal ? 0 : detectedLedgerTotal);
+        return {
+          ...group,
+          ledgerDetectedTotal: detectedLedgerTotal,
+          executedTotal,
+          deviation: executedTotal - group.plannedTotal,
+          completionRatio: group.rows.length ? group.checkedCount / group.rows.length : 0,
+          editableRow: group.rows[0] ?? null,
+        };
+      })
       .sort(
         (a, b) =>
           expenseCheckinCategorySortWeight(a.categoryKey) -
-            expenseCheckinCategorySortWeight(b.categoryKey) || b.plannedTotal - a.plannedTotal,
+            expenseCheckinCategorySortWeight(b.categoryKey) ||
+          b.plannedTotal - a.plannedTotal ||
+          a.subcategoryLabel.localeCompare(b.subcategoryLabel, 'es'),
       );
   });
+  const selectedExpenseMonthExecuted = computed(() =>
+    groupedMonthlyExpenseExecutionEntries.value.reduce(
+      (sum, group) => sum + group.executedTotal,
+      0,
+    ),
+  );
 
   function buildMonthlyResultBreakdown<
     TEntry extends { category: string; subcategory: string },
@@ -2270,12 +2327,12 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const monthlyExpenseCoverageSummary = computed<MonthlyCoverageSummary>(() => {
-    const total = monthlyExpenseExecutionEntries.value.length;
-    const viaLedger = monthlyExpenseExecutionEntries.value.filter(
-      (row) => row.executionSource === 'categorized_ledger',
+    const total = groupedMonthlyExpenseExecutionEntries.value.length;
+    const viaLedger = groupedMonthlyExpenseExecutionEntries.value.filter(
+      (group) => group.ledgerDetectedTotal > 0,
     ).length;
-    const viaFallback = monthlyExpenseExecutionEntries.value.filter(
-      (row) => row.executionSource === 'legacy_fallback',
+    const viaFallback = groupedMonthlyExpenseExecutionEntries.value.filter(
+      (group) => group.ledgerDetectedTotal <= 0 && group.checkedCount > 0,
     ).length;
     const pending = total - viaLedger - viaFallback;
     return {
@@ -3204,6 +3261,27 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     ).toFixed(2);
   }
 
+  function cacheIncomeCheckin(checkin: IncomeMonthlyCheckinApiItem): void {
+    incomeCheckinsByEntryId.value = {
+      ...incomeCheckinsByEntryId.value,
+      [checkin.annual_income_entry_id]: checkin,
+    };
+    incomeCheckinsByEntryMonth.value = {
+      ...incomeCheckinsByEntryMonth.value,
+      [incomeEntryMonthKey(checkin.annual_income_entry_id, checkin.month)]: checkin,
+    };
+  }
+
+  function removeCachedIncomeCheckin(checkin: IncomeMonthlyCheckinApiItem): void {
+    const nextByEntryId = { ...incomeCheckinsByEntryId.value };
+    delete nextByEntryId[checkin.annual_income_entry_id];
+    incomeCheckinsByEntryId.value = nextByEntryId;
+
+    const nextByEntryMonth = { ...incomeCheckinsByEntryMonth.value };
+    delete nextByEntryMonth[incomeEntryMonthKey(checkin.annual_income_entry_id, checkin.month)];
+    incomeCheckinsByEntryMonth.value = nextByEntryMonth;
+  }
+
   async function clearIncomeCheckin(
     row: (typeof monthlyIncomeExecutionEntries.value)[number],
   ): Promise<void> {
@@ -3228,7 +3306,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       .map((row) => incomeCheckinsByEntryId.value[row.entry.id])
       .filter((checkin): checkin is IncomeMonthlyCheckinApiItem => !!checkin);
     if (!existingCheckins.length) return;
-    const busyEntryId = group.editableRow?.entry.id ?? existingCheckins[0].annual_income_entry_id;
+    const firstCheckin = existingCheckins[0];
+    const busyEntryId = group.editableRow?.entry.id ?? firstCheckin?.annual_income_entry_id;
+    if (busyEntryId == null) return;
     incomeExecutionBusyEntryId.value = busyEntryId;
     incomeExecutionError.value = null;
     try {
@@ -3237,7 +3317,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           budgetApi.delete(`/api/budget/annual-income-checkins/${checkin.id}/`),
         ),
       );
-      await refreshIncomeExecutionData();
+      for (const checkin of existingCheckins) removeCachedIncomeCheckin(checkin);
     } catch (e: unknown) {
       incomeExecutionError.value = toBudgetErrorMessage(e);
     } finally {
@@ -3312,6 +3392,56 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const status = amountsEqualCents(totalExecuted, group.plannedTotal) ? 'confirmed' : 'adjusted';
     await upsertIncomeCheckin(group.editableRow, status);
     setIncomeGroupUnlocked(group.key, false);
+  }
+
+  async function markIncomeGroupAsSkipped(
+    group: (typeof groupedMonthlyIncomeExecutionEntries.value)[number],
+  ): Promise<void> {
+    const editableEntryId = group.editableRow?.entry.id;
+    if (editableEntryId == null) return;
+    incomeExecutionBusyEntryId.value = editableEntryId;
+    incomeExecutionError.value = null;
+    try {
+      const responses = await Promise.all(
+        group.rows.map((row) => {
+          const payload = {
+            annual_income_entry_id: row.entry.id,
+            fiscal_year: fiscalYear.value,
+            month: selectedExecutionMonth.value,
+            status: 'skipped' as const,
+            executed_amount: null,
+          };
+          const existing = incomeCheckinsByEntryId.value[row.entry.id];
+          if (existing) {
+            return budgetApi.patch<IncomeMonthlyCheckinApiItem>(
+              `/api/budget/annual-income-checkins/${existing.id}/`,
+              payload,
+            );
+          }
+          return budgetApi.post<IncomeMonthlyCheckinApiItem>(
+            '/api/budget/annual-income-checkins/',
+            payload,
+          );
+        }),
+      );
+      setIncomeGroupUnlocked(group.key, false);
+      for (const response of responses) cacheIncomeCheckin(response.data);
+    } catch (e: unknown) {
+      incomeExecutionError.value = toBudgetErrorMessage(e);
+    } finally {
+      incomeExecutionBusyEntryId.value = null;
+    }
+  }
+
+  async function onIncomeGroupReviewedToggle(
+    group: (typeof groupedMonthlyIncomeExecutionEntries.value)[number],
+    checked: boolean,
+  ): Promise<void> {
+    if (checked) {
+      await markIncomeGroupAsSkipped(group);
+      return;
+    }
+    await clearIncomeGroupCheckins(group);
   }
 
   async function onIncomeCheckinCheckboxToggle(
@@ -3402,6 +3532,27 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return `${subcategory} - ${name}`;
   }
 
+  function cacheExpenseCheckin(checkin: ExpenseMonthlyCheckinApiItem): void {
+    expenseCheckinsByEntryId.value = {
+      ...expenseCheckinsByEntryId.value,
+      [checkin.annual_expense_entry_id]: checkin,
+    };
+    expenseCheckinsByEntryMonth.value = {
+      ...expenseCheckinsByEntryMonth.value,
+      [expenseEntryMonthKey(checkin.annual_expense_entry_id, checkin.month)]: checkin,
+    };
+  }
+
+  function removeCachedExpenseCheckin(checkin: ExpenseMonthlyCheckinApiItem): void {
+    const nextByEntryId = { ...expenseCheckinsByEntryId.value };
+    delete nextByEntryId[checkin.annual_expense_entry_id];
+    expenseCheckinsByEntryId.value = nextByEntryId;
+
+    const nextByEntryMonth = { ...expenseCheckinsByEntryMonth.value };
+    delete nextByEntryMonth[expenseEntryMonthKey(checkin.annual_expense_entry_id, checkin.month)];
+    expenseCheckinsByEntryMonth.value = nextByEntryMonth;
+  }
+
   async function clearExpenseCheckin(
     row: (typeof monthlyExpenseExecutionEntries.value)[number],
   ): Promise<void> {
@@ -3417,6 +3568,44 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     } finally {
       expenseExecutionBusyEntryId.value = null;
     }
+  }
+
+  async function clearExpenseGroupCheckins(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): Promise<void> {
+    const existingCheckins = group.rows
+      .map((row) => expenseCheckinsByEntryId.value[row.entry.id])
+      .filter((checkin): checkin is ExpenseMonthlyCheckinApiItem => !!checkin);
+    if (!existingCheckins.length) return;
+    const firstCheckin = existingCheckins[0];
+    const busyEntryId = group.editableRow?.entry.id ?? firstCheckin?.annual_expense_entry_id;
+    if (busyEntryId == null) return;
+    expenseExecutionBusyEntryId.value = busyEntryId;
+    expenseExecutionError.value = null;
+    try {
+      await Promise.all(
+        existingCheckins.map((checkin) =>
+          budgetApi.delete(`/api/budget/annual-expense-checkins/${checkin.id}/`),
+        ),
+      );
+      for (const checkin of existingCheckins) removeCachedExpenseCheckin(checkin);
+    } catch (e: unknown) {
+      expenseExecutionError.value = toBudgetErrorMessage(e);
+    } finally {
+      expenseExecutionBusyEntryId.value = null;
+    }
+  }
+
+  function ensureExpenseGroupAdjustAmountPrefilled(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): void {
+    if (!group.editableRow) return;
+    const current = String(expenseAdjustAmounts.value[group.editableRow.entry.id] ?? '').trim();
+    if (current) return;
+    expenseAdjustAmounts.value[group.editableRow.entry.id] = Math.max(
+      group.executedTotal - group.ledgerDetectedTotal,
+      0,
+    ).toFixed(2);
   }
 
   function setExpenseAdjustAmountZero(
@@ -3442,6 +3631,17 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     }
   }
 
+  async function resetExpenseGroupCheckinDraftValue(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+    mode: 'zero' | 'planned',
+  ): Promise<void> {
+    if (!group.editableRow) return;
+    expenseAdjustAmounts.value[group.editableRow.entry.id] =
+      mode === 'zero'
+        ? '0.00'
+        : Math.max(group.plannedTotal - group.ledgerDetectedTotal, 0).toFixed(2);
+  }
+
   async function saveExpenseCheckinFromInput(
     row: (typeof monthlyExpenseExecutionEntries.value)[number],
   ): Promise<void> {
@@ -3455,6 +3655,76 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     expenseAdjustAmounts.value[row.entry.id] = parsedAdjusted.toFixed(2);
     const status = amountsEqualCents(parsedAdjusted, row.planned) ? 'confirmed' : 'adjusted';
     await upsertExpenseCheckin(row, status);
+  }
+
+  async function saveExpenseGroupCheckinFromInput(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): Promise<void> {
+    if (!group.editableRow) return;
+    ensureExpenseGroupAdjustAmountPrefilled(group);
+    const parsed = parseDecimalInput(
+      String(expenseAdjustAmounts.value[group.editableRow.entry.id] ?? '').trim(),
+    );
+    if (parsed == null) {
+      expenseExecutionError.value = 'Indica un importe valido para confirmar (por ejemplo 123,45).';
+      return;
+    }
+    expenseAdjustAmounts.value[group.editableRow.entry.id] = parsed.toFixed(2);
+    const totalExecuted = group.ledgerDetectedTotal + parsed;
+    expenseAdjustAmounts.value[group.editableRow.entry.id] = totalExecuted.toFixed(2);
+    const status = amountsEqualCents(totalExecuted, group.plannedTotal) ? 'confirmed' : 'adjusted';
+    await upsertExpenseCheckin(group.editableRow, status);
+    setExpenseGroupUnlocked(group.key, false);
+  }
+
+  async function markExpenseGroupAsSkipped(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): Promise<void> {
+    const editableEntryId = group.editableRow?.entry.id;
+    if (editableEntryId == null) return;
+    expenseExecutionBusyEntryId.value = editableEntryId;
+    expenseExecutionError.value = null;
+    try {
+      const responses = await Promise.all(
+        group.rows.map((row) => {
+          const payload = {
+            annual_expense_entry_id: row.entry.id,
+            fiscal_year: fiscalYear.value,
+            month: selectedExecutionMonth.value,
+            status: 'skipped' as const,
+            executed_amount: null,
+          };
+          const existing = expenseCheckinsByEntryId.value[row.entry.id];
+          if (existing) {
+            return budgetApi.patch<ExpenseMonthlyCheckinApiItem>(
+              `/api/budget/annual-expense-checkins/${existing.id}/`,
+              payload,
+            );
+          }
+          return budgetApi.post<ExpenseMonthlyCheckinApiItem>(
+            '/api/budget/annual-expense-checkins/',
+            payload,
+          );
+        }),
+      );
+      setExpenseGroupUnlocked(group.key, false);
+      for (const response of responses) cacheExpenseCheckin(response.data);
+    } catch (e: unknown) {
+      expenseExecutionError.value = toBudgetErrorMessage(e);
+    } finally {
+      expenseExecutionBusyEntryId.value = null;
+    }
+  }
+
+  async function onExpenseGroupReviewedToggle(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+    checked: boolean,
+  ): Promise<void> {
+    if (checked) {
+      await markExpenseGroupAsSkipped(group);
+      return;
+    }
+    await clearExpenseGroupCheckins(group);
   }
 
   async function onExpenseCheckinCheckboxToggle(
@@ -3504,6 +3774,20 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     } finally {
       expenseExecutionBusyEntryId.value = null;
     }
+  }
+
+  function unlockExpenseGroupManualAdjustment(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): void {
+    ensureExpenseGroupAdjustAmountPrefilled(group);
+    setExpenseGroupUnlocked(group.key, true);
+  }
+
+  async function relockExpenseGroupManualAdjustment(
+    group: (typeof groupedMonthlyExpenseExecutionEntries.value)[number],
+  ): Promise<void> {
+    setExpenseGroupUnlocked(group.key, false);
+    await clearExpenseGroupCheckins(group);
   }
 
   function shortLiquiditySubcategoryLabel(subcategory: string): string {
@@ -3722,7 +4006,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   async function unlockLiquidityLedgerRow(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
   ): Promise<void> {
-    if (!row.ledger_available || row.coverage_source !== 'ledger') return;
     const seed = row.executed ?? row.planned;
     liquidityAdjustAmounts.value[row.asset_id] = seed.toFixed(2);
     setLiquidityLedgerRowUnlocked(row.asset_id, true);
@@ -3915,6 +4198,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     setIncomeAdjustAmount,
     setExpenseAdjustAmount,
     setLiquidityAdjustAmount,
+    isExpenseGroupUnlocked,
     isLiquidityLedgerRowUnlocked,
     updateIncomeViewMode,
     updateExpenseViewMode,
@@ -4045,6 +4329,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     refreshExpenseExecutionData,
     suggestedExecutedAmountForRow,
     ensureExpenseAdjustAmountPrefilled,
+    ensureExpenseGroupAdjustAmountPrefilled,
     parseDecimalInput,
     checkinStatusLabel,
     incomeCheckinRowSummary,
@@ -4055,6 +4340,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     upsertIncomeCheckin,
     saveIncomeCheckinFromInput,
     saveIncomeGroupCheckinFromInput,
+    markIncomeGroupAsSkipped,
+    onIncomeGroupReviewedToggle,
     onIncomeCheckinCheckboxToggle,
     onIncomeAdjustAmountBlur,
     resetIncomeCheckinDraftValue,
@@ -4067,13 +4354,20 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     amountsEqualCents,
     expenseCheckinRowSummary,
     clearExpenseCheckin,
+    clearExpenseGroupCheckins,
     setExpenseAdjustAmountZero,
     setExpenseAdjustAmountPlanned,
     resetExpenseCheckinDraftValue,
+    resetExpenseGroupCheckinDraftValue,
     saveExpenseCheckinFromInput,
+    saveExpenseGroupCheckinFromInput,
+    markExpenseGroupAsSkipped,
+    onExpenseGroupReviewedToggle,
     onExpenseCheckinCheckboxToggle,
     onExpenseAdjustAmountBlur,
     upsertExpenseCheckin,
+    unlockExpenseGroupManualAdjustment,
+    relockExpenseGroupManualAdjustment,
     shortLiquiditySubcategoryLabel,
     liquidityCheckinRowSummary,
     suggestedLiquidityClosingBalanceForRow,

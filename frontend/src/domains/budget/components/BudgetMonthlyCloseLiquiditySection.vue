@@ -194,7 +194,12 @@ defineProps<{
                   </span>
                 </div>
                 <div
-                  v-if="row.ledger_available && row.coverage_source === 'ledger'"
+                  v-if="
+                    row.ledger_available &&
+                    (row.coverage_source === 'ledger' ||
+                      !row.checkin ||
+                      isLiquidityLedgerRowUnlocked(row.asset_id))
+                  "
                   class="ui-budget-checkin-row-state"
                 >
                   <strong>Libro contable activo</strong>
@@ -239,8 +244,7 @@ defineProps<{
               <div class="ui-budget-checkin-row-actions">
                 <div
                   v-if="
-                    row.ledger_available &&
-                    row.coverage_source === 'ledger' &&
+                    (row.ledger_available || (!row.ledger_available && row.checkin)) &&
                     !isLiquidityLedgerRowUnlocked(row.asset_id)
                   "
                   class="ui-budget-checkin-adjust"
@@ -321,6 +325,7 @@ defineProps<{
                   v-if="
                     !(
                       row.ledger_available ||
+                      (!row.ledger_available && row.checkin) ||
                       (row.coverage_source === 'ledger' &&
                         !isLiquidityLedgerRowUnlocked(row.asset_id))
                     )
