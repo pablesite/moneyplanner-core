@@ -1577,7 +1577,9 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertGreater(principal_row.amount_annual, Decimal("0.00"))
 
-    def test_generated_mortgage_recurrent_amount_still_recalculates_when_only_notes_were_edited(self):
+    def test_generated_mortgage_recurrent_amount_still_recalculates_when_only_notes_were_edited(
+        self,
+    ):
         response = self.client.post(
             "/api/net-worth/liabilities/",
             {
@@ -2279,6 +2281,74 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(response.data["ledger_rows_confirmed"], 0)
         self.assertEqual(response.data["fallback_rows_confirmed"], 1)
         self.assertTrue(response.data["has_ledger_data"])
+
+    def test_liquidity_monthly_summary_exposes_ledger_available_for_linked_checkin_asset(self):
+        ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Deposito MyInvestor 3 meses",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        ledger_asset = Asset.objects.create(
+            user=self.user,
+            name="Deposito MyInvestor 3 meses",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=ledger_account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=ledger_asset,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("0.00"),
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        row = response.data["rows"][0]
+        self.assertEqual(row["coverage_source"], "checkin")
+        self.assertTrue(row["ledger_available"])
+        self.assertEqual(row["executed_closing_balance"], "0.00")
+        self.assertTrue(response.data["has_ledger_data"])
+
+    def test_liquidity_monthly_summary_uses_effective_balance_for_linked_asset_without_checkin(
+        self,
+    ):
+        ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Deposito MyInvestor sin checkin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="Deposito MyInvestor sin checkin",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            accounting_account_id=ledger_account.id,
+            currency="EUR",
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        row = response.data["rows"][0]
+        self.assertEqual(row["coverage_source"], "ledger")
+        self.assertTrue(row["ledger_available"])
+        self.assertEqual(row["executed_closing_balance"], "10000.00")
+        self.assertEqual(response.data["ledger_rows_confirmed"], 1)
 
     def test_liquidity_checkin_update_does_not_trigger_liability_sync_and_updates_row(self):
         bank = Asset.objects.create(
