@@ -62,6 +62,7 @@ def _build_liquidity_monthly_summary_impl(
         planned_native = Decimal(asset.amount or 0)
         checkin = checkins.get(asset.id)
         effective_native = get_effective_asset_amount_fn(asset=asset, as_of_date=summary_date)
+        ledger_available = False
         ledger_covered = False
         if getattr(asset, "tracking_mode", None) == "accounting" and getattr(
             asset, "accounting_account_id", None
@@ -74,25 +75,30 @@ def _build_liquidity_monthly_summary_impl(
                 account_id=asset.accounting_account_id,
                 expected_type="asset",
             )
-            ledger_covered = (
-                accounting_account is not None
-                and accounting_account.currency == asset.currency
-                and has_account_entries(
-                    account=accounting_account,
-                    as_of_date=summary_date,
-                    status=cast(str, LedgerTransaction.Status.POSTED),
-                )
+            ledger_available = (
+                accounting_account is not None and accounting_account.currency == asset.currency
+            )
+            ledger_covered = ledger_available and has_account_entries(
+                account=accounting_account,
+                as_of_date=summary_date,
+                status=cast(str, LedgerTransaction.Status.POSTED),
             )
         if ledger_covered and checkin is not None:
             executed_native = checkin.closing_balance_real
             coverage_source = "checkin"
             fallback_count += 1
             checked_count += 1
-        elif ledger_covered:
-            executed_native = effective_native
-            coverage_source = "ledger"
-            ledger_count += 1
-            checked_count += 1
+        elif ledger_available:
+            if checkin is not None:
+                executed_native = checkin.closing_balance_real
+                coverage_source = "checkin"
+                fallback_count += 1
+                checked_count += 1
+            else:
+                executed_native = effective_native
+                coverage_source = "ledger"
+                ledger_count += 1
+                checked_count += 1
         elif checkin is not None:
             executed_native = checkin.closing_balance_real
             coverage_source = "checkin"
@@ -101,7 +107,7 @@ def _build_liquidity_monthly_summary_impl(
         else:
             executed_native = None
             coverage_source = "none"
-        if ledger_covered:
+        if ledger_available:
             ledger_available_count += 1
 
         planned_base = convert_currency(
@@ -143,7 +149,7 @@ def _build_liquidity_monthly_summary_impl(
                 "effective_closing_balance_base": serialize_money_fn(effective_base),
                 "deviation_base": serialize_money_fn(deviation_base),
                 "coverage_source": coverage_source,
-                "ledger_available": ledger_covered,
+                "ledger_available": ledger_available,
                 "checkin": (
                     {
                         "id": checkin.id,
