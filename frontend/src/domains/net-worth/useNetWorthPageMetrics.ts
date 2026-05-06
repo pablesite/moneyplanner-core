@@ -219,6 +219,12 @@ export function useNetWorthPageMetrics(params: {
     buildCategoryTotals(allLiabilityPositionRows.value),
   );
 
+  const canonicalCategoryOrder = new Map<string, number>();
+  params.assetCategories.forEach((c, i) => canonicalCategoryOrder.set(c.value, i));
+  params.liabilityCategories.forEach((c, i) =>
+    canonicalCategoryOrder.set(c.value, params.assetCategories.length + i),
+  );
+
   const effectiveCategoryKeys = computed(() => {
     if (params.ownershipFilter.value === 'all') return params.byCategoryKeys.value;
     return Array.from(
@@ -226,6 +232,9 @@ export function useNetWorthPageMetrics(params: {
         ...filteredAssetCategoryTotals.value.keys(),
         ...filteredLiabilityCategoryTotals.value.keys(),
       ]),
+    ).sort(
+      (a, b) =>
+        (canonicalCategoryOrder.get(a) ?? Infinity) - (canonicalCategoryOrder.get(b) ?? Infinity),
     );
   });
 
