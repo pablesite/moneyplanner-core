@@ -434,6 +434,32 @@ function editRow(row: PositionRow): void {
   openEdit(item, row.type);
 }
 
+const archivedWorkspaceItems = computed(() => {
+  const cat = selectedTimelineCategory.value;
+  if (!cat) return [];
+  const type = selectedTimelineCategoryType.value;
+  const list = type === 'asset' ? store.assets : store.liabilities;
+  return list
+    .filter((it) => it.is_active === false && it.category === cat)
+    .map((it) => ({ id: it.id, name: it.name, type }));
+});
+
+async function archiveRow(row: PositionRow): Promise<void> {
+  if (row.type === 'asset') {
+    await store.archiveAsset(row.id);
+  } else {
+    await store.archiveLiability(row.id);
+  }
+}
+
+async function unarchiveItem(item: { id: number; type: 'asset' | 'liability' }): Promise<void> {
+  if (item.type === 'asset') {
+    await store.unarchiveAsset(item.id);
+  } else {
+    await store.unarchiveLiability(item.id);
+  }
+}
+
 async function deleteRow(row: PositionRow): Promise<void> {
   const label = row.type === 'asset' ? 'activo' : 'pasivo';
   if (!confirm(`Eliminar este ${label}? Esta accion no se puede deshacer.`)) return;
@@ -744,7 +770,10 @@ const {
               :ownership-badge-for-row="ownershipBadgeForRow"
               :select-position="selectPosition"
               :edit-row="editRow"
+              :archive-row="archiveRow"
               :delete-row="deleteRow"
+              :archived-workspace-items="archivedWorkspaceItems"
+              :unarchive-item="unarchiveItem"
             />
           </aside>
         </div>

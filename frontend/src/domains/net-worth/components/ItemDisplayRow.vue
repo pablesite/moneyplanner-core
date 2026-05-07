@@ -20,6 +20,7 @@ defineProps<Props>();
 const emit = defineEmits<{
   (e: 'edit', id: number): void;
   (e: 'archive', id: number): void;
+  (e: 'unarchive', id: number): void;
   (e: 'delete', id: number): void;
 }>();
 </script>
@@ -43,12 +44,22 @@ const emit = defineEmits<{
         &#9998;&#65039;
       </button>
       <button
+        v-if="item.is_active !== false"
         class="icon-btn"
         title="Archivar"
         aria-label="Archivar"
         @click="emit('archive', item.id)"
       >
         &#128230;
+      </button>
+      <button
+        v-else
+        class="icon-btn"
+        title="Reactivar"
+        aria-label="Reactivar"
+        @click="emit('unarchive', item.id)"
+      >
+        &#8617;
       </button>
       <button
         class="icon-btn"

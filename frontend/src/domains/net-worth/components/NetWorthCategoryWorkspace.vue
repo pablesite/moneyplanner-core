@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue';
+
 type CategoryType = 'asset' | 'liability';
 type PositionType = 'asset' | 'liability';
 
@@ -12,6 +14,14 @@ type PositionRow = {
   ownershipFraction: number;
   category: string;
 };
+
+type ArchivedItem = {
+  id: number;
+  name: string;
+  type: PositionType;
+};
+
+const showArchived = ref(false);
 
 defineProps<{
   showCategoryWorkspace: boolean;
@@ -33,7 +43,10 @@ defineProps<{
   ownershipBadgeForRow: (row: PositionRow) => string | null;
   selectPosition: (row: PositionRow) => void | Promise<void>;
   editRow: (row: PositionRow) => void | Promise<void>;
+  archiveRow: (row: PositionRow) => void | Promise<void>;
   deleteRow: (row: PositionRow) => void | Promise<void>;
+  archivedWorkspaceItems: ArchivedItem[];
+  unarchiveItem: (item: ArchivedItem) => void | Promise<void>;
 }>();
 </script>
 
@@ -134,6 +147,15 @@ defineProps<{
           <button
             class="icon-btn ui-nw-category-item-action"
             type="button"
+            :aria-label="row.type === 'asset' ? 'Archivar activo' : 'Archivar pasivo'"
+            title="Archivar"
+            @click="archiveRow(row)"
+          >
+            <span class="icon" aria-hidden="true">&#128230;</span>
+          </button>
+          <button
+            class="icon-btn ui-nw-category-item-action"
+            type="button"
             :aria-label="row.type === 'asset' ? 'Eliminar activo' : 'Eliminar pasivo'"
             title="Eliminar"
             @click="deleteRow(row)"
@@ -142,6 +164,30 @@ defineProps<{
           </button>
         </div>
       </article>
+    </div>
+    <div v-if="archivedWorkspaceItems.length > 0" class="ui-nw-archived-section">
+      <button
+        class="ui-nw-archived-toggle"
+        type="button"
+        @click="showArchived = !showArchived"
+      >
+        <span>Archivados ({{ archivedWorkspaceItems.length }})</span>
+        <span>{{ showArchived ? '▲' : '▼' }}</span>
+      </button>
+      <ul v-if="showArchived" class="ui-nw-archived-list">
+        <li v-for="item in archivedWorkspaceItems" :key="item.id" class="ui-nw-archived-item">
+          <span class="ui-nw-archived-name">{{ item.name }}</span>
+          <button
+            class="icon-btn ui-nw-category-item-action"
+            type="button"
+            title="Reactivar"
+            aria-label="Reactivar"
+            @click="unarchiveItem(item)"
+          >
+            &#8617;
+          </button>
+        </li>
+      </ul>
     </div>
   </div>
 </template>

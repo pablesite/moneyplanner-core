@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { toApiErrorMessage } from '@/lib/errors';
+import { coreAccountingApi } from '@/domains/accounting/api';
 import { coreNetWorthApi, premiumOwnershipApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
 import { attachOwnershipRef, buildOwnershipMaps } from '@/domains/net-worth/ownership';
@@ -235,7 +236,19 @@ export const useNetWorthStore = defineStore('netWorth', {
     },
 
     async archiveAsset(id: number) {
+      const asset = this.assets.find((a) => a.id === id);
+      if (asset?.accounting_account_id) {
+        await coreAccountingApi.updateAccount(asset.accounting_account_id, { is_active: false });
+      }
       return this.updateAsset(id, { is_active: false });
+    },
+
+    async unarchiveAsset(id: number) {
+      const asset = this.assets.find((a) => a.id === id);
+      if (asset?.accounting_account_id) {
+        await coreAccountingApi.updateAccount(asset.accounting_account_id, { is_active: true });
+      }
+      return this.updateAsset(id, { is_active: true });
     },
 
     async deleteAsset(id: number) {
@@ -304,7 +317,19 @@ export const useNetWorthStore = defineStore('netWorth', {
     },
 
     async archiveLiability(id: number) {
+      const liability = this.liabilities.find((l) => l.id === id);
+      if (liability?.accounting_account_id) {
+        await coreAccountingApi.updateAccount(liability.accounting_account_id, { is_active: false });
+      }
       return this.updateLiability(id, { is_active: false });
+    },
+
+    async unarchiveLiability(id: number) {
+      const liability = this.liabilities.find((l) => l.id === id);
+      if (liability?.accounting_account_id) {
+        await coreAccountingApi.updateAccount(liability.accounting_account_id, { is_active: true });
+      }
+      return this.updateLiability(id, { is_active: true });
     },
 
     async deleteLiability(id: number) {
