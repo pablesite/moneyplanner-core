@@ -99,7 +99,7 @@ defineProps<{
           <button type="button" class="btn ui-monthly-close-step-nav-btn" disabled>&rarr;</button>
         </div>
         <p class="ui-budget-checkin-subtitle">
-          Residual contable provisional a partir de liquidez real y de ingresos/gastos confirmados
+          Residual contable provisional a partir del perimetro real y de ingresos/gastos confirmados
           del mes.
         </p>
       </div>
@@ -107,7 +107,7 @@ defineProps<{
 
     <div class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
-        <span>Liquidez mes anterior</span>
+        <span>Perimetro mes anterior</span>
         <strong>{{ formatMoney(selectedLiquidityStartBase) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
@@ -115,7 +115,7 @@ defineProps<{
         <strong>{{ formatMoney(selectedMonthlyCloseExpected) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Cierre real</span>
+        <span>Cierre real perimetro</span>
         <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</strong>
       </article>
       <article
@@ -144,7 +144,7 @@ defineProps<{
         <strong>{{ formatPercent(selectedMonthlyCloseCompletionRatio, 0) }}</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Variación liquidez</span>
+        <span>Variación perimetro</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR

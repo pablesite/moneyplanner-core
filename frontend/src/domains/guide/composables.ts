@@ -396,6 +396,14 @@ export function useGuideHomeState(scope: GuideScope) {
     };
   }
 
+  const isLoading = computed(
+    () =>
+      store.loading ||
+      annualIncomeStore.loading.value ||
+      annualExpenseStore.loading.value ||
+      store.summary === null,
+  );
+
   onMounted(() => {
     void store.fetchSettings();
     void store.refreshAll();
@@ -404,6 +412,7 @@ export function useGuideHomeState(scope: GuideScope) {
   });
 
   return {
+    isLoading,
     phaseState,
     phaseDetailTo,
     phaseDisplayProgress,

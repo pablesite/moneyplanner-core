@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { computed } from 'vue';
 import type { AnnualIncomeEntry } from '@/domains/data-input';
 
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
@@ -55,11 +56,22 @@ type IncomeGroup = {
   editableRow: IncomeRow | null;
 };
 
+type IncomeCategoryBlock = {
+  key: string;
+  label: string;
+  plannedTotal: number;
+  executedTotal: number;
+  deviation: number;
+  completionRatio: number;
+  reviewedCount: number;
+  groups: IncomeGroup[];
+};
+
 function hasManualIncomeAdjustment(group: IncomeGroup): boolean {
   return Math.abs(group.executedTotal - group.ledgerDetectedTotal) >= 0.005;
 }
 
-defineProps<{
+const props = defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
   groupedMonthlyIncomeExecutionEntries: IncomeGroup[];
@@ -93,6 +105,38 @@ defineProps<{
   unlockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
   relockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
 }>();
+
+const incomeCategoryBlocks = computed<IncomeCategoryBlock[]>(() => {
+  const blocks = new Map<string, IncomeCategoryBlock>();
+
+  for (const group of props.groupedMonthlyIncomeExecutionEntries) {
+    let block = blocks.get(group.categoryKey);
+    if (!block) {
+      block = {
+        key: group.categoryKey,
+        label: group.categoryLabel,
+        plannedTotal: 0,
+        executedTotal: 0,
+        deviation: 0,
+        completionRatio: 0,
+        reviewedCount: 0,
+        groups: [],
+      };
+      blocks.set(group.categoryKey, block);
+    }
+
+    block.groups.push(group);
+    block.plannedTotal += group.plannedTotal;
+    block.executedTotal += group.executedTotal;
+    if (group.ledgerDetectedTotal > 0 || group.checkedCount > 0) block.reviewedCount += 1;
+  }
+
+  return Array.from(blocks.values()).map((block) => ({
+    ...block,
+    deviation: block.executedTotal - block.plannedTotal,
+    completionRatio: block.groups.length ? block.reviewedCount / block.groups.length : 1,
+  }));
+});
 </script>
 
 <template>
@@ -179,10 +223,37 @@ defineProps<{
             subcategoría y requieren revisión manual.
           </small>
         </div>
-        <div class="ui-budget-checkin-group">
+        <details
+          v-for="block in incomeCategoryBlocks"
+          :key="`income-checkin-category-${block.key}`"
+          class="ui-budget-checkin-group"
+          :open="block.completionRatio < 1 || block.deviation < 0"
+        >
+          <summary class="ui-budget-checkin-group-summary">
+            <div class="ui-budget-checkin-group-title-wrap">
+              <strong class="ui-budget-checkin-group-title">{{ block.label }}</strong>
+              <span class="ui-budget-checkin-group-meta">
+                {{ block.groups.length }} subcategorías -
+                {{ Math.round(block.completionRatio * 100) }} % revisión
+              </span>
+            </div>
+            <div class="ui-budget-checkin-group-kpis">
+              <span>P {{ formatMoney(block.plannedTotal) }} EUR</span>
+              <span>E {{ formatMoney(block.executedTotal) }} EUR</span>
+              <span
+                :class="{
+                  'ui-budget-checkin-income-dev-pos': block.deviation > 0,
+                  'ui-budget-checkin-income-dev-neg': block.deviation < 0,
+                }"
+              >
+                D {{ block.deviation > 0 ? '+' : '' }}{{ formatMoney(block.deviation) }} EUR
+              </span>
+            </div>
+          </summary>
+
           <div class="ui-budget-checkin-group-rows ui-budget-checkin-subcategory-rows">
             <article
-              v-for="group in groupedMonthlyIncomeExecutionEntries"
+              v-for="group in block.groups"
               :key="`income-checkin-group-${group.key}`"
               class="ui-budget-checkin-row"
               :class="{
@@ -338,7 +409,7 @@ defineProps<{
               </div>
             </article>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   </section>

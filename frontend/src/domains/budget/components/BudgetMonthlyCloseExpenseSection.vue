@@ -29,8 +29,12 @@ type ExpenseCheckin = {
   updated_at: string;
 };
 
+type ExpenseExecutionEntry = AnnualExpenseEntry & {
+  baseAmountAnnual: number;
+};
+
 type ExpenseRow = {
-  entry: AnnualExpenseEntry;
+  entry: ExpenseExecutionEntry;
   planned: number;
   executed: number | null;
   categorizedLedgerExecuted: number | null;

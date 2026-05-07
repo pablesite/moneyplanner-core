@@ -649,20 +649,11 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         <div class="ui-budget-section-rollup-controls">
           <button
             type="button"
-            class="ui-budget-detail-toggle"
+            class="ui-budget-expand-link"
             :aria-expanded="isSectionExpanded(section.id)"
             @click="toggleSectionExpanded(section.id)"
           >
-            <span class="ui-budget-detail-toggle-icon" aria-hidden="true">
-              {{ isSectionExpanded(section.id) ? '-' : '+' }}
-            </span>
-            <span>
-              {{
-                isSectionExpanded(section.id)
-                  ? 'Ocultar detalle'
-                  : `Ver detalle (${section.categoryCount} categorías - ${section.subcategoryCount} subcategorías)`
-              }}
-            </span>
+            {{ isSectionExpanded(section.id) ? 'Ocultar ↑' : 'Ver desglose ↓' }}
           </button>
         </div>
       </div>
