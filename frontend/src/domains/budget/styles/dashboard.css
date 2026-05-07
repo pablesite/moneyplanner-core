@@ -1888,6 +1888,11 @@
   pointer-events: none;
 }
 
+.ui-budget-rich-bar-track:has(.ui-budget-inline-progress-fill-warn) .ui-budget-rich-bar-exec-label,
+.ui-budget-rich-bar-track:has(.ui-budget-inline-progress-fill-warn) .ui-budget-rich-bar-plan-label {
+  color: rgba(0, 0, 0, 0.75);
+}
+
 .ui-budget-rich-bar-exec-label-pending {
   font-weight: 400;
   opacity: 0.65;
@@ -2267,10 +2272,32 @@
 
 .ui-budget-section-rollup-controls {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 8px;
+}
+
+.ui-budget-expand-link {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.73rem;
+  cursor: pointer;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  transition: color 0.14s ease;
+}
+
+.ui-budget-expand-link:hover {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ui-budget-expand-link:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.25);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 .ui-budget-detail-month-bar-inline {

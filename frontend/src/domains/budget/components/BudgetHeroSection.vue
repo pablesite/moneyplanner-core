@@ -178,8 +178,8 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
           >
         </div>
         <p class="ui-budget-subtitle">
-          Empieza por la liquidez real, luego confirma ingresos y gastos, y termina revisando el
-          residual contable.
+          Empieza por la liquidez neta real, luego confirma ingresos y gastos, y termina revisando
+          el residual contable.
         </p>
       </div>
       <div class="ui-budget-checkin-controls">
@@ -366,16 +366,12 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
           <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
             <div class="ui-hero-stat ui-hero-stat-assets">
               <span class="ui-hero-stat-label">Ingresos previstos</span>
-              <strong class="ui-hero-stat-value">
-                {{ formatMoney(plannedIncomeTotal) }} €
-              </strong>
+              <strong class="ui-hero-stat-value"> {{ formatMoney(plannedIncomeTotal) }} € </strong>
             </div>
 
             <div class="ui-hero-stat ui-hero-stat-liabilities">
               <span class="ui-hero-stat-label">Gastos previstos</span>
-              <strong class="ui-hero-stat-value">
-                {{ formatMoney(plannedExpenseTotal) }} €
-              </strong>
+              <strong class="ui-hero-stat-value"> {{ formatMoney(plannedExpenseTotal) }} € </strong>
             </div>
           </div>
         </div>

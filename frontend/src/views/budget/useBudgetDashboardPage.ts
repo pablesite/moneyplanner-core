@@ -172,10 +172,14 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   };
 
   type LiquidityMonthlySummaryRow = {
+    row_type?: 'asset' | 'liability';
     asset_id: number;
     asset_name: string;
     asset_category: string;
     asset_subcategory: string;
+    liability_id?: number;
+    liability_name?: string;
+    liability_category?: string;
     currency: string;
     planned_closing_balance: string;
     executed_closing_balance: string | null;
@@ -185,7 +189,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     executed_closing_balance_base: string | null;
     effective_closing_balance_base: string;
     deviation_base: string;
-    coverage_source?: 'ledger' | 'checkin' | 'none';
+    coverage_source?: 'ledger' | 'checkin' | 'liability' | 'none';
     ledger_available?: boolean;
     checkin: LiquidityMonthlyCheckinApiItem | null;
   };
@@ -197,6 +201,11 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     planned_total: string;
     executed_total: string;
     deviation_total: string;
+    gross_asset_planned_total?: string;
+    gross_asset_executed_total?: string;
+    liquid_liability_planned_total?: string;
+    liquid_liability_executed_total?: string;
+    perimeter_internal_expense_total?: string;
     completion_ratio: number;
     checkins_confirmed: number;
     checkins_expected: number;
@@ -378,7 +387,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const monthlyCloseFlowSteps = computed<
     { id: MonthlyCloseStepId; label: string; subtitle: string }[]
   >(() => [
-    { id: 'liq', label: 'Liquidez', subtitle: 'Saldo real de cuentas' },
+    { id: 'liq', label: 'Perimetro', subtitle: 'Caja + activos incluidos - tarjetas' },
     { id: 'income', label: 'Ingresos', subtitle: 'Confirmar / ajustar' },
     { id: 'expense', label: 'Gastos', subtitle: 'Confirmar / ajustar' },
     { id: 'result', label: 'Resultado', subtitle: 'Residual y KPIs' },
@@ -668,6 +677,39 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   function toNumberOrZero(raw: unknown): number {
     const n = Number(raw ?? 0);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function monthlySummaryExecutedTotal(
+    row: ExpenseMonthlySummaryMonth | IncomeMonthlySummaryMonth | null | undefined,
+  ): number | null {
+    if (!row) return null;
+    return toNumberOrZero(row.executed_total ?? row.executed);
+  }
+
+  function incomeBreakdownMonthForTaxonomy(
+    categoryKey: string,
+    subcategoryKey: string,
+    month: number,
+  ): ExpenseExecutionBreakdownMonth | null {
+    return (
+      incomeExecutionBreakdownCategories.value
+        .find((category) => category.category === categoryKey)
+        ?.subcategories.find((subcategory) => subcategory.subcategory === subcategoryKey)
+        ?.months.find((monthRow) => monthRow.month === month) ?? null
+    );
+  }
+
+  function expenseBreakdownMonthForTaxonomy(
+    categoryKey: string,
+    subcategoryKey: string,
+    month: number,
+  ): ExpenseExecutionBreakdownMonth | null {
+    return (
+      expenseExecutionBreakdownCategories.value
+        .find((category) => category.category === categoryKey)
+        ?.subcategories.find((subcategory) => subcategory.subcategory === subcategoryKey)
+        ?.months.find((monthRow) => monthRow.month === month) ?? null
+    );
   }
 
   function budgetTaxonomyKey(category: string, subcategory: string): string {
@@ -1023,7 +1065,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
     const uniqueCategorizedLedgerExecuted =
-      categorizedLedgerExecuted != null && taxonomyLineCount === 1 ? categorizedLedgerExecuted : 0;
+      categorizedLedgerExecuted != null && taxonomyLineCount <= 1 ? categorizedLedgerExecuted : 0;
     let executionOrigin: BudgetExecutionOrigin = 'none';
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
@@ -1068,7 +1110,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
     const uniqueCategorizedLedgerExecuted =
-      categorizedLedgerExecuted != null && taxonomyLineCount === 1 ? categorizedLedgerExecuted : 0;
+      categorizedLedgerExecuted != null && taxonomyLineCount <= 1 ? categorizedLedgerExecuted : 0;
     let executionOrigin: BudgetExecutionOrigin = 'none';
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
@@ -1101,6 +1143,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return expenseSummaryByMonth.value.get(selectedExecutionMonth.value) ?? null;
   });
 
+  const selectedIncomeSummaryMonth = computed(() => {
+    return incomeSummaryByMonth.value.get(selectedExecutionMonth.value) ?? null;
+  });
+
   const selectedExpenseMonthPlanned = computed(() =>
     monthlyExpenseExecutionEntries.value.reduce((sum, row) => sum + row.planned, 0),
   );
@@ -1112,8 +1158,21 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return incomeEntries.value
       .filter((entry) => {
         if (entry.fiscalYear !== fiscalYear.value) return false;
-        if (entry.incomeType === 'one_off')
-          return entry.targetMonth === selectedExecutionMonth.value;
+        const summaryMonth = incomeBreakdownMonthForTaxonomy(
+          entry.category,
+          entry.subcategory,
+          selectedExecutionMonth.value,
+        );
+        const hasExecutionInSelectedMonth =
+          summaryMonth != null && toNumberOrZero(summaryMonth.executed_total) > 0;
+        const hasCheckinInSelectedMonth = incomeCheckinsByEntryId.value[entry.id] != null;
+        if (entry.incomeType === 'one_off') {
+          return (
+            entry.targetMonth === selectedExecutionMonth.value ||
+            hasExecutionInSelectedMonth ||
+            hasCheckinInSelectedMonth
+          );
+        }
         return true;
       })
       .map((entry) => {
@@ -1137,7 +1196,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           executionSource,
         };
       })
-      .filter((row) => row.planned > 0)
+      .filter((row) => row.planned > 0 || row.executed != null || row.checkin != null)
       .sort((a, b) => b.planned - a.planned || a.entry.name.localeCompare(b.entry.name, 'es'));
   });
 
@@ -1197,6 +1256,34 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }
     }
 
+    for (const category of incomeExecutionBreakdownCategories.value) {
+      for (const subcategory of category.subcategories) {
+        const summaryMonth = subcategory.months.find(
+          (monthRow) => monthRow.month === selectedExecutionMonth.value,
+        );
+        const summaryExecutedTotal =
+          summaryMonth != null ? toNumberOrZero(summaryMonth.executed_total) : 0;
+        const summaryPlanned = summaryMonth != null ? toNumberOrZero(summaryMonth.planned) : 0;
+        if (summaryExecutedTotal === 0 && summaryPlanned === 0) continue;
+        const key = `${category.category}:${subcategory.subcategory}`;
+        if (groups.has(key)) continue;
+        groups.set(key, {
+          key,
+          categoryKey: category.category,
+          categoryLabel: incomeCategoryLabels.get(category.category as never) ?? category.category,
+          subcategoryKey: subcategory.subcategory,
+          subcategoryLabel:
+            incomeSubcategoryLabels.get(subcategory.subcategory) ?? subcategory.subcategory,
+          rows: [],
+          plannedTotal: summaryPlanned,
+          executedTotal: summaryExecutedTotal,
+          checkedCount: summaryExecutedTotal > 0 ? 1 : 0,
+          ledgerDetectedTotal: summaryExecutedTotal,
+          editableRow: null,
+        });
+      }
+    }
+
     return Array.from(groups.values())
       .map((group) => {
         const manualOverrideTotal = group.rows.reduce((sum, row) => {
@@ -1204,15 +1291,24 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           return sum + toNumberOrZero(row.checkin.executed_amount);
         }, 0);
         const hasManualOverride = manualOverrideTotal > 0;
+        const summaryMonth = incomeBreakdownMonthForTaxonomy(
+          group.categoryKey,
+          group.subcategoryKey,
+          selectedExecutionMonth.value,
+        );
+        const summaryExecutedTotal =
+          summaryMonth != null ? toNumberOrZero(summaryMonth.executed_total) : null;
         const detectedLedgerTotal = group.rows.some(
           (row) => row.executionSource === 'pending_classification',
         )
-          ? Math.max(...group.rows.map((row) => row.categorizedLedgerExecuted ?? 0))
+          ? (summaryExecutedTotal ??
+            Math.max(...group.rows.map((row) => row.categorizedLedgerExecuted ?? 0)))
           : group.ledgerDetectedTotal;
         const executedTotal = hasManualOverride
           ? manualOverrideTotal
-          : group.executedTotal +
-            (detectedLedgerTotal === group.ledgerDetectedTotal ? 0 : detectedLedgerTotal);
+          : (summaryExecutedTotal ??
+            group.executedTotal +
+              (detectedLedgerTotal === group.ledgerDetectedTotal ? 0 : detectedLedgerTotal));
         return {
           ...group,
           ledgerDetectedTotal: detectedLedgerTotal,
@@ -1228,8 +1324,13 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           a.subcategoryLabel.localeCompare(b.subcategoryLabel, 'es'),
       );
   });
-  const selectedIncomeMonthExecuted = computed(() =>
-    groupedMonthlyIncomeExecutionEntries.value.reduce((sum, group) => sum + group.executedTotal, 0),
+  const selectedIncomeMonthExecuted = computed(
+    () =>
+      monthlySummaryExecutedTotal(selectedIncomeSummaryMonth.value) ??
+      groupedMonthlyIncomeExecutionEntries.value.reduce(
+        (sum, group) => sum + group.executedTotal,
+        0,
+      ),
   );
   const selectedIncomeMonthDeviation = computed(
     () => selectedIncomeMonthExecuted.value - selectedIncomeMonthPlanned.value,
@@ -1365,12 +1466,18 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const selectedLiquidityMonthDeviation = computed(
     () => selectedLiquidityMonthExecuted.value - selectedLiquidityMonthPlanned.value,
   );
+  const selectedPerimeterInternalExpenseTotal = computed(() =>
+    toNumberOrZero(liquidityMonthlySummary.value?.perimeter_internal_expense_total),
+  );
+  const selectedExpenseMonthExternalExecuted = computed(() =>
+    Math.max(0, selectedExpenseMonthExecuted.value - selectedPerimeterInternalExpenseTotal.value),
+  );
   const selectedLiquidityStartBase = computed(() => selectedLiquidityMonthPlanned.value);
   const selectedMonthlyCloseExpected = computed(
     () =>
       selectedLiquidityStartBase.value +
       selectedIncomeMonthExecuted.value -
-      selectedExpenseMonthExecuted.value,
+      selectedExpenseMonthExternalExecuted.value,
   );
   const selectedMonthlyCloseResidual = computed(
     () => selectedLiquidityMonthExecuted.value - selectedMonthlyCloseExpected.value,
@@ -1399,7 +1506,19 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const month = selectedExecutionMonth.value;
     return filteredExpenseEntries.value
       .filter((entry) => {
-        if (entry.expenseType === 'one_off') return entry.targetMonth === month;
+        const summaryMonth = expenseBreakdownMonthForTaxonomy(
+          entry.category,
+          entry.subcategory,
+          month,
+        );
+        const hasExecutionInSelectedMonth =
+          summaryMonth != null && toNumberOrZero(summaryMonth.executed_total) > 0;
+        const hasCheckinInSelectedMonth = expenseCheckinsByEntryId.value[entry.id] != null;
+        if (entry.expenseType === 'one_off') {
+          return (
+            entry.targetMonth === month || hasExecutionInSelectedMonth || hasCheckinInSelectedMonth
+          );
+        }
         return true;
       })
       .map((entry) => {
@@ -1423,7 +1542,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           executionSource,
         };
       })
-      .filter((row) => row.planned > 0)
+      .filter((row) => row.planned > 0 || row.executed != null || row.checkin != null)
       .sort(
         (a, b) =>
           expenseCheckinCategorySortWeight(a.entry.category) -
@@ -1488,6 +1607,34 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }
     }
 
+    for (const category of expenseExecutionBreakdownCategories.value) {
+      for (const subcategory of category.subcategories) {
+        const summaryMonth = subcategory.months.find(
+          (monthRow) => monthRow.month === selectedExecutionMonth.value,
+        );
+        const summaryExecutedTotal =
+          summaryMonth != null ? toNumberOrZero(summaryMonth.executed_total) : 0;
+        const summaryPlanned = summaryMonth != null ? toNumberOrZero(summaryMonth.planned) : 0;
+        if (summaryExecutedTotal === 0 && summaryPlanned === 0) continue;
+        const key = `${category.category}:${subcategory.subcategory}`;
+        if (groups.has(key)) continue;
+        groups.set(key, {
+          key,
+          categoryKey: category.category,
+          categoryLabel: shortExpenseCategoryLabel(category.category),
+          subcategoryKey: subcategory.subcategory,
+          subcategoryLabel:
+            expenseSubcategoryLabels.get(subcategory.subcategory) ?? subcategory.subcategory,
+          rows: [],
+          plannedTotal: summaryPlanned,
+          executedTotal: summaryExecutedTotal,
+          checkedCount: summaryExecutedTotal > 0 ? 1 : 0,
+          ledgerDetectedTotal: summaryExecutedTotal,
+          editableRow: null,
+        });
+      }
+    }
+
     return Array.from(groups.values())
       .map((group) => {
         const manualOverrideTotal = group.rows.reduce((sum, row) => {
@@ -1495,15 +1642,24 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           return sum + toNumberOrZero(row.checkin.executed_amount);
         }, 0);
         const hasManualOverride = manualOverrideTotal > 0;
+        const summaryMonth = expenseBreakdownMonthForTaxonomy(
+          group.categoryKey,
+          group.subcategoryKey,
+          selectedExecutionMonth.value,
+        );
+        const summaryExecutedTotal =
+          summaryMonth != null ? toNumberOrZero(summaryMonth.executed_total) : null;
         const detectedLedgerTotal = group.rows.some(
           (row) => row.executionSource === 'pending_classification',
         )
-          ? Math.max(...group.rows.map((row) => row.categorizedLedgerExecuted ?? 0))
+          ? (summaryExecutedTotal ??
+            Math.max(...group.rows.map((row) => row.categorizedLedgerExecuted ?? 0)))
           : group.ledgerDetectedTotal;
         const executedTotal = hasManualOverride
           ? manualOverrideTotal
-          : group.executedTotal +
-            (detectedLedgerTotal === group.ledgerDetectedTotal ? 0 : detectedLedgerTotal);
+          : (summaryExecutedTotal ??
+            group.executedTotal +
+              (detectedLedgerTotal === group.ledgerDetectedTotal ? 0 : detectedLedgerTotal));
         return {
           ...group,
           ledgerDetectedTotal: detectedLedgerTotal,
@@ -1521,11 +1677,13 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           a.subcategoryLabel.localeCompare(b.subcategoryLabel, 'es'),
       );
   });
-  const selectedExpenseMonthExecuted = computed(() =>
-    groupedMonthlyExpenseExecutionEntries.value.reduce(
-      (sum, group) => sum + group.executedTotal,
-      0,
-    ),
+  const selectedExpenseMonthExecuted = computed(
+    () =>
+      monthlySummaryExecutedTotal(selectedExpenseSummaryMonth.value) ??
+      groupedMonthlyExpenseExecutionEntries.value.reduce(
+        (sum, group) => sum + group.executedTotal,
+        0,
+      ),
   );
 
   function buildMonthlyResultBreakdown<
@@ -2301,7 +2459,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const resultReconciliationFlowRows = computed(() => [
     {
       id: 'start',
-      label: 'Liquidez inicio (referencia)',
+      label: 'Perimetro inicio (referencia)',
       amount: selectedLiquidityStartBase.value,
       tone: 'neutral' as const,
       meta: 'Base de referencia del paso de liquidez',
@@ -2318,20 +2476,31 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     },
     {
       id: 'expense',
-      label: 'Gastos ejecutados',
-      amount: -selectedExpenseMonthExecuted.value,
+      label: 'Gastos externos al perimetro',
+      amount: -selectedExpenseMonthExternalExecuted.value,
       tone: 'warning' as const,
       meta:
         selectedMonthlyExecutedVolume.value > 0
-          ? `${formatPercent(selectedExpenseMonthExecuted.value / selectedMonthlyExecutedVolume.value, 0)} del volumen`
+          ? `${formatPercent(selectedExpenseMonthExternalExecuted.value / selectedMonthlyExecutedVolume.value, 0)} del volumen`
           : undefined,
     },
+    ...(selectedPerimeterInternalExpenseTotal.value > 0
+      ? [
+          {
+            id: 'internal-perimeter-expense',
+            label: 'Aportes dentro del perimetro',
+            amount: 0,
+            tone: 'neutral' as const,
+            meta: `${formatMoney(selectedPerimeterInternalExpenseTotal.value)} EUR reclasificados como movimiento interno`,
+          },
+        ]
+      : []),
     {
       id: 'expected-close',
       label: 'Cierre esperado',
       amount: selectedMonthlyCloseExpected.value,
       tone: 'neutral' as const,
-      meta: 'Liquidez inicio + ingresos - gastos',
+      meta: 'Perimetro inicio + ingresos - gastos externos',
       isResult: true,
     },
     {
@@ -2346,10 +2515,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     },
     {
       id: 'real-close',
-      label: 'Cierre real',
+      label: 'Cierre real del perimetro',
       amount: selectedLiquidityMonthExecuted.value,
       tone: 'neutral' as const,
-      meta: 'Cierre de liquidez confirmado',
+      meta: 'Cierre del perimetro confirmado',
       isResult: true,
     },
   ]);
@@ -3894,6 +4063,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   }
 
   function shortLiquiditySubcategoryLabel(subcategory: string): string {
+    if (subcategory === 'credit_card') return 'Tarjeta de credito';
     if (subcategory === 'bank_account') return 'Cuenta bancaria';
     if (subcategory === 'short_term_deposit') return 'Deposito corto plazo';
     if (subcategory === 'wallet') return 'Monedero';
@@ -3904,7 +4074,19 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   function liquidityCheckinRowSummary(
     row: (typeof monthlyLiquidityExecutionRows.value)[number],
   ): string {
+    if (row.row_type === 'liability') {
+      return `${shortLiquiditySubcategoryLabel(row.liability_category ?? row.asset_subcategory)} - ${
+        row.liability_name ?? row.asset_name
+      }`;
+    }
     return `${shortLiquiditySubcategoryLabel(row.asset_subcategory)} - ${row.asset_name}`;
+  }
+
+  function selectedLiquidityValuationDate(): string {
+    const lastDay = new Date(fiscalYear.value, selectedExecutionMonth.value, 0).getDate();
+    return `${fiscalYear.value}-${String(selectedExecutionMonth.value).padStart(2, '0')}-${String(
+      lastDay,
+    ).padStart(2, '0')}`;
   }
 
   function suggestedLiquidityClosingBalanceForRow(
@@ -4022,7 +4204,13 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     liquidityExecutionBusyAssetId.value = row.asset_id;
     liquidityExecutionError.value = null;
     try {
-      await budgetApi.delete(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`);
+      const endpoint =
+        row.row_type === 'liability'
+          ? `/api/net-worth/liability-valuations/${row.checkin.id}/`
+          : row.asset_category !== 'cash'
+            ? `/api/net-worth/asset-valuations/${row.checkin.id}/`
+            : `/api/net-worth/liquidity-checkins/${row.checkin.id}/`;
+      await budgetApi.delete(endpoint);
       await refreshLiquidityExecutionData();
     } catch (e: unknown) {
       liquidityExecutionError.value = toBudgetErrorMessage(e);
@@ -4069,17 +4257,49 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         return;
       }
       liquidityAdjustAmounts.value[row.asset_id] = parsedAdjusted.toFixed(2);
-      const payload = {
-        asset_id: row.asset_id,
-        fiscal_year: fiscalYear.value,
-        month: selectedExecutionMonth.value,
-        status,
-        closing_balance_real: parsedAdjusted.toFixed(2),
-      };
-      if (row.checkin) {
-        await budgetApi.patch(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`, payload);
+      if (row.row_type === 'liability') {
+        if (row.liability_id == null) {
+          liquidityExecutionError.value = 'No se ha podido identificar la tarjeta para ajustarla.';
+          return;
+        }
+        const payload = {
+          liability_id: row.liability_id,
+          valuation_date: selectedLiquidityValuationDate(),
+          value: parsedAdjusted.toFixed(2),
+          source: 'manual_checkpoint',
+          note: `Ajuste manual cierre ${selectedLiquidityValuationDate()}`,
+        };
+        if (row.checkin) {
+          await budgetApi.patch(`/api/net-worth/liability-valuations/${row.checkin.id}/`, payload);
+        } else {
+          await budgetApi.post('/api/net-worth/liability-valuations/', payload);
+        }
+      } else if (row.asset_category !== 'cash') {
+        const payload = {
+          asset_id: row.asset_id,
+          valuation_date: selectedLiquidityValuationDate(),
+          value: parsedAdjusted.toFixed(2),
+          source: 'manual_checkpoint',
+          note: `Ajuste manual cierre ${selectedLiquidityValuationDate()}`,
+        };
+        if (row.checkin) {
+          await budgetApi.patch(`/api/net-worth/asset-valuations/${row.checkin.id}/`, payload);
+        } else {
+          await budgetApi.post('/api/net-worth/asset-valuations/', payload);
+        }
       } else {
-        await budgetApi.post('/api/net-worth/liquidity-checkins/', payload);
+        const payload = {
+          asset_id: row.asset_id,
+          fiscal_year: fiscalYear.value,
+          month: selectedExecutionMonth.value,
+          status,
+          closing_balance_real: parsedAdjusted.toFixed(2),
+        };
+        if (row.checkin) {
+          await budgetApi.patch(`/api/net-worth/liquidity-checkins/${row.checkin.id}/`, payload);
+        } else {
+          await budgetApi.post('/api/net-worth/liquidity-checkins/', payload);
+        }
       }
       setLiquidityLedgerRowUnlocked(row.asset_id, false);
       await refreshLiquidityExecutionData();

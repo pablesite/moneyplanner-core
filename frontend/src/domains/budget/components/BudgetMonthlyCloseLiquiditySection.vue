@@ -3,14 +3,18 @@ type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type LiquidityResetMode = 'zero' | 'planned';
 
 type LiquidityRow = {
+  row_type?: 'asset' | 'liability';
   asset_id: number;
   asset_name: string;
   asset_category: string;
   asset_subcategory: string;
+  liability_id?: number;
+  liability_name?: string;
+  liability_category?: string;
   planned: number;
   executed: number | null;
   currency: string;
-  coverage_source?: 'ledger' | 'checkin' | 'none';
+  coverage_source?: 'ledger' | 'checkin' | 'liability' | 'none';
   ledger_available?: boolean;
   planned_closing_balance: string;
   executed_closing_balance: string | null;
@@ -94,7 +98,7 @@ defineProps<{
         </div>
         <h2 v-else class="ui-budget-checkin-title">Cierre de liquidez</h2>
         <p class="ui-budget-checkin-subtitle">
-          Ajusta el saldo real de cuentas y activos liquidos para el mes seleccionado (14C v1).
+          Ajusta el perimetro de cierre: caja, activos incluidos y tarjetas de credito.
         </p>
       </div>
       <div v-if="!isMonthlyCloseView" class="ui-budget-checkin-controls">
@@ -118,11 +122,11 @@ defineProps<{
 
     <div v-if="liquidityMonthlySummary" class="ui-budget-checkin-summary-grid">
       <article class="ui-budget-checkin-kpi">
-        <span>Saldo mes anterior</span>
+        <span>Perimetro anterior</span>
         <strong>{{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</strong>
       </article>
       <article class="ui-budget-checkin-kpi">
-        <span>Real cierre</span>
+        <span>Perimetro real cierre</span>
         <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</strong>
       </article>
       <article
@@ -132,7 +136,7 @@ defineProps<{
           'ui-budget-checkin-kpi-good': selectedLiquidityMonthDeviation > 0,
         }"
       >
-        <span>Variación liquidez</span>
+        <span>Variación perimetro</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
@@ -151,15 +155,15 @@ defineProps<{
     <div class="ui-budget-checkin-list">
       <div v-if="liquidityExecutionLoading" class="subtle">Cargando cierre de liquidez...</div>
       <div v-else-if="!monthlyLiquidityExecutionRows.length" class="subtle">
-        No hay activos de liquidez activos para este mes.
+        No hay activos o pasivos liquidos activos para este mes.
       </div>
       <div v-else class="ui-budget-checkin-groups-box">
         <div class="ui-budget-checkin-group">
           <div class="ui-budget-checkin-group-summary">
             <div class="ui-budget-checkin-group-title-wrap">
-              <strong class="ui-budget-checkin-group-title">Activos liquidos</strong>
+              <strong class="ui-budget-checkin-group-title">Perimetro de cierre</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ monthlyLiquidityExecutionRows.length }} cuentas -
+                {{ monthlyLiquidityExecutionRows.length }} posiciones -
                 {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }}
                 completitud
               </span>
@@ -182,7 +186,7 @@ defineProps<{
           <div class="ui-budget-checkin-group-rows">
             <article
               v-for="row in monthlyLiquidityExecutionRows"
-              :key="`liquidity-checkin-${row.asset_id}`"
+              :key="`liquidity-checkin-${row.row_type ?? 'asset'}-${row.asset_id}`"
               class="ui-budget-checkin-row"
             >
               <div class="ui-budget-checkin-row-main">

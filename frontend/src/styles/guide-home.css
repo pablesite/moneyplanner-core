@@ -1,3 +1,58 @@
+@keyframes ui-home-skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+}
+
+.ui-home-skeleton-bar {
+  display: block;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.05) 30%,
+      rgba(76, 195, 255, 0.24) 50%,
+      rgba(255, 255, 255, 0.05) 70%
+    ),
+    rgba(255, 255, 255, 0.03);
+  background-size: 220% 100%;
+  animation: ui-home-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.ui-home-skeleton-kpi {
+  height: 26px;
+  margin-top: 2px;
+}
+
+.ui-home-skeleton-badge {
+  height: 20px;
+  width: 38px;
+  border-radius: 999px;
+}
+
+.ui-home-skeleton-pct {
+  height: 16px;
+  width: 28px;
+  border-radius: 6px;
+}
+
+.ui-home-phase-donut-loading {
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.05) 30%,
+      rgba(76, 195, 255, 0.18) 50%,
+      rgba(255, 255, 255, 0.05) 70%
+    ),
+    rgba(255, 255, 255, 0.06);
+  background-size: 220% 100%;
+  animation: ui-home-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
 .ui-home-intro {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
