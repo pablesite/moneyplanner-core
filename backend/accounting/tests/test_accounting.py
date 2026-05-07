@@ -954,6 +954,58 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(len(entries_res.data), 2)
         self.assertTrue(any(entry["flow_family"] == "income" for entry in entries_res.data))
 
+    def test_transaction_entries_include_amount_converted_to_user_base_currency(self):
+        crypto_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+        )
+        FxRate.objects.create(
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("65000.00000000"),
+            rate_date=date(2026, 4, 8),
+            source="test",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 8),
+            value_date=date(2026, 4, 8),
+            description="Compra BTC",
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=crypto_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("0.00030000"),
+            currency="BTC",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="financial_investments",
+            subcategory_key="crypto",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("19.50"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/accounting/transactions/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        crypto_entry = next(
+            row
+            for row in response.data["results"][0]["entries"]
+            if row["account_id"] == crypto_account.id
+        )
+        self.assertEqual(crypto_entry["amount"], "0.00030000")
+        self.assertEqual(crypto_entry["amount_base"], "19.50")
+
     def test_account_list_current_balance_excludes_draft_transactions(self):
         posted_tx = LedgerTransaction.objects.create(
             user=self.user,
@@ -2720,7 +2772,9 @@ class AccountingApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         eur_credit = next(
-            entry for entry in response.data["entries"] if entry["account_id"] == self.cash_account.id
+            entry
+            for entry in response.data["entries"]
+            if entry["account_id"] == self.cash_account.id
         )
         usd_debit = next(
             entry for entry in response.data["entries"] if entry["account_id"] == usd_account.id

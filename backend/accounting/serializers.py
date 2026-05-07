@@ -4,15 +4,18 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from typing import cast
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import (
     EXPENSE_TAXONOMY,
     validate_annual_expense_taxonomy,
     validate_annual_income_taxonomy,
 )
+from core.services import build_fx_cache, convert_currency_cached
 from memberships.models import Ownership
 from net_worth.models import Asset, Liability
 
@@ -161,6 +164,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         required=False,
     )
     account_name = serializers.CharField(source="account.name", read_only=True)
+    amount_base = serializers.SerializerMethodField()
     flow_family = serializers.ChoiceField(
         choices=LedgerEntry.FlowFamily.choices,
         allow_blank=True,
@@ -185,6 +189,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "account_name",
             "side",
             "amount",
+            "amount_base",
             "currency",
             "flow_family",
             "category_key",
@@ -197,7 +202,42 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "account_name"]
+        read_only_fields = ["id", "created_at", "updated_at", "account_name", "amount_base"]
+
+    def get_amount_base(self, obj: LedgerEntry) -> str:
+        base_currency = self.context.get("base_currency")
+        if not isinstance(base_currency, str):
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            base_currency = (
+                UserSettings.objects.filter(user_id=user.id)
+                .values_list("base_currency", flat=True)
+                .first()
+                if user is not None
+                else None
+            )
+            base_currency = str(base_currency or "EUR").strip().upper()
+            self.context["base_currency"] = base_currency
+        base_currency = str(base_currency or "EUR").strip().upper()
+        entry_currency = str(obj.currency or base_currency).strip().upper()
+        if entry_currency == base_currency:
+            return str(obj.amount.quantize(Decimal("0.01")))
+
+        fx_cache = self.context.get("fx_cache")
+        if not isinstance(fx_cache, dict):
+            fx_cache = build_fx_cache({entry_currency, base_currency, "USD"})
+            self.context["fx_cache"] = fx_cache
+        try:
+            converted = convert_currency_cached(
+                obj.amount,
+                entry_currency,
+                base_currency,
+                rate_date=obj.transaction.booking_date,
+                fx_cache=fx_cache,
+            )
+        except DjangoValidationError:
+            return str(obj.amount)
+        return str(converted)
 
     def validate_currency(self, value: str) -> str:
         normalized = normalize_currency_code(value)
@@ -943,7 +983,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         if movement_type not in {"investment", "transfer"}:
             if destination_amount is not None:
                 raise serializers.ValidationError(
-                    {"destination_amount": "Solo aplica a movimientos de inversion o transferencia."}
+                    {
+                        "destination_amount": "Solo aplica a movimientos de inversion o transferencia."
+                    }
                 )
             return
         if amount <= 0:

@@ -37,6 +37,7 @@ export type LedgerEntry = {
   account_name: string;
   side: LedgerEntrySide;
   amount: string;
+  amount_base?: string;
   currency: string;
   flow_family: '' | 'income' | 'expense';
   category_key: string;

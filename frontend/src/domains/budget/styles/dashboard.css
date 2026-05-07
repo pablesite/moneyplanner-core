@@ -925,7 +925,9 @@
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 12px 14px;
+  border-left: 3px solid rgba(45, 212, 191, 0.58);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .ui-budget-checkin-group-summary::-webkit-details-marker {
@@ -939,7 +941,9 @@
 }
 
 .ui-budget-checkin-group-title {
-  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.98);
+  font-size: 0.98rem;
+  font-weight: 800;
 }
 
 .ui-budget-checkin-group-meta {
@@ -955,6 +959,10 @@
   font-size: 0.74rem;
   justify-content: flex-end;
   text-align: right;
+}
+
+.ui-budget-checkin-group[open] .ui-budget-checkin-group-summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ui-budget-checkin-group-dev-pos {
@@ -976,7 +984,9 @@
 .ui-budget-checkin-group-rows {
   display: grid;
   gap: 0;
-  padding: 0 8px 8px 28px;
+  margin-left: 18px;
+  padding: 6px 8px 10px 20px;
+  border-left: 1px solid rgba(45, 212, 191, 0.18);
 }
 
 .ui-budget-checkin-subtitle-note {
@@ -990,7 +1000,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 7px 2px;
+  padding: 9px 2px;
   background: transparent;
 }
 
@@ -1000,7 +1010,7 @@
 
 .ui-budget-checkin-row-title {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1095,7 +1105,7 @@
 }
 
 .ui-budget-checkin-subcategory-rows {
-  padding-left: 10px;
+  padding-left: 20px;
 }
 
 .ui-budget-checkin-subcategory-meta {
@@ -1412,7 +1422,6 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  min-width: 420px;
 }
 
 .ui-budget-expense-coverage-kpi {
@@ -1565,6 +1574,27 @@
   height: 22%;
   border-radius: 4px;
   background: hsl(142 71% 45%);
+  min-height: 3px;
+}
+
+.ui-budget-month-exec-good {
+  height: 22%;
+  border-radius: 4px;
+  background: hsl(142 71% 45%);
+  min-height: 3px;
+}
+
+.ui-budget-month-exec-warn {
+  height: 22%;
+  border-radius: 4px;
+  background: hsl(45 93% 47%);
+  min-height: 3px;
+}
+
+.ui-budget-month-exec-danger {
+  height: 22%;
+  border-radius: 4px;
+  background: hsl(0 78% 52%);
   min-height: 3px;
 }
 
@@ -1803,6 +1833,30 @@
   align-items: center;
   gap: 10px;
   margin-top: 6px;
+}
+
+.ui-budget-group .ui-budget-rich-bar-track {
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ui-budget-group .ui-budget-rich-bar-fill {
+  opacity: 0.72;
+}
+
+.ui-budget-group .ui-budget-rich-bar-exec-label {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ui-budget-group .ui-budget-rich-bar-plan-label {
+  font-size: 11px;
+}
+
+.ui-budget-group .ui-budget-rich-bar-deviation {
+  font-size: 11px;
+  min-width: 70px;
 }
 
 .ui-budget-rich-bar-track {
@@ -2382,7 +2436,6 @@
   }
 
   .ui-budget-expense-coverage-kpis {
-    min-width: 0;
     grid-template-columns: 1fr;
     width: 100%;
   }
@@ -2498,6 +2551,19 @@
   .ui-budget-context-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+}
+
+.ui-budget-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .ui-budget-sections-grid {
+    grid-template-columns: 1fr;
   }
 }
 

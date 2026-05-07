@@ -390,6 +390,34 @@ function sectionYtdTotals(sectionId: 'income' | 'expense') {
   return sectionId === 'income' ? props.incomeExecutionYtdTotals : props.expenseExecutionYtdTotals;
 }
 
+function execBarClass(point: any, sectionId: 'income' | 'expense'): string {
+  if (!('hasExecuted' in point) || !point.hasExecuted) return 'ui-budget-month-exec-pending';
+  const planned = Number(point.planned ?? 0);
+  const executed = Number(point.executed ?? 0);
+  if (planned <= 0) return 'ui-budget-month-exec-good';
+  const ratio = executed / planned;
+  if (sectionId === 'income') {
+    if (ratio >= 1) return 'ui-budget-month-exec-good';
+    if (ratio >= 0.85) return 'ui-budget-month-exec-warn';
+    return 'ui-budget-month-exec-danger';
+  } else {
+    if (ratio > 1.05) return 'ui-budget-month-exec-danger';
+    if (ratio >= 0.95) return 'ui-budget-month-exec-warn';
+    return 'ui-budget-month-exec-good';
+  }
+}
+
+function visibleEvolutionMonths(sectionId: 'income' | 'expense') {
+  const months = sectionId === 'income' ? props.incomeEvolutionMonths : props.expenseEvolutionMonths;
+  const visible = months.slice(0, props.budgetDetailMonth);
+  const maxVal = Math.max(1, ...visible.map((m: any) => Math.max(Number(m.planned ?? 0), Number(m.executed ?? 0))));
+  return visible.map((m: any) => ({
+    ...m,
+    planHeightPct: Number(m.planned) > 0 ? Math.max(6, Math.min(100, (Number(m.planned) / maxVal) * 100)) : 0,
+    execHeightPct: Number(m.executed) > 0 ? Math.max(6, Math.min(100, (Number(m.executed) / maxVal) * 100)) : 0,
+  }));
+}
+
 function openEditIncome(entry: AnnualIncomeEntry): void {
   props.annualEntriesPage?.openIncomeModal(entry);
 }
@@ -428,11 +456,30 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     </p>
   </section>
 
+  <div
+    v-show="!isMonthlyCloseView && sections.some(s => s.groups.length > 0)"
+    class="ui-budget-detail-month-bar mt-3"
+  >
+    <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
+    <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
+      <button
+        v-for="(label, i) in monthLabels"
+        :key="i"
+        type="button"
+        class="ui-budget-filter-btn"
+        :class="{ 'ui-budget-filter-btn-active': budgetDetailMonth === i + 1 }"
+        @click="updateBudgetDetailMonth(i + 1)"
+      >
+        {{ label }}
+      </button>
+    </div>
+  </div>
+
+  <div v-show="!isMonthlyCloseView" class="ui-budget-sections-grid mt-2">
   <section
     v-for="section in sections"
-    v-show="!isMonthlyCloseView"
     :key="section.id"
-    class="card ui-pro-panel ui-budget-section mt-3"
+    class="card ui-pro-panel ui-budget-section"
     :class="section.toneClass"
   >
     <div class="ui-budget-section-header">
@@ -454,34 +501,35 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
           <strong>{{ formatMoney(section.totalAnnual) }} EUR</strong>
           <small>{{ formatMoney(section.totalAnnual / 12) }} EUR/mes</small>
         </div>
-        <div v-if="section.id === 'expense'" class="ui-budget-expense-coverage-kpis">
-          <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">Ejecutado real (YTD)</span>
-            <strong>{{ formatMoney(expenseExecutionYtdTotals.executedTotal) }} EUR</strong>
-          </div>
-          <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
-            <strong>{{ formatMoney(expenseExecutionYtdTotals.planned) }} EUR</strong>
-          </div>
-          <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
-            <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
-            <strong>{{ formatMoney(expenseExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
-          </div>
-        </div>
-        <div v-else class="ui-budget-expense-coverage-kpis">
-          <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">Ejecutado real (YTD)</span>
-            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedTotal) }} EUR</strong>
-          </div>
-          <div class="ui-budget-expense-coverage-kpi">
-            <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
-            <strong>{{ formatMoney(incomeExecutionYtdTotals.planned) }} EUR</strong>
-          </div>
-          <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
-            <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
-            <strong>{{ formatMoney(incomeExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
-          </div>
-        </div>
+      </div>
+    </div>
+
+    <div v-if="section.id === 'expense'" class="ui-budget-expense-coverage-kpis">
+      <div class="ui-budget-expense-coverage-kpi">
+        <span class="ui-budget-expense-coverage-kpi-label">Ejecutado real (YTD)</span>
+        <strong>{{ formatMoney(expenseExecutionYtdTotals.executedTotal) }} EUR</strong>
+      </div>
+      <div class="ui-budget-expense-coverage-kpi">
+        <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
+        <strong>{{ formatMoney(expenseExecutionYtdTotals.planned) }} EUR</strong>
+      </div>
+      <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
+        <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
+        <strong>{{ formatMoney(expenseExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
+      </div>
+    </div>
+    <div v-else class="ui-budget-expense-coverage-kpis">
+      <div class="ui-budget-expense-coverage-kpi">
+        <span class="ui-budget-expense-coverage-kpi-label">Ejecutado real (YTD)</span>
+        <strong>{{ formatMoney(incomeExecutionYtdTotals.executedTotal) }} EUR</strong>
+      </div>
+      <div class="ui-budget-expense-coverage-kpi">
+        <span class="ui-budget-expense-coverage-kpi-label">Presupuesto previsto (YTD)</span>
+        <strong>{{ formatMoney(incomeExecutionYtdTotals.planned) }} EUR</strong>
+      </div>
+      <div class="ui-budget-expense-coverage-kpi ui-budget-expense-coverage-kpi-alert">
+        <span class="ui-budget-expense-coverage-kpi-label">Fuera de presupuesto (YTD)</span>
+        <strong>{{ formatMoney(incomeExecutionYtdTotals.executedUnbudgeted) }} EUR</strong>
       </div>
     </div>
 
@@ -515,6 +563,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 
       <div
         class="ui-budget-evolution-bars"
+        :style="{ gridTemplateColumns: `repeat(${budgetDetailMonth}, minmax(0, 1fr))` }"
         :aria-label="
           section.id === 'income'
             ? 'Barras de evolucion de ingresos previsto vs ejecutado por mes'
@@ -522,7 +571,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         "
       >
         <div
-          v-for="point in section.id === 'income' ? incomeEvolutionMonths : expenseEvolutionMonths"
+          v-for="point in visibleEvolutionMonths(section.id)"
           :key="`${section.id}-${point.label}`"
           class="ui-budget-month-col"
         >
@@ -537,11 +586,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
               "
             />
             <div
-              :class="
-                'hasExecuted' in point && point.hasExecuted
-                  ? 'ui-budget-month-exec'
-                  : 'ui-budget-month-exec-pending'
-              "
+              :class="execBarClass(point, section.id)"
               :style="'execHeightPct' in point ? { height: `${point.execHeightPct}%` } : undefined"
               :title="
                 'executed' in point
@@ -602,22 +647,6 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
         </div>
 
         <div class="ui-budget-section-rollup-controls">
-          <div class="ui-budget-detail-month-bar ui-budget-detail-month-bar-inline">
-            <span class="ui-budget-detail-month-bar-label">Ver acumulado hasta:</span>
-            <div class="ui-budget-filter-segment" role="group" aria-label="Mes de detalle">
-              <button
-                v-for="(label, i) in monthLabels"
-                :key="i"
-                type="button"
-                class="ui-budget-filter-btn"
-                :class="{ 'ui-budget-filter-btn-active': budgetDetailMonth === i + 1 }"
-                @click="updateBudgetDetailMonth(i + 1)"
-              >
-                {{ label }}
-              </button>
-            </div>
-          </div>
-
           <button
             type="button"
             class="ui-budget-detail-toggle"
@@ -973,6 +1002,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       </template>
     </div>
   </section>
+  </div>
 
   <div v-if="isLoading" class="ui-status-line">Cargando presupuesto...</div>
 

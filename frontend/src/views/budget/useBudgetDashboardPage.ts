@@ -268,6 +268,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   };
   type AccountingPostedEntry = LedgerEntry & {
     bookingMonth: number;
+    transactionId: number;
     transactionMemberTag: string;
     transactionQuickEntryKind: string;
     assetSubcategory: string;
@@ -749,10 +750,160 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     entry: LedgerEntry,
     flowFamily: 'income' | 'expense',
   ): boolean {
+    if (
+      flowFamily === 'expense' &&
+      entry.side === 'credit' &&
+      entry.flow_family === 'expense' &&
+      (entry as AccountingPostedEntry).transactionQuickEntryKind === 'investment' &&
+      entry.asset_id == null
+    ) {
+      return true;
+    }
     return (
       (flowFamily === 'income' && entry.side === 'credit') ||
       (flowFamily === 'expense' && entry.side === 'debit')
     );
+  }
+
+  type DebtPaymentExpenseTarget = { categoryKey: string; subcategoryKey: string };
+  type AccountingExecutionBucketAccumulator = {
+    incomeCategorizedByMonthTaxonomy: Map<string, number>;
+    expenseCategorizedByMonthTaxonomy: Map<string, number>;
+    incomeLegacyByMonthEntryId: Map<string, number>;
+    expenseLegacyByMonthEntryId: Map<string, number>;
+    depositRotationIncomeByMonth: Map<number, number>;
+    depositRotationExpenseByMonth: Map<number, number>;
+    incomeUnclassifiedTotal: number;
+    expenseUnclassifiedTotal: number;
+  };
+
+  function addMapAmount<K>(map: Map<K, number>, key: K, amount: number): void {
+    map.set(key, (map.get(key) ?? 0) + amount);
+  }
+
+  function buildDebtPaymentExpenseTargetByTransactionId(
+    entries: AccountingPostedEntry[],
+  ): Map<number, DebtPaymentExpenseTarget> {
+    const targets = new Map<number, DebtPaymentExpenseTarget>();
+    for (const entry of entries) {
+      if (entry.transactionQuickEntryKind !== 'debt_payment') continue;
+      if (entry.liability_id == null) continue;
+      if (entry.side !== 'debit') continue;
+      if (resolveLedgerEntryFlowFamily(entry) !== 'expense') continue;
+      if (!entry.category_key || !entry.subcategory_key) continue;
+      targets.set(entry.transactionId, {
+        categoryKey: entry.category_key,
+        subcategoryKey: entry.subcategory_key,
+      });
+    }
+    return targets;
+  }
+
+  function resolveDebtPaymentSiblingExpenseTarget(
+    entry: AccountingPostedEntry,
+    flowFamily: 'income' | 'expense',
+    targets: Map<number, DebtPaymentExpenseTarget>,
+  ): DebtPaymentExpenseTarget | undefined {
+    if (flowFamily !== 'expense') return undefined;
+    if (entry.transactionQuickEntryKind !== 'debt_payment') return undefined;
+    if (entry.liability_id != null) return undefined;
+    return targets.get(entry.transactionId);
+  }
+
+  function collectDebtPaymentSiblingExpenseExecution(
+    entry: AccountingPostedEntry,
+    flowFamily: 'income' | 'expense',
+    amount: number,
+    bookingMonth: number,
+    targets: Map<number, DebtPaymentExpenseTarget>,
+    buckets: AccountingExecutionBucketAccumulator,
+  ): boolean {
+    const target = resolveDebtPaymentSiblingExpenseTarget(entry, flowFamily, targets);
+    if (!target) return false;
+    const key = budgetMonthTaxonomyKey(bookingMonth, target.categoryKey, target.subcategoryKey);
+    addMapAmount(buckets.expenseCategorizedByMonthTaxonomy, key, amount);
+    return true;
+  }
+
+  function collectTaxonomyExecution(
+    entry: AccountingPostedEntry,
+    flowFamily: 'income' | 'expense',
+    amount: number,
+    bookingMonth: number,
+    buckets: AccountingExecutionBucketAccumulator,
+  ): boolean {
+    if (!entry.category_key || !entry.subcategory_key) return false;
+    const key = budgetMonthTaxonomyKey(bookingMonth, entry.category_key, entry.subcategory_key);
+    const targetMap =
+      flowFamily === 'income'
+        ? buckets.incomeCategorizedByMonthTaxonomy
+        : buckets.expenseCategorizedByMonthTaxonomy;
+    addMapAmount(targetMap, key, amount);
+    return true;
+  }
+
+  function collectLegacyExecution(
+    entry: AccountingPostedEntry,
+    flowFamily: 'income' | 'expense',
+    amount: number,
+    bookingMonth: number,
+    buckets: AccountingExecutionBucketAccumulator,
+  ): boolean {
+    if (flowFamily === 'income' && entry.annual_income_entry_id != null) {
+      const key = budgetMonthEntryKey(bookingMonth, entry.annual_income_entry_id);
+      addMapAmount(buckets.incomeLegacyByMonthEntryId, key, amount);
+      return true;
+    }
+    if (flowFamily === 'expense' && entry.annual_expense_entry_id != null) {
+      const key = budgetMonthEntryKey(bookingMonth, entry.annual_expense_entry_id);
+      addMapAmount(buckets.expenseLegacyByMonthEntryId, key, amount);
+      return true;
+    }
+    return false;
+  }
+
+  function collectAccountingExecutionEntry(
+    entry: AccountingPostedEntry,
+    targets: Map<number, DebtPaymentExpenseTarget>,
+    buckets: AccountingExecutionBucketAccumulator,
+  ): void {
+    if (entry.transactionQuickEntryKind === 'revaluation') return;
+    const flowFamily = resolveLedgerEntryFlowFamily(entry);
+    if (!flowFamily || !isPositiveExecutionLedgerEntry(entry, flowFamily)) return;
+
+    const ownershipFraction = allocationFractionForOwnerLabel(
+      entry.transactionMemberTag ?? '',
+      ownershipFilter.value,
+    );
+    if (ownershipFraction <= 0) return;
+    const amount = toNumberOrZero(entry.amount_base ?? entry.amount) * ownershipFraction;
+    const bookingMonth = entry.bookingMonth;
+    if (!bookingMonth) return;
+
+    collectDepositRotationMonthBuckets(
+      entry,
+      flowFamily,
+      bookingMonth,
+      amount,
+      buckets.depositRotationIncomeByMonth,
+      buckets.depositRotationExpenseByMonth,
+    );
+    if (
+      collectDebtPaymentSiblingExpenseExecution(
+        entry,
+        flowFamily,
+        amount,
+        bookingMonth,
+        targets,
+        buckets,
+      )
+    ) {
+      return;
+    }
+    if (collectTaxonomyExecution(entry, flowFamily, amount, bookingMonth, buckets)) return;
+    if (collectLegacyExecution(entry, flowFamily, amount, bookingMonth, buckets)) return;
+    if (flowFamily === 'income') buckets.incomeUnclassifiedTotal += amount;
+    if (flowFamily === 'expense') buckets.expenseUnclassifiedTotal += amount;
   }
 
   function monthlyPlannedAmountForExpenseEntry(
@@ -808,71 +959,25 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const accountingExecutionBuckets = computed(() => {
-    const incomeCategorizedByMonthTaxonomy = new Map<string, number>();
-    const expenseCategorizedByMonthTaxonomy = new Map<string, number>();
-    const incomeLegacyByMonthEntryId = new Map<string, number>();
-    const expenseLegacyByMonthEntryId = new Map<string, number>();
-    const depositRotationIncomeByMonth = new Map<number, number>();
-    const depositRotationExpenseByMonth = new Map<number, number>();
-    let incomeUnclassifiedTotal = 0;
-    let expenseUnclassifiedTotal = 0;
+    const buckets: AccountingExecutionBucketAccumulator = {
+      incomeCategorizedByMonthTaxonomy: new Map<string, number>(),
+      expenseCategorizedByMonthTaxonomy: new Map<string, number>(),
+      incomeLegacyByMonthEntryId: new Map<string, number>(),
+      expenseLegacyByMonthEntryId: new Map<string, number>(),
+      depositRotationIncomeByMonth: new Map<number, number>(),
+      depositRotationExpenseByMonth: new Map<number, number>(),
+      incomeUnclassifiedTotal: 0,
+      expenseUnclassifiedTotal: 0,
+    };
+    const debtPaymentExpenseTargetByTransactionId = buildDebtPaymentExpenseTargetByTransactionId(
+      accountingPostedEntries.value,
+    );
 
     for (const entry of accountingPostedEntries.value) {
-      if (entry.transactionQuickEntryKind === 'revaluation') continue;
-      const flowFamily = resolveLedgerEntryFlowFamily(entry);
-      if (!flowFamily || !isPositiveExecutionLedgerEntry(entry, flowFamily)) continue;
-
-      const ownershipFraction = allocationFractionForOwnerLabel(
-        entry.transactionMemberTag ?? '',
-        ownershipFilter.value,
-      );
-      if (ownershipFraction <= 0) continue;
-      const amount = toNumberOrZero(entry.amount) * ownershipFraction;
-      const bookingMonth = entry.bookingMonth;
-      if (!bookingMonth) continue;
-      collectDepositRotationMonthBuckets(
-        entry,
-        flowFamily,
-        bookingMonth,
-        amount,
-        depositRotationIncomeByMonth,
-        depositRotationExpenseByMonth,
-      );
-      if (entry.category_key && entry.subcategory_key) {
-        const key = budgetMonthTaxonomyKey(bookingMonth, entry.category_key, entry.subcategory_key);
-        const targetMap =
-          flowFamily === 'income'
-            ? incomeCategorizedByMonthTaxonomy
-            : expenseCategorizedByMonthTaxonomy;
-        targetMap.set(key, (targetMap.get(key) ?? 0) + amount);
-        continue;
-      }
-
-      if (flowFamily === 'income' && entry.annual_income_entry_id != null) {
-        const key = budgetMonthEntryKey(bookingMonth, entry.annual_income_entry_id);
-        incomeLegacyByMonthEntryId.set(key, (incomeLegacyByMonthEntryId.get(key) ?? 0) + amount);
-        continue;
-      }
-      if (flowFamily === 'expense' && entry.annual_expense_entry_id != null) {
-        const key = budgetMonthEntryKey(bookingMonth, entry.annual_expense_entry_id);
-        expenseLegacyByMonthEntryId.set(key, (expenseLegacyByMonthEntryId.get(key) ?? 0) + amount);
-        continue;
-      }
-
-      if (flowFamily === 'income') incomeUnclassifiedTotal += amount;
-      if (flowFamily === 'expense') expenseUnclassifiedTotal += amount;
+      collectAccountingExecutionEntry(entry, debtPaymentExpenseTargetByTransactionId, buckets);
     }
 
-    return {
-      incomeCategorizedByMonthTaxonomy,
-      expenseCategorizedByMonthTaxonomy,
-      incomeLegacyByMonthEntryId,
-      expenseLegacyByMonthEntryId,
-      depositRotationIncomeByMonth,
-      depositRotationExpenseByMonth,
-      incomeUnclassifiedTotal,
-      expenseUnclassifiedTotal,
-    };
+    return buckets;
   });
 
   const incomeTaxonomyLineCountsByMonth = computed(() => {
@@ -997,11 +1102,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   });
 
   const selectedExpenseMonthPlanned = computed(() =>
-    filteredExpenseEntries.value.reduce(
-      (sum, entry) =>
-        sum + monthlyPlannedAmountForExpenseEntry(entry, selectedExecutionMonth.value),
-      0,
-    ),
+    monthlyExpenseExecutionEntries.value.reduce((sum, row) => sum + row.planned, 0),
   );
   const selectedExpenseMonthDeviation = computed(
     () => selectedExpenseMonthExecuted.value - selectedExpenseMonthPlanned.value,
@@ -1296,9 +1397,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
   const monthlyExpenseExecutionEntries = computed(() => {
     const month = selectedExecutionMonth.value;
-    return expenseEntries.value
+    return filteredExpenseEntries.value
       .filter((entry) => {
-        if (entry.category === 'savings_allocation') return false;
         if (entry.expenseType === 'one_off') return entry.targetMonth === month;
         return true;
       })
@@ -1353,8 +1453,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     >();
 
     for (const row of monthlyExpenseExecutionEntries.value) {
-      const categoryKey = row.entry.category;
-      const subcategoryKey = row.entry.subcategory;
+      const { categoryKey, subcategoryKey } = normalizedBudgetTaxonomy(
+        row.entry.category,
+        row.entry.subcategory,
+      );
       const key = `${categoryKey}:${subcategoryKey}`;
       let group = groups.get(key);
       if (!group) {
@@ -2434,6 +2536,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
               return transaction.entries.map((entry) => ({
                 ...entry,
                 bookingMonth,
+                transactionId: transaction.id,
                 transactionMemberTag: transaction.member_tag ?? '',
                 transactionQuickEntryKind: transaction.quick_entry_kind ?? '',
                 assetSubcategory: '',
@@ -2531,8 +2634,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   ): BudgetExecutionTone {
     if (!Number.isFinite(ratio) || ratio <= 0) return 'neutral';
     if (sectionId === 'expense') {
-      if (ratio > 1) return 'danger';
-      if (ratio > 0.85) return 'warn';
+      if (ratio > 1.05) return 'danger';
+      if (ratio >= 0.95) return 'warn';
       return 'good';
     }
     if (ratio >= 1) return 'good';
@@ -3500,10 +3603,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   }
 
   function shortExpenseCategoryLabel(category: string): string {
-    if (category === 'real_estate_assets') return 'Act. Inm';
-    if (category === 'tangible_assets') return 'Act. Mob';
+    if (category === 'real_estate_assets') return 'Activos inmobiliarios';
+    if (category === 'tangible_assets') return 'Activos mobiliarios';
     if (category === 'consumption_expenses') return 'Gastos';
-    if (category === 'financial_investments') return 'Inv. Fin';
+    if (category === 'financial_investments') return 'Inversion financiera';
     if (category === 'savings_allocation') return 'Ahorro';
     return (
       expenseCategoryLabels.get(category as (typeof expenseCategories)[number]['value']) ?? category
