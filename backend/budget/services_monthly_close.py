@@ -295,6 +295,10 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
 
     income_executed = Decimal(income_month_data["executed"] if income_month_data else "0")
     expense_executed = Decimal(expense_month_data["executed"] if expense_month_data else "0")
+    perimeter_internal_expense = Decimal(
+        str(liquidity_summary.get("perimeter_internal_expense_total") or "0")
+    )
+    external_expense_executed = max(Decimal("0"), expense_executed - perimeter_internal_expense)
 
     liquidity_executed_raw = liquidity_summary.get("executed_total")
     liquidity_executed = (
@@ -332,7 +336,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
     if has_gaps:
         residual_net: Decimal | None = None
         if delta_liquidity is not None:
-            known_net = income_executed - expense_executed
+            known_net = income_executed - external_expense_executed
             residual_net = delta_liquidity - known_net
 
         income_dist, expense_dist = compute_smart_distribution(
@@ -382,6 +386,8 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         },
         "expense": {
             "executed": str(expense_executed),
+            "external_executed": str(external_expense_executed),
+            "perimeter_internal_executed": str(perimeter_internal_expense),
             "planned": str(
                 Decimal(expense_month_data["planned"]) if expense_month_data else Decimal("0")
             ),

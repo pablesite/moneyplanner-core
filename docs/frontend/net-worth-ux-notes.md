@@ -77,6 +77,12 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 2. When `payment_start_date` is set, the installment schedule is anchored to that date.
 3. When `payment_start_date` is empty, legacy behavior is preserved (first installment one period after `start_date`).
 
+## Monthly close liquidity netting
+1. The monthly-close liquidity step uses the close perimeter: active liquidity assets plus scoped non-cash assets (currently crowdlending) minus active credit-card liabilities.
+2. Credit-card rows appear as liquid liabilities. They are derived from the liability/accounting balance by default and can be manually adjusted with a month-end `LiabilityValuation`.
+3. This keeps card purchases in the same month as the expense recognition while card payments only move cash against the liability.
+4. Contributions into assets inside the perimeter are shown in expenses but treated as internal movements for residual calculation.
+
 ## Investment contribution intervals (asset form)
 1. Investment assets no longer expose the legacy periodic fields (`investment_contribution_mode`, `monthly_contribution_amount`, `investment_contribution_frequency`, `investment_contribution_currency`, `expected_end_date`) in the form UI.
 2. The form now includes an inline interval manager under "Aportaciones periódicas" to add, edit, and remove multiple intervals before save.
