@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, cast
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.db import models
 from django.utils import timezone as _timezone
 
 from accounts.models import UserSettings
@@ -45,7 +46,23 @@ def get_financed_asset_queryset_for_user(*, user):
 
 
 def get_liquidity_asset_queryset_for_user(*, user):
-    return Asset.objects.filter(user=user, is_active=True, category=Asset.Category.CASH)
+    return Asset.objects.filter(user=user, is_active=True).filter(
+        models.Q(category=Asset.Category.CASH)
+        | models.Q(
+            category=Asset.Category.INVESTMENTS,
+            subcategory__in=[
+                Asset.Subcategory.CROWDLENDING,
+            ],
+        )
+    )
+
+
+def get_liquid_liability_queryset_for_user(*, user):
+    return Liability.objects.filter(
+        user=user,
+        is_active=True,
+        category=Liability.Category.CREDIT_CARD,
+    )
 
 
 def _ensure_user_settings(user) -> None:
@@ -99,13 +116,19 @@ def calculate_totals(
     def _convert(amount: Decimal, from_cur: str) -> Decimal:
         if fx_cache is not None:
             return convert_currency_cached(
-                amount, from_cur, base_currency, rate_date=as_of_date, fx_cache=fx_cache,
+                amount,
+                from_cur,
+                base_currency,
+                rate_date=as_of_date,
+                fx_cache=fx_cache,
             )
         return convert_currency(amount, from_cur, base_currency, date=as_of_date)
 
     for asset in assets_qs:
         effective_amount = get_effective_asset_amount(
-            asset=asset, as_of_date=as_of_date, position_cache=position_cache,
+            asset=asset,
+            as_of_date=as_of_date,
+            position_cache=position_cache,
         )
         converted = _convert(effective_amount, asset.currency)
         total_assets += converted

@@ -17,6 +17,7 @@ from ..models import (
     AssetImprovement,
     InvestmentContributionInterval,
     Liability,
+    LiabilityValuation,
     LiquidityMonthlyCheckin,
 )
 from ..services_assets_budget import sync_generated_budget_commitments_for_asset
@@ -2136,6 +2137,96 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row["deviation"], "-79.50")
         self.assertEqual(row["coverage_source"], "checkin")
         self.assertEqual(row["checkin"]["status"], "adjusted")
+
+    def test_liquidity_monthly_summary_subtracts_credit_card_liabilities_from_net_total(self):
+        bank = Asset.objects.create(
+            user=self.user,
+            name="Cuenta nomina",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        credit_card = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta Visa",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("200.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=bank,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("950.00"),
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["gross_asset_executed_total"], "950.00")
+        self.assertEqual(response.data["liquid_liability_executed_total"], "200.00")
+        self.assertEqual(response.data["executed_total"], "750.00")
+        rows = {row["asset_name"]: row for row in response.data["rows"]}
+        self.assertEqual(rows["Cuenta nomina"]["row_type"], "asset")
+        self.assertEqual(rows["Tarjeta Visa"]["row_type"], "liability")
+        self.assertEqual(rows["Tarjeta Visa"]["liability_id"], credit_card.id)
+        self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance"], "200.00")
+        self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance_base"], "-200.00")
+
+    def test_liquidity_monthly_summary_uses_credit_card_manual_checkpoint(self):
+        bank = Asset.objects.create(
+            user=self.user,
+            name="Cuenta nomina",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        credit_card = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta Visa",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("200.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        valuation = LiabilityValuation.objects.create(
+            user=self.user,
+            liability=credit_card,
+            valuation_date=date(2026, 2, 28),
+            value=Decimal("125.40"),
+            source=LiabilityValuation.Source.MANUAL_CHECKPOINT,
+            note="Ajuste cierre",
+        )
+        LiquidityMonthlyCheckin.objects.create(
+            user=self.user,
+            asset=bank,
+            fiscal_year=2026,
+            month=2,
+            status=LiquidityMonthlyCheckin.Status.CONFIRMED,
+            closing_balance_real=Decimal("1000.00"),
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        rows = {row["asset_name"]: row for row in response.data["rows"]}
+        self.assertEqual(rows["Tarjeta Visa"]["coverage_source"], "checkin")
+        self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance"], "125.40")
+        self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance_base"], "-125.40")
+        self.assertEqual(rows["Tarjeta Visa"]["checkin"]["id"], valuation.id)
+        self.assertEqual(rows["Tarjeta Visa"]["checkin"]["closing_balance_real"], "125.40")
+        self.assertEqual(response.data["executed_total"], "874.60")
 
     def test_liquidity_monthly_summary_uses_ledger_for_accounting_assets_and_keeps_fallback(self):
         ledger_account = LedgerAccount.objects.create(
