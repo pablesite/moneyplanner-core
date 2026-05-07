@@ -41,6 +41,7 @@ type Props = {
     payload: NetWorthWritePayload & { ownership_id?: number | null },
   ) => Promise<void>;
   onArchive: (id: number) => Promise<void>;
+  onUnarchive?: (id: number) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
   onAdd?: () => void;
   addLabel?: string;
@@ -787,6 +788,7 @@ async function saveEdit(id: number) {
                   :share-percent="it._sharePercent"
                   @edit="onEdit ? onEdit(editTarget(it)) : startEdit(editTarget(it))"
                   @archive="onArchive(it.id)"
+                  @unarchive="onUnarchive?.(it.id)"
                   @delete="handleDelete(it.id)"
                 />
 
