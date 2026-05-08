@@ -588,6 +588,15 @@ def planned_expense_monthly_distribution(
     return distribution
 
 
+def _is_user_override_checkin(checkin) -> bool:
+    """Returns True when the user has explicitly set an amount that should override ledger data."""
+    return (
+        checkin is not None
+        and checkin.status not in ("skipped", "estimated")
+        and checkin.executed_amount is not None
+    )
+
+
 def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
     entries = list(
         AnnualExpenseEntry.objects.filter(user=user, is_active=True, fiscal_year=fiscal_year)
@@ -663,6 +672,23 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
         entry_ids = cast(list[int], slot["entry_ids"])
+
+        # If any entry in this slot has a user-explicit override, the sum of those
+        # overrides becomes the authoritative total for the slot (replaces ledger).
+        override_total = Decimal("0.00")
+        any_override = False
+        for entry_id in entry_ids:
+            oc = checkins_by_key.get((entry_id, month))
+            if _is_user_override_checkin(oc):
+                override_total += _round_money(Decimal(oc.executed_amount))
+                any_override = True
+        if any_override:
+            fallback_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += override_total
+            executed_budgeted_by_slot_month[slot_key] += override_total
+            continue
+
         ledger_amount = categorized_ledger_by_key.get(slot_key)
         if ledger_amount is not None:
             ledger_entries_by_month[month] += len(entry_ids)
@@ -924,6 +950,22 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
         entry_ids = cast(list[int], slot["entry_ids"])
+
+        # For single-entry slots: a user-explicit override takes priority over ledger data.
+        override_total = Decimal("0.00")
+        any_override = False
+        for entry_id in entry_ids:
+            oc = checkins_by_key.get((entry_id, month))
+            if _is_user_override_checkin(oc):
+                override_total += _round_money(Decimal(oc.executed_amount))
+                any_override = True
+        if any_override:
+            fallback_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += override_total
+            executed_budgeted_by_slot_month[slot_key] += override_total
+            continue
+
         ledger_amount = categorized_ledger_by_key.get(slot_key)
         if ledger_amount is not None:
             ledger_entries_by_month[month] += len(entry_ids)
