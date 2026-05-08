@@ -45,14 +45,22 @@ def get_financed_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True)
 
 
+INTEREST_BEARING_INVESTMENT_SUBCATEGORIES = {
+    Asset.Subcategory.CROWDLENDING,
+    Asset.Subcategory.REAL_ESTATE_CROWD,
+}
+
+
 def get_liquidity_asset_queryset_for_user(*, user):
     return Asset.objects.filter(user=user, is_active=True).filter(
         models.Q(category=Asset.Category.CASH)
         | models.Q(
             category=Asset.Category.INVESTMENTS,
-            subcategory__in=[
-                Asset.Subcategory.CROWDLENDING,
-            ],
+            annual_interest_tae__gt=Decimal("0"),
+        )
+        | models.Q(
+            category=Asset.Category.INVESTMENTS,
+            subcategory__in=INTEREST_BEARING_INVESTMENT_SUBCATEGORIES,
         )
     )
 

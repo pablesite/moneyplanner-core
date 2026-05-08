@@ -91,7 +91,10 @@ function liquidityBlockKey(row: LiquidityRow): string {
     return 'credit_cards';
   }
   if (row.asset_subcategory === 'short_term_deposit') return 'liquid_deposits';
-  if (row.asset_subcategory === 'crypto_spot_earn' || hasExpectedInterest) {
+  if (
+    row.asset_subcategory === 'crypto_spot_earn' ||
+    (row.asset_category === 'cash' && hasExpectedInterest)
+  ) {
     return 'yield_accounts';
   }
   if (row.asset_subcategory === 'bank_account' || row.asset_subcategory === 'wallet') {

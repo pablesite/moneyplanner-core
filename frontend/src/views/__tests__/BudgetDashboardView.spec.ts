@@ -509,6 +509,25 @@ describe('BudgetDashboardView', () => {
             checkin: null,
           },
           {
+            asset_id: 6,
+            asset_name: 'Urbanitae',
+            asset_category: 'investments',
+            asset_subcategory: 'real_estate_crowd',
+            annual_interest_tae: '8.00',
+            currency: 'EUR',
+            planned_closing_balance: '2000.00',
+            executed_closing_balance: '2087.29',
+            effective_closing_balance: '2087.29',
+            deviation: '87.29',
+            planned_closing_balance_base: '2000.00',
+            executed_closing_balance_base: '2087.29',
+            effective_closing_balance_base: '2087.29',
+            deviation_base: '87.29',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
             row_type: 'liability',
             asset_id: -10,
             asset_name: 'Visa',
@@ -550,11 +569,13 @@ describe('BudgetDashboardView', () => {
     ).toBe(true);
     expect(summaries.some((text) => text.includes('Depositos liquidos'))).toBe(true);
     expect(summaries.some((text) => text.includes('Tarjetas de credito'))).toBe(true);
+    expect(summaries.some((text) => text.includes('Otros liquidos'))).toBe(true);
     expect(wrapper.text()).toContain('Cuenta bancaria - Cuenta nomina');
     expect(wrapper.text()).toContain('Spot/Earn - Spot Binance');
     expect(wrapper.text()).toContain('Cuenta bancaria - MyInvestor cuenta ahorro');
     expect(wrapper.text()).toContain('Cuenta bancaria - Trade Republic efectivo');
     expect(wrapper.text()).toContain('Deposito corto plazo - Deposito 6 meses');
+    expect(wrapper.text()).toContain('Liquidez - Urbanitae');
     expect(wrapper.text()).toContain('Tarjeta de credito - Visa');
   });
 
