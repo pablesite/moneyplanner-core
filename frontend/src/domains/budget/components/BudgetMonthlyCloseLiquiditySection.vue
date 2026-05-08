@@ -1,4 +1,6 @@
 ﻿<script setup lang="ts">
+import { computed } from 'vue';
+
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type LiquidityResetMode = 'zero' | 'planned';
 
@@ -34,7 +36,18 @@ type LiquidityRow = {
   } | null;
 };
 
-defineProps<{
+type LiquidityCategoryBlock = {
+  key: string;
+  label: string;
+  plannedTotal: number;
+  executedTotal: number;
+  deviation: number;
+  completionRatio: number;
+  reviewedCount: number;
+  rows: LiquidityRow[];
+};
+
+const props = defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
   isCloseLocked?: boolean;
@@ -69,6 +82,75 @@ defineProps<{
   relockLiquidityLedgerRow: (row: LiquidityRow) => void | Promise<void>;
   onLiquidityCheckinCheckboxToggle: (row: LiquidityRow, checked: boolean) => void | Promise<void>;
 }>();
+
+function liquidityBlockKey(row: LiquidityRow): string {
+  if (row.row_type === 'liability' || row.liability_category === 'credit_card') {
+    return 'credit_cards';
+  }
+  if (row.asset_subcategory === 'short_term_deposit') return 'liquid_deposits';
+  if (row.asset_subcategory === 'crypto_spot_earn') return 'yield_accounts';
+  if (row.asset_subcategory === 'bank_account' || row.asset_subcategory === 'wallet') {
+    return 'cash_accounts';
+  }
+  return 'other_liquidity';
+}
+
+function liquidityBlockLabel(key: string): string {
+  const labels: Record<string, string> = {
+    cash_accounts: 'Cuentas y efectivo',
+    yield_accounts: 'Cuentas remuneradas',
+    liquid_deposits: 'Depositos liquidos',
+    credit_cards: 'Tarjetas de credito',
+    other_liquidity: 'Otros liquidos',
+  };
+  return labels[key] ?? 'Otros liquidos';
+}
+
+function isLiquidityRowReviewed(row: LiquidityRow): boolean {
+  return row.coverage_source === 'ledger' || !!row.checkin;
+}
+
+const liquidityCategoryBlocks = computed<LiquidityCategoryBlock[]>(() => {
+  const order = [
+    'cash_accounts',
+    'yield_accounts',
+    'liquid_deposits',
+    'credit_cards',
+    'other_liquidity',
+  ];
+  const blocks = new Map<string, LiquidityCategoryBlock>();
+
+  for (const row of props.monthlyLiquidityExecutionRows) {
+    const key = liquidityBlockKey(row);
+    let block = blocks.get(key);
+    if (!block) {
+      block = {
+        key,
+        label: liquidityBlockLabel(key),
+        plannedTotal: 0,
+        executedTotal: 0,
+        deviation: 0,
+        completionRatio: 0,
+        reviewedCount: 0,
+        rows: [],
+      };
+      blocks.set(key, block);
+    }
+
+    block.rows.push(row);
+    block.plannedTotal += row.planned;
+    block.executedTotal += row.executed ?? 0;
+    if (isLiquidityRowReviewed(row)) block.reviewedCount += 1;
+  }
+
+  return Array.from(blocks.values())
+    .map((block) => ({
+      ...block,
+      deviation: block.executedTotal - block.plannedTotal,
+      completionRatio: block.rows.length ? block.reviewedCount / block.rows.length : 1,
+    }))
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+});
 </script>
 
 <template>
@@ -158,34 +240,37 @@ defineProps<{
         No hay activos o pasivos liquidos activos para este mes.
       </div>
       <div v-else class="ui-budget-checkin-groups-box">
-        <div class="ui-budget-checkin-group">
-          <div class="ui-budget-checkin-group-summary">
+        <details
+          v-for="block in liquidityCategoryBlocks"
+          :key="`liquidity-checkin-category-${block.key}`"
+          class="ui-budget-checkin-group"
+          :open="block.completionRatio < 1 || block.deviation !== 0"
+        >
+          <summary class="ui-budget-checkin-group-summary">
             <div class="ui-budget-checkin-group-title-wrap">
-              <strong class="ui-budget-checkin-group-title">Perimetro de cierre</strong>
+              <strong class="ui-budget-checkin-group-title">{{ block.label }}</strong>
               <span class="ui-budget-checkin-group-meta">
-                {{ monthlyLiquidityExecutionRows.length }} posiciones -
-                {{ formatPercent(liquidityMonthlySummary?.completion_ratio ?? null, 0) }}
-                completitud
+                {{ block.rows.length }} posiciones - {{ Math.round(block.completionRatio * 100) }} %
+                revision
               </span>
             </div>
             <div class="ui-budget-checkin-group-kpis">
-              <span>Anterior {{ formatMoney(selectedLiquidityMonthPlanned) }} EUR</span>
-              <span>E {{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</span>
+              <span>P {{ formatMoney(block.plannedTotal) }} EUR</span>
+              <span>E {{ formatMoney(block.executedTotal) }} EUR</span>
               <span
                 :class="{
-                  'ui-budget-checkin-group-dev-pos': selectedLiquidityMonthDeviation > 0,
-                  'ui-budget-checkin-group-dev-neg': selectedLiquidityMonthDeviation < 0,
+                  'ui-budget-checkin-group-dev-pos': block.deviation > 0,
+                  'ui-budget-checkin-group-dev-neg': block.deviation < 0,
                 }"
               >
-                D {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
-                }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
+                D {{ block.deviation > 0 ? '+' : '' }}{{ formatMoney(block.deviation) }} EUR
               </span>
             </div>
-          </div>
+          </summary>
 
           <div class="ui-budget-checkin-group-rows">
             <article
-              v-for="row in monthlyLiquidityExecutionRows"
+              v-for="row in block.rows"
               :key="`liquidity-checkin-${row.row_type ?? 'asset'}-${row.asset_id}`"
               class="ui-budget-checkin-row"
             >
@@ -359,7 +444,7 @@ defineProps<{
               </div>
             </article>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   </section>
