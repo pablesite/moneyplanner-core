@@ -256,6 +256,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   type BudgetExecutionOrigin =
     | 'categorized_ledger'
     | 'legacy_ledger'
+    | 'user_override'
     | 'legacy_checkin'
     | 'ambiguous_taxonomy'
     | 'none';
@@ -1065,13 +1066,28 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const taxonomyLineCount = incomeTaxonomyLineCountsByMonth.value.get(taxonomyKey) ?? 0;
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
+    const plannedThisMonth = monthlyPlannedAmountForIncomeEntry(entry, month);
+    const isUserOverride =
+      checkin != null &&
+      checkin.status !== 'skipped' &&
+      checkin.status !== 'estimated' &&
+      checkin.executed_amount != null;
     const uniqueCategorizedLedgerExecuted =
-      categorizedLedgerExecuted != null && taxonomyLineCount <= 1 ? categorizedLedgerExecuted : 0;
+      !isUserOverride &&
+      categorizedLedgerExecuted != null &&
+      taxonomyLineCount <= 1 &&
+      (plannedThisMonth > 0 || taxonomyLineCount === 0)
+        ? categorizedLedgerExecuted
+        : 0;
     let executionOrigin: BudgetExecutionOrigin = 'none';
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+    if (isUserOverride) {
+      executionOrigin = 'user_override';
+      executionSource = 'legacy_fallback';
+      executed = toNumberOrZero(checkin!.executed_amount);
+    } else if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
       executionOrigin =
         uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
       executionSource =
@@ -1110,13 +1126,28 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const taxonomyLineCount = expenseTaxonomyLineCountsByMonth.value.get(taxonomyKey) ?? 0;
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
+    const plannedThisMonth = monthlyPlannedAmountForExpenseEntry(entry, month);
+    const isUserOverride =
+      checkin != null &&
+      checkin.status !== 'skipped' &&
+      checkin.status !== 'estimated' &&
+      checkin.executed_amount != null;
     const uniqueCategorizedLedgerExecuted =
-      categorizedLedgerExecuted != null && taxonomyLineCount <= 1 ? categorizedLedgerExecuted : 0;
+      !isUserOverride &&
+      categorizedLedgerExecuted != null &&
+      taxonomyLineCount <= 1 &&
+      (plannedThisMonth > 0 || taxonomyLineCount === 0)
+        ? categorizedLedgerExecuted
+        : 0;
     let executionOrigin: BudgetExecutionOrigin = 'none';
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+    if (isUserOverride) {
+      executionOrigin = 'user_override';
+      executionSource = 'legacy_fallback';
+      executed = toNumberOrZero(checkin!.executed_amount);
+    } else if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
       executionOrigin =
         uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
       executionSource =
@@ -1248,7 +1279,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
 
       group.rows.push(row);
       group.plannedTotal += row.planned;
-      if (row.executed != null && row.executionOrigin !== 'legacy_checkin') {
+      if (row.executionOrigin === 'user_override') {
+        group.ledgerDetectedTotal += row.categorizedLedgerExecuted ?? 0;
+      } else if (row.executed != null && row.executionOrigin !== 'legacy_checkin') {
         group.ledgerDetectedTotal += row.executed;
       }
       if (row.executionSource !== 'none') {
@@ -1597,7 +1630,9 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }
       group.rows.push(row);
       group.plannedTotal += row.planned;
-      if (row.executed != null && row.executionOrigin !== 'legacy_checkin') {
+      if (row.executionOrigin === 'user_override') {
+        group.ledgerDetectedTotal += row.categorizedLedgerExecuted ?? 0;
+      } else if (row.executed != null && row.executionOrigin !== 'legacy_checkin') {
         group.ledgerDetectedTotal += row.executed;
       }
       if (row.executionSource !== 'none') {
@@ -1814,23 +1849,135 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       );
   }
 
-  const monthlyIncomeResultBreakdown = computed(() =>
-    buildMonthlyResultBreakdown(
-      monthlyIncomeExecutionEntries.value,
-      incomeCategoryLabels,
-      incomeSubcategoryLabels,
-      selectedIncomeMonthExecuted.value,
-    ),
-  );
+  const monthlyIncomeResultBreakdown = computed((): MonthlyResultBreakdownGroup[] => {
+    const sectionTotal = selectedIncomeMonthExecuted.value;
+    const catMap = new Map<
+      string,
+      {
+        key: string;
+        categoryKey: string;
+        categoryLabel: string;
+        lineCount: number;
+        plannedTotal: number;
+        executedTotal: number;
+        checkedCount: number;
+        rows: MonthlyResultBreakdownSubrow[];
+      }
+    >();
 
-  const monthlyExpenseResultBreakdown = computed(() =>
-    buildMonthlyResultBreakdown(
-      monthlyExpenseExecutionEntries.value,
-      expenseCategoryLabels,
-      expenseSubcategoryLabels,
-      selectedExpenseMonthExecuted.value,
-    ),
-  );
+    for (const subcat of groupedMonthlyIncomeExecutionEntries.value) {
+      let cat = catMap.get(subcat.categoryKey);
+      if (!cat) {
+        cat = {
+          key: subcat.categoryKey,
+          categoryKey: subcat.categoryKey,
+          categoryLabel: subcat.categoryLabel,
+          lineCount: 0,
+          plannedTotal: 0,
+          executedTotal: 0,
+          checkedCount: 0,
+          rows: [],
+        };
+        catMap.set(subcat.categoryKey, cat);
+      }
+      const subcatLineCount = subcat.rows.length || 1;
+      cat.lineCount += subcatLineCount;
+      cat.plannedTotal += subcat.plannedTotal;
+      cat.executedTotal += subcat.executedTotal;
+      cat.checkedCount += subcat.checkedCount;
+      cat.rows.push({
+        key: subcat.key,
+        subcategoryKey: subcat.subcategoryKey,
+        subcategoryLabel: subcat.subcategoryLabel,
+        lineCount: subcatLineCount,
+        plannedTotal: subcat.plannedTotal,
+        executedTotal: subcat.executedTotal,
+        deviation: subcat.deviation,
+        checkedCount: subcat.checkedCount,
+        completionRatio: subcat.completionRatio,
+        shareOfExecuted: sectionTotal > 0 ? subcat.executedTotal / sectionTotal : 0,
+      });
+    }
+
+    return Array.from(catMap.values())
+      .map((group) => ({
+        ...group,
+        deviation: group.executedTotal - group.plannedTotal,
+        completionRatio: group.lineCount > 0 ? group.checkedCount / group.lineCount : 0,
+        shareOfExecuted: sectionTotal > 0 ? group.executedTotal / sectionTotal : 0,
+        rows: group.rows.sort((a, b) => b.executedTotal - a.executedTotal),
+      }))
+      .sort(
+        (a, b) =>
+          b.executedTotal - a.executedTotal ||
+          a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
+      );
+  });
+
+  const monthlyExpenseResultBreakdown = computed((): MonthlyResultBreakdownGroup[] => {
+    const sectionTotal = selectedExpenseMonthExecuted.value;
+    const catMap = new Map<
+      string,
+      {
+        key: string;
+        categoryKey: string;
+        categoryLabel: string;
+        lineCount: number;
+        plannedTotal: number;
+        executedTotal: number;
+        checkedCount: number;
+        rows: MonthlyResultBreakdownSubrow[];
+      }
+    >();
+
+    for (const subcat of groupedMonthlyExpenseExecutionEntries.value) {
+      let cat = catMap.get(subcat.categoryKey);
+      if (!cat) {
+        cat = {
+          key: subcat.categoryKey,
+          categoryKey: subcat.categoryKey,
+          categoryLabel: subcat.categoryLabel,
+          lineCount: 0,
+          plannedTotal: 0,
+          executedTotal: 0,
+          checkedCount: 0,
+          rows: [],
+        };
+        catMap.set(subcat.categoryKey, cat);
+      }
+      const subcatLineCount = subcat.rows.length || 1;
+      cat.lineCount += subcatLineCount;
+      cat.plannedTotal += subcat.plannedTotal;
+      cat.executedTotal += subcat.executedTotal;
+      cat.checkedCount += subcat.checkedCount;
+      cat.rows.push({
+        key: subcat.key,
+        subcategoryKey: subcat.subcategoryKey,
+        subcategoryLabel: subcat.subcategoryLabel,
+        lineCount: subcatLineCount,
+        plannedTotal: subcat.plannedTotal,
+        executedTotal: subcat.executedTotal,
+        deviation: subcat.deviation,
+        checkedCount: subcat.checkedCount,
+        completionRatio: subcat.completionRatio,
+        shareOfExecuted: sectionTotal > 0 ? subcat.executedTotal / sectionTotal : 0,
+      });
+    }
+
+    return Array.from(catMap.values())
+      .map((group) => ({
+        ...group,
+        deviation: group.executedTotal - group.plannedTotal,
+        completionRatio: group.lineCount > 0 ? group.checkedCount / group.lineCount : 0,
+        shareOfExecuted: sectionTotal > 0 ? group.executedTotal / sectionTotal : 0,
+        rows: group.rows.sort((a, b) => b.executedTotal - a.executedTotal),
+      }))
+      .sort(
+        (a, b) =>
+          b.executedTotal - a.executedTotal ||
+          a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
+      );
+  });
 
   const selectedExecutionMonthLabel = computed(
     () => monthLabels[selectedExecutionMonth.value - 1] ?? String(selectedExecutionMonth.value),
@@ -2670,6 +2817,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   function executionSourceLabel(origin: BudgetExecutionOrigin): string {
     if (origin === 'categorized_ledger') return 'Movimientos';
     if (origin === 'legacy_ledger' || origin === 'legacy_checkin') return 'Manual';
+    if (origin === 'user_override') return 'Ajuste manual';
     if (origin === 'ambiguous_taxonomy') return 'Pendiente clasificar';
     return '';
   }
@@ -3590,7 +3738,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           budgetApi.delete(`/api/budget/annual-income-checkins/${checkin.id}/`),
         ),
       );
-      for (const checkin of existingCheckins) removeCachedIncomeCheckin(checkin);
+      await refreshIncomeExecutionData();
     } catch (e: unknown) {
       incomeExecutionError.value = toBudgetErrorMessage(e);
     } finally {
@@ -3861,7 +4009,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           budgetApi.delete(`/api/budget/annual-expense-checkins/${checkin.id}/`),
         ),
       );
-      for (const checkin of existingCheckins) removeCachedExpenseCheckin(checkin);
+      await refreshExpenseExecutionData();
     } catch (e: unknown) {
       expenseExecutionError.value = toBudgetErrorMessage(e);
     } finally {

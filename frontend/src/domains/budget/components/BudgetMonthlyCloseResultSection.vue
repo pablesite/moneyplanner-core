@@ -137,6 +137,49 @@ const resultBridgeRows = computed(() =>
           del mes.
         </p>
       </div>
+      <div v-if="closeStatus" style="display: flex; gap: 8px; align-items: center; flex-shrink: 0">
+        <template v-if="closeStatus === 'locked'">
+          <span class="ui-monthly-close-locked-banner">Este mes está bloqueado.</span>
+        </template>
+        <template v-else-if="closeStatus === 'finalized'">
+          <button
+            type="button"
+            class="btn"
+            :disabled="monthlyCloseActionBusy"
+            @click="onReopenClose && onReopenClose()"
+          >
+            Reabrir cierre
+          </button>
+          <button
+            type="button"
+            class="btn"
+            style="color: rgba(255, 140, 140, 0.95); border-color: rgba(255, 92, 92, 0.3)"
+            :disabled="monthlyCloseActionBusy"
+            @click="onLockClose && onLockClose()"
+          >
+            Bloquear
+          </button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="btn"
+            :disabled="monthlyCloseActionBusy"
+            @click="onFinalizeClose && onFinalizeClose()"
+          >
+            Finalizar cierre
+          </button>
+          <button
+            v-if="hasDistributionSuggestion"
+            type="button"
+            class="btn"
+            :disabled="monthlyCloseActionBusy"
+            @click="onApplyDistribution && onApplyDistribution()"
+          >
+            Aplicar distribución
+          </button>
+        </template>
+      </div>
     </div>
 
     <div class="ui-budget-result-hero-grid">
@@ -226,20 +269,6 @@ const resultBridgeRows = computed(() =>
             {{ selectedMonthlyResidualSeverityLabel }}
           </div>
         </div>
-        <div
-          class="ui-budget-result-diagnostic"
-          :class="{
-            'ui-budget-result-diagnostic-good': selectedMonthlyResidualSeverity === 'ok',
-            'ui-budget-result-diagnostic-watch': selectedMonthlyResidualSeverity === 'watch',
-            'ui-budget-result-diagnostic-alert': selectedMonthlyResidualSeverity === 'alert',
-          }"
-        >
-          <span>{{ residualReading }}</span>
-          <strong>{{ formatSignedMoney(selectedMonthlyCloseResidual) }} EUR</strong>
-          <small>
-            {{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }} del volumen ejecutado
-          </small>
-        </div>
         <div class="ui-budget-result-diagnostic-scale">
           <div class="ui-budget-result-diagnostic-scale-head">
             <span>Impacto del residual</span>
@@ -270,10 +299,6 @@ const resultBridgeRows = computed(() =>
           <article class="ui-budget-result-mini-kpi">
             <span>Sobre cierre esperado</span>
             <strong>{{ formatPercent(selectedMonthlyResidualExpectedCloseRatio, 1) }}</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>Volumen ejecutado</span>
-            <strong>{{ formatMoney(selectedMonthlyExecutedVolume) }} EUR</strong>
           </article>
           <article class="ui-budget-result-mini-kpi">
             <span>Umbral OK</span>
@@ -321,8 +346,8 @@ const resultBridgeRows = computed(() =>
                 <span>P {{ formatMoney(group.plannedTotal) }} EUR</span>
                 <span
                   :class="{
-                    'ui-budget-checkin-group-dev-pos': group.deviation > 0,
-                    'ui-budget-checkin-group-dev-neg': group.deviation < 0,
+                    'ui-budget-checkin-income-dev-pos': group.deviation > 0,
+                    'ui-budget-checkin-group-dev-pos': group.deviation < 0,
                   }"
                 >
                   D {{ formatSignedMoney(group.deviation) }} EUR
@@ -341,8 +366,8 @@ const resultBridgeRows = computed(() =>
                 <span>{{ formatPercent(row.shareOfExecuted, 0) }}</span>
                 <span
                   :class="{
-                    'ui-budget-checkin-group-dev-pos': row.deviation > 0,
-                    'ui-budget-checkin-group-dev-neg': row.deviation < 0,
+                    'ui-budget-checkin-income-dev-pos': row.deviation > 0,
+                    'ui-budget-checkin-group-dev-pos': row.deviation < 0,
                   }"
                 >
                   {{ formatSignedMoney(row.deviation) }} EUR
@@ -421,48 +446,5 @@ const resultBridgeRows = computed(() =>
       </section>
     </div>
 
-    <div v-if="closeStatus" class="ui-monthly-close-actions">
-      <template v-if="closeStatus === 'locked'">
-        <span class="ui-monthly-close-locked-banner" style="flex: 1">Este mes está bloqueado.</span>
-      </template>
-      <template v-else-if="closeStatus === 'finalized'">
-        <button
-          type="button"
-          class="btn"
-          :disabled="monthlyCloseActionBusy"
-          @click="onReopenClose && onReopenClose()"
-        >
-          Reabrir cierre
-        </button>
-        <button
-          type="button"
-          class="btn"
-          style="color: rgba(255, 140, 140, 0.95); border-color: rgba(255, 92, 92, 0.3)"
-          :disabled="monthlyCloseActionBusy"
-          @click="onLockClose && onLockClose()"
-        >
-          Bloquear
-        </button>
-      </template>
-      <template v-else>
-        <button
-          type="button"
-          class="btn"
-          :disabled="monthlyCloseActionBusy"
-          @click="onFinalizeClose && onFinalizeClose()"
-        >
-          Finalizar cierre
-        </button>
-        <button
-          v-if="hasDistributionSuggestion"
-          type="button"
-          class="btn"
-          :disabled="monthlyCloseActionBusy"
-          @click="onApplyDistribution && onApplyDistribution()"
-        >
-          Aplicar distribución
-        </button>
-      </template>
-    </div>
   </section>
 </template>
