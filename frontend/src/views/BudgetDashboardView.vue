@@ -143,6 +143,7 @@ const {
   incomeExecutionYtdTotals,
   expenseExecutionYtdTotals,
   hasAnyPlannedData,
+  selectedPerimeterInternalExpenseTotal,
   closeStatus,
   isCloseLocked,
   hasDistributionSuggestion,
@@ -415,6 +416,7 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :selected-monthly-residual-income-ratio="selectedMonthlyResidualIncomeRatio"
       :selected-monthly-residual-expense-ratio="selectedMonthlyResidualExpenseRatio"
       :selected-monthly-residual-expected-close-ratio="selectedMonthlyResidualExpectedCloseRatio"
+      :selected-perimeter-internal-expense-total="selectedPerimeterInternalExpenseTotal"
       :result-reconciliation-flow-rows="resultReconciliationFlowRows"
       :result-reconciliation-composition-rows="resultReconciliationCompositionRows"
       :monthly-income-execution-entries="monthlyIncomeExecutionEntries"

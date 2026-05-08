@@ -4588,6 +4588,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     incomeInvestmentRotationCategoryAdjustment,
     incomeInvestmentRotationSubcategoryAdjustment,
     selectedMonthlyExecutedVolume,
+    selectedPerimeterInternalExpenseTotal,
     selectedMonthlyResidualAbs,
     selectedMonthlyResidualVolumeRatio,
     selectedMonthlyResidualIncomeRatio,

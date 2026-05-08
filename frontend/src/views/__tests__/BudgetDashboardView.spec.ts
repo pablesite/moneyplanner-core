@@ -687,9 +687,10 @@ describe('BudgetDashboardView', () => {
 
     expect(wrapper.text()).toContain('Residual contable');
     expect(wrapper.text()).toContain('Conciliacion de cierre');
-    expect(wrapper.text()).toContain('Composición del movimiento');
+    expect(wrapper.text()).toContain('Diagnóstico del residual');
     expect(wrapper.find('.ui-budget-result-bridge').exists()).toBe(true);
-    expect(wrapper.find('.ui-budget-result-volume-summary').exists()).toBe(true);
+    expect(wrapper.find('.ui-budget-result-diagnostic').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Composición del movimiento');
     expect(wrapper.text()).not.toContain('Variación perimetro');
   });
 
