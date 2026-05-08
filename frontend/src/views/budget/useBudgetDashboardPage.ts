@@ -177,6 +177,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     asset_name: string;
     asset_category: string;
     asset_subcategory: string;
+    annual_interest_tae?: string | null;
     liability_id?: number;
     liability_name?: string;
     liability_category?: string;

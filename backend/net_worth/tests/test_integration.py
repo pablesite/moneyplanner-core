@@ -182,7 +182,7 @@ class NetWorthApiTests(APITestCase):
             subcategory=Asset.Subcategory.BANK_ACCOUNT,
             tracking_mode=Asset.TrackingMode.MANUAL,
             currency="EUR",
-            annual_interest_tae=Decimal("0.00"),
+            annual_interest_tae=Decimal("0.50"),
             amount=Decimal("1200.00"),
             is_active=True,
         )
@@ -214,7 +214,7 @@ class NetWorthApiTests(APITestCase):
             subcategory=Asset.Subcategory.BANK_ACCOUNT,
             tracking_mode=Asset.TrackingMode.MANUAL,
             currency="EUR",
-            annual_interest_tae=Decimal("0.00"),
+            annual_interest_tae=Decimal("0.50"),
             amount=Decimal("300.00"),
             is_active=True,
         )
@@ -2093,7 +2093,7 @@ class NetWorthApiTests(APITestCase):
             subcategory=Asset.Subcategory.BANK_ACCOUNT,
             currency="EUR",
             amount=Decimal("1500.00"),
-            annual_interest_tae=Decimal("0.00"),
+            annual_interest_tae=Decimal("0.50"),
             is_active=True,
         )
         Asset.objects.create(
@@ -2135,6 +2135,7 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row["planned_closing_balance"], "1500.00")
         self.assertEqual(row["executed_closing_balance"], "1420.50")
         self.assertEqual(row["deviation"], "-79.50")
+        self.assertEqual(row["annual_interest_tae"], "0.50")
         self.assertEqual(row["coverage_source"], "checkin")
         self.assertEqual(row["checkin"]["status"], "adjusted")
 
