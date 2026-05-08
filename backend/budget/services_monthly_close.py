@@ -19,6 +19,7 @@ from .services import (
     _round_money,
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
+    normalize_annual_expense_taxonomy_keys,
     planned_expense_monthly_distribution,
     planned_income_monthly_distribution,
 )
@@ -138,7 +139,11 @@ def _get_uncovered_expense_entries_for_month(
         planned_amount = distribution.get(month)
         if not planned_amount or planned_amount <= Decimal("0"):
             continue
-        if (entry.category, entry.subcategory, month) in categorized_ledger:
+        category, subcategory = normalize_annual_expense_taxonomy_keys(
+            category=entry.category,
+            subcategory=entry.subcategory,
+        )
+        if (category, subcategory, month) in categorized_ledger:
             continue
         if (entry.id, month) in legacy_ledger:
             continue

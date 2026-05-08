@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from budget.models import (
     AnnualExpenseEntry,
     AnnualIncomeEntry,
@@ -10,6 +11,7 @@ from budget.models import (
     MonthlyClose,
 )
 from budget.services_monthly_close import (
+    _get_uncovered_expense_entries_for_month,
     apply_distribution_to_checkins,
     compute_monthly_close_state,
     compute_smart_distribution,
@@ -227,6 +229,51 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         state = compute_monthly_close_state(user=self.user, fiscal_year=2026, month=3)
         # Entry is covered by checkin
         self.assertNotIn(str(entry.id), state["suggestions"]["income"])
+
+    def test_uncovered_expenses_normalize_legacy_investment_subcategory_aliases(self):
+        entry = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportacion ETF legacy",
+            category="financial_investments",
+            subcategory="index_funds_etf",
+            expense_type="recurrent",
+            time_profile="structural_recurrent",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="ETF",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-01-10",
+            value_date="2026-01-10",
+            description="Aportacion ETF",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="financial_investments",
+            subcategory_key="etf_indexed",
+        )
+
+        uncovered = _get_uncovered_expense_entries_for_month(
+            user=self.user,
+            fiscal_year=2026,
+            month=1,
+        )
+
+        self.assertNotIn(entry.id, {row.id for row, _planned in uncovered})
 
 
 # ---------------------------------------------------------------------------
