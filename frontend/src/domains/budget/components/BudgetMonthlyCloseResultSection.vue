@@ -61,6 +61,7 @@ const props = defineProps<{
   selectedMonthlyResidualIncomeRatio: number | null;
   selectedMonthlyResidualExpenseRatio: number | null;
   selectedMonthlyResidualExpectedCloseRatio: number | null;
+  selectedPerimeterInternalExpenseTotal: number;
   resultReconciliationFlowRows: ResultFlowRow[];
   resultReconciliationCompositionRows: ResultCompositionRow[];
   monthlyIncomeExecutionEntries: Array<{ entry: { id: number } }>;
@@ -217,44 +218,75 @@ const resultBridgeRows = computed(() =>
 
       <section class="ui-budget-result-card">
         <div class="ui-budget-result-card-head">
-          <h3 class="ui-budget-result-card-title">Composición del movimiento</h3>
-          <div class="ui-budget-result-card-meta">Ingresos, gastos y residual sobre el volumen</div>
-        </div>
-        <div class="ui-budget-result-volume-summary">
-          <strong>{{ formatMoney(selectedMonthlyExecutedVolume) }} EUR</strong>
-          <span>volumen ejecutado total</span>
-        </div>
-        <div class="ui-budget-result-composition">
+          <h3 class="ui-budget-result-card-title">Diagnóstico del residual</h3>
           <div
-            v-for="row in resultReconciliationCompositionRows"
-            :key="row.id"
-            class="ui-budget-result-composition-row"
+            class="ui-budget-result-badge"
+            :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`"
           >
-            <div class="ui-budget-result-composition-main">
-              <span>{{ row.label }}</span>
-              <small>{{ formatSignedMoney(row.amount) }} EUR</small>
-            </div>
-            <div class="ui-budget-result-composition-bar">
-              <div
-                class="ui-budget-result-composition-fill"
-                :class="{
-                  'ui-budget-result-composition-fill-positive': row.tone === 'positive',
-                  'ui-budget-result-composition-fill-warning': row.tone === 'warning',
-                  'ui-budget-result-composition-fill-negative': row.tone === 'negative',
-                }"
-                :style="{
-                  width: `${
-                    row.shareOfVolume == null || row.shareOfVolume <= 0
-                      ? 0
-                      : Math.max(4, Math.min(100, row.shareOfVolume * 100))
-                  }%`,
-                }"
-              />
-            </div>
-            <div class="ui-budget-result-composition-share">
-              {{ formatPercent(row.shareOfVolume, 1) }}
-            </div>
+            {{ selectedMonthlyResidualSeverityLabel }}
           </div>
+        </div>
+        <div
+          class="ui-budget-result-diagnostic"
+          :class="{
+            'ui-budget-result-diagnostic-good': selectedMonthlyResidualSeverity === 'ok',
+            'ui-budget-result-diagnostic-watch': selectedMonthlyResidualSeverity === 'watch',
+            'ui-budget-result-diagnostic-alert': selectedMonthlyResidualSeverity === 'alert',
+          }"
+        >
+          <span>{{ residualReading }}</span>
+          <strong>{{ formatSignedMoney(selectedMonthlyCloseResidual) }} EUR</strong>
+          <small>
+            {{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }} del volumen ejecutado
+          </small>
+        </div>
+        <div class="ui-budget-result-diagnostic-scale">
+          <div class="ui-budget-result-diagnostic-scale-head">
+            <span>Impacto del residual</span>
+            <strong>{{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }}</strong>
+          </div>
+          <div class="ui-budget-result-diagnostic-track">
+            <div class="ui-budget-result-diagnostic-zone ui-budget-result-diagnostic-zone-ok" />
+            <div class="ui-budget-result-diagnostic-zone ui-budget-result-diagnostic-zone-watch" />
+            <div class="ui-budget-result-diagnostic-zone ui-budget-result-diagnostic-zone-alert" />
+            <div
+              class="ui-budget-result-diagnostic-marker"
+              :style="{
+                left: `${
+                  selectedMonthlyResidualVolumeRatio == null
+                    ? 0
+                    : Math.min(100, (selectedMonthlyResidualVolumeRatio / 0.03) * 100)
+                }%`,
+              }"
+            />
+          </div>
+          <div class="ui-budget-result-diagnostic-scale-labels">
+            <span>0 %</span>
+            <span>1 %</span>
+            <span>3 %+</span>
+          </div>
+        </div>
+        <div class="ui-budget-result-residual-kpis">
+          <article class="ui-budget-result-mini-kpi">
+            <span>Sobre cierre esperado</span>
+            <strong>{{ formatPercent(selectedMonthlyResidualExpectedCloseRatio, 1) }}</strong>
+          </article>
+          <article class="ui-budget-result-mini-kpi">
+            <span>Volumen ejecutado</span>
+            <strong>{{ formatMoney(selectedMonthlyExecutedVolume) }} EUR</strong>
+          </article>
+          <article class="ui-budget-result-mini-kpi">
+            <span>Umbral OK</span>
+            <strong>≤ 1,0 %</strong>
+          </article>
+          <article class="ui-budget-result-mini-kpi">
+            <span>Umbral revisión</span>
+            <strong>≤ 3,0 %</strong>
+          </article>
+        </div>
+        <div v-if="selectedPerimeterInternalExpenseTotal > 0" class="ui-budget-result-footnote">
+          {{ formatMoney(selectedPerimeterInternalExpenseTotal) }} EUR movidos dentro del perímetro
+          no cuentan como gasto externo.
         </div>
       </section>
     </div>

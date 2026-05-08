@@ -870,6 +870,110 @@
   font-size: 0.72rem;
 }
 
+.ui-budget-result-diagnostic {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+  padding: 14px;
+}
+
+.ui-budget-result-diagnostic span,
+.ui-budget-result-diagnostic small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.76rem;
+}
+
+.ui-budget-result-diagnostic strong {
+  font-size: 1.45rem;
+}
+
+.ui-budget-result-diagnostic-good {
+  border-color: rgba(97, 216, 155, 0.22);
+  background: rgba(44, 196, 129, 0.045);
+}
+
+.ui-budget-result-diagnostic-good strong {
+  color: rgba(141, 241, 188, 0.95);
+}
+
+.ui-budget-result-diagnostic-watch {
+  border-color: rgba(255, 191, 66, 0.24);
+  background: rgba(255, 191, 66, 0.045);
+}
+
+.ui-budget-result-diagnostic-watch strong {
+  color: rgba(255, 221, 135, 0.95);
+}
+
+.ui-budget-result-diagnostic-alert {
+  border-color: rgba(255, 92, 92, 0.28);
+  background: rgba(255, 72, 72, 0.045);
+}
+
+.ui-budget-result-diagnostic-alert strong {
+  color: rgba(255, 140, 140, 0.96);
+}
+
+.ui-budget-result-diagnostic-scale {
+  display: grid;
+  gap: 7px;
+}
+
+.ui-budget-result-diagnostic-scale-head,
+.ui-budget-result-diagnostic-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.72rem;
+}
+
+.ui-budget-result-diagnostic-scale-head strong {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.ui-budget-result-diagnostic-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 2fr 6fr;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ui-budget-result-diagnostic-zone-ok {
+  background: rgba(44, 196, 129, 0.58);
+}
+
+.ui-budget-result-diagnostic-zone-watch {
+  background: rgba(255, 191, 66, 0.58);
+}
+
+.ui-budget-result-diagnostic-zone-alert {
+  background: rgba(255, 92, 92, 0.5);
+}
+
+.ui-budget-result-diagnostic-marker {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  transform: translateX(-50%);
+}
+
+.ui-budget-result-footnote {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 9px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.74rem;
+}
+
 .ui-budget-result-residual-kpis {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
