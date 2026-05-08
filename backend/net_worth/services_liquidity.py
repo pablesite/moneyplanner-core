@@ -177,6 +177,7 @@ def _build_liquidity_monthly_summary_impl(
                 "asset_name": asset.name,
                 "asset_category": asset.category,
                 "asset_subcategory": asset.subcategory,
+                "annual_interest_tae": serialize_money_fn(asset.annual_interest_tae),
                 "currency": asset.currency,
                 "planned_closing_balance": serialize_money_fn(planned_native),
                 "executed_closing_balance": serialize_money_fn(executed_native),
