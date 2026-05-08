@@ -94,7 +94,7 @@ def ensure_liability_accounting_account(*, liability: Liability) -> str | None:
         if account.liability_id is None:
             account.liability_id = liability.id
             update_fields.append("liability")
-        if not account.is_active:
+        if not account.is_active and liability.is_active:
             account.is_active = True
             update_fields.append("is_active")
         if update_fields:

@@ -158,7 +158,7 @@ def ensure_asset_accounting_account(*, asset: Asset) -> str | None:
         if account.asset_id is None:
             account.asset_id = asset.id
             update_fields.append("asset")
-        if not account.is_active:
+        if not account.is_active and asset.is_active:
             account.is_active = True
             update_fields.append("is_active")
         if update_fields:
