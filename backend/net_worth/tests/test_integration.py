@@ -2181,6 +2181,66 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance"], "200.00")
         self.assertEqual(rows["Tarjeta Visa"]["executed_closing_balance_base"], "-200.00")
 
+    def test_liquidity_monthly_summary_includes_interest_bearing_investments_in_perimeter(self):
+        investment = Asset.objects.create(
+            user=self.user,
+            name="Urbanitae",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.REAL_ESTATE_CROWD,
+            currency="EUR",
+            amount=Decimal("2000.00"),
+            annual_interest_tae=Decimal("8.00"),
+            is_active=True,
+        )
+        non_interest_investment = Asset.objects.create(
+            user=self.user,
+            name="ETF World",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("3000.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Inversiones",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 10),
+            value_date=date(2026, 2, 10),
+            description="Aportacion Urbanitae",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="financial_investments",
+            subcategory_key="crowdfunding_real_estate",
+            asset=investment,
+        )
+
+        response = self.client.get("/api/net-worth/liquidity/monthly-summary/?year=2026&month=2")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        rows = {row["asset_name"]: row for row in response.data["rows"]}
+        self.assertIn("Urbanitae", rows)
+        self.assertNotIn("ETF World", rows)
+        self.assertEqual(rows["Urbanitae"]["asset_id"], investment.id)
+        self.assertEqual(rows["Urbanitae"]["annual_interest_tae"], "8.00")
+        self.assertEqual(response.data["perimeter_internal_expense_total"], "100.00")
+        self.assertNotIn(
+            non_interest_investment.id,
+            [row["asset_id"] for row in response.data["rows"]],
+        )
+
     def test_liquidity_monthly_summary_uses_credit_card_manual_checkpoint(self):
         bank = Asset.objects.create(
             user=self.user,

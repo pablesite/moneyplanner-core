@@ -12,10 +12,6 @@ from core.services import convert_currency
 
 from .models import AssetValuation, LiabilityValuation, LiquidityMonthlyCheckin
 
-PERIMETER_INTERNAL_EXPENSE_SUBCATEGORIES = {
-    "crowdlending_p2p",
-}
-
 
 def parse_liquidity_monthly_summary_period(*, query_params) -> tuple[int, int]:
     try:
@@ -230,7 +226,6 @@ def _build_liquidity_monthly_summary_impl(
             transaction__booking_date__month=month,
             flow_family=LedgerEntry.FlowFamily.EXPENSE,
             category_key="financial_investments",
-            subcategory_key__in=PERIMETER_INTERNAL_EXPENSE_SUBCATEGORIES,
             asset_id__in=perimeter_asset_ids,
         ).select_related("transaction")
         for entry in internal_expense_entries:
