@@ -676,8 +676,21 @@ describe('BudgetDashboardView', () => {
     const wrapper = mountMonthlyCloseView();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Saldo mes anterior900,00 EUR');
-    expect(wrapper.text()).toContain('Variación liquidez+300,00 EUR');
+    expect(wrapper.text()).toContain('Perimetro anterior900,00 EUR');
+    expect(wrapper.text()).toContain('Variación perimetro+300,00 EUR');
+
+    const resultStep = wrapper
+      .findAll('button.ui-monthly-close-step-chip')
+      .find((button) => button.text().includes('Resultado'));
+    await resultStep?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Residual contable');
+    expect(wrapper.text()).toContain('Conciliacion de cierre');
+    expect(wrapper.text()).toContain('Composición del movimiento');
+    expect(wrapper.find('.ui-budget-result-bridge').exists()).toBe(true);
+    expect(wrapper.find('.ui-budget-result-volume-summary').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Variación perimetro');
   });
 
   it('opens ledger liquidity manual editing without persisting until the user confirms', async () => {

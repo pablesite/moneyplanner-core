@@ -1,4 +1,6 @@
 ﻿<script setup lang="ts">
+import { computed } from 'vue';
+
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type MonthlyCloseStatus = 'draft' | 'finalized' | 'locked';
 type ResultTone = 'positive' | 'warning' | 'negative' | 'neutral';
@@ -41,7 +43,7 @@ type ResultBreakdownGroup = {
   rows: ResultBreakdownRow[];
 };
 
-defineProps<{
+const props = defineProps<{
   isMonthlyCloseView: boolean;
   activeMonthlyCloseStep: MonthlyCloseStepId;
   selectedLiquidityStartBase: number;
@@ -78,6 +80,37 @@ defineProps<{
   onLockClose?: () => void | Promise<void>;
   onApplyDistribution?: () => void | Promise<void>;
 }>();
+
+const residualReading = computed(() => {
+  if (props.selectedMonthlyCloseResidual < 0) return 'Falta caja vs explicado';
+  if (props.selectedMonthlyCloseResidual > 0) return 'Sobra caja vs explicado';
+  return 'Sin diferencia';
+});
+
+const selectedMonthlyCloseDelta = computed(
+  () => props.selectedLiquidityMonthExecuted - props.selectedMonthlyCloseExpected,
+);
+
+const resultBridgeMax = computed(() => {
+  const values = [
+    props.selectedLiquidityStartBase,
+    props.selectedIncomeMonthExecuted,
+    props.selectedExpenseMonthExecuted,
+    props.selectedMonthlyCloseExpected,
+    props.selectedLiquidityMonthExecuted,
+    Math.abs(props.selectedMonthlyCloseResidual),
+  ].map((value) => Math.abs(value));
+  return Math.max(...values, 1);
+});
+
+const resultBridgeRows = computed(() =>
+  props.resultReconciliationFlowRows
+    .filter((row) => row.id !== 'internal-perimeter-expense')
+    .map((row) => ({
+      ...row,
+      width: Math.max(3, Math.min(100, (Math.abs(row.amount) / resultBridgeMax.value) * 100)),
+    })),
+);
 </script>
 
 <template>
@@ -105,50 +138,48 @@ defineProps<{
       </div>
     </div>
 
-    <div class="ui-budget-checkin-summary-grid">
-      <article class="ui-budget-checkin-kpi">
-        <span>Perimetro mes anterior</span>
-        <strong>{{ formatMoney(selectedLiquidityStartBase) }} EUR</strong>
-      </article>
-      <article class="ui-budget-checkin-kpi">
-        <span>Cierre esperado</span>
-        <strong>{{ formatMoney(selectedMonthlyCloseExpected) }} EUR</strong>
-      </article>
-      <article class="ui-budget-checkin-kpi">
-        <span>Cierre real perimetro</span>
-        <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</strong>
-      </article>
+    <div class="ui-budget-result-hero-grid">
       <article
-        class="ui-budget-checkin-kpi"
+        class="ui-budget-result-hero-card ui-budget-result-hero-card-primary"
         :class="{
-          'ui-budget-checkin-kpi-danger': selectedMonthlyCloseResidual < 0,
-          'ui-budget-checkin-kpi-good': selectedMonthlyCloseResidual > 0,
+          'ui-budget-result-hero-card-danger': selectedMonthlyCloseResidual < 0,
+          'ui-budget-result-hero-card-good': selectedMonthlyCloseResidual > 0,
         }"
       >
-        <span>Residual contable</span>
-        <strong>
-          {{ selectedMonthlyCloseResidual > 0 ? '+' : ''
-          }}{{ formatMoney(selectedMonthlyCloseResidual) }} EUR
-        </strong>
+        <div class="ui-budget-result-hero-card-head">
+          <span>Residual contable</span>
+          <div
+            class="ui-budget-result-badge"
+            :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`"
+          >
+            {{ selectedMonthlyResidualSeverityLabel }}
+          </div>
+        </div>
+        <strong>{{ formatSignedMoney(selectedMonthlyCloseResidual) }} EUR</strong>
+        <small>
+          {{ residualReading }} · {{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }} del
+          volumen ejecutado
+        </small>
       </article>
-      <article class="ui-budget-checkin-kpi">
-        <span>Ingresos ejecutados</span>
-        <strong>{{ formatMoney(selectedIncomeMonthExecuted) }} EUR</strong>
+      <article class="ui-budget-result-hero-card">
+        <span>Cierre esperado</span>
+        <strong>{{ formatMoney(selectedMonthlyCloseExpected) }} EUR</strong>
+        <small>Perimetro inicial + ingresos - gastos externos</small>
       </article>
-      <article class="ui-budget-checkin-kpi">
-        <span>Gastos ejecutados</span>
-        <strong>{{ formatMoney(selectedExpenseMonthExecuted) }} EUR</strong>
+      <article class="ui-budget-result-hero-card">
+        <span>Cierre real</span>
+        <strong>{{ formatMoney(selectedLiquidityMonthExecuted) }} EUR</strong>
+        <small>
+          {{ formatSignedMoney(selectedMonthlyCloseDelta) }} EUR frente al cierre esperado
+        </small>
       </article>
-      <article class="ui-budget-checkin-kpi">
+      <article class="ui-budget-result-hero-card">
         <span>Completitud cierre</span>
         <strong>{{ formatPercent(selectedMonthlyCloseCompletionRatio, 0) }}</strong>
-      </article>
-      <article class="ui-budget-checkin-kpi">
-        <span>Variación perimetro</span>
-        <strong>
-          {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
-          }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR
-        </strong>
+        <small>
+          {{ monthlyIncomeExecutionEntries.length + monthlyExpenseExecutionEntries.length }} líneas
+          revisadas
+        </small>
       </article>
     </div>
 
@@ -160,70 +191,38 @@ defineProps<{
             Volumen ejecutado {{ formatMoney(selectedMonthlyExecutedVolume) }} EUR
           </div>
         </div>
-        <div class="ui-budget-recon-flow">
+        <div class="ui-budget-result-bridge">
           <div
-            v-for="row in resultReconciliationFlowRows"
+            v-for="row in resultBridgeRows"
             :key="row.id"
-            class="ui-budget-recon-flow-row"
+            class="ui-budget-result-bridge-row"
             :class="{
-              'ui-budget-recon-flow-row-result': !!row.isResult,
-              'ui-budget-recon-flow-row-positive': row.tone === 'positive',
-              'ui-budget-recon-flow-row-warning': row.tone === 'warning',
-              'ui-budget-recon-flow-row-negative': row.tone === 'negative',
+              'ui-budget-result-bridge-row-result': !!row.isResult,
+              'ui-budget-result-bridge-row-positive': row.tone === 'positive',
+              'ui-budget-result-bridge-row-warning': row.tone === 'warning',
+              'ui-budget-result-bridge-row-negative': row.tone === 'negative',
             }"
           >
-            <div class="ui-budget-recon-flow-row-main">
-              <div class="ui-budget-recon-flow-label">{{ row.label }}</div>
-              <div v-if="row.meta" class="ui-budget-recon-flow-meta">{{ row.meta }}</div>
+            <div class="ui-budget-result-bridge-label">
+              <span>{{ row.label }}</span>
+              <small v-if="row.meta">{{ row.meta }}</small>
             </div>
-            <strong class="ui-budget-recon-flow-value"
-              >{{ formatSignedMoney(row.amount) }} EUR</strong
-            >
+            <div class="ui-budget-result-bridge-track" aria-hidden="true">
+              <div class="ui-budget-result-bridge-fill" :style="{ width: `${row.width}%` }" />
+            </div>
+            <strong>{{ formatSignedMoney(row.amount) }} EUR</strong>
           </div>
         </div>
       </section>
 
       <section class="ui-budget-result-card">
         <div class="ui-budget-result-card-head">
-          <h3 class="ui-budget-result-card-title">Ajuste de conciliacion</h3>
-          <div
-            class="ui-budget-result-badge"
-            :class="`ui-budget-result-badge-${selectedMonthlyResidualSeverity}`"
-          >
-            {{ selectedMonthlyResidualSeverityLabel }}
-          </div>
+          <h3 class="ui-budget-result-card-title">Composición del movimiento</h3>
+          <div class="ui-budget-result-card-meta">Ingresos, gastos y residual sobre el volumen</div>
         </div>
-        <div class="ui-budget-result-residual-kpis">
-          <article class="ui-budget-result-mini-kpi">
-            <span>Residual no contabilizado</span>
-            <strong>{{ formatSignedMoney(selectedMonthlyCloseResidual) }} EUR</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>% sobre volumen ejecutado</span>
-            <strong>{{ formatPercent(selectedMonthlyResidualVolumeRatio, 1) }}</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>% sobre ingresos ejecutados</span>
-            <strong>{{ formatPercent(selectedMonthlyResidualIncomeRatio, 1) }}</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>% sobre gastos ejecutados</span>
-            <strong>{{ formatPercent(selectedMonthlyResidualExpenseRatio, 1) }}</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>% impacto sobre cierre esperado</span>
-            <strong>{{ formatPercent(selectedMonthlyResidualExpectedCloseRatio, 1) }}</strong>
-          </article>
-          <article class="ui-budget-result-mini-kpi">
-            <span>Lectura</span>
-            <strong>{{
-              selectedMonthlyCloseResidual < 0
-                ? 'Falta caja vs explicado'
-                : selectedMonthlyCloseResidual > 0
-                  ? 'Sobra caja vs explicado'
-                  : 'Sin diferencia'
-            }}</strong>
-          </article>
+        <div class="ui-budget-result-volume-summary">
+          <strong>{{ formatMoney(selectedMonthlyExecutedVolume) }} EUR</strong>
+          <span>volumen ejecutado total</span>
         </div>
         <div class="ui-budget-result-composition">
           <div
