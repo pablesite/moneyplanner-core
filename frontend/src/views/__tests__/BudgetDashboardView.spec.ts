@@ -451,6 +451,42 @@ describe('BudgetDashboardView', () => {
           },
           {
             asset_id: 3,
+            asset_name: 'MyInvestor cuenta ahorro',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '1200.00',
+            executed_closing_balance: '1200.00',
+            effective_closing_balance: '1200.00',
+            deviation: '0.00',
+            planned_closing_balance_base: '1200.00',
+            executed_closing_balance_base: '1200.00',
+            effective_closing_balance_base: '1200.00',
+            deviation_base: '0.00',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
+            asset_id: 4,
+            asset_name: 'Trade Republic efectivo',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '900.00',
+            executed_closing_balance: '900.00',
+            effective_closing_balance: '900.00',
+            deviation: '0.00',
+            planned_closing_balance_base: '900.00',
+            executed_closing_balance_base: '900.00',
+            effective_closing_balance_base: '900.00',
+            deviation_base: '0.00',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
+            asset_id: 5,
             asset_name: 'Deposito 6 meses',
             asset_category: 'cash',
             asset_subcategory: 'short_term_deposit',
@@ -502,11 +538,17 @@ describe('BudgetDashboardView', () => {
 
     const summaries = wrapper.findAll('summary').map((summary) => summary.text());
     expect(summaries.some((text) => text.includes('Cuentas y efectivo'))).toBe(true);
-    expect(summaries.some((text) => text.includes('Cuentas remuneradas'))).toBe(true);
+    expect(
+      summaries.some(
+        (text) => text.includes('Cuentas remuneradas') && text.includes('3 posiciones'),
+      ),
+    ).toBe(true);
     expect(summaries.some((text) => text.includes('Depositos liquidos'))).toBe(true);
     expect(summaries.some((text) => text.includes('Tarjetas de credito'))).toBe(true);
     expect(wrapper.text()).toContain('Cuenta bancaria - Cuenta nomina');
     expect(wrapper.text()).toContain('Spot/Earn - Spot Binance');
+    expect(wrapper.text()).toContain('Cuenta bancaria - MyInvestor cuenta ahorro');
+    expect(wrapper.text()).toContain('Cuenta bancaria - Trade Republic efectivo');
     expect(wrapper.text()).toContain('Deposito corto plazo - Deposito 6 meses');
     expect(wrapper.text()).toContain('Tarjeta de credito - Visa');
   });
