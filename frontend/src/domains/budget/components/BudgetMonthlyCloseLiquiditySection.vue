@@ -84,11 +84,18 @@ const props = defineProps<{
 }>();
 
 function liquidityBlockKey(row: LiquidityRow): string {
+  const positionName = `${row.asset_name} ${row.liability_name ?? ''}`.toLocaleLowerCase('es-ES');
   if (row.row_type === 'liability' || row.liability_category === 'credit_card') {
     return 'credit_cards';
   }
   if (row.asset_subcategory === 'short_term_deposit') return 'liquid_deposits';
-  if (row.asset_subcategory === 'crypto_spot_earn') return 'yield_accounts';
+  if (
+    row.asset_subcategory === 'crypto_spot_earn' ||
+    positionName.includes('myinvestor') ||
+    positionName.includes('trade republic')
+  ) {
+    return 'yield_accounts';
+  }
   if (row.asset_subcategory === 'bank_account' || row.asset_subcategory === 'wallet') {
     return 'cash_accounts';
   }
