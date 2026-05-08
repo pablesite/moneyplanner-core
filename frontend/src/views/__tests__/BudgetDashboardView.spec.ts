@@ -405,6 +405,112 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.find('.ui-budget-checkin-confirm').exists()).toBe(false);
   });
 
+  it('groups monthly close liquidity rows by financial category', async () => {
+    configureCoreApi({
+      liquiditySummary: {
+        planned_total: '10400.00',
+        executed_total: '10380.00',
+        deviation_total: '-20.00',
+        completion_ratio: 1,
+        rows: [
+          {
+            asset_id: 1,
+            asset_name: 'Cuenta nomina',
+            asset_category: 'cash',
+            asset_subcategory: 'bank_account',
+            currency: 'EUR',
+            planned_closing_balance: '1000.00',
+            executed_closing_balance: '1000.00',
+            effective_closing_balance: '1000.00',
+            deviation: '0.00',
+            planned_closing_balance_base: '1000.00',
+            executed_closing_balance_base: '1000.00',
+            effective_closing_balance_base: '1000.00',
+            deviation_base: '0.00',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
+            asset_id: 2,
+            asset_name: 'Spot Binance',
+            asset_category: 'cash',
+            asset_subcategory: 'crypto_spot_earn',
+            currency: 'EUR',
+            planned_closing_balance: '3000.00',
+            executed_closing_balance: '2980.00',
+            effective_closing_balance: '2980.00',
+            deviation: '-20.00',
+            planned_closing_balance_base: '3000.00',
+            executed_closing_balance_base: '2980.00',
+            effective_closing_balance_base: '2980.00',
+            deviation_base: '-20.00',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
+            asset_id: 3,
+            asset_name: 'Deposito 6 meses',
+            asset_category: 'cash',
+            asset_subcategory: 'short_term_deposit',
+            currency: 'EUR',
+            planned_closing_balance: '7000.00',
+            executed_closing_balance: '7000.00',
+            effective_closing_balance: '7000.00',
+            deviation: '0.00',
+            planned_closing_balance_base: '7000.00',
+            executed_closing_balance_base: '7000.00',
+            effective_closing_balance_base: '7000.00',
+            deviation_base: '0.00',
+            coverage_source: 'ledger',
+            ledger_available: true,
+            checkin: null,
+          },
+          {
+            row_type: 'liability',
+            asset_id: -10,
+            asset_name: 'Visa',
+            asset_category: 'liability',
+            asset_subcategory: 'credit_card',
+            liability_id: 10,
+            liability_name: 'Visa',
+            liability_category: 'credit_card',
+            currency: 'EUR',
+            planned_closing_balance: '-600.00',
+            executed_closing_balance: '-600.00',
+            effective_closing_balance: '-600.00',
+            deviation: '0.00',
+            planned_closing_balance_base: '-600.00',
+            executed_closing_balance_base: '-600.00',
+            effective_closing_balance_base: '-600.00',
+            deviation_base: '0.00',
+            coverage_source: 'liability',
+            ledger_available: false,
+            checkin: null,
+          },
+        ],
+      },
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({ data: [] } as never);
+
+    const wrapper = mountMonthlyCloseView();
+    await flushPromises();
+
+    const summaries = wrapper.findAll('summary').map((summary) => summary.text());
+    expect(summaries.some((text) => text.includes('Cuentas y efectivo'))).toBe(true);
+    expect(summaries.some((text) => text.includes('Cuentas remuneradas'))).toBe(true);
+    expect(summaries.some((text) => text.includes('Depositos liquidos'))).toBe(true);
+    expect(summaries.some((text) => text.includes('Tarjetas de credito'))).toBe(true);
+    expect(wrapper.text()).toContain('Cuenta bancaria - Cuenta nomina');
+    expect(wrapper.text()).toContain('Spot/Earn - Spot Binance');
+    expect(wrapper.text()).toContain('Deposito corto plazo - Deposito 6 meses');
+    expect(wrapper.text()).toContain('Tarjeta de credito - Visa');
+  });
+
   it('opens linked manual liquidity checkins with the ledger adjustment controls', async () => {
     configureCoreApi({
       liquiditySummary: {
