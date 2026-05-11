@@ -130,6 +130,12 @@ export type NetWorthTimeline = {
   base_currency: string;
   filters: TimelineFilters;
   rows: TimelineRow[];
+  prev_month_same_day?: {
+    date: string;
+    total_assets: string;
+    total_liabilities: string;
+    net_worth: string;
+  } | null;
 };
 
 export type PositionTimelineRow = {

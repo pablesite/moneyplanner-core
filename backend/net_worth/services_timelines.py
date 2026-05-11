@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -248,6 +249,49 @@ def _resolve_timeline_range(
     return start_date, end_date
 
 
+def _same_day_prev_month(today: date) -> date:
+    prev_month = today.month - 1 if today.month > 1 else 12
+    prev_year = today.year if today.month > 1 else today.year - 1
+    last_day = calendar.monthrange(prev_year, prev_month)[1]
+    return date(prev_year, prev_month, min(today.day, last_day))
+
+
+def _build_prev_month_same_day(
+    *,
+    today: date,
+    assets: list,
+    liabilities: list,
+    base_currency: str,
+    fx_cache: dict,
+    pos_cache: "PositionDataCache",
+    timeline_start_date: date,
+) -> dict[str, object] | None:
+    month_end = _month_end_for(today)
+    if today >= month_end:
+        return None
+
+    comparison_date = _same_day_prev_month(today)
+    if comparison_date < timeline_start_date:
+        return None
+
+    active_assets = [a for a in assets if a.start_date <= comparison_date]
+    active_liabilities = [li for li in liabilities if li.start_date <= comparison_date]
+    totals = calculate_totals(
+        assets_qs=active_assets,
+        liabilities_qs=active_liabilities,
+        base_currency=base_currency,
+        as_of_date=comparison_date,
+        fx_cache=fx_cache,
+        position_cache=pos_cache,
+    )
+    return {
+        "date": comparison_date.isoformat(),
+        "total_assets": _serialize_money(totals.total_assets),
+        "total_liabilities": _serialize_money(totals.total_liabilities),
+        "net_worth": _serialize_money(totals.total_assets - totals.total_liabilities),
+    }
+
+
 def build_net_worth_timeline(
     *,
     user,
@@ -311,6 +355,16 @@ def build_net_worth_timeline(
             }
         )
 
+    prev_month_same_day = _build_prev_month_same_day(
+        today=timeline_end_date,
+        assets=assets,
+        liabilities=liabilities,
+        base_currency=base_currency,
+        fx_cache=fx_cache,
+        pos_cache=pos_cache,
+        timeline_start_date=timeline_start_date,
+    )
+
     return {
         "group_by": "month",
         "start_date": timeline_start_date.isoformat(),
@@ -321,6 +375,7 @@ def build_net_worth_timeline(
             "liability_category": liability_category,
         },
         "rows": rows,
+        "prev_month_same_day": prev_month_same_day,
     }
 
 
