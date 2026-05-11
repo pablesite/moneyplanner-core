@@ -371,11 +371,27 @@ const monthlyDelta = computed<{
 } | null>(() => {
   const rows = globalTimelineRows.value;
   const last = rows[rows.length - 1];
-  const prev = rows[rows.length - 2];
-  if (!last || !prev) return null;
-  const value = last.netWorth - prev.netWorth;
-  const pct = prev.netWorth !== 0 ? value / Math.abs(prev.netWorth) : null;
-  return { value, pct, lastLabel: last.label, prevLabel: prev.label };
+  if (!last) return null;
+
+  const sameDayData = store.timeline?.prev_month_same_day;
+  let prevNetWorth: number;
+  let prevLabel: string;
+
+  if (sameDayData) {
+    prevNetWorth = toNumber(sameDayData.net_worth);
+    prevLabel = new Intl.DateTimeFormat('es-ES', { month: 'short', year: '2-digit' }).format(
+      new Date(sameDayData.date),
+    );
+  } else {
+    const prev = rows[rows.length - 2];
+    if (!prev) return null;
+    prevNetWorth = prev.netWorth;
+    prevLabel = prev.label;
+  }
+
+  const value = last.netWorth - prevNetWorth;
+  const pct = prevNetWorth !== 0 ? value / Math.abs(prevNetWorth) : null;
+  return { value, pct, lastLabel: last.label, prevLabel };
 });
 
 const {
