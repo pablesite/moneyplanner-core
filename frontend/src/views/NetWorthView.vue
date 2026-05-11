@@ -355,10 +355,15 @@ const timelineRows = computed<TimelinePoint[]>(() =>
 // de esa categoría, pero el hero siempre muestra el patrimonio global — por eso
 // necesitamos conservar el último estado global para calcular el delta correctamente.
 const globalTimelineRows = ref<TimelinePoint[]>([]);
+type PrevMonthSameDay = NonNullable<(typeof store.timeline)>['prev_month_same_day'];
+const globalPrevMonthSameDay = ref<PrevMonthSameDay>(null);
 watch(
   [timelineRows, selectedTimelineCategory],
   ([rows, cat]) => {
-    if (cat === null) globalTimelineRows.value = rows;
+    if (cat === null) {
+      globalTimelineRows.value = rows;
+      globalPrevMonthSameDay.value = store.timeline?.prev_month_same_day ?? null;
+    }
   },
   { immediate: true },
 );
@@ -373,7 +378,7 @@ const monthlyDelta = computed<{
   const last = rows[rows.length - 1];
   if (!last) return null;
 
-  const sameDayData = store.timeline?.prev_month_same_day;
+  const sameDayData = globalPrevMonthSameDay.value;
   let prevNetWorth: number;
   let prevLabel: string;
 
