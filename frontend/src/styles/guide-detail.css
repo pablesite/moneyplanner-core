@@ -1,0 +1,404 @@
+/* ── Guide Phase Progress (nav header, back link, phase switcher) ── */
+
+.ui-guide-phase-head {
+  display: grid;
+  gap: 10px;
+}
+
+.ui-guide-phase-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-guide-phase-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-guide-back-link {
+  color: rgba(45, 212, 191, 0.95);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ui-guide-back-link:hover {
+  text-decoration: underline;
+}
+
+.ui-guide-phase-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ui-guide-phase-inline-action-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-guide-phase-inline-action-link:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.06);
+}
+
+.ui-guide-phase-switch {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ui-guide-phase-switch-link {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  text-decoration: none;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ui-guide-phase-switch-link-active {
+  border-color: rgba(45, 212, 191, 0.72);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.ui-guide-phase-title {
+  margin-bottom: 2px;
+}
+
+.ui-guide-phase-title-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 2px;
+}
+
+.ui-guide-phase-title-inline-kicker {
+  margin: 0;
+  font-size: 13px;
+}
+
+.ui-guide-phase-title-inline-name {
+  margin: 0;
+  font-size: 13px;
+}
+
+.ui-guide-phase-copy {
+  margin: 0;
+}
+
+/* ── Score panel wrapper ── */
+
+.ui-guide-score-panel {
+  padding: 16px;
+}
+
+/* ── Score top (health badge row) ── */
+
+.ui-guide-score-top {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+/* ── Score grid + cards ── */
+
+.ui-guide-score-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+}
+
+.ui-guide-score-grid-cols-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ui-guide-score-grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-guide-score-card {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  height: 100%;
+}
+
+.ui-guide-score-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ui-guide-score-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ui-guide-score-card-value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ui-guide-score-card-value-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ui-guide-score-card-grade {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ui-guide-score-card-copy {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── KPI rows inside score cards ── */
+
+.ui-guide-score-kpi-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.ui-guide-score-kpi-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ui-guide-score-kpi-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ui-guide-score-kpi-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: hsl(34 100% 72%);
+  border: 1px solid hsl(34 100% 68% / 0.45);
+  background: hsl(34 100% 50% / 0.14);
+}
+
+.ui-guide-score-kpi-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-score-kpi-pending {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Summary grid + cards ── */
+
+.ui-guide-summary-grid {
+  margin-top: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-guide-summary-grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-guide-summary-grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-guide-summary-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 11px;
+}
+
+.ui-guide-summary-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-summary-value {
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.ui-guide-summary-value-positive {
+  color: rgba(110, 231, 183, 0.95);
+}
+
+.ui-guide-summary-value-negative {
+  color: rgba(251, 113, 133, 0.96);
+}
+
+.ui-guide-summary-value-warning {
+  color: rgba(253, 224, 71, 0.96);
+}
+
+.ui-guide-summary-value-neutral {
+  color: inherit;
+}
+
+.ui-guide-summary-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Context diagnostics accordion (details/summary) ── */
+
+.ui-guide-context-details {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.01);
+  overflow: clip;
+}
+
+.ui-guide-context-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.ui-guide-context-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-guide-context-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ui-guide-context-summary-copy {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-context-details[open] .ui-guide-context-summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ui-guide-context-details-content {
+  padding: 12px;
+}
+
+.ui-guide-context-score-grid {
+  margin-top: 12px;
+}
+
+/* ── Summary sections inside context details ── */
+
+.ui-guide-summary-sections {
+  display: grid;
+  gap: 14px;
+}
+
+.ui-guide-summary-section {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.008));
+}
+
+.ui-guide-summary-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.ui-guide-summary-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ui-guide-summary-section-copy {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ui-guide-section-filter {
+  display: grid;
+  gap: 4px;
+  min-width: min(280px, 100%);
+}
+
+.ui-guide-section-filter-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@media (max-width: 1024px) {
+  .ui-guide-score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-guide-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-guide-summary-grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ui-guide-score-top {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-guide-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-guide-summary-grid-cols-2,
+  .ui-guide-summary-grid-cols-4 {
+    grid-template-columns: 1fr;
+  }
+}
