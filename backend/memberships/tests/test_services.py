@@ -115,6 +115,97 @@ class MembershipsServicesTests(TestCase):
             ).exists()
         )
 
+    def test_sync_ownership_link_replaces_existing_link(self):
+        member_a = FamilyMember.objects.create(
+            user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+        )
+        member_b = FamilyMember.objects.create(
+            user=self.user, name="Ana", role=FamilyMember.Role.ADULT
+        )
+        first_ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member_a,
+        )
+        second_ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member_b,
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=999,
+            ownership=first_ownership,
+        )
+
+        result = sync_ownership_link(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=999,
+            ownership=second_ownership,
+        )
+
+        self.assertEqual(result, {"ok": True, "ownership_id": second_ownership.id})
+        link = OwnershipLink.objects.get(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=999,
+        )
+        self.assertEqual(link.ownership_id, second_ownership.id)
+
+    def test_sync_ownership_link_rejects_foreign_ownership_when_called_directly(self):
+        other_user = get_user_model().objects.create_user(
+            username="memberships_services_other_user",
+            password="pass1234",
+        )
+        other_member = FamilyMember.objects.create(
+            user=other_user,
+            name="Otro",
+            role=FamilyMember.Role.ADULT,
+        )
+        foreign_ownership = Ownership.objects.create(
+            user=other_user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=other_member,
+        )
+
+        with self.assertRaises(DRFValidationError):
+            sync_ownership_link(
+                user=self.user,
+                target_type=OwnershipLink.TargetType.ASSET,
+                target_id=999,
+                ownership=foreign_ownership,
+            )
+
+        self.assertFalse(
+            OwnershipLink.objects.filter(
+                user=self.user,
+                target_type=OwnershipLink.TargetType.ASSET,
+                target_id=999,
+            ).exists()
+        )
+
+    def test_sync_ownership_link_rejects_invalid_target_type_when_called_directly(self):
+        member = FamilyMember.objects.create(
+            user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+        )
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+
+        with self.assertRaises(DRFValidationError):
+            sync_ownership_link(
+                user=self.user,
+                target_type="portfolio",
+                target_id=999,
+                ownership=ownership,
+            )
+
+        self.assertFalse(OwnershipLink.objects.filter(user=self.user).exists())
+
     @patch("net_worth.services_assets_budget.sync_generated_budget_commitments_for_asset")
     def test_sync_ownership_link_for_asset_triggers_budget_sync_side_effect(self, sync_mock):
         member = FamilyMember.objects.create(
@@ -146,6 +237,97 @@ class MembershipsServicesTests(TestCase):
 
         self.assertEqual(result, {"ok": True, "ownership_id": ownership.id})
         sync_mock.assert_called_once()
+
+    @patch("net_worth.services_assets_budget.sync_generated_budget_commitments_for_asset")
+    def test_sync_ownership_link_removal_for_asset_triggers_budget_sync_side_effect(
+        self, sync_mock
+    ):
+        member = FamilyMember.objects.create(
+            user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+        )
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            tracking_mode=Asset.TrackingMode.MANUAL,
+            currency="EUR",
+            amount=Decimal("100.00"),
+            annual_interest_tae=Decimal("0.00"),
+            is_active=True,
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=asset.id,
+            ownership=ownership,
+        )
+
+        result = sync_ownership_link(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=asset.id,
+            ownership=None,
+        )
+
+        self.assertEqual(result, {"ok": True, "ownership_id": None})
+        self.assertFalse(
+            OwnershipLink.objects.filter(
+                user=self.user,
+                target_type=OwnershipLink.TargetType.ASSET,
+                target_id=asset.id,
+            ).exists()
+        )
+        sync_mock.assert_called_once()
+
+    @patch("net_worth.services_assets_budget.sync_generated_budget_commitments_for_asset")
+    def test_sync_ownership_link_skips_asset_side_effect_when_target_is_missing(self, sync_mock):
+        member = FamilyMember.objects.create(
+            user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+        )
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+
+        result = sync_ownership_link(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=999,
+            ownership=ownership,
+        )
+
+        self.assertEqual(result, {"ok": True, "ownership_id": ownership.id})
+        sync_mock.assert_not_called()
+
+    @patch("net_worth.services_liabilities_budget.sync_generated_budget_commitments_for_liability")
+    def test_sync_ownership_link_skips_liability_side_effect_when_target_is_missing(
+        self, sync_mock
+    ):
+        member = FamilyMember.objects.create(
+            user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+        )
+        ownership = Ownership.objects.create(
+            user=self.user,
+            kind=Ownership.Kind.INDIVIDUAL,
+            member=member,
+        )
+
+        result = sync_ownership_link(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.LIABILITY,
+            target_id=999,
+            ownership=ownership,
+        )
+
+        self.assertEqual(result, {"ok": True, "ownership_id": ownership.id})
+        sync_mock.assert_not_called()
 
     @patch("net_worth.services_liabilities_budget.sync_generated_budget_commitments_for_liability")
     def test_sync_ownership_link_for_liability_triggers_budget_sync_side_effect(self, sync_mock):

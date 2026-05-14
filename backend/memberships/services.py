@@ -306,33 +306,48 @@ def sync_ownership_link_from_payload(*, user, payload: dict) -> dict[str, object
     )
 
 
+def _assert_ownership_belongs_to_user(*, user, ownership: Ownership | None) -> None:
+    if ownership is not None and ownership.user_id != user.id:
+        raise DRFValidationError({"ownership_id": "La titularidad no existe para este usuario."})
+
+
+def _assert_supported_ownership_target_type(*, target_type: str) -> None:
+    supported_target_types = {choice[0] for choice in OwnershipLink.TargetType.choices}
+    if target_type not in supported_target_types:
+        raise DRFValidationError({"target_type": "Tipo de objetivo invalido."})
+
+
+def _sync_generated_commitments_for_target(*, user, target_type: str, target_id: int) -> None:
+    if target_type == OwnershipLink.TargetType.LIABILITY:
+        from net_worth.models import Liability
+        from net_worth.services_liabilities_budget import (
+            sync_generated_budget_commitments_for_liability,
+        )
+
+        liability = Liability.objects.filter(user=user, id=target_id).first()
+        if liability is None:
+            return
+        sync_generated_budget_commitments_for_liability(liability=liability)
+        return
+
+    if target_type == OwnershipLink.TargetType.ASSET:
+        from net_worth.models import Asset
+        from net_worth.services_assets_budget import (
+            sync_generated_budget_commitments_for_asset,
+        )
+
+        asset = Asset.objects.filter(user=user, id=target_id).first()
+        if asset is None:
+            return
+        sync_generated_budget_commitments_for_asset(asset=asset)
+
+
 @transaction.atomic
 def sync_ownership_link(
     *, user, target_type: str, target_id: int, ownership: Ownership | None
 ) -> dict[str, object]:
-    def _sync_generated_commitments_if_needed() -> None:
-        if target_type == OwnershipLink.TargetType.LIABILITY:
-            from net_worth.models import Liability
-            from net_worth.services_liabilities_budget import (
-                sync_generated_budget_commitments_for_liability,
-            )
-
-            liability = Liability.objects.filter(user=user, id=target_id).first()
-            if liability is None:
-                return
-            sync_generated_budget_commitments_for_liability(liability=liability)
-            return
-
-        if target_type == OwnershipLink.TargetType.ASSET:
-            from net_worth.models import Asset
-            from net_worth.services_assets_budget import (
-                sync_generated_budget_commitments_for_asset,
-            )
-
-            asset = Asset.objects.filter(user=user, id=target_id).first()
-            if asset is None:
-                return
-            sync_generated_budget_commitments_for_asset(asset=asset)
+    _assert_supported_ownership_target_type(target_type=target_type)
+    _assert_ownership_belongs_to_user(user=user, ownership=ownership)
 
     if ownership is None:
         OwnershipLink.objects.filter(
@@ -340,7 +355,11 @@ def sync_ownership_link(
             target_type=target_type,
             target_id=target_id,
         ).delete()
-        _sync_generated_commitments_if_needed()
+        _sync_generated_commitments_for_target(
+            user=user,
+            target_type=target_type,
+            target_id=target_id,
+        )
         return {"ok": True, "ownership_id": None}
 
     link, _created = OwnershipLink.objects.update_or_create(
@@ -349,5 +368,9 @@ def sync_ownership_link(
         target_id=target_id,
         defaults={"ownership": ownership},
     )
-    _sync_generated_commitments_if_needed()
+    _sync_generated_commitments_for_target(
+        user=user,
+        target_type=target_type,
+        target_id=target_id,
+    )
     return {"ok": True, "ownership_id": link.ownership_id}
