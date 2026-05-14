@@ -67,10 +67,11 @@ services:
       dockerfile: Dockerfile
     container_name: core_frontend
     environment:
-      # Cross-platform file watching for Docker Desktop/WSL and Linux hosts.
-      CHOKIDAR_USEPOLLING: "true"
-      WATCHPACK_POLLING: "true"
-      CHOKIDAR_INTERVAL: "300"
+      # Linux fast path (default): polling disabled.
+      # Windows/WSL compatibility mode: set FRONTEND_USE_POLLING=true when needed.
+      CHOKIDAR_USEPOLLING: "${FRONTEND_USE_POLLING:-false}"
+      WATCHPACK_POLLING: "${FRONTEND_USE_POLLING:-false}"
+      CHOKIDAR_INTERVAL: "${FRONTEND_POLLING_INTERVAL:-300}"
     volumes:
       - ./frontend:/app
       - /app/node_modules
