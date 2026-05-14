@@ -2388,6 +2388,25 @@
   font-size: 0.74rem;
 }
 
+.ui-budget-detected-add-btn {
+  margin-top: 6px;
+  width: fit-content;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(209, 250, 244, 0.94);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.ui-budget-detected-add-btn:hover {
+  border-color: rgba(45, 212, 191, 0.58);
+  background: rgba(45, 212, 191, 0.14);
+}
+
 .ui-budget-row-actions {
   margin-top: 4px;
 }

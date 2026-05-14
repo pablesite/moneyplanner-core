@@ -445,6 +445,5 @@ const resultBridgeRows = computed(() =>
         </div>
       </section>
     </div>
-
   </section>
 </template>

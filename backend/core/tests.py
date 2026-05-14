@@ -666,7 +666,9 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(LedgerEntry.objects.filter(transaction__user=self.user).count(), 2)
         imported_asset = Asset.objects.get(user=self.user)
         self.assertEqual(imported_asset.tracking_mode, Asset.TrackingMode.ACCOUNTING)
-        linked_account = LedgerAccount.objects.get(user=self.user, id=imported_asset.accounting_account_id)
+        linked_account = LedgerAccount.objects.get(
+            user=self.user, id=imported_asset.accounting_account_id
+        )
         self.assertEqual(linked_account.account_type, LedgerAccount.AccountType.ASSET)
         self.assertEqual(AnnualIncomeEntry.objects.filter(user=self.user).count(), 1)
         self.assertEqual(AnnualExpenseEntry.objects.filter(user=self.user).count(), 1)
@@ -1159,12 +1161,7 @@ class PortableDataImportAPITests(APITestCase):
         entries = list(transaction.entries.all())
         self.assertEqual(len(entries), 4)
         self.assertEqual(
-            sum(
-                1
-                for row in entries
-                if "balancear la transaccion por moneda"
-                in str(row.notes)
-            ),
+            sum(1 for row in entries if "balancear la transaccion por moneda" in str(row.notes)),
             2,
         )
 
@@ -1250,7 +1247,9 @@ class PortableDataImportAPITests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        transaction = LedgerTransaction.objects.get(user=self.user, description="Legacy single entry row")
+        transaction = LedgerTransaction.objects.get(
+            user=self.user, description="Legacy single entry row"
+        )
         self.assertEqual(transaction.entries.count(), 2)
 
     def test_portable_import_remaps_opening_balance_note_for_accounting_liabilities(self):
@@ -1489,7 +1488,9 @@ class PortableDataImportAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
         imported_asset = Asset.objects.get(user=self.user, name="Cuenta")
-        opening_tx = LedgerTransaction.objects.get(user=self.user, description="Saldo inicial Kutxa")
+        opening_tx = LedgerTransaction.objects.get(
+            user=self.user, description="Saldo inicial Kutxa"
+        )
         self.assertEqual(
             opening_tx.notes,
             f"net_worth_opening_balance:asset:{imported_asset.id}",

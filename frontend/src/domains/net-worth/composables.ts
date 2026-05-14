@@ -364,7 +364,11 @@ export function useNetWorthViewState() {
     const zeroAssetCats = new Set(
       store.assets
         .filter(
-          (a) => a.is_active !== false && a.category && !existingKeys.has(a.category) && !zeroLiabCats.has(a.category),
+          (a) =>
+            a.is_active !== false &&
+            a.category &&
+            !existingKeys.has(a.category) &&
+            !zeroLiabCats.has(a.category),
         )
         .map((a) => a.category),
     );

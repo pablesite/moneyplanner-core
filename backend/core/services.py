@@ -165,6 +165,7 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
 # Bulk FX cache for timeline-style loops
 # ---------------------------------------------------------------------------
 
+
 def build_fx_cache(currencies: set[str]) -> dict[tuple[str, str], list[tuple[date, Decimal]]]:
     """
     Bulk-load all FxRate rows involving the given currencies into an in-memory
@@ -175,8 +176,7 @@ def build_fx_cache(currencies: set[str]) -> dict[tuple[str, str], list[tuple[dat
     if not currencies:
         return {}
     rows = (
-        FxRate.objects
-        .filter(from_currency__in=currencies, to_currency__in=currencies)
+        FxRate.objects.filter(from_currency__in=currencies, to_currency__in=currencies)
         .order_by("from_currency", "to_currency", "-rate_date")
         .values_list("from_currency", "to_currency", "rate_date", "rate")
     )

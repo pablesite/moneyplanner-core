@@ -94,9 +94,7 @@ const generatedLiabilityExpenseReviewChangeMessage = computed(
   () => unref(page.generatedLiabilityExpenseReviewChangeMessage) ?? '',
 );
 
-const generatedAssetExpenseReview = computed(
-  () => unref(page.generatedAssetExpenseReview) ?? null,
-);
+const generatedAssetExpenseReview = computed(() => unref(page.generatedAssetExpenseReview) ?? null);
 const generatedAssetExpenseEntries = computed(
   () => generatedAssetExpenseReview.value?.entries ?? [],
 );
@@ -344,11 +342,7 @@ const itemFormProps = computed(() => unref(page.itemFormProps) ?? {});
         </div>
 
         <div class="actions justify-end">
-          <button
-            class="btn btn-ghost"
-            type="button"
-            @click="page.closeGeneratedAssetExpenseModal"
-          >
+          <button class="btn btn-ghost" type="button" @click="page.closeGeneratedAssetExpenseModal">
             Cerrar
           </button>
           <button

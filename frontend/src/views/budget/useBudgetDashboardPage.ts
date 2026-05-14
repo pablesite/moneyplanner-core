@@ -1051,6 +1051,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return map;
   });
 
+  // eslint-disable-next-line complexity
   function resolveIncomeExecutionForMonth(
     entry: (typeof incomeEntries.value)[number],
     month: number,
@@ -1067,13 +1068,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
     const plannedThisMonth = monthlyPlannedAmountForIncomeEntry(entry, month);
-    const isUserOverride =
-      checkin != null &&
-      checkin.status !== 'skipped' &&
-      checkin.status !== 'estimated' &&
-      checkin.executed_amount != null;
     const uniqueCategorizedLedgerExecuted =
-      !isUserOverride &&
       categorizedLedgerExecuted != null &&
       taxonomyLineCount <= 1 &&
       (plannedThisMonth > 0 || taxonomyLineCount === 0)
@@ -1083,11 +1078,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (isUserOverride) {
-      executionOrigin = 'user_override';
-      executionSource = 'legacy_fallback';
-      executed = toNumberOrZero(checkin!.executed_amount);
-    } else if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
       executionOrigin =
         uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
       executionSource =
@@ -1096,6 +1087,15 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
       executionOrigin = 'ambiguous_taxonomy';
       executionSource = 'pending_classification';
+    } else if (
+      checkin != null &&
+      checkin.status !== 'skipped' &&
+      checkin.status !== 'estimated' &&
+      checkin.executed_amount != null
+    ) {
+      executionOrigin = 'user_override';
+      executionSource = 'legacy_fallback';
+      executed = toNumberOrZero(checkin.executed_amount);
     } else if (checkin) {
       executionOrigin = 'legacy_checkin';
       executionSource = 'legacy_fallback';
@@ -1111,6 +1111,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     };
   }
 
+  // eslint-disable-next-line complexity
   function resolveExpenseExecutionForMonth(
     entry: (typeof expenseEntries.value)[number],
     month: number,
@@ -1127,13 +1128,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
     const plannedThisMonth = monthlyPlannedAmountForExpenseEntry(entry, month);
-    const isUserOverride =
-      checkin != null &&
-      checkin.status !== 'skipped' &&
-      checkin.status !== 'estimated' &&
-      checkin.executed_amount != null;
     const uniqueCategorizedLedgerExecuted =
-      !isUserOverride &&
       categorizedLedgerExecuted != null &&
       taxonomyLineCount <= 1 &&
       (plannedThisMonth > 0 || taxonomyLineCount === 0)
@@ -1143,11 +1138,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (isUserOverride) {
-      executionOrigin = 'user_override';
-      executionSource = 'legacy_fallback';
-      executed = toNumberOrZero(checkin!.executed_amount);
-    } else if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
+    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
       executionOrigin =
         uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
       executionSource =
@@ -1156,6 +1147,15 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
       executionOrigin = 'ambiguous_taxonomy';
       executionSource = 'pending_classification';
+    } else if (
+      checkin != null &&
+      checkin.status !== 'skipped' &&
+      checkin.status !== 'estimated' &&
+      checkin.executed_amount != null
+    ) {
+      executionOrigin = 'user_override';
+      executionSource = 'legacy_fallback';
+      executed = toNumberOrZero(checkin.executed_amount);
     } else if (checkin) {
       executionOrigin = 'legacy_checkin';
       executionSource = 'legacy_fallback';
@@ -1187,6 +1187,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   );
 
   const monthlyIncomeExecutionEntries = computed(() => {
+    // eslint-disable-next-line complexity
     return incomeEntries.value
       .filter((entry) => {
         if (entry.fiscalYear !== fiscalYear.value) return false;
@@ -1236,6 +1237,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     monthlyIncomeExecutionEntries.value.reduce((sum, row) => sum + row.planned, 0),
   );
 
+  // eslint-disable-next-line complexity
   const groupedMonthlyIncomeExecutionEntries = computed(() => {
     type Row = (typeof monthlyIncomeExecutionEntries.value)[number];
     const groups = new Map<
@@ -1909,8 +1911,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }))
       .sort(
         (a, b) =>
-          b.executedTotal - a.executedTotal ||
-          a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
+          b.executedTotal - a.executedTotal || a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
       );
   });
 
@@ -1974,8 +1975,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       }))
       .sort(
         (a, b) =>
-          b.executedTotal - a.executedTotal ||
-          a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
+          b.executedTotal - a.executedTotal || a.categoryLabel.localeCompare(b.categoryLabel, 'es'),
       );
   });
 
@@ -3693,16 +3693,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     };
   }
 
-  function removeCachedIncomeCheckin(checkin: IncomeMonthlyCheckinApiItem): void {
-    const nextByEntryId = { ...incomeCheckinsByEntryId.value };
-    delete nextByEntryId[checkin.annual_income_entry_id];
-    incomeCheckinsByEntryId.value = nextByEntryId;
-
-    const nextByEntryMonth = { ...incomeCheckinsByEntryMonth.value };
-    delete nextByEntryMonth[incomeEntryMonthKey(checkin.annual_income_entry_id, checkin.month)];
-    incomeCheckinsByEntryMonth.value = nextByEntryMonth;
-  }
-
   async function clearIncomeCheckin(
     row: (typeof monthlyIncomeExecutionEntries.value)[number],
   ): Promise<void> {
@@ -3962,16 +3952,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       ...expenseCheckinsByEntryMonth.value,
       [expenseEntryMonthKey(checkin.annual_expense_entry_id, checkin.month)]: checkin,
     };
-  }
-
-  function removeCachedExpenseCheckin(checkin: ExpenseMonthlyCheckinApiItem): void {
-    const nextByEntryId = { ...expenseCheckinsByEntryId.value };
-    delete nextByEntryId[checkin.annual_expense_entry_id];
-    expenseCheckinsByEntryId.value = nextByEntryId;
-
-    const nextByEntryMonth = { ...expenseCheckinsByEntryMonth.value };
-    delete nextByEntryMonth[expenseEntryMonthKey(checkin.annual_expense_entry_id, checkin.month)];
-    expenseCheckinsByEntryMonth.value = nextByEntryMonth;
   }
 
   async function clearExpenseCheckin(

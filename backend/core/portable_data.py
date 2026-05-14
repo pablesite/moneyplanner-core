@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from typing import cast
 from typing import Any
 
 from django.conf import settings
@@ -294,7 +295,9 @@ def _build_liability_payload(
         ),
         "cancellation_forecast_enabled": liability.get("cancellation_forecast_enabled", False),
         "cancellation_date": normalize_optional_text(liability.get("cancellation_date")),
-        "cancellation_fee_amount": normalize_optional_text(liability.get("cancellation_fee_amount")),
+        "cancellation_fee_amount": normalize_optional_text(
+            liability.get("cancellation_fee_amount")
+        ),
         "amount": str(liability.get("amount", "0")),
         "is_active": liability.get("is_active", True),
         "notes": liability.get("notes", "") or "",
@@ -547,7 +550,9 @@ def _import_investment_events(
     if not events:
         return 0
 
-    investment_queryset = Asset.objects.filter(user=context.user, category=Asset.Category.INVESTMENTS)
+    investment_queryset = Asset.objects.filter(
+        user=context.user, category=Asset.Category.INVESTMENTS
+    )
     imported = 0
     for row in sorted(events, key=lambda entry: int(entry.get("id", 0))):
         old_asset_id = row.get("asset_ref")
@@ -599,7 +604,10 @@ def _import_liquidity_events(
                 "amount": str(row.get("amount", "0")),
                 "note": row.get("note", "") or "",
             },
-            context={"request": context.request, "liquidity_event_asset_queryset": liquidity_queryset},
+            context={
+                "request": context.request,
+                "liquidity_event_asset_queryset": liquidity_queryset,
+            },
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -740,9 +748,7 @@ def _import_annual_expense(
     return len(annual_expense), expense_id_map
 
 
-def _import_settings(
-    *, context: PortableImportContext, bundle: dict[str, Any]
-) -> None:
+def _import_settings(*, context: PortableImportContext, bundle: dict[str, Any]) -> None:
     settings_payload = bundle.get("settings")
     if isinstance(settings_payload, dict) and normalize_optional_text(
         settings_payload.get("base_currency")
@@ -797,7 +803,9 @@ def _build_account_payload(
 ) -> dict[str, Any]:
     old_asset_id = account.get("asset_id")
     old_liability_id = account.get("liability_id")
-    mapped_asset_id = asset_id_map.get(int(old_asset_id)) if old_asset_id not in (None, "") else None
+    mapped_asset_id = (
+        asset_id_map.get(int(old_asset_id)) if old_asset_id not in (None, "") else None
+    )
     mapped_liability_id = (
         liability_id_map.get(int(old_liability_id)) if old_liability_id not in (None, "") else None
     )
@@ -869,8 +877,7 @@ def _sync_imported_tracking_account_links(
         if new_liability_id is None or new_account_id is None:
             continue
         Liability.objects.filter(user=context.user, id=new_liability_id).update(
-            tracking_mode=Liability.TrackingMode.ACCOUNTING,
-            accounting_account_id=new_account_id
+            tracking_mode=Liability.TrackingMode.ACCOUNTING, accounting_account_id=new_account_id
         )
 
 
@@ -892,7 +899,9 @@ def _build_transaction_payload(
     entries_payload: list[dict[str, Any]] = []
     for entry in transaction_row.get("entries", []):
         old_account_id = entry.get("account_id")
-        new_account_id = account_id_map.get(int(old_account_id)) if old_account_id not in (None, "") else None
+        new_account_id = (
+            account_id_map.get(int(old_account_id)) if old_account_id not in (None, "") else None
+        )
         if new_account_id is None:
             raise serializers.ValidationError(
                 {
@@ -934,14 +943,18 @@ def _build_transaction_payload(
                 "category_key": category_key,
                 "subcategory_key": subcategory_key,
                 "annual_income_entry_id": (
-                    annual_income_id_map.get(int(old_income_id)) if old_income_id not in (None, "") else None
+                    annual_income_id_map.get(int(old_income_id))
+                    if old_income_id not in (None, "")
+                    else None
                 ),
                 "annual_expense_entry_id": (
                     annual_expense_id_map.get(int(old_expense_id))
                     if old_expense_id not in (None, "")
                     else None
                 ),
-                "asset_id": asset_id_map.get(int(old_asset_id)) if old_asset_id not in (None, "") else None,
+                "asset_id": asset_id_map.get(int(old_asset_id))
+                if old_asset_id not in (None, "")
+                else None,
                 "liability_id": (
                     liability_id_map.get(int(old_liability_id))
                     if old_liability_id not in (None, "")
@@ -1044,7 +1057,7 @@ def _ensure_minimum_transaction_entries(*, payload: dict[str, Any], user: Any) -
     counter_side = "credit" if side == "debit" else "debit"
     contra_account = get_or_create_system_account(
         user_id=user.id,
-        account_type=LedgerAccount.AccountType.EQUITY,
+        account_type=cast(str, LedgerAccount.AccountType.EQUITY),
         currency=currency,
         name="Ajuste importacion portable",
     )
@@ -1095,7 +1108,7 @@ def _ensure_balanced_entries_by_currency(*, payload: dict[str, Any], user: Any) 
         contra_side = "credit" if diff > 0 else "debit"
         contra_account = get_or_create_system_account(
             user_id=user.id,
-            account_type=LedgerAccount.AccountType.EQUITY,
+            account_type=cast(str, LedgerAccount.AccountType.EQUITY),
             currency=currency,
             name="Ajuste importacion portable",
         )

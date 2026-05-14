@@ -77,8 +77,9 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
     }
     // Last resort for legacy entries without flow_family: entries are ordered by id,
     // so entries[0] is always the asset account (debit = gain, credit = loss).
-    if (transaction.entries.length > 0) {
-      return transaction.entries[0].side === 'debit' ? baseAmount : -baseAmount;
+    const firstEntry = transaction.entries[0];
+    if (firstEntry) {
+      return firstEntry.side === 'debit' ? baseAmount : -baseAmount;
     }
     return 0;
   }
@@ -115,7 +116,9 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           <option value="revaluation">Revalorizaciones</option>
         </select>
         <select
-          v-if="['income', 'expense', 'investment', 'debt_payment'].includes(state.activityFilters.kind)"
+          v-if="
+            ['income', 'expense', 'investment', 'debt_payment'].includes(state.activityFilters.kind)
+          "
           v-model="state.activityFilters.categoryKey"
           class="select"
         >

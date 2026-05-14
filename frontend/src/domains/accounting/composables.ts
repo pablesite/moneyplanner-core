@@ -3875,6 +3875,22 @@ export function useAccountingPage() {
     quickEntryForm.revaluation_new_value = '';
   }
 
+  async function previewMoneyWizImport(file?: File | null): Promise<void> {
+    if (!file) {
+      store.error = 'Selecciona antes un CSV exportado desde MoneyWiz.';
+      return;
+    }
+    await store.previewMoneyWizImport(file);
+  }
+
+  async function commitMoneyWizImport(file?: File | null): Promise<void> {
+    if (!file) {
+      store.error = 'Selecciona antes un CSV exportado desde MoneyWiz.';
+      return;
+    }
+    await store.commitMoneyWizImport(file);
+  }
+
   return {
     loading,
     accountCreationLoading,
@@ -4025,6 +4041,8 @@ export function useAccountingPage() {
     resetEditTransactionForm,
     deleteTransaction,
     deleteImportedTransactions,
+    previewMoneyWizImport,
+    commitMoneyWizImport,
     fillQuickEntryFromTransaction,
   };
 }

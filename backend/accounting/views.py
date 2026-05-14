@@ -112,9 +112,7 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
     serializer_class = LedgerTransactionSerializer
 
     @staticmethod
-    def _signed_impact_for_account(
-        *, account_type: str, side: str, amount: Decimal
-    ) -> Decimal:
+    def _signed_impact_for_account(*, account_type: str, side: str, amount: Decimal) -> Decimal:
         increases_on_debit = account_type in {
             LedgerAccount.AccountType.ASSET,
             LedgerAccount.AccountType.EXPENSE,
@@ -223,7 +221,9 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         try:
             date_to = parse_date(date_to_raw) if date_to_raw else today
         except ValueError as exc:
-            raise ValidationError({"date_to": "Query param 'date_to' invalido (YYYY-MM-DD)."}) from exc
+            raise ValidationError(
+                {"date_to": "Query param 'date_to' invalido (YYYY-MM-DD)."}
+            ) from exc
         status_value = status_raw or LedgerTransaction.Status.POSTED
 
         if date_from_raw and date_from is None:
@@ -246,9 +246,7 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
                         {"ownership_id": "Query param 'ownership_id' invalido."}
                     ) from exc
                 if ownership_id < 1:
-                    raise ValidationError(
-                        {"ownership_id": "Query param 'ownership_id' invalido."}
-                    )
+                    raise ValidationError({"ownership_id": "Query param 'ownership_id' invalido."})
 
         return Response(
             build_daily_balance_series(

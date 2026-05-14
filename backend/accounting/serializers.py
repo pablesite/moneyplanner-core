@@ -11,7 +11,6 @@ from rest_framework import serializers
 from accounts.models import UserSettings
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import (
-    EXPENSE_TAXONOMY,
     validate_annual_expense_taxonomy,
     validate_annual_income_taxonomy,
 )
@@ -718,6 +717,13 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             investment_direction=investment_direction,
             liability_account=liability_account,
         )
+        self._align_category_with_legacy_link(
+            attrs=attrs,
+            movement_type=movement_type,
+            annual_income_entry=annual_income_entry,
+            annual_expense_entry=annual_expense_entry,
+            interest_amount=interest_amount or Decimal("0"),
+        )
         flow_family = attrs.get("flow_family", "")
         category_key = attrs.get("category_key", "")
         subcategory_key = attrs.get("subcategory_key", "")
@@ -897,13 +903,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 interest_amount=interest_amount,
             )
 
-        self._align_category_with_legacy_link(
-            attrs=attrs,
-            movement_type=movement_type,
-            annual_income_entry=annual_income_entry,
-            annual_expense_entry=annual_expense_entry,
-            interest_amount=interest_amount or Decimal("0"),
-        )
         return attrs
 
     def _apply_canonical_classification_policy(
@@ -921,9 +920,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             return
 
         if movement_type == "expense":
-            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
-            if attrs.get("category_key") not in EXPENSE_TAXONOMY:
-                attrs["category_key"] = "consumption_expenses"
             return
 
         if movement_type == "investment":
@@ -937,22 +933,19 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 attrs["category_key"] = ""
                 attrs["subcategory_key"] = ""
                 return
-            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
             return
 
         if movement_type != "debt_payment":
             return
 
-        attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
         if liability_account is None or liability_account.liability is None:
             return
         liability_category = liability_account.liability.category
         if liability_category == Liability.Category.MORTGAGE:
+            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
             attrs["category_key"] = "real_estate_assets"
             attrs["subcategory_key"] = "mortgage_principal"
             return
-        if not attrs.get("category_key"):
-            attrs["category_key"] = "consumption_expenses"
 
     def _normalize_investment_payload(
         self,
@@ -1045,18 +1038,10 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 {"subcategory_key": "Categoria y subcategoria son obligatorias para gastos."}
             )
         if (
-            movement_type == "investment"
-            and investment_direction != LedgerTransaction.InvestmentDirection.REINVESTMENT
+            movement_type == "debt_payment"
             and not has_classification
+            and annual_expense_entry is None
         ):
-            raise serializers.ValidationError(
-                {
-                    "subcategory_key": (
-                        "Categoria y subcategoria son obligatorias para movimientos de inversion."
-                    )
-                }
-            )
-        if movement_type == "debt_payment" and not has_classification:
             raise serializers.ValidationError(
                 {
                     "subcategory_key": (
@@ -1499,7 +1484,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             )
 
         category_key = attrs.get("category_key", "")
-        if investment_direction == LedgerTransaction.InvestmentDirection.INFLOW:
+        if category_key and investment_direction == LedgerTransaction.InvestmentDirection.INFLOW:
             if category_key not in {
                 "financial_investments",
                 "real_estate_assets",

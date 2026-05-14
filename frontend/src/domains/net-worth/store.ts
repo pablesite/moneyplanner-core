@@ -319,7 +319,9 @@ export const useNetWorthStore = defineStore('netWorth', {
     async archiveLiability(id: number) {
       const liability = this.liabilities.find((l) => l.id === id);
       if (liability?.accounting_account_id) {
-        await coreAccountingApi.updateAccount(liability.accounting_account_id, { is_active: false });
+        await coreAccountingApi.updateAccount(liability.accounting_account_id, {
+          is_active: false,
+        });
       }
       return this.updateLiability(id, { is_active: false });
     },

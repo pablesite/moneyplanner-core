@@ -638,7 +638,6 @@ class Liability(models.Model):
         return f"{self.user_id} - {self.name} ({self.amount} {self.currency})"
 
 
-
 class LiquidityMonthlyCheckin(models.Model):
     class Status(models.TextChoices):
         CONFIRMED = "confirmed", "Confirmado"

@@ -7,6 +7,7 @@ type IncomeResetMode = 'zero' | 'planned';
 type IncomeExecutionOrigin =
   | 'categorized_ledger'
   | 'legacy_ledger'
+  | 'user_override'
   | 'legacy_checkin'
   | 'ambiguous_taxonomy'
   | 'none';

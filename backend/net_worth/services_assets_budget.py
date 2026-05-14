@@ -112,8 +112,7 @@ def _build_legacy_schedule(
     horizon_end_date: date | None = None,
 ) -> list[tuple[date, Decimal]]:
     if (
-        asset.investment_contribution_mode
-        != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
+        asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
         or asset.monthly_contribution_amount is None
         or asset.monthly_contribution_amount <= 0
     ):
@@ -123,8 +122,7 @@ def _build_legacy_schedule(
         end_date=asset.expected_end_date,
         amount=Decimal(asset.monthly_contribution_amount),
         frequency=str(
-            asset.investment_contribution_frequency
-            or Asset.InvestmentContributionFrequency.MONTHLY
+            asset.investment_contribution_frequency or Asset.InvestmentContributionFrequency.MONTHLY
         ),
         as_of_date=as_of_date,
         horizon_end_date=horizon_end_date,
@@ -199,7 +197,9 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             if str(interval.currency or "").strip()
         }
         contribution_currency = (
-            interval_currencies.pop() if len(interval_currencies) == 1 else str(asset.currency).strip().upper()
+            interval_currencies.pop()
+            if len(interval_currencies) == 1
+            else str(asset.currency).strip().upper()
         )
     else:
         final_due_year = schedule[-1][0].year if asset.expected_end_date is not None else None

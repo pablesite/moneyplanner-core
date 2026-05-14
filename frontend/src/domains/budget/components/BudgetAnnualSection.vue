@@ -120,20 +120,6 @@ function toggleGroup(categoryKey: string): void {
   };
 }
 
-function isDepositRotationIncomeCategory(
-  sectionId: 'income' | 'expense',
-  categoryKey: string,
-): boolean {
-  return sectionId === 'income' && categoryKey === 'capital_gains';
-}
-
-function isDepositRotationIncomeSubcategory(
-  sectionId: 'income' | 'expense',
-  rowKey: string,
-): boolean {
-  return sectionId === 'income' && rowKey === 'capital_gains::sale_financial_assets';
-}
-
 function goToMovements(categoryKey: string, subcategoryKey?: string): void {
   const fmt = (d: Date) => {
     const y = d.getFullYear();
@@ -857,6 +843,14 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
                       {{ rowPlannedMeta(section.id, row) }}
                     </template>
                   </div>
+                  <button
+                    v-if="row.detectedUnbudgeted"
+                    type="button"
+                    class="ui-budget-detected-add-btn"
+                    @click.stop="openCreateDirect(section.id, row)"
+                  >
+                    Añadir al presupuesto
+                  </button>
                   <div
                     v-if="
                       (incomeInvestmentRotationSubcategoryAdjustment?.(section.id, row.key) ?? 0) >

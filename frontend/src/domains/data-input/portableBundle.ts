@@ -614,10 +614,7 @@ export function toPortableLedgerTransactionRecord(
     value_date: String(raw.value_date ?? ''),
     description: String(raw.description ?? ''),
     status: raw.status === 'draft' ? 'draft' : 'posted',
-    origin:
-      raw.origin === 'import' || raw.origin === 'system'
-        ? raw.origin
-        : ('manual' as const),
+    origin: raw.origin === 'import' || raw.origin === 'system' ? raw.origin : ('manual' as const),
     notes: raw.notes == null ? '' : String(raw.notes),
     ownership_id: toNumberOrNull(raw.ownership_id),
     quick_entry_kind: raw.quick_entry_kind == null ? '' : String(raw.quick_entry_kind),
@@ -666,8 +663,7 @@ export function toPortableAssetRecord(raw: Partial<PortableAssetRecord>): Portab
     initial_purchase_value: toOptionalText(raw.initial_purchase_value),
     amortization_method: raw.amortization_method == null ? 'none' : String(raw.amortization_method),
     amortization_term_years: toNumberOrNull(raw.amortization_term_years),
-    valuation_model:
-      raw.valuation_model === 'real_estate_auto' ? 'real_estate_auto' : 'manual',
+    valuation_model: raw.valuation_model === 'real_estate_auto' ? 'real_estate_auto' : 'manual',
     land_value_share_percent: toOptionalText(raw.land_value_share_percent),
     land_annual_appreciation_percent: toOptionalText(raw.land_annual_appreciation_percent),
     building_annual_depreciation_percent: toOptionalText(raw.building_annual_depreciation_percent),
@@ -789,9 +785,7 @@ export function toPortableOwnershipLinkRecord(
   };
 }
 
-function assertPortableDataCollections(
-  data: PortableDataBundle['data'],
-): {
+function assertPortableDataCollections(data: PortableDataBundle['data']): {
   annual_income: PortableDataBundle['data']['annual_income'];
   annual_expense: PortableDataBundle['data']['annual_expense'];
   assets: PortableDataBundle['data']['assets'];
@@ -865,7 +859,10 @@ function parsePortableAccounting(
 ): PortableDataBundle['data']['accounting'] {
   const accountingAccounts = raw?.accounts;
   const accountingTransactions = raw?.transactions;
-  if (raw != null && (!Array.isArray(accountingAccounts) || !Array.isArray(accountingTransactions))) {
+  if (
+    raw != null &&
+    (!Array.isArray(accountingAccounts) || !Array.isArray(accountingTransactions))
+  ) {
     throw new Error('El bloque accounting del archivo no es valido.');
   }
   return {
@@ -896,8 +893,7 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
     liability_events,
     liability_valuations,
     accounting,
-  } =
-    assertPortableDataCollections(parsed.data as PortableDataBundle['data']);
+  } = assertPortableDataCollections(parsed.data as PortableDataBundle['data']);
   const sourceApp = parsed.source_app === 'saas' ? 'saas' : 'core';
   const premium = parsePortablePremium(parsed.premium);
   return {

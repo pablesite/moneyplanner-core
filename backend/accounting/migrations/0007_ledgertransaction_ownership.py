@@ -5,16 +5,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounting', '0006_ledgertransaction_acct_tx_user_book_id_desc'),
-        ('memberships', '0004_rename_memberships_user_id_247f36_idx_memberships_user_id_bd713b_idx_and_more'),
+        ("accounting", "0006_ledgertransaction_acct_tx_user_book_id_desc"),
+        (
+            "memberships",
+            "0004_rename_memberships_user_id_247f36_idx_memberships_user_id_bd713b_idx_and_more",
+        ),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ledgertransaction',
-            name='ownership',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='ledger_transactions', to='memberships.ownership'),
+            model_name="ledgertransaction",
+            name="ownership",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="ledger_transactions",
+                to="memberships.ownership",
+            ),
         ),
     ]

@@ -92,9 +92,7 @@ const displayedPoints = computed(() => {
     const absIdx = rows.length - last6.length + i;
     const prev = rows[absIdx - 1];
     const delta =
-      prev && prev.value !== 0
-        ? ((row.value - prev.value) / Math.abs(prev.value)) * 100
-        : null;
+      prev && prev.value !== 0 ? ((row.value - prev.value) / Math.abs(prev.value)) * 100 : null;
     return { row, delta };
   });
 });
@@ -176,18 +174,17 @@ const displayedPoints = computed(() => {
       </div>
 
       <div class="ui-nw-timeline-points">
-        <div
-          v-for="{ row, delta } in displayedPoints"
-          :key="row.date"
-          class="ui-nw-timeline-point"
-        >
+        <div v-for="{ row, delta } in displayedPoints" :key="row.date" class="ui-nw-timeline-point">
           <span>{{ row.label }}</span>
           <strong>{{ formatNumber(row.value, 0) }} {{ displayedTimelineUnit }}</strong>
           <span
             v-if="delta !== null"
             class="ui-nw-timeline-point-delta"
-            :class="delta >= 0 ? 'ui-nw-timeline-point-delta-pos' : 'ui-nw-timeline-point-delta-neg'"
-          >{{ delta >= 0 ? '+' : '' }}{{ formatNumber(delta, 1) }}%</span>
+            :class="
+              delta >= 0 ? 'ui-nw-timeline-point-delta-pos' : 'ui-nw-timeline-point-delta-neg'
+            "
+            >{{ delta >= 0 ? '+' : '' }}{{ formatNumber(delta, 1) }}%</span
+          >
         </div>
       </div>
     </div>

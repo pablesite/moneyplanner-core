@@ -11,9 +11,7 @@ def sync_position_start_dates_for_transaction(*, transaction: LedgerTransaction)
     booking_date = transaction.booking_date
     if booking_date is None:
         return
-    account_ids = list(
-        transaction.entries.values_list("account_id", flat=True).distinct()
-    )
+    account_ids = list(transaction.entries.values_list("account_id", flat=True).distinct())
     if not account_ids:
         return
     _sync_asset_start_dates_for_accounts(account_ids=account_ids, booking_date=booking_date)
