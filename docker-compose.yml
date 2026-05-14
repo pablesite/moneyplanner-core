@@ -66,6 +66,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: core_frontend
+    environment:
+      # Cross-platform file watching for Docker Desktop/WSL and Linux hosts.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
     volumes:
       - ./frontend:/app
       - /app/node_modules
