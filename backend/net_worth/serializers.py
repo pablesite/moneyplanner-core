@@ -43,10 +43,6 @@ from .services_liabilities_core import (
 )
 
 
-class EmptySerializer(serializers.Serializer):
-    pass
-
-
 class AssetImprovementSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
 

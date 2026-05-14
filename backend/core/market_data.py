@@ -399,27 +399,6 @@ def ensure_market_history(
     )
 
 
-def ensure_market_history_safe(
-    *, from_currency: str, to_currency: str, start_date: date | None, end_date: date | None = None
-) -> int:
-    try:
-        return ensure_market_history(
-            from_currency=from_currency,
-            to_currency=to_currency,
-            start_date=start_date,
-            end_date=end_date,
-        )
-    except MarketDataSyncError:
-        logger.warning(
-            "Unable to backfill FX history for %s->%s from %s.",
-            from_currency,
-            to_currency,
-            start_date,
-            exc_info=True,
-        )
-        return 0
-
-
 def _extract_ine_region_name(series: dict[str, Any]) -> str | None:
     for metadata in series.get("MetaData") or []:
         variable = str(metadata.get("T3_Variable") or "")
