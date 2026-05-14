@@ -7,7 +7,10 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
-from accounting.services_summaries import build_monthly_accounting_summary
+from accounting.services_summaries import (
+    build_daily_balance_series,
+    build_monthly_accounting_summary,
+)
 
 
 class AccountingSummaryPerformanceTests(TestCase):
@@ -85,3 +88,50 @@ class AccountingSummaryPerformanceTests(TestCase):
         self.assertEqual(summary["months"][0]["uncategorized_total"], "2000.00")
         self.assertEqual(summary["months"][1]["expense_total"], "2000.00")
         self.assertEqual(summary["months"][1]["uncategorized_total"], "2000.00")
+
+    def test_daily_balance_series_uses_grouped_queries_with_high_entry_volume(self):
+        transactions = [
+            LedgerTransaction(
+                user=self.user,
+                booking_date=date(2025, 12, 15) if idx < 1200 else date(2026, 1, (idx % 31) + 1),
+                value_date=date(2025, 12, 15) if idx < 1200 else date(2026, 1, (idx % 31) + 1),
+                description=f"Movimiento diario {idx}",
+            )
+            for idx in range(2400)
+        ]
+        LedgerTransaction.objects.bulk_create(transactions)
+        transactions = list(LedgerTransaction.objects.filter(user=self.user).order_by("id"))
+        amount = Decimal("10.00")
+        entries = []
+        for transaction in transactions:
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.cash_account,
+                    side=LedgerEntry.Side.DEBIT,
+                    amount=amount,
+                    currency="EUR",
+                )
+            )
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.income_account,
+                    side=LedgerEntry.Side.CREDIT,
+                    amount=amount,
+                    currency="EUR",
+                )
+            )
+        LedgerEntry.objects.bulk_create(entries, batch_size=1000)
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            summary = build_daily_balance_series(
+                user_id=self.user.id,
+                date_from=date(2026, 1, 1),
+                date_to=date(2026, 1, 31),
+            )
+
+        self.assertLessEqual(len(captured_queries), 5)
+        self.assertEqual(len(summary["rows"]), 31)
+        self.assertEqual(summary["rows"][0]["assets_total"], "12390.00")
+        self.assertEqual(summary["rows"][-1]["assets_total"], "24000.00")

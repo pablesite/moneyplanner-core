@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Min
+from django.db.models import Min, Sum
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import UserSettings
@@ -45,6 +45,14 @@ class DailyBalanceContext:
     ownership_is_null: bool | None
     base_currency: str
     fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]]
+
+
+@dataclass(frozen=True)
+class DailyBalanceEntryTotal:
+    account_id: int
+    side: str
+    amount: Decimal
+    booking_date: date | None = None
 
 
 def build_monthly_accounting_summary(*, user_id: int, fiscal_year: int) -> dict:
@@ -515,29 +523,56 @@ def _load_daily_balance_entries(
     *,
     user_id: int,
     context: DailyBalanceContext,
-) -> tuple[list[LedgerEntry], list[LedgerEntry]]:
+) -> tuple[list[DailyBalanceEntryTotal], list[DailyBalanceEntryTotal]]:
     account_ids = context.accounts.account_ids
-    historical_entries = LedgerEntry.objects.filter(
-        transaction__user_id=user_id,
-        account_id__in=account_ids,
-        transaction__booking_date__lt=context.date_from,
-        transaction__status=context.status,
-    ).select_related("transaction")
-    ranged_entries = LedgerEntry.objects.filter(
-        transaction__user_id=user_id,
-        account_id__in=account_ids,
-        transaction__booking_date__gte=context.date_from,
-        transaction__booking_date__lte=context.date_to,
-        transaction__status=context.status,
-    ).select_related("transaction")
-    return list(historical_entries), list(ranged_entries)
+    historical_rows = (
+        LedgerEntry.objects.filter(
+            transaction__user_id=user_id,
+            account_id__in=account_ids,
+            transaction__booking_date__lt=context.date_from,
+            transaction__status=context.status,
+        )
+        .values("account_id", "side")
+        .annotate(amount_total=Sum("amount"))
+        .order_by("account_id", "side")
+    )
+    ranged_rows = (
+        LedgerEntry.objects.filter(
+            transaction__user_id=user_id,
+            account_id__in=account_ids,
+            transaction__booking_date__gte=context.date_from,
+            transaction__booking_date__lte=context.date_to,
+            transaction__status=context.status,
+        )
+        .values("transaction__booking_date", "account_id", "side")
+        .annotate(amount_total=Sum("amount"))
+        .order_by("transaction__booking_date", "account_id", "side")
+    )
+    historical_entries = [
+        DailyBalanceEntryTotal(
+            account_id=int(row["account_id"]),
+            side=str(row["side"]),
+            amount=Decimal(row["amount_total"] or ZERO),
+        )
+        for row in historical_rows
+    ]
+    ranged_entries = [
+        DailyBalanceEntryTotal(
+            booking_date=cast(date, row["transaction__booking_date"]),
+            account_id=int(row["account_id"]),
+            side=str(row["side"]),
+            amount=Decimal(row["amount_total"] or ZERO),
+        )
+        for row in ranged_rows
+    ]
+    return historical_entries, ranged_entries
 
 
 def _build_opening_running_balance_by_account(
     *,
     account_ids: list[int],
     account_data_by_id: dict[int, dict[str, str]],
-    historical_entries: list[LedgerEntry],
+    historical_entries: list[DailyBalanceEntryTotal],
 ) -> dict[int, Decimal]:
     running_balance_by_account = {account_id: ZERO for account_id in account_ids}
     for entry in historical_entries:
@@ -559,7 +594,7 @@ def _build_opening_running_balance_by_account(
 def _group_daily_balance_deltas_by_date(
     *,
     account_data_by_id: dict[int, dict[str, str]],
-    ranged_entries: list[LedgerEntry],
+    ranged_entries: list[DailyBalanceEntryTotal],
 ) -> dict[date, dict[int, Decimal]]:
     deltas_by_date: dict[date, dict[int, Decimal]] = defaultdict(dict)
     for entry in ranged_entries:
@@ -572,7 +607,9 @@ def _group_daily_balance_deltas_by_date(
             side=entry.side,
             amount=entry.amount,
         )
-        booking_date = entry.transaction.booking_date
+        booking_date = entry.booking_date
+        if booking_date is None:
+            continue
         day_deltas = deltas_by_date[booking_date]
         day_deltas[account_id] = day_deltas.get(account_id, ZERO) + signed_impact
     return deltas_by_date
