@@ -155,7 +155,7 @@ def build_account_balances_summary(
     }
 
 
-def build_daily_balance_series(
+def build_daily_balance_series(  # noqa: C901
     *,
     user_id: int,
     date_from: date | None,
@@ -180,7 +180,10 @@ def build_daily_balance_series(
         links = list(
             OwnershipLink.objects.filter(
                 user_id=user_id,
-                target_type__in=[OwnershipLink.TargetType.ASSET, OwnershipLink.TargetType.LIABILITY],
+                target_type__in=[
+                    OwnershipLink.TargetType.ASSET,
+                    OwnershipLink.TargetType.LIABILITY,
+                ],
             ).values("ownership_id", "target_type", "target_id")
         )
         asset_owner_by_target_id = {
@@ -234,9 +237,7 @@ def build_daily_balance_series(
             if account_type == LedgerAccount.AccountType.ASSET:
                 target_id = row.get("asset_id")
                 owner_id = (
-                    asset_owner_by_target_id.get(int(target_id))
-                    if target_id is not None
-                    else None
+                    asset_owner_by_target_id.get(int(target_id)) if target_id is not None else None
                 )
             else:
                 target_id = row.get("liability_id")
@@ -294,9 +295,12 @@ def build_daily_balance_series(
             account_id__in=account_ids,
             transaction__status=status,
         )
-        date_from = earliest_entries.aggregate(min_booking_date=Min("transaction__booking_date"))[
-            "min_booking_date"
-        ] or date_to
+        date_from = (
+            earliest_entries.aggregate(min_booking_date=Min("transaction__booking_date"))[
+                "min_booking_date"
+            ]
+            or date_to
+        )
     if date_from is None:
         date_from = date_to
     if date_from > date_to:
@@ -332,7 +336,9 @@ def build_daily_balance_series(
 
     # Keep running balances by account in account currency and revalue each day to base currency
     # using the latest available FX rate at that specific date (mark-to-market daily).
-    running_balance_by_account: dict[int, Decimal] = {account_id: ZERO for account_id in account_ids}
+    running_balance_by_account: dict[int, Decimal] = {
+        account_id: ZERO for account_id in account_ids
+    }
     for entry in historical_entries:
         account_id = int(entry.account_id)
         account_data = account_data_by_id.get(account_id)
@@ -343,7 +349,9 @@ def build_daily_balance_series(
             side=entry.side,
             amount=entry.amount,
         )
-        running_balance_by_account[account_id] = running_balance_by_account.get(account_id, ZERO) + signed_impact
+        running_balance_by_account[account_id] = (
+            running_balance_by_account.get(account_id, ZERO) + signed_impact
+        )
 
     deltas_by_date: dict[date, dict[int, Decimal]] = defaultdict(dict)
     for entry in ranged_entries:

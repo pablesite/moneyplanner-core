@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("net_worth", "0039_migrate_legacy_contribution_intervals"),
     ]

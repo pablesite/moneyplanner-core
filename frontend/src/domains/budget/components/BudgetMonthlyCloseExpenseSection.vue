@@ -7,6 +7,7 @@ type ExpenseResetMode = 'zero' | 'planned';
 type ExpenseExecutionOrigin =
   | 'categorized_ledger'
   | 'legacy_ledger'
+  | 'user_override'
   | 'legacy_checkin'
   | 'ambiguous_taxonomy'
   | 'none';

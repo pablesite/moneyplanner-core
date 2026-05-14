@@ -38,7 +38,11 @@ const {
       <div class="ui-home-intro-kpis">
         <div class="ui-home-intro-kpi" :style="isLoading ? {} : phaseSummaryStyle(mostTensePhase)">
           <span>Mayor tension</span>
-          <span v-if="isLoading" class="ui-home-skeleton-bar ui-home-skeleton-kpi" aria-hidden="true"></span>
+          <span
+            v-if="isLoading"
+            class="ui-home-skeleton-bar ui-home-skeleton-kpi"
+            aria-hidden="true"
+          ></span>
           <strong v-else-if="mostTensePhase">
             F{{ mostTensePhase.phase.id }} · {{ mostTensePhase.grade }} ·
             {{ mostTensePhase.score }}%
@@ -47,7 +51,11 @@ const {
         </div>
         <div class="ui-home-intro-kpi" :style="isLoading ? {} : phaseSummaryStyle(strongestPhase)">
           <span>Mejor posicionada</span>
-          <span v-if="isLoading" class="ui-home-skeleton-bar ui-home-skeleton-kpi" aria-hidden="true"></span>
+          <span
+            v-if="isLoading"
+            class="ui-home-skeleton-bar ui-home-skeleton-kpi"
+            aria-hidden="true"
+          ></span>
           <strong v-else-if="strongestPhase">
             F{{ strongestPhase.phase.id }} · {{ strongestPhase.grade }} ·
             {{ strongestPhase.score }}%
@@ -78,7 +86,11 @@ const {
             <div class="ui-home-phase-head">
               <span class="ui-home-phase-id">F{{ phase.id }}</span>
               <ScoreGradeBadge v-if="!isLoading" :score="phaseDisplayProgress(phase)" />
-              <span v-else class="ui-home-skeleton-bar ui-home-skeleton-badge" aria-hidden="true"></span>
+              <span
+                v-else
+                class="ui-home-skeleton-bar ui-home-skeleton-badge"
+                aria-hidden="true"
+              ></span>
             </div>
 
             <div class="ui-home-phase-title">{{ phase.title }}</div>
@@ -90,7 +102,11 @@ const {
               :style="isLoading ? {} : phaseDonutStyle(phase)"
             >
               <div class="ui-home-phase-donut-inner">
-                <span v-if="isLoading" class="ui-home-skeleton-bar ui-home-skeleton-pct" aria-hidden="true"></span>
+                <span
+                  v-if="isLoading"
+                  class="ui-home-skeleton-bar ui-home-skeleton-pct"
+                  aria-hidden="true"
+                ></span>
                 <template v-else>{{ phaseDisplayProgress(phase) }}%</template>
               </div>
             </div>

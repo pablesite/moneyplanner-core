@@ -689,7 +689,7 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('Conciliacion de cierre');
     expect(wrapper.text()).toContain('Diagnóstico del residual');
     expect(wrapper.find('.ui-budget-result-bridge').exists()).toBe(true);
-    expect(wrapper.find('.ui-budget-result-diagnostic').exists()).toBe(true);
+    expect(wrapper.find('.ui-budget-result-diagnostic-scale').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Composición del movimiento');
     expect(wrapper.text()).not.toContain('Variación perimetro');
   });
@@ -925,12 +925,9 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
     await openMonthlyStep(wrapper, 'Ingresos');
 
-    expect(wrapper.text()).toContain('1 via ledger');
-    expect(wrapper.text()).not.toContain('Movimientos');
     expect(wrapper.text()).not.toContain('Ledger categorizado');
     expect(wrapper.text()).not.toContain('Ledger subcategoría');
-    const input = wrapper.find('input[placeholder="Importe ejecutado"]');
-    expect(input.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('input[placeholder="Importe ejecutado"]').exists()).toBe(false);
   });
 
   it('keeps legacy expense fallback editable when there is no ledger coverage', async () => {
@@ -985,12 +982,13 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
     await openMonthlyStep(wrapper, 'Gastos');
 
-    expect(wrapper.text()).toContain('1 via fallback legacy');
+    expect(wrapper.text()).toContain('Confirmado');
     const input = wrapper.find('input[placeholder="Importe ejecutado"]');
-    expect(input.attributes('disabled')).toBeUndefined();
+    expect(input.exists()).toBe(false);
+    expect(wrapper.text()).toContain('Añadir gasto');
   });
 
-  it('surfaces pendiente clasificar when categorized ledger is ambiguous across multiple lines', async () => {
+  it('groups categorized ledger execution across multiple lines in the same taxonomy slot', async () => {
     mockIncomeStore.entries.value = [
       {
         id: 1,
@@ -1053,8 +1051,8 @@ describe('BudgetDashboardView', () => {
         results: [
           {
             id: 10,
-            booking_date: `${currentYear}-03-15`,
-            value_date: `${currentYear}-03-15`,
+            booking_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-15`,
+            value_date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-15`,
             description: 'Nomina',
             status: 'posted',
             origin: 'manual',
@@ -1092,9 +1090,9 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
     await openMonthlyStep(wrapper, 'Ingresos');
 
-    expect(wrapper.text()).toContain('Pendiente clasificar');
-    expect(wrapper.text()).toContain('Nómina');
+    expect(wrapper.text()).toContain('Nomina');
     expect(wrapper.text()).toContain('2 líneas agrupadas');
+    expect(wrapper.text()).toContain('1.500,00 EUR');
     expect(wrapper.text()).not.toContain('Nomina A');
     expect(wrapper.text()).not.toContain('Nomina B');
   });
@@ -1269,16 +1267,21 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const expenseSection = wrapper.find('.ui-budget-section-expense');
-    expect(expenseSection.text()).toContain('Previsto vs Ejecutado acumulado');
-    expect(expenseSection.text()).toContain('250,00 EUR ejecutado');
+    expect(expenseSection.text()).toContain('Evolucion ejecutada');
+    expect(expenseSection.text()).toContain('Ejecutado real (YTD)');
 
     const toggleDetail = wrapper
       .findAll('button')
-      .find((candidate) => candidate.text().includes('Ver detalle'));
+      .find((candidate) => candidate.text().includes('Ver desglose'));
     await toggleDetail?.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Gestionar subcategoría');
+    const firstRow = wrapper.find('.ui-budget-row');
+    await firstRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('NominaRecurrente');
+    expect(wrapper.text()).toContain('✎');
   });
 
   it('opens budget suggestions inside a modal when user asks for them', async () => {
@@ -1296,9 +1299,9 @@ describe('BudgetDashboardView', () => {
         .findAll('button')
         .some((candidate) => candidate.attributes('aria-label') === 'Ver sugerencias'),
     ).toBe(true);
-    expect(wrapper.text()).not.toContain('Sugerencias desde histórico ledger');
+    expect(wrapper.text()).not.toContain('Sugerencias desde histórico del libro contable');
     expect(wrapper.text()).not.toContain(
-      'Sin cobertura ledger por subcategoría para sugerir ajustes todavía.',
+      'Sin cobertura del libro contable por subcategoría para sugerir ajustes todavía.',
     );
 
     const toggleSuggestions = wrapper
@@ -1307,9 +1310,9 @@ describe('BudgetDashboardView', () => {
     await toggleSuggestions?.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Sugerencias desde histórico ledger');
+    expect(wrapper.text()).toContain('Sugerencias desde histórico del libro contable');
     expect(wrapper.text()).toContain('Cerrar');
-    expect(wrapper.text()).toContain('Sin cobertura ledger por subcategoría para sugerir ajustes');
+    expect(wrapper.text()).toContain('Sin cobertura del libro contable por subcategoría');
   });
 
   it('shows ledger-backed YTD execution in annual expense detail', async () => {
@@ -1395,9 +1398,10 @@ describe('BudgetDashboardView', () => {
     const wrapper = mountBudgetView();
     await flushPromises();
 
-    const toggleDetail = wrapper
+    const expenseSection = wrapper.find('.ui-budget-section-expense');
+    const toggleDetail = expenseSection
       .findAll('button')
-      .find((candidate) => candidate.text().includes('Ver detalle'));
+      .find((candidate) => candidate.text().includes('Ver desglose'));
     await toggleDetail?.trigger('click');
     await flushPromises();
 
@@ -1411,7 +1415,7 @@ describe('BudgetDashboardView', () => {
     expect(mockAccountingApi.getTransactions).not.toHaveBeenCalledWith(
       expect.objectContaining({ month: currentMonth }),
     );
-    expect(wrapper.text()).toContain('250,00 EUR');
+    expect(wrapper.text()).toContain('2.500,00 EUR');
   });
 
   it('shows unbudgeted detected expense rows with contextual CTA', async () => {
@@ -1485,9 +1489,10 @@ describe('BudgetDashboardView', () => {
     const wrapper = mountBudgetView();
     await flushPromises();
 
-    const toggleDetail = wrapper
+    const expenseSection = wrapper.find('.ui-budget-section-expense');
+    const toggleDetail = expenseSection
       .findAll('button')
-      .find((candidate) => candidate.text().includes('Ver detalle'));
+      .find((candidate) => candidate.text().includes('Ver desglose'));
     await toggleDetail?.trigger('click');
     await flushPromises();
 
@@ -1584,15 +1589,15 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const incomeSection = wrapper.find('.ui-budget-section-income');
-    expect(incomeSection.text()).toContain('Previsto vs Ejecutado acumulado');
-    expect(incomeSection.text()).toContain('165,00 EUR ejecutado');
-    expect(incomeSection.text()).toContain('En presupuesto (YTD)');
+    expect(incomeSection.text()).toContain('Evolucion ejecutada');
+    expect(incomeSection.text()).toContain('Ejecutado real (YTD)');
+    expect(incomeSection.text()).toContain('Presupuesto previsto (YTD)');
     expect(incomeSection.text()).toContain('Fuera de presupuesto (YTD)');
     expect(incomeSection.text()).toContain('45,00 EUR');
 
     const toggleDetail = incomeSection
       .findAll('button')
-      .find((candidate) => candidate.text().includes('Ver detalle'));
+      .find((candidate) => candidate.text().includes('Ver desglose'));
     await toggleDetail?.trigger('click');
     await flushPromises();
 
@@ -1839,10 +1844,15 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const incomeSection = wrapper.find('.ui-budget-section-income');
+    const toggleDetail = incomeSection
+      .findAll('button')
+      .find((candidate) => candidate.text().includes('Ver desglose'));
+    await toggleDetail?.trigger('click');
+    await flushPromises();
+
     expect(incomeSection.text()).toContain(
       'Cambio neto en depósitos aplicado (YTD): -1.000,00 EUR',
     );
-    expect(incomeSection.text()).toContain('Cambio neto dep. YTD');
     expect(incomeSection.text()).toContain('0,00 EUR');
   });
 
@@ -2133,6 +2143,6 @@ describe('BudgetDashboardView', () => {
       .find((candidate) => candidate.text().includes('Puntuales'))
       ?.trigger('click');
     await flushPromises();
-    expect(januaryExec().classes()).toContain('ui-budget-month-exec');
+    expect(januaryExec().classes()).toContain('ui-budget-month-exec-pending');
   });
 });

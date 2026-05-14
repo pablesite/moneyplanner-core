@@ -234,3 +234,27 @@ export type QuickLedgerTransactionWritePayload = {
 export type DeleteImportedTransactionsResult = {
   deleted_count: number;
 };
+
+export type MoneyWizImportPreview = {
+  delimiter: string;
+  row_count: number;
+  valid_row_count: number;
+  error_row_count: number;
+  duplicate_row_count: number;
+  existing_row_count: number;
+  warnings: string[];
+  stats: Record<string, number>;
+  detected_accounts: unknown[];
+  rows: unknown[];
+};
+
+export type MoneyWizImportCommitResult = {
+  source: string;
+  row_count: number;
+  created_count: number;
+  skipped_existing_count: number;
+  warning_count: number;
+  rows: unknown[];
+  preview: MoneyWizImportPreview;
+  created_transaction_ids: number[];
+};

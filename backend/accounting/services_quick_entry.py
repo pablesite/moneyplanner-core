@@ -236,13 +236,13 @@ def _build_quick_entry_payload(
                 "amount": destination_value,
                 "currency": counterparty_account.currency,
                 "asset": counterparty_account.asset if counterparty_account.asset_id else None,
+                **classification,
             },
             {
                 "account": account,
                 "side": LedgerEntry.Side.CREDIT,
                 "amount": base_amount,
                 "currency": account.currency,
-                **classification,
             },
         ]
     if movement_type == "revaluation":

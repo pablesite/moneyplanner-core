@@ -4,20 +4,41 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('budget', '0013_alter_annualexpensemonthlycheckin_status_and_more'),
+        ("budget", "0013_alter_annualexpensemonthlycheckin_status_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='annualexpenseentry',
-            name='cashflow_role',
-            field=models.CharField(choices=[('operating', 'Operativo'), ('temporary_commitment', 'Compromiso temporal'), ('savings', 'Ahorro'), ('investment', 'Inversión'), ('asset_purchase', 'Compra de activo'), ('tax_fee', 'Impuestos y gastos'), ('transfer', 'Transferencia'), ('other', 'Otro')], default='operating', max_length=24),
+            model_name="annualexpenseentry",
+            name="cashflow_role",
+            field=models.CharField(
+                choices=[
+                    ("operating", "Operativo"),
+                    ("temporary_commitment", "Compromiso temporal"),
+                    ("savings", "Ahorro"),
+                    ("investment", "Inversión"),
+                    ("asset_purchase", "Compra de activo"),
+                    ("tax_fee", "Impuestos y gastos"),
+                    ("transfer", "Transferencia"),
+                    ("other", "Otro"),
+                ],
+                default="operating",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='annualexpenseentry',
-            name='category',
-            field=models.CharField(choices=[('savings_allocation', 'Ahorro'), ('financial_investments', 'Inversión financiera'), ('real_estate_assets', 'Activos inmobiliarios'), ('tangible_assets', 'Activos mobiliarios'), ('consumption_expenses', 'Gastos')], max_length=32),
+            model_name="annualexpenseentry",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("savings_allocation", "Ahorro"),
+                    ("financial_investments", "Inversión financiera"),
+                    ("real_estate_assets", "Activos inmobiliarios"),
+                    ("tangible_assets", "Activos mobiliarios"),
+                    ("consumption_expenses", "Gastos"),
+                ],
+                max_length=32,
+            ),
         ),
     ]

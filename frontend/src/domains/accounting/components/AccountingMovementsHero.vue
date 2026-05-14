@@ -163,7 +163,9 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
           <div class="ui-hero-summary-controls">
             <label class="ui-hero-context">
               <span class="ui-hero-context-label">Titularidad</span>
-              <details class="ui-select-popover ui-hero-context-popover ui-accounting-ownership-popover">
+              <details
+                class="ui-select-popover ui-hero-context-popover ui-accounting-ownership-popover"
+              >
                 <summary class="ui-select-popover-trigger ui-hero-context-trigger">
                   <span class="ui-select-popover-text">{{ selectedOwnershipFilterLabel }}</span>
                   <span class="ui-select-popover-caret" aria-hidden="true">&#8964;</span>
@@ -177,7 +179,8 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
                     type="button"
                     class="ui-select-popover-option"
                     :class="{
-                      'ui-select-popover-option-active': state.dailyBalanceOwnershipFilter === 'all',
+                      'ui-select-popover-option-active':
+                        state.dailyBalanceOwnershipFilter === 'all',
                     }"
                     @click="selectOwnershipFilterOption('all', $event)"
                   >

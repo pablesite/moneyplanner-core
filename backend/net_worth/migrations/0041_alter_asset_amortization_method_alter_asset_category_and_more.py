@@ -4,55 +4,148 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0040_liability_cancellation_include_payment_month'),
+        ("net_worth", "0040_liability_cancellation_include_payment_month"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='asset',
-            name='amortization_method',
-            field=models.CharField(choices=[('none', 'Sin amortización'), ('straight_line', 'Lineal'), ('manual', 'Manual')], default='none', help_text='Modelo de amortizacion/depreciacion del activo (si aplica).', max_length=24),
+            model_name="asset",
+            name="amortization_method",
+            field=models.CharField(
+                choices=[
+                    ("none", "Sin amortización"),
+                    ("straight_line", "Lineal"),
+                    ("manual", "Manual"),
+                ],
+                default="none",
+                help_text="Modelo de amortizacion/depreciacion del activo (si aplica).",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='category',
-            field=models.CharField(choices=[('cash', 'Liquidez'), ('investments', 'Inversiones'), ('real_estate', 'Inmuebles'), ('vehicle', 'Vehículo'), ('furnishings', 'Mobiliario'), ('other', 'Otros')], default='cash', max_length=32),
+            model_name="asset",
+            name="category",
+            field=models.CharField(
+                choices=[
+                    ("cash", "Liquidez"),
+                    ("investments", "Inversiones"),
+                    ("real_estate", "Inmuebles"),
+                    ("vehicle", "Vehículo"),
+                    ("furnishings", "Mobiliario"),
+                    ("other", "Otros"),
+                ],
+                default="cash",
+                max_length=32,
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='investment_contribution_mode',
-            field=models.CharField(choices=[('one_time', 'Aportación única'), ('periodic_contribution', 'Aportación periódica')], default='one_time', help_text='Modo de aportacion para inversiones: unica o periodica. Solo aplica a category=investments.', max_length=32),
+            model_name="asset",
+            name="investment_contribution_mode",
+            field=models.CharField(
+                choices=[
+                    ("one_time", "Aportación única"),
+                    ("periodic_contribution", "Aportación periódica"),
+                ],
+                default="one_time",
+                help_text="Modo de aportacion para inversiones: unica o periodica. Solo aplica a category=investments.",
+                max_length=32,
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='subcategory',
-            field=models.CharField(choices=[('bank_account', 'Cuenta bancaria'), ('short_term_deposit', 'Depósito a corto plazo'), ('wallet', 'Monedero'), ('crypto_spot_earn', 'Spot/Earn Cripto'), ('deposits', 'Depósitos'), ('funds', 'Fondos'), ('etfs', 'ETFs'), ('roboadvisor', 'Roboadvisor'), ('stocks', 'Stocks'), ('pension_plans', 'Planes de pensiones'), ('cryptocurrencies', 'Criptomonedas'), ('real_estate_crowd', 'Crowdfunding Inmobiliario'), ('crowdlending', 'Crowdlending'), ('primary_home', 'Vivienda habitual'), ('second_home', 'Segunda vivienda'), ('rental', 'Rentas'), ('vehicles', 'Vehículos'), ('technology', 'Tecnología'), ('home_furnishings', 'Muebles vivienda'), ('sports_equipment', 'Equipamiento deportivo'), ('jewelry', 'Joyería'), ('other', 'Otros')], default='other', max_length=48),
+            model_name="asset",
+            name="subcategory",
+            field=models.CharField(
+                choices=[
+                    ("bank_account", "Cuenta bancaria"),
+                    ("short_term_deposit", "Depósito a corto plazo"),
+                    ("wallet", "Monedero"),
+                    ("crypto_spot_earn", "Spot/Earn Cripto"),
+                    ("deposits", "Depósitos"),
+                    ("funds", "Fondos"),
+                    ("etfs", "ETFs"),
+                    ("roboadvisor", "Roboadvisor"),
+                    ("stocks", "Stocks"),
+                    ("pension_plans", "Planes de pensiones"),
+                    ("cryptocurrencies", "Criptomonedas"),
+                    ("real_estate_crowd", "Crowdfunding Inmobiliario"),
+                    ("crowdlending", "Crowdlending"),
+                    ("primary_home", "Vivienda habitual"),
+                    ("second_home", "Segunda vivienda"),
+                    ("rental", "Rentas"),
+                    ("vehicles", "Vehículos"),
+                    ("technology", "Tecnología"),
+                    ("home_furnishings", "Muebles vivienda"),
+                    ("sports_equipment", "Equipamiento deportivo"),
+                    ("jewelry", "Joyería"),
+                    ("other", "Otros"),
+                ],
+                default="other",
+                max_length=48,
+            ),
         ),
         migrations.AlterField(
-            model_name='asset',
-            name='valuation_model',
-            field=models.CharField(choices=[('manual', 'Manual'), ('real_estate_auto', 'Vivienda automática')], default='manual', help_text='Modelo de valoracion del activo. En inmuebles residenciales puede usarse valoracion automatica por suelo + construccion.', max_length=24),
+            model_name="asset",
+            name="valuation_model",
+            field=models.CharField(
+                choices=[("manual", "Manual"), ("real_estate_auto", "Vivienda automática")],
+                default="manual",
+                help_text="Modelo de valoracion del activo. En inmuebles residenciales puede usarse valoracion automatica por suelo + construccion.",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='assetimprovement',
-            name='amortization_method',
-            field=models.CharField(choices=[('none', 'Sin amortización'), ('straight_line', 'Lineal'), ('manual', 'Manual')], default='none', help_text='Metodo de amortizacion de la reforma.', max_length=24),
+            model_name="assetimprovement",
+            name="amortization_method",
+            field=models.CharField(
+                choices=[
+                    ("none", "Sin amortización"),
+                    ("straight_line", "Lineal"),
+                    ("manual", "Manual"),
+                ],
+                default="none",
+                help_text="Metodo de amortizacion de la reforma.",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='investmentassetevent',
-            name='event_type',
-            field=models.CharField(choices=[('contribution', 'Aportación'), ('withdrawal', 'Retirada'), ('fee', 'Comisión'), ('passive_income', 'Rendimiento')], max_length=24),
+            model_name="investmentassetevent",
+            name="event_type",
+            field=models.CharField(
+                choices=[
+                    ("contribution", "Aportación"),
+                    ("withdrawal", "Retirada"),
+                    ("fee", "Comisión"),
+                    ("passive_income", "Rendimiento"),
+                ],
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='liabilityevent',
-            name='event_type',
-            field=models.CharField(choices=[('charge', 'Cargo'), ('payment', 'Pago'), ('fee', 'Comisión'), ('interest', 'Interés'), ('adjustment', 'Ajuste')], max_length=16),
+            model_name="liabilityevent",
+            name="event_type",
+            field=models.CharField(
+                choices=[
+                    ("charge", "Cargo"),
+                    ("payment", "Pago"),
+                    ("fee", "Comisión"),
+                    ("interest", "Interés"),
+                    ("adjustment", "Ajuste"),
+                ],
+                max_length=16,
+            ),
         ),
         migrations.AlterField(
-            model_name='liquidityassetevent',
-            name='event_type',
-            field=models.CharField(choices=[('inflow', 'Entrada'), ('outflow', 'Salida'), ('fee', 'Comisión'), ('interest', 'Interés')], max_length=16),
+            model_name="liquidityassetevent",
+            name="event_type",
+            field=models.CharField(
+                choices=[
+                    ("inflow", "Entrada"),
+                    ("outflow", "Salida"),
+                    ("fee", "Comisión"),
+                    ("interest", "Interés"),
+                ],
+                max_length=16,
+            ),
         ),
     ]

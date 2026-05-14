@@ -6,7 +6,7 @@ type PositionRow = {
   category: string;
 };
 
-type TimelinePreset = '1m' | '3m' | '6m' | '1a' | 'all';
+type TimelinePreset = '1m' | '3m' | '6m' | '1a' | '5a' | 'all';
 
 type StoreLike = {
   positionTimeline: unknown;

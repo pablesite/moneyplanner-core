@@ -90,12 +90,16 @@ const showValueDate = ref(false);
 const debtInterestManualOverride = ref(false);
 
 function decimalsForCurrency(currency?: string): number {
-  const code = String(currency ?? '').trim().toUpperCase();
+  const code = String(currency ?? '')
+    .trim()
+    .toUpperCase();
   return code === 'BTC' || code === 'ETH' ? 8 : 2;
 }
 
 function parseDecimal(raw: string): number | null {
-  const normalized = String(raw ?? '').replace(',', '.').trim();
+  const normalized = String(raw ?? '')
+    .replace(',', '.')
+    .trim();
   if (!normalized) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
@@ -327,7 +331,8 @@ const editMainAccountGroups = computed(() => {
         <p class="ui-accounting-balance-feedback">
           <template v-if="editRevaluationCurrentBalance != null">
             Saldo actual:
-            <strong>{{ editRevaluationCurrentBalance.toFixed(2) }}</strong>.
+            <strong>{{ editRevaluationCurrentBalance.toFixed(2) }}</strong
+            >.
             <template v-if="page.editTransactionForm.amount.trim()">
               Revalorizacion:
               <strong
@@ -339,7 +344,8 @@ const editMainAccountGroups = computed(() => {
                       : ''
                 "
               >
-                {{ Number(page.editTransactionForm.amount) >= 0 ? '+' : '' }}{{ page.editTransactionForm.amount }}
+                {{ Number(page.editTransactionForm.amount) >= 0 ? '+' : ''
+                }}{{ page.editTransactionForm.amount }}
               </strong>
             </template>
           </template>
@@ -396,10 +402,9 @@ const editMainAccountGroups = computed(() => {
             <select v-model="page.editTransactionForm.account_id" class="select" required>
               <option :value="null">Seleccionar</option>
               <optgroup
-                v-for="group in
-                  isInvestmentReinvestment
-                    ? groupAndSortAccounts(page.editInvestmentOriginOptions)
-                    : editLiquidityGroups"
+                v-for="group in isInvestmentReinvestment
+                  ? groupAndSortAccounts(page.editInvestmentOriginOptions)
+                  : editLiquidityGroups"
                 :key="group.key"
                 :label="group.label"
               >
@@ -615,7 +620,8 @@ const editMainAccountGroups = computed(() => {
       >
         <template v-if="editAdjustmentCurrentBalance != null">
           Saldo actual:
-          <strong>{{ editAdjustmentCurrentBalance.toFixed(2) }}</strong>.
+          <strong>{{ editAdjustmentCurrentBalance.toFixed(2) }}</strong
+          >.
           <template v-if="editAdjustmentDelta != null">
             Ajuste calculado:
             <strong
@@ -709,9 +715,9 @@ const editMainAccountGroups = computed(() => {
                   ? 'Inversion multimoneda: informa importe origen e importe destino segun ejecucion real.'
                   : page.editTransactionForm.investment_direction === 'reinvestment'
                     ? 'La reinversion mueve capital entre dos cuentas de inversion sin usar cuenta puente.'
-                  : page.editTransactionForm.investment_direction === 'outflow'
-                    ? 'La desinversion devuelve liquidez al activo de caja.'
-                    : 'El aporte registra el alta en la cuenta de inversion.'
+                    : page.editTransactionForm.investment_direction === 'outflow'
+                      ? 'La desinversion devuelve liquidez al activo de caja.'
+                      : 'El aporte registra el alta en la cuenta de inversion.'
                 : 'Las partidas contables se generan automaticamente.'
           }}
         </p>

@@ -390,7 +390,9 @@ def validate_asset_payload(
             purchase_value=purchase_value,
         )
     if is_periodic_investment and has_contribution_intervals and purchase_value is None:
-        raise DRFValidationError({"amount": ("Requerido para aportacion periodica en inversiones.")})
+        raise DRFValidationError(
+            {"amount": ("Requerido para aportacion periodica en inversiones.")}
+        )
 
     _validate_market_value_override_payload(
         category=category,
@@ -581,7 +583,10 @@ def _get_degressive_remaining_ratio(
 
 
 def _get_effective_accounting_asset_amount_or_none(
-    *, asset: Asset, as_of_date: date, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
 ) -> Decimal | None:
     if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
         return None
@@ -766,7 +771,10 @@ def _cached_latest_valuation(position_cache, asset_id: int, as_of_date: date):
 
 
 def get_effective_asset_amount(
-    *, asset: Asset, as_of_date: date | None = None, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date | None = None,
+    position_cache=None,
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     accounting_amount = _get_effective_accounting_asset_amount_or_none(
@@ -779,21 +787,28 @@ def get_effective_asset_amount(
 
     if asset.category == Asset.Category.INVESTMENTS:
         return _get_effective_investment_asset_amount(
-            asset=asset, as_of_date=ref_date, position_cache=position_cache,
+            asset=asset,
+            as_of_date=ref_date,
+            position_cache=position_cache,
         )
     if asset.category == Asset.Category.CASH:
         return _get_effective_cash_asset_amount(
-            asset=asset, as_of_date=ref_date, position_cache=position_cache,
+            asset=asset,
+            as_of_date=ref_date,
+            position_cache=position_cache,
         )
 
     manual_override = _get_latest_asset_manual_value(
-        asset=asset, as_of_date=ref_date, position_cache=position_cache,
+        asset=asset,
+        as_of_date=ref_date,
+        position_cache=position_cache,
     )
     if manual_override is not None:
         return manual_override
 
-    if asset.category == Asset.Category.INVESTMENTS and _can_apply_periodic_investment_to_effective_amount(
-        asset=asset
+    if (
+        asset.category == Asset.Category.INVESTMENTS
+        and _can_apply_periodic_investment_to_effective_amount(asset=asset)
     ):
         accrued_contributions = sum(
             installment
@@ -894,7 +909,10 @@ def get_effective_asset_amount(
 
 
 def _get_effective_investment_asset_amount(
-    *, asset: Asset, as_of_date: date, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
 ) -> Decimal:
     anchor_date = None
     anchor_value = Decimal(asset.amount)
@@ -942,7 +960,10 @@ def _get_effective_investment_asset_amount(
 
 
 def _get_effective_cash_asset_amount(
-    *, asset: Asset, as_of_date: date, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
 ) -> Decimal:
     anchor_date = None
     anchor_value = Decimal(asset.amount)
@@ -956,7 +977,9 @@ def _get_effective_cash_asset_amount(
             .first()
         )
     latest_checkin = _get_latest_liquidity_checkin(
-        asset=asset, as_of_date=as_of_date, position_cache=position_cache,
+        asset=asset,
+        as_of_date=as_of_date,
+        position_cache=position_cache,
     )
     latest_manual_date = latest_manual.valuation_date if latest_manual is not None else None
     latest_checkin_date = _get_liquidity_checkin_effective_date(latest_checkin)
@@ -980,7 +1003,10 @@ def _get_effective_cash_asset_amount(
 
 
 def _get_latest_asset_manual_value(
-    *, asset: Asset, as_of_date: date, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
 ) -> Decimal | None:
     if position_cache is not None:
         valuation = _cached_latest_valuation(position_cache, asset.id, as_of_date)
@@ -996,7 +1022,9 @@ def _get_latest_asset_manual_value(
     checkin_date = None
     if asset.category == Asset.Category.CASH:
         liquidity_checkin = _get_latest_liquidity_checkin(
-            asset=asset, as_of_date=as_of_date, position_cache=position_cache,
+            asset=asset,
+            as_of_date=as_of_date,
+            position_cache=position_cache,
         )
         checkin_date = _get_liquidity_checkin_effective_date(liquidity_checkin)
 
@@ -1099,7 +1127,8 @@ def get_investment_asset_events_delta(
     if position_cache is not None:
         all_events = position_cache.investment_events.get(asset.id, [])
         events = [
-            e for e in all_events
+            e
+            for e in all_events
             if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
         ]
     else:
@@ -1135,7 +1164,8 @@ def get_liquidity_asset_events_delta(
     if position_cache is not None:
         all_events = position_cache.liquidity_events.get(asset.id, [])
         events = [
-            e for e in all_events
+            e
+            for e in all_events
             if e.event_date <= ref_date and (from_date is None or e.event_date > from_date)
         ]
     else:
@@ -1176,7 +1206,10 @@ def _get_periodic_investment_delta_since_anchor(
 
 
 def _get_latest_liquidity_checkin(
-    *, asset: Asset, as_of_date: date, position_cache=None,
+    *,
+    asset: Asset,
+    as_of_date: date,
+    position_cache=None,
 ) -> LiquidityMonthlyCheckin | None:
     if position_cache is not None:
         rows = position_cache.liquidity_checkins.get(asset.id, [])

@@ -166,11 +166,7 @@ defineProps<{
       </article>
     </div>
     <div v-if="archivedWorkspaceItems.length > 0" class="ui-nw-archived-section">
-      <button
-        class="ui-nw-archived-toggle"
-        type="button"
-        @click="showArchived = !showArchived"
-      >
+      <button class="ui-nw-archived-toggle" type="button" @click="showArchived = !showArchived">
         <span>Archivados ({{ archivedWorkspaceItems.length }})</span>
         <span>{{ showArchived ? '▲' : '▼' }}</span>
       </button>
