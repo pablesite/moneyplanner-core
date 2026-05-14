@@ -33,6 +33,21 @@ from .services import (
 from .services_start_dates import sync_position_start_dates_for_transaction
 
 
+def _context_user(context: dict):
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None
+    return user
+
+
+def _scope_queryset_to_context_user(*, context: dict, base_queryset):
+    user = _context_user(context)
+    if user is None:
+        return base_queryset.none()
+    return base_queryset.filter(user=user)
+
+
 class LedgerAccountSerializer(serializers.ModelSerializer):
     asset_id = serializers.PrimaryKeyRelatedField(
         source="asset",
@@ -67,6 +82,18 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "display_name", "current_balance", "created_at", "updated_at"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["asset_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Asset.objects.all(),
+        )
+        fields["liability_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Liability.objects.all(),
+        )
+        return fields
 
     def get_current_balance(self, obj: LedgerAccount) -> str:
         return str(
@@ -202,6 +229,30 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "account_name", "amount_base"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["account_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=LedgerAccount.objects.all(),
+        )
+        fields["annual_income_entry_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=AnnualIncomeEntry.objects.all(),
+        )
+        fields["annual_expense_entry_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=AnnualExpenseEntry.objects.all(),
+        )
+        fields["asset_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Asset.objects.all(),
+        )
+        fields["liability_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Liability.objects.all(),
+        )
+        return fields
 
     def get_amount_base(self, obj: LedgerEntry) -> str:
         base_currency = self.context.get("base_currency")
@@ -349,6 +400,14 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["ownership_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Ownership.objects.all(),
+        )
+        return fields
 
     def get_activity_kind(self, obj: LedgerTransaction) -> str:
         return classify_transaction_activity_kind(obj)
@@ -676,6 +735,30 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         choices=LedgerTransaction.Origin.choices,
         default=LedgerTransaction.Origin.MANUAL,
     )
+
+    def get_fields(self):
+        fields = super().get_fields()
+        ledger_accounts = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=LedgerAccount.objects.select_related("asset", "liability"),
+        )
+        fields["account_id"].queryset = ledger_accounts.select_related("asset")
+        fields["counterparty_account_id"].queryset = ledger_accounts
+        fields["liability_account_id"].queryset = ledger_accounts.select_related("liability")
+        fields["interest_account_id"].queryset = ledger_accounts.select_related("liability")
+        fields["ownership_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=Ownership.objects.all(),
+        )
+        fields["annual_income_entry_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=AnnualIncomeEntry.objects.all(),
+        )
+        fields["annual_expense_entry_id"].queryset = _scope_queryset_to_context_user(
+            context=self.context,
+            base_queryset=AnnualExpenseEntry.objects.all(),
+        )
+        return fields
 
     def validate(self, attrs: dict) -> dict:
         request = self.context["request"]
