@@ -29,7 +29,7 @@ Convenciones:
 - ✅ Estilo de evolución ejecutada mensual revisado.
 - ✅ Interpretación del estado financiero simplificada.
 - ✅ UX general mejorada (barras de progreso, estado del presupuesto).
-- ✅ Cierre v1 aplicado (2026-05-14): summaries mensuales como contrato canónico para barras/cobertura, precedencia ledger sobre fallback legacy/checkin, modales de líneas con errores backend persistentes y header alineado con Patrimonio.
+- ✅ Cierre v1 aplicado y validado manualmente (2026-05-14): summaries mensuales como contrato canónico para barras/cobertura, precedencia ledger sobre fallback legacy/checkin, modales de líneas con errores backend persistentes y header alineado con Patrimonio.
 
 ### Para v2
 
