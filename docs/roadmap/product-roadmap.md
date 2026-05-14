@@ -39,7 +39,7 @@ Convenciones:
 
 ## CIERRE DEL MES / AÑO
 
-> Backend modo dual implementado (2026-03-19). Frontend integrado (2026-03-19) — spec: `core/docs/tasks/monthly-close/terminados/dual-mode-frontend.md`.
+> Backend modo dual implementado (2026-03-19). Frontend integrado (2026-03-19) — spec: `core/docs/tasks/monthly-close/terminados/dual-mode-frontend.md`. Revisión manual v1 completada (2026-05-14).
 
 ### Modos de cierre — decisiones tomadas
 - **Sin selección explícita de modo.** El sistema detecta automáticamente cobertura (ledger / checkin / ninguna) y adapta lo que muestra y sugiere.
