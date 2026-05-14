@@ -44,10 +44,82 @@
   font-weight: 700;
 }
 
+.ui-budget-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ui-budget-title-row .ui-budget-title {
+  margin: 0;
+}
+
 .ui-budget-subtitle {
   margin: 6px 0 0;
   color: rgba(255, 255, 255, 0.7);
   max-width: 68ch;
+}
+
+.ui-budget-hero-legend-dot-income {
+  background: rgba(52, 211, 153, 0.92);
+}
+
+.ui-budget-hero-legend-dot-expense {
+  background: rgba(251, 113, 133, 0.92);
+}
+
+.ui-budget-hero-legend-dot-balance {
+  background: rgba(110, 209, 255, 0.92);
+}
+
+.ui-budget-hero .ui-nw-hero-skeleton {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+}
+
+.ui-budget-hero .ui-nw-hero-skeleton-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-budget-hero .ui-nw-hero-skeleton-bar {
+  display: block;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255, 255, 255, 0.05) 30%,
+      rgba(76, 195, 255, 0.24) 50%,
+      rgba(255, 255, 255, 0.05) 70%
+    ),
+    rgba(255, 255, 255, 0.03);
+  background-size: 220% 100%;
+  animation: ui-budget-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.ui-budget-hero .ui-nw-hero-skeleton-bar-value {
+  height: 56px;
+  width: min(360px, 100%);
+}
+
+.ui-budget-hero .ui-nw-hero-skeleton-bar-delta {
+  height: 24px;
+  width: min(240px, 78%);
+}
+
+@keyframes ui-budget-skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -20% 0;
+  }
 }
 
 .ui-budget-toolbar {

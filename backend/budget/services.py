@@ -333,10 +333,16 @@ def _build_ledger_monthly_execution_maps(
             continue
         # CREDIT entries on non-asset accounts classified as expense = investment purchase source
         # (source account credited to fund asset acquisition). Treat as positive so amount counts.
-        if row.side != positive_side and row.asset_id is None and flow_family == LedgerEntry.FlowFamily.EXPENSE:
+        if (
+            row.side != positive_side
+            and row.asset_id is None
+            and flow_family == LedgerEntry.FlowFamily.EXPENSE
+        ):
             signed_amount = Decimal(row.amount)
         else:
-            signed_amount = Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+            signed_amount = (
+                Decimal(row.amount) if row.side == positive_side else -Decimal(row.amount)
+            )
         signed_amount = _convert_to_base(
             signed_amount,
             row.currency or "EUR",
@@ -673,8 +679,15 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         month = cast(int, slot["month"])
         entry_ids = cast(list[int], slot["entry_ids"])
 
-        # If any entry in this slot has a user-explicit override, the sum of those
-        # overrides becomes the authoritative total for the slot (replaces ledger).
+        ledger_amount = categorized_ledger_by_key.get(slot_key)
+        if ledger_amount is not None:
+            ledger_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += ledger_amount
+            executed_budgeted_by_slot_month[slot_key] += ledger_amount
+            continue
+
+        # Manual checkins are only authoritative while the slot has no categorized ledger.
         override_total = Decimal("0.00")
         any_override = False
         for entry_id in entry_ids:
@@ -689,13 +702,6 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             executed_budgeted_by_slot_month[slot_key] += override_total
             continue
 
-        ledger_amount = categorized_ledger_by_key.get(slot_key)
-        if ledger_amount is not None:
-            ledger_entries_by_month[month] += len(entry_ids)
-            confirmed_entries_by_month[month] += len(entry_ids)
-            executed_by_month[month] += ledger_amount
-            executed_budgeted_by_slot_month[slot_key] += ledger_amount
-            continue
         for entry_id in entry_ids:
             legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
             if legacy_ledger_amount is not None:
@@ -951,7 +957,15 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         month = cast(int, slot["month"])
         entry_ids = cast(list[int], slot["entry_ids"])
 
-        # For single-entry slots: a user-explicit override takes priority over ledger data.
+        ledger_amount = categorized_ledger_by_key.get(slot_key)
+        if ledger_amount is not None:
+            ledger_entries_by_month[month] += len(entry_ids)
+            confirmed_entries_by_month[month] += len(entry_ids)
+            executed_by_month[month] += ledger_amount
+            executed_budgeted_by_slot_month[slot_key] += ledger_amount
+            continue
+
+        # Manual checkins are only authoritative while the slot has no categorized ledger.
         override_total = Decimal("0.00")
         any_override = False
         for entry_id in entry_ids:
@@ -966,13 +980,6 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             executed_budgeted_by_slot_month[slot_key] += override_total
             continue
 
-        ledger_amount = categorized_ledger_by_key.get(slot_key)
-        if ledger_amount is not None:
-            ledger_entries_by_month[month] += len(entry_ids)
-            confirmed_entries_by_month[month] += len(entry_ids)
-            executed_by_month[month] += ledger_amount
-            executed_budgeted_by_slot_month[slot_key] += ledger_amount
-            continue
         for entry_id in entry_ids:
             legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
             if legacy_ledger_amount is not None:

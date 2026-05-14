@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-04-16 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-05-14 | **Versión Core:** 0.23.2
 
 ---
 
@@ -17,7 +17,6 @@ Estado actual de funcionalidades por área. Actualizar cuando cambie el estado d
 | Módulo | Tipo | Descripción | Spec |
 |--------|------|-------------|------|
 | Cierre mensual | Manual | Implementación automática completada; pendiente pulido manual de detalles UX/operativos para cerrar v1. | Se define durante la revisión. |
-| Presupuesto | Manual | Revisión integral de experiencia de uso y ajustes funcionales para alinear el comportamiento con la v1 objetivo. | Se define durante la revisión. |
 
 ### Siguiente tarea disponible
 
@@ -38,7 +37,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
 | Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Importador MoneyWiz ad-hoc funcional y consolidado; eliminar antes de producción. |
-| Presupuesto — v1 | Alta | 🔄 | UX consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
+| Presupuesto — v1 | Alta | ✅ | Cierre funcional aplicado: summaries mensuales canónicos para ejecución/cobertura, precedencia ledger sobre fallback legacy/checkin, errores backend dentro de modales de líneas y header alineado con Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ⚪ | Revisión completa de modales de creación/edición de activos y pasivos. Cierra v1 del módulo. |
 | Cierre mensual — modo dual | Alta | 🔄 | Implementación automática completada (backend+frontend); pendiente pulido manual y revisión operativa para cierre v1. |
 | Informe Fiscal Crypto | Media | ⚪ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. |
@@ -59,7 +58,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Área | Estado | Notas |
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez) | 🔄 | Base completa. Snapshots eliminados. Modal de revisión de gastos generados por activos de inversión añadido. Intervalos múltiples de aportación periódica completados (phases 1-2 archivadas). Gráficas (timeline + donut) y KPIs validados. Pendiente v1: revisión completa de modales de creación/edición de activos y pasivos. |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | 🔄 | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. UX general consolidada. Pendiente v1: consistencia de cálculos de barras (tras revisión de movimientos), modales de líneas de presupuesto y ajuste de header al estilo Patrimonio. |
+| Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. Los summaries mensuales son contrato canónico para ejecución/cobertura; modales de líneas muestran errores backend sin perder formulario; header alineado con Patrimonio. |
 | Cierre mensual | 🔄 | Integrado con budget y accounting; en pulido manual para cierre v1. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |

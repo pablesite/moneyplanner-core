@@ -168,8 +168,8 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     <div class="ui-budget-hero-header">
       <div>
         <p class="ui-pro-kicker">Cierre mensual</p>
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
-          <h1 class="ui-budget-title" style="margin: 0">Flujo de cierre mensual</h1>
+        <div class="ui-budget-title-row">
+          <h1 class="ui-budget-title">Flujo de cierre mensual</h1>
           <span
             v-if="closeStatus"
             class="ui-monthly-close-status-badge"
@@ -233,15 +233,15 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
             </div>
             <div class="nw-donut-legend">
               <span class="nw-donut-legend-item">
-                <span class="nw-donut-legend-dot" :style="{ background: INCOME_COLOR }" />
+                <span class="nw-donut-legend-dot ui-budget-hero-legend-dot-income" />
                 <span class="nw-donut-legend-label">Ingresos</span>
               </span>
               <span class="nw-donut-legend-item">
-                <span class="nw-donut-legend-dot" :style="{ background: EXPENSE_COLOR }" />
+                <span class="nw-donut-legend-dot ui-budget-hero-legend-dot-expense" />
                 <span class="nw-donut-legend-label">Gastos</span>
               </span>
               <span class="nw-donut-legend-item">
-                <span class="nw-donut-legend-dot" :style="{ background: BALANCE_COLOR }" />
+                <span class="nw-donut-legend-dot ui-budget-hero-legend-dot-balance" />
                 <span class="nw-donut-legend-label">Saldo</span>
               </span>
             </div>
@@ -362,18 +362,31 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
         </div>
 
         <div class="ui-hero-summary-body">
-          <div class="ui-hero-value">{{ formatMoney(plannedBalanceTotal) }} €</div>
-          <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
-            <div class="ui-hero-stat ui-hero-stat-assets">
-              <span class="ui-hero-stat-label">Ingresos previstos</span>
-              <strong class="ui-hero-stat-value"> {{ formatMoney(plannedIncomeTotal) }} € </strong>
-            </div>
-
-            <div class="ui-hero-stat ui-hero-stat-liabilities">
-              <span class="ui-hero-stat-label">Gastos previstos</span>
-              <strong class="ui-hero-stat-value"> {{ formatMoney(plannedExpenseTotal) }} € </strong>
+          <div v-if="isLoading" class="ui-nw-hero-skeleton" aria-hidden="true">
+            <span class="ui-nw-hero-skeleton-bar ui-nw-hero-skeleton-bar-value"></span>
+            <span class="ui-nw-hero-skeleton-bar ui-nw-hero-skeleton-bar-delta"></span>
+            <div class="ui-nw-hero-skeleton-grid">
+              <span v-for="idx in 4" :key="idx" class="ui-nw-hero-skeleton-bar"></span>
             </div>
           </div>
+          <template v-else>
+            <div class="ui-hero-value">{{ formatMoney(plannedBalanceTotal) }} €</div>
+            <div class="ui-hero-bottom-row ui-hero-bottom-row-4">
+              <div class="ui-hero-stat ui-hero-stat-assets">
+                <span class="ui-hero-stat-label">Ingresos previstos</span>
+                <strong class="ui-hero-stat-value">
+                  {{ formatMoney(plannedIncomeTotal) }} €
+                </strong>
+              </div>
+
+              <div class="ui-hero-stat ui-hero-stat-liabilities">
+                <span class="ui-hero-stat-label">Gastos previstos</span>
+                <strong class="ui-hero-stat-value">
+                  {{ formatMoney(plannedExpenseTotal) }} €
+                </strong>
+              </div>
+            </div>
+          </template>
         </div>
       </article>
     </div>

@@ -34,6 +34,7 @@ const props = withDefaults(
     title: string;
     form: AnnualEntryModalFormModel;
     loading?: boolean;
+    error?: string | null;
     submitLabel: string;
     categoryOptions: ReadonlyArray<SelectOption>;
     subcategoryOptions: ReadonlyArray<SelectOption>;
@@ -60,6 +61,7 @@ const props = withDefaults(
   }>(),
   {
     loading: false,
+    error: null,
     showOwnerField: false,
     showCashflowRoleField: true,
     showEventGroupField: true,
@@ -241,6 +243,10 @@ const emit = defineEmits<{
           emit('patch', { notes: String(($event.target as HTMLTextAreaElement).value ?? '') })
         "
       />
+
+      <div v-if="error" class="ui-state-block ui-state-error md:col-span-2" role="alert">
+        {{ error }}
+      </div>
 
       <div class="actions md:col-span-2">
         <button class="btn btn-ghost" type="button" @click="emit('close')">Cancelar</button>

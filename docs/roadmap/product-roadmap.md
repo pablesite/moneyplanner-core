@@ -29,12 +29,11 @@ Convenciones:
 - ✅ Estilo de evolución ejecutada mensual revisado.
 - ✅ Interpretación del estado financiero simplificada.
 - ✅ UX general mejorada (barras de progreso, estado del presupuesto).
+- ✅ Cierre v1 aplicado (2026-05-14): summaries mensuales como contrato canónico para barras/cobertura, precedencia ledger sobre fallback legacy/checkin, modales de líneas con errores backend persistentes y header alineado con Patrimonio.
 
-### Para v1
+### Para v2
 
-- **Revisión de consistencia de los cálculos de las barras.** Supeditado a haber revisado todos los movimientos de contabilidad.
-- **Revisión a fondo de los modales de crear/editar líneas de presupuesto.** Coherencia visual, validaciones y flujo.
-- **Ajuste fino del header** para que sea exactamente igual al de la vista de Patrimonio.
+- **Asistente de revisión anual del presupuesto.** Detectar automáticamente desviaciones recurrentes y proponer ajustes por categoría/subcategoría con confirmación manual.
 
 ---
 

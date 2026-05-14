@@ -526,6 +526,36 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(subcategories["social_benefits"]["has_budgeted_line"], False)
         self.assertEqual(subcategories["social_benefits"]["executed_unbudgeted_total"], "45.00")
 
+    def test_income_summary_groups_multiple_budget_lines_in_same_subcategory_slot(self):
+        for name in ("Nomina", "Complemento"):
+            AnnualIncomeEntry.objects.create(
+                user=self.user,
+                name=name,
+                category="salary",
+                subcategory="employee_salary",
+                amount_annual=Decimal("1200.00"),
+                fiscal_year=2026,
+                currency="EUR",
+                is_active=True,
+            )
+        self._post_income_entry(
+            amount="1800.00",
+            month=1,
+            category_key="salary",
+            subcategory_key="employee_salary",
+        )
+
+        summary = build_income_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        month = next(row for row in summary["months"] if row["month"] == 1)
+        self.assertEqual(summary["planned_total"], "2400.00")
+        self.assertEqual(summary["executed_total"], "1800.00")
+        self.assertEqual(summary["executed_budgeted_total"], "1800.00")
+        self.assertEqual(summary["executed_unbudgeted_total"], "0.00")
+        self.assertEqual(month["planned"], "200.00")
+        self.assertEqual(month["executed_total"], "1800.00")
+        self.assertEqual(month["ledger_confirmed"], 2)
+        self.assertEqual(month["checkins_expected"], 2)
+
     def test_expense_summary_reports_mixed_coverage_with_ledger_and_fallback(self):
         expense = AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -558,6 +588,66 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(months[2]["coverage_mode"], "checkin")
         self.assertEqual(summary["months_with_ledger"], 1)
         self.assertEqual(summary["months_with_fallback"], 1)
+
+    def test_expense_summary_ignores_estimated_checkin_when_ledger_exists(self):
+        expense = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gastos hogar",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        AnnualExpenseMonthlyCheckin.objects.create(
+            user=self.user,
+            annual_expense_entry=expense,
+            fiscal_year=2026,
+            month=1,
+            status=AnnualExpenseMonthlyCheckin.Status.ESTIMATED,
+            executed_amount=Decimal("999.00"),
+        )
+        self._post_expense_entry(
+            amount="110.00",
+            month=1,
+            category_key="consumption_expenses",
+            subcategory_key="living_expenses",
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        month = next(row for row in summary["months"] if row["month"] == 1)
+        self.assertEqual(summary["coverage_mode"], "ledger")
+        self.assertEqual(month["executed_total"], "110.00")
+        self.assertEqual(month["ledger_confirmed"], 1)
+        self.assertEqual(month["fallback_confirmed"], 0)
+
+    def test_expense_summary_manual_checkin_is_fallback_when_slot_has_no_ledger(self):
+        expense = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gastos hogar",
+            category="consumption_expenses",
+            subcategory="living_expenses",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+            is_active=True,
+        )
+        AnnualExpenseMonthlyCheckin.objects.create(
+            user=self.user,
+            annual_expense_entry=expense,
+            fiscal_year=2026,
+            month=1,
+            status=AnnualExpenseMonthlyCheckin.Status.ADJUSTED,
+            executed_amount=Decimal("90.00"),
+        )
+
+        summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
+        month = next(row for row in summary["months"] if row["month"] == 1)
+        self.assertEqual(summary["coverage_mode"], "checkin")
+        self.assertEqual(month["executed_total"], "90.00")
+        self.assertEqual(month["ledger_confirmed"], 0)
+        self.assertEqual(month["fallback_confirmed"], 1)
 
     def test_expense_summary_includes_unbudgeted_subcategory_within_budgeted_category(self):
         AnnualExpenseEntry.objects.create(
@@ -810,7 +900,9 @@ class BudgetServicesTests(TestCase):
         }
         investments = categories["financial_investments"]
         subcategories = {row["subcategory"]: row for row in investments["subcategories"]}
-        self.assertEqual(subcategories["deposits_fixed_income"]["executed_unbudgeted_total"], "250.00")
+        self.assertEqual(
+            subcategories["deposits_fixed_income"]["executed_unbudgeted_total"], "250.00"
+        )
         self.assertNotIn("other_financial_investments", subcategories)
 
     def test_expense_summary_handles_user_without_fiscal_year_entries(self):
@@ -938,7 +1030,9 @@ class BudgetServicesTests(TestCase):
         )
         summary = build_expense_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
         breakdown = summary["expense_execution_breakdown"]
-        fi_cat = next(c for c in breakdown["categories"] if c["category"] == "financial_investments")
+        fi_cat = next(
+            c for c in breakdown["categories"] if c["category"] == "financial_investments"
+        )
         crypto_sub = next(s for s in fi_cat["subcategories"] if s["subcategory"] == "crypto")
         april = next(m for m in crypto_sub["months"] if m["month"] == 4)
         self.assertEqual(Decimal(april["executed_budgeted"]), Decimal("23.75"))  # 25 USD * 0.95
