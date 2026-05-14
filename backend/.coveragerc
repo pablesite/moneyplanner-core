@@ -2,8 +2,12 @@
 branch = True
 source =
     accounts
+    accounting
+    budget
     net_worth
     core
+    memberships
+    config
 
 [report]
 skip_covered = True
