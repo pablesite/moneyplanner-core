@@ -1,0 +1,87 @@
+from datetime import date
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+from accounting.services_summaries import build_monthly_accounting_summary
+
+
+class AccountingSummaryPerformanceTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="acct_perf_user",
+            password="pass1234",
+        )
+        self.cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        self.income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        self.expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+
+    def test_monthly_summary_uses_stable_query_count_with_high_entry_volume(self):
+        transactions = [
+            LedgerTransaction(
+                user=self.user,
+                booking_date=date(2026, (idx % 12) + 1, 15),
+                value_date=date(2026, (idx % 12) + 1, 15),
+                description=f"Movimiento {idx}",
+            )
+            for idx in range(2400)
+        ]
+        LedgerTransaction.objects.bulk_create(transactions)
+        transactions = list(LedgerTransaction.objects.filter(user=self.user).order_by("id"))
+        entries = []
+        amount = Decimal("10.00")
+        for idx, transaction in enumerate(transactions):
+            is_income = idx % 2 == 0
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.cash_account,
+                    side=LedgerEntry.Side.DEBIT if is_income else LedgerEntry.Side.CREDIT,
+                    amount=amount,
+                    currency="EUR",
+                )
+            )
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.income_account if is_income else self.expense_account,
+                    side=LedgerEntry.Side.CREDIT if is_income else LedgerEntry.Side.DEBIT,
+                    amount=amount,
+                    currency="EUR",
+                    flow_family=LedgerEntry.FlowFamily.INCOME
+                    if is_income
+                    else LedgerEntry.FlowFamily.EXPENSE,
+                    category_key="salary" if is_income else "consumption_expenses",
+                    subcategory_key="employee_salary" if is_income else "living_expenses",
+                )
+            )
+        LedgerEntry.objects.bulk_create(entries, batch_size=1000)
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            summary = build_monthly_accounting_summary(user_id=self.user.id, fiscal_year=2026)
+
+        self.assertLessEqual(len(captured_queries), 2)
+        self.assertEqual(len(summary["months"]), 12)
+        self.assertEqual(summary["months"][0]["income_total"], "2000.00")
+        self.assertEqual(summary["months"][0]["uncategorized_total"], "2000.00")
+        self.assertEqual(summary["months"][1]["expense_total"], "2000.00")
+        self.assertEqual(summary["months"][1]["uncategorized_total"], "2000.00")
