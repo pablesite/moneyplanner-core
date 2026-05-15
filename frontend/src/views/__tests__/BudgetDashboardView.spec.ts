@@ -327,6 +327,7 @@ function mountBudgetView() {
 
 describe('BudgetDashboardView', () => {
   beforeEach(() => {
+    document.body.innerHTML = '';
     mockCoreApiGet.mockReset();
     mockCoreApiPost.mockReset();
     mockCoreApiPatch.mockReset();
@@ -1310,9 +1311,11 @@ describe('BudgetDashboardView', () => {
     await toggleSuggestions?.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Sugerencias desde histórico del libro contable');
-    expect(wrapper.text()).toContain('Cerrar');
-    expect(wrapper.text()).toContain('Sin cobertura del libro contable por subcategoría');
+    const modalText = document.body.textContent ?? '';
+
+    expect(modalText).toContain('Sugerencias desde histórico del libro contable');
+    expect(modalText).toContain('Cerrar');
+    expect(modalText).toContain('Sin cobertura del libro contable por subcategoría');
   });
 
   it('shows ledger-backed YTD execution in annual expense detail', async () => {

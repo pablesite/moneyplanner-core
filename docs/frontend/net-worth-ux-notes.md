@@ -89,6 +89,10 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 3. Each interval captures `start_date`, optional `end_date`, `amount`, `frequency`, and `currency`.
 4. Saving sends `contribution_intervals` as a nested list to backend; submitting an empty list means "sin aportaciones periódicas previstas".
 
+## Asset and liability modals
+1. Creation and edit modals for assets and liabilities have been reviewed as part of the Patrimonio v1 closure.
+2. They use the shared `BaseModal` shell and the domain `ItemForm`, preserving consistent close behavior, scroll handling, validation display, and action placement.
+
 ## UX principles of the current view
 1. Keep the main financial picture visible at the top.
 2. Let the user move from summary to category to position without losing context.

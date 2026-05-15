@@ -10,6 +10,7 @@ import {
   type ChartOptions,
   type Plugin,
 } from 'chart.js';
+import { BaseModal } from '@/domains/ui';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -391,33 +392,21 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
       </article>
     </div>
 
-    <div
-      v-if="isSuggestionsModalOpen"
-      class="ui-budget-suggestions-modal-backdrop"
-      @click.self="isSuggestionsModalOpen = false"
+    <BaseModal
+      :open="isSuggestionsModalOpen"
+      title="Sugerencias desde histórico del libro contable"
+      panel-class="ui-budget-suggestions-modal-panel"
+      @close="isSuggestionsModalOpen = false"
     >
-      <section
-        class="ui-budget-suggestions-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="budget-suggestions-title"
-      >
+      <section class="ui-budget-suggestions-modal">
         <header class="ui-budget-suggestions-modal-head">
           <div>
-            <h2 id="budget-suggestions-title">Sugerencias desde histórico del libro contable</h2>
             <p>
               Referencia orientativa para plan anual. El presupuesto sigue siendo editable y manual.
             </p>
           </div>
           <div class="ui-budget-suggestions-modal-actions">
             <span class="ui-budget-pill">{{ observedSuggestionMonths }} meses observados</span>
-            <button
-              type="button"
-              class="ui-budget-suggestions-close-btn"
-              @click="isSuggestionsModalOpen = false"
-            >
-              Cerrar
-            </button>
           </div>
         </header>
 
@@ -511,6 +500,6 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
           </div>
         </div>
       </section>
-    </div>
+    </BaseModal>
   </section>
 </template>
