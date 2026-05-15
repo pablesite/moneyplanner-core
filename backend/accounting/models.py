@@ -212,6 +212,7 @@ class LedgerEntry(models.Model):
         indexes = [
             models.Index(fields=["transaction"], name="acct_entry_tx_idx"),
             models.Index(fields=["account"], name="acct_entry_acc_idx"),
+            models.Index(fields=["account", "transaction"], name="acct_entry_acc_tx_idx"),
             models.Index(fields=["currency"], name="acct_entry_currency_idx"),
             models.Index(fields=["flow_family"], name="acct_entry_flow_idx"),
             models.Index(

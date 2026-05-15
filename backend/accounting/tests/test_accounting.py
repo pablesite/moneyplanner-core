@@ -1796,6 +1796,15 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(by_account.data["total_count"], 1)
         self.assertEqual(by_account.data["results"][0]["description"], "Transferencia ahorro")
 
+        by_account_name_query = self.client.get(
+            "/api/accounting/transactions/?query=Cuenta%20ahorro"
+        )
+        self.assertEqual(by_account_name_query.status_code, status.HTTP_200_OK)
+        self.assertEqual(by_account_name_query.data["total_count"], 1)
+        self.assertEqual(
+            by_account_name_query.data["results"][0]["description"], "Transferencia ahorro"
+        )
+
     def test_transactions_list_kind_investment_purchase_excludes_revaluation(self):
         investment_asset = Asset.objects.create(
             user=self.user,
