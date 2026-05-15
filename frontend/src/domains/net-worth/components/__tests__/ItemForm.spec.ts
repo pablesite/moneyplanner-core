@@ -132,7 +132,7 @@ describe('ItemForm (saas)', () => {
 
     const amortizationMethodSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Sin amortizacion') && s.text().includes('Lineal'))!;
+      .find((s) => s.text().includes('Sin amortización') && s.text().includes('Lineal'))!;
     await amortizationMethodSelect.setValue('straight_line');
     await wrapper.find('input[placeholder="Ej: 10"]').setValue('4');
 
@@ -164,7 +164,7 @@ describe('ItemForm (saas)', () => {
     await selects[0]!.setValue('furnishings');
     await selects[1]!.setValue('sports_equipment');
 
-    expect(wrapper.text()).toContain('decreciente + residual por subcategoria');
+    expect(wrapper.text()).toContain('decreciente + residual por subcategoría');
     expect(wrapper.text()).toContain('suelo residual del 20%');
   });
 
@@ -203,10 +203,10 @@ describe('ItemForm (saas)', () => {
 
     const amortizationMethodSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Sin amortizacion (joyeria)'))!;
+      .find((s) => s.text().includes('Sin amortización (joyería)'))!;
     expect(amortizationMethodSelect.text()).not.toContain('Lineal');
     expect(amortizationMethodSelect.text()).not.toContain('Manual');
-    expect(wrapper.text()).toContain("En 'Joyeria' no se aplica amortizacion automatica.");
+    expect(wrapper.text()).toContain("En 'Joyería' no se aplica amortización automática.");
   });
 
   it('submits sports equipment without manual term years', async () => {
@@ -232,7 +232,7 @@ describe('ItemForm (saas)', () => {
 
     const amortizationMethodSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('decreciente + residual por subcategoria'))!;
+      .find((s) => s.text().includes('decreciente + residual por subcategoría'))!;
     await amortizationMethodSelect.setValue('straight_line');
 
     expect(wrapper.text()).not.toContain('Plazo de amortizacion (anos) obligatorio');
@@ -270,7 +270,7 @@ describe('ItemForm (saas)', () => {
     await flushPromises();
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('duracion del deposito');
+    expect(wrapper.text()).toContain('duración del depósito');
 
     const depositTermSelect = wrapper
       .findAll('select')
@@ -333,7 +333,7 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
     await wrapper.find('input[placeholder="Ej: 30"]').setValue('35');
     await wrapper.find('input[placeholder="Ej: 3"]').setValue('4');
@@ -377,7 +377,7 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
 
     await wrapper.find('button.ui-item-form-mini-btn').trigger('click');
@@ -426,13 +426,13 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
     await wrapper.find('button.ui-item-form-mini-btn').trigger('click');
 
     const reformAmortizationSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Sin amortizacion') && s.text().includes('Lineal'))!;
+      .find((s) => s.text().includes('Sin amortización') && s.text().includes('Lineal'))!;
     await reformAmortizationSelect.setValue('straight_line');
 
     const termInput = wrapper.find('input[placeholder="Ej: 10"]');
@@ -466,7 +466,7 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
     await wrapper.find('input[placeholder="Ej: 30"]').setValue('35');
 
@@ -541,7 +541,7 @@ describe('ItemForm (saas)', () => {
     await wrapper.find('input[placeholder="Importe"]').setValue('100000');
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
 
     const landInput = wrapper.find('input[placeholder="Ej: 30"]');
@@ -574,7 +574,7 @@ describe('ItemForm (saas)', () => {
     await wrapper.find('input[placeholder="Importe"]').setValue('100000');
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
 
     const growthInput = wrapper.find('input[placeholder="Ej: 3"]');
@@ -726,7 +726,7 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
     await wrapper.find('input[placeholder="Ej: 30"]').setValue('40');
     await wrapper.find('input[placeholder="Ej: 3"]').setValue('5');
@@ -770,12 +770,12 @@ describe('ItemForm (saas)', () => {
 
     const modelSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Automatica (suelo + construccion)'))!;
+      .find((s) => s.text().includes('Automática (suelo + construcción)'))!;
     await modelSelect.setValue('real_estate_auto');
 
     const profileSelect = wrapper
       .findAll('select')
-      .find((s) => s.text().includes('Dinamico') && s.text().includes('Personalizado'))!;
+      .find((s) => s.text().includes('Dinámico') && s.text().includes('Personalizado'))!;
     expect((profileSelect.element as HTMLSelectElement).value).toBe('dynamic');
     expect((wrapper.find('input[placeholder="Ej: 3"]').element as HTMLInputElement).value).toBe(
       '8',
