@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia';
 import { isCanceledRequestError, toApiErrorMessage } from '@/lib/errors';
-
-let timelineAbortController: AbortController | null = null;
 import { coreAccountingApi } from '@/domains/accounting/api';
 import { coreNetWorthApi, premiumOwnershipApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
@@ -25,6 +23,8 @@ import type {
 export type { Asset, Liability, Ownership, Summary } from '@/domains/net-worth/models';
 
 type OwnershipAwarePayload = NetWorthWritePayload & { ownership_id?: number | null };
+
+let timelineAbortController: AbortController | null = null;
 
 export const useNetWorthStore = defineStore('netWorth', {
   state: () => ({
