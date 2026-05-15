@@ -11,19 +11,7 @@ import type {
   MonthlyAccountingSummary,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
-import { toApiErrorMessage } from '@/lib/errors';
-
-function isCanceledRequestError(error: unknown): boolean {
-  if ((error as { name?: string }).name === 'CanceledError') return true;
-  if ((error as { name?: string }).name === 'AbortError') return true;
-  if ((error as { code?: string }).code === 'ERR_CANCELED') return true;
-  const message = (error as { message?: string }).message;
-  if (typeof message === 'string') {
-    const normalized = message.trim().toLowerCase();
-    if (normalized === 'canceled' || normalized === 'cancelled') return true;
-  }
-  return false;
-}
+import { isCanceledRequestError, toApiErrorMessage } from '@/lib/errors';
 
 export const useAccountingStore = defineStore('accounting', {
   state: () => ({

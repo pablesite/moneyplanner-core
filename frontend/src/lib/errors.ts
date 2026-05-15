@@ -79,6 +79,18 @@ function firstValidationMessage(data: unknown, path: string[] = []): string | nu
   return null;
 }
 
+export function isCanceledRequestError(error: unknown): boolean {
+  if ((error as { name?: string }).name === 'CanceledError') return true;
+  if ((error as { name?: string }).name === 'AbortError') return true;
+  if ((error as { code?: string }).code === 'ERR_CANCELED') return true;
+  const message = (error as { message?: string }).message;
+  if (typeof message === 'string') {
+    const normalized = message.trim().toLowerCase();
+    if (normalized === 'canceled' || normalized === 'cancelled') return true;
+  }
+  return false;
+}
+
 export function toApiErrorMessage(error: unknown): string {
   const code = getApiErrorCode(error);
   const mapped = humanMessageForApiCode(code);

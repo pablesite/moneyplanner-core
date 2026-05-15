@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
-import { toApiErrorMessage } from '@/lib/errors';
+import { isCanceledRequestError, toApiErrorMessage } from '@/lib/errors';
+
+let timelineAbortController: AbortController | null = null;
 import { coreAccountingApi } from '@/domains/accounting/api';
 import { coreNetWorthApi, premiumOwnershipApi } from '@/domains/net-worth/api';
 import { buildByCategoryChart } from '@/domains/net-worth/charts';
@@ -39,7 +41,6 @@ export const useNetWorthStore = defineStore('netWorth', {
     timelineLoading: false as boolean,
     timelineCategoryFilter: null as string | null,
     timelineCategoryFilterType: 'asset' as 'asset' | 'liability',
-    _timelineFetchSeq: 0 as number,
     positionTimeline: null as PositionTimeline | null,
     positionTimelineLoading: false as boolean,
     positionActivityLoading: false as boolean,
@@ -94,22 +95,27 @@ export const useNetWorthStore = defineStore('netWorth', {
       category: string | null = null,
       categoryType: 'asset' | 'liability' = 'asset',
     ) {
+      timelineAbortController?.abort();
+      timelineAbortController = new AbortController();
+      const { signal } = timelineAbortController;
+
       this.timelineLoading = true;
       this.timelineCategoryFilter = category;
       this.timelineCategoryFilterType = categoryType;
-      const seq = ++this._timelineFetchSeq;
       try {
-        const timelineRes = await coreNetWorthApi.getTimeline({
-          asset_category: categoryType === 'asset' ? category : null,
-          liability_category: categoryType === 'liability' ? category : null,
-        });
-        if (seq !== this._timelineFetchSeq) return;
+        const timelineRes = await coreNetWorthApi.getTimeline(
+          {
+            asset_category: categoryType === 'asset' ? category : null,
+            liability_category: categoryType === 'liability' ? category : null,
+          },
+          { signal },
+        );
         this.timeline = timelineRes.data;
       } catch (e: unknown) {
-        if (seq !== this._timelineFetchSeq) return;
+        if (isCanceledRequestError(e)) return;
         this.error = toApiErrorMessage(e);
       } finally {
-        if (seq === this._timelineFetchSeq) this.timelineLoading = false;
+        this.timelineLoading = false;
       }
     },
 

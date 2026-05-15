@@ -175,10 +175,10 @@ describe('net worth store (core)', () => {
 
     await store.fetchTimeline('investments');
 
-    expect(mocks.coreNetWorthApi.getTimeline).toHaveBeenCalledWith({
-      asset_category: 'investments',
-      liability_category: null,
-    });
+    expect(mocks.coreNetWorthApi.getTimeline).toHaveBeenCalledWith(
+      { asset_category: 'investments', liability_category: null },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(store.timelineCategoryFilter).toBe('investments');
     expect(store.timelineCategoryFilterType).toBe('asset');
     expect(store.timeline?.filters.asset_category).toBe('investments');

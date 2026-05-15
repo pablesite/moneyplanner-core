@@ -33,7 +33,10 @@ export const coreNetWorthApi = {
   getLiabilities() {
     return coreApi.get<Liability[]>('/api/net-worth/liabilities/');
   },
-  getTimeline(params?: { asset_category?: string | null; liability_category?: string | null }) {
+  getTimeline(
+    params?: { asset_category?: string | null; liability_category?: string | null },
+    options?: { signal?: AbortSignal },
+  ) {
     return coreApi.get<NetWorthTimeline>('/api/net-worth/timeline/', {
       params:
         params?.asset_category || params?.liability_category
@@ -44,6 +47,7 @@ export const coreNetWorthApi = {
                 : {}),
             }
           : undefined,
+      signal: options?.signal,
     });
   },
   getAssetTimeline(id: number) {
