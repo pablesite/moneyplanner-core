@@ -127,6 +127,8 @@ This leaves a gap:
    - server-side filters: `query`, `kind`, `account_id`, `date_from`, `date_to`
 4. `LedgerTransaction` list payload includes `activity_kind` (read-only) resolved server-side from prefetched entries.
    - when `include_entries=false`, list rows omit the nested `entries` payload but keep transaction-level fields and `activity_kind`
+   - consumers should use `include_entries=false&include_total=false` for infinite-scroll/list-only views that do not render entry-level detail
+   - consumers should keep the default full payload for detail, edit, and any view that needs per-entry account/category data
 5. Supported `kind` values: `income`, `expense`, `transfer`, `adjustment`, `investment_purchase`, `debt_payment`, `revaluation`.
 6. Quick-entry supports `movement_type=adjustment` for reconciliation deltas:
    - only for operational accounts (`asset`/`liability`)

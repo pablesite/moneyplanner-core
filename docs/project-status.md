@@ -24,6 +24,7 @@ Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capac
 
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
+| Contabilidad — listado compacto frontend | Agente | Consumir el contrato backend compacto en listados/scroll (`include_entries=false&include_total=false`) y mantener payload completo para detalle/edición. | _(sin spec)_ |
 | Informe Fiscal Crypto — Phase 0 | Manual | Explorar APIs Pionex + Binance con credenciales reales; rellenar tabla de cobertura antes de iniciar Phase 1. | `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md` |
 | Informe Fiscal Crypto — Phase 1 | Agente | Backend Pionex: nueva app `broker_integrations`, modelos, API client, CSV importers. | `core/docs/tasks/fiscal-report/phase-1-pionex/backend.md` |
 | Informe Fiscal Crypto — Phase 2 | Agente | Backend Binance: API client + CSV importers (extender Phase 1). | `core/docs/tasks/fiscal-report/phase-2-binance/backend.md` |
