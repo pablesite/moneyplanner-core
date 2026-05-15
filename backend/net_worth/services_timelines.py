@@ -42,11 +42,13 @@ class PositionDataCache:
     accounting_prefix_debits: dict[int, list[Decimal]] = field(default_factory=dict)
     accounting_prefix_credits: dict[int, list[Decimal]] = field(default_factory=dict)
     accounting_account_types: dict[int, str] = field(default_factory=dict)
+    accounting_accounts: dict[int, dict[str, object]] = field(default_factory=dict)
     asset_opening_booking_dates: dict[int, date] = field(default_factory=dict)
     liability_opening_booking_dates: dict[int, date] = field(default_factory=dict)
     periodic_investment_schedules: dict[tuple[int, date], list[tuple[date, Decimal]]] = field(
         default_factory=dict
     )
+    inflation_indexes: dict[str, list[tuple[date, Decimal]]] = field(default_factory=dict)
 
 
 def _build_position_data_cache(
@@ -104,10 +106,16 @@ def _build_position_data_cache(
         from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
         from accounting.services_ledger import build_net_worth_opening_balance_note
 
-        for account_id, account_type in LedgerAccount.objects.filter(
+        for account_id, account_type, currency, asset_id, liability_id in LedgerAccount.objects.filter(
             id__in=accounting_account_ids
-        ).values_list("id", "account_type"):
+        ).values_list("id", "account_type", "currency", "asset_id", "liability_id"):
             cache.accounting_account_types[int(account_id)] = str(account_type)
+            cache.accounting_accounts[int(account_id)] = {
+                "account_type": str(account_type),
+                "currency": str(currency),
+                "asset_id": asset_id,
+                "liability_id": liability_id,
+            }
 
         running_debits: dict[int, Decimal] = {}
         running_credits: dict[int, Decimal] = {}
@@ -216,6 +224,22 @@ def _build_position_data_cache(
             )
             if opening_tx is not None:
                 cache.asset_opening_booking_dates[asset.id] = opening_tx.booking_date
+
+    needs_inflation_indexes = any(
+        asset.category == Asset.Category.FURNISHINGS
+        and asset.currency == "EUR"
+        and asset.amortization_method == Asset.AmortizationMethod.STRAIGHT_LINE
+        for asset in assets
+    )
+    if needs_inflation_indexes:
+        from core.models import InflationIndex
+
+        cache.inflation_indexes[InflationIndex.Region.ES] = [
+            (period, Decimal(index))
+            for period, index in InflationIndex.objects.filter(region=InflationIndex.Region.ES)
+            .order_by("period")
+            .values_list("period", "index")
+        ]
 
     return cache
 

@@ -619,99 +619,112 @@ def get_effective_liability_amount(
 ) -> Decimal:
     ref_date = as_of_date or timezone.localdate()
     if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING:
-        integration_state = ensure_liability_accounting_account(liability=liability)
-        if integration_state == AccountingIntegrationState.NEEDS_REVIEW:
-            return liability.amount
-
-        from accounting.models import LedgerTransaction
-        from accounting.services_ledger import (
-            build_net_worth_opening_balance_note,
-            compute_account_balance_from_totals,
-            compute_entry_balance_totals,
-            get_account_entries,
-            get_account_balance,
-            has_account_entries,
-        )
-
-        accounting_account = _get_accounting_liability_account(
-            user_id=liability.user_id,
-            account_id=liability.accounting_account_id,
-        )
-        if accounting_account is not None and accounting_account.currency == liability.currency:
-            posted_status = cast(str, LedgerTransaction.Status.POSTED)
-            opening_note = build_net_worth_opening_balance_note(
-                position_kind="liability",
-                position_id=liability.id,
-            )
-            if position_cache is not None:
-                dates = position_cache.accounting_prefix_dates.get(accounting_account.id, [])
-                if dates:
-                    idx = bisect_right(dates, ref_date) - 1
-                    if idx >= 0:
-                        debit_total = position_cache.accounting_prefix_debits[
-                            accounting_account.id
-                        ][idx]
-                        credit_total = position_cache.accounting_prefix_credits[
-                            accounting_account.id
-                        ][idx]
-                        raw_full = credit_total - debit_total
-
-                        opening_date = position_cache.liability_opening_booking_dates.get(
-                            liability.id
-                        )
-                        if opening_date is not None and ref_date >= opening_date:
-                            before_opening_idx = (
-                                bisect_right(dates, opening_date - timedelta(days=1)) - 1
-                            )
-                            if before_opening_idx >= 0:
-                                before_debit_total = position_cache.accounting_prefix_debits[
-                                    accounting_account.id
-                                ][before_opening_idx]
-                                before_credit_total = position_cache.accounting_prefix_credits[
-                                    accounting_account.id
-                                ][before_opening_idx]
-                                raw_full -= before_credit_total - before_debit_total
-                        return max(Decimal("0"), raw_full)
-
-            if has_account_entries(
-                account=accounting_account,
-                as_of_date=ref_date,
-                status=posted_status,
-            ):
-                opening_tx = (
-                    LedgerTransaction.objects.filter(
-                        user_id=liability.user_id,
-                        status=posted_status,
-                        notes=opening_note,
-                        entries__account_id=accounting_account.id,
-                    )
-                    .distinct()
-                    .order_by("-booking_date", "-id")
-                    .first()
+        if position_cache is not None:
+            account_id = liability.accounting_account_id
+            if account_id is not None:
+                account_id_int = int(account_id)
+                cached_account = getattr(position_cache, "accounting_accounts", {}).get(
+                    account_id_int
                 )
-                if opening_tx is not None and ref_date >= opening_tx.booking_date:
-                    anchored_entries = get_account_entries(
+                if (
+                    cached_account is not None
+                    and cached_account["account_type"] == "liability"
+                    and cached_account["currency"] == liability.currency
+                    and cached_account["liability_id"] in (None, liability.id)
+                ):
+                    dates = position_cache.accounting_prefix_dates.get(account_id_int, [])
+                    if dates:
+                        idx = bisect_right(dates, ref_date) - 1
+                        if idx >= 0:
+                            debit_total = position_cache.accounting_prefix_debits[
+                                account_id_int
+                            ][idx]
+                            credit_total = position_cache.accounting_prefix_credits[
+                                account_id_int
+                            ][idx]
+                            raw_full = credit_total - debit_total
+
+                            opening_date = position_cache.liability_opening_booking_dates.get(
+                                liability.id
+                            )
+                            if opening_date is not None and ref_date >= opening_date:
+                                before_opening_idx = (
+                                    bisect_right(dates, opening_date - timedelta(days=1)) - 1
+                                )
+                                if before_opening_idx >= 0:
+                                    before_debit_total = position_cache.accounting_prefix_debits[
+                                        account_id_int
+                                    ][before_opening_idx]
+                                    before_credit_total = position_cache.accounting_prefix_credits[
+                                        account_id_int
+                                    ][before_opening_idx]
+                                    raw_full -= before_credit_total - before_debit_total
+                            return max(Decimal("0"), raw_full)
+
+        else:
+            integration_state = ensure_liability_accounting_account(liability=liability)
+            if integration_state == AccountingIntegrationState.NEEDS_REVIEW:
+                return liability.amount
+
+            from accounting.models import LedgerTransaction
+            from accounting.services_ledger import (
+                build_net_worth_opening_balance_note,
+                compute_account_balance_from_totals,
+                compute_entry_balance_totals,
+                get_account_entries,
+                get_account_balance,
+                has_account_entries,
+            )
+
+            accounting_account = _get_accounting_liability_account(
+                user_id=liability.user_id,
+                account_id=liability.accounting_account_id,
+            )
+            if accounting_account is not None and accounting_account.currency == liability.currency:
+                posted_status = cast(str, LedgerTransaction.Status.POSTED)
+                opening_note = build_net_worth_opening_balance_note(
+                    position_kind="liability",
+                    position_id=liability.id,
+                )
+                if has_account_entries(
+                    account=accounting_account,
+                    as_of_date=ref_date,
+                    status=posted_status,
+                ):
+                    opening_tx = (
+                        LedgerTransaction.objects.filter(
+                            user_id=liability.user_id,
+                            status=posted_status,
+                            notes=opening_note,
+                            entries__account_id=accounting_account.id,
+                        )
+                        .distinct()
+                        .order_by("-booking_date", "-id")
+                        .first()
+                    )
+                    if opening_tx is not None and ref_date >= opening_tx.booking_date:
+                        anchored_entries = get_account_entries(
+                            account=accounting_account,
+                            as_of_date=ref_date,
+                            status=posted_status,
+                        ).filter(transaction__booking_date__gte=opening_tx.booking_date)
+                        if anchored_entries.exists():
+                            totals = compute_entry_balance_totals(
+                                anchored_entries,
+                                account_id=accounting_account.id,
+                            )
+                            raw = compute_account_balance_from_totals(
+                                account_type=accounting_account.account_type,
+                                totals=totals,
+                            )
+                            return max(Decimal("0"), raw)
+
+                    raw = get_account_balance(
                         account=accounting_account,
                         as_of_date=ref_date,
                         status=posted_status,
-                    ).filter(transaction__booking_date__gte=opening_tx.booking_date)
-                    if anchored_entries.exists():
-                        totals = compute_entry_balance_totals(
-                            anchored_entries,
-                            account_id=accounting_account.id,
-                        )
-                        raw = compute_account_balance_from_totals(
-                            account_type=accounting_account.account_type,
-                            totals=totals,
-                        )
-                        return max(Decimal("0"), raw)
-
-                raw = get_account_balance(
-                    account=accounting_account,
-                    as_of_date=ref_date,
-                    status=cast(str, LedgerTransaction.Status.POSTED),
-                )
-                return max(Decimal("0"), raw)
+                    )
+                    return max(Decimal("0"), raw)
 
     if position_cache is not None:
         cached_vals = position_cache.liability_valuations.get(liability.id, [])

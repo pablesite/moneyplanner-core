@@ -8,6 +8,8 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from accounts.models import UserSettings
+from accounting.models import LedgerAccount
+from core.models import InflationIndex
 from net_worth.models import (
     Asset,
     AssetValuation,
@@ -20,7 +22,11 @@ from net_worth.models import (
     LiquidityMonthlyCheckin,
 )
 from net_worth.services_summaries import build_net_worth_summary
-from net_worth.services_timelines import build_asset_timeline, build_liability_timeline
+from net_worth.services_timelines import (
+    build_asset_timeline,
+    build_liability_timeline,
+    build_net_worth_timeline,
+)
 
 
 class NetWorthSummaryPerformanceTests(TestCase):
@@ -259,3 +265,55 @@ class NetWorthSummaryPerformanceTests(TestCase):
         self.assertLessEqual(len(captured_queries), 7)
         self.assertEqual(len(timeline["rows"]), 36)
         self.assertEqual(timeline["rows"][-1]["value"], "680.00")
+
+    def test_net_worth_timeline_caches_accounting_accounts_and_inflation_indexes(self):
+        InflationIndex.objects.bulk_create(
+            [
+                InflationIndex(
+                    region=InflationIndex.Region.ES,
+                    period=date(2025, 1, 1),
+                    index=Decimal("100.00"),
+                ),
+                InflationIndex(
+                    region=InflationIndex.Region.ES,
+                    period=date(2026, 12, 1),
+                    index=Decimal("104.00"),
+                ),
+            ]
+        )
+        assets = []
+        for idx in range(15):
+            asset = Asset.objects.create(
+                user=self.user,
+                name=f"Mueble contable {idx}",
+                category=Asset.Category.FURNISHINGS,
+                subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+                tracking_mode=Asset.TrackingMode.ACCOUNTING,
+                currency="EUR",
+                amount=Decimal("1200.00"),
+                start_date=date(2025, 1, 1),
+                amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+                amortization_term_years=10,
+                is_active=True,
+            )
+            account = LedgerAccount.objects.create(
+                user=self.user,
+                name=f"Cuenta mueble {idx}",
+                account_type=LedgerAccount.AccountType.ASSET,
+                currency="EUR",
+                asset=asset,
+            )
+            asset.accounting_account_id = account.id
+            asset.save(update_fields=["accounting_account_id"])
+            assets.append(asset)
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            timeline = build_net_worth_timeline(
+                user=self.user,
+                start_date=date(2025, 1, 1),
+                end_date=date(2026, 12, 31),
+            )
+
+        self.assertLessEqual(len(captured_queries), 12)
+        self.assertEqual(len(timeline["rows"]), 24)
+        self.assertEqual(timeline["rows"][-1]["asset_positions"], len(assets))
