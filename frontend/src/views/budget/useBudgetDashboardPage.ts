@@ -13,10 +13,7 @@ import {
   coreAccountingApi,
   type BudgetDerivedSuggestions,
   type BudgetSuggestionSubcategoryRow,
-  type LedgerTransaction,
-  type MonthlyAccountingSummary,
 } from '@/domains/accounting';
-import { coreNetWorthApi } from '@/domains/net-worth/api';
 import {
   effectiveAnnualAmountForEntry,
   useAnnualExpenseStore,
@@ -37,10 +34,8 @@ import {
   type BudgetExecutionOrigin,
   type MonthlyCoverageSummary,
   type PendingClassificationSummary,
-  type AccountingPostedEntry,
   type MonthlyResultBreakdownSubrow,
   type MonthlyResultBreakdownGroup,
-  type AccountingExecutionBucketAccumulator,
   type BudgetActualExecution,
   type ExpenseExecutionBreakdownMonth,
   monthLabels,
@@ -63,11 +58,8 @@ import {
   budgetMonthEntryKey,
   parseBudgetTaxonomyKey,
   normalizedBudgetTaxonomy,
-  bookingMonthFromDate,
   resolveLedgerEntryFlowFamily,
   isPositiveExecutionLedgerEntry,
-  buildDebtPaymentExpenseTargetByTransactionId,
-  collectAccountingExecutionEntry,
   monthlyPlannedAmountForExpenseEntry,
   monthlyPlannedAmountForIncomeEntry,
   buildMonthlyResultBreakdown,
@@ -111,6 +103,7 @@ import {
   expenseCategories,
   expenseSubcategories,
 } from '@/views/budget/budgetDashboardUtils';
+import { useAccountingExecutionData } from '@/views/budget/useAccountingExecutionData';
 
 export type BudgetDashboardMode = 'budget' | 'monthly-close';
 export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
@@ -141,10 +134,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const incomeAdjustAmounts = ref<Record<number, string>>({});
   const unlockedIncomeGroupKeys = ref<Set<string>>(new Set());
   const unlockedExpenseGroupKeys = ref<Set<string>>(new Set());
-  const accountingExecutionLoading = ref(false);
-  const accountingExecutionError = ref<string | null>(null);
-  const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);
-  const accountingPostedEntries = ref<AccountingPostedEntry[]>([]);
   const budgetSuggestionsLoading = ref(false);
   const budgetSuggestionsError = ref<string | null>(null);
   const budgetSuggestions = ref<BudgetDerivedSuggestions | null>(null);
@@ -159,6 +148,16 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const monthlyCloseLoading = ref(false);
   const monthlyCloseError = ref<string | null>(null);
   const monthlyCloseActionBusy = ref(false);
+
+  const {
+    accountingExecutionLoading,
+    accountingExecutionError,
+    accountingMonthlySummary,
+    accountingPostedEntries,
+    accountingSummaryByMonth,
+    accountingExecutionBuckets,
+    refreshAccountingExecutionData,
+  } = useAccountingExecutionData(fiscalYear, ownershipFilter);
 
   const isMonthlyCloseView = computed(() => mode.value === 'monthly-close');
   const monthlyCloseFlowSteps = computed<
@@ -427,41 +426,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       map.set(row.month, row);
     }
     return map;
-  });
-
-  const accountingSummaryByMonth = computed(() => {
-    const map = new Map<number, MonthlyAccountingSummary['months'][number]>();
-    for (const row of accountingMonthlySummary.value?.months ?? []) {
-      map.set(row.month, row);
-    }
-    return map;
-  });
-
-  const accountingExecutionBuckets = computed(() => {
-    const buckets: AccountingExecutionBucketAccumulator = {
-      incomeCategorizedByMonthTaxonomy: new Map<string, number>(),
-      expenseCategorizedByMonthTaxonomy: new Map<string, number>(),
-      incomeLegacyByMonthEntryId: new Map<string, number>(),
-      expenseLegacyByMonthEntryId: new Map<string, number>(),
-      depositRotationIncomeByMonth: new Map<number, number>(),
-      depositRotationExpenseByMonth: new Map<number, number>(),
-      incomeUnclassifiedTotal: 0,
-      expenseUnclassifiedTotal: 0,
-    };
-    const debtPaymentExpenseTargetByTransactionId = buildDebtPaymentExpenseTargetByTransactionId(
-      accountingPostedEntries.value,
-    );
-
-    for (const entry of accountingPostedEntries.value) {
-      collectAccountingExecutionEntry(
-        entry,
-        debtPaymentExpenseTargetByTransactionId,
-        buckets,
-        ownershipFilter.value,
-      );
-    }
-
-    return buckets;
   });
 
   const incomeTaxonomyLineCountsByMonth = computed(() => {
@@ -2048,63 +2012,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   const monthlyIncomeCoverageDetail = computed(() =>
     coverageDetail(monthlyIncomeCoverageSummary.value),
   );
-
-  async function refreshAccountingExecutionData(): Promise<void> {
-    accountingExecutionLoading.value = true;
-    accountingExecutionError.value = null;
-    try {
-      const fetchAllTransactions = async (params: { year: number; status?: string }) => {
-        const allResults: typeof accountingPostedEntries.value = [];
-        let cursor: string | undefined;
-        do {
-          const response = await coreAccountingApi.getTransactions({
-            ...params,
-            page_size: 200,
-            cursor,
-          });
-          allResults.push(
-            ...(response.data.results ?? []).flatMap((transaction: LedgerTransaction) => {
-              const bookingMonth = bookingMonthFromDate(transaction.booking_date);
-              return transaction.entries.map((entry) => ({
-                ...entry,
-                bookingMonth,
-                transactionId: transaction.id,
-                transactionMemberTag: transaction.member_tag ?? '',
-                transactionQuickEntryKind: transaction.quick_entry_kind ?? '',
-                assetSubcategory: '',
-              }));
-            }),
-          );
-          cursor = response.data.next_cursor ?? undefined;
-        } while (cursor);
-        return allResults;
-      };
-      const [summaryResponse, transactionsResponse, assetsResponse] = await Promise.all([
-        coreAccountingApi.getMonthlySummary(fiscalYear.value),
-        fetchAllTransactions({
-          year: fiscalYear.value,
-          status: 'posted',
-        }),
-        coreNetWorthApi.getAssets(),
-      ]);
-      const assetSubcategoryById = new Map<number, string>();
-      for (const asset of assetsResponse.data ?? []) {
-        assetSubcategoryById.set(asset.id, asset.subcategory ?? '');
-      }
-      accountingMonthlySummary.value = summaryResponse.data ?? null;
-      accountingPostedEntries.value = transactionsResponse.map((entry) => ({
-        ...entry,
-        assetSubcategory:
-          entry.asset_id != null ? (assetSubcategoryById.get(entry.asset_id) ?? '') : '',
-      }));
-    } catch (e: unknown) {
-      accountingExecutionError.value = toBudgetErrorMessage(e);
-      accountingMonthlySummary.value = null;
-      accountingPostedEntries.value = [];
-    } finally {
-      accountingExecutionLoading.value = false;
-    }
-  }
 
   async function refreshBudgetSuggestionData(): Promise<void> {
     budgetSuggestionsLoading.value = true;
