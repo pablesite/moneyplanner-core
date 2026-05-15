@@ -138,11 +138,75 @@ def _build_position_data_cache(
             cache.accounting_prefix_debits.setdefault(account_id_int, []).append(debit_total)
             cache.accounting_prefix_credits.setdefault(account_id_int, []).append(credit_total)
 
+        asset_opening_note_by_id = {
+            asset.id: build_net_worth_opening_balance_note(
+                position_kind="asset",
+                position_id=asset.id,
+            )
+            for asset in assets
+            if asset.tracking_mode == Asset.TrackingMode.ACCOUNTING
+            and asset.accounting_account_id is not None
+            and asset.category == Asset.Category.CASH
+        }
+        liability_opening_note_by_id = {
+            liability.id: build_net_worth_opening_balance_note(
+                position_kind="liability",
+                position_id=liability.id,
+            )
+            for liability in liabilities
+            if liability.tracking_mode == Liability.TrackingMode.ACCOUNTING
+            and liability.accounting_account_id is not None
+        }
+        note_to_target = {
+            **{
+                note: ("asset", position_id)
+                for position_id, note in asset_opening_note_by_id.items()
+            },
+            **{
+                note: ("liability", position_id)
+                for position_id, note in liability_opening_note_by_id.items()
+            },
+        }
+        note_to_account_id = {
+            **{
+                note: asset.accounting_account_id
+                for asset in assets
+                if (note := asset_opening_note_by_id.get(asset.id)) is not None
+            },
+            **{
+                note: liability.accounting_account_id
+                for liability in liabilities
+                if (note := liability_opening_note_by_id.get(liability.id)) is not None
+            },
+        }
+        opening_notes = list(note_to_target)
+        if opening_notes:
+            seen_notes: set[str] = set()
+            opening_rows = (
+                LedgerTransaction.objects.filter(
+                    status=LedgerTransaction.Status.POSTED,
+                    notes__in=opening_notes,
+                    entries__account_id__in=accounting_account_ids,
+                )
+                .order_by("notes", "-booking_date", "-id")
+                .values_list("notes", "booking_date", "entries__account_id")
+            )
+            for note, booking_date, account_id in opening_rows:
+                if note in seen_notes or int(account_id) != int(note_to_account_id[note]):
+                    continue
+                target_kind, target_id = note_to_target[note]
+                if target_kind == "asset":
+                    cache.asset_opening_booking_dates[target_id] = booking_date
+                else:
+                    cache.liability_opening_booking_dates[target_id] = booking_date
+                seen_notes.add(note)
+
         for asset in assets:
             if (
                 asset.tracking_mode != Asset.TrackingMode.ACCOUNTING
                 or asset.accounting_account_id is None
                 or asset.category != Asset.Category.CASH
+                or asset.id in cache.asset_opening_booking_dates
             ):
                 continue
             opening_tx = _get_latest_opening_balance_tx_for_accounting_asset(
@@ -152,30 +216,6 @@ def _build_position_data_cache(
             )
             if opening_tx is not None:
                 cache.asset_opening_booking_dates[asset.id] = opening_tx.booking_date
-
-        for liability in liabilities:
-            if (
-                liability.tracking_mode != Liability.TrackingMode.ACCOUNTING
-                or liability.accounting_account_id is None
-            ):
-                continue
-            opening_note = build_net_worth_opening_balance_note(
-                position_kind="liability",
-                position_id=liability.id,
-            )
-            opening_booking_date = (
-                LedgerTransaction.objects.filter(
-                    status=LedgerTransaction.Status.POSTED,
-                    notes=opening_note,
-                    entries__account_id=liability.accounting_account_id,
-                )
-                .distinct()
-                .order_by("-booking_date", "-id")
-                .values_list("booking_date", flat=True)
-                .first()
-            )
-            if opening_booking_date is not None:
-                cache.liability_opening_booking_dates[liability.id] = opening_booking_date
 
     return cache
 
@@ -380,12 +420,22 @@ def build_net_worth_timeline(
 
 
 def build_asset_timeline(*, asset: Asset, end_date: date | None = None) -> dict[str, object]:
+    asset = (
+        Asset.objects.select_related("user")
+        .prefetch_related("improvements", "contribution_intervals")
+        .get(id=asset.id)
+    )
     base_currency = get_base_currency_for_user(user=asset.user)
     timeline_end_date = end_date or timezone.localdate()
     fx_cache = build_fx_cache({base_currency, asset.currency})
+    pos_cache = _build_position_data_cache([asset], [])
     rows: list[dict[str, object]] = []
     for point_date in _iter_month_ends(start_date=asset.start_date, end_date=timeline_end_date):
-        native_value = get_effective_asset_amount(asset=asset, as_of_date=point_date)
+        native_value = get_effective_asset_amount(
+            asset=asset,
+            as_of_date=point_date,
+            position_cache=pos_cache,
+        )
         base_value = convert_currency_cached(
             native_value,
             asset.currency,
@@ -413,12 +463,18 @@ def build_asset_timeline(*, asset: Asset, end_date: date | None = None) -> dict[
 def build_liability_timeline(
     *, liability: Liability, end_date: date | None = None
 ) -> dict[str, object]:
+    liability = Liability.objects.select_related("user").get(id=liability.id)
     base_currency = get_base_currency_for_user(user=liability.user)
     timeline_end_date = end_date or timezone.localdate()
     fx_cache = build_fx_cache({base_currency, liability.currency})
+    pos_cache = _build_position_data_cache([], [liability])
     rows: list[dict[str, object]] = []
     for point_date in _iter_month_ends(start_date=liability.start_date, end_date=timeline_end_date):
-        native_value = get_effective_liability_amount(liability=liability, as_of_date=point_date)
+        native_value = get_effective_liability_amount(
+            liability=liability,
+            as_of_date=point_date,
+            position_cache=pos_cache,
+        )
         base_value = convert_currency_cached(
             native_value,
             liability.currency,
