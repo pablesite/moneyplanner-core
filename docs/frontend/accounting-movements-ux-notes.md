@@ -106,6 +106,13 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 6. "Cuentas" tab uses server pagination by `account_id`; per-row `impactValue` and `tone` are still computed client-side.
 7. Create/edit/delete/import mutations refresh current movement pages to keep visible data in sync.
 
+## Pending compact-list adoption (2026-05-15)
+1. Backend supports compact transaction pages through `include_entries=false`.
+2. Frontend list-only and infinite-scroll requests should use `include_entries=false&include_total=false` when they do not render nested entry detail.
+3. Detail/edit flows must keep the default full payload so forms still receive per-entry account, category, amount, and linked-position data.
+4. The expected benefit is lower payload size and faster list refreshes; the backend measurement on 200-row pages reduced response bodies from roughly 289-309 KB to 106-118 KB.
+5. Pending implementation: update the Core accounting domain client/store/composables to choose compact mode for list rendering and full mode for detail/edit.
+
 ## Shared scenarios that must stay consistent
 1. Manual income to a liquidity account
 2. Manual expense from a liquidity account
