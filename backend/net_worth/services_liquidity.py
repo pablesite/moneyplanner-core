@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -9,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from core.services import convert_currency
+from core.services import build_fx_cache, convert_currency_cached
 
 from .models import AssetValuation, LiabilityValuation, LiquidityMonthlyCheckin
 
@@ -26,6 +27,8 @@ class LiquiditySummaryInputs:
     checkins: dict[int, LiquidityMonthlyCheckin]
     asset_checkpoints: dict[int, AssetValuation]
     liability_checkins: dict[int, LiabilityValuation]
+    fx_cache: dict
+    position_cache: object
 
 
 @dataclass
@@ -210,18 +213,26 @@ def _load_liquidity_summary_inputs(
     get_liquid_liability_queryset_for_user_fn,
     last_day_of_month_fn,
 ) -> LiquiditySummaryInputs:
+    from .services_timelines import _build_position_data_cache
+
     summary_date = date(fiscal_year, month, last_day_of_month_fn(fiscal_year, month))
+    liquid_assets = list(
+        get_liquidity_asset_queryset_for_user_fn(user=user)
+        .prefetch_related("improvements", "contribution_intervals")
+        .order_by("subcategory", "name", "id")
+    )
+    liquid_liabilities = list(
+        get_liquid_liability_queryset_for_user_fn(user=user).order_by("category", "name", "id")
+    )
+    base_currency = get_base_currency_for_user_fn(user=user)
+    currencies = {base_currency}
+    currencies.update(asset.currency for asset in liquid_assets)
+    currencies.update(liability.currency for liability in liquid_liabilities)
     return LiquiditySummaryInputs(
-        base_currency=get_base_currency_for_user_fn(user=user),
+        base_currency=base_currency,
         summary_date=summary_date,
-        liquid_assets=list(
-            get_liquidity_asset_queryset_for_user_fn(user=user).order_by(
-                "subcategory", "name", "id"
-            )
-        ),
-        liquid_liabilities=list(
-            get_liquid_liability_queryset_for_user_fn(user=user).order_by("category", "name", "id")
-        ),
+        liquid_assets=liquid_assets,
+        liquid_liabilities=liquid_liabilities,
         checkins={
             row.asset_id: row
             for row in LiquidityMonthlyCheckin.objects.filter(
@@ -244,6 +255,8 @@ def _load_liquidity_summary_inputs(
                 valuation_date=summary_date,
             ).select_related("liability")
         },
+        fx_cache=build_fx_cache(currencies),
+        position_cache=_build_position_data_cache(liquid_assets, liquid_liabilities),
     )
 
 
@@ -297,11 +310,29 @@ def _resolve_position_accounting_coverage(
     position,
     summary_date: date,
     expected_type: str,
+    position_cache=None,
 ) -> PositionCoverage:
     if not getattr(position, "tracking_mode", None) == "accounting":
         return PositionCoverage(ledger_available=False, ledger_covered=False)
     if not getattr(position, "accounting_account_id", None):
         return PositionCoverage(ledger_available=False, ledger_covered=False)
+
+    account_id = int(position.accounting_account_id)
+    if position_cache is not None:
+        cached_account = getattr(position_cache, "accounting_accounts", {}).get(account_id)
+        expected_position_key = "asset_id" if expected_type == "asset" else "liability_id"
+        ledger_available = (
+            cached_account is not None
+            and cached_account["account_type"] == expected_type
+            and cached_account["currency"] == position.currency
+            and cached_account[expected_position_key] in (None, position.id)
+        )
+        dates = getattr(position_cache, "accounting_prefix_dates", {}).get(account_id, [])
+        ledger_covered = ledger_available and bisect_right(dates, summary_date) > 0
+        return PositionCoverage(
+            ledger_available=ledger_available,
+            ledger_covered=ledger_covered,
+        )
 
     from accounting.models import LedgerTransaction
     from accounting.services_ledger import get_user_ledger_account, has_account_entries
@@ -397,12 +428,14 @@ def _build_asset_summary_row(
     effective_native = get_effective_asset_amount_fn(
         asset=asset,
         as_of_date=inputs.summary_date,
+        position_cache=inputs.position_cache,
     )
     coverage = _resolve_position_accounting_coverage(
         user=user,
         position=asset,
         summary_date=inputs.summary_date,
         expected_type="asset",
+        position_cache=inputs.position_cache,
     )
     execution = _resolve_asset_execution(
         asset=asset,
@@ -411,27 +444,30 @@ def _build_asset_summary_row(
         coverage=coverage,
     )
 
-    planned_base = convert_currency(
+    planned_base = convert_currency_cached(
         planned_native,
         asset.currency,
         inputs.base_currency,
-        date=inputs.summary_date,
+        rate_date=inputs.summary_date,
+        fx_cache=inputs.fx_cache,
     )
     executed_base = (
-        convert_currency(
+        convert_currency_cached(
             execution.executed_native,
             asset.currency,
             inputs.base_currency,
-            date=inputs.summary_date,
+            rate_date=inputs.summary_date,
+            fx_cache=inputs.fx_cache,
         )
         if execution.executed_native is not None
         else None
     )
-    effective_base = convert_currency(
+    effective_base = convert_currency_cached(
         effective_native,
         asset.currency,
         inputs.base_currency,
-        date=inputs.summary_date,
+        rate_date=inputs.summary_date,
+        fx_cache=inputs.fx_cache,
     )
     deviation_base = (executed_base - planned_base) if executed_base is not None else ZERO
     totals.add_asset(
@@ -521,11 +557,12 @@ def _compute_perimeter_internal_expense_total_base(
     for entry in internal_expense_entries:
         amount = Decimal(entry.amount)
         signed_amount = amount if entry.side == LedgerEntry.Side.DEBIT else -amount
-        total += convert_currency(
+        total += convert_currency_cached(
             signed_amount,
             entry.currency,
             inputs.base_currency,
-            date=entry.transaction.booking_date,
+            rate_date=entry.transaction.booking_date,
+            fx_cache=inputs.fx_cache,
         )
     return total
 
@@ -544,25 +581,29 @@ def _build_liability_summary_row(
     executed_native = get_effective_liability_amount_fn(
         liability=liability,
         as_of_date=inputs.summary_date,
+        position_cache=inputs.position_cache,
     )
     coverage = _resolve_position_accounting_coverage(
         user=user,
         position=liability,
         summary_date=inputs.summary_date,
         expected_type="liability",
+        position_cache=inputs.position_cache,
     )
 
-    planned_base = convert_currency(
+    planned_base = convert_currency_cached(
         planned_native,
         liability.currency,
         inputs.base_currency,
-        date=inputs.summary_date,
+        rate_date=inputs.summary_date,
+        fx_cache=inputs.fx_cache,
     )
-    executed_base = convert_currency(
+    executed_base = convert_currency_cached(
         executed_native,
         liability.currency,
         inputs.base_currency,
-        date=inputs.summary_date,
+        rate_date=inputs.summary_date,
+        fx_cache=inputs.fx_cache,
     )
     deviation_base = executed_base - planned_base
     totals.add_liability(

@@ -402,3 +402,56 @@ class NetWorthSummaryPerformanceTests(TestCase):
             {row["financed_asset_detail"]["id"] for row in response.data},
             {financed_asset.id},
         )
+
+    def test_liquidity_monthly_summary_uses_position_cache_for_accounting_positions(self):
+        for idx in range(20):
+            asset = Asset.objects.create(
+                user=self.user,
+                name=f"Liquidez contable {idx}",
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.BANK_ACCOUNT,
+                tracking_mode=Asset.TrackingMode.ACCOUNTING,
+                currency="EUR",
+                amount=Decimal("1000.00"),
+                start_date=date(2026, 1, 1),
+                is_active=True,
+            )
+            account = LedgerAccount.objects.create(
+                user=self.user,
+                name=f"Ledger liquidez {idx}",
+                account_type=LedgerAccount.AccountType.ASSET,
+                currency="EUR",
+                asset=asset,
+            )
+            asset.accounting_account_id = account.id
+            asset.save(update_fields=["accounting_account_id"])
+
+        for idx in range(10):
+            liability = Liability.objects.create(
+                user=self.user,
+                name=f"Tarjeta contable {idx}",
+                category=Liability.Category.CREDIT_CARD,
+                tracking_mode=Liability.TrackingMode.ACCOUNTING,
+                currency="EUR",
+                amount=Decimal("500.00"),
+                start_date=date(2026, 1, 1),
+                is_active=True,
+            )
+            account = LedgerAccount.objects.create(
+                user=self.user,
+                name=f"Ledger tarjeta {idx}",
+                account_type=LedgerAccount.AccountType.LIABILITY,
+                currency="EUR",
+                liability=liability,
+            )
+            liability.accounting_account_id = account.id
+            liability.save(update_fields=["accounting_account_id"])
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            response = self.client.get(
+                "/api/net-worth/liquidity/monthly-summary/?year=2026&month=5"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(captured_queries), 22)
+        self.assertEqual(response.data["coverage_expected"], 30)

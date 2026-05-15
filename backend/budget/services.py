@@ -609,6 +609,8 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         .only(
             "id",
             "fiscal_year",
+            "category",
+            "subcategory",
             "expense_type",
             "time_profile",
             "amount_input_period",
@@ -893,6 +895,8 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         .only(
             "id",
             "fiscal_year",
+            "category",
+            "subcategory",
             "time_profile",
             "amount_input_period",
             "target_month",
