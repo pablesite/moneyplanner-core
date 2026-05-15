@@ -21,7 +21,7 @@ describe('ItemDisplayRow', () => {
   it('emits edit, archive and delete events with item id', async () => {
     const wrapper = mount(ItemDisplayRow, {
       props: {
-        item: { id: 11, name: 'Hipoteca', is_active: false, currency: 'EUR' },
+        item: { id: 11, name: 'Hipoteca', is_active: true, currency: 'EUR' },
         formattedAmount: '800.00',
         isLiabilitiesList: true,
         financedAssetName: 'Casa',
