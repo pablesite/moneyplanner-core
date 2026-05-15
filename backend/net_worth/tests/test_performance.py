@@ -1,0 +1,176 @@
+from datetime import date
+from decimal import Decimal
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+
+from accounts.models import UserSettings
+from net_worth.models import (
+    Asset,
+    AssetValuation,
+    InvestmentAssetEvent,
+    InvestmentContributionInterval,
+    Liability,
+    LiabilityEvent,
+    LiabilityValuation,
+    LiquidityAssetEvent,
+    LiquidityMonthlyCheckin,
+)
+from net_worth.services_summaries import build_net_worth_summary
+
+
+class NetWorthSummaryPerformanceTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="nw_perf_user",
+            password="pass1234",
+        )
+        UserSettings.objects.update_or_create(
+            user=self.user,
+            defaults={"base_currency": "EUR", "inflation_region": "ES"},
+        )
+
+    @patch("net_worth.services.timezone.localdate", return_value=date(2026, 5, 15))
+    def test_summary_uses_position_cache_with_high_position_volume(self, _date_mock):
+        cash_assets = [
+            Asset.objects.create(
+                user=self.user,
+                name=f"Cuenta {idx}",
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.BANK_ACCOUNT,
+                currency="EUR",
+                amount=Decimal("1000.00"),
+                start_date=date(2026, 1, 1),
+                is_active=True,
+            )
+            for idx in range(20)
+        ]
+        investment_assets = [
+            Asset.objects.create(
+                user=self.user,
+                name=f"Fondo {idx}",
+                category=Asset.Category.INVESTMENTS,
+                subcategory=Asset.Subcategory.FUNDS,
+                currency="EUR",
+                amount=Decimal("2000.00"),
+                start_date=date(2026, 1, 1),
+                investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+                is_active=True,
+            )
+            for idx in range(20)
+        ]
+        liabilities = [
+            Liability.objects.create(
+                user=self.user,
+                name=f"Prestamo {idx}",
+                category=Liability.Category.OTHER,
+                currency="EUR",
+                amount=Decimal("500.00"),
+                start_date=date(2026, 1, 1),
+                is_active=True,
+            )
+            for idx in range(10)
+        ]
+
+        AssetValuation.objects.bulk_create(
+            [
+                AssetValuation(
+                    user=self.user,
+                    asset=asset,
+                    valuation_date=date(2026, 4, 30),
+                    value=Decimal("1100.00"),
+                )
+                for asset in cash_assets
+            ]
+            + [
+                AssetValuation(
+                    user=self.user,
+                    asset=asset,
+                    valuation_date=date(2026, 4, 30),
+                    value=Decimal("2200.00"),
+                )
+                for asset in investment_assets
+            ]
+        )
+        LiquidityMonthlyCheckin.objects.bulk_create(
+            [
+                LiquidityMonthlyCheckin(
+                    user=self.user,
+                    asset=asset,
+                    fiscal_year=2026,
+                    month=4,
+                    closing_balance_real=Decimal("1050.00"),
+                )
+                for asset in cash_assets
+            ]
+        )
+        LiquidityAssetEvent.objects.bulk_create(
+            [
+                LiquidityAssetEvent(
+                    user=self.user,
+                    asset=asset,
+                    event_date=date(2026, 5, 10),
+                    event_type=LiquidityAssetEvent.EventType.INTEREST,
+                    amount=Decimal("5.00"),
+                )
+                for asset in cash_assets
+            ]
+        )
+        InvestmentAssetEvent.objects.bulk_create(
+            [
+                InvestmentAssetEvent(
+                    user=self.user,
+                    asset=asset,
+                    event_date=date(2026, 5, 10),
+                    event_type=InvestmentAssetEvent.EventType.CONTRIBUTION,
+                    amount=Decimal("25.00"),
+                )
+                for asset in investment_assets
+            ]
+        )
+        InvestmentContributionInterval.objects.bulk_create(
+            [
+                InvestmentContributionInterval(
+                    asset=asset,
+                    start_date=date(2026, 5, 1),
+                    amount=Decimal("10.00"),
+                    frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+                    currency="EUR",
+                )
+                for asset in investment_assets
+            ]
+        )
+        LiabilityValuation.objects.bulk_create(
+            [
+                LiabilityValuation(
+                    user=self.user,
+                    liability=liability,
+                    valuation_date=date(2026, 4, 30),
+                    value=Decimal("450.00"),
+                )
+                for liability in liabilities
+            ]
+        )
+        LiabilityEvent.objects.bulk_create(
+            [
+                LiabilityEvent(
+                    user=self.user,
+                    liability=liability,
+                    event_date=date(2026, 5, 5),
+                    event_type=LiabilityEvent.EventType.PAYMENT,
+                    amount=Decimal("20.00"),
+                )
+                for liability in liabilities
+            ]
+        )
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            summary = build_net_worth_summary(user=self.user)
+
+        self.assertLessEqual(len(captured_queries), 14)
+        self.assertEqual(summary["total_assets"], Decimal("66800.00"))
+        self.assertEqual(summary["total_liabilities"], Decimal("4300.00"))
+        self.assertEqual(summary["net_worth"], Decimal("62500.00"))

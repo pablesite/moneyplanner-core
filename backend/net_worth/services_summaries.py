@@ -17,15 +17,30 @@ def _build_net_worth_summary_impl(
     timezone_localdate_fn,
     adjust_for_inflation_fn,
     build_inflation_adjuster_fn=None,
+    build_fx_cache_fn=None,
+    build_position_data_cache_fn=None,
 ) -> dict[str, object]:
     today = timezone_localdate_fn()
     base_currency = get_base_currency_for_user_fn(user=user)
     assets_qs, liabilities_qs = get_active_positions_fn(user=user)
+    assets = list(assets_qs)
+    liabilities = list(liabilities_qs)
+    fx_cache = None
+    position_cache = None
+    if build_fx_cache_fn is not None:
+        currencies = {base_currency}
+        currencies.update(asset.currency for asset in assets)
+        currencies.update(liability.currency for liability in liabilities)
+        fx_cache = build_fx_cache_fn(currencies)
+    if build_position_data_cache_fn is not None:
+        position_cache = build_position_data_cache_fn(assets, liabilities)
     totals = calculate_totals_fn(
-        assets_qs=assets_qs,
-        liabilities_qs=liabilities_qs,
+        assets_qs=assets,
+        liabilities_qs=liabilities,
         base_currency=base_currency,
         as_of_date=today,
+        fx_cache=fx_cache,
+        position_cache=position_cache,
     )
 
     net_worth = totals.total_assets - totals.total_liabilities
@@ -113,6 +128,8 @@ def _build_net_worth_summary_impl(
 def build_net_worth_summary(*, user) -> dict[str, object]:
     # Local import keeps patching compatibility through `net_worth.services` during transition.
     from . import services as services_facade
+    from .services_timelines import _build_position_data_cache
+    from core.services import build_fx_cache
 
     return _build_net_worth_summary_impl(
         user=user,
@@ -124,6 +141,8 @@ def build_net_worth_summary(*, user) -> dict[str, object]:
         timezone_localdate_fn=services_facade.timezone.localdate,
         adjust_for_inflation_fn=services_facade.adjust_for_inflation,
         build_inflation_adjuster_fn=services_facade.build_inflation_adjuster,
+        build_fx_cache_fn=build_fx_cache,
+        build_position_data_cache_fn=_build_position_data_cache,
     )
 
 
