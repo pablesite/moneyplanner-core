@@ -13,7 +13,7 @@ Convenciones:
 
 ### Para v1
 
-- **Revisión completa de modales de creación/edición de activos y pasivos.** Verificar coherencia visual, validaciones y flujo de todos los modales del módulo. La v1 se cierra cuando este punto esté resuelto.
+- ✅ **Revisión completa de modales de creación/edición de activos y pasivos.** Coherencia visual, validaciones y flujo revisados; v1 del módulo cerrada a nivel funcional.
 
 ### Para v2
 

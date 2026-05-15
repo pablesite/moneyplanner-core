@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue';
 
+let modalIdCounter = 0;
+
 const props = withDefaults(
   defineProps<{
     open: boolean;
@@ -16,6 +18,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
+
+const titleId = `base-modal-title-${++modalIdCounter}`;
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close');
@@ -40,9 +44,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       <div
         class="flex max-h-[calc(100vh-2rem)] w-full max-w-[720px] flex-col overflow-hidden rounded-lg border border-white/10 bg-[#121212fa] shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
         :class="panelClass"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="title ? titleId : undefined"
       >
         <div class="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
-          <div class="text-base font-semibold">{{ title }}</div>
+          <div :id="titleId" class="text-base font-semibold">{{ title }}</div>
           <button
             class="ml-auto rounded-md border border-white/10 px-2 py-1 text-sm text-white/70 transition hover:border-white/20 hover:text-white"
             type="button"
