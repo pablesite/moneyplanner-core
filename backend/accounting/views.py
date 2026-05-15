@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q, QuerySet, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
@@ -28,7 +28,6 @@ from .services import (
     validate_balance_summary_filters,
     validate_budget_suggestion_filters,
 )
-from .services_ledger import get_account_balance
 
 
 class LedgerAccountViewSet(viewsets.ModelViewSet):
@@ -121,16 +120,57 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             return amount
         return -amount
 
-    def _build_account_balance_after_map(self, *, account: LedgerAccount) -> dict[int, Decimal]:
-        account_rows = list(
+    def _sum_account_entry_impacts(
+        self,
+        *,
+        account: LedgerAccount,
+        transaction_ids: QuerySet | None = None,
+    ) -> Decimal:
+        queryset = LedgerEntry.objects.filter(
+            account_id=account.id,
+            transaction__user_id=account.user_id,
+        )
+        if transaction_ids is not None:
+            queryset = queryset.filter(transaction_id__in=transaction_ids)
+
+        impact = Decimal("0")
+        for row in queryset.values("side").annotate(amount_total=Sum("amount")):
+            amount = row["amount_total"] or Decimal("0")
+            impact += self._signed_impact_for_account(
+                account_type=account.account_type,
+                side=row["side"],
+                amount=amount,
+            )
+        return impact
+
+    def _build_account_balance_after_map(
+        self,
+        *,
+        account: LedgerAccount,
+        rows: list[LedgerTransaction],
+    ) -> dict[int, Decimal]:
+        if not rows:
+            return {}
+
+        first_row = rows[0]
+        newer_transaction_ids = (
             self.get_queryset()
             .filter(entries__account_id=account.id)
+            .filter(
+                Q(booking_date__gt=first_row.booking_date)
+                | Q(booking_date=first_row.booking_date, id__gt=first_row.id)
+            )
             .distinct()
-            .order_by("-booking_date", "-id")
+            .order_by()
+            .values("id")
         )
-        running_balance = get_account_balance(account=account)
+        running_balance = self._sum_account_entry_impacts(account=account)
+        running_balance -= self._sum_account_entry_impacts(
+            account=account,
+            transaction_ids=newer_transaction_ids,
+        )
         by_transaction_id: dict[int, Decimal] = {}
-        for transaction in account_rows:
+        for transaction in rows:
             by_transaction_id[transaction.id] = running_balance
             impact = Decimal("0")
             for entry in transaction.entries.all():
@@ -183,7 +223,8 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             serializer_context = {
                 **serializer_context,
                 "account_balance_after_by_tx_id": self._build_account_balance_after_map(
-                    account=account
+                    account=account,
+                    rows=rows,
                 ),
             }
 
