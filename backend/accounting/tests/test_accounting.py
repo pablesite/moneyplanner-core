@@ -1805,6 +1805,42 @@ class AccountingApiTests(APITestCase):
             by_account_name_query.data["results"][0]["description"], "Transferencia ahorro"
         )
 
+    def test_transactions_list_kind_transfer_includes_legacy_asset_transfers(self):
+        savings_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta ahorro legacy",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 11),
+            value_date=date(2026, 2, 11),
+            description="Transferencia legacy entre cuentas",
+            origin=LedgerTransaction.Origin.MANUAL,
+            quick_entry_kind="",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("25.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=savings_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("25.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/accounting/transactions/?kind=transfer")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["total_count"], 1)
+        self.assertEqual(response.data["results"][0]["description"], tx.description)
+
     def test_transactions_list_kind_investment_purchase_excludes_revaluation(self):
         investment_asset = Asset.objects.create(
             user=self.user,

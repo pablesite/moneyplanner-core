@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Count, Exists, OuterRef, Q, QuerySet
+from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
@@ -153,6 +153,43 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
     return "other"
 
 
+def _get_legacy_transfer_transaction_ids(queryset: QuerySet) -> list[int]:
+    legacy_rows = (
+        queryset.prefetch_related(None)
+        .filter(quick_entry_kind="")
+        .prefetch_related(
+            Prefetch("entries", queryset=LedgerEntry.objects.select_related("account"))
+        )
+    )
+    legacy_transfer_ids: list[int] = []
+    for transaction in legacy_rows:
+        entries = list(transaction.entries.all())
+        asset_entry_count = sum(
+            1 for entry in entries if entry.account.account_type == LedgerAccount.AccountType.ASSET
+        )
+        has_income_like_entry = any(
+            entry.flow_family == LedgerEntry.FlowFamily.INCOME
+            or entry.annual_income_entry_id is not None
+            for entry in entries
+        )
+        has_expense_like_entry = any(
+            entry.flow_family == LedgerEntry.FlowFamily.EXPENSE
+            or entry.annual_expense_entry_id is not None
+            for entry in entries
+        )
+        has_liability_entry = any(entry.liability_id is not None for entry in entries)
+        has_investment_entry = any(entry.asset_id is not None for entry in entries)
+        if (
+            asset_entry_count >= 2
+            and not has_income_like_entry
+            and not has_expense_like_entry
+            and not has_liability_entry
+            and not has_investment_entry
+        ):
+            legacy_transfer_ids.append(transaction.id)
+    return legacy_transfer_ids
+
+
 def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     date_from = (params.get("date_from") or "").strip()
     date_to = (params.get("date_to") or "").strip()
@@ -282,45 +319,10 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             & Q(notes__startswith=NET_WORTH_OPENING_NOTE_PREFIX)
         )
     if kind == "transfer":
-        transfer_legacy_queryset = queryset.annotate(
-            asset_entry_count=Count(
-                "entries",
-                filter=Q(entries__account__account_type=LedgerAccount.AccountType.ASSET),
-                distinct=True,
-            ),
-            income_like_entry_count=Count(
-                "entries",
-                filter=Q(entries__flow_family=LedgerEntry.FlowFamily.INCOME)
-                | Q(entries__annual_income_entry_id__isnull=False),
-                distinct=True,
-            ),
-            expense_like_entry_count=Count(
-                "entries",
-                filter=Q(entries__flow_family=LedgerEntry.FlowFamily.EXPENSE)
-                | Q(entries__annual_expense_entry_id__isnull=False),
-                distinct=True,
-            ),
-            liability_entry_count=Count(
-                "entries",
-                filter=Q(entries__liability_id__isnull=False),
-                distinct=True,
-            ),
-            investment_entry_count=Count(
-                "entries",
-                filter=Q(entries__asset_id__isnull=False),
-                distinct=True,
-            ),
-        ).filter(
-            Q(quick_entry_kind=""),
-            asset_entry_count__gte=2,
-            income_like_entry_count=0,
-            expense_like_entry_count=0,
-            liability_entry_count=0,
-            investment_entry_count=0,
-        )
+        legacy_transfer_ids = _get_legacy_transfer_transaction_ids(queryset)
         return queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER)
-            | Q(id__in=transfer_legacy_queryset.values("id"))
+            | Q(id__in=legacy_transfer_ids)
         )
     if kind == "adjustment":
         return queryset.filter(Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT))
