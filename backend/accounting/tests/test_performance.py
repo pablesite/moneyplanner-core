@@ -8,9 +8,11 @@ from django.test.utils import CaptureQueriesContext
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_summaries import (
+    build_account_balances_summary,
     build_daily_balance_series,
     build_monthly_accounting_summary,
 )
+from net_worth.models import Asset
 
 
 class AccountingSummaryPerformanceTests(TestCase):
@@ -135,3 +137,128 @@ class AccountingSummaryPerformanceTests(TestCase):
         self.assertEqual(len(summary["rows"]), 31)
         self.assertEqual(summary["rows"][0]["assets_total"], "12390.00")
         self.assertEqual(summary["rows"][-1]["assets_total"], "24000.00")
+
+    def test_account_balances_summary_uses_grouped_queries_with_high_entry_volume(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo indexado",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        transactions = [
+            LedgerTransaction(
+                user=self.user,
+                booking_date=date(2025, 12, 15) if idx < 1200 else date(2026, 1, (idx % 31) + 1),
+                value_date=date(2025, 12, 15) if idx < 1200 else date(2026, 1, (idx % 31) + 1),
+                description=f"Balance movimiento {idx}",
+            )
+            for idx in range(2400)
+        ]
+        transactions.append(
+            LedgerTransaction(
+                user=self.user,
+                booking_date=date(2026, 1, 5),
+                value_date=date(2026, 1, 5),
+                description="Aporte inversion",
+                quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            )
+        )
+        transactions.append(
+            LedgerTransaction(
+                user=self.user,
+                booking_date=date(2026, 1, 20),
+                value_date=date(2026, 1, 20),
+                description="Retiro inversion",
+                quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            )
+        )
+        LedgerTransaction.objects.bulk_create(transactions)
+        transactions = list(LedgerTransaction.objects.filter(user=self.user).order_by("id"))
+        amount = Decimal("10.00")
+        entries = []
+        for transaction in transactions[:2400]:
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.cash_account,
+                    side=LedgerEntry.Side.DEBIT,
+                    amount=amount,
+                    currency="EUR",
+                )
+            )
+            entries.append(
+                LedgerEntry(
+                    transaction=transaction,
+                    account=self.income_account,
+                    side=LedgerEntry.Side.CREDIT,
+                    amount=amount,
+                    currency="EUR",
+                )
+            )
+        investment_inflow = transactions[2400]
+        investment_outflow = transactions[2401]
+        entries.extend(
+            [
+                LedgerEntry(
+                    transaction=investment_inflow,
+                    account=investment_account,
+                    side=LedgerEntry.Side.DEBIT,
+                    amount=Decimal("500.00"),
+                    currency="EUR",
+                    asset=investment_asset,
+                ),
+                LedgerEntry(
+                    transaction=investment_inflow,
+                    account=self.cash_account,
+                    side=LedgerEntry.Side.CREDIT,
+                    amount=Decimal("500.00"),
+                    currency="EUR",
+                ),
+                LedgerEntry(
+                    transaction=investment_outflow,
+                    account=self.cash_account,
+                    side=LedgerEntry.Side.DEBIT,
+                    amount=Decimal("200.00"),
+                    currency="EUR",
+                ),
+                LedgerEntry(
+                    transaction=investment_outflow,
+                    account=investment_account,
+                    side=LedgerEntry.Side.CREDIT,
+                    amount=Decimal("200.00"),
+                    currency="EUR",
+                    asset=investment_asset,
+                ),
+            ]
+        )
+        LedgerEntry.objects.bulk_create(entries, batch_size=1000)
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            summary = build_account_balances_summary(
+                user_id=self.user.id,
+                fiscal_year=2026,
+                month=1,
+                account_type=LedgerAccount.AccountType.ASSET,
+            )
+
+        self.assertLessEqual(len(captured_queries), 4)
+        accounts_by_id = {row["account_id"]: row for row in summary["accounts"]}
+        self.assertEqual(summary["totals_by_account_type"]["asset"], "24000.00")
+        self.assertEqual(accounts_by_id[self.cash_account.id]["current_balance"], "23700.00000000")
+        self.assertEqual(accounts_by_id[self.cash_account.id]["period_net_change"], "11700.00")
+        self.assertEqual(accounts_by_id[investment_account.id]["current_balance"], "300.00000000")
+        self.assertEqual(accounts_by_id[investment_account.id]["period_net_change"], "300.00")
+        self.assertEqual(accounts_by_id[investment_account.id]["investment_inflow_total"], "500.00")
+        self.assertEqual(
+            accounts_by_id[investment_account.id]["investment_outflow_total"], "200.00"
+        )

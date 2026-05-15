@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Min, Sum
+from django.db.models import Min, Q, QuerySet, Sum
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import UserSettings
@@ -114,15 +114,11 @@ def build_account_balances_summary(
         accounts_queryset = accounts_queryset.filter(account_type=account_type)
     accounts = list(accounts_queryset.order_by("account_type", "name", "id"))
 
-    current_entries_queryset = LedgerEntry.objects.filter(
-        transaction__user_id=user_id,
-    ).select_related("transaction", "account")
-    if account_type:
-        current_entries_queryset = current_entries_queryset.filter(
-            account__account_type=account_type
-        )
-    if status:
-        current_entries_queryset = current_entries_queryset.filter(transaction__status=status)
+    current_entries_queryset = _build_account_balance_entries_queryset(
+        user_id=user_id,
+        account_type=account_type,
+        status=status,
+    )
 
     period_entries_queryset = current_entries_queryset
     if fiscal_year is not None:
@@ -134,12 +130,11 @@ def build_account_balances_summary(
             transaction__booking_date__month=month
         )
 
-    current_entries = list(current_entries_queryset)
-    period_entries = list(period_entries_queryset)
-
-    current_totals_by_account = _group_balance_totals_by_account(current_entries)
-    period_totals_by_account = _group_balance_totals_by_account(period_entries)
-    investment_contributed_totals = _group_investment_contributed_by_account(current_entries)
+    current_totals_by_account = _aggregate_balance_totals_by_account(current_entries_queryset)
+    period_totals_by_account = _aggregate_balance_totals_by_account(period_entries_queryset)
+    investment_contributed_totals = _aggregate_investment_contributed_by_account(
+        current_entries_queryset
+    )
 
     items: list[dict] = []
     totals_by_type: dict[str, Decimal] = defaultdict(lambda: ZERO)
@@ -697,10 +692,31 @@ def validate_budget_suggestion_filters(*, lookback_years: int) -> None:
         raise ValidationError({"lookback_years": "Query param 'lookback_years' invalido."})
 
 
-def _group_balance_totals_by_account(entries: list[LedgerEntry]) -> dict[int, LedgerBalanceTotals]:
+def _build_account_balance_entries_queryset(
+    *,
+    user_id: int,
+    account_type: str | None,
+    status: str | None,
+) -> QuerySet[LedgerEntry]:
+    queryset = LedgerEntry.objects.filter(transaction__user_id=user_id)
+    if account_type:
+        queryset = queryset.filter(account__account_type=account_type)
+    if status:
+        queryset = queryset.filter(transaction__status=status)
+    return queryset
+
+
+def _aggregate_balance_totals_by_account(
+    entries_queryset: QuerySet[LedgerEntry],
+) -> dict[int, LedgerBalanceTotals]:
     grouped: dict[int, dict[str, Decimal]] = defaultdict(lambda: {"debit": ZERO, "credit": ZERO})
-    for entry in entries:
-        grouped[entry.account_id][entry.side] += entry.amount
+    rows = (
+        entries_queryset.values("account_id", "side")
+        .annotate(amount_total=Sum("amount"))
+        .order_by("account_id", "side")
+    )
+    for row in rows:
+        grouped[int(row["account_id"])][str(row["side"])] += Decimal(row["amount_total"] or ZERO)
     return {
         account_id: LedgerBalanceTotals(
             debit_total=totals["debit"],
@@ -714,23 +730,30 @@ def _build_period_keys(*, start_year: int, end_year: int) -> list[tuple[int, int
     return [(year, month) for year in range(start_year, end_year + 1) for month in range(1, 13)]
 
 
-def _group_investment_contributed_by_account(
-    entries: list[LedgerEntry],
+def _aggregate_investment_contributed_by_account(
+    entries_queryset: QuerySet[LedgerEntry],
 ) -> dict[int, tuple[Decimal, Decimal]]:
-    totals: dict[int, tuple[Decimal, Decimal]] = defaultdict(lambda: (ZERO, ZERO))
-    for entry in entries:
-        if entry.account.asset_id is None:
-            continue
-        tx_kind = str(getattr(entry.transaction, "quick_entry_kind", "") or "").strip()
-        if tx_kind and tx_kind != "investment":
-            continue
-        inflow_total, outflow_total = totals[entry.account_id]
-        if entry.side == LedgerEntry.Side.DEBIT:
-            inflow_total += entry.amount
-        elif entry.side == LedgerEntry.Side.CREDIT:
-            outflow_total += entry.amount
-        totals[entry.account_id] = (inflow_total, outflow_total)
-    return totals
+    grouped: dict[int, tuple[Decimal, Decimal]] = defaultdict(lambda: (ZERO, ZERO))
+    rows = (
+        entries_queryset.filter(account__asset_id__isnull=False)
+        .filter(
+            Q(transaction__quick_entry_kind="")
+            | Q(transaction__quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT)
+        )
+        .values("account_id", "side")
+        .annotate(amount_total=Sum("amount"))
+        .order_by("account_id", "side")
+    )
+    for row in rows:
+        account_id = int(row["account_id"])
+        amount = Decimal(row["amount_total"] or ZERO)
+        inflow_total, outflow_total = grouped[account_id]
+        if row["side"] == LedgerEntry.Side.DEBIT:
+            inflow_total += amount
+        elif row["side"] == LedgerEntry.Side.CREDIT:
+            outflow_total += amount
+        grouped[account_id] = (inflow_total, outflow_total)
+    return grouped
 
 
 def _serialize_series(
