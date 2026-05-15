@@ -522,17 +522,55 @@ def _get_inflation_index_or_none(*, region: str, period_month: date) -> Decimal 
     return None
 
 
-def _get_inflation_growth_factor_or_one(*, start: date, end: date) -> Decimal:
+def _get_cached_inflation_index_or_none(
+    *,
+    region: str,
+    period_month: date,
+    position_cache,
+) -> Decimal | None:
+    rows = getattr(position_cache, "inflation_indexes", {}).get(region, [])
+    if not rows:
+        return None
+    previous_index = None
+    for row_period, row_index in rows:
+        if row_period <= period_month:
+            previous_index = row_index
+        else:
+            break
+    return previous_index if previous_index is not None else rows[0][1]
+
+
+def _get_inflation_growth_factor_or_one(
+    *,
+    start: date,
+    end: date,
+    position_cache=None,
+) -> Decimal:
     if end <= start:
         return Decimal("1")
-    start_index = _get_inflation_index_or_none(
-        region=cast(str, InflationIndex.Region.ES),
-        period_month=_month_start(start),
-    )
-    end_index = _get_inflation_index_or_none(
-        region=cast(str, InflationIndex.Region.ES),
-        period_month=_month_start(end),
-    )
+    region = cast(str, InflationIndex.Region.ES)
+    start_month = _month_start(start)
+    end_month = _month_start(end)
+    if position_cache is not None:
+        start_index = _get_cached_inflation_index_or_none(
+            region=region,
+            period_month=start_month,
+            position_cache=position_cache,
+        )
+        end_index = _get_cached_inflation_index_or_none(
+            region=region,
+            period_month=end_month,
+            position_cache=position_cache,
+        )
+    else:
+        start_index = _get_inflation_index_or_none(
+            region=region,
+            period_month=start_month,
+        )
+        end_index = _get_inflation_index_or_none(
+            region=region,
+            period_month=end_month,
+        )
     if not start_index or not end_index or start_index == 0:
         return Decimal("1")
     return end_index / start_index
@@ -591,6 +629,44 @@ def _get_effective_accounting_asset_amount_or_none(
     if asset.tracking_mode != Asset.TrackingMode.ACCOUNTING:
         return None
 
+    if position_cache is not None:
+        account_id = asset.accounting_account_id
+        if account_id is None:
+            return None
+        account_id_int = int(account_id)
+        cached_account = getattr(position_cache, "accounting_accounts", {}).get(account_id_int)
+        if (
+            cached_account is None
+            or cached_account["account_type"] != "asset"
+            or cached_account["currency"] != asset.currency
+            or cached_account["asset_id"] not in (None, asset.id)
+        ):
+            return None
+
+        dates = position_cache.accounting_prefix_dates.get(account_id_int, [])
+        if not dates:
+            return None
+        idx = bisect_right(dates, as_of_date) - 1
+        if idx < 0:
+            return None
+        debit_total = position_cache.accounting_prefix_debits[account_id_int][idx]
+        credit_total = position_cache.accounting_prefix_credits[account_id_int][idx]
+        raw_full = debit_total - credit_total
+
+        if asset.category == Asset.Category.CASH:
+            opening_date = position_cache.asset_opening_booking_dates.get(asset.id)
+            if opening_date is not None and as_of_date >= opening_date:
+                before_opening_idx = bisect_right(dates, opening_date - timedelta(days=1)) - 1
+                if before_opening_idx >= 0:
+                    before_debit_total = position_cache.accounting_prefix_debits[account_id_int][
+                        before_opening_idx
+                    ]
+                    before_credit_total = position_cache.accounting_prefix_credits[account_id_int][
+                        before_opening_idx
+                    ]
+                    raw_full -= before_debit_total - before_credit_total
+        return raw_full
+
     integration_state = ensure_asset_accounting_account(asset=asset)
     if integration_state == AccountingIntegrationState.NEEDS_REVIEW:
         return None
@@ -612,31 +688,6 @@ def _get_effective_accounting_asset_amount_or_none(
         return None
 
     should_apply_opening_anchor = asset.category == Asset.Category.CASH
-
-    if position_cache is not None:
-        dates = position_cache.accounting_prefix_dates.get(accounting_account.id, [])
-        if not dates:
-            return None
-        idx = bisect_right(dates, as_of_date) - 1
-        if idx < 0:
-            return None
-        debit_total = position_cache.accounting_prefix_debits[accounting_account.id][idx]
-        credit_total = position_cache.accounting_prefix_credits[accounting_account.id][idx]
-        raw_full = debit_total - credit_total
-
-        if should_apply_opening_anchor:
-            opening_date = position_cache.asset_opening_booking_dates.get(asset.id)
-            if opening_date is not None and as_of_date >= opening_date:
-                before_opening_idx = bisect_right(dates, opening_date - timedelta(days=1)) - 1
-                if before_opening_idx >= 0:
-                    before_debit_total = position_cache.accounting_prefix_debits[
-                        accounting_account.id
-                    ][before_opening_idx]
-                    before_credit_total = position_cache.accounting_prefix_credits[
-                        accounting_account.id
-                    ][before_opening_idx]
-                    raw_full -= before_debit_total - before_credit_total
-        return raw_full
 
     if not has_account_entries(
         account=accounting_account,
@@ -865,6 +916,7 @@ def get_effective_asset_amount(
                 inflation_growth = _get_inflation_growth_factor_or_one(
                     start=asset.start_date,
                     end=ref_date,
+                    position_cache=position_cache,
                 )
                 effective_value *= inflation_growth
             return effective_value
