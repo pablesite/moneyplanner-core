@@ -359,10 +359,7 @@ class AssetSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        effective_amount = get_effective_asset_amount(
-            asset=obj,
-            position_cache=self.context.get("position_cache"),
-        )
+        effective_amount = self._get_effective_amount(obj)
         return get_amount_base_value(
             amount=effective_amount,
             currency=obj.currency,
@@ -371,12 +368,18 @@ class AssetSerializer(serializers.ModelSerializer):
         )
 
     def get_effective_amount(self, obj):
-        return str(
-            get_effective_asset_amount(
-                asset=obj,
-                position_cache=self.context.get("position_cache"),
-            )
+        return str(self._get_effective_amount(obj))
+
+    def _get_effective_amount(self, obj):
+        cached_amount = getattr(obj, "_effective_amount_cache", None)
+        if cached_amount is not None:
+            return cached_amount
+        effective_amount = get_effective_asset_amount(
+            asset=obj,
+            position_cache=self.context.get("position_cache"),
         )
+        obj._effective_amount_cache = effective_amount
+        return effective_amount
 
     def get_accounting_integration_state(self, obj):
         cached_state = getattr(obj, "_accounting_integration_state", None)
@@ -386,6 +389,22 @@ class AssetSerializer(serializers.ModelSerializer):
             AssetAccountingIntegrationState.NEEDS_REVIEW,
         }:
             return cached_state
+        cache = self.context.get("position_cache")
+        account_id = obj.accounting_account_id
+        if (
+            cache is not None
+            and obj.tracking_mode == Asset.TrackingMode.ACCOUNTING
+            and account_id is not None
+        ):
+            cached_account = getattr(cache, "accounting_accounts", {}).get(int(account_id))
+            if (
+                cached_account is not None
+                and cached_account["account_type"] == "asset"
+                and cached_account["currency"] == obj.currency
+                and cached_account["asset_id"] in (None, obj.id)
+            ):
+                return AssetAccountingIntegrationState.LINKED
+            return AssetAccountingIntegrationState.NEEDS_REVIEW
         state = ensure_asset_accounting_account(asset=obj)
         if state in {
             AssetAccountingIntegrationState.LINKED,
@@ -704,10 +723,7 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return attrs
 
     def get_amount_base(self, obj):
-        effective_amount = get_effective_liability_amount(
-            liability=obj,
-            position_cache=self.context.get("position_cache"),
-        )
+        effective_amount = self._get_effective_amount(obj)
         return get_amount_base_value(
             amount=effective_amount,
             currency=obj.currency,
@@ -731,12 +747,18 @@ class LiabilitySerializer(serializers.ModelSerializer):
         return str(value) if value is not None else None
 
     def get_effective_amount(self, obj):
-        return str(
-            get_effective_liability_amount(
-                liability=obj,
-                position_cache=self.context.get("position_cache"),
-            )
+        return str(self._get_effective_amount(obj))
+
+    def _get_effective_amount(self, obj):
+        cached_amount = getattr(obj, "_effective_amount_cache", None)
+        if cached_amount is not None:
+            return cached_amount
+        effective_amount = get_effective_liability_amount(
+            liability=obj,
+            position_cache=self.context.get("position_cache"),
         )
+        obj._effective_amount_cache = effective_amount
+        return effective_amount
 
     def get_accounting_integration_state(self, obj):
         cached_state = getattr(obj, "_accounting_integration_state", None)
@@ -746,6 +768,22 @@ class LiabilitySerializer(serializers.ModelSerializer):
             LiabilityAccountingIntegrationState.NEEDS_REVIEW,
         }:
             return cached_state
+        cache = self.context.get("position_cache")
+        account_id = obj.accounting_account_id
+        if (
+            cache is not None
+            and obj.tracking_mode == Liability.TrackingMode.ACCOUNTING
+            and account_id is not None
+        ):
+            cached_account = getattr(cache, "accounting_accounts", {}).get(int(account_id))
+            if (
+                cached_account is not None
+                and cached_account["account_type"] == "liability"
+                and cached_account["currency"] == obj.currency
+                and cached_account["liability_id"] in (None, obj.id)
+            ):
+                return LiabilityAccountingIntegrationState.LINKED
+            return LiabilityAccountingIntegrationState.NEEDS_REVIEW
         state = ensure_liability_accounting_account(liability=obj)
         if state in {
             LiabilityAccountingIntegrationState.LINKED,

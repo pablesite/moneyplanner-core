@@ -4,8 +4,10 @@ import calendar
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 
 from core.services import build_fx_cache, convert_currency_cached
@@ -22,6 +24,8 @@ from .models import (
 )
 from .services import calculate_totals, get_base_currency_for_user
 from .services_assets_core import (
+    OPENING_ASSET_NOTE_PREFIX,
+    OPENING_BALANCE_DESCRIPTION_PREFIX,
     _get_latest_opening_balance_tx_for_accounting_asset,
     get_effective_asset_amount,
 )
@@ -49,6 +53,112 @@ class PositionDataCache:
         default_factory=dict
     )
     inflation_indexes: dict[str, list[tuple[date, Decimal]]] = field(default_factory=dict)
+
+
+def _cache_legacy_asset_opening_dates(
+    *,
+    cache: PositionDataCache,
+    assets: list[Asset],
+) -> set[int]:
+    legacy_opening_assets = [
+        asset
+        for asset in assets
+        if asset.tracking_mode == Asset.TrackingMode.ACCOUNTING
+        and asset.accounting_account_id is not None
+        and asset.category == Asset.Category.CASH
+        and asset.id not in cache.asset_opening_booking_dates
+        and asset.user_id is not None
+    ]
+    legacy_checked_asset_ids = {asset.id for asset in legacy_opening_assets}
+    if not legacy_opening_assets:
+        return legacy_checked_asset_ids
+
+    from accounting.models import LedgerAccount, LedgerTransaction
+
+    legacy_asset_by_id = {asset.id: asset for asset in legacy_opening_assets}
+    legacy_assets_by_account: dict[int, list[Asset]] = {}
+    for asset in legacy_opening_assets:
+        legacy_assets_by_account.setdefault(int(asset.accounting_account_id), []).append(asset)
+    legacy_account_ids = set(legacy_assets_by_account)
+    legacy_asset_ids = set(legacy_asset_by_id)
+    legacy_user_ids = {asset.user_id for asset in legacy_opening_assets}
+    legacy_transactions = (
+        LedgerTransaction.objects.filter(
+            user_id__in=legacy_user_ids,
+            status=LedgerTransaction.Status.POSTED,
+            entries__account_id__in=legacy_account_ids,
+        )
+        .filter(
+            Q(
+                origin=LedgerTransaction.Origin.SYSTEM,
+                notes__startswith=OPENING_ASSET_NOTE_PREFIX,
+                entries__asset_id__in=legacy_asset_ids,
+            )
+            | Q(
+                origin=LedgerTransaction.Origin.SYSTEM,
+                description__startswith=OPENING_BALANCE_DESCRIPTION_PREFIX,
+            )
+        )
+        .distinct()
+        .prefetch_related("entries__account")
+        .order_by("-booking_date", "-id")
+    )
+    for transaction in legacy_transactions:
+        entries = list(transaction.entries.all())
+        if len(entries) != 2:
+            continue
+        for position_entry in entries:
+            account_id = int(position_entry.account_id)
+            candidate_assets = legacy_assets_by_account.get(account_id, [])
+            if position_entry.asset_id is not None:
+                candidate_asset = legacy_asset_by_id.get(position_entry.asset_id)
+                candidate_assets = [candidate_asset] if candidate_asset is not None else []
+            if not candidate_assets:
+                continue
+
+            counterpart_entries = [entry for entry in entries if entry.id != position_entry.id]
+            if len(counterpart_entries) != 1:
+                continue
+            counterpart_entry = counterpart_entries[0]
+            for asset in candidate_assets:
+                if asset.id in cache.asset_opening_booking_dates:
+                    continue
+                if transaction.user_id != asset.user_id:
+                    continue
+                if position_entry.asset_id not in (None, asset.id):
+                    continue
+                if counterpart_entry.account.account_type != LedgerAccount.AccountType.EQUITY:
+                    continue
+                if position_entry.amount != counterpart_entry.amount:
+                    continue
+                if position_entry.side == counterpart_entry.side:
+                    continue
+                cache.asset_opening_booking_dates[asset.id] = transaction.booking_date
+    return legacy_checked_asset_ids
+
+
+def _cache_inflation_indexes_if_needed(
+    *,
+    cache: PositionDataCache,
+    assets: list[Asset],
+) -> None:
+    needs_inflation_indexes = any(
+        asset.category == Asset.Category.FURNISHINGS
+        and asset.currency == "EUR"
+        and asset.amortization_method == Asset.AmortizationMethod.STRAIGHT_LINE
+        for asset in assets
+    )
+    if not needs_inflation_indexes:
+        return
+
+    from core.models import InflationIndex
+
+    cache.inflation_indexes[cast(str, InflationIndex.Region.ES)] = [
+        (period, Decimal(index))
+        for period, index in InflationIndex.objects.filter(region=InflationIndex.Region.ES)
+        .order_by("period")
+        .values_list("period", "index")
+    ]
 
 
 def _build_position_data_cache(
@@ -106,9 +216,15 @@ def _build_position_data_cache(
         from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
         from accounting.services_ledger import build_net_worth_opening_balance_note
 
-        for account_id, account_type, currency, asset_id, liability_id in LedgerAccount.objects.filter(
-            id__in=accounting_account_ids
-        ).values_list("id", "account_type", "currency", "asset_id", "liability_id"):
+        for (
+            account_id,
+            account_type,
+            currency,
+            asset_id,
+            liability_id,
+        ) in LedgerAccount.objects.filter(id__in=accounting_account_ids).values_list(
+            "id", "account_type", "currency", "asset_id", "liability_id"
+        ):
             cache.accounting_account_types[int(account_id)] = str(account_type)
             cache.accounting_accounts[int(account_id)] = {
                 "account_type": str(account_type),
@@ -209,12 +325,18 @@ def _build_position_data_cache(
                     cache.liability_opening_booking_dates[target_id] = booking_date
                 seen_notes.add(note)
 
+        legacy_checked_asset_ids = _cache_legacy_asset_opening_dates(
+            cache=cache,
+            assets=assets,
+        )
+
         for asset in assets:
             if (
                 asset.tracking_mode != Asset.TrackingMode.ACCOUNTING
                 or asset.accounting_account_id is None
                 or asset.category != Asset.Category.CASH
                 or asset.id in cache.asset_opening_booking_dates
+                or asset.id in legacy_checked_asset_ids
             ):
                 continue
             opening_tx = _get_latest_opening_balance_tx_for_accounting_asset(
@@ -225,21 +347,10 @@ def _build_position_data_cache(
             if opening_tx is not None:
                 cache.asset_opening_booking_dates[asset.id] = opening_tx.booking_date
 
-    needs_inflation_indexes = any(
-        asset.category == Asset.Category.FURNISHINGS
-        and asset.currency == "EUR"
-        and asset.amortization_method == Asset.AmortizationMethod.STRAIGHT_LINE
-        for asset in assets
+    _cache_inflation_indexes_if_needed(
+        cache=cache,
+        assets=assets,
     )
-    if needs_inflation_indexes:
-        from core.models import InflationIndex
-
-        cache.inflation_indexes[InflationIndex.Region.ES] = [
-            (period, Decimal(index))
-            for period, index in InflationIndex.objects.filter(region=InflationIndex.Region.ES)
-            .order_by("period")
-            .values_list("period", "index")
-        ]
 
     return cache
 

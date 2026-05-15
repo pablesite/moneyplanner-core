@@ -636,12 +636,12 @@ def get_effective_liability_amount(
                     if dates:
                         idx = bisect_right(dates, ref_date) - 1
                         if idx >= 0:
-                            debit_total = position_cache.accounting_prefix_debits[
-                                account_id_int
-                            ][idx]
-                            credit_total = position_cache.accounting_prefix_credits[
-                                account_id_int
-                            ][idx]
+                            debit_total = position_cache.accounting_prefix_debits[account_id_int][
+                                idx
+                            ]
+                            credit_total = position_cache.accounting_prefix_credits[account_id_int][
+                                idx
+                            ]
                             raw_full = credit_total - debit_total
 
                             opening_date = position_cache.liability_opening_booking_dates.get(
