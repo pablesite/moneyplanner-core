@@ -26,6 +26,7 @@ vi.mock('@/domains/net-worth', () => ({
   ItemForm: makeStub('ItemForm'),
   ItemList: makeStub('ItemList'),
   NetWorthByCategoryBar: makeStub('NetWorthByCategoryBar'),
+  NetWorthDeltaChart: makeStub('NetWorthDeltaChart'),
   NetWorthTimelineChart: makeStub('NetWorthTimelineChart'),
   NetWorthDonut: defineComponent({
     name: 'NetWorthDonut',
