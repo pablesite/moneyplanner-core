@@ -1559,6 +1559,50 @@ class AccountingApiTests(APITestCase):
         second_page_ids = {row["id"] for row in second_page.data["results"]}
         self.assertTrue(first_page_ids.isdisjoint(second_page_ids))
 
+    def test_transactions_list_can_skip_total_count(self):
+        create_res = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2026-02-10",
+                "value_date": "2026-02-10",
+                "description": "Nomina",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": self.cash_account.id,
+                        "side": "debit",
+                        "amount": "100.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "100.00",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "salary",
+                        "subcategory_key": "employee_salary",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+
+        response = self.client.get("/api/accounting/transactions/?include_total=false")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("total_count", response.data)
+        self.assertIsNone(response.data["total_count"])
+        self.assertEqual(len(response.data["results"]), 1)
+
+    def test_transactions_list_rejects_invalid_include_total(self):
+        response = self.client.get("/api/accounting/transactions/?include_total=maybe")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("include_total", response.data["error"]["details"])
+
     def test_transactions_list_returns_account_balance_after_across_cursor_pages(self):
         expense_account = LedgerAccount.objects.create(
             user=self.user,
