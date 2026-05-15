@@ -20,6 +20,7 @@ from net_worth.models import (
     LiquidityMonthlyCheckin,
 )
 from net_worth.services_summaries import build_net_worth_summary
+from net_worth.services_timelines import build_asset_timeline, build_liability_timeline
 
 
 class NetWorthSummaryPerformanceTests(TestCase):
@@ -174,3 +175,87 @@ class NetWorthSummaryPerformanceTests(TestCase):
         self.assertEqual(summary["total_assets"], Decimal("66800.00"))
         self.assertEqual(summary["total_liabilities"], Decimal("4300.00"))
         self.assertEqual(summary["net_worth"], Decimal("62500.00"))
+
+    def test_asset_timeline_uses_position_cache_across_many_months(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo largo plazo",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2024, 1, 1),
+            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
+            is_active=True,
+        )
+        AssetValuation.objects.create(
+            user=self.user,
+            asset=asset,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("1500.00"),
+        )
+        InvestmentAssetEvent.objects.bulk_create(
+            [
+                InvestmentAssetEvent(
+                    user=self.user,
+                    asset=asset,
+                    event_date=date(2025, month, 15),
+                    event_type=InvestmentAssetEvent.EventType.CONTRIBUTION,
+                    amount=Decimal("20.00"),
+                )
+                for month in range(1, 13)
+            ]
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2025, 1, 1),
+            amount=Decimal("10.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
+        )
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            timeline = build_asset_timeline(asset=asset, end_date=date(2026, 12, 31))
+
+        self.assertLessEqual(len(captured_queries), 10)
+        self.assertEqual(len(timeline["rows"]), 36)
+        self.assertEqual(timeline["rows"][-1]["value"], "1980.00")
+
+    def test_liability_timeline_uses_position_cache_across_many_months(self):
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta larga",
+            category=Liability.Category.CREDIT_CARD,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            start_date=date(2024, 1, 1),
+            is_active=True,
+        )
+        LiabilityValuation.objects.create(
+            user=self.user,
+            liability=liability,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("800.00"),
+        )
+        LiabilityEvent.objects.bulk_create(
+            [
+                LiabilityEvent(
+                    user=self.user,
+                    liability=liability,
+                    event_date=date(2025, month, 10),
+                    event_type=LiabilityEvent.EventType.PAYMENT,
+                    amount=Decimal("10.00"),
+                )
+                for month in range(1, 13)
+            ]
+        )
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            timeline = build_liability_timeline(
+                liability=liability,
+                end_date=date(2026, 12, 31),
+            )
+
+        self.assertLessEqual(len(captured_queries), 7)
+        self.assertEqual(len(timeline["rows"]), 36)
+        self.assertEqual(timeline["rows"][-1]["value"], "680.00")
