@@ -123,9 +123,10 @@ This leaves a gap:
    - `total_count`: total rows for the active filter set (independent from current page), or `null` when `include_total=false`
 3. Supported query params:
    - existing compatibility filters: `year`, `month`, `status`
-   - pagination: `cursor`, `page_size` (default `50`, max `200`), `include_total` (default `true`)
+   - pagination: `cursor`, `page_size` (default `50`, max `200`), `include_total` (default `true`), `include_entries` (default `true`)
    - server-side filters: `query`, `kind`, `account_id`, `date_from`, `date_to`
 4. `LedgerTransaction` list payload includes `activity_kind` (read-only) resolved server-side from prefetched entries.
+   - when `include_entries=false`, list rows omit the nested `entries` payload but keep transaction-level fields and `activity_kind`
 5. Supported `kind` values: `income`, `expense`, `transfer`, `adjustment`, `investment_purchase`, `debt_payment`, `revaluation`.
 6. Quick-entry supports `movement_type=adjustment` for reconciliation deltas:
    - only for operational accounts (`asset`/`liability`)
