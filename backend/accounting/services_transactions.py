@@ -181,11 +181,16 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
         queryset = queryset.filter(entries__account_id=account_id_int).distinct()
 
     if query:
+        matching_account_ids = LedgerAccount.objects.filter(name__icontains=query).values("id")
+        matching_account_entry = LedgerEntry.objects.filter(
+            transaction_id=OuterRef("pk"),
+            account_id__in=matching_account_ids,
+        )
         queryset = queryset.filter(
             Q(description__icontains=query)
             | Q(notes__icontains=query)
-            | Q(entries__account__name__icontains=query)
-        ).distinct()
+            | Exists(matching_account_entry)
+        )
 
     if category_key:
         queryset = queryset.filter(
