@@ -178,6 +178,12 @@ export const useNetWorthStore = defineStore('netWorth', {
       }
     },
 
+    async _refreshSummary() {
+      const res = await coreNetWorthApi.getSummary();
+      this.summary = res.data;
+      this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
+    },
+
     async createAsset(
       payload: OwnershipAwarePayload & {
         estimated_average_balance_for_interest?: string | null;
@@ -197,8 +203,9 @@ export const useNetWorthStore = defineStore('netWorth', {
             target_id: res.data.id,
             ownership_id,
           });
+          this.assets = [...this.assets, { ...res.data, ownership_ref: ownership_id }];
         }
-        await this.refreshAll();
+        await this._refreshSummary();
         return createdAsset;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
@@ -221,13 +228,15 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.error = null;
       try {
         const { ownership_id = null, ...corePayload } = payload;
-        await coreNetWorthApi.updateAsset(id, corePayload);
+        const res = await coreNetWorthApi.updateAsset(id, corePayload);
         await premiumOwnershipApi.syncOwnershipLink({
           target_type: 'asset',
           target_id: id,
           ownership_id,
         });
-        await this.refreshAll();
+        const updated = { ...res.data, ownership_ref: ownership_id };
+        this.assets = this.assets.map((a) => (a.id === id ? updated : a));
+        await this._refreshSummary();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
@@ -240,7 +249,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       if (asset?.accounting_account_id) {
         await coreAccountingApi.updateAccount(asset.accounting_account_id, { is_active: false });
       }
-      return this.updateAsset(id, { is_active: false });
+      return this.updateAsset(id, { is_active: false, ownership_id: asset?.ownership_ref ?? null });
     },
 
     async unarchiveAsset(id: number) {
@@ -248,7 +257,7 @@ export const useNetWorthStore = defineStore('netWorth', {
       if (asset?.accounting_account_id) {
         await coreAccountingApi.updateAccount(asset.accounting_account_id, { is_active: true });
       }
-      return this.updateAsset(id, { is_active: true });
+      return this.updateAsset(id, { is_active: true, ownership_id: asset?.ownership_ref ?? null });
     },
 
     async deleteAsset(id: number) {
@@ -256,7 +265,8 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.error = null;
       try {
         await coreNetWorthApi.deleteAsset(id);
-        await this.refreshAll();
+        this.assets = this.assets.filter((a) => a.id !== id);
+        await this._refreshSummary();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
@@ -278,8 +288,9 @@ export const useNetWorthStore = defineStore('netWorth', {
             target_id: res.data.id,
             ownership_id,
           });
+          this.liabilities = [...this.liabilities, { ...res.data, ownership_ref: ownership_id }];
         }
-        await this.refreshAll();
+        await this._refreshSummary();
         return createdLiability;
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
@@ -302,13 +313,15 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.error = null;
       try {
         const { ownership_id = null, ...corePayload } = payload;
-        await coreNetWorthApi.updateLiability(id, corePayload);
+        const res = await coreNetWorthApi.updateLiability(id, corePayload);
         await premiumOwnershipApi.syncOwnershipLink({
           target_type: 'liability',
           target_id: id,
           ownership_id,
         });
-        await this.refreshAll();
+        const updated = { ...res.data, ownership_ref: ownership_id };
+        this.liabilities = this.liabilities.map((l) => (l.id === id ? updated : l));
+        await this._refreshSummary();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
@@ -323,7 +336,10 @@ export const useNetWorthStore = defineStore('netWorth', {
           is_active: false,
         });
       }
-      return this.updateLiability(id, { is_active: false });
+      return this.updateLiability(id, {
+        is_active: false,
+        ownership_id: liability?.ownership_ref ?? null,
+      });
     },
 
     async unarchiveLiability(id: number) {
@@ -331,7 +347,10 @@ export const useNetWorthStore = defineStore('netWorth', {
       if (liability?.accounting_account_id) {
         await coreAccountingApi.updateAccount(liability.accounting_account_id, { is_active: true });
       }
-      return this.updateLiability(id, { is_active: true });
+      return this.updateLiability(id, {
+        is_active: true,
+        ownership_id: liability?.ownership_ref ?? null,
+      });
     },
 
     async deleteLiability(id: number) {
@@ -339,7 +358,8 @@ export const useNetWorthStore = defineStore('netWorth', {
       this.error = null;
       try {
         await coreNetWorthApi.deleteLiability(id);
-        await this.refreshAll();
+        this.liabilities = this.liabilities.filter((l) => l.id !== id);
+        await this._refreshSummary();
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
