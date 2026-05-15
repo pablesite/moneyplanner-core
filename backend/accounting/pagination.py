@@ -34,9 +34,9 @@ def _encode_cursor(transaction: LedgerTransaction) -> str:
 
 
 def paginate_transactions(
-    queryset: QuerySet, page_size: int, cursor: str | None
-) -> tuple[list[LedgerTransaction], str | None, int]:
-    total_count = queryset.count()
+    queryset: QuerySet, page_size: int, cursor: str | None, include_total: bool = True
+) -> tuple[list[LedgerTransaction], str | None, int | None]:
+    total_count = queryset.count() if include_total else None
     paginated_queryset = queryset
     if cursor:
         booking_date_iso, identifier = _decode_cursor(cursor)
