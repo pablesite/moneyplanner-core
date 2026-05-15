@@ -69,23 +69,31 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
         if self.action == "list" and self.request.method == "GET":
             asset_rows = list(
                 self.get_queryset().values_list(
-                    "id", "currency", "tracking_mode", "accounting_account_id", "category"
+                    "id",
+                    "user_id",
+                    "currency",
+                    "tracking_mode",
+                    "accounting_account_id",
+                    "category",
                 )
             )
             if asset_rows:
                 currencies = {base_currency}
                 currencies.update(
-                    currency for _, currency, _, _, _ in asset_rows if str(currency or "").strip()
+                    currency
+                    for _, _, currency, _, _, _ in asset_rows
+                    if str(currency or "").strip()
                 )
                 ctx["fx_cache"] = build_fx_cache(currencies)
                 cache_assets = [
                     Asset(
                         id=asset_id,
+                        user_id=user_id,
                         tracking_mode=tracking_mode,
                         accounting_account_id=accounting_account_id,
                         category=category,
                     )
-                    for asset_id, _, tracking_mode, accounting_account_id, category in asset_rows
+                    for asset_id, user_id, _, tracking_mode, accounting_account_id, category in asset_rows
                 ]
                 ctx["position_cache"] = _build_position_data_cache(cache_assets, [])
         return ctx
@@ -117,7 +125,7 @@ class AssetViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 class LiabilityViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = LiabilitySerializer
-    queryset = Liability.objects.all()
+    queryset = Liability.objects.select_related("financed_asset").all()
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()

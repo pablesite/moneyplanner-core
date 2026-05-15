@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from rest_framework.test import APIClient
 
 from accounts.models import UserSettings
 from accounting.models import LedgerAccount
@@ -39,6 +40,8 @@ class NetWorthSummaryPerformanceTests(TestCase):
             user=self.user,
             defaults={"base_currency": "EUR", "inflation_region": "ES"},
         )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
 
     @patch("net_worth.services.timezone.localdate", return_value=date(2026, 5, 15))
     def test_summary_uses_position_cache_with_high_position_volume(self, _date_mock):
@@ -317,3 +320,85 @@ class NetWorthSummaryPerformanceTests(TestCase):
         self.assertLessEqual(len(captured_queries), 12)
         self.assertEqual(len(timeline["rows"]), 24)
         self.assertEqual(timeline["rows"][-1]["asset_positions"], len(assets))
+
+    def test_asset_list_uses_cached_accounting_state(self):
+        for idx in range(20):
+            asset = Asset.objects.create(
+                user=self.user,
+                name=f"Cuenta contable {idx}",
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.BANK_ACCOUNT,
+                tracking_mode=Asset.TrackingMode.ACCOUNTING,
+                currency="EUR",
+                amount=Decimal("1000.00"),
+                start_date=date(2026, 1, 1),
+                is_active=True,
+            )
+            account = LedgerAccount.objects.create(
+                user=self.user,
+                name=f"Ledger cuenta {idx}",
+                account_type=LedgerAccount.AccountType.ASSET,
+                currency="EUR",
+                asset=asset,
+            )
+            asset.accounting_account_id = account.id
+            asset.save(update_fields=["accounting_account_id"])
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            response = self.client.get("/api/net-worth/assets/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(captured_queries), 14)
+        self.assertEqual(len(response.data), 20)
+        self.assertEqual(
+            {row["accounting_integration_state"] for row in response.data},
+            {"linked"},
+        )
+
+    def test_liability_list_prefetches_financed_asset_and_cached_accounting_state(self):
+        financed_asset = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("200000.00"),
+            start_date=date(2026, 1, 1),
+            is_active=True,
+        )
+        for idx in range(10):
+            liability = Liability.objects.create(
+                user=self.user,
+                name=f"Hipoteca {idx}",
+                category=Liability.Category.MORTGAGE,
+                tracking_mode=Liability.TrackingMode.ACCOUNTING,
+                currency="EUR",
+                amount=Decimal("100000.00"),
+                start_date=date(2026, 1, 1),
+                financed_asset=financed_asset,
+                is_active=True,
+            )
+            account = LedgerAccount.objects.create(
+                user=self.user,
+                name=f"Ledger hipoteca {idx}",
+                account_type=LedgerAccount.AccountType.LIABILITY,
+                currency="EUR",
+                liability=liability,
+            )
+            liability.accounting_account_id = account.id
+            liability.save(update_fields=["accounting_account_id"])
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            response = self.client.get("/api/net-worth/liabilities/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(captured_queries), 10)
+        self.assertEqual(len(response.data), 10)
+        self.assertEqual(
+            {row["accounting_integration_state"] for row in response.data},
+            {"linked"},
+        )
+        self.assertEqual(
+            {row["financed_asset_detail"]["id"] for row in response.data},
+            {financed_asset.id},
+        )
