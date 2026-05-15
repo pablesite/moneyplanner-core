@@ -1559,6 +1559,87 @@ class AccountingApiTests(APITestCase):
         second_page_ids = {row["id"] for row in second_page.data["results"]}
         self.assertTrue(first_page_ids.isdisjoint(second_page_ids))
 
+    def test_transactions_list_returns_account_balance_after_across_cursor_pages(self):
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gastos corrientes",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        for booking_date, description, cash_side, counterparty_account, amount in (
+            (
+                "2026-02-10",
+                "Nomina",
+                LedgerEntry.Side.DEBIT,
+                self.income_account,
+                Decimal("100.00"),
+            ),
+            (
+                "2026-02-09",
+                "Supermercado",
+                LedgerEntry.Side.CREDIT,
+                expense_account,
+                Decimal("30.00"),
+            ),
+            (
+                "2026-02-08",
+                "Ingreso inicial",
+                LedgerEntry.Side.DEBIT,
+                self.income_account,
+                Decimal("50.00"),
+            ),
+        ):
+            counterparty_side = (
+                LedgerEntry.Side.CREDIT
+                if cash_side == LedgerEntry.Side.DEBIT
+                else LedgerEntry.Side.DEBIT
+            )
+            create_res = self.client.post(
+                "/api/accounting/transactions/",
+                {
+                    "booking_date": booking_date,
+                    "value_date": booking_date,
+                    "description": description,
+                    "status": "posted",
+                    "origin": "manual",
+                    "entries": [
+                        {
+                            "account_id": self.cash_account.id,
+                            "side": cash_side,
+                            "amount": str(amount),
+                            "currency": "EUR",
+                        },
+                        {
+                            "account_id": counterparty_account.id,
+                            "side": counterparty_side,
+                            "amount": str(amount),
+                            "currency": "EUR",
+                        },
+                    ],
+                },
+                format="json",
+            )
+            self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+
+        first_page = self.client.get(
+            f"/api/accounting/transactions/?account_id={self.cash_account.id}&page_size=2"
+        )
+        self.assertEqual(first_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [row["account_balance_after"] for row in first_page.data["results"]],
+            ["120.00000000", "20.00000000"],
+        )
+        self.assertIsNotNone(first_page.data["next_cursor"])
+
+        second_page = self.client.get(
+            f"/api/accounting/transactions/?account_id={self.cash_account.id}&page_size=2"
+            f"&cursor={first_page.data['next_cursor']}"
+        )
+        self.assertEqual(second_page.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(second_page.data["results"]), 1)
+        self.assertEqual(second_page.data["results"][0]["account_balance_after"], "50.00000000")
+        self.assertIsNone(second_page.data["next_cursor"])
+
     def test_transactions_list_filters_support_combination(self):
         expense_account = LedgerAccount.objects.create(
             user=self.user,
