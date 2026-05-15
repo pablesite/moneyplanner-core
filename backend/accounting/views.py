@@ -111,13 +111,13 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
     serializer_class = LedgerTransactionSerializer
 
     @staticmethod
-    def _parse_include_total(raw_value: str | None) -> bool:
-        value = (raw_value or "true").strip().lower()
+    def _parse_bool_query_param(*, param_name: str, raw_value: str | None, default: bool) -> bool:
+        value = (raw_value or ("true" if default else "false")).strip().lower()
         if value in {"true", "1", "yes"}:
             return True
         if value in {"false", "0", "no"}:
             return False
-        raise ValidationError({"include_total": "Query param 'include_total' invalido."})
+        raise ValidationError({param_name: f"Query param '{param_name}' invalido."})
 
     @staticmethod
     def _signed_impact_for_account(*, account_type: str, side: str, amount: Decimal) -> Decimal:
@@ -216,7 +216,16 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         if page_size < 1 or page_size > 200:
             raise ValidationError({"page_size": "Query param 'page_size' invalido (1-200)."})
         cursor = (request.query_params.get("cursor") or "").strip() or None
-        include_total = self._parse_include_total(request.query_params.get("include_total"))
+        include_total = self._parse_bool_query_param(
+            param_name="include_total",
+            raw_value=request.query_params.get("include_total"),
+            default=True,
+        )
+        include_entries = self._parse_bool_query_param(
+            param_name="include_entries",
+            raw_value=request.query_params.get("include_entries"),
+            default=True,
+        )
         rows, next_cursor, total_count = paginate_transactions(
             queryset=queryset,
             page_size=page_size,
@@ -224,6 +233,7 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             include_total=include_total,
         )
         serializer_context = self.get_serializer_context()
+        serializer_context = {**serializer_context, "include_entries": include_entries}
         account_id = parse_optional_int_query_param(request.query_params, "account_id")
         if account_id is not None:
             account = LedgerAccount.objects.filter(user=request.user, id=account_id).first()

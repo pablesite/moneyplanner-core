@@ -1603,6 +1603,50 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("include_total", response.data["error"]["details"])
 
+    def test_transactions_list_can_skip_entries(self):
+        create_res = self.client.post(
+            "/api/accounting/transactions/",
+            {
+                "booking_date": "2026-02-10",
+                "value_date": "2026-02-10",
+                "description": "Nomina",
+                "status": "posted",
+                "origin": "manual",
+                "entries": [
+                    {
+                        "account_id": self.cash_account.id,
+                        "side": "debit",
+                        "amount": "100.00",
+                        "currency": "EUR",
+                    },
+                    {
+                        "account_id": self.income_account.id,
+                        "side": "credit",
+                        "amount": "100.00",
+                        "currency": "EUR",
+                        "flow_family": "income",
+                        "category_key": "salary",
+                        "subcategory_key": "employee_salary",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_201_CREATED, create_res.data)
+
+        response = self.client.get("/api/accounting/transactions/?include_entries=false")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertNotIn("entries", response.data["results"][0])
+        self.assertEqual(response.data["results"][0]["activity_kind"], "income")
+
+    def test_transactions_list_rejects_invalid_include_entries(self):
+        response = self.client.get("/api/accounting/transactions/?include_entries=maybe")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("include_entries", response.data["error"]["details"])
+
     def test_transactions_list_returns_account_balance_after_across_cursor_pages(self):
         expense_account = LedgerAccount.objects.create(
             user=self.user,

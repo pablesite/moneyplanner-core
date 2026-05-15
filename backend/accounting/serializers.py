@@ -403,6 +403,8 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
     def get_fields(self):
         fields = super().get_fields()
+        if self.context.get("include_entries") is False:
+            fields.pop("entries", None)
         fields["ownership_id"].queryset = _scope_queryset_to_context_user(
             context=self.context,
             base_queryset=Ownership.objects.all(),
