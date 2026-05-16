@@ -188,6 +188,56 @@ class CoreCrossStackSaasTokenTests(APITestCase):
         self.assertNotEqual(mapped.user.username, core_user.username)
 
 
+class CoreLogoutTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="logout_user", password="pass1234"
+        )
+
+    def _obtain_tokens(self):
+        res = self.client.post(
+            "/api/auth/token/",
+            {"username": self.user.username, "password": "pass1234"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        return res.data["access"], res.data["refresh"]
+
+    def test_logout_requires_auth(self):
+        response = self.client.post("/api/auth/logout/", {"refresh": "anything"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_missing_refresh_returns_400(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post("/api/auth/logout/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_logout_blacklists_refresh_token(self):
+        access, refresh = self._obtain_tokens()
+
+        logout_res = self.client.post(
+            "/api/auth/logout/",
+            {"refresh": refresh},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
+        self.assertEqual(logout_res.status_code, status.HTTP_204_NO_CONTENT)
+
+        refresh_res = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh": refresh},
+            format="json",
+        )
+        self.assertEqual(refresh_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_with_invalid_token_still_returns_204(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            "/api/auth/logout/", {"refresh": "not-a-valid-token"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+
 class CoreAccountServicesTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="svc_user", password="pass1234")
