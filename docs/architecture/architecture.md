@@ -54,20 +54,12 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
 3. Legacy flat fields in `Asset` remain available for backward compatibility, while the schedule builder prioritizes interval rows when present.
 
-## Public Import API
-1. Core exposes MoneyWiz import endpoints in `accounting` for preview and commit:
-   - `POST /api/accounting/transactions/import-moneywiz/preview/`
-   - `POST /api/accounting/transactions/import-moneywiz/commit/`
-2. The import flow is Core-owned and supports:
-   - CSV parsing with optional `sep=` header
-   - row fingerprint idempotency persisted on `LedgerTransaction`
-   - safe fallback classification when MoneyWiz categories do not map exactly
-   - automatic creation of missing operational ledger accounts
-   - pairing of mirrored MoneyWiz investment-withdrawal rows into one `investment outflow` operation (without duplicated `income` mirror rows)
-   - persistent traceability through transaction origin/import metadata; imported rows are no longer treated as disposable cleanup data once consolidated in the ledger
-3. The accounting movement contract is evolving from purchase-only investment support to a bidirectional investment flow with explicit direction (`inflow` / `outflow`), while preserving legacy compatibility for existing `investment_purchase` writers during transition.
-4. Quick-entry investment payloads support optional manual realized metadata (`realized_cost_basis`, `realized_gain_loss`) without enforcing automatic PnL calculation in this phase.
-5. The frontend workspace for accounting consumes this API directly in Core and mirrors the same flow in SaaS.
+## Import Traceability And Accounting API
+1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.
+2. Imported accounting rows remain traceable through `LedgerTransaction.origin`, `import_source` and `import_fingerprint`; consolidated imported rows are no longer treated as disposable cleanup data.
+3. Portable data import/export remains the supported whole-dataset migration path.
+4. The accounting movement contract supports bidirectional investment flow with explicit direction (`inflow` / `outflow`), while preserving legacy compatibility for existing `investment_purchase` writers during transition.
+5. Quick-entry investment payloads support optional manual realized metadata (`realized_cost_basis`, `realized_gain_loss`) without enforcing automatic PnL calculation in this phase.
 6. The accounting timeline API exposes a daily consolidated balance series for active ledger accounts:
    - `GET /api/accounting/transactions/daily-balance-series/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&status=posted|draft`
 

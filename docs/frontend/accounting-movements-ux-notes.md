@@ -94,8 +94,8 @@ Describe the target UX for daily movements in Core and how it should coexist wit
    - `AccountingMovementsAllTransactions.vue`
    - `AccountingBalances.vue`
 4. Accounting view styles are moved to `domains/accounting/styles/movements.css`.
-5. Core keeps MoneyWiz unmapped categories support through `AccountingMovementsMoneyWizModal`.
-6. SaaS mirrors the same structure but keeps the existing behavior difference (no unmapped section UI).
+5. The ad-hoc MoneyWiz import UI was removed; accounting keeps imported-row traceability through backend metadata instead of a disposable cleanup flow.
+6. SaaS mirrors the same active accounting structure.
 
 ## Server pagination UX (2026-03-23)
 1. The "Todos los movimientos" tab loads only the first page (`50`) on initial render.

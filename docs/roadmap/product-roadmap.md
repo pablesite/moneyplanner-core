@@ -112,13 +112,9 @@ Convenciones:
 
 ### Importación de datos
 
-- ✅ Importador MoneyWiz completado:
-  - Preview + commit desde CSV exportado por MoneyWiz.
-  - Idempotencia por huella de fila.
-  - Auto-creación de cuentas operativas cuando faltan.
-  - Fallback seguro de clasificación para categorías sin mapeo exacto.
-  - Flujo UI integrado en `AccountingMovementsView` y espejado en SaaS.
-- ⚠️ **Funcionalidad ad-hoc** — implementada para el caso de uso propio del autor. Debe eliminarse antes de lanzar a producción (no es apta para uso general).
+- ✅ Importador MoneyWiz ad-hoc retirado antes de producción.
+- ✅ La trazabilidad de movimientos importados se mantiene en contabilidad mediante `origin`, `import_source` e `import_fingerprint`.
+- ✅ La importación portable sigue siendo el flujo soportado para mover/copiar la base de datos entre instancias.
 
 ---
 
@@ -174,10 +170,8 @@ El coach (fases 1–4) está funcional. Pendiente antes de producción:
 
 ## IMPORTACIÓN DE DATOS
 
-- Implementar importador masivo para uso propio (objetivo: test real con datos personales):
-  - Desde MoneyWiz.
-  - Desde Excel.
-- Mapear: movimientos, cuentas, categorías.
+- Mantener importación/exportación portable como flujo soportado.
+- No reintroducir importadores ad-hoc por proveedor salvo decisión explícita de producto.
 
 ---
 

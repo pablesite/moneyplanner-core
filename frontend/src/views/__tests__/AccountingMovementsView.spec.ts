@@ -37,7 +37,6 @@ function makeState(tab: 'cuentas' | 'todos' | 'estadisticas' = 'cuentas') {
     updateDailyTimelineWindowStart: vi.fn(),
     updateDailyTimelineWindowEnd: vi.fn(),
     formatNumber: vi.fn((value: number) => String(value)),
-    showMoneyWizImportModal: ref(false),
     showQuickEntryModal: ref(false),
     openActivationModal: vi.fn(),
   };

@@ -1,7 +1,6 @@
 import { coreApi } from '@/lib/api';
 import type {
   BudgetDerivedSuggestions,
-  DeleteImportedTransactionsResult,
   LedgerAccount,
   LedgerAccountBalanceSummary,
   LedgerDailyBalanceSeries,
@@ -10,8 +9,6 @@ import type {
   LedgerTransaction,
   PaginatedTransactionsResponse,
   LedgerTransactionWritePayload,
-  MoneyWizImportCommitResult,
-  MoneyWizImportPreview,
   MonthlyAccountingSummary,
   QuickLedgerTransactionWritePayload,
 } from '@/domains/accounting/models';
@@ -110,28 +107,6 @@ export const coreAccountingApi = {
   },
   createQuickEntry(payload: QuickLedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/quick-entry/', payload);
-  },
-  deleteImportedTransactions() {
-    return coreApi.post<DeleteImportedTransactionsResult>(
-      '/api/accounting/transactions/delete-imported/',
-    );
-  },
-  previewMoneyWizImport(file: File) {
-    const formData = new FormData();
-    formData.append('file', file);
-    return coreApi.post<MoneyWizImportPreview>(
-      '/api/accounting/transactions/import/moneywiz/preview/',
-      formData,
-    );
-  },
-  commitMoneyWizImport(file: File, options: Record<string, unknown> = {}) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('options', JSON.stringify(options));
-    return coreApi.post<MoneyWizImportCommitResult>(
-      '/api/accounting/transactions/import/moneywiz/commit/',
-      formData,
-    );
   },
   getEntries(params?: {
     account_id?: number;
