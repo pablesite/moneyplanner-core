@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-05-16 | **Versión Core:** 0.23.4
+**Última revisión:** 2026-05-17 | **Versión Core:** 0.23.5
 
 ---
 
@@ -44,7 +44,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ✅ | Logout endpoint con blacklist, aislamiento cross-user validado con 31 tests (net_worth, accounting, budget, memberships), frontend wired. Pendiente: auditoría CVEs y flujos reales con usuarios. |
 | Importación de datos | Media | ✅ | Importación portable mantenida para migrar/copiar datos. Importador MoneyWiz ad-hoc retirado antes de producción. |
-| Auditoría de seguridad | Alta | ⚪ | Vulnerabilidades backend, CVEs en dependencias, validación auth/permisos/inputs |
+| Auditoría de seguridad | Alta | ✅ | CVEs frontend saneados (12→0 via npm audit fix: axios, vite, rollup, postcss, lodash…). Backend: pip CVEs resueltos con upgrade en Dockerfile; app deps limpios. Auth/permisos cubiertos en tarea anterior. |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
 ---
