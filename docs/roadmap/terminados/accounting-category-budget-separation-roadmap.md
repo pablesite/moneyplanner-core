@@ -1,13 +1,18 @@
 # Roadmap: separacion entre cuenta contable, categoria y presupuesto anual
 
 ## Estado del documento
-1. Propuesta lista para implementacion.
-2. Alcance Core-only.
-3. Cuando una fase toque UX compartida en `core/frontend/`, replicar el cambio equivalente en `frontend/` salvo que se declare explicitamente Core-only.
-4. Este documento es el handoff funcional/técnico para ejecutar la separacion entre:
+1. Roadmap terminado.
+2. Alcance Core con espejo frontend SaaS cuando aplique.
+3. Este documento conserva el handoff historico de la separacion entre:
    - cuenta contable (donde impacta),
    - categoria/subcategoria (por que ocurre),
    - linea anual de presupuesto (que plan cubre).
+
+## Estado final (2026-05-16)
+1. `LedgerEntry` conserva solo la clasificacion funcional (`flow_family`, `category_key`, `subcategory_key`) y enlaces a patrimonio (`Asset`/`Liability`) cuando aplican.
+2. Los enlaces operativos `annual_income_entry_id` y `annual_expense_entry_id` fueron eliminados de modelo, API, quick-entry, portable data y frontend.
+3. Presupuesto calcula ejecutado desde movimientos publicados por taxonomia + mes; los check-ins manuales siguen siendo fallback del plan, pero ya no existe fallback ledger por FK a linea anual.
+4. La trazabilidad de movimientos importados se conserva mediante `origin`, `import_source` e `import_fingerprint`.
 
 ## Estado de avance (2026-03-16)
 1. Fase 1 implementada en `core/backend/accounting`:

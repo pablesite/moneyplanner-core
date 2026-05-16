@@ -14,10 +14,7 @@ import {
   collectAccountingExecutionEntry,
 } from '@/views/budget/budgetDashboardUtils';
 
-export function useAccountingExecutionData(
-  fiscalYear: Ref<number>,
-  ownershipFilter: Ref<string>,
-) {
+export function useAccountingExecutionData(fiscalYear: Ref<number>, ownershipFilter: Ref<string>) {
   const accountingExecutionLoading = ref(false);
   const accountingExecutionError = ref<string | null>(null);
   const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);

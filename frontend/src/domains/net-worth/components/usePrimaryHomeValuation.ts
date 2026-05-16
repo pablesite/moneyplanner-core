@@ -21,7 +21,6 @@ type PrimaryHomeFormFields = {
 
 export function usePrimaryHomeValuation(
   form: PrimaryHomeFormFields,
-  showPrimaryHomeValuationFields: Ref<boolean>,
   showPrimaryHomeAutoValuationFields: Ref<boolean>,
   maxDecimals: Ref<number>,
 ) {

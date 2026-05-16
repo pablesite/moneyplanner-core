@@ -283,7 +283,6 @@ export function useItemForm(props: ItemFormProps) {
   });
 
   const {
-    activeLiabilityFieldGroup,
     liabilityDatesError,
     liabilityScheduleError,
     cancellationForecastError,
@@ -315,12 +314,7 @@ export function useItemForm(props: ItemFormProps) {
     resetPrimaryHomeState,
     isImprovementExpanded,
     toggleImprovementExpanded,
-  } = usePrimaryHomeValuation(
-    form,
-    showPrimaryHomeValuationFields,
-    showPrimaryHomeAutoValuationFields,
-    maxDecimals,
-  );
+  } = usePrimaryHomeValuation(form, showPrimaryHomeAutoValuationFields, maxDecimals);
 
   watch(
     () => form.category,

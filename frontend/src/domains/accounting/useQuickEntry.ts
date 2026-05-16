@@ -72,13 +72,7 @@ function roundByCurrency(value: number, currency: string): number {
 }
 
 export function useQuickEntry(ctx: QuickEntryContext) {
-  const {
-    accounts,
-    accountMap,
-    liabilityMap,
-    accountPositionMetaByAccountId,
-    manualAssets,
-  } = ctx;
+  const { accounts, accountMap, liabilityMap, accountPositionMetaByAccountId, manualAssets } = ctx;
 
   const quickEntryForm = reactive({
     movement_type: 'expense' as QuickLedgerMovementType,
