@@ -245,9 +245,7 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INCOME)
             | (
                 Q(quick_entry_kind="")
-                & Exists(
-                    entry_subquery.filter(flow_family=LedgerEntry.FlowFamily.INCOME)
-                )
+                & Exists(entry_subquery.filter(flow_family=LedgerEntry.FlowFamily.INCOME))
             )
         )
     if kind == "expense":

@@ -2360,14 +2360,14 @@ class AccountingApiTests(APITestCase):
             self.client.get("/api/accounting/accounts/").data[0]["current_balance"], "2000.00000000"
         )
 
-    def test_quick_entry_income_accepts_category_without_annual_link(self):
+    def test_quick_entry_income_accepts_taxonomy_classification(self):
         response = self.client.post(
             "/api/accounting/transactions/quick-entry/",
             {
                 "movement_type": "income",
                 "booking_date": "2026-04-06",
                 "value_date": "2026-04-06",
-                "description": "Ingreso clasificado sin linea anual",
+                "description": "Ingreso clasificado por taxonomia",
                 "amount": "550.00",
                 "account_id": self.cash_account.id,
                 "category_key": "salary",
@@ -2385,9 +2385,8 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(income_entry["flow_family"], "income")
         self.assertEqual(income_entry["category_key"], "salary")
         self.assertEqual(income_entry["subcategory_key"], "employee_salary")
-        self.assertNotIn("annual_income_entry_id", income_entry)
 
-    def test_quick_entry_expense_requires_category_when_annual_link_is_missing(self):
+    def test_quick_entry_expense_requires_taxonomy_classification(self):
         response = self.client.post(
             "/api/accounting/transactions/quick-entry/",
             {
@@ -3481,7 +3480,6 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(principal_entry["side"], "debit")
         self.assertEqual(principal_entry["liability_id"], liability.id)
         self.assertEqual(interest_entry["side"], "debit")
-        self.assertNotIn("annual_expense_entry_id", interest_entry)
         self.assertEqual(interest_entry["flow_family"], "expense")
         self.assertEqual(interest_entry["category_key"], "consumption_expenses")
         self.assertEqual(interest_entry["subcategory_key"], "financial_commitments")

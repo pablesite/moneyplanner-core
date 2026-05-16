@@ -39,7 +39,9 @@ function accountTypeLabel(accountType?: string): string {
 
 function accountLabel(account: AccountOption): string {
   if (typeof props.page.accountDisplayName === 'function') {
-    return props.page.accountDisplayName(account as Parameters<typeof props.page.accountDisplayName>[0]);
+    return props.page.accountDisplayName(
+      account as Parameters<typeof props.page.accountDisplayName>[0],
+    );
   }
   return account.display_name || account.name;
 }
@@ -86,11 +88,11 @@ const liabilityGroups = computed(() =>
 );
 
 type MovementTypeOption = { value: QuickLedgerMovementType; label: string };
-const commonTypeOptions = computed<MovementTypeOption[]>(() =>
-  props.page.quickMovementTypeOptions.slice(0, 2) as MovementTypeOption[],
+const commonTypeOptions = computed<MovementTypeOption[]>(
+  () => props.page.quickMovementTypeOptions.slice(0, 2) as MovementTypeOption[],
 );
-const advancedTypeOptions = computed<MovementTypeOption[]>(() =>
-  props.page.quickMovementTypeOptions.slice(2) as MovementTypeOption[],
+const advancedTypeOptions = computed<MovementTypeOption[]>(
+  () => props.page.quickMovementTypeOptions.slice(2) as MovementTypeOption[],
 );
 
 const showValueDate = ref(false);

@@ -5,7 +5,8 @@
 2. `Reemplazar datos` se ejecuta en Core como operacion atomica: o importa todo o no modifica nada.
 3. `append` y `replace` usan un unico endpoint backend.
 4. El bloque `data` incluye presupuesto, patrimonio y contabilidad (`accounting.accounts` + `accounting.transactions`).
-5. Los movimientos importados remapean referencias internas (activos, pasivos, ownership y lineas anuales) al entorno destino.
+5. Los movimientos importados remapean referencias internas (activos, pasivos y ownership) al entorno destino.
+6. Los apuntes contables ya no pueden traer enlaces legacy a lineas anuales de presupuesto (`annual_income_entry_id` / `annual_expense_entry_id`); si llegan poblados, el backend rechaza el bundle como obsoleto.
 
 ## Reglas de seguridad
 1. `replace` se bloquea si el archivo no incluye `exported_app_version`.

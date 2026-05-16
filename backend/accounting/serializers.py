@@ -545,12 +545,10 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         # Legacy lane for imported rows without quick_entry_kind:
         # allow multicurrency asymmetry when shape maps to classic transfer/investment.
         has_income_like = any(
-            entry.get("flow_family") == LedgerEntry.FlowFamily.INCOME
-            for entry in incoming_entries
+            entry.get("flow_family") == LedgerEntry.FlowFamily.INCOME for entry in incoming_entries
         )
         has_expense_like = any(
-            entry.get("flow_family") == LedgerEntry.FlowFamily.EXPENSE
-            for entry in incoming_entries
+            entry.get("flow_family") == LedgerEntry.FlowFamily.EXPENSE for entry in incoming_entries
         )
         has_liability_link = any(entry.get("liability") is not None for entry in incoming_entries)
         asset_account_entries = sum(

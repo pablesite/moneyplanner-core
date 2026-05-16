@@ -56,9 +56,9 @@ Describe the target UX for daily movements in Core and how it should coexist wit
    - should not absorb daily accounting movements
 2. `BudgetDashboardView`
    - should consume ledger execution when movement coverage exists
-   - should fall back to existing execution and check-in data when coverage is partial or absent
-   - should label the source row-by-row so the user can distinguish `Ledger` from `Fallback legacy`
-   - should disable legacy edit actions on rows already covered by ledger
+   - should fall back to manual check-in data when coverage is partial or absent
+   - should label the source row-by-row so the user can distinguish ledger execution from manual fallback
+   - should disable manual edit actions on rows already covered by ledger
 3. `NetWorthView`
    - positions in `tracking_mode=accounting` should show `Actividad contable`
    - the user should not be forced to leave the current workspace to inspect position activity
@@ -120,6 +120,6 @@ Describe the target UX for daily movements in Core and how it should coexist wit
 4. Investment flow with aporte / desinversion
 5. Debt payment split into principal and interest
 6. Monthly close with full ledger coverage
-7. Monthly close with partial ledger coverage and legacy fallback
+7. Monthly close with partial ledger coverage and manual check-in fallback
 8. Asset or liability in `manual`
 9. Asset or liability in `accounting`

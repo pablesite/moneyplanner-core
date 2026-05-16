@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('accounting', '0009_ledgerentry_acct_entry_acc_tx_idx'),
+        ("accounting", "0009_ledgerentry_acct_entry_acc_tx_idx"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='ledgerentry',
-            name='annual_expense_entry',
+            model_name="ledgerentry",
+            name="annual_expense_entry",
         ),
         migrations.RemoveField(
-            model_name='ledgerentry',
-            name='annual_income_entry',
+            model_name="ledgerentry",
+            name="annual_income_entry",
         ),
     ]

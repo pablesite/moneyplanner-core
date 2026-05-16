@@ -21,7 +21,7 @@ This leaves a gap:
 ## Principles
 1. `accounting` belongs to Core, not to SaaS.
 2. The domain starts with double-entry bookkeeping semantics.
-3. Legacy models can coexist temporarily while the new domain is rolled out.
+3. Legacy net-worth event models can coexist while the new domain is rolled out.
 4. `tracking_mode` remains the main complexity control for positions.
 5. Rollout must happen in small phases without breaking `budget`, `net_worth`, or `monthly close`.
 6. Positions in `tracking_mode=accounting` must end with an operational `LedgerAccount` link, including pre-existing rows in `net_worth`.
@@ -36,7 +36,8 @@ This leaves a gap:
    - belongs to one `LedgerTransaction`
    - points to one `LedgerAccount`
    - stores side, amount, currency, and optional classification metadata
-   - may keep optional links to `Asset`, `Liability`, `AnnualIncomeEntry`, or `AnnualExpenseEntry`
+   - may keep optional links to `Asset` or `Liability`
+   - does not link to concrete annual budget rows; budget execution is derived by month + functional taxonomy
 3. `LedgerAccount`
    - user-owned operational account
    - can be backed by an `Asset`, a `Liability`, or a system/virtual account
@@ -51,10 +52,10 @@ This leaves a gap:
    - debt payment flows should separate principal from interest/fees
 3. `AnnualIncomeEntry`
    - remains planning data in v1
-   - can receive optional execution links or category alignment from ledger data
+   - receives executed figures from ledger rows with matching `flow_family/category_key/subcategory_key` and month
 4. `AnnualExpenseEntry`
    - remains planning data in v1
-   - can receive optional execution links or category alignment from ledger data
+   - receives executed figures from ledger rows with matching `flow_family/category_key/subcategory_key` and month
 
 ## Behavioral rules
 1. `tracking_mode=manual`
@@ -107,11 +108,11 @@ This leaves a gap:
    - the net-worth view remains summary-first and position drilldown stays in place
 2. Budget
    - annual budget remains the planning layer
-   - executed monthly figures consume posted ledger aggregates when coverage exists at line level
-   - monthly summaries can mix ledger-backed execution and legacy check-ins in the same month during coexistence
+   - executed monthly figures consume posted ledger aggregates by taxonomy and month
+   - monthly summaries can mix ledger-backed execution and manual check-ins in the same month
 3. Monthly close
-   - monthly close uses ledger-derived liquidity and execution where `tracking_mode=accounting` or budget links provide coverage
-   - legacy check-ins remain fallback when coverage is partial or absent
+   - monthly close uses ledger-derived liquidity and execution where `tracking_mode=accounting` or taxonomy coverage exists
+   - manual check-ins remain fallback when coverage is partial or absent
    - historical closes must respect `as_of_date` instead of reading current live balances
    - precedence is explicit: use ledger first when the account link is valid and covered; fallback only when ledger coverage is unsafe or absent
 

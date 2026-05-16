@@ -99,7 +99,7 @@ describe('useAccountingPage', () => {
     seedNetWorthResponses();
   });
 
-  it('omits annual plan ids from quick-entry payload', async () => {
+  it('sends taxonomy in quick-entry payload', async () => {
     const store = useAccountingStore();
     const Harness = defineComponent({
       setup() {
@@ -124,9 +124,10 @@ describe('useAccountingPage', () => {
     await wrapper.vm.submitQuickEntry();
 
     expect(coreAccountingApi.createQuickEntry).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        annual_income_entry_id: expect.anything(),
-        annual_expense_entry_id: expect.anything(),
+      expect.objectContaining({
+        movement_type: 'income',
+        category_key: 'salary',
+        subcategory_key: 'employee_salary',
       }),
     );
     expect(store.transactionCreationLoading).toBe(false);

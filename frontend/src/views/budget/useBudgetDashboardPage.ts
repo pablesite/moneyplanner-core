@@ -600,12 +600,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       .map((entry) => {
         const checkin = incomeCheckinsByEntryId.value[entry.id] ?? null;
         const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
-        const {
-          categorizedLedgerExecuted,
-          executed,
-          executionOrigin,
-          executionSource,
-        } = resolveIncomeExecutionForMonth(entry, selectedExecutionMonth.value, checkin);
+        const { categorizedLedgerExecuted, executed, executionOrigin, executionSource } =
+          resolveIncomeExecutionForMonth(entry, selectedExecutionMonth.value, checkin);
         return {
           entry,
           planned,
@@ -947,12 +943,8 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       .map((entry) => {
         const checkin = expenseCheckinsByEntryId.value[entry.id] ?? null;
         const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
-        const {
-          categorizedLedgerExecuted,
-          executed,
-          executionOrigin,
-          executionSource,
-        } = resolveExpenseExecutionForMonth(entry, month, checkin);
+        const { categorizedLedgerExecuted, executed, executionOrigin, executionSource } =
+          resolveExpenseExecutionForMonth(entry, month, checkin);
         return {
           entry,
           planned,

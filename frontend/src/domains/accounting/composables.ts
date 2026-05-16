@@ -2383,12 +2383,8 @@ export function useAccountingPage() {
               : {}),
           }
         : {}),
-      ...(quickEntryForm.movement_type === 'income'
-        ? {}
-        : {}),
-      ...(quickEntryForm.movement_type === 'expense'
-        ? {}
-        : {}),
+      ...(quickEntryForm.movement_type === 'income' ? {} : {}),
+      ...(quickEntryForm.movement_type === 'expense' ? {} : {}),
       ...(quickEntryForm.movement_type === 'investment'
         ? {
             counterparty_account_id: normalizeAccountId(quickEntryForm.counterparty_account_id),
