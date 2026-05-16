@@ -61,7 +61,7 @@ def build_monthly_accounting_summary(*, user_id: int, fiscal_year: int) -> dict:
             transaction__user_id=user_id,
             transaction__booking_date__year=fiscal_year,
         )
-        .select_related("transaction", "annual_income_entry", "annual_expense_entry")
+        .select_related("transaction")
         .order_by("transaction__booking_date", "id")
     )
 

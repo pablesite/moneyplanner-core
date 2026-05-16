@@ -2318,16 +2318,6 @@ class AccountingApiTests(APITestCase):
         self.assertIn("detail", response.data["error"]["details"])
 
     def test_quick_entry_income_creates_balanced_transaction_with_system_income_account(self):
-        income_plan = AnnualIncomeEntry.objects.create(
-            user=self.user,
-            name="Nomina",
-            category=AnnualIncomeEntry.Category.SALARY,
-            subcategory="employee_salary",
-            amount_annual=Decimal("24000.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
-
         response = self.client.post(
             "/api/accounting/transactions/quick-entry/",
             {
@@ -2337,7 +2327,8 @@ class AccountingApiTests(APITestCase):
                 "description": "Nomina abril",
                 "amount": "2000.00",
                 "account_id": self.cash_account.id,
-                "annual_income_entry_id": income_plan.id,
+                "category_key": "salary",
+                "subcategory_key": "employee_salary",
             },
             format="json",
         )
@@ -2357,7 +2348,7 @@ class AccountingApiTests(APITestCase):
                 user=self.user,
                 account_type=LedgerAccount.AccountType.INCOME,
                 origin=LedgerAccount.Origin.SYSTEM,
-                name="Ingreso: Nomina",
+                name="Ingresos sin categoria",
             ).exists()
         )
         self.cash_account.refresh_from_db()
@@ -2394,7 +2385,7 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(income_entry["flow_family"], "income")
         self.assertEqual(income_entry["category_key"], "salary")
         self.assertEqual(income_entry["subcategory_key"], "employee_salary")
-        self.assertIsNone(income_entry["annual_income_entry_id"])
+        self.assertNotIn("annual_income_entry_id", income_entry)
 
     def test_quick_entry_expense_requires_category_when_annual_link_is_missing(self):
         response = self.client.post(
@@ -2414,24 +2405,6 @@ class AccountingApiTests(APITestCase):
         self.assertIn("subcategory_key", response.data["error"]["details"])
 
     def test_quick_entry_expense_uses_expense_counterpart_and_updates_monthly_summary(self):
-        income_plan = AnnualIncomeEntry.objects.create(
-            user=self.user,
-            name="Nomina",
-            category=AnnualIncomeEntry.Category.SALARY,
-            subcategory="employee_salary",
-            amount_annual=Decimal("18000.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
-        expense_plan = AnnualExpenseEntry.objects.create(
-            user=self.user,
-            name="Supermercado",
-            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
-            subcategory="living_expenses",
-            amount_annual=Decimal("3600.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
         self.client.post(
             "/api/accounting/transactions/quick-entry/",
             {
@@ -2441,7 +2414,8 @@ class AccountingApiTests(APITestCase):
                 "description": "Saldo inicial",
                 "amount": "1500.00",
                 "account_id": self.cash_account.id,
-                "annual_income_entry_id": income_plan.id,
+                "category_key": "salary",
+                "subcategory_key": "employee_salary",
             },
             format="json",
         )
@@ -2455,7 +2429,8 @@ class AccountingApiTests(APITestCase):
                 "description": "Compra semanal",
                 "amount": "120.00",
                 "account_id": self.cash_account.id,
-                "annual_expense_entry_id": expense_plan.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "living_expenses",
             },
             format="json",
         )
@@ -2474,7 +2449,7 @@ class AccountingApiTests(APITestCase):
                 user=self.user,
                 account_type=LedgerAccount.AccountType.EXPENSE,
                 origin=LedgerAccount.Origin.SYSTEM,
-                name="Gasto: Supermercado",
+                name="Gastos sin categoria",
             ).exists()
         )
 
@@ -2560,19 +2535,10 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(expense_entry["category_key"], "consumption_expenses")
         self.assertEqual(expense_entry["subcategory_key"], "transport_mobility")
 
-    def test_ledger_entry_with_annual_expense_link_is_reflected_in_monthly_summary(self):
-        expense_plan = AnnualExpenseEntry.objects.create(
-            user=self.user,
-            name="Alquiler",
-            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
-            subcategory="housing_home",
-            amount_annual=Decimal("9600.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
+    def test_ledger_entry_with_classification_is_reflected_in_monthly_summary(self):
         expense_account = LedgerAccount.objects.create(
             user=self.user,
-            name="Gastos legacy",
+            name="Gastos clasificados",
             account_type=LedgerAccount.AccountType.EXPENSE,
             currency="EUR",
         )
@@ -2580,7 +2546,7 @@ class AccountingApiTests(APITestCase):
             user=self.user,
             booking_date=date(2026, 6, 10),
             value_date=date(2026, 6, 10),
-            description="Gasto legacy",
+            description="Gasto clasificado",
         )
         LedgerEntry.objects.create(
             transaction=tx,
@@ -2588,7 +2554,9 @@ class AccountingApiTests(APITestCase):
             side=LedgerEntry.Side.DEBIT,
             amount=Decimal("80.00"),
             currency="EUR",
-            annual_expense_entry=expense_plan,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="housing_home",
         )
         LedgerEntry.objects.create(
             transaction=tx,
@@ -3458,15 +3426,6 @@ class AccountingApiTests(APITestCase):
         self.assertIn("realized_gain_loss", response.data["error"]["details"])
 
     def test_quick_entry_debt_payment_creates_principal_and_interest_breakdown(self):
-        expense_plan = AnnualExpenseEntry.objects.create(
-            user=self.user,
-            name="Intereses prestamo",
-            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
-            subcategory="financial_commitments",
-            amount_annual=Decimal("1200.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
         liability = Liability.objects.create(
             user=self.user,
             name="Prestamo coche",
@@ -3501,7 +3460,8 @@ class AccountingApiTests(APITestCase):
                 "account_id": self.cash_account.id,
                 "liability_account_id": liability_account.id,
                 "interest_account_id": interest_account.id,
-                "annual_expense_entry_id": expense_plan.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "financial_commitments",
             },
             format="json",
         )
@@ -3521,7 +3481,7 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(principal_entry["side"], "debit")
         self.assertEqual(principal_entry["liability_id"], liability.id)
         self.assertEqual(interest_entry["side"], "debit")
-        self.assertEqual(interest_entry["annual_expense_entry_id"], expense_plan.id)
+        self.assertNotIn("annual_expense_entry_id", interest_entry)
         self.assertEqual(interest_entry["flow_family"], "expense")
         self.assertEqual(interest_entry["category_key"], "consumption_expenses")
         self.assertEqual(interest_entry["subcategory_key"], "financial_commitments")
@@ -3656,24 +3616,6 @@ class AccountingApiTests(APITestCase):
         self.assertIn("subcategory_key", response.data["error"]["details"])
 
     def test_account_balances_endpoint_returns_period_aggregates_for_liquidity_accounts(self):
-        income_plan = AnnualIncomeEntry.objects.create(
-            user=self.user,
-            name="Nomina",
-            category=AnnualIncomeEntry.Category.SALARY,
-            subcategory="employee_salary",
-            amount_annual=Decimal("12000.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
-        expense_plan = AnnualExpenseEntry.objects.create(
-            user=self.user,
-            name="Compras",
-            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
-            subcategory="living_expenses",
-            amount_annual=Decimal("2400.00"),
-            fiscal_year=2026,
-            currency="EUR",
-        )
         second_cash_account = LedgerAccount.objects.create(
             user=self.user,
             name="Ahorro",
@@ -3690,7 +3632,8 @@ class AccountingApiTests(APITestCase):
                 "description": "Nomina abril",
                 "amount": "1000.00",
                 "account_id": self.cash_account.id,
-                "annual_income_entry_id": income_plan.id,
+                "category_key": "salary",
+                "subcategory_key": "employee_salary",
             },
             format="json",
         )
@@ -3703,7 +3646,8 @@ class AccountingApiTests(APITestCase):
                 "description": "Compra abril",
                 "amount": "200.00",
                 "account_id": self.cash_account.id,
-                "annual_expense_entry_id": expense_plan.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "living_expenses",
             },
             format="json",
         )

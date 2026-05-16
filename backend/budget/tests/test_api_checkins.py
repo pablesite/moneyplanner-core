@@ -287,10 +287,8 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
         self.assertEqual(months[2]["executed"], "1950.00")
         self.assertEqual(months[2]["coverage_mode"], "checkin")
 
-    def test_income_monthly_summary_uses_legacy_link_as_fallback_when_new_classification_missing(
-        self,
-    ):
-        recurring = AnnualIncomeEntry.objects.create(
+    def test_income_monthly_summary_ignores_unclassified_ledger_entry(self):
+        AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
             category="salary",
@@ -332,18 +330,18 @@ class AnnualIncomeApiCheckinsTests(APITestCase):
             side=LedgerEntry.Side.CREDIT,
             amount=Decimal("2000.00"),
             currency="EUR",
-            annual_income_entry=recurring,
         )
 
         response = self.client.get("/api/budget/annual-income/monthly-summary/?year=2026")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["executed_total"], "2000.00")
+        self.assertEqual(response.data["executed_total"], "0.00")
         self.assertFalse(response.data["has_ledger_data"])
-        self.assertEqual(response.data["months_with_fallback"], 1)
-        self.assertEqual(response.data["coverage_mode"], "checkin")
+        self.assertEqual(response.data["months_with_fallback"], 0)
+        self.assertEqual(response.data["coverage_mode"], "none")
         months = {row["month"]: row for row in response.data["months"]}
-        self.assertEqual(months[1]["executed"], "2000.00")
-        self.assertEqual(months[1]["coverage_mode"], "checkin")
+        self.assertEqual(months[1]["executed"], "0.00")
+        self.assertEqual(months[1]["pending"], "2000.00")
+        self.assertEqual(months[1]["coverage_mode"], "none")
 
 
 class AnnualExpenseApiCheckinsTests(APITestCase):

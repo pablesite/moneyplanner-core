@@ -59,7 +59,6 @@ class BudgetServicesTests(TestCase):
         month: int,
         category_key: str = "",
         subcategory_key: str = "",
-        legacy: AnnualIncomeEntry | None = None,
     ) -> None:
         tx = LedgerTransaction.objects.create(
             user=self.user,
@@ -84,7 +83,6 @@ class BudgetServicesTests(TestCase):
             flow_family=LedgerEntry.FlowFamily.INCOME if category_key else "",
             category_key=category_key,
             subcategory_key=subcategory_key,
-            annual_income_entry=legacy,
         )
 
     def _post_expense_entry(
@@ -94,7 +92,6 @@ class BudgetServicesTests(TestCase):
         month: int,
         category_key: str = "",
         subcategory_key: str = "",
-        legacy: AnnualExpenseEntry | None = None,
         asset: Asset | None = None,
     ) -> None:
         tx = LedgerTransaction.objects.create(
@@ -113,7 +110,6 @@ class BudgetServicesTests(TestCase):
             flow_family=LedgerEntry.FlowFamily.EXPENSE if category_key else "",
             category_key=category_key,
             subcategory_key=subcategory_key,
-            annual_expense_entry=legacy,
             asset=asset,
         )
         LedgerEntry.objects.create(
@@ -465,8 +461,8 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(month["ledger_confirmed"], 1)
         self.assertEqual(month["fallback_confirmed"], 0)
 
-    def test_income_summary_uses_legacy_link_when_new_classification_missing(self):
-        entry = AnnualIncomeEntry.objects.create(
+    def test_income_summary_ignores_unclassified_ledger_entry(self):
+        AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Nomina",
             category="salary",
@@ -476,14 +472,15 @@ class BudgetServicesTests(TestCase):
             currency="EUR",
             is_active=True,
         )
-        self._post_income_entry(amount="1000.00", month=3, legacy=entry)
+        self._post_income_entry(amount="1000.00", month=3)
 
         summary = build_income_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
         month = next(row for row in summary["months"] if row["month"] == 3)
         self.assertEqual(summary["has_ledger_data"], False)
-        self.assertEqual(summary["coverage_mode"], "checkin")
-        self.assertEqual(month["executed"], "1000.00")
-        self.assertEqual(month["fallback_confirmed"], 1)
+        self.assertEqual(summary["coverage_mode"], "none")
+        self.assertEqual(month["executed"], "0.00")
+        self.assertEqual(month["pending"], "1000.00")
+        self.assertEqual(month["fallback_confirmed"], 0)
 
     def test_income_summary_includes_unbudgeted_subcategory_within_budgeted_category(self):
         AnnualIncomeEntry.objects.create(

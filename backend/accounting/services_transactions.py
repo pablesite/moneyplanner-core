@@ -111,11 +111,7 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
     if qek == LedgerTransaction.QuickEntryKind.DEBT_PAYMENT:
         return "debt_payment"
 
-    has_income = any(
-        entry.flow_family == LedgerEntry.FlowFamily.INCOME
-        or entry.annual_income_entry_id is not None
-        for entry in entries
-    )
+    has_income = any(entry.flow_family == LedgerEntry.FlowFamily.INCOME for entry in entries)
     if has_income:
         return "income"
 
@@ -124,11 +120,7 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
         return "debt_payment"
 
     has_expense = any(
-        (
-            entry.flow_family == LedgerEntry.FlowFamily.EXPENSE
-            or entry.annual_expense_entry_id is not None
-        )
-        and entry.liability_id is None
+        entry.flow_family == LedgerEntry.FlowFamily.EXPENSE and entry.liability_id is None
         for entry in entries
     )
     if has_expense:
@@ -168,14 +160,10 @@ def _get_legacy_transfer_transaction_ids(queryset: QuerySet) -> list[int]:
             1 for entry in entries if entry.account.account_type == LedgerAccount.AccountType.ASSET
         )
         has_income_like_entry = any(
-            entry.flow_family == LedgerEntry.FlowFamily.INCOME
-            or entry.annual_income_entry_id is not None
-            for entry in entries
+            entry.flow_family == LedgerEntry.FlowFamily.INCOME for entry in entries
         )
         has_expense_like_entry = any(
-            entry.flow_family == LedgerEntry.FlowFamily.EXPENSE
-            or entry.annual_expense_entry_id is not None
-            for entry in entries
+            entry.flow_family == LedgerEntry.FlowFamily.EXPENSE for entry in entries
         )
         has_liability_entry = any(entry.liability_id is not None for entry in entries)
         has_investment_entry = any(entry.asset_id is not None for entry in entries)
@@ -258,10 +246,7 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
             | (
                 Q(quick_entry_kind="")
                 & Exists(
-                    entry_subquery.filter(
-                        Q(flow_family=LedgerEntry.FlowFamily.INCOME)
-                        | Q(annual_income_entry_id__isnull=False)
-                    )
+                    entry_subquery.filter(flow_family=LedgerEntry.FlowFamily.INCOME)
                 )
             )
         )
@@ -272,11 +257,8 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 Q(quick_entry_kind="")
                 & Exists(
                     entry_subquery.filter(
-                        (
-                            Q(flow_family=LedgerEntry.FlowFamily.EXPENSE)
-                            | Q(annual_expense_entry_id__isnull=False)
-                        )
-                        & Q(liability_id__isnull=True)
+                        flow_family=LedgerEntry.FlowFamily.EXPENSE,
+                        liability_id__isnull=True,
                     )
                 )
             )

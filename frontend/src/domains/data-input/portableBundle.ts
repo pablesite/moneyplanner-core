@@ -166,8 +166,6 @@ export type PortableLedgerEntryRecord = {
   flow_family?: 'income' | 'expense' | '';
   category_key?: string;
   subcategory_key?: string;
-  annual_income_entry_id?: number | null;
-  annual_expense_entry_id?: number | null;
   asset_id?: number | null;
   liability_id?: number | null;
   notes?: string;
@@ -597,8 +595,6 @@ export function toPortableLedgerEntryRecord(
     flow_family: toFlowFamily(raw.flow_family),
     category_key: String(raw.category_key ?? ''),
     subcategory_key: String(raw.subcategory_key ?? ''),
-    annual_income_entry_id: toNumberOrNull(raw.annual_income_entry_id),
-    annual_expense_entry_id: toNumberOrNull(raw.annual_expense_entry_id),
     asset_id: toNumberOrNull(raw.asset_id),
     liability_id: toNumberOrNull(raw.liability_id),
     notes: raw.notes == null ? '' : String(raw.notes),

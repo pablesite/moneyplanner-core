@@ -33,8 +33,6 @@ def create_quick_transaction(
     import_fingerprint: str = "",
     member_tag: str = "",
     ownership=None,
-    annual_income_entry=None,
-    annual_expense_entry=None,
     flow_family: str = "",
     category_key: str = "",
     subcategory_key: str = "",
@@ -57,8 +55,6 @@ def create_quick_transaction(
         amount=amount,
         account=account,
         counterparty_account=counterparty_account,
-        annual_income_entry=annual_income_entry,
-        annual_expense_entry=annual_expense_entry,
         flow_family=flow_family,
         category_key=category_key,
         subcategory_key=subcategory_key,
@@ -111,8 +107,6 @@ def _build_quick_entry_payload(
     amount: Decimal,
     account: LedgerAccount,
     counterparty_account: LedgerAccount,
-    annual_income_entry=None,
-    annual_expense_entry=None,
     flow_family: str = "",
     category_key: str = "",
     subcategory_key: str = "",
@@ -136,8 +130,6 @@ def _build_quick_entry_payload(
         flow_family=flow_family,
         category_key=category_key,
         subcategory_key=subcategory_key,
-        annual_income_entry=annual_income_entry,
-        annual_expense_entry=annual_expense_entry,
     )
     if movement_type == "income":
         return [
@@ -152,7 +144,6 @@ def _build_quick_entry_payload(
                 "side": LedgerEntry.Side.CREDIT,
                 "amount": base_amount,
                 "currency": counterparty_account.currency,
-                "annual_income_entry": annual_income_entry,
                 **classification,
             },
         ]
@@ -163,7 +154,6 @@ def _build_quick_entry_payload(
                 "side": LedgerEntry.Side.DEBIT,
                 "amount": base_amount,
                 "currency": counterparty_account.currency,
-                "annual_expense_entry": annual_expense_entry,
                 **classification,
             },
             {
@@ -332,7 +322,6 @@ def _build_quick_entry_payload(
                     "side": LedgerEntry.Side.DEBIT,
                     "amount": interest,
                     "currency": interest_account.currency,
-                    "annual_expense_entry": annual_expense_entry,
                     **classification,
                 },
             )
@@ -369,8 +358,6 @@ def _resolve_entry_classification(
     flow_family: str,
     category_key: str,
     subcategory_key: str,
-    annual_income_entry,
-    annual_expense_entry,
 ) -> dict[str, str]:
     if flow_family and category_key and subcategory_key:
         return {
@@ -379,18 +366,6 @@ def _resolve_entry_classification(
             "subcategory_key": subcategory_key,
         }
 
-    if movement_type == "income" and annual_income_entry is not None:
-        return {
-            "flow_family": LedgerEntry.FlowFamily.INCOME,
-            "category_key": annual_income_entry.category,
-            "subcategory_key": annual_income_entry.subcategory,
-        }
-    if movement_type in {"expense", "debt_payment"} and annual_expense_entry is not None:
-        return {
-            "flow_family": LedgerEntry.FlowFamily.EXPENSE,
-            "category_key": annual_expense_entry.category,
-            "subcategory_key": annual_expense_entry.subcategory,
-        }
     return {}
 
 

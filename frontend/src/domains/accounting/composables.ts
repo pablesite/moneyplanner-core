@@ -86,8 +86,6 @@ type PersistedTransactionEntry = {
   flow_family: '' | 'income' | 'expense';
   category_key: string;
   subcategory_key: string;
-  annual_income_entry_id: number | null;
-  annual_expense_entry_id: number | null;
   asset_id: number | null;
   liability_id: number | null;
   notes: string;
@@ -391,8 +389,6 @@ export function useAccountingPage() {
     liabilityMap,
     accountPositionMetaByAccountId,
     manualAssets,
-    incomeOptions,
-    expenseOptions,
   };
   const {
     quickEntryForm,
@@ -424,8 +420,6 @@ export function useAccountingPage() {
     quickSubcategoryOptions,
     quickCategoryLocked,
     quickSubcategoryLocked,
-    annualIncomeOptionsCompatible,
-    annualExpenseOptionsCompatible,
     resolveFlexibleDebtBreakdown,
     resolveQuickDebtBreakdown,
     resolveDefaultDebtInterestAccountId,
@@ -1218,8 +1212,6 @@ export function useAccountingPage() {
       flow_family: entry.flow_family ?? '',
       category_key: entry.category_key ?? '',
       subcategory_key: entry.subcategory_key ?? '',
-      annual_income_entry_id: entry.annual_income_entry_id ?? null,
-      annual_expense_entry_id: entry.annual_expense_entry_id ?? null,
       asset_id: entry.asset_id ?? null,
       liability_id: entry.liability_id ?? null,
       notes: entry.notes ?? '',
@@ -1365,8 +1357,6 @@ export function useAccountingPage() {
       flow_family: '' as '' | 'income' | 'expense',
       category_key: '',
       subcategory_key: '',
-      annual_income_entry_id: null,
-      annual_expense_entry_id: null,
       asset_id: null,
       liability_id: null,
     }));
@@ -1579,8 +1569,6 @@ export function useAccountingPage() {
       flow_family: '',
       category_key: '',
       subcategory_key: '',
-      annual_income_entry_id: null,
-      annual_expense_entry_id: null,
       asset_id: null,
       liability_id: null,
       notes: '',
@@ -1766,9 +1754,6 @@ export function useAccountingPage() {
         store.error = 'Liquidez y pasivo deben usar la misma moneda en pago deuda.';
         return null;
       }
-      const annualExpenseEntryId =
-        editTransactionPersistedEntries.value.find((entry) => entry.annual_expense_entry_id != null)
-          ?.annual_expense_entry_id ?? null;
       const entryNotesByAccountId = new Map(
         editTransactionPersistedEntries.value.map((entry) => [entry.account_id, entry.notes]),
       );
@@ -1782,8 +1767,6 @@ export function useAccountingPage() {
           flow_family: 'expense',
           category_key: editTransactionForm.category_key,
           subcategory_key: editTransactionForm.subcategory_key,
-          annual_income_entry_id: null,
-          annual_expense_entry_id: annualExpenseEntryId,
           asset_id: null,
           liability_id: liabilityAccount.liability_id ?? null,
           notes: entryNotesByAccountId.get(liabilityAccount.id) ?? '',
@@ -1812,8 +1795,6 @@ export function useAccountingPage() {
           flow_family: 'expense',
           category_key: editTransactionForm.category_key,
           subcategory_key: editTransactionForm.subcategory_key,
-          annual_income_entry_id: null,
-          annual_expense_entry_id: annualExpenseEntryId,
           asset_id: null,
           liability_id: null,
           notes: entryNotesByAccountId.get(interestAccount.id) ?? '',
@@ -1827,8 +1808,6 @@ export function useAccountingPage() {
         flow_family: '',
         category_key: '',
         subcategory_key: '',
-        annual_income_entry_id: null,
-        annual_expense_entry_id: null,
         asset_id: selectedAccount.asset_id ?? null,
         liability_id: null,
         notes: entryNotesByAccountId.get(selectedAccount.id) ?? '',
@@ -2184,8 +2163,6 @@ export function useAccountingPage() {
           flow_family: entry.flow_family,
           category_key: entry.category_key,
           subcategory_key: entry.subcategory_key,
-          annual_income_entry_id: entry.annual_income_entry_id,
-          annual_expense_entry_id: entry.annual_expense_entry_id,
           asset_id: entry.asset_id,
           liability_id: entry.liability_id,
           notes: entry.notes.trim(),
@@ -2245,8 +2222,6 @@ export function useAccountingPage() {
         flow_family: entry.flow_family,
         category_key: entry.category_key,
         subcategory_key: entry.subcategory_key,
-        annual_income_entry_id: entry.annual_income_entry_id,
-        annual_expense_entry_id: entry.annual_expense_entry_id,
         asset_id: entry.asset_id,
         liability_id: entry.liability_id,
         notes: entry.notes.trim(),
@@ -2409,14 +2384,10 @@ export function useAccountingPage() {
           }
         : {}),
       ...(quickEntryForm.movement_type === 'income'
-        ? quickEntryForm.annual_income_entry_id != null
-          ? { annual_income_entry_id: quickEntryForm.annual_income_entry_id }
-          : {}
+        ? {}
         : {}),
       ...(quickEntryForm.movement_type === 'expense'
-        ? quickEntryForm.annual_expense_entry_id != null
-          ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
-          : {}
+        ? {}
         : {}),
       ...(quickEntryForm.movement_type === 'investment'
         ? {
@@ -2439,9 +2410,6 @@ export function useAccountingPage() {
             amount: String(debtBreakdown?.total ?? 0),
             principal_amount: String(debtBreakdown?.principal ?? 0),
             interest_amount: String(debtBreakdown?.interest ?? 0),
-            ...(quickEntryForm.annual_expense_entry_id != null
-              ? { annual_expense_entry_id: quickEntryForm.annual_expense_entry_id }
-              : {}),
             ...((debtBreakdown?.interest ?? 0) > 0
               ? { interest_account_id: normalizeAccountId(quickEntryForm.interest_account_id) }
               : {}),
@@ -2554,8 +2522,6 @@ export function useAccountingPage() {
     quickEntryForm.realized_gain_loss = transaction.realized_gain_loss ?? '';
     quickEntryForm.category_key = classifiedEntry?.category_key ?? '';
     quickEntryForm.subcategory_key = classifiedEntry?.subcategory_key ?? '';
-    quickEntryForm.annual_income_entry_id = classifiedEntry?.annual_income_entry_id ?? null;
-    quickEntryForm.annual_expense_entry_id = classifiedEntry?.annual_expense_entry_id ?? null;
     quickEntryForm.notes = transaction.notes ?? '';
     quickEntryForm.revaluation_new_value = '';
   }
@@ -2630,8 +2596,6 @@ export function useAccountingPage() {
     liquidityBalanceTotal,
     incomeOptions,
     expenseOptions,
-    annualIncomeOptionsCompatible,
-    annualExpenseOptionsCompatible,
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,

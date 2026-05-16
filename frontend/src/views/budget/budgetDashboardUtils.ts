@@ -209,7 +209,6 @@ export type BudgetExecutionSource =
   | 'none';
 export type BudgetExecutionOrigin =
   | 'categorized_ledger'
-  | 'legacy_ledger'
   | 'user_override'
   | 'legacy_checkin'
   | 'ambiguous_taxonomy'
@@ -270,8 +269,6 @@ export type DebtPaymentExpenseTarget = { categoryKey: string; subcategoryKey: st
 export type AccountingExecutionBucketAccumulator = {
   incomeCategorizedByMonthTaxonomy: Map<string, number>;
   expenseCategorizedByMonthTaxonomy: Map<string, number>;
-  incomeLegacyByMonthEntryId: Map<string, number>;
-  expenseLegacyByMonthEntryId: Map<string, number>;
   depositRotationIncomeByMonth: Map<number, number>;
   depositRotationExpenseByMonth: Map<number, number>;
   incomeUnclassifiedTotal: number;
@@ -296,7 +293,6 @@ export type IncomeExecutionRow = {
   executed: number | null;
   executionOrigin: BudgetExecutionOrigin;
   categorizedLedgerExecuted: number | null;
-  legacyLedgerExecuted: number | null;
   executionSource: BudgetExecutionSource;
 };
 
@@ -307,7 +303,6 @@ export type ExpenseExecutionRow = {
   executed: number | null;
   executionOrigin: BudgetExecutionOrigin;
   categorizedLedgerExecuted: number | null;
-  legacyLedgerExecuted: number | null;
   executionSource: BudgetExecutionSource;
 };
 
@@ -507,8 +502,6 @@ export function bookingMonthFromDate(value: string): number {
 
 export function resolveLedgerEntryFlowFamily(entry: LedgerEntry): '' | 'income' | 'expense' {
   if (entry.flow_family === 'income' || entry.flow_family === 'expense') return entry.flow_family;
-  if (entry.annual_income_entry_id != null) return 'income';
-  if (entry.annual_expense_entry_id != null) return 'expense';
   return '';
 }
 
@@ -600,26 +593,6 @@ export function collectTaxonomyExecution(
   return true;
 }
 
-export function collectLegacyExecution(
-  entry: AccountingPostedEntry,
-  flowFamily: 'income' | 'expense',
-  amount: number,
-  bookingMonth: number,
-  buckets: AccountingExecutionBucketAccumulator,
-): boolean {
-  if (flowFamily === 'income' && entry.annual_income_entry_id != null) {
-    const key = budgetMonthEntryKey(bookingMonth, entry.annual_income_entry_id);
-    addMapAmount(buckets.incomeLegacyByMonthEntryId, key, amount);
-    return true;
-  }
-  if (flowFamily === 'expense' && entry.annual_expense_entry_id != null) {
-    const key = budgetMonthEntryKey(bookingMonth, entry.annual_expense_entry_id);
-    addMapAmount(buckets.expenseLegacyByMonthEntryId, key, amount);
-    return true;
-  }
-  return false;
-}
-
 export function collectDepositRotationMonthBuckets(
   entry: AccountingPostedEntry,
   flowFamily: 'income' | 'expense',
@@ -688,7 +661,6 @@ export function collectAccountingExecutionEntry(
     return;
   }
   if (collectTaxonomyExecution(entry, flowFamily, amount, bookingMonth, buckets)) return;
-  if (collectLegacyExecution(entry, flowFamily, amount, bookingMonth, buckets)) return;
   if (flowFamily === 'income') buckets.incomeUnclassifiedTotal += amount;
   if (flowFamily === 'expense') buckets.expenseUnclassifiedTotal += amount;
 }
@@ -897,7 +869,7 @@ export function buildActualExecution(
 }
 
 export function isLockedExecutionRow(row: { executionOrigin: BudgetExecutionOrigin }): boolean {
-  return row.executionOrigin === 'categorized_ledger' || row.executionOrigin === 'legacy_ledger';
+  return row.executionOrigin === 'categorized_ledger';
 }
 
 export function resolveCoverageMode(summary: MonthlyCoverageSummary): string {
@@ -928,7 +900,7 @@ export function coverageDetail(summary: MonthlyCoverageSummary): string {
 
 export function executionSourceLabel(origin: BudgetExecutionOrigin): string {
   if (origin === 'categorized_ledger') return 'Movimientos';
-  if (origin === 'legacy_ledger' || origin === 'legacy_checkin') return 'Manual';
+  if (origin === 'legacy_checkin') return 'Manual';
   if (origin === 'user_override') return 'Ajuste manual';
   if (origin === 'ambiguous_taxonomy') return 'Pendiente clasificar';
   return '';

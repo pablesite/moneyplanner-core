@@ -175,20 +175,6 @@ class LedgerEntry(models.Model):
     )
     category_key = models.CharField(max_length=64, blank=True, default="")
     subcategory_key = models.CharField(max_length=64, blank=True, default="")
-    annual_income_entry = models.ForeignKey(
-        "budget.AnnualIncomeEntry",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="ledger_entries",
-    )
-    annual_expense_entry = models.ForeignKey(
-        "budget.AnnualExpenseEntry",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="ledger_entries",
-    )
     asset = models.ForeignKey(
         "net_worth.Asset",
         on_delete=models.SET_NULL,

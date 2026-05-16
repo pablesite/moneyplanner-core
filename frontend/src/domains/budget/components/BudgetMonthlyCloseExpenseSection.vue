@@ -6,7 +6,6 @@ type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type ExpenseResetMode = 'zero' | 'planned';
 type ExpenseExecutionOrigin =
   | 'categorized_ledger'
-  | 'legacy_ledger'
   | 'user_override'
   | 'legacy_checkin'
   | 'ambiguous_taxonomy'
@@ -39,7 +38,6 @@ type ExpenseRow = {
   planned: number;
   executed: number | null;
   categorizedLedgerExecuted: number | null;
-  legacyLedgerExecuted: number | null;
   executionSource: ExpenseExecutionSource;
   executionOrigin: ExpenseExecutionOrigin;
   checkin: ExpenseCheckin | null;

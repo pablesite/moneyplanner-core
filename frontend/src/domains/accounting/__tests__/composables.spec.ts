@@ -99,7 +99,7 @@ describe('useAccountingPage', () => {
     seedNetWorthResponses();
   });
 
-  it('omits annual plan ids from quick-entry payload when the movement is not linked', async () => {
+  it('omits annual plan ids from quick-entry payload', async () => {
     const store = useAccountingStore();
     const Harness = defineComponent({
       setup() {
@@ -119,8 +119,6 @@ describe('useAccountingPage', () => {
     wrapper.vm.quickEntryForm.account_id = 1;
     wrapper.vm.quickEntryForm.category_key = 'salary';
     wrapper.vm.quickEntryForm.subcategory_key = 'employee_salary';
-    wrapper.vm.quickEntryForm.annual_income_entry_id = null;
-
     vi.mocked(coreAccountingApi.createQuickEntry).mockResolvedValue({ data: {} } as never);
 
     await wrapper.vm.submitQuickEntry();

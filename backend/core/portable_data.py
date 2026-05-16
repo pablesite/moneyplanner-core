@@ -886,8 +886,6 @@ def _build_transaction_payload(
     transaction_row: dict[str, Any],
     account_id_map: dict[int, int],
     ownership_id_map: dict[int, int],
-    annual_income_id_map: dict[int, int],
-    annual_expense_id_map: dict[int, int],
     asset_id_map: dict[int, int],
     liability_id_map: dict[int, int],
 ) -> dict[str, Any]:
@@ -915,8 +913,23 @@ def _build_transaction_payload(
                 }
             )
 
-        old_income_id = entry.get("annual_income_entry_id")
-        old_expense_id = entry.get("annual_expense_entry_id")
+        if entry.get("annual_income_entry_id") not in (None, "") or entry.get(
+            "annual_expense_entry_id"
+        ) not in (None, ""):
+            raise serializers.ValidationError(
+                {
+                    "bundle": {
+                        "data": {
+                            "accounting": {
+                                "transactions": (
+                                    "Bundle obsoleto: las entradas contables ya no admiten "
+                                    "annual_income_entry_id ni annual_expense_entry_id."
+                                )
+                            }
+                        }
+                    }
+                }
+            )
         old_asset_id = entry.get("asset_id")
         old_liability_id = entry.get("liability_id")
         flow_family = str(entry.get("flow_family", "")).strip()
@@ -942,16 +955,6 @@ def _build_transaction_payload(
                 "flow_family": flow_family,
                 "category_key": category_key,
                 "subcategory_key": subcategory_key,
-                "annual_income_entry_id": (
-                    annual_income_id_map.get(int(old_income_id))
-                    if old_income_id not in (None, "")
-                    else None
-                ),
-                "annual_expense_entry_id": (
-                    annual_expense_id_map.get(int(old_expense_id))
-                    if old_expense_id not in (None, "")
-                    else None
-                ),
                 "asset_id": asset_id_map.get(int(old_asset_id))
                 if old_asset_id not in (None, "")
                 else None,
@@ -1016,8 +1019,6 @@ def _import_ledger_transactions(
     transactions: list[dict[str, Any]],
     account_id_map: dict[int, int],
     ownership_id_map: dict[int, int],
-    annual_income_id_map: dict[int, int],
-    annual_expense_id_map: dict[int, int],
     asset_id_map: dict[int, int],
     liability_id_map: dict[int, int],
 ) -> int:
@@ -1026,8 +1027,6 @@ def _import_ledger_transactions(
             transaction_row=transaction_row,
             account_id_map=account_id_map,
             ownership_id_map=ownership_id_map,
-            annual_income_id_map=annual_income_id_map,
-            annual_expense_id_map=annual_expense_id_map,
             asset_id_map=asset_id_map,
             liability_id_map=liability_id_map,
         )
@@ -1070,8 +1069,6 @@ def _ensure_minimum_transaction_entries(*, payload: dict[str, Any], user: Any) -
             "flow_family": "",
             "category_key": "",
             "subcategory_key": "",
-            "annual_income_entry_id": None,
-            "annual_expense_entry_id": None,
             "asset_id": None,
             "liability_id": None,
             "notes": "Contraapunte generado automaticamente durante importacion portable.",
@@ -1121,8 +1118,6 @@ def _ensure_balanced_entries_by_currency(*, payload: dict[str, Any], user: Any) 
                 "flow_family": "",
                 "category_key": "",
                 "subcategory_key": "",
-                "annual_income_entry_id": None,
-                "annual_expense_entry_id": None,
                 "asset_id": None,
                 "liability_id": None,
                 "notes": (
@@ -1190,10 +1185,10 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             valuations=liability_valuations,
             liability_id_map=liability_id_map,
         )
-        income_count, annual_income_id_map = _import_annual_income(
+        income_count, _annual_income_id_map = _import_annual_income(
             context=context, annual_income=list(data["annual_income"])
         )
-        expense_count, annual_expense_id_map = _import_annual_expense(
+        expense_count, _annual_expense_id_map = _import_annual_expense(
             context=context, annual_expense=list(data["annual_expense"])
         )
         account_id_map = _import_ledger_accounts(
@@ -1215,8 +1210,6 @@ def import_portable_bundle(*, user, request, mode: str, bundle: dict[str, Any]) 
             transactions=accounting_transactions,
             account_id_map=account_id_map,
             ownership_id_map=ownership_id_map,
-            annual_income_id_map=annual_income_id_map,
-            annual_expense_id_map=annual_expense_id_map,
             asset_id_map=asset_id_map,
             liability_id_map=liability_id_map,
         )

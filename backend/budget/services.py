@@ -222,24 +222,6 @@ def _resolve_ledger_budget_classification(
                 subcategory_key = "deposits_fixed_income"
             return row.flow_family, category_key, subcategory_key, True
         return row.flow_family, row.category_key, row.subcategory_key, True
-    if row.annual_income_entry_id is not None and row.annual_income_entry is not None:
-        return (
-            cast(str, LedgerEntry.FlowFamily.INCOME),
-            row.annual_income_entry.category,
-            row.annual_income_entry.subcategory,
-            False,
-        )
-    if row.annual_expense_entry_id is not None and row.annual_expense_entry is not None:
-        category, subcategory = normalize_annual_expense_taxonomy_keys(
-            category=row.annual_expense_entry.category,
-            subcategory=row.annual_expense_entry.subcategory,
-        )
-        return (
-            cast(str, LedgerEntry.FlowFamily.EXPENSE),
-            category,
-            subcategory,
-            False,
-        )
     return "", "", "", False
 
 
@@ -270,10 +252,9 @@ def _build_ledger_monthly_execution_maps(
     user,
     fiscal_year: int,
     flow_family: str,
-    legacy_fk_name: str,
     positive_side: str,
     base_currency: str,
-) -> tuple[dict[tuple[str, str, int], Decimal], dict[tuple[int, int], Decimal]]:
+) -> dict[tuple[str, str, int], Decimal]:
     queryset = (
         LedgerEntry.objects.filter(
             transaction__user=user,
@@ -282,8 +263,6 @@ def _build_ledger_monthly_execution_maps(
         )
         .select_related(
             "transaction",
-            "annual_income_entry",
-            "annual_expense_entry",
             "asset",
             "liability",
         )
@@ -297,15 +276,9 @@ def _build_ledger_monthly_execution_maps(
             "subcategory_key",
             "asset_id",
             "asset__subcategory",
-            "annual_income_entry_id",
-            "annual_expense_entry_id",
             "liability_id",
             "liability__category",
             "transaction__booking_date",
-            "annual_income_entry__category",
-            "annual_income_entry__subcategory",
-            "annual_expense_entry__category",
-            "annual_expense_entry__subcategory",
         )
     )
     rows = list(queryset)
@@ -321,7 +294,6 @@ def _build_ledger_monthly_execution_maps(
         and row.flow_family == LedgerEntry.FlowFamily.EXPENSE
     }
     categorized_totals: dict[tuple[str, str, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
-    legacy_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0.00"))
     for row in rows:
         resolved_flow_family, category_key, subcategory_key, is_primary_classification = (
             _resolve_ledger_budget_classification(
@@ -353,15 +325,7 @@ def _build_ledger_monthly_execution_maps(
         if is_primary_classification and category_key and subcategory_key:
             key = (category_key, subcategory_key, row.transaction.booking_date.month)
             categorized_totals[key] += signed_amount
-            continue
-        entry_id = getattr(row, f"{legacy_fk_name}_id")
-        if entry_id is None:
-            continue
-        legacy_totals[(entry_id, row.transaction.booking_date.month)] += signed_amount
-    return (
-        {key: _round_money(value) for key, value in categorized_totals.items()},
-        {key: _round_money(value) for key, value in legacy_totals.items()},
-    )
+    return {key: _round_money(value) for key, value in categorized_totals.items()}
 
 
 def _resolve_coverage_mode(*, ledger_count: int, fallback_count: int) -> str:
@@ -634,11 +598,10 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         if 1 <= item.month <= 12
     }
     base_currency = _get_base_currency(user)
-    categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
+    categorized_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
-        legacy_fk_name="annual_expense_entry",
         positive_side=cast(str, LedgerEntry.Side.DEBIT),
         base_currency=base_currency,
     )
@@ -705,18 +668,6 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             continue
 
         for entry_id in entry_ids:
-            legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
-            if legacy_ledger_amount is not None:
-                fallback_entries_by_month[month] += 1
-                confirmed_entries_by_month[month] += 1
-                executed_by_month[month] += legacy_ledger_amount
-                entry = entries_by_id[entry_id]
-                budget_key = normalize_annual_expense_taxonomy_keys(
-                    category=entry.category,
-                    subcategory=entry.subcategory,
-                ) + (month,)
-                executed_budgeted_by_slot_month[budget_key] += legacy_ledger_amount
-                continue
             checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
                 pending_by_month[month] += planned_entry_amounts_by_key[(entry_id, month)]
@@ -918,11 +869,10 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         if 1 <= item.month <= 12
     }
     base_currency = _get_base_currency(user)
-    categorized_ledger_by_key, legacy_ledger_by_key = _build_ledger_monthly_execution_maps(
+    categorized_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=cast(str, LedgerEntry.FlowFamily.INCOME),
-        legacy_fk_name="annual_income_entry",
         positive_side=cast(str, LedgerEntry.Side.CREDIT),
         base_currency=base_currency,
     )
@@ -985,15 +935,6 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             continue
 
         for entry_id in entry_ids:
-            legacy_ledger_amount = legacy_ledger_by_key.get((entry_id, month))
-            if legacy_ledger_amount is not None:
-                fallback_entries_by_month[month] += 1
-                confirmed_entries_by_month[month] += 1
-                executed_by_month[month] += legacy_ledger_amount
-                entry = entries_by_id[entry_id]
-                budget_key = (entry.category, entry.subcategory, month)
-                executed_budgeted_by_slot_month[budget_key] += legacy_ledger_amount
-                continue
             checkin = checkins_by_key.get((entry_id, month))
             if checkin is None:
                 pending_by_month[month] += planned_entry_amounts_by_key[(entry_id, month)]

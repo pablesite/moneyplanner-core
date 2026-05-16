@@ -55,7 +55,6 @@ import {
   monthlySummaryExecutedTotal,
   budgetTaxonomyKey,
   budgetMonthTaxonomyKey,
-  budgetMonthEntryKey,
   parseBudgetTaxonomyKey,
   normalizedBudgetTaxonomy,
   resolveLedgerEntryFlowFamily,
@@ -464,10 +463,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const taxonomyKey = budgetMonthTaxonomyKey(month, entry.category, entry.subcategory);
     const categorizedLedgerExecuted =
       accountingExecutionBuckets.value.incomeCategorizedByMonthTaxonomy.get(taxonomyKey) ?? null;
-    const legacyLedgerExecuted =
-      accountingExecutionBuckets.value.incomeLegacyByMonthEntryId.get(
-        budgetMonthEntryKey(month, entry.id),
-      ) ?? null;
     const taxonomyLineCount = incomeTaxonomyLineCountsByMonth.value.get(taxonomyKey) ?? 0;
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
@@ -482,12 +477,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
-      executionOrigin =
-        uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
-      executionSource =
-        uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_fallback';
-      executed = uniqueCategorizedLedgerExecuted + (legacyLedgerExecuted ?? 0);
+    if (uniqueCategorizedLedgerExecuted > 0) {
+      executionOrigin = 'categorized_ledger';
+      executionSource = 'categorized_ledger';
+      executed = uniqueCategorizedLedgerExecuted;
     } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
       executionOrigin = 'ambiguous_taxonomy';
       executionSource = 'pending_classification';
@@ -511,7 +504,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       executionOrigin,
       executionSource,
       categorizedLedgerExecuted,
-      legacyLedgerExecuted,
     };
   }
 
@@ -524,10 +516,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     const taxonomyKey = budgetMonthTaxonomyKey(month, entry.category, entry.subcategory);
     const categorizedLedgerExecuted =
       accountingExecutionBuckets.value.expenseCategorizedByMonthTaxonomy.get(taxonomyKey) ?? null;
-    const legacyLedgerExecuted =
-      accountingExecutionBuckets.value.expenseLegacyByMonthEntryId.get(
-        budgetMonthEntryKey(month, entry.id),
-      ) ?? null;
     const taxonomyLineCount = expenseTaxonomyLineCountsByMonth.value.get(taxonomyKey) ?? 0;
     const fallbackExecuted =
       checkin && checkin.status !== 'skipped' ? toNumberOrZero(checkin.executed_amount) : 0;
@@ -542,12 +530,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     let executionSource: BudgetExecutionSource = 'none';
     let executed: number | null = null;
 
-    if (uniqueCategorizedLedgerExecuted > 0 || legacyLedgerExecuted != null) {
-      executionOrigin =
-        uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_ledger';
-      executionSource =
-        uniqueCategorizedLedgerExecuted > 0 ? 'categorized_ledger' : 'legacy_fallback';
-      executed = uniqueCategorizedLedgerExecuted + (legacyLedgerExecuted ?? 0);
+    if (uniqueCategorizedLedgerExecuted > 0) {
+      executionOrigin = 'categorized_ledger';
+      executionSource = 'categorized_ledger';
+      executed = uniqueCategorizedLedgerExecuted;
     } else if (categorizedLedgerExecuted != null && taxonomyLineCount > 1) {
       executionOrigin = 'ambiguous_taxonomy';
       executionSource = 'pending_classification';
@@ -571,7 +557,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       executionOrigin,
       executionSource,
       categorizedLedgerExecuted,
-      legacyLedgerExecuted,
     };
   }
 
@@ -617,7 +602,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         const planned = monthlyPlannedAmountForIncomeEntry(entry, selectedExecutionMonth.value);
         const {
           categorizedLedgerExecuted,
-          legacyLedgerExecuted,
           executed,
           executionOrigin,
           executionSource,
@@ -629,7 +613,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           executed,
           executionOrigin,
           categorizedLedgerExecuted,
-          legacyLedgerExecuted,
           executionSource,
         };
       })
@@ -966,7 +949,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
         const planned = monthlyPlannedAmountForExpenseEntry(entry, month);
         const {
           categorizedLedgerExecuted,
-          legacyLedgerExecuted,
           executed,
           executionOrigin,
           executionSource,
@@ -978,7 +960,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           executed,
           executionOrigin,
           categorizedLedgerExecuted,
-          legacyLedgerExecuted,
           executionSource,
         };
       })
