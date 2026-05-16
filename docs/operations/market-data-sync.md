@@ -29,13 +29,6 @@ docker compose exec backend python manage.py sync_market_data --datasets fx --mo
 docker compose exec backend python manage.py sync_market_data --datasets inflation --mode reconcile
 ```
 
-## Compatibility Wrapper
-`sync_fx_rates` remains available as compatibility command.
-
-Notes:
-1. With `--for-active-positions` (and no explicit ranges), it delegates to `sync_market_data --datasets fx`.
-2. Explicit currency/date invocations still work as manual fallback for FX only.
-
 ## Worker Service
 `docker-compose.yml` includes `market_data_sync` service.
 
@@ -47,7 +40,6 @@ Default behavior:
 Environment variables:
 1. `FX_SYNC_ENABLED=1`
 2. `FX_SYNC_INTERVAL_SECONDS=86400`
-3. `FX_SYNC_QUOTE_CURRENCY` remains as legacy compatibility env var for old manual command use.
 
 Useful commands:
 
