@@ -1,26 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 
-from django.db import transaction
 from django.db.models import Q
 
 from .models import LedgerEntry, LedgerTransaction
 from .services_ledger import ZERO
 from .services_summaries import _build_period_keys, _serialize_series
-
-
-@dataclass(frozen=True)
-class LedgerClassificationBackfillResult:
-    scanned: int
-    updated: int
-    already_classified: int
-    ambiguous: int
-    ambiguous_reasons: dict[str, int]
-    dry_run: bool
 
 
 def build_budget_derived_suggestions(
@@ -55,78 +43,6 @@ def build_budget_derived_suggestions(
             "de la ventana * 12. No reemplaza el criterio del plan anual."
         ),
     }
-
-
-@transaction.atomic
-def backfill_ledger_entry_classification(
-    *,
-    user_id: int | None = None,
-    limit: int | None = None,
-    dry_run: bool = False,
-) -> LedgerClassificationBackfillResult:
-    queryset = (
-        LedgerEntry.objects.filter(
-            Q(annual_income_entry__isnull=False) | Q(annual_expense_entry__isnull=False)
-        )
-        .select_related("annual_income_entry", "annual_expense_entry")
-        .order_by("id")
-    )
-    if user_id is not None:
-        queryset = queryset.filter(transaction__user_id=user_id)
-    if limit is not None:
-        queryset = queryset[:limit]
-
-    scanned = 0
-    updated = 0
-    already_classified = 0
-    ambiguous_reasons: dict[str, int] = defaultdict(int)
-    rows_to_update: list[LedgerEntry] = []
-
-    for entry in queryset:
-        scanned += 1
-        if entry.flow_family and entry.category_key and entry.subcategory_key:
-            already_classified += 1
-            continue
-
-        if entry.flow_family or entry.category_key or entry.subcategory_key:
-            ambiguous_reasons["partial_new_classification"] += 1
-            continue
-
-        has_income_link = (
-            entry.annual_income_entry_id is not None and entry.annual_income_entry is not None
-        )
-        has_expense_link = (
-            entry.annual_expense_entry_id is not None and entry.annual_expense_entry is not None
-        )
-        if has_income_link and has_expense_link:
-            ambiguous_reasons["conflicting_legacy_references"] += 1
-            continue
-        resolution = _resolve_backfill_classification(entry)
-        if resolution is None:
-            ambiguous_reasons["missing_legacy_reference"] += 1
-            continue
-
-        flow_family, category_key, subcategory_key = resolution
-        entry.flow_family = flow_family
-        entry.category_key = category_key
-        entry.subcategory_key = subcategory_key
-        rows_to_update.append(entry)
-
-    updated = len(rows_to_update)
-    if updated and not dry_run:
-        LedgerEntry.objects.bulk_update(
-            rows_to_update,
-            ["flow_family", "category_key", "subcategory_key"],
-        )
-
-    return LedgerClassificationBackfillResult(
-        scanned=scanned,
-        updated=updated,
-        already_classified=already_classified,
-        ambiguous=sum(ambiguous_reasons.values()),
-        ambiguous_reasons=dict(sorted(ambiguous_reasons.items())),
-        dry_run=dry_run,
-    )
 
 
 def _build_budget_suggestion_section(
@@ -247,27 +163,3 @@ def _resolve_budget_classification(entry: LedgerEntry) -> tuple[str, str, str]:
             entry.annual_expense_entry.subcategory,
         )
     return "", "", ""
-
-
-def _resolve_backfill_classification(
-    entry: LedgerEntry,
-) -> tuple[str, str, str] | None:
-    has_income_link = (
-        entry.annual_income_entry_id is not None and entry.annual_income_entry is not None
-    )
-    has_expense_link = (
-        entry.annual_expense_entry_id is not None and entry.annual_expense_entry is not None
-    )
-    if has_income_link:
-        return (
-            cast(str, LedgerEntry.FlowFamily.INCOME),
-            entry.annual_income_entry.category,
-            entry.annual_income_entry.subcategory,
-        )
-    if has_expense_link:
-        return (
-            cast(str, LedgerEntry.FlowFamily.EXPENSE),
-            entry.annual_expense_entry.category,
-            entry.annual_expense_entry.subcategory,
-        )
-    return None
