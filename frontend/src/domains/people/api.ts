@@ -15,11 +15,13 @@ export type PeopleApiAdapter = {
   ): ReturnType<typeof coreApi.patch<FamilyMember>>;
   deleteMember(id: number): ReturnType<typeof coreApi.delete>;
   getOwnerships(): ReturnType<typeof coreApi.get<OwnershipRead[]>>;
-  createSharedOwnership(payload: OwnershipSplitsPayload): ReturnType<typeof coreApi.post>;
+  createSharedOwnership(
+    payload: OwnershipSplitsPayload,
+  ): ReturnType<typeof coreApi.post<OwnershipRead>>;
   updateSharedOwnership(
     id: number,
     payload: OwnershipSplitsPayload,
-  ): ReturnType<typeof coreApi.patch>;
+  ): ReturnType<typeof coreApi.patch<OwnershipRead>>;
   deleteOwnership(id: number): ReturnType<typeof coreApi.delete>;
 };
 

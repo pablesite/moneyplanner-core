@@ -113,8 +113,8 @@ export const usePeopleStore = defineStore('people', {
       this.loading = true;
       this.error = null;
       try {
-        await peopleApi.createSharedOwnership(payload);
-        await this.fetchOwnerships();
+        const { data } = await peopleApi.createSharedOwnership(payload);
+        this.ownerships = [...this.ownerships, data];
       } catch (e) {
         this.error = toPeopleErrorMessage(e);
         throw e;
@@ -130,8 +130,8 @@ export const usePeopleStore = defineStore('people', {
       this.loading = true;
       this.error = null;
       try {
-        await peopleApi.updateSharedOwnership(id, payload);
-        await this.fetchOwnerships();
+        const { data } = await peopleApi.updateSharedOwnership(id, payload);
+        this.ownerships = this.ownerships.map((o) => (o.id === id ? data : o));
       } catch (e) {
         this.error = toPeopleErrorMessage(e);
         throw e;

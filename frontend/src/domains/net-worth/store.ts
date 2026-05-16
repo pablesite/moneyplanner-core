@@ -391,8 +391,29 @@ export const useNetWorthStore = defineStore('netWorth', {
           base_currency: payload.base_currency ?? this.baseCurrency ?? 'EUR',
           inflation_region: payload.inflation_region ?? this.inflationRegion ?? 'ES',
         });
-        // refreshAll re-fetches settings, summary, assets, liabilities from the server
-        await this.refreshAll();
+        // Ownerships and links are unaffected by settings — rebuild maps from current state
+        const assetOwnership = new Map(
+          this.assets
+            .filter((a) => a.ownership_ref != null)
+            .map((a) => [a.id, a.ownership_ref as number]),
+        );
+        const liabilityOwnership = new Map(
+          this.liabilities
+            .filter((l) => l.ownership_ref != null)
+            .map((l) => [l.id, l.ownership_ref as number]),
+        );
+        const [settingsRes, summaryRes, assetsRes, liabilitiesRes] = await Promise.all([
+          coreNetWorthApi.getSettings(),
+          coreNetWorthApi.getSummary(),
+          coreNetWorthApi.getAssets(),
+          coreNetWorthApi.getLiabilities(),
+        ]);
+        this.baseCurrency = settingsRes.data.base_currency;
+        this.inflationRegion = settingsRes.data.inflation_region;
+        this.summary = summaryRes.data;
+        this.assets = attachOwnershipRef(assetsRes.data, assetOwnership);
+        this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
+        this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {
