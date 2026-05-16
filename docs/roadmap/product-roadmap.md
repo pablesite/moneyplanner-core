@@ -175,6 +175,56 @@ El coach (fases 1–4) está funcional. Pendiente antes de producción:
 
 ---
 
+## LEGACY RESIDUAL
+
+Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz activo, `delete-imported`, `accounting/services.py`, `sync_fx_rates` y artefactos `.js` generados. No todo lo legacy es basura: algunas piezas protegen históricos y la portabilidad de datos.
+
+### Pendiente prioritario
+
+- **Renombrar/separar `data-input` como dominio compartido.**
+  - Para qué sirve hoy: formularios y stores de ingresos/gastos anuales usados desde Presupuesto, helpers de taxonomía usados por Guía/Contabilidad y portable data usado desde Cuenta.
+  - Por qué es legacy: la ruta `/introduccion-datos` ya no existe, pero el nombre del dominio sigue describiendo el flujo antiguo.
+  - Acción recomendada: partir responsabilidades en dominios con nombre real (`budget annual entries`, `portable-data`, `taxonomy utils`) y eliminar referencias a `views/data-input/*` cuando Presupuesto tenga composables propios.
+
+- **Reducir el fallback legacy de Budget/check-ins.**
+  - Para qué sirve hoy: mantiene ejecución manual cuando no hay cobertura ledger suficiente y evita perder meses históricos.
+  - Por qué es legacy: la fuente canónica de ejecución debe ser ledger categorizado cuando existe cobertura segura.
+  - Acción recomendada: medir cobertura real, migrar históricos seguros y dejar el fallback solo como red explícita de seguridad.
+
+- **Retirar gradualmente el alias `investment_purchase`.**
+  - Para qué sirve hoy: compatibilidad con movimientos antiguos y payloads previos al modelo `investment` + `inflow/outflow`.
+  - Por qué es legacy: el modelo canónico ya es bidireccional.
+  - Acción recomendada: normalizar datos/payloads restantes y después eliminar filtros/etiquetas específicas del alias.
+
+- **Desarmar `net_worth.services.py` como facade interna.**
+  - Para qué sirve hoy: mantiene imports estables hacia totales, moneda base e inflación mientras otros módulos/tests siguen acoplados.
+  - Por qué es legacy: replica el patrón de facade ya retirado en `accounting/services.py`.
+  - Acción recomendada: migrar imports a módulos específicos (`services_summaries`, `services_timelines`, `services_assets_core`, etc.) y eliminar la facade cuando no tenga consumidores.
+
+### Mantener por seguridad de datos
+
+- **Compatibilidad de portable import/export con bundles antiguos.**
+  - Para qué sirve hoy: protege bases exportadas con versiones previas, bundles sin metadata y formatos históricos parcialmente migrables.
+  - Decisión: mantener. Es parte de la garantía de no perder datos.
+
+- **Trazabilidad de movimientos importados.**
+  - Para qué sirve hoy: conserva `origin`, `import_source` e `import_fingerprint` para saber qué movimientos nacieron de una importación histórica.
+  - Decisión: mantener. No reintroduce el importador MoneyWiz ni el borrado masivo de importados.
+
+- **Campos legacy de aportaciones periódicas en Patrimonio.**
+  - Para qué sirven hoy: compatibilidad con activos creados antes de los intervalos múltiples.
+  - Acción recomendada: verificar que los datos reales ya tienen `contribution_intervals`; retirar campos/fallbacks solo con migración segura.
+
+- **`compat.*` en capabilities.**
+  - Para qué sirve hoy: puente SaaS/frontend mientras todos los checks migran al modelo de capabilities efectivo.
+  - Acción recomendada: retirar cuando no haya consumidores de `compat.*`.
+
+### Referencias históricas
+
+- Los documentos archivados en `core/docs/tasks/**/terminados/` y `core/docs/roadmap/terminados/` pueden seguir mencionando MoneyWiz, `sync_fx_rates`, `accounting/services.py` o flujos antiguos porque describen decisiones pasadas. No implican código activo.
+
+---
+
 ## SEGURIDAD
 
 - Auditoría de código: vulnerabilidades backend, validaciones de inputs.
