@@ -2,7 +2,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-05-15 | **Versión Core:** 0.23.2
+**Última revisión:** 2026-05-16 | **Versión Core:** 0.23.2
 
 ---
 
@@ -25,11 +25,6 @@ Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capac
 | Modulo | Tipo | Descripcion | Spec |
 |--------|------|-------------|------|
 | Contabilidad — listado compacto frontend | Agente | Consumir el contrato backend compacto en listados/scroll (`include_entries=false&include_total=false`) y mantener payload completo para detalle/edición. | _(sin spec)_ |
-| Informe Fiscal Crypto — Phase 0 | Manual | Explorar APIs Pionex + Binance con credenciales reales; rellenar tabla de cobertura antes de iniciar Phase 1. | `core/docs/tasks/fiscal-report/phase-0-api-exploration/notes.md` |
-| Informe Fiscal Crypto — Phase 1 | Agente | Backend Pionex: nueva app `broker_integrations`, modelos, API client, CSV importers. | `core/docs/tasks/fiscal-report/phase-1-pionex/backend.md` |
-| Informe Fiscal Crypto — Phase 2 | Agente | Backend Binance: API client + CSV importers (extender Phase 1). | `core/docs/tasks/fiscal-report/phase-2-binance/backend.md` |
-| Informe Fiscal Crypto — Phase 3 | Agente | Motor FIFO global cross-exchange + endpoint informe fiscal. | `core/docs/tasks/fiscal-report/phase-3-fiscal-engine/backend.md` |
-| Informe Fiscal Crypto — Phase 4 | Agente | Frontend Core: gestión credenciales, sync, CSV upload, visualización informe. | `core/docs/tasks/fiscal-report/phase-4-frontend/frontend.md` |
 
 ### Hoja de ruta pre-producción (resumen por área)
 
@@ -41,7 +36,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Presupuesto — v1 | Alta | ✅ | Cierre funcional aplicado y revisión manual completada: summaries mensuales canónicos para ejecución/cobertura, precedencia ledger sobre fallback legacy/checkin, errores backend dentro de modales de líneas y header alineado con Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ✅ | Revisión completa de modales de creación/edición de activos y pasivos completada. V1 del módulo cerrada a nivel funcional. |
 | Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. |
-| Informe Fiscal Crypto | Media | ⚪ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. |
+| Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
@@ -77,9 +72,11 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Accounting-budget separation | ✅ Fases 1-5 completadas | `roadmap/terminados/accounting-category-budget-separation-roadmap.md` |
 | Refactor frontend | ✅ Completado | Fases 0-6 cerradas; specs archivadas en `core/docs/tasks/frontend-refactor/*/terminados/`; `core/docs/architecture/shared-package-candidates.md` creado. |
 
-## Deliberadamente aparcado (funcionalidad primero)
+## Deliberadamente aparcado (funcionalidad futura)
 
-_(ninguna tarea aparcada en este momento)_
+| Módulo | Descripción | Specs |
+|--------|-------------|-------|
+| Informe Fiscal Crypto | Módulo completo IRPF español: integración Pionex + Binance, motor FIFO global cross-exchange, casillas 029/332/337. Aparcado antes de publicación pública del repo; revisar estado de la exploración antes de retomar. | `core/docs/tasks/fiscal-report/` |
 
 ---
 
