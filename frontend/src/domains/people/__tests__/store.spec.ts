@@ -101,37 +101,39 @@ describe('people store (saas)', () => {
   });
 
   it('handles ownership list/create/update/delete flows', async () => {
-    mocks.peopleApi.getOwnerships.mockResolvedValue({
-      data: [{ id: 5, kind: 'shared', member: null, splits: [], is_in_use: false }],
-    });
-    mocks.peopleApi.createSharedOwnership.mockResolvedValue({});
-    mocks.peopleApi.updateSharedOwnership.mockResolvedValue({});
+    const initialOwnership = { id: 5, kind: 'shared' as const, member: null, splits: [], is_in_use: false };
+    const createdOwnership = { id: 9, kind: 'shared' as const, member: null, splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '100' }], is_in_use: false };
+    const updatedOwnership = { ...initialOwnership, splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '60' }] };
+    mocks.peopleApi.getOwnerships.mockResolvedValue({ data: [initialOwnership] });
+    mocks.peopleApi.createSharedOwnership.mockResolvedValue({ data: createdOwnership });
+    mocks.peopleApi.updateSharedOwnership.mockResolvedValue({ data: updatedOwnership });
     mocks.peopleApi.deleteOwnership.mockResolvedValue({});
     const store = usePeopleStore();
     store.ownerships = [
-      {
-        id: 1,
-        kind: 'individual',
-        member: { id: 1, name: 'Ana', role: 'adult' },
-        splits: [],
-        is_in_use: false,
-      },
-      { id: 5, kind: 'shared', member: null, splits: [], is_in_use: false },
+      { id: 1, kind: 'individual', member: { id: 1, name: 'Ana', role: 'adult' }, splits: [], is_in_use: false },
+      initialOwnership,
     ];
 
     await store.fetchOwnerships();
     expect(store.ownerships).toHaveLength(1);
+    expect(mocks.peopleApi.getOwnerships).toHaveBeenCalledTimes(1);
 
+    // createSharedOwnership updates state optimistically from the API response
     await store.createSharedOwnership({ splits: [{ member_id: 1, percent: '100' }] });
     expect(mocks.peopleApi.createSharedOwnership).toHaveBeenCalled();
-    expect(mocks.peopleApi.getOwnerships).toHaveBeenCalledTimes(2);
+    expect(mocks.peopleApi.getOwnerships).toHaveBeenCalledTimes(1); // no extra fetch
+    expect(store.ownerships).toHaveLength(2);
+    expect(store.ownerships[1]).toEqual(createdOwnership);
 
+    // updateSharedOwnership updates state optimistically from the API response
     await store.updateSharedOwnership(5, { splits: [{ member_id: 1, percent: '60' }] });
     expect(mocks.peopleApi.updateSharedOwnership).toHaveBeenCalledWith(5, {
       splits: [{ member_id: 1, percent: '60' }],
     });
+    expect(mocks.peopleApi.getOwnerships).toHaveBeenCalledTimes(1); // no extra fetch
+    expect(store.ownerships.find((o) => o.id === 5)).toEqual(updatedOwnership);
 
     await store.deleteOwnership(5);
-    expect(store.ownerships).toEqual([]);
+    expect(store.ownerships.some((o) => o.id === 5)).toBe(false);
   });
 });
