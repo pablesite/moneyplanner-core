@@ -600,7 +600,7 @@ class PortableDataImportAPITests(APITestCase):
                                     "flow_family": "income",
                                     "category_key": "salary",
                                     "subcategory_key": "employee_salary",
-                                    "annual_income_entry_id": 10,
+                                    "annual_income_entry_id": None,
                                     "annual_expense_entry_id": None,
                                     "asset_id": 20,
                                     "liability_id": None,

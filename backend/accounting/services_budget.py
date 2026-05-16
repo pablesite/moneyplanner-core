@@ -4,8 +4,6 @@ from collections import defaultdict
 from decimal import Decimal
 from typing import cast
 
-from django.db.models import Q
-
 from .models import LedgerEntry, LedgerTransaction
 from .services_ledger import ZERO
 from .services_summaries import _build_period_keys, _serialize_series
@@ -60,26 +58,16 @@ def _build_budget_suggestion_section(
             transaction__status=LedgerTransaction.Status.POSTED,
             transaction__booking_date__year__gte=start_year,
             transaction__booking_date__year__lte=end_year,
+            flow_family=flow_family,
         )
-        .filter(
-            Q(flow_family=flow_family)
-            | Q(annual_income_entry__isnull=False)
-            | Q(annual_expense_entry__isnull=False)
-        )
-        .select_related("transaction", "annual_income_entry", "annual_expense_entry")
+        .select_related("transaction")
         .only(
             "side",
             "amount",
             "flow_family",
             "category_key",
             "subcategory_key",
-            "annual_income_entry_id",
-            "annual_expense_entry_id",
             "transaction__booking_date",
-            "annual_income_entry__category",
-            "annual_income_entry__subcategory",
-            "annual_expense_entry__category",
-            "annual_expense_entry__subcategory",
         )
     )
 
@@ -150,16 +138,4 @@ def _serialize_categorized_suggestions(
 def _resolve_budget_classification(entry: LedgerEntry) -> tuple[str, str, str]:
     if entry.flow_family and entry.category_key and entry.subcategory_key:
         return entry.flow_family, entry.category_key, entry.subcategory_key
-    if entry.annual_income_entry_id is not None and entry.annual_income_entry is not None:
-        return (
-            cast(str, LedgerEntry.FlowFamily.INCOME),
-            entry.annual_income_entry.category,
-            entry.annual_income_entry.subcategory,
-        )
-    if entry.annual_expense_entry_id is not None and entry.annual_expense_entry is not None:
-        return (
-            cast(str, LedgerEntry.FlowFamily.EXPENSE),
-            entry.annual_expense_entry.category,
-            entry.annual_expense_entry.subcategory,
-        )
     return "", "", ""

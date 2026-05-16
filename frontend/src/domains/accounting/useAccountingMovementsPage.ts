@@ -44,11 +44,11 @@ export function useAccountingMovementsPage() {
     accountDisplayName,
     accountPositionMetaByAccountId,
     hasAvailableManualPositions,
-    annualIncomeOptionsCompatible,
-    annualExpenseOptionsCompatible,
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    quickCategoryLocked,
+    quickSubcategoryLocked,
     filterCategoryOptions,
     filterSubcategoryOptions,
     cuentasFilterCategoryOptions,
@@ -541,12 +541,6 @@ export function useAccountingMovementsPage() {
     await deleteTransaction(transactionId, description);
   }
 
-  const hasCompatibleAnnualPlanOptions = computed(
-    () =>
-      annualIncomeOptionsCompatible.value.length > 0 ||
-      annualExpenseOptionsCompatible.value.length > 0,
-  );
-
   const page = reactive({
     loading,
     accountCreationLoading,
@@ -592,12 +586,11 @@ export function useAccountingMovementsPage() {
     accountDisplayName,
     accountPositionMetaByAccountId,
     hasAvailableManualPositions,
-    annualIncomeOptionsCompatible,
-    annualExpenseOptionsCompatible,
-    hasCompatibleAnnualPlanOptions,
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,
+    quickCategoryLocked,
+    quickSubcategoryLocked,
     filterCategoryOptions,
     filterSubcategoryOptions,
     cuentasFilterCategoryOptions,

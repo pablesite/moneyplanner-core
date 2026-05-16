@@ -9,7 +9,6 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import UserSettings
-from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import (
     validate_annual_expense_taxonomy,
     validate_annual_income_taxonomy,
@@ -165,18 +164,6 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         source="account",
         queryset=LedgerAccount.objects.all(),
     )
-    annual_income_entry_id = serializers.PrimaryKeyRelatedField(
-        source="annual_income_entry",
-        queryset=AnnualIncomeEntry.objects.all(),
-        allow_null=True,
-        required=False,
-    )
-    annual_expense_entry_id = serializers.PrimaryKeyRelatedField(
-        source="annual_expense_entry",
-        queryset=AnnualExpenseEntry.objects.all(),
-        allow_null=True,
-        required=False,
-    )
     asset_id = serializers.PrimaryKeyRelatedField(
         source="asset",
         queryset=Asset.objects.all(),
@@ -220,8 +207,6 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "flow_family",
             "category_key",
             "subcategory_key",
-            "annual_income_entry_id",
-            "annual_expense_entry_id",
             "asset_id",
             "liability_id",
             "notes",
@@ -235,14 +220,6 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         fields["account_id"].queryset = _scope_queryset_to_context_user(
             context=self.context,
             base_queryset=LedgerAccount.objects.all(),
-        )
-        fields["annual_income_entry_id"].queryset = _scope_queryset_to_context_user(
-            context=self.context,
-            base_queryset=AnnualIncomeEntry.objects.all(),
-        )
-        fields["annual_expense_entry_id"].queryset = _scope_queryset_to_context_user(
-            context=self.context,
-            base_queryset=AnnualExpenseEntry.objects.all(),
         )
         fields["asset_id"].queryset = _scope_queryset_to_context_user(
             context=self.context,
@@ -299,12 +276,6 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         account = attrs.get("account", getattr(self.instance, "account", None))
-        annual_income_entry = attrs.get(
-            "annual_income_entry", getattr(self.instance, "annual_income_entry", None)
-        )
-        annual_expense_entry = attrs.get(
-            "annual_expense_entry", getattr(self.instance, "annual_expense_entry", None)
-        )
         asset = attrs.get("asset", getattr(self.instance, "asset", None))
         liability = attrs.get("liability", getattr(self.instance, "liability", None))
         flow_family = attrs.get("flow_family", getattr(self.instance, "flow_family", ""))
@@ -313,18 +284,8 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "subcategory_key", getattr(self.instance, "subcategory_key", "")
         )
 
-        if annual_income_entry is not None and annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {
-                    "annual_expense_entry_id": (
-                        "Un apunte no puede vincularse a una entrada anual de ingreso y gasto a la vez."
-                    )
-                }
-            )
         for field_name, value in (
             ("account_id", account),
-            ("annual_income_entry_id", annual_income_entry),
-            ("annual_expense_entry_id", annual_expense_entry),
             ("asset_id", asset),
             ("liability_id", liability),
         ):
@@ -345,14 +306,6 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
                         )
                     }
                 )
-        if annual_income_entry is not None and flow_family == LedgerEntry.FlowFamily.EXPENSE:
-            raise serializers.ValidationError(
-                {"flow_family": "No es compatible con annual_income_entry_id."}
-            )
-        if annual_expense_entry is not None and flow_family == LedgerEntry.FlowFamily.INCOME:
-            raise serializers.ValidationError(
-                {"flow_family": "No es compatible con annual_expense_entry_id."}
-            )
         return attrs
 
 
@@ -593,12 +546,10 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         # allow multicurrency asymmetry when shape maps to classic transfer/investment.
         has_income_like = any(
             entry.get("flow_family") == LedgerEntry.FlowFamily.INCOME
-            or entry.get("annual_income_entry") is not None
             for entry in incoming_entries
         )
         has_expense_like = any(
             entry.get("flow_family") == LedgerEntry.FlowFamily.EXPENSE
-            or entry.get("annual_expense_entry") is not None
             for entry in incoming_entries
         )
         has_liability_link = any(entry.get("liability") is not None for entry in incoming_entries)
@@ -701,18 +652,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         allow_null=True,
         required=False,
     )
-    annual_income_entry_id = serializers.PrimaryKeyRelatedField(
-        source="annual_income_entry",
-        queryset=AnnualIncomeEntry.objects.all(),
-        allow_null=True,
-        required=False,
-    )
-    annual_expense_entry_id = serializers.PrimaryKeyRelatedField(
-        source="annual_expense_entry",
-        queryset=AnnualExpenseEntry.objects.all(),
-        allow_null=True,
-        required=False,
-    )
     flow_family = serializers.ChoiceField(
         choices=LedgerEntry.FlowFamily.choices,
         allow_blank=True,
@@ -752,14 +691,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             context=self.context,
             base_queryset=Ownership.objects.all(),
         )
-        fields["annual_income_entry_id"].queryset = _scope_queryset_to_context_user(
-            context=self.context,
-            base_queryset=AnnualIncomeEntry.objects.all(),
-        )
-        fields["annual_expense_entry_id"].queryset = _scope_queryset_to_context_user(
-            context=self.context,
-            base_queryset=AnnualExpenseEntry.objects.all(),
-        )
         return fields
 
     def validate(self, attrs: dict) -> dict:
@@ -774,8 +705,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         counterparty_account = attrs.get("counterparty_account")
         liability_account = attrs.get("liability_account")
         interest_account = attrs.get("interest_account")
-        annual_income_entry = attrs.get("annual_income_entry")
-        annual_expense_entry = attrs.get("annual_expense_entry")
         flow_family = attrs.get("flow_family", "")
         category_key = attrs.get("category_key", "")
         subcategory_key = attrs.get("subcategory_key", "")
@@ -802,11 +731,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             investment_direction=investment_direction,
             liability_account=liability_account,
         )
-        self._align_category_with_legacy_link(
+        self._infer_missing_flow_family(
             attrs=attrs,
             movement_type=movement_type,
-            annual_income_entry=annual_income_entry,
-            annual_expense_entry=annual_expense_entry,
             interest_amount=interest_amount or Decimal("0"),
         )
         flow_family = attrs.get("flow_family", "")
@@ -836,14 +763,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     account=account, user_id=user.id, field_name="account_id"
                 )
 
-        if annual_income_entry is not None and annual_income_entry.user_id != user.id:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "La referencia no pertenece al usuario autenticado."}
-            )
-        if annual_expense_entry is not None and annual_expense_entry.user_id != user.id:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "La referencia no pertenece al usuario autenticado."}
-            )
         inferred_flow_family = self._infer_flow_family(
             movement_type=movement_type,
             interest_amount=interest_amount,
@@ -910,8 +829,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             investment_direction=investment_direction,
             category_key=category_key,
             subcategory_key=subcategory_key,
-            annual_income_entry=annual_income_entry,
-            annual_expense_entry=annual_expense_entry,
             interest_amount=interest_amount,
         )
         self._validate_category_taxonomy(
@@ -926,8 +843,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
             )
         elif movement_type == "expense":
             self._validate_expense_movement(
@@ -935,16 +850,12 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
             )
         elif movement_type == "transfer":
             self._validate_transfer_movement(
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
                 destination_amount=destination_amount,
             )
         elif movement_type == "adjustment":
@@ -953,8 +864,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
             )
         elif movement_type == "investment":
             self._validate_investment_movement(
@@ -962,8 +871,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 user_id=user.id,
                 account=account,
                 counterparty_account=counterparty_account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
                 investment_direction=investment_direction,
                 destination_amount=destination_amount,
             )
@@ -972,8 +879,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 attrs=attrs,
                 user_id=user.id,
                 account=account,
-                annual_income_entry=annual_income_entry,
-                annual_expense_entry=annual_expense_entry,
             )
         else:
             self._validate_debt_payment_movement(
@@ -983,7 +888,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 account=account,
                 liability_account=liability_account,
                 interest_account=interest_account,
-                annual_income_entry=annual_income_entry,
                 principal_amount=principal_amount,
                 interest_amount=interest_amount,
             )
@@ -1109,24 +1013,18 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         investment_direction: str,
         category_key: str,
         subcategory_key: str,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
         interest_amount: Decimal | None,
     ) -> None:
         has_classification = bool(category_key and subcategory_key)
-        if movement_type == "income" and not has_classification and annual_income_entry is None:
+        if movement_type == "income" and not has_classification:
             raise serializers.ValidationError(
                 {"subcategory_key": "Categoria y subcategoria son obligatorias para ingresos."}
             )
-        if movement_type == "expense" and not has_classification and annual_expense_entry is None:
+        if movement_type == "expense" and not has_classification:
             raise serializers.ValidationError(
                 {"subcategory_key": "Categoria y subcategoria son obligatorias para gastos."}
             )
-        if (
-            movement_type == "debt_payment"
-            and not has_classification
-            and annual_expense_entry is None
-        ):
+        if movement_type == "debt_payment" and not has_classification:
             raise serializers.ValidationError(
                 {
                     "subcategory_key": (
@@ -1135,12 +1033,11 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 }
             )
         if movement_type == "debt_payment" and (interest_amount or Decimal("0")) > 0:
-            if not has_classification and annual_expense_entry is None:
+            if not has_classification:
                 raise serializers.ValidationError(
                     {
                         "subcategory_key": (
-                            "Cuando hay intereses debes informar categoria/subcategoria de gasto "
-                            "o annual_expense_entry_id."
+                            "Cuando hay intereses debes informar categoria/subcategoria de gasto."
                         )
                     }
                 )
@@ -1215,70 +1112,20 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                     {"subcategory_key": "Subcategoria de gasto no valida para la categoria dada."}
                 ) from exc
 
-    def _align_category_with_legacy_link(
+    def _infer_missing_flow_family(
         self,
         *,
         attrs: dict,
         movement_type: str,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
         interest_amount: Decimal,
     ) -> None:
         category_key = attrs.get("category_key", "")
         subcategory_key = attrs.get("subcategory_key", "")
         flow_family = attrs.get("flow_family", "")
-
-        if movement_type == "income" and annual_income_entry is not None:
-            self._validate_compatibility_with_legacy_link(
-                category_key=category_key,
-                subcategory_key=subcategory_key,
-                expected_category=annual_income_entry.category,
-                expected_subcategory=annual_income_entry.subcategory,
-                legacy_field="annual_income_entry_id",
-            )
-            attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.INCOME)
-            attrs["category_key"] = annual_income_entry.category
-            attrs["subcategory_key"] = annual_income_entry.subcategory
-            return
-
-        if movement_type in {"expense", "debt_payment"} and annual_expense_entry is not None:
-            self._validate_compatibility_with_legacy_link(
-                category_key=category_key,
-                subcategory_key=subcategory_key,
-                expected_category=annual_expense_entry.category,
-                expected_subcategory=annual_expense_entry.subcategory,
-                legacy_field="annual_expense_entry_id",
-            )
-            if movement_type == "expense" or interest_amount > 0:
-                attrs["flow_family"] = cast(str, LedgerEntry.FlowFamily.EXPENSE)
-                attrs["category_key"] = annual_expense_entry.category
-                attrs["subcategory_key"] = annual_expense_entry.subcategory
-            return
-
         if category_key and subcategory_key and not flow_family:
             attrs["flow_family"] = self._infer_flow_family(
                 movement_type=movement_type,
                 interest_amount=interest_amount,
-            )
-
-    def _validate_compatibility_with_legacy_link(
-        self,
-        *,
-        category_key: str,
-        subcategory_key: str,
-        expected_category: str,
-        expected_subcategory: str,
-        legacy_field: str,
-    ) -> None:
-        if not category_key and not subcategory_key:
-            return
-        if category_key != expected_category or subcategory_key != expected_subcategory:
-            raise serializers.ValidationError(
-                {
-                    legacy_field: (
-                        "La linea anual indicada no coincide con la categoria/subcategoria informada."
-                    )
-                }
             )
 
     def _validate_income_movement(
@@ -1288,13 +1135,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
     ) -> None:
-        if annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a movimientos de ingreso."}
-            )
         if counterparty_account is not None:
             validate_counterparty_account_type(
                 account=counterparty_account,
@@ -1307,11 +1148,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             user_id=user_id,
             account_type=cast(str, LedgerAccount.AccountType.INCOME),
             currency=account.currency,
-            name=(
-                f"Ingreso: {annual_income_entry.name}"
-                if annual_income_entry is not None
-                else "Ingresos sin categoria"
-            ),
+            name="Ingresos sin categoria",
         )
 
     def _validate_expense_movement(
@@ -1321,13 +1158,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
     ) -> None:
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a movimientos de gasto."}
-            )
         if counterparty_account is not None:
             validate_counterparty_account_type(
                 account=counterparty_account,
@@ -1340,11 +1171,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             user_id=user_id,
             account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
             currency=account.currency,
-            name=(
-                f"Gasto: {annual_expense_entry.name}"
-                if annual_expense_entry is not None
-                else "Gastos sin categoria"
-            ),
+            name="Gastos sin categoria",
         )
 
     def _validate_transfer_movement(
@@ -1353,18 +1180,8 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
         destination_amount: Decimal | None,
     ) -> None:
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a transferencias internas."}
-            )
-        if annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a transferencias internas."}
-            )
         self._validate_transfer_account(
             account=account,
             user_id=user_id,
@@ -1420,17 +1237,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
     ) -> None:
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a ajustes de conciliacion."}
-            )
-        if annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a ajustes de conciliacion."}
-            )
         if account.account_type not in {
             LedgerAccount.AccountType.ASSET,
             LedgerAccount.AccountType.LIABILITY,
@@ -1478,8 +1285,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         user_id: int,
         account: LedgerAccount,
         counterparty_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
-        annual_expense_entry: AnnualExpenseEntry | None,
         investment_direction: str,
         destination_amount: Decimal | None,
     ) -> None:
@@ -1490,14 +1295,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         }:
             raise serializers.ValidationError(
                 {"investment_direction": "Indica si es aporte, desinversion o reinversion."}
-            )
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a movimientos de inversion."}
-            )
-        if annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a movimientos de inversion."}
             )
         validate_counterparty_account_type(
             account=counterparty_account,
@@ -1589,17 +1386,7 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         attrs: dict,
         user_id: int,
         account: LedgerAccount,
-        annual_income_entry,
-        annual_expense_entry,
     ) -> None:
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a revalorizaciones."}
-            )
-        if annual_expense_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_expense_entry_id": "No aplica a revalorizaciones."}
-            )
         # Revaluations adjust an asset account value directly; no counterparty required.
         if attrs.get("counterparty_account") is None:
             attrs["counterparty_account"] = get_or_create_system_account(
@@ -1618,14 +1405,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         account: LedgerAccount,
         liability_account: LedgerAccount | None,
         interest_account: LedgerAccount | None,
-        annual_income_entry: AnnualIncomeEntry | None,
         principal_amount: Decimal | None,
         interest_amount: Decimal | None,
     ) -> None:
-        if annual_income_entry is not None:
-            raise serializers.ValidationError(
-                {"annual_income_entry_id": "No aplica a pagos de deuda."}
-            )
         validate_counterparty_account_type(
             account=liability_account,
             user_id=user_id,

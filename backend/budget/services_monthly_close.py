@@ -80,11 +80,10 @@ def _get_uncovered_income_entries_for_month(
     """Returns (entry, planned_amount) pairs not covered by ledger or checkin."""
     entries = list(AnnualIncomeEntry.objects.filter(user=user, is_active=True))
 
-    categorized_ledger, legacy_ledger = _build_ledger_monthly_execution_maps(
+    categorized_ledger = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=str(LedgerEntry.FlowFamily.INCOME),
-        legacy_fk_name="annual_income_entry",
         positive_side=str(LedgerEntry.Side.CREDIT),
         base_currency=_get_base_currency(user),
     )
@@ -103,8 +102,6 @@ def _get_uncovered_income_entries_for_month(
             continue
         if (entry.category, entry.subcategory, month) in categorized_ledger:
             continue
-        if (entry.id, month) in legacy_ledger:
-            continue
         if entry.id in existing_checkins:
             continue
         result.append((entry, planned_amount))
@@ -118,11 +115,10 @@ def _get_uncovered_expense_entries_for_month(
     """Returns (entry, planned_amount) pairs not covered by ledger or checkin."""
     entries = list(AnnualExpenseEntry.objects.filter(user=user, is_active=True))
 
-    categorized_ledger, legacy_ledger = _build_ledger_monthly_execution_maps(
+    categorized_ledger = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
         flow_family=str(LedgerEntry.FlowFamily.EXPENSE),
-        legacy_fk_name="annual_expense_entry",
         positive_side=str(LedgerEntry.Side.DEBIT),
         base_currency=_get_base_currency(user),
     )
@@ -144,8 +140,6 @@ def _get_uncovered_expense_entries_for_month(
             subcategory=entry.subcategory,
         )
         if (category, subcategory, month) in categorized_ledger:
-            continue
-        if (entry.id, month) in legacy_ledger:
             continue
         if entry.id in existing_checkins:
             continue

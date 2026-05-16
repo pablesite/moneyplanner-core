@@ -1,7 +1,6 @@
 import { computed, reactive, watch, type ComputedRef, type Ref } from 'vue';
 import type { LedgerAccount, QuickLedgerMovementType } from '@/domains/accounting/models';
 import type { Asset, Liability } from '@/domains/net-worth/models';
-import type { AnnualExpenseEntry, AnnualIncomeEntry } from '@/domains/data-input';
 import {
   expenseCategories,
   expenseSubcategories,
@@ -46,8 +45,6 @@ export interface QuickEntryContext {
   liabilityMap: ComputedRef<Map<number, Liability>>;
   accountPositionMetaByAccountId: ComputedRef<Map<number, AccountPositionMeta>>;
   manualAssets: Ref<Asset[]>;
-  incomeOptions: ComputedRef<AnnualIncomeEntry[]>;
-  expenseOptions: ComputedRef<AnnualExpenseEntry[]>;
 }
 
 function formatDecimalInput(raw: string): string {
@@ -81,8 +78,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     liabilityMap,
     accountPositionMetaByAccountId,
     manualAssets,
-    incomeOptions,
-    expenseOptions,
   } = ctx;
 
   const quickEntryForm = reactive({
@@ -105,8 +100,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     flow_family: '' as '' | 'income' | 'expense',
     category_key: '',
     subcategory_key: '',
-    annual_income_entry_id: null as number | null,
-    annual_expense_entry_id: null as number | null,
     notes: '',
     revaluation_new_value: '',
   });
@@ -610,31 +603,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     return false;
   });
 
-  const annualIncomeOptionsCompatible = computed<AnnualIncomeEntry[]>(() => {
-    if (quickEntryForm.movement_type !== 'income') return [];
-    if (!quickEntryForm.category_key || !quickEntryForm.subcategory_key) return [];
-    return incomeOptions.value.filter(
-      (entry) =>
-        entry.category === quickEntryForm.category_key &&
-        entry.subcategory === quickEntryForm.subcategory_key,
-    );
-  });
-
-  const annualExpenseOptionsCompatible = computed<AnnualExpenseEntry[]>(() => {
-    if (
-      quickEntryForm.movement_type !== 'expense' &&
-      quickEntryForm.movement_type !== 'debt_payment'
-    ) {
-      return [];
-    }
-    if (!quickEntryForm.category_key || !quickEntryForm.subcategory_key) return [];
-    return expenseOptions.value.filter(
-      (entry) =>
-        entry.category === quickEntryForm.category_key &&
-        entry.subcategory === quickEntryForm.subcategory_key,
-    );
-  });
-
   const quickMovementTypeOptions: { value: QuickLedgerMovementType; label: string }[] = [
     { value: 'income', label: 'Ingreso' },
     { value: 'expense', label: 'Gasto' },
@@ -660,10 +628,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
       quickEntryForm.flow_family = '';
       quickEntryForm.revaluation_new_value = '';
       quickEntryForm.investment_direction = 'inflow';
-      if (movementType !== 'income') quickEntryForm.annual_income_entry_id = null;
-      if (movementType !== 'expense' && movementType !== 'debt_payment') {
-        quickEntryForm.annual_expense_entry_id = null;
-      }
       const remembered =
         movementType === 'income' || movementType === 'expense' || movementType === 'debt_payment'
           ? lastQuickClassification[movementType]
@@ -685,8 +649,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
       if (quickEntryForm.investment_direction === 'reinvestment') {
         quickEntryForm.category_key = '';
         quickEntryForm.subcategory_key = '';
-        quickEntryForm.annual_income_entry_id = null;
-        quickEntryForm.annual_expense_entry_id = null;
         return;
       }
       if (quickEntryForm.investment_direction === 'outflow') {
@@ -773,8 +735,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
         !quickSubcategoryOptions.value.some((row) => row.value === quickEntryForm.subcategory_key)
       ) {
         quickEntryForm.subcategory_key = '';
-        quickEntryForm.annual_income_entry_id = null;
-        quickEntryForm.annual_expense_entry_id = null;
       }
     },
   );
@@ -822,8 +782,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     quickEntryForm.flow_family = '';
     quickEntryForm.category_key = '';
     quickEntryForm.subcategory_key = '';
-    quickEntryForm.annual_income_entry_id = null;
-    quickEntryForm.annual_expense_entry_id = null;
     quickEntryForm.notes = '';
     quickEntryForm.revaluation_new_value = '';
   }
@@ -861,8 +819,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     quickSubcategoryOptions,
     quickCategoryLocked,
     quickSubcategoryLocked,
-    annualIncomeOptionsCompatible,
-    annualExpenseOptionsCompatible,
     // exposed for submitQuickEntry / submitRevaluationEntry / edit form in parent
     resolveFlexibleDebtBreakdown,
     resolveQuickDebtBreakdown,

@@ -35,8 +35,6 @@ export function useAccountingExecutionData(
     const buckets: AccountingExecutionBucketAccumulator = {
       incomeCategorizedByMonthTaxonomy: new Map<string, number>(),
       expenseCategorizedByMonthTaxonomy: new Map<string, number>(),
-      incomeLegacyByMonthEntryId: new Map<string, number>(),
-      expenseLegacyByMonthEntryId: new Map<string, number>(),
       depositRotationIncomeByMonth: new Map<number, number>(),
       depositRotationExpenseByMonth: new Map<number, number>(),
       incomeUnclassifiedTotal: 0,
