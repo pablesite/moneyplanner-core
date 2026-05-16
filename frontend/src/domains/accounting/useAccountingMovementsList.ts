@@ -117,10 +117,6 @@ export function useAccountingMovementsList(
   let todosSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let cuentasSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const hasImportedTransactions = computed(() =>
-    todosTransactions.value.some((transaction) => transaction.origin === 'import'),
-  );
-
   const cuentasSelectedAccount = computed(() =>
     cuentasSelectedAccountId.value != null
       ? (accounts.value.find((a) => a.id === cuentasSelectedAccountId.value) ?? null)
@@ -381,7 +377,6 @@ export function useAccountingMovementsList(
     cuentasLoading,
     cuentasLoadingMore,
     cuentasHasMore,
-    hasImportedTransactions,
     fetchTodosPage,
     fetchCuentasPage,
     loadMoreCuentas,
