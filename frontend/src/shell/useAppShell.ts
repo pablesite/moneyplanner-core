@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { clearAuthTokens, hasAccessToken } from '@/domains/auth/session';
+import { authApi } from '@/domains/auth/api';
+import { clearAuthTokens, getRefreshToken, hasAccessToken } from '@/domains/auth/session';
 import { appShellNavItems, type NavItem } from './appShellNav';
 
 export function useAppShell() {
@@ -52,6 +53,10 @@ export function useAppShell() {
   }
 
   function logout(): void {
+    const refresh = getRefreshToken();
+    if (refresh) {
+      authApi.logout(refresh).catch(() => {});
+    }
     clearAuthTokens();
     closeAccountMenu();
     sidebarOpen.value = false;

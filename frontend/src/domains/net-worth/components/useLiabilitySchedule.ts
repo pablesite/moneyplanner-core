@@ -1,5 +1,10 @@
 import { computed, ref, watch, type Ref } from 'vue';
-import { sanitizeAmount, addMonthsPreserveDayIso, monthsBetweenPreserveDayIso, todayIsoDate } from './itemFormUtils';
+import {
+  sanitizeAmount,
+  addMonthsPreserveDayIso,
+  monthsBetweenPreserveDayIso,
+  todayIsoDate,
+} from './itemFormUtils';
 
 type LiabilityScheduleFormFields = {
   term_months: string;

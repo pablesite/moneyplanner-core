@@ -101,16 +101,37 @@ describe('people store (saas)', () => {
   });
 
   it('handles ownership list/create/update/delete flows', async () => {
-    const initialOwnership = { id: 5, kind: 'shared' as const, member: null, splits: [], is_in_use: false };
-    const createdOwnership = { id: 9, kind: 'shared' as const, member: null, splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '100' }], is_in_use: false };
-    const updatedOwnership = { ...initialOwnership, splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '60' }] };
+    const initialOwnership = {
+      id: 5,
+      kind: 'shared' as const,
+      member: null,
+      splits: [],
+      is_in_use: false,
+    };
+    const createdOwnership = {
+      id: 9,
+      kind: 'shared' as const,
+      member: null,
+      splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '100' }],
+      is_in_use: false,
+    };
+    const updatedOwnership = {
+      ...initialOwnership,
+      splits: [{ member: { id: 1, name: 'Ana', role: 'adult' as const }, percent: '60' }],
+    };
     mocks.peopleApi.getOwnerships.mockResolvedValue({ data: [initialOwnership] });
     mocks.peopleApi.createSharedOwnership.mockResolvedValue({ data: createdOwnership });
     mocks.peopleApi.updateSharedOwnership.mockResolvedValue({ data: updatedOwnership });
     mocks.peopleApi.deleteOwnership.mockResolvedValue({});
     const store = usePeopleStore();
     store.ownerships = [
-      { id: 1, kind: 'individual', member: { id: 1, name: 'Ana', role: 'adult' }, splits: [], is_in_use: false },
+      {
+        id: 1,
+        kind: 'individual',
+        member: { id: 1, name: 'Ana', role: 'adult' },
+        splits: [],
+        is_in_use: false,
+      },
       initialOwnership,
     ];
 

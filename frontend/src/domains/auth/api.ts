@@ -14,6 +14,7 @@ export type LoginResponse = {
 export type AuthApiAdapter = {
   login(payload: LoginPayload): Promise<AxiosResponse<LoginResponse>>;
   validateSession(): Promise<AxiosResponse<{ base_currency?: string }>>;
+  logout(refresh: string): Promise<AxiosResponse<void>>;
 };
 
 export const coreAuthApi: AuthApiAdapter = {
@@ -22,6 +23,9 @@ export const coreAuthApi: AuthApiAdapter = {
   },
   validateSession() {
     return api.get<{ base_currency?: string }>('/api/auth/me/');
+  },
+  logout(refresh: string) {
+    return api.post<void>('/api/auth/logout/', { refresh });
   },
 };
 
