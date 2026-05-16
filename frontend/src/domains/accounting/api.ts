@@ -29,6 +29,8 @@ function buildTransactionQueryParams(params?: {
   kind?: string;
   category_key?: string;
   subcategory_key?: string;
+  include_entries?: boolean;
+  include_total?: boolean;
 }) {
   if (!params) return undefined;
   const queryParams = {
@@ -44,6 +46,8 @@ function buildTransactionQueryParams(params?: {
     ...(params.kind ? { kind: params.kind } : {}),
     ...(params.category_key ? { category_key: params.category_key } : {}),
     ...(params.subcategory_key ? { subcategory_key: params.subcategory_key } : {}),
+    ...(params.include_entries === false ? { include_entries: 'false' } : {}),
+    ...(params.include_total === false ? { include_total: 'false' } : {}),
   };
   return Object.keys(queryParams).length ? queryParams : undefined;
 }
@@ -85,6 +89,8 @@ export const coreAccountingApi = {
       kind?: string;
       category_key?: string;
       subcategory_key?: string;
+      include_entries?: boolean;
+      include_total?: boolean;
     },
     options?: { signal?: AbortSignal },
   ) {
