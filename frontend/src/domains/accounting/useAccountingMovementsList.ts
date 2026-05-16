@@ -55,7 +55,7 @@ function toAccountTimelineRows(
   accountType: LedgerAccountType,
 ): AccountTimelineTransaction[] {
   return rows.map((transaction) => {
-    const impactValue = transaction.entries
+    const impactValue = (transaction.entries ?? [])
       .filter((entry) => entry.account_id === accountId)
       .reduce((sum, entry) => sum + signedImpact(accountType, entry.side, entry.amount), 0);
     const accountBalanceAfterValue =
@@ -155,12 +155,14 @@ export function useAccountingMovementsList(
           date_to: todosDateTo.value || undefined,
           category_key: activityFilters.categoryKey || undefined,
           subcategory_key: activityFilters.subcategoryKey || undefined,
+          include_entries: false,
+          include_total: reset,
         },
         { signal: controller.signal },
       );
       todosTransactions.value = reset ? page.results : todosTransactions.value.concat(page.results);
       todosNextCursor.value = page.next_cursor;
-      todosTotalCount.value = page.total_count;
+      if (page.total_count !== null) todosTotalCount.value = page.total_count;
     } catch (error: unknown) {
       if (isCanceledRequestError(error)) return;
       throw error;
@@ -203,13 +205,14 @@ export function useAccountingMovementsList(
           date_to: cuentasDateTo.value || undefined,
           category_key: cuentasFilters.categoryKey || undefined,
           subcategory_key: cuentasFilters.subcategoryKey || undefined,
+          include_total: reset,
         },
         { signal: controller.signal },
       );
       const pageRows = toAccountTimelineRows(page.results, accountId, account.account_type);
       cuentasTransactions.value = reset ? pageRows : cuentasTransactions.value.concat(pageRows);
       cuentasNextCursor.value = page.next_cursor;
-      cuentasTotalCount.value = page.total_count;
+      if (page.total_count !== null) cuentasTotalCount.value = page.total_count;
     } catch (error: unknown) {
       if (isCanceledRequestError(error)) return;
       throw error;
@@ -249,9 +252,7 @@ export function useAccountingMovementsList(
   }
 
   function transactionMainAmount(t: LedgerTransaction): number {
-    return t.entries
-      .filter((e) => e.side === 'debit')
-      .reduce((sum, e) => sum + toNumber(e.amount), 0);
+    return toNumber(t.amount ?? '0');
   }
 
   watch(cuentasSelectedAccountId, () => {
