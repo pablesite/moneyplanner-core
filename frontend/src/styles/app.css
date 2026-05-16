@@ -773,7 +773,6 @@ body {
 }
 
 .input,
-.select,
 .textarea {
   width: 100%;
   box-sizing: border-box;
@@ -800,24 +799,17 @@ body {
 }
 
 .input:focus,
-.select:focus,
 .textarea:focus {
   border-color: var(--focus-border);
   box-shadow: var(--focus-ring);
 }
 
-.select {
-  color-scheme: dark;
-}
-
-.input option,
-.select option {
+.input option {
   color: #e5e7eb;
   background: #111827;
 }
 
-.input option:checked,
-.select option:checked {
+.input option:checked {
   color: #f9fafb;
   background: #1f2937;
 }
