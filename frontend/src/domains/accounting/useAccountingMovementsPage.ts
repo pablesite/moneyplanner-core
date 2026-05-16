@@ -541,6 +541,12 @@ export function useAccountingMovementsPage() {
     await deleteTransaction(transactionId, description);
   }
 
+  const hasCompatibleAnnualPlanOptions = computed(
+    () =>
+      annualIncomeOptionsCompatible.value.length > 0 ||
+      annualExpenseOptionsCompatible.value.length > 0,
+  );
+
   const page = reactive({
     loading,
     accountCreationLoading,
@@ -588,6 +594,7 @@ export function useAccountingMovementsPage() {
     hasAvailableManualPositions,
     annualIncomeOptionsCompatible,
     annualExpenseOptionsCompatible,
+    hasCompatibleAnnualPlanOptions,
     quickEntryNeedsClassification,
     quickCategoryOptions,
     quickSubcategoryOptions,

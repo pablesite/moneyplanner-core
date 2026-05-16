@@ -2,10 +2,11 @@
 /* eslint-disable vue/no-mutating-props */
 import { computed, ref, watch, type PropType } from 'vue';
 import BaseModal from '@/domains/ui/components/BaseModal.vue';
+import type { AccountingMovementsPageState } from '@/domains/accounting/useAccountingMovementsPage';
 
 const props = defineProps({
   page: {
-    type: Object as PropType<any>,
+    type: Object as PropType<AccountingMovementsPageState>,
     required: true,
   },
 });
