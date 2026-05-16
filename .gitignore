@@ -1,4 +1,5 @@
 backups/
 .env
 backend/.env
+backend/tmp/
 frontend/.env
