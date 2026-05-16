@@ -5,7 +5,9 @@ import { useAppShell } from '@/shell/useAppShell';
 
 const mocks = vi.hoisted(() => ({
   clearAuthTokens: vi.fn(),
+  getRefreshToken: vi.fn(() => null as string | null),
   hasAccessToken: { value: false },
+  authApiLogout: vi.fn(() => Promise.resolve()),
   route: {
     name: 'home',
     path: '/',
@@ -23,12 +25,19 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/domains/auth/session', () => ({
   clearAuthTokens: mocks.clearAuthTokens,
+  getRefreshToken: mocks.getRefreshToken,
   hasAccessToken: mocks.hasAccessToken,
+}));
+
+vi.mock('@/domains/auth/api', () => ({
+  authApi: { logout: mocks.authApiLogout },
 }));
 
 describe('useAppShell', () => {
   beforeEach(() => {
     mocks.clearAuthTokens.mockReset();
+    mocks.getRefreshToken.mockReset().mockReturnValue(null);
+    mocks.authApiLogout.mockReset().mockResolvedValue(undefined);
     mocks.router.push.mockReset();
     mocks.hasAccessToken.value = false;
     mocks.route.name = 'home';
