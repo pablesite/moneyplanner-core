@@ -580,7 +580,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             "transfer",
             "adjustment",
             "investment",
-            "investment_purchase",
             "debt_payment",
             "revaluation",
         ]
@@ -755,7 +754,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
                 "transfer",
                 "adjustment",
                 "investment",
-                "investment_purchase",
                 "revaluation",
             }
             if requires_liquidity_origin:
@@ -942,11 +940,6 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         movement_type: str,
         investment_direction: str,
     ) -> tuple[str, str]:
-        if movement_type == "investment_purchase":
-            return (
-                cast(str, LedgerTransaction.QuickEntryKind.INVESTMENT),
-                cast(str, LedgerTransaction.InvestmentDirection.INFLOW),
-            )
         if movement_type != "investment":
             return movement_type, ""
         if not investment_direction:

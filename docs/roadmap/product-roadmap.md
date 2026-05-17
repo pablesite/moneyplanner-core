@@ -191,11 +191,6 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
   - Por qué es legacy: la fuente canónica de ejecución debe ser ledger categorizado cuando existe cobertura segura.
   - Acción recomendada: medir cobertura real, migrar históricos seguros y dejar el fallback solo como red explícita de seguridad.
 
-- **Retirar gradualmente el alias `investment_purchase`.**
-  - Para qué sirve hoy: compatibilidad con movimientos antiguos y payloads previos al modelo `investment` + `inflow/outflow`.
-  - Por qué es legacy: el modelo canónico ya es bidireccional.
-  - Acción recomendada: normalizar datos/payloads restantes y después eliminar filtros/etiquetas específicas del alias.
-
 - **Desarmar `net_worth.services.py` como facade interna.**
   - Para qué sirve hoy: mantiene imports estables hacia totales, moneda base e inflación mientras otros módulos/tests siguen acoplados.
   - Por qué es legacy: replica el patrón de facade ya retirado en `accounting/services.py`.

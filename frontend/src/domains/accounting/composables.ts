@@ -1047,7 +1047,7 @@ export function useAccountingPage() {
       );
       if (assetEntry?.side === 'credit') return (-debitTotalValue).toFixed(decimals);
     }
-    if (transaction.activity_kind === 'investment_purchase') {
+    if (transaction.activity_kind === 'investment') {
       const creditEntry =
         transaction.entries.find((entry) => entry.side === 'credit') ??
         transaction.entries[1] ??
@@ -1069,10 +1069,7 @@ export function useAccountingPage() {
   }
 
   function getTransactionEditDestinationAmount(transaction: LedgerTransaction): string {
-    if (
-      transaction.activity_kind !== 'investment_purchase' &&
-      transaction.activity_kind !== 'transfer'
-    )
+    if (transaction.activity_kind !== 'investment' && transaction.activity_kind !== 'transfer')
       return '';
     const debitEntry =
       transaction.entries.find((entry) => entry.side === 'debit') ?? transaction.entries[0] ?? null;
@@ -2419,8 +2416,7 @@ export function useAccountingPage() {
     else if (rawKind === 'expense') movementType = 'expense';
     else if (rawKind === 'transfer') movementType = 'transfer';
     else if (rawKind === 'adjustment') movementType = 'adjustment';
-    else if (rawKind === 'investment' || rawKind === 'investment_purchase')
-      movementType = 'investment';
+    else if (rawKind === 'investment') movementType = 'investment';
     else if (rawKind === 'debt_payment') movementType = 'debt_payment';
     else if (rawKind === 'revaluation') movementType = 'revaluation';
 

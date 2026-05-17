@@ -103,7 +103,7 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
     if qek == LedgerTransaction.QuickEntryKind.ADJUSTMENT:
         return "adjustment"
     if qek == LedgerTransaction.QuickEntryKind.INVESTMENT:
-        return "investment_purchase"
+        return "investment"
     if qek == LedgerTransaction.QuickEntryKind.INCOME:
         return "income"
     if qek == LedgerTransaction.QuickEntryKind.EXPENSE:
@@ -134,7 +134,7 @@ def classify_transaction_activity_kind(transaction: LedgerTransaction) -> str:
         for entry in entries
     )
     if has_investment:
-        return "investment_purchase"
+        return "investment"
 
     asset_entries_count = sum(
         1 for entry in entries if entry.account.account_type == LedgerAccount.AccountType.ASSET
@@ -271,7 +271,7 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 & Exists(entry_subquery.filter(liability_id__isnull=False))
             ),
         )
-    if kind == "investment_purchase":
+    if kind == "investment":
         return queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT)
             | (

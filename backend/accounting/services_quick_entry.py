@@ -390,8 +390,6 @@ def _normalize_investment_budget_classification(
 
 
 def _normalize_quick_movement_type(movement_type: str) -> str:
-    if movement_type == "investment_purchase":
-        return "investment"
     return movement_type
 
 

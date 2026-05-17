@@ -58,7 +58,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.
 2. Imported accounting rows remain traceable through `LedgerTransaction.origin`, `import_source` and `import_fingerprint`; consolidated imported rows are no longer treated as disposable cleanup data.
 3. Portable data import/export remains the supported whole-dataset migration path.
-4. The accounting movement contract supports bidirectional investment flow with explicit direction (`inflow` / `outflow`), while preserving legacy compatibility for existing `investment_purchase` writers during transition.
+4. The accounting movement contract supports bidirectional investment flow with explicit direction (`inflow` / `outflow`).
 5. Quick-entry investment payloads support optional manual realized metadata (`realized_cost_basis`, `realized_gain_loss`) without enforcing automatic PnL calculation in this phase.
 6. The accounting timeline API exposes a daily consolidated balance series for active ledger accounts:
    - `GET /api/accounting/transactions/daily-balance-series/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&status=posted|draft`
