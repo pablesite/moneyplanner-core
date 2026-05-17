@@ -4,6 +4,36 @@ import { authApi } from '@/domains/auth/api';
 import { setAccessToken, setRefreshToken } from '@/domains/auth/session';
 import { toApiErrorMessage } from '@/lib/errors';
 
+export function useRegisterForm() {
+  const router = useRouter();
+  const username = ref('');
+  const password = ref('');
+  const passwordConfirm = ref('');
+  const error = ref<string | null>(null);
+  const loading = ref(false);
+
+  async function register() {
+    loading.value = true;
+    error.value = null;
+    try {
+      const res = await authApi.register({
+        username: username.value,
+        password: password.value,
+        password_confirm: passwordConfirm.value,
+      });
+      setAccessToken(res.data.access);
+      if (res.data.refresh) setRefreshToken(res.data.refresh);
+      await router.push('/');
+    } catch (e: unknown) {
+      error.value = toApiErrorMessage(e);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  return { username, password, passwordConfirm, error, loading, register };
+}
+
 export function useLoginForm() {
   const router = useRouter();
   const route = useRoute();

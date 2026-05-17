@@ -1,26 +1,22 @@
 <script setup lang="ts">
-import { useLoginForm } from '@/domains/auth';
+import { useRegisterForm } from '@/domains/auth';
 import { RouterLink } from 'vue-router';
 
-const { username, password, error, loading, sessionNotice, login } = useLoginForm();
+const { username, password, passwordConfirm, error, loading, register } = useRegisterForm();
 </script>
 
 <template>
   <div class="ui-auth-page">
     <div class="ui-auth-shell">
       <div class="ui-auth-card">
-        <h1 class="ui-auth-title">Acceso</h1>
+        <h1 class="ui-auth-title">Crear cuenta</h1>
         <div class="ui-auth-subtitle">Gestiona tu patrimonio familiar con claridad.</div>
-
-        <div v-if="sessionNotice" class="ui-status-line ui-auth-alert">
-          {{ sessionNotice }}
-        </div>
 
         <div v-if="error" class="alert ui-auth-alert">
           {{ error }}
         </div>
 
-        <form class="ui-auth-form" @submit.prevent="login">
+        <form class="ui-auth-form" @submit.prevent="register">
           <label class="ui-auth-field">
             <span class="ui-auth-label">Usuario</span>
             <input v-model="username" autocomplete="username" class="input" />
@@ -31,19 +27,29 @@ const { username, password, error, loading, sessionNotice, login } = useLoginFor
             <input
               v-model="password"
               type="password"
-              autocomplete="current-password"
+              autocomplete="new-password"
+              class="input"
+            />
+          </label>
+
+          <label class="ui-auth-field">
+            <span class="ui-auth-label">Confirmar contraseña</span>
+            <input
+              v-model="passwordConfirm"
+              type="password"
+              autocomplete="new-password"
               class="input"
             />
           </label>
 
           <button :disabled="loading" type="submit" class="btn btn-primary ui-auth-submit">
-            {{ loading ? 'Entrando...' : 'Entrar' }}
+            {{ loading ? 'Creando cuenta...' : 'Crear cuenta' }}
           </button>
         </form>
 
         <div class="ui-auth-footer">
-          ¿No tienes cuenta?
-          <RouterLink to="/registro" class="ui-auth-link">Regístrate</RouterLink>
+          ¿Ya tienes cuenta?
+          <RouterLink to="/login" class="ui-auth-link">Inicia sesión</RouterLink>
         </div>
       </div>
     </div>

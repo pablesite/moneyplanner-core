@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .auth_views import CoreLogoutView, CoreTokenObtainPairView, CoreTokenRefreshView
+from .auth_views import CoreLogoutView, CoreTokenObtainPairView, CoreTokenRefreshView, RegisterView
 from .views import (
     CoreAuthModeAPIView,
     CoreAuthOpsMetricsAPIView,
@@ -9,6 +9,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("register/", RegisterView.as_view(), name="register"),
     path("token/", CoreTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("refresh/", CoreTokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", CoreLogoutView.as_view(), name="logout"),

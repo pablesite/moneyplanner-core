@@ -125,6 +125,7 @@ REST_FRAMEWORK = {
         "auth_settings": os.getenv("THROTTLE_AUTH_SETTINGS", "120/min"),
         "auth_ops_metrics": os.getenv("THROTTLE_AUTH_OPS_METRICS", "60/min"),
         "auth_link_token": os.getenv("THROTTLE_AUTH_LINK_TOKEN", "30/min"),
+        "auth_register": os.getenv("THROTTLE_AUTH_REGISTER", "5/min"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "config.exceptions.custom_exception_handler",

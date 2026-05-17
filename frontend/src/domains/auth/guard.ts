@@ -35,20 +35,22 @@ async function ensureAuthValid(): Promise<boolean> {
   return authCheckPromise ?? false;
 }
 
+const PUBLIC_PATHS = new Set(['/login', '/registro']);
+
 export function registerAuthGuard(router: Router) {
   router.beforeEach(async (to) => {
     const token = getAccessToken();
 
-    if (!token && to.path !== '/login') {
+    if (!token && !PUBLIC_PATHS.has(to.path)) {
       return { path: '/login' };
     }
 
     if (token) {
       const ok = await ensureAuthValid();
-      if (!ok && to.path !== '/login') {
+      if (!ok && !PUBLIC_PATHS.has(to.path)) {
         return { path: '/login' };
       }
-      if (ok && to.path === '/login') {
+      if (ok && PUBLIC_PATHS.has(to.path)) {
         return { path: '/' };
       }
     }
