@@ -67,37 +67,34 @@ class Command(BaseCommand):
                 self.style.WARNING(f"Admin user '{username}' already exists (ensured flags).")
             )
 
-        # Seed FX + IPC (mínimo viable)
+        # Seed FX + IPC — fallback para primer arranque sin sync.
+        # Solo inserta si el par/region no tiene ningún dato todavía.
+        # El servicio market_data_sync sobreescribe esto con datos reales del INE/Frankfurter.
         rate_date = timezone.localdate() - timedelta(days=1)
 
-        # FX (triangulación vía USD)
-        fx_rows = [
-            ("USD", "EUR", _d("0,85")),
-            ("BTC", "USD", _d("78281")),
-            ("ETH", "USD", _d("2332,96")),
+        fx_fallbacks = [
+            ("USD", "EUR", _d("0.85")),
+            ("BTC", "EUR", _d("80000")),
+            ("ETH", "EUR", _d("2000")),
         ]
+        for f, t, r in fx_fallbacks:
+            if not FxRate.objects.filter(from_currency=f, to_currency=t).exists():
+                FxRate.objects.create(
+                    from_currency=f, to_currency=t, rate_date=rate_date, rate=r
+                )
+                self.stdout.write(f"  FX fallback creado: {f}->{t} {rate_date}")
 
-        for f, t, r in fx_rows:
-            FxRate.objects.update_or_create(
-                from_currency=f,
-                to_currency=t,
-                rate_date=rate_date,
-                defaults={"rate": r},
+        if not InflationIndex.objects.filter(region=InflationIndex.Region.ES).exists():
+            InflationIndex.objects.create(
+                region=InflationIndex.Region.ES,
+                period=timezone.datetime(2012, 6, 1).date(),
+                index=_d("100"),
             )
-
-        # IPC mensual (period siempre YYYY-MM-01)
-        base_period = timezone.datetime(2012, 6, 1).date()
-        current_period = timezone.datetime(2025, 12, 1).date()
-
-        InflationIndex.objects.update_or_create(
-            region=InflationIndex.Region.ES,
-            period=base_period,
-            defaults={"index": _d("100")},
-        )
-        InflationIndex.objects.update_or_create(
-            region=InflationIndex.Region.ES,
-            period=current_period,
-            defaults={"index": _d("126")},
-        )
+            InflationIndex.objects.create(
+                region=InflationIndex.Region.ES,
+                period=timezone.datetime(2025, 12, 1).date(),
+                index=_d("126"),
+            )
+            self.stdout.write("  IPC fallback creado para ES.")
 
         self.stdout.write(self.style.SUCCESS(f"Seed FX + IPC done for rate_date={rate_date}."))
