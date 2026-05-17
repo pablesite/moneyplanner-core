@@ -49,7 +49,7 @@ import {
   toPortableLedgerTransactionRecord,
   toPortableLiabilityRecord,
   toPortableOwnershipRecord,
-} from '@/domains/data-input/portableBundle';
+} from '@/domains/portable-data/portableBundle';
 import {
   amountInputValueFromStoredAnnual,
   effectiveAnnualAmountForEntry,

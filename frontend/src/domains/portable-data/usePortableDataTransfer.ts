@@ -28,8 +28,8 @@ import {
   toPortableLedgerTransactionRecord,
   toPortableLiabilityRecord,
   toPortableOwnershipRecord,
-} from '@/domains/data-input/portableBundle';
-import { dataInputPageApi, toApiErrorMessage } from '@/domains/data-input/pageApi';
+} from '@/domains/portable-data/portableBundle';
+import { portableDataApi, toApiErrorMessage } from '@/domains/portable-data/api';
 
 type PortableDataMeta = { app_version: string };
 
@@ -113,7 +113,7 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
 
   async function ensurePortableDataAppVersion(): Promise<string> {
     if (portableDataAppVersion.value) return portableDataAppVersion.value;
-    const response = await dataInputPageApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
+    const response = await portableDataApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
     portableDataAppVersion.value = response.data.app_version;
     return portableDataAppVersion.value;
   }
@@ -142,25 +142,23 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
         ownershipsRes,
         linksRes,
       ] = await Promise.all([
-        dataInputPageApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
-        dataInputPageApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
-        dataInputPageApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
-        dataInputPageApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-        dataInputPageApi.get<PortableAssetValuationRecord[]>('/api/net-worth/asset-valuations/'),
-        dataInputPageApi.get<PortableInvestmentEventRecord[]>('/api/net-worth/investment-events/'),
-        dataInputPageApi.get<PortableLiquidityEventRecord[]>('/api/net-worth/liquidity-events/'),
-        dataInputPageApi.get<PortableLiquidityCheckinRecord[]>(
-          '/api/net-worth/liquidity-checkins/',
-        ),
-        dataInputPageApi.get<PortableLiabilityEventRecord[]>('/api/net-worth/liability-events/'),
-        dataInputPageApi.get<PortableLiabilityValuationRecord[]>(
+        portableDataApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+        portableDataApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
+        portableDataApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+        portableDataApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+        portableDataApi.get<PortableAssetValuationRecord[]>('/api/net-worth/asset-valuations/'),
+        portableDataApi.get<PortableInvestmentEventRecord[]>('/api/net-worth/investment-events/'),
+        portableDataApi.get<PortableLiquidityEventRecord[]>('/api/net-worth/liquidity-events/'),
+        portableDataApi.get<PortableLiquidityCheckinRecord[]>('/api/net-worth/liquidity-checkins/'),
+        portableDataApi.get<PortableLiabilityEventRecord[]>('/api/net-worth/liability-events/'),
+        portableDataApi.get<PortableLiabilityValuationRecord[]>(
           '/api/net-worth/liability-valuations/',
         ),
-        dataInputPageApi.get<PortableLedgerAccountRecord[]>('/api/accounting/accounts/'),
-        dataInputPageApi.get<PortableSettingsRecord>('/api/auth/settings/'),
-        dataInputPageApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
-        dataInputPageApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
-        dataInputPageApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+        portableDataApi.get<PortableLedgerAccountRecord[]>('/api/accounting/accounts/'),
+        portableDataApi.get<PortableSettingsRecord>('/api/auth/settings/'),
+        portableDataApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+        portableDataApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+        portableDataApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
       ]);
 
       const payload: PortableDataBundle = {
@@ -235,7 +233,7 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
     let cursor: string | null = null;
     do {
       const pageData = (
-        await dataInputPageApi.get('/api/accounting/transactions/', {
+        await portableDataApi.get('/api/accounting/transactions/', {
           params: {
             page_size: 200,
             ...(cursor ? { cursor } : {}),
@@ -271,7 +269,7 @@ export function usePortableDataTransfer(options: UsePortableDataTransferOptions 
 
       setDataImportBusyState(importMode);
 
-      const response = await dataInputPageApi.post<PortableImportResponse>(
+      const response = await portableDataApi.post<PortableImportResponse>(
         '/api/core/portable-data/import/',
         {
           mode: importMode,
