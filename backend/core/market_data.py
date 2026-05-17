@@ -497,11 +497,19 @@ def _collect_relevant_position_dates() -> dict[str, date]:
     return earliest_by_currency
 
 
+_FX_DEFAULT_HISTORY_YEARS = 5
+
+
 def _build_fx_scope_requests() -> list[SyncScopeRequest]:
     earliest_by_currency = _collect_relevant_position_dates()
     global_start = earliest_by_currency.get("__global__")
     if global_start is None:
         return []
+
+    # Guarantee at least N years of history for every needed pair, regardless of
+    # when the earliest asset was created. This avoids a 24-h gap when a user adds
+    # a foreign-currency asset for the first time.
+    floor_date = date.today() - timedelta(days=365 * _FX_DEFAULT_HISTORY_YEARS)
 
     base_currencies = {
         str(value or "").strip().upper()
@@ -521,11 +529,12 @@ def _build_fx_scope_requests() -> list[SyncScopeRequest]:
         for from_currency in sorted(source_currencies):
             if from_currency == quote_currency:
                 continue
+            asset_start = earliest_by_currency.get(from_currency, global_start)
             requests.append(
                 SyncScopeRequest(
                     dataset=cast(str, MarketDataSyncState.Dataset.FX),
                     scope=f"{from_currency}->{quote_currency}",
-                    required_start_date=earliest_by_currency.get(from_currency, global_start),
+                    required_start_date=min(asset_start, floor_date),
                 )
             )
     return requests
@@ -537,12 +546,10 @@ def _build_inflation_scope_requests() -> list[SyncScopeRequest]:
     if global_start is None:
         return []
 
-    regions = {
-        str(value or "").strip().upper()
-        for value in UserSettings.objects.values_list("inflation_region", flat=True)
-        if str(value or "").strip()
-    }
-    regions.add(cast(str, InflationIndex.Region.ES))
+    # Always sync all supported Spanish regions so that when a user changes their
+    # inflation_region in settings, data is already available without waiting for
+    # the next sync cycle.
+    regions = {choice[0] for choice in InflationIndex.Region.choices}
     return [
         SyncScopeRequest(
             dataset=cast(str, MarketDataSyncState.Dataset.INFLATION),
@@ -683,6 +690,23 @@ class InflationMarketDataProvider(MarketDataProvider):
                 start_date=_next_month(latest),
                 end_date=target_end,
             )
+
+        # Fill internal gaps: non-system-managed rows (interpolated / seed stubs)
+        # that the INE should replace. The INE endpoint returns the full series in
+        # one HTTP request, so re-fetching the whole range costs a single call.
+        has_non_managed = InflationIndex.objects.filter(
+            region=scope,
+            period__gte=required_start_date,
+            period__lte=target_end,
+            managed_by_system=False,
+        ).exists()
+        if has_non_managed:
+            inserted += sync_inflation_history(
+                region=scope,
+                start_date=required_start_date,
+                end_date=target_end,
+            )
+
         return inserted
 
 
