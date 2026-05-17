@@ -36,7 +36,7 @@ export function getInvestmentDirection(
 export function getTransactionActivityKind(
   transaction: LedgerTransaction,
 ): Exclude<ActivityFilter, 'all'> | 'other' {
-  if (transaction.activity_kind === 'investment_purchase') return 'investment';
+  if (transaction.activity_kind === 'investment') return 'investment';
   if (transaction.activity_kind === 'income') return 'income';
   if (transaction.activity_kind === 'expense') return 'expense';
   if (transaction.activity_kind === 'transfer') return 'transfer';

@@ -9,7 +9,6 @@ export type QuickLedgerMovementType =
   | 'transfer'
   | 'adjustment'
   | 'investment'
-  | 'investment_purchase'
   | 'debt_payment'
   | 'revaluation';
 

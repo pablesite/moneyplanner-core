@@ -58,7 +58,7 @@ function typeBadgeVariant(movement: {
   if (movement.activity_kind === 'expense') return 'expense';
   if (movement.activity_kind === 'transfer') return 'transfer';
   if (movement.activity_kind === 'adjustment') return 'transfer';
-  if (movement.activity_kind === 'investment_purchase') {
+  if (movement.activity_kind === 'investment') {
     return movement.investment_direction === 'outflow' ? 'investment-outflow' : 'investment-inflow';
   }
   if (movement.activity_kind === 'debt_payment') return 'debt-payment';

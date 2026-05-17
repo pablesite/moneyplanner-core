@@ -1658,7 +1658,7 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.data["total_count"], 1)
         self.assertEqual(response.data["results"][0]["description"], tx.description)
 
-    def test_transactions_list_kind_investment_purchase_excludes_revaluation(self):
+    def test_transactions_list_kind_investment_excludes_revaluation(self):
         investment_asset = Asset.objects.create(
             user=self.user,
             name="Cartera indexada",
@@ -1753,11 +1753,11 @@ class AccountingApiTests(APITestCase):
             currency="EUR",
         )
 
-        filtered = self.client.get("/api/accounting/transactions/?kind=investment_purchase")
+        filtered = self.client.get("/api/accounting/transactions/?kind=investment")
         self.assertEqual(filtered.status_code, status.HTTP_200_OK)
         self.assertEqual(filtered.data["total_count"], 1)
         self.assertEqual(filtered.data["results"][0]["description"], "Aporte broker marzo")
-        self.assertEqual(filtered.data["results"][0]["activity_kind"], "investment_purchase")
+        self.assertEqual(filtered.data["results"][0]["activity_kind"], "investment")
 
     def test_transactions_list_kind_debt_payment_excludes_revaluation(self):
         liability = Liability.objects.create(
@@ -2947,7 +2947,7 @@ class AccountingApiTests(APITestCase):
             all(row["activity_kind"] == "adjustment" for row in response.data["results"])
         )
 
-    def test_quick_entry_investment_purchase_creates_balanced_entries_with_asset_link(self):
+    def test_quick_entry_investment_inflow_creates_balanced_entries_with_asset_link(self):
         investment_asset = Asset.objects.create(
             user=self.user,
             name="Fondo indexado",
@@ -2968,7 +2968,8 @@ class AccountingApiTests(APITestCase):
         response = self.client.post(
             "/api/accounting/transactions/quick-entry/",
             {
-                "movement_type": "investment_purchase",
+                "movement_type": "investment",
+                "investment_direction": "inflow",
                 "booking_date": "2026-04-12",
                 "value_date": "2026-04-12",
                 "description": "Compra fondo abril",

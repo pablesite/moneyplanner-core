@@ -72,7 +72,7 @@ This leaves a gap:
 4. Investments
    - contributions, withdrawals, fees, and income should move toward transaction-driven activity
    - investment flows should be modeled as one bidirectional operation with explicit direction (`inflow` / `outflow`), not as unrelated income plus transfer shortcuts
-   - quick-entry keeps backwards compatibility with `investment_purchase` as legacy alias of investment `inflow`
+   - quick-entry uses `movement_type=investment` plus explicit `investment_direction`
    - for cross-currency investment quick-entry, Core accepts `amount` as origin amount and `destination_amount` as destination amount (broker executed units/value); same-currency investment keeps `destination_amount` optional and defaults it to `amount`
    - realized metadata (`realized_cost_basis`, `realized_gain_loss`) is optional and manual in this phase; Core stores it but does not auto-calculate lots or fiscal impact
    - investment aggregates per asset account expose `investment_inflow_total`, `investment_outflow_total`, and `investment_net_contributed`
@@ -130,7 +130,7 @@ This leaves a gap:
    - when `include_entries=false`, list rows omit the nested `entries` payload but keep transaction-level fields and `activity_kind`
    - consumers should use `include_entries=false&include_total=false` for infinite-scroll/list-only views that do not render entry-level detail
    - consumers should keep the default full payload for detail, edit, and any view that needs per-entry account/category data
-5. Supported `kind` values: `income`, `expense`, `transfer`, `adjustment`, `investment_purchase`, `debt_payment`, `revaluation`.
+5. Supported `kind` values: `income`, `expense`, `transfer`, `adjustment`, `investment`, `debt_payment`, `revaluation`.
 6. Quick-entry supports `movement_type=adjustment` for reconciliation deltas:
    - only for operational accounts (`asset`/`liability`)
    - optional `counterparty_account_id`; if omitted, backend auto-creates/reuses a system equity account (`Ajustes de conciliacion`) in the same currency

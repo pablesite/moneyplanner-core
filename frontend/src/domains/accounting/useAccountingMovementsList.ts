@@ -40,7 +40,7 @@ function impactTone(value: number): 'positive' | 'negative' | 'neutral' {
 
 function toApiKind(kind: ActivityFilter): string | undefined {
   if (kind === 'all') return undefined;
-  if (kind === 'investment') return 'investment_purchase';
+  if (kind === 'investment') return 'investment';
   return kind;
 }
 

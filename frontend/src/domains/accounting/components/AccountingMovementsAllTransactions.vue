@@ -39,7 +39,7 @@ function typeBadgeVariant(transaction: LedgerTransaction): string {
   if (transaction.activity_kind === 'expense') return 'expense';
   if (transaction.activity_kind === 'transfer') return 'transfer';
   if (transaction.activity_kind === 'adjustment') return 'transfer';
-  if (transaction.activity_kind === 'investment_purchase') {
+  if (transaction.activity_kind === 'investment') {
     return transaction.investment_direction === 'outflow'
       ? 'investment-outflow'
       : 'investment-inflow';
@@ -56,7 +56,7 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
   if (transaction.activity_kind === 'expense' || transaction.activity_kind === 'debt_payment') {
     return -baseAmount;
   }
-  if (transaction.activity_kind === 'investment_purchase') {
+  if (transaction.activity_kind === 'investment') {
     return 0;
   }
   if (
