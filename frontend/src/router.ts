@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import NetWorthView from './views/NetWorthView.vue';
 import LoginView from './views/LoginView.vue';
+import RegisterView from './views/RegisterView.vue';
 import HomeView from './views/HomeView.vue';
 import GuidePhaseDetailView from './views/GuidePhaseDetailView.vue';
 import BudgetView from './views/BudgetView.vue';
@@ -13,6 +14,7 @@ import { registerAuthGuard } from '@/domains/auth';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: LoginView },
+  { path: '/registro', name: 'register', component: RegisterView },
   { path: '/', name: 'home', component: HomeView },
   { path: '/inicio', redirect: '/' },
   { path: '/guia/fases/:phaseId', name: 'guide-phase', component: GuidePhaseDetailView },
