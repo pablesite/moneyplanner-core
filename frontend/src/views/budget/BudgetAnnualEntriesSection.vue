@@ -1,10 +1,10 @@
 ﻿<script setup lang="ts">
-import DataInputAnnualSections from '@/views/data-input/DataInputAnnualSections.vue';
-import { useDataInputPage } from '@/views/data-input/useDataInputPage';
+import BudgetAnnualEntriesContent from '@/views/budget/BudgetAnnualEntriesContent.vue';
+import { useBudgetAnnualEntriesPage } from '@/views/budget/useBudgetAnnualEntriesPage';
 
-const page = useDataInputPage();
+const page = useBudgetAnnualEntriesPage();
 </script>
 
 <template>
-  <DataInputAnnualSections :page="page" />
+  <BudgetAnnualEntriesContent :page="page" />
 </template>

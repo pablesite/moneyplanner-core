@@ -1,3 +1,15 @@
+# Project Status — Core
+
+> **English summary** (last updated 2026-05-17 · Core v0.23.5)
+>
+> All planned v1 modules are implemented and stable: Net Worth, Budget & Monthly Close,
+> Accounting Movements, Market Data Sync, Portable Data, Financial Coach v1, Auth & Security.
+> Active work: Unified Design System (UI consistency pass) and residual legacy cleanup.
+> Paused: Crypto Tax Report (IRPF Spain). Up next: validation with real users.
+> Full details in Spanish below.
+
+---
+
 # Estado del Proyecto — Core
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
@@ -40,7 +52,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
-| Limpieza legacy residual | Media | 🔄 | Inventario vivo documentado en `roadmap/product-roadmap.md`. Avance: `portable-data`, `budget/annual-entries` y `budget/taxonomy` extraídos de `data-input`; queda absorber `views/data-input/*` en Presupuesto, fallback Budget/check-ins, alias `investment_purchase`, facade `net_worth.services`, campos legacy de aportaciones, compat portable y `compat.*`. |
+| Limpieza legacy residual | Media | 🔄 | Inventario vivo documentado en `roadmap/product-roadmap.md`. Avance: Introducción de Datos absorbido en Presupuesto (`views/budget`, `budget/annual-entries`, `budget/taxonomy`) y `core.dataInput` retirado; quedan fallback Budget/check-ins, alias `investment_purchase`, facade `net_worth.services`, campos legacy de aportaciones, compat portable y `compat.*`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ✅ | Logout endpoint con blacklist, aislamiento cross-user validado con 31 tests (net_worth, accounting, budget, memberships), frontend wired. Pendiente: auditoría CVEs y flujos reales con usuarios. |

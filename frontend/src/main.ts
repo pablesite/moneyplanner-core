@@ -13,6 +13,6 @@ import './styles/app.css';
 import './styles/guide-score.css';
 import './styles/guide-home.css';
 import './styles/guide-detail.css';
-import './styles/data-input.css';
+import './styles/budget-annual-entries.css';
 
 createApp(App).use(createPinia()).use(router).mount('#app');

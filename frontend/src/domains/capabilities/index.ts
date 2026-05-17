@@ -22,7 +22,6 @@ export type AppCapabilitiesV2 = {
   };
   core: {
     netWorth: boolean;
-    dataInput: boolean;
     budget: boolean;
     accountingBasic: boolean;
     accountingMovementsManual: boolean;
@@ -113,7 +112,6 @@ export const capabilities: AppCapabilities = withCompat({
   },
   core: {
     netWorth: true,
-    dataInput: true,
     budget: true,
     accountingBasic: true,
     accountingMovementsManual: false,
@@ -172,7 +170,6 @@ export type CapabilityPath =
   | 'platform.pwaMinimal'
   | 'platform.mobileAppNative'
   | 'core.netWorth'
-  | 'core.dataInput'
   | 'core.budget'
   | 'core.accountingBasic'
   | 'core.accountingMovementsManual'

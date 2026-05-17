@@ -8,7 +8,7 @@ import {
   BudgetMonthlyCloseLiquiditySection,
   BudgetMonthlyCloseResultSection,
 } from '@/domains/budget';
-import { useDataInputPage } from './data-input/useDataInputPage';
+import { useBudgetAnnualEntriesPage } from './budget/useBudgetAnnualEntriesPage';
 
 import '@/domains/budget/styles/dashboard.css';
 import { type BudgetDashboardMode, useBudgetDashboardPage } from './budget/useBudgetDashboardPage';
@@ -184,7 +184,7 @@ const {
   onLiquidityAdjustAmountBlur,
 } = useBudgetDashboardPage(computed(() => props.mode));
 
-const annualEntriesPage = props.mode === 'budget' ? useDataInputPage() : null;
+const annualEntriesPage = props.mode === 'budget' ? useBudgetAnnualEntriesPage() : null;
 
 if (annualEntriesPage) {
   watch(

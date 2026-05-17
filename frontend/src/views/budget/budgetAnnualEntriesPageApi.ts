@@ -1,5 +1,5 @@
 import { coreApi } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 
-export const dataInputPageApi = coreApi;
+export const budgetAnnualEntriesPageApi = coreApi;
 export { toApiErrorMessage };

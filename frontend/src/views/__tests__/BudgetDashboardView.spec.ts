@@ -44,7 +44,7 @@ const mockAccountingApi = vi.hoisted(() => ({
 const mockNetWorthApi = vi.hoisted(() => ({
   getAssets: vi.fn(async () => ({ data: [] })),
 }));
-const mockDataInputPage = vi.hoisted(() => ({
+const mockBudgetAnnualEntriesPage = vi.hoisted(() => ({
   fiscalYear: { value: new Date().getFullYear() },
   showIncomeModal: { value: false },
   showExpenseModal: { value: false },
@@ -167,8 +167,8 @@ vi.mock('@/domains/budget/annual-entries', () => ({
   useAnnualIncomeStore: () => mockIncomeStore,
   useAnnualExpenseStore: () => mockExpenseStore,
 }));
-vi.mock('@/views/data-input/useDataInputPage', () => ({
-  useDataInputPage: () => mockDataInputPage,
+vi.mock('@/views/budget/useBudgetAnnualEntriesPage', () => ({
+  useBudgetAnnualEntriesPage: () => mockBudgetAnnualEntriesPage,
 }));
 
 function makeMonthlySummary(executed = '0.00', overrides: Record<string, unknown> = {}) {
