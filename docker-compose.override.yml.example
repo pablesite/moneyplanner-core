@@ -1,0 +1,33 @@
+# docker-compose.override.yml.example
+#
+# Copy this file to docker-compose.override.yml to customise your local environment
+# without touching docker-compose.yml (which is tracked in git).
+#
+# docker-compose automatically merges docker-compose.override.yml when present.
+# The override file itself is listed in .gitignore so your local tweaks stay private.
+
+services:
+
+  backend:
+    # Uncomment to expose debugpy for IDE step-through debugging (e.g. VS Code).
+    # Also add `import debugpy; debugpy.listen(("0.0.0.0", 5678)); debugpy.wait_for_client()`
+    # at the entry point you want to debug.
+    # ports:
+    #   - "5678:5678"
+
+    # Uncomment to expose PostgreSQL directly on localhost:5432 for IDE database tools.
+    # (Useful for TablePlus, DBeaver, DataGrip, etc.)
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  db:
+    # Expose Postgres on localhost so IDE tools can connect directly.
+    # ports:
+    #   - "5432:5432"
+
+  frontend:
+    # Force polling for file-watch if hot-reload doesn't work (common on Windows/WSL2).
+    # environment:
+    #   - CHOKIDAR_USEPOLLING=true
+    #   - CHOKIDAR_INTERVAL=500

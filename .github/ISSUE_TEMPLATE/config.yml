@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/pablesite/moneyplanner-core/tree/main/docs
+    about: Read the docs before opening an issue.
+  - name: Community Roadmap
+    url: https://github.com/pablesite/moneyplanner-core/blob/main/docs/roadmap/community-roadmap.md
+    about: Check the community roadmap to see if your idea is already planned.
