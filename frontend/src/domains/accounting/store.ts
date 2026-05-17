@@ -4,6 +4,7 @@ import type {
   LedgerAccount,
   LedgerAccountBalanceSummary,
   LedgerAccountWritePayload,
+  LedgerTransaction,
   LedgerTransactionWritePayload,
   PaginatedTransactionsResponse,
   MonthlyAccountingSummary,
@@ -164,6 +165,17 @@ export const useAccountingStore = defineStore('accounting', {
         throw error;
       } finally {
         this.transactionCreationLoading = false;
+      }
+    },
+
+    async fetchTransactionById(transactionId: number): Promise<LedgerTransaction> {
+      this.error = null;
+      try {
+        const response = await coreAccountingApi.getTransactionById(transactionId);
+        return response.data;
+      } catch (error: unknown) {
+        this.error = toApiErrorMessage(error);
+        throw error;
       }
     },
 

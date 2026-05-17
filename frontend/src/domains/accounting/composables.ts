@@ -2036,8 +2036,8 @@ export function useAccountingPage() {
 
   function findLoadedTransactionById(transactionId: number): LedgerTransaction | undefined {
     return (
-      todosTransactions.value.find((row) => row.id === transactionId) ??
-      cuentasTransactions.value.find((row) => row.id === transactionId)
+      cuentasTransactions.value.find((row) => row.id === transactionId) ??
+      todosTransactions.value.find((row) => row.id === transactionId)
     );
   }
 
@@ -2064,9 +2064,16 @@ export function useAccountingPage() {
     successMessage.value = 'Movimiento contable registrado.';
   }
 
-  function openTransactionForEditing(transactionId: number) {
-    const transaction = findLoadedTransactionById(transactionId);
+  async function openTransactionForEditing(transactionId: number) {
+    let transaction = findLoadedTransactionById(transactionId);
     if (!transaction) return false;
+    if (!transaction.entries) {
+      try {
+        transaction = await store.fetchTransactionById(transactionId);
+      } catch {
+        return false;
+      }
+    }
     if (transaction.origin === 'system') {
       store.error = 'Los asientos de origen system no se pueden editar desde esta vista.';
       return false;

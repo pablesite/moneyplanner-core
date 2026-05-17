@@ -151,7 +151,6 @@ export function useAccountingMovementsList(
           date_to: todosDateTo.value || undefined,
           category_key: activityFilters.categoryKey || undefined,
           subcategory_key: activityFilters.subcategoryKey || undefined,
-          include_entries: false,
           include_total: reset,
         },
         { signal: controller.signal },
@@ -248,7 +247,9 @@ export function useAccountingMovementsList(
   }
 
   function transactionMainAmount(t: LedgerTransaction): number {
-    return toNumber(t.amount ?? '0');
+    return (t.entries ?? [])
+      .filter((e) => e.side === 'debit')
+      .reduce((sum, e) => sum + toNumber(e.amount), 0);
   }
 
   watch(cuentasSelectedAccountId, () => {
