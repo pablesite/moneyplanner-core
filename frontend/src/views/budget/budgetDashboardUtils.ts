@@ -7,14 +7,14 @@ import {
   expenseCategories,
   incomeSubcategories,
   expenseSubcategories,
-} from '@/domains/data-input';
+} from '@/domains/budget/taxonomy';
 
 export {
   incomeCategories,
   incomeSubcategories,
   expenseCategories,
   expenseSubcategories,
-} from '@/domains/data-input';
+} from '@/domains/budget/taxonomy';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

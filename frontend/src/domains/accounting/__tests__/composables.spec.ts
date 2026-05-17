@@ -33,7 +33,7 @@ vi.mock('@/domains/net-worth/api', () => ({
   },
 }));
 
-vi.mock('@/domains/data-input', () => ({
+vi.mock('@/domains/budget/taxonomy', () => ({
   incomeCategories: [{ value: 'salary', label: 'Salarios y trabajo' }],
   incomeSubcategories: [{ category: 'salary', value: 'employee_salary', label: 'Nomina' }],
   expenseCategories: [{ value: 'consumption_expenses', label: 'Gastos de consumo' }],

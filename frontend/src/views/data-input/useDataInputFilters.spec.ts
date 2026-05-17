@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nextTick, ref } from 'vue';
-import { useDataInputFilters } from '@/domains/data-input/useDataInputFilters';
+import { useDataInputFilters } from '@/views/data-input/useDataInputFilters';
 
 describe('useDataInputFilters', () => {
   it('keeps asset/liability filters synced with global filter', async () => {

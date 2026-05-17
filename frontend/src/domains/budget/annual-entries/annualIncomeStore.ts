@@ -1,7 +1,10 @@
 import { ref } from 'vue';
 import { api } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
-import { incomeSubcategories, type IncomeCategoryKey } from '@/domains/data-input/incomeTaxonomy';
+import {
+  incomeSubcategories,
+  type IncomeCategoryKey,
+} from '@/domains/budget/taxonomy/incomeTaxonomy';
 import {
   normalizeOwnerName,
   parseAnnualAmount,

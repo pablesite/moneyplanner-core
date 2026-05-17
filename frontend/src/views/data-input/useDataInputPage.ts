@@ -12,8 +12,7 @@ import {
   incomeCategories,
   incomeSubcategories,
   type IncomeCategoryKey,
-  useDataInputFilters,
-} from '@/domains/data-input';
+} from '@/domains/budget/taxonomy';
 import {
   useAnnualIncomeStore,
   type AnnualIncomeCashflowRole,
@@ -56,7 +55,8 @@ import {
   amountInputValueFromStoredAnnual,
   effectiveAnnualAmountForEntry,
 } from '@/domains/budget/annual-entries/annualEntryUtils';
-import { dataInputPageApi, toApiErrorMessage } from '@/domains/data-input/pageApi';
+import { dataInputPageApi, toApiErrorMessage } from '@/views/data-input/pageApi';
+import { useDataInputFilters } from '@/views/data-input/useDataInputFilters';
 
 export function useDataInputPage() {
   const {
