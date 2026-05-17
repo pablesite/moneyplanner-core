@@ -63,7 +63,7 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
     transaction.activity_kind === 'revaluation' ||
     transaction.activity_kind === 'opening_balance'
   ) {
-    const linkedEntry = transaction.entries.find(
+    const linkedEntry = (transaction.entries ?? []).find(
       (entry) => entry.asset_id != null || entry.liability_id != null,
     );
     if (linkedEntry) {
@@ -71,13 +71,13 @@ function signedImpactForRow(transaction: LedgerTransaction): number {
     }
     // Fallback: use the income/expense entry direction.
     // A positive revaluation credits an income account; a negative one debits an expense account.
-    const flowEntry = transaction.entries.find((e) => e.flow_family !== '');
+    const flowEntry = (transaction.entries ?? []).find((e) => e.flow_family !== '');
     if (flowEntry) {
       return flowEntry.side === 'credit' ? baseAmount : -baseAmount;
     }
     // Last resort for legacy entries without flow_family: entries are ordered by id,
     // so entries[0] is always the asset account (debit = gain, credit = loss).
-    const firstEntry = transaction.entries[0];
+    const firstEntry = (transaction.entries ?? [])[0];
     if (firstEntry) {
       return firstEntry.side === 'debit' ? baseAmount : -baseAmount;
     }
@@ -213,7 +213,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           {{
             state.formatMoney(
               state.transactionMainAmount(transaction),
-              transaction.entries[0]?.currency ?? 'EUR',
+              transaction.entries?.[0]?.currency ?? 'EUR',
             )
           }}
         </span>

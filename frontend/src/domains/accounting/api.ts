@@ -96,6 +96,9 @@ export const coreAccountingApi = {
       signal: options?.signal,
     });
   },
+  getTransactionById(id: number) {
+    return coreApi.get<LedgerTransaction>(`/api/accounting/transactions/${id}/`);
+  },
   createTransaction(payload: LedgerTransactionWritePayload) {
     return coreApi.post<LedgerTransaction>('/api/accounting/transactions/', payload);
   },

@@ -515,8 +515,8 @@ export function useAccountingMovementsPage() {
     showQuickEntryModal.value = false;
   }
 
-  function openEditTransactionModal(transactionId: number) {
-    if (openTransactionForEditing(transactionId)) {
+  async function openEditTransactionModal(transactionId: number) {
+    if (await openTransactionForEditing(transactionId)) {
       showEditTransactionModal.value = true;
     }
   }
