@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, type ComponentPublicInstance } from 'vue';
 import { useRoute } from 'vue-router';
 import { authApi, toAuthErrorMessage } from '@/domains/auth';
-import { usePortableDataTransfer } from '@/domains/data-input';
+import { usePortableDataTransfer } from '@/domains/portable-data';
 
 const route = useRoute();
 
