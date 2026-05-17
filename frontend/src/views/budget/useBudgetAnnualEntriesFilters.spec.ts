@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { nextTick, ref } from 'vue';
-import { useDataInputFilters } from '@/views/data-input/useDataInputFilters';
+import { useBudgetAnnualEntriesFilters } from '@/views/budget/useBudgetAnnualEntriesFilters';
 
-describe('useDataInputFilters', () => {
+describe('useBudgetAnnualEntriesFilters', () => {
   it('keeps asset/liability filters synced with global filter', async () => {
     const options = ref([
       { id: 1, label: 'Alice' },
       { id: 2, label: 'Bob' },
     ]);
-    const filters = useDataInputFilters(options);
+    const filters = useBudgetAnnualEntriesFilters(options);
 
     expect(filters.globalOwnershipFilter.value).toBe('all');
     expect(filters.assetOwnershipFilter.value).toBe('all');
@@ -30,7 +30,7 @@ describe('useDataInputFilters', () => {
       { id: 1, label: 'Alice' },
       { id: 2, label: 'Bob' },
     ]);
-    const filters = useDataInputFilters(options);
+    const filters = useBudgetAnnualEntriesFilters(options);
     filters.globalOwnershipFilter.value = 2;
     await nextTick();
 

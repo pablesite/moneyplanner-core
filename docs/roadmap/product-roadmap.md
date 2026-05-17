@@ -181,11 +181,10 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
 
 ### Pendiente prioritario
 
-- **Renombrar/separar `data-input` como dominio compartido.**
-  - Para qué sirve hoy: ya no queda dominio `domains/data-input`; solo queda `views/data-input/*` como adaptador interno usado por Presupuesto.
-  - Por qué es legacy: la ruta `/introduccion-datos` ya no existe, pero esos componentes/composables siguen nombrando el flujo antiguo.
-  - Avance: `portable-data` ya vive en dominio propio y `AccountView` consume ese dominio directamente. Las entradas anuales (`annualIncomeStore`, `annualExpenseStore`, utilidades y formulario compartido) ya viven en `budget/annual-entries`. Las taxonomías ya viven en `budget/taxonomy`.
-  - Acción recomendada: absorber `views/data-input/*` en `views/budget`/composables de presupuesto y eliminar los nombres residuales de Introducción de Datos.
+- **Cerrar la absorción de Introducción de Datos en Presupuesto.**
+  - Para qué sirve hoy: el flujo de ingresos/gastos anuales ya vive en Presupuesto (`views/budget`, `budget/annual-entries` y `budget/taxonomy`).
+  - Estado: no quedan rutas, dominios, vistas ni CSS con nombre `data-input`; `core.dataInput` también fue retirado de capabilities.
+  - Acción recomendada: revisar si el composable anual de Presupuesto aún puede adelgazar dependencias históricas de patrimonio/portabilidad que quedaron por seguridad durante la migración.
 
 - **Reducir el fallback legacy de Budget/check-ins.**
   - Para qué sirve hoy: mantiene ejecución manual cuando no hay cobertura ledger suficiente y evita perder meses históricos.

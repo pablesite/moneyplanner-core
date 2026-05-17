@@ -55,10 +55,13 @@ import {
   amountInputValueFromStoredAnnual,
   effectiveAnnualAmountForEntry,
 } from '@/domains/budget/annual-entries/annualEntryUtils';
-import { dataInputPageApi, toApiErrorMessage } from '@/views/data-input/pageApi';
-import { useDataInputFilters } from '@/views/data-input/useDataInputFilters';
+import {
+  budgetAnnualEntriesPageApi,
+  toApiErrorMessage,
+} from '@/views/budget/budgetAnnualEntriesPageApi';
+import { useBudgetAnnualEntriesFilters } from '@/views/budget/useBudgetAnnualEntriesFilters';
 
-export function useDataInputPage() {
+export function useBudgetAnnualEntriesPage() {
   const {
     store,
     assetCategories,
@@ -444,7 +447,7 @@ export function useDataInputPage() {
     assetOwnershipFilter,
     liabilityOwnershipFilter,
     visibilityFilterMode,
-  } = useDataInputFilters(globalOwnershipFilterOptions);
+  } = useBudgetAnnualEntriesFilters(globalOwnershipFilterOptions);
   const showOwnerField = computed(() => ownerOptions.value.length > 1);
   const fiscalYear = ref(2026);
   const fiscalYearOptions = computed(() => {
@@ -627,14 +630,14 @@ export function useDataInputPage() {
   const hasExpenseData = computed(() => annualExpenseCount.value > 0);
   const hasAssetData = computed(() => assetsCount.value > 0);
   const hasLiabilityData = computed(() => liabilitiesCount.value > 0);
-  const hasCompleteDataInput = computed(
+  const hasCompleteAnnualEntries = computed(
     () =>
       hasIncomeData.value && hasExpenseData.value && hasAssetData.value && hasLiabilityData.value,
   );
-  const dataInputCheckTitle = computed(() =>
-    hasCompleteDataInput.value ? 'Check de datos: completo' : 'Check de datos: pendiente',
+  const budgetAnnualEntriesCheckTitle = computed(() =>
+    hasCompleteAnnualEntries.value ? 'Check de datos: completo' : 'Check de datos: pendiente',
   );
-  const dataInputSummary = computed(() => {
+  const budgetAnnualEntriesSummary = computed(() => {
     const incomePart = hasIncomeData.value
       ? `${annualIncomeCount.value} ingresos registrados`
       : 'sin ingresos registrados';
@@ -1872,7 +1875,7 @@ export function useDataInputPage() {
     ) {
       try {
         for (const id of bulkEditingGeneratedExpenseIds.value) {
-          await dataInputPageApi.patch(`/api/budget/annual-expense/${id}/`, {
+          await budgetAnnualEntriesPageApi.patch(`/api/budget/annual-expense/${id}/`, {
             name: draft.name,
             category: draft.category,
             subcategory: draft.subcategory,
@@ -2016,7 +2019,9 @@ export function useDataInputPage() {
 
   async function ensurePortableDataAppVersion(): Promise<string> {
     if (portableDataAppVersion.value) return portableDataAppVersion.value;
-    const response = await dataInputPageApi.get<PortableDataMeta>('/api/core/portable-data/meta/');
+    const response = await budgetAnnualEntriesPageApi.get<PortableDataMeta>(
+      '/api/core/portable-data/meta/',
+    );
     portableDataAppVersion.value = response.data.app_version;
     return portableDataAppVersion.value;
   }
@@ -2045,25 +2050,35 @@ export function useDataInputPage() {
         ownershipsRes,
         linksRes,
       ] = await Promise.all([
-        dataInputPageApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
-        dataInputPageApi.get<PortableAnnualExpenseRecord[]>('/api/budget/annual-expense/'),
-        dataInputPageApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
-        dataInputPageApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
-        dataInputPageApi.get<PortableAssetValuationRecord[]>('/api/net-worth/asset-valuations/'),
-        dataInputPageApi.get<PortableInvestmentEventRecord[]>('/api/net-worth/investment-events/'),
-        dataInputPageApi.get<PortableLiquidityEventRecord[]>('/api/net-worth/liquidity-events/'),
-        dataInputPageApi.get<PortableLiquidityCheckinRecord[]>(
+        budgetAnnualEntriesPageApi.get<PortableAnnualIncomeRecord[]>('/api/budget/annual-income/'),
+        budgetAnnualEntriesPageApi.get<PortableAnnualExpenseRecord[]>(
+          '/api/budget/annual-expense/',
+        ),
+        budgetAnnualEntriesPageApi.get<PortableAssetRecord[]>('/api/net-worth/assets/'),
+        budgetAnnualEntriesPageApi.get<PortableLiabilityRecord[]>('/api/net-worth/liabilities/'),
+        budgetAnnualEntriesPageApi.get<PortableAssetValuationRecord[]>(
+          '/api/net-worth/asset-valuations/',
+        ),
+        budgetAnnualEntriesPageApi.get<PortableInvestmentEventRecord[]>(
+          '/api/net-worth/investment-events/',
+        ),
+        budgetAnnualEntriesPageApi.get<PortableLiquidityEventRecord[]>(
+          '/api/net-worth/liquidity-events/',
+        ),
+        budgetAnnualEntriesPageApi.get<PortableLiquidityCheckinRecord[]>(
           '/api/net-worth/liquidity-checkins/',
         ),
-        dataInputPageApi.get<PortableLiabilityEventRecord[]>('/api/net-worth/liability-events/'),
-        dataInputPageApi.get<PortableLiabilityValuationRecord[]>(
+        budgetAnnualEntriesPageApi.get<PortableLiabilityEventRecord[]>(
+          '/api/net-worth/liability-events/',
+        ),
+        budgetAnnualEntriesPageApi.get<PortableLiabilityValuationRecord[]>(
           '/api/net-worth/liability-valuations/',
         ),
-        dataInputPageApi.get<PortableLedgerAccountRecord[]>('/api/accounting/accounts/'),
-        dataInputPageApi.get<PortableSettingsRecord>('/api/auth/settings/'),
-        dataInputPageApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
-        dataInputPageApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
-        dataInputPageApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
+        budgetAnnualEntriesPageApi.get<PortableLedgerAccountRecord[]>('/api/accounting/accounts/'),
+        budgetAnnualEntriesPageApi.get<PortableSettingsRecord>('/api/auth/settings/'),
+        budgetAnnualEntriesPageApi.get<PortableFamilyMemberRecord[]>('/api/family-members/'),
+        budgetAnnualEntriesPageApi.get<PortableOwnershipRecord[]>('/api/ownerships/'),
+        budgetAnnualEntriesPageApi.get<PortableOwnershipLinkRecord[]>('/api/ownership-links/'),
       ]);
 
       const payload: PortableDataBundle = {
@@ -2146,7 +2161,7 @@ export function useDataInputPage() {
     let cursor: string | null = null;
     do {
       const pageData = (
-        await dataInputPageApi.get('/api/accounting/transactions/', {
+        await budgetAnnualEntriesPageApi.get('/api/accounting/transactions/', {
           params: {
             page_size: 200,
             ...(cursor ? { cursor } : {}),
@@ -2182,7 +2197,7 @@ export function useDataInputPage() {
 
       setDataImportBusyState(importMode);
 
-      const response = await dataInputPageApi.post<PortableImportResponse>(
+      const response = await budgetAnnualEntriesPageApi.post<PortableImportResponse>(
         '/api/core/portable-data/import/',
         {
           mode: importMode,
@@ -2252,8 +2267,8 @@ export function useDataInputPage() {
     closeGeneratedLiabilityExpenseModal,
     closeIncomeModal,
     closeLiabilityModal,
-    dataInputCheckTitle,
-    dataInputSummary,
+    budgetAnnualEntriesCheckTitle,
+    budgetAnnualEntriesSummary,
     dataTransferBusy,
     dataTransferBusyLabel,
     dataTransferError,

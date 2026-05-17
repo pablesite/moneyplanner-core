@@ -4,7 +4,9 @@ export type OwnerFilterValue = number | 'all' | 'unassigned';
 export type VisibilityFilterMode = 'active' | 'archived' | 'all';
 export type OwnershipOption = { id: number; label: string };
 
-export function useDataInputFilters(globalOwnershipFilterOptions: Ref<OwnershipOption[]>) {
+export function useBudgetAnnualEntriesFilters(
+  globalOwnershipFilterOptions: Ref<OwnershipOption[]>,
+) {
   const globalOwnershipFilter = ref<OwnerFilterValue>('all');
   const assetOwnershipFilter = ref<OwnerFilterValue>('all');
   const liabilityOwnershipFilter = ref<OwnerFilterValue>('all');
