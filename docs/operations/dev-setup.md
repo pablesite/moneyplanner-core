@@ -97,6 +97,46 @@ docker compose exec backend python manage.py migrate memberships
 docker compose exec backend python manage.py test budget accounting --keepdb
 ```
 
+## Windows / WSL
+
+If file changes in the frontend container are not triggering hot-reload:
+
+1. Add this to `backend/.env` (or export in your shell):
+   ```
+   FRONTEND_USE_POLLING=true
+   FRONTEND_POLLING_INTERVAL=500
+   ```
+2. Restart the frontend service:
+   ```bash
+   docker compose restart frontend
+   ```
+
+This is needed because WSL2 does not propagate inotify events from the Windows filesystem into Linux containers.
+
+## Common Issues
+
+### Port 5432 already in use
+PostgreSQL is running locally on the same port. Options:
+1. Stop the local Postgres: `sudo systemctl stop postgresql` (Linux) or stop the service via Docker Desktop.
+2. Or remap the port in `docker-compose.yml` under the `db` service (`"5433:5432"`).
+
+### Frontend doesn't reload changes (non-WSL)
+Ensure Docker has access to the source directory. On macOS, check Docker Desktop → Settings → File Sharing.
+
+### How to reset the database
+Only do this if you intentionally want to destroy local data:
+```bash
+docker compose down -v   # removes volumes
+docker compose up --build -d
+```
+
+### Viewing logs for a specific service
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f market_data_sync
+```
+
 ## Related Operational Docs
 1. `market-data-sync.md`
 2. `portable-import.md`

@@ -1,0 +1,3 @@
+# Default owner for everything in the repository.
+# PRs will request a review from @pablesite automatically.
+* @pablesite
