@@ -23,7 +23,7 @@ import { useNetWorthPageActions } from '@/domains/net-worth/useNetWorthPageActio
 import { useNetWorthTimeline } from '@/domains/net-worth/useNetWorthTimeline';
 import { useNetWorthTimelineLayout } from '@/domains/net-worth/useNetWorthTimelineLayout';
 import { BaseModal } from '@/domains/ui';
-import { useAnnualExpenseStore } from '@/domains/data-input';
+import { useAnnualExpenseStore } from '@/domains/budget/annual-entries';
 import { toApiErrorMessage } from '@/lib/errors';
 
 const {

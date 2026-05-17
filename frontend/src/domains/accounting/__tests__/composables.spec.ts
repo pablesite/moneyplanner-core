@@ -40,6 +40,9 @@ vi.mock('@/domains/data-input', () => ({
   expenseSubcategories: [
     { category: 'consumption_expenses', value: 'living_expenses', label: 'Alimentacion' },
   ],
+}));
+
+vi.mock('@/domains/budget/annual-entries', () => ({
   useAnnualIncomeStore: () => ({
     entries: { value: [] },
     loadAll: loadAnnualIncome,

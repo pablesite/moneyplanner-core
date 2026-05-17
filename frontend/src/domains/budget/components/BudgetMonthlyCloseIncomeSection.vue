@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed } from 'vue';
-import type { AnnualIncomeEntry } from '@/domains/data-input';
+import type { AnnualIncomeEntry } from '@/domains/budget/annual-entries';
 
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type IncomeResetMode = 'zero' | 'planned';

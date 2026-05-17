@@ -12,14 +12,16 @@ import {
   incomeCategories,
   incomeSubcategories,
   type IncomeCategoryKey,
+  useDataInputFilters,
+} from '@/domains/data-input';
+import {
   useAnnualIncomeStore,
   type AnnualIncomeCashflowRole,
   type AnnualIncomeTimeProfile as IncomeTimeProfile,
   useAnnualExpenseStore,
   type AnnualExpenseCashflowRole,
   type AnnualExpenseTimeProfile as ExpenseTimeProfile,
-  useDataInputFilters,
-} from '@/domains/data-input';
+} from '@/domains/budget/annual-entries';
 import {
   buildImportPreviewMessage,
   buildPortableFilename,
@@ -53,7 +55,7 @@ import {
 import {
   amountInputValueFromStoredAnnual,
   effectiveAnnualAmountForEntry,
-} from '@/domains/data-input/annualEntryUtils';
+} from '@/domains/budget/annual-entries/annualEntryUtils';
 import { dataInputPageApi, toApiErrorMessage } from '@/domains/data-input/pageApi';
 
 export function useDataInputPage() {

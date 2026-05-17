@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, unref } from 'vue';
-import { AnnualEntryModalForm } from '@/domains/data-input';
+import { AnnualEntryModalForm } from '@/domains/budget/annual-entries';
 
 const props = defineProps<{
   page: any;

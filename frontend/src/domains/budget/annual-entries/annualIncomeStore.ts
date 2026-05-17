@@ -2,7 +2,10 @@ import { ref } from 'vue';
 import { api } from '@/lib/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import { incomeSubcategories, type IncomeCategoryKey } from '@/domains/data-input/incomeTaxonomy';
-import { normalizeOwnerName, parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
+import {
+  normalizeOwnerName,
+  parseAnnualAmount,
+} from '@/domains/budget/annual-entries/annualEntryUtils';
 
 export type AnnualIncomeType = 'recurrent' | 'one_off';
 export type AnnualTimeProfile = 'structural_recurrent' | 'term_recurrent' | 'one_off';

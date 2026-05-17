@@ -1,7 +1,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useAnnualExpenseStore, useAnnualIncomeStore } from '@/domains/data-input';
-import { effectiveAnnualAmountForEntry } from '@/domains/data-input/annualEntryUtils';
+import { useAnnualExpenseStore, useAnnualIncomeStore } from '@/domains/budget/annual-entries';
+import { effectiveAnnualAmountForEntry } from '@/domains/budget/annual-entries/annualEntryUtils';
 import { useNetWorthStore } from '@/domains/net-worth';
 import {
   findGuidePhaseById,
