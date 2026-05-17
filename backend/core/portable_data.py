@@ -282,6 +282,7 @@ def _build_liability_payload(
         ),
         "amortization_system": normalize_optional_text(liability.get("amortization_system")),
         "annual_interest_tae": normalize_imported_liability_tae(liability),
+        "monthly_payment_amount": normalize_optional_text(liability.get("monthly_payment_amount")),
         "principal_amount": normalize_optional_text(liability.get("principal_amount")),
         "opening_fees_amount": normalize_optional_text(liability.get("opening_fees_amount")),
         "early_repayment_fee_percent": normalize_optional_text(
