@@ -6,7 +6,7 @@ import {
   type AnnualIncomeEntry,
   AnnualEntryModalForm,
 } from '@/domains/budget/annual-entries';
-import { normalizeExpenseTaxonomy } from '@/domains/data-input';
+import { normalizeExpenseTaxonomy } from '@/domains/budget/taxonomy';
 import { effectiveAnnualAmountForEntry } from '@/domains/budget/annual-entries/annualEntryUtils';
 
 const router = useRouter();

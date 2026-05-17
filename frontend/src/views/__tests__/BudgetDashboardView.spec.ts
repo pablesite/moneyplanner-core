@@ -109,7 +109,7 @@ vi.mock('@/domains/net-worth/api', () => ({
   coreNetWorthApi: mockNetWorthApi,
 }));
 
-vi.mock('@/domains/data-input', () => ({
+vi.mock('@/domains/budget/taxonomy', () => ({
   incomeCategories: [
     { value: 'salary', label: 'Salario' },
     { value: 'capital_gains', label: 'Ganancias de capital' },

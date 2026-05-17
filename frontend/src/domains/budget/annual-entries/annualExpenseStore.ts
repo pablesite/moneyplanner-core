@@ -4,7 +4,7 @@ import { toApiErrorMessage } from '@/lib/errors';
 import {
   expenseSubcategories,
   type ExpenseCategoryKey,
-} from '@/domains/data-input/expenseTaxonomy';
+} from '@/domains/budget/taxonomy/expenseTaxonomy';
 import {
   normalizeOwnerName,
   parseAnnualAmount,
