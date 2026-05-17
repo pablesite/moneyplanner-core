@@ -5,7 +5,10 @@ import {
   expenseSubcategories,
   type ExpenseCategoryKey,
 } from '@/domains/data-input/expenseTaxonomy';
-import { normalizeOwnerName, parseAnnualAmount } from '@/domains/data-input/annualEntryUtils';
+import {
+  normalizeOwnerName,
+  parseAnnualAmount,
+} from '@/domains/budget/annual-entries/annualEntryUtils';
 
 export type AnnualExpenseType = 'recurrent' | 'one_off';
 export type AnnualTimeProfile = 'structural_recurrent' | 'term_recurrent' | 'one_off';

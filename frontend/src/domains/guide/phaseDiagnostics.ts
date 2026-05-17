@@ -1,5 +1,5 @@
 import type { Asset, Liability, Summary } from '@/domains/net-worth/models';
-import { effectiveAnnualAmountForEntry } from '@/domains/data-input/annualEntryUtils';
+import { effectiveAnnualAmountForEntry } from '@/domains/budget/annual-entries/annualEntryUtils';
 
 type SummaryExtended = Summary & {
   liabilities_unbacked?: string | null;

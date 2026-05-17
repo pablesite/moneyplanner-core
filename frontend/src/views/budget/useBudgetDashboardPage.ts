@@ -18,7 +18,7 @@ import {
   effectiveAnnualAmountForEntry,
   useAnnualExpenseStore,
   useAnnualIncomeStore,
-} from '@/domains/data-input';
+} from '@/domains/budget/annual-entries';
 import {
   type MonthlyCloseStepId,
   type ExpenseMonthlySummaryMonth,

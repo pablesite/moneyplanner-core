@@ -131,6 +131,16 @@ vi.mock('@/domains/data-input', () => ({
       label: 'Depositos / renta fija',
     },
   ],
+  normalizeExpenseTaxonomy: (category: string, subcategory: string) => ({
+    category,
+    subcategory:
+      category === 'financial_investments' && subcategory === 'index_funds_etf'
+        ? 'etf_indexed'
+        : subcategory,
+  }),
+}));
+
+vi.mock('@/domains/budget/annual-entries', () => ({
   AnnualEntryModalForm: defineComponent({
     name: 'AnnualEntryModalForm',
     template: '<div />',
@@ -154,13 +164,6 @@ vi.mock('@/domains/data-input', () => ({
     }
     return annual;
   },
-  normalizeExpenseTaxonomy: (category: string, subcategory: string) => ({
-    category,
-    subcategory:
-      category === 'financial_investments' && subcategory === 'index_funds_etf'
-        ? 'etf_indexed'
-        : subcategory,
-  }),
   useAnnualIncomeStore: () => mockIncomeStore,
   useAnnualExpenseStore: () => mockExpenseStore,
 }));

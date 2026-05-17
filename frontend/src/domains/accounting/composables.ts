@@ -8,7 +8,7 @@ import {
   useAnnualIncomeStore,
   type AnnualExpenseEntry,
   type AnnualIncomeEntry,
-} from '@/domains/data-input';
+} from '@/domains/budget/annual-entries';
 import {
   type EditableActivityKind,
   type ClassificationActivityKind,

@@ -182,10 +182,10 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
 ### Pendiente prioritario
 
 - **Renombrar/separar `data-input` como dominio compartido.**
-  - Para qué sirve hoy: formularios y stores de ingresos/gastos anuales usados desde Presupuesto, helpers de taxonomía usados por Guía/Contabilidad y portable data usado desde Cuenta.
+  - Para qué sirve hoy: taxonomías de ingresos/gastos usadas por Presupuesto, Guía y Contabilidad, filtros residuales y cliente de la vista interna `views/data-input/*`.
   - Por qué es legacy: la ruta `/introduccion-datos` ya no existe, pero el nombre del dominio sigue describiendo el flujo antiguo.
-  - Avance: `portable-data` ya vive en dominio propio y `AccountView` consume ese dominio directamente.
-  - Acción recomendada: partir las responsabilidades restantes en dominios con nombre real (`budget annual entries`, `taxonomy utils`) y eliminar referencias a `views/data-input/*` cuando Presupuesto tenga composables propios.
+  - Avance: `portable-data` ya vive en dominio propio y `AccountView` consume ese dominio directamente. Las entradas anuales (`annualIncomeStore`, `annualExpenseStore`, utilidades y formulario compartido) ya viven en `budget/annual-entries`.
+  - Acción recomendada: mover las taxonomías a un dominio con nombre real (`budget/taxonomy` o `taxonomy utils`) y eliminar referencias a `views/data-input/*` cuando Presupuesto tenga composables propios.
 
 - **Reducir el fallback legacy de Budget/check-ins.**
   - Para qué sirve hoy: mantiene ejecución manual cuando no hay cobertura ledger suficiente y evita perder meses históricos.

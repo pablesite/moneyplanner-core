@@ -1,8 +1,7 @@
 import type { LedgerEntry } from '@/domains/accounting';
 import type { Asset } from '@/domains/net-worth/models';
+import type { AnnualExpenseEntry, AnnualIncomeEntry } from '@/domains/budget/annual-entries';
 import {
-  type AnnualExpenseEntry,
-  type AnnualIncomeEntry,
   normalizeExpenseTaxonomy,
   incomeCategories,
   expenseCategories,

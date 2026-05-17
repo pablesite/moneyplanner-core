@@ -43,7 +43,7 @@ vi.mock('@/domains/net-worth', () => ({
   useNetWorthStore: () => mockNetWorthStore,
 }));
 
-vi.mock('@/domains/data-input', () => ({
+vi.mock('@/domains/budget/annual-entries', () => ({
   useAnnualIncomeStore: () => ({
     entries: mockAnnualIncomeEntries,
     loadAll: mockAnnualIncomeLoadAll,
