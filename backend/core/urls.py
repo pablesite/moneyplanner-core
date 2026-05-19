@@ -2,6 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    DbBackupView,
+    DbRestoreView,
     FxRateViewSet,
     InflationIndexViewSet,
     MarketDataStatusAPIView,
@@ -18,4 +20,6 @@ urlpatterns = [
     path("market-data/status/", MarketDataStatusAPIView.as_view(), name="market-data-status"),
     path("portable-data/meta/", PortableDataMetaAPIView.as_view(), name="portable-data-meta"),
     path("portable-data/import/", PortableDataImportAPIView.as_view(), name="portable-data-import"),
+    path("db-backup/", DbBackupView.as_view(), name="db-backup"),
+    path("db-restore/", DbRestoreView.as_view(), name="db-restore"),
 ]

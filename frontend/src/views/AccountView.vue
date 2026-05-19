@@ -1,30 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type ComponentPublicInstance } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { authApi, toAuthErrorMessage } from '@/domains/auth';
-import { usePortableDataTransfer } from '@/domains/portable-data';
+import { coreApi } from '@/lib/api';
 
 const route = useRoute();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
 const baseCurrency = ref<string>('');
-const {
-  dataTransferUiBusy,
-  dataTransferBusy,
-  dataTransferBusyLabel,
-  dataTransferStatus,
-  dataTransferError,
-  dataTransferToastKind,
-  dataTransferToastMessage,
-  importFileInputRef,
-  triggerImportDialog,
-  exportDataBundle,
-  importDataFromFile,
-} = usePortableDataTransfer({
-  externalBusy: loading,
-  onImportCompleted: load,
-});
+
+const backupBusy = ref(false);
+const backupError = ref<string | null>(null);
+const restoreBusy = ref(false);
+const restoreError = ref<string | null>(null);
+const restoreStatus = ref<string | null>(null);
+const restoreFileInputRef = ref<HTMLInputElement | null>(null);
 
 const permissionNotice =
   route.query.reason === 'permission_denied'
@@ -46,17 +37,67 @@ async function load() {
 
 onMounted(load);
 
-const setImportFileInputRef = (el: Element | ComponentPublicInstance | null): void => {
-  importFileInputRef.value = el as HTMLInputElement | null;
-};
-const portableDataToastClass = computed(() =>
-  dataTransferToastKind.value === 'error'
-    ? 'border border-rose-300/30 bg-rose-950/90 text-rose-100'
-    : 'border border-emerald-300/30 bg-emerald-950/90 text-emerald-100',
-);
-const portableDataToastDotClass = computed(() =>
-  dataTransferToastKind.value === 'error' ? 'bg-rose-300' : 'bg-emerald-300',
-);
+async function downloadBackup() {
+  backupBusy.value = true;
+  backupError.value = null;
+  try {
+    const res = await coreApi.get('/api/core/db-backup/', { responseType: 'blob' });
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `moneyplanner_backup_${today}.dump`;
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch {
+    backupError.value = 'No se pudo generar el backup. Comprueba que eres administrador.';
+  } finally {
+    backupBusy.value = false;
+  }
+}
+
+function triggerRestoreDialog() {
+  restoreError.value = null;
+  restoreStatus.value = null;
+  restoreFileInputRef.value?.click();
+}
+
+async function handleRestoreFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  const confirmed = window.confirm(
+    `¿Restaurar la base de datos desde "${file.name}"?\n\n` +
+      'ATENCIÓN: Esto reemplazará TODOS los datos actuales sin posibilidad de deshacer desde la app.\n\n' +
+      'Asegúrate de tener un backup reciente antes de continuar.',
+  );
+  if (!confirmed) {
+    input.value = '';
+    return;
+  }
+
+  restoreBusy.value = true;
+  restoreError.value = null;
+  restoreStatus.value = null;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    await coreApi.post('/api/core/db-restore/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    restoreStatus.value = 'Base de datos restaurada. Recarga la página para continuar.';
+  } catch {
+    restoreError.value = 'La restauración falló. Comprueba que el archivo es un .dump válido y que eres administrador.';
+  } finally {
+    restoreBusy.value = false;
+    input.value = '';
+  }
+}
 </script>
 
 <template>
@@ -95,95 +136,40 @@ const portableDataToastDotClass = computed(() =>
 
       <section class="card ui-pro-panel grid gap-2.5">
         <div class="ui-profile-head">
-          <h2 class="ui-profile-head-title">Portable data</h2>
+          <h2 class="ui-profile-head-title">Base de datos</h2>
         </div>
         <p class="subtle m-0">
-          Exporta, importa o reemplaza tus datos para mover tu entorno entre instancias.
+          Exporta o restaura la base de datos completa. Solo disponible para administradores.
         </p>
         <div class="actions m-0">
           <button
             class="btn btn-ghost"
             type="button"
-            :disabled="dataTransferUiBusy"
-            @click="exportDataBundle"
+            :disabled="backupBusy || restoreBusy"
+            @click="downloadBackup"
           >
-            Exportar datos
-          </button>
-          <button
-            class="btn btn-primary"
-            type="button"
-            :disabled="dataTransferUiBusy"
-            @click="triggerImportDialog('append')"
-          >
-            Importar datos
+            {{ backupBusy ? 'Generando...' : 'Exportar base de datos' }}
           </button>
           <button
             class="btn btn-ghost"
             type="button"
-            :disabled="dataTransferUiBusy"
-            @click="triggerImportDialog('replace')"
+            :disabled="backupBusy || restoreBusy"
+            @click="triggerRestoreDialog"
           >
-            Reemplazar datos
+            {{ restoreBusy ? 'Restaurando...' : 'Restaurar base de datos' }}
           </button>
           <input
-            :ref="setImportFileInputRef"
+            ref="restoreFileInputRef"
             type="file"
-            accept="application/json,.json"
+            accept=".dump"
             class="sr-only"
-            @change="importDataFromFile"
+            @change="handleRestoreFile"
           />
         </div>
-        <p v-if="dataTransferStatus" class="subtle m-0">{{ dataTransferStatus }}</p>
-        <p v-if="dataTransferError" class="alert m-0">{{ dataTransferError }}</p>
+        <p v-if="restoreStatus" class="subtle m-0">{{ restoreStatus }}</p>
+        <p v-if="backupError" class="alert m-0">{{ backupError }}</p>
+        <p v-if="restoreError" class="alert m-0">{{ restoreError }}</p>
       </section>
-    </div>
-  </div>
-
-  <Transition
-    enter-active-class="transition duration-200 ease-out"
-    enter-from-class="-translate-y-2 opacity-0"
-    enter-to-class="translate-y-0 opacity-100"
-    leave-active-class="transition duration-150 ease-in"
-    leave-from-class="translate-y-0 opacity-100"
-    leave-to-class="-translate-y-2 opacity-0"
-  >
-    <div
-      v-if="dataTransferToastMessage"
-      class="fixed right-4 top-4 z-[80] max-w-[min(92vw,560px)] rounded-xl px-4 py-3 text-sm shadow-2xl backdrop-blur"
-      :class="portableDataToastClass"
-      role="status"
-      aria-live="polite"
-    >
-      <div class="flex items-start gap-2.5">
-        <span
-          class="mt-0.5 inline-block h-2.5 w-2.5 rounded-full"
-          :class="portableDataToastDotClass"
-        />
-        <span>{{ dataTransferToastMessage }}</span>
-      </div>
-    </div>
-  </Transition>
-
-  <div
-    v-if="dataTransferBusy"
-    class="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 backdrop-blur-[2px]"
-    role="status"
-    aria-live="polite"
-    aria-busy="true"
-  >
-    <div class="w-full max-w-md rounded-2xl border border-white/15 bg-[#111827f2] p-4 shadow-2xl">
-      <div class="flex items-center gap-3">
-        <span
-          class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-teal-300"
-          aria-hidden="true"
-        />
-        <div>
-          <p class="m-0 text-sm font-medium text-white">
-            {{ dataTransferBusyLabel ?? 'Procesando datos...' }}
-          </p>
-          <p class="m-0 text-xs text-white/65">No cierres la pestaña hasta que termine.</p>
-        </div>
-      </div>
     </div>
   </div>
 </template>
