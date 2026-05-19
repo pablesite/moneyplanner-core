@@ -51,7 +51,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
-| Sistema de diseño unificado | Alta (crítico) | ⚪ | Colores, tipografías, componentes; coherencia visual en todas las vistas |
+| Sistema de diseño unificado | Alta (crítico) | 🔄 | Fundacion inicial de tokens, superficies y controles compartidos creada en `core/frontend/src/styles/app.css`; pendiente migracion/pulido vista a vista. |
 | Limpieza legacy residual | Media | 🔄 | Inventario vivo documentado en `roadmap/product-roadmap.md`. Avance: Introducción de Datos absorbido en Presupuesto y alias `investment_purchase` retirado del contrato activo; quedan fallback Budget/check-ins, facade `net_worth.services`, campos legacy de aportaciones, compat portable y `compat.*`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |

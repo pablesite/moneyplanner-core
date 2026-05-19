@@ -31,6 +31,7 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
    - `terminados/` for completed roadmaps
 4. `frontend/`
    - active frontend UX notes
+   - Core design system foundation
 5. `tasks/`
    - executable task specs by specialty
    - `terminados/` subfolders for completed task specs
@@ -41,4 +42,3 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
 1. This directory is the canonical source for Core product and domain documentation.
 2. SaaS documentation must reference Core docs instead of duplicating Core behavior.
 3. If Core behavior, architecture, or operational flows change, update these docs first.
-

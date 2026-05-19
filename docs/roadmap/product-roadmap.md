@@ -147,6 +147,7 @@ El coach (fases 1–4) está funcional. Pendiente antes de producción:
 ## DISEÑO Y EXPERIENCIA DE USUARIO
 
 ### Sistema de diseño unificado (crítico para producción)
+- 🔄 Fundacion inicial creada en `core/frontend/src/styles/app.css`: tokens semanticos de color, layout, radio, sombras, estados y controles base. Ver `core/docs/frontend/design-system.md`.
 - Crear sistema de diseño coherente: colores, tipografías, espaciados, componentes base.
 - Unificar todas las vistas bajo el mismo sistema.
 - Elevar calidad visual a nivel SaaS profesional.
