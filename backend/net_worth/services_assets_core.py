@@ -229,52 +229,6 @@ def _validate_accounting_asset_account_link(
         )
 
 
-def _validate_periodic_investment_payload(
-    *,
-    start_date: date | None,
-    expected_end_date: date | None,
-    investment_contribution_frequency: str | None,
-    investment_contribution_currency: str | None,
-    monthly_contribution_amount,
-    purchase_value,
-) -> None:
-    if expected_end_date is not None and start_date and expected_end_date < start_date:
-        raise DRFValidationError(
-            {"expected_end_date": ("Debe ser igual o posterior a start_date.")}
-        )
-    if investment_contribution_frequency not in (
-        Asset.InvestmentContributionFrequency.MONTHLY,
-        Asset.InvestmentContributionFrequency.WEEKLY,
-        None,
-    ):
-        raise DRFValidationError(
-            {"investment_contribution_frequency": ("Frecuencia invalida. Usa mensual o semanal.")}
-        )
-    if monthly_contribution_amount is None or Decimal(str(monthly_contribution_amount)) <= 0:
-        raise DRFValidationError(
-            {
-                "monthly_contribution_amount": (
-                    "La cuota periodica debe ser mayor que 0 en aportacion periodica."
-                )
-            }
-        )
-    contribution_currency = str(investment_contribution_currency or "").strip().upper()
-    if contribution_currency and (
-        len(contribution_currency) != 3 or not contribution_currency.isalpha()
-    ):
-        raise DRFValidationError(
-            {
-                "investment_contribution_currency": (
-                    "Moneda de cuota invalida (usa codigo ISO de 3 letras, ej: USD)."
-                )
-            }
-        )
-    if purchase_value is None:
-        raise DRFValidationError(
-            {"amount": ("Requerido para aportacion periodica en inversiones.")}
-        )
-
-
 def _validate_market_value_override_payload(
     *,
     category,
@@ -314,11 +268,6 @@ def validate_asset_payload(
     land_annual_appreciation_percent=None,
     building_annual_depreciation_percent=None,
     deposit_term_months=None,
-    investment_contribution_mode: str | None = None,
-    investment_contribution_frequency: str | None = None,
-    investment_contribution_currency: str | None = None,
-    expected_end_date: date | None = None,
-    monthly_contribution_amount=None,
     market_value_override=None,
     market_value_override_date: date | None = None,
     has_contribution_intervals: bool = False,
@@ -376,20 +325,7 @@ def validate_asset_payload(
 
     purchase_value = initial_purchase_value if initial_purchase_value is not None else amount
 
-    is_periodic_investment = (
-        category == Asset.Category.INVESTMENTS
-        and investment_contribution_mode == Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION
-    )
-    if is_periodic_investment and not has_contribution_intervals:
-        _validate_periodic_investment_payload(
-            start_date=start_date,
-            expected_end_date=expected_end_date,
-            investment_contribution_frequency=investment_contribution_frequency,
-            investment_contribution_currency=investment_contribution_currency,
-            monthly_contribution_amount=monthly_contribution_amount,
-            purchase_value=purchase_value,
-        )
-    if is_periodic_investment and has_contribution_intervals and purchase_value is None:
+    if category == Asset.Category.INVESTMENTS and has_contribution_intervals and purchase_value is None:
         raise DRFValidationError(
             {"amount": ("Requerido para aportacion periodica en inversiones.")}
         )
@@ -1088,20 +1024,15 @@ def _get_latest_asset_manual_value(
 
 
 def _can_apply_periodic_investment_to_effective_amount(*, asset: Asset) -> bool:
-    if asset.investment_contribution_mode != Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION:
-        return False
     intervals = list(asset.contribution_intervals.all())
-    if intervals:
-        asset_currency = str(asset.currency or "").strip().upper()
-        for interval in intervals:
-            interval_currency = str(interval.currency or "").strip().upper()
-            if interval_currency and interval_currency != asset_currency:
-                return False
-        return True
-    if asset.monthly_contribution_amount is None or asset.monthly_contribution_amount <= 0:
+    if not intervals:
         return False
-    contribution_currency = str(asset.investment_contribution_currency or "").strip().upper()
-    return not contribution_currency or contribution_currency == str(asset.currency).strip().upper()
+    asset_currency = str(asset.currency or "").strip().upper()
+    for interval in intervals:
+        interval_currency = str(interval.currency or "").strip().upper()
+        if interval_currency and interval_currency != asset_currency:
+            return False
+    return True
 
 
 def validate_investment_asset_event_payload(

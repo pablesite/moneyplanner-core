@@ -58,10 +58,6 @@ class Asset(models.Model):
         MANUAL = "manual", "Manual"
         REAL_ESTATE_AUTO = "real_estate_auto", "Vivienda automática"
 
-    class InvestmentContributionMode(models.TextChoices):
-        ONE_TIME = "one_time", "Aportación única"
-        PERIODIC_CONTRIBUTION = "periodic_contribution", "Aportación periódica"
-
     class InvestmentContributionFrequency(models.TextChoices):
         MONTHLY = "monthly", "Mensual"
         WEEKLY = "weekly", "Semanal"
@@ -86,14 +82,6 @@ class Asset(models.Model):
         default=timezone.localdate,
         help_text="Fecha de inicio o adquisicion del activo.",
     )
-    expected_end_date = models.DateField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Fecha fin prevista para aportaciones periodicas en inversiones. "
-            "Solo aplica cuando investment_contribution_mode=periodic_contribution."
-        ),
-    )
     initial_purchase_value = models.DecimalField(
         max_digits=20,
         decimal_places=8,
@@ -115,44 +103,6 @@ class Asset(models.Model):
         null=True,
         blank=True,
         help_text="Vida util/plazo de amortizacion estimado en anos (si aplica).",
-    )
-    investment_contribution_mode = models.CharField(
-        max_length=32,
-        choices=InvestmentContributionMode.choices,
-        default=InvestmentContributionMode.ONE_TIME,
-        help_text=(
-            "Modo de aportacion para inversiones: unica o periodica. "
-            "Solo aplica a category=investments."
-        ),
-    )
-    investment_contribution_frequency = models.CharField(
-        max_length=16,
-        choices=InvestmentContributionFrequency.choices,
-        default=InvestmentContributionFrequency.MONTHLY,
-        help_text=(
-            "Frecuencia de la aportacion periodica en inversiones: mensual o semanal. "
-            "Solo aplica a investment_contribution_mode=periodic_contribution."
-        ),
-    )
-    investment_contribution_currency = models.CharField(
-        max_length=3,
-        null=True,
-        blank=True,
-        help_text=(
-            "Moneda de la cuota periodica en inversiones. "
-            "Si no se indica, se asume la moneda del activo."
-        ),
-    )
-    monthly_contribution_amount = models.DecimalField(
-        max_digits=20,
-        decimal_places=8,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-        help_text=(
-            "Cuota mensual prevista para inversiones periodicas. "
-            "Solo aplica a investment_contribution_mode=periodic_contribution."
-        ),
     )
     market_value_override = models.DecimalField(
         max_digits=20,

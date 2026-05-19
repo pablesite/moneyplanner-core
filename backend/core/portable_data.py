@@ -214,21 +214,6 @@ def _build_asset_payload(asset: dict[str, Any]) -> dict[str, Any]:
         "accounting_account_id": None,
         "currency": str(asset.get("currency", "EUR")).upper(),
         "start_date": asset.get("start_date"),
-        "expected_end_date": normalize_optional_text(asset.get("expected_end_date")),
-        "investment_contribution_mode": normalize_optional_text(
-            asset.get("investment_contribution_mode")
-        )
-        or "one_time",
-        "investment_contribution_frequency": normalize_optional_text(
-            asset.get("investment_contribution_frequency")
-        )
-        or "monthly",
-        "investment_contribution_currency": normalize_optional_text(
-            asset.get("investment_contribution_currency")
-        ),
-        "monthly_contribution_amount": normalize_optional_text(
-            asset.get("monthly_contribution_amount")
-        ),
         "contribution_intervals": list(asset.get("contribution_intervals", [])),
         "market_value_override": normalize_optional_text(asset.get("market_value_override")),
         "market_value_override_date": normalize_optional_text(

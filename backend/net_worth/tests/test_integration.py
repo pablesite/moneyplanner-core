@@ -789,9 +789,15 @@ class NetWorthApiTests(APITestCase):
                 "start_date": "2026-01-15",
                 "amount": "5000.00",
                 "initial_purchase_value": "5000.00",
-                "investment_contribution_mode": "periodic_contribution",
-                "expected_end_date": "2027-12-15",
-                "monthly_contribution_amount": "300.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": "2027-12-15",
+                        "amount": "300.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    }
+                ],
             },
             format="json",
         )
@@ -845,7 +851,6 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         asset = Asset.objects.get(id=response.data["id"])
-        self.assertEqual(asset.investment_contribution_mode, "periodic_contribution")
         intervals = list(asset.contribution_intervals.order_by("start_date"))
         self.assertEqual(len(intervals), 2)
         self.assertEqual(intervals[0].amount, Decimal("100.00"))
@@ -899,8 +904,6 @@ class NetWorthApiTests(APITestCase):
             start_date=date(2026, 1, 15),
             amount=Decimal("5000.00"),
             initial_purchase_value=Decimal("5000.00"),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            monthly_contribution_amount=Decimal("10.00"),
             is_active=True,
         )
         InvestmentContributionInterval.objects.create(
@@ -947,13 +950,17 @@ class NetWorthApiTests(APITestCase):
             subcategory=Asset.Subcategory.FUNDS,
             currency="EUR",
             start_date=date(2026, 1, 15),
-            expected_end_date=date(2027, 2, 15),
             amount=Decimal("5000.00"),
             initial_purchase_value=Decimal("5000.00"),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            monthly_contribution_amount=Decimal("300.00"),
-            investment_contribution_currency="EUR",
             is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 15),
+            end_date=date(2027, 2, 15),
+            amount=Decimal("300.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
         )
         original_create = AnnualExpenseEntry.objects.create
         call_count = {"value": 0}
@@ -980,7 +987,7 @@ class NetWorthApiTests(APITestCase):
             ).exists()
         )
 
-    def test_periodic_investment_asset_requires_monthly_contribution_only(self):
+    def test_periodic_investment_asset_requires_purchase_value_with_intervals(self):
         response = self.client.post(
             "/api/net-worth/assets/",
             {
@@ -989,14 +996,19 @@ class NetWorthApiTests(APITestCase):
                 "subcategory": Asset.Subcategory.FUNDS,
                 "currency": "EUR",
                 "start_date": "2026-01-15",
-                "amount": "1000.00",
-                "initial_purchase_value": "1000.00",
-                "investment_contribution_mode": "periodic_contribution",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": None,
+                        "amount": "300.00",
+                        "frequency": "monthly",
+                    }
+                ],
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
-        self.assertIn("monthly_contribution_amount", response.data["error"]["details"])
+        self.assertIn("amount", response.data["error"]["details"])
 
     def test_periodic_investment_asset_supports_indefinite_end_date(self):
         response = self.client.post(
@@ -1009,9 +1021,14 @@ class NetWorthApiTests(APITestCase):
                 "start_date": "2026-01-15",
                 "amount": "1000.00",
                 "initial_purchase_value": "1000.00",
-                "investment_contribution_mode": "periodic_contribution",
-                "investment_contribution_frequency": "weekly",
-                "monthly_contribution_amount": "100.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": None,
+                        "amount": "100.00",
+                        "frequency": "weekly",
+                    }
+                ],
             },
             format="json",
         )
@@ -1042,15 +1059,19 @@ class NetWorthApiTests(APITestCase):
                 "start_date": "2026-01-01",
                 "amount": "0.03725777",
                 "initial_purchase_value": "0.03725777",
-                "investment_contribution_mode": "periodic_contribution",
-                "investment_contribution_frequency": "weekly",
-                "investment_contribution_currency": "USD",
-                "monthly_contribution_amount": "25.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-01",
+                        "end_date": None,
+                        "amount": "25.00",
+                        "frequency": "weekly",
+                        "currency": "USD",
+                    }
+                ],
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertEqual(response.data["investment_contribution_currency"], "USD")
         self.assertEqual(response.data["effective_amount"], "0.03725777")
         generated = AnnualExpenseEntry.objects.filter(
             user=self.user,
@@ -1124,9 +1145,15 @@ class NetWorthApiTests(APITestCase):
                 "start_date": f"{current_year}-03-01",
                 "amount": "1000.00",
                 "initial_purchase_value": "1000.00",
-                "investment_contribution_mode": "periodic_contribution",
-                "investment_contribution_frequency": "weekly",
-                "monthly_contribution_amount": "30.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": f"{current_year}-03-01",
+                        "end_date": None,
+                        "amount": "30.00",
+                        "frequency": "weekly",
+                        "currency": "EUR",
+                    }
+                ],
             },
             format="json",
         )
@@ -1147,7 +1174,15 @@ class NetWorthApiTests(APITestCase):
             f"/api/net-worth/assets/{asset_id}/",
             {
                 "start_date": f"{current_year}-01-01",
-                "investment_contribution_currency": "USD",
+                "contribution_intervals": [
+                    {
+                        "start_date": f"{current_year}-01-01",
+                        "end_date": None,
+                        "amount": "30.00",
+                        "frequency": "weekly",
+                        "currency": "USD",
+                    }
+                ],
             },
             format="json",
         )
@@ -1169,9 +1204,15 @@ class NetWorthApiTests(APITestCase):
                 "start_date": "2026-01-15",
                 "amount": "5000.00",
                 "initial_purchase_value": "5000.00",
-                "investment_contribution_mode": "periodic_contribution",
-                "expected_end_date": "2027-12-15",
-                "monthly_contribution_amount": "300.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": "2027-12-15",
+                        "amount": "300.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    }
+                ],
             },
             format="json",
         )
@@ -1202,9 +1243,15 @@ class NetWorthApiTests(APITestCase):
                 "start_date": "2026-01-15",
                 "amount": "5000.00",
                 "initial_purchase_value": "5000.00",
-                "investment_contribution_mode": "periodic_contribution",
-                "expected_end_date": "2027-12-15",
-                "monthly_contribution_amount": "300.00",
+                "contribution_intervals": [
+                    {
+                        "start_date": "2026-01-15",
+                        "end_date": "2027-12-15",
+                        "amount": "300.00",
+                        "frequency": "monthly",
+                        "currency": "EUR",
+                    }
+                ],
             },
             format="json",
         )

@@ -1521,12 +1521,16 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.OTHER,
             currency="EUR",
             start_date=date(2025, 3, 5),
-            expected_end_date=date(2027, 3, 5),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            monthly_contribution_amount=Decimal("1374.00"),
             amount=Decimal("8800.00"),
             initial_purchase_value=Decimal("8800.00"),
             is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2025, 3, 5),
+            end_date=date(2027, 3, 5),
+            amount=Decimal("1374.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
         )
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 5))
         # 13 cuotas (de 2025-03 a 2026-03 inclusive) + importe inicial.
@@ -1540,12 +1544,16 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.ETFS,
             currency="EUR",
             start_date=date(2026, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            investment_contribution_frequency=Asset.InvestmentContributionFrequency.WEEKLY,
-            monthly_contribution_amount=Decimal("100.00"),
             amount=Decimal("1000.00"),
             initial_purchase_value=Decimal("1000.00"),
             is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 1),
+            end_date=None,
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.WEEKLY,
         )
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 1, 29))
         # Cuotas semanales en: 01, 08, 15, 22 y 29 de enero.
@@ -1559,8 +1567,6 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.ETFS,
             currency="EUR",
             start_date=date(2025, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            monthly_contribution_amount=Decimal("1.00"),
             amount=Decimal("1000.00"),
             initial_purchase_value=Decimal("1000.00"),
             is_active=True,
@@ -1592,7 +1598,6 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.ETFS,
             currency="EUR",
             start_date=date(2026, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
             amount=Decimal("1000.00"),
             initial_purchase_value=Decimal("1000.00"),
             is_active=True,
@@ -1620,12 +1625,16 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.ETFS,
             currency="EUR",
             start_date=date(2026, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            investment_contribution_frequency=Asset.InvestmentContributionFrequency.MONTHLY,
-            monthly_contribution_amount=Decimal("100.00"),
             amount=Decimal("1000.00"),
             initial_purchase_value=Decimal("1000.00"),
             is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 1),
+            end_date=None,
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
         )
         position_cache = _build_position_data_cache([asset], [])
         get_effective_asset_amount(
@@ -1650,13 +1659,17 @@ class NetWorthServicesTests(TestCase):
             subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
             currency="BTC",
             start_date=date(2026, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
-            investment_contribution_frequency=Asset.InvestmentContributionFrequency.WEEKLY,
-            investment_contribution_currency="USD",
-            monthly_contribution_amount=Decimal("25.00"),
             amount=Decimal("0.03725777"),
             initial_purchase_value=Decimal("0.03725777"),
             is_active=True,
+        )
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(2026, 1, 1),
+            end_date=None,
+            amount=Decimal("25.00"),
+            frequency=Asset.InvestmentContributionFrequency.WEEKLY,
+            currency="USD",
         )
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 3, 1))
         self.assertEqual(effective, Decimal("0.03725777"))

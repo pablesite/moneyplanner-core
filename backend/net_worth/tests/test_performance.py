@@ -67,7 +67,6 @@ class NetWorthSummaryPerformanceTests(TestCase):
                 currency="EUR",
                 amount=Decimal("2000.00"),
                 start_date=date(2026, 1, 1),
-                investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
                 is_active=True,
             )
             for idx in range(20)
@@ -194,7 +193,6 @@ class NetWorthSummaryPerformanceTests(TestCase):
             currency="EUR",
             amount=Decimal("1000.00"),
             start_date=date(2024, 1, 1),
-            investment_contribution_mode=Asset.InvestmentContributionMode.PERIODIC_CONTRIBUTION,
             is_active=True,
         )
         AssetValuation.objects.create(
