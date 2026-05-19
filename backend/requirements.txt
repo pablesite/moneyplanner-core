@@ -1,7 +1,7 @@
 
 # Core
 Django>=5.0,<6.0
-djangorestframework>=3.15
+djangorestframework>=3.17.1
 
 # Auth
 djangorestframework-simplejwt>=5.3
