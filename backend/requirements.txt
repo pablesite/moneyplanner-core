@@ -7,7 +7,7 @@ djangorestframework>=3.15
 djangorestframework-simplejwt>=5.3
 
 # CORS
-django-cors-headers>=4.4
+django-cors-headers>=4.9.0
 
 # OpenAPI / Swagger
 drf-spectacular>=0.27
