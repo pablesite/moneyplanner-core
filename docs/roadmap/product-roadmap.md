@@ -126,11 +126,14 @@ Convenciones:
 
 ## COACH FINANCIERO
 
-El coach (fases 1–4) está funcional. Pendiente antes de producción:
+El coach (fases 1–4) está funcional. Decisiones tomadas para v1:
 
 - ~~Las barras del coach no se renderizan en el frontend del Core.~~ (resuelto)
-- **Rediseñar navegación**: integración fluida con los módulos del producto (patrimonio, presupuesto, cierre, contabilidad). El usuario debe poder pasar naturalmente de una recomendación del coach al módulo correspondiente.
-- Flujo natural entre coach ↔ producto sin romper el contexto.
+- ✅ **Navegación v1 simplificada** (2026-05-20): `/` redirige a `/patrimonio`; guía en `/guia` y `/guia/fases/:id`. Quick actions contextuales por fase ya existían. Integración más profunda coach ↔ producto aparcada para v2.
+- ✅ **Fase 5 (Independencia financiera) retirada** — se reincorporará cuando exista módulo de cartera de inversión con datos reales.
+
+### Para v2
+- Integración fluida coach ↔ módulos: pasar de una recomendación directamente al punto concreto del módulo relevante sin perder contexto.
 
 ---
 

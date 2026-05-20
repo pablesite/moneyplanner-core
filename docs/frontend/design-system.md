@@ -72,8 +72,7 @@ Note: `withDefaults(defineProps<>(), {...})` is hoisted to module scope by the V
 19. `budget-annual-entries.css`, `guide-detail.css`, `guide-home.css`, `movements.css` cleaned — remaining `var(--muted)` / `var(--text)` aliases and hardcoded rgba values replaced with canonical tokens.
 20. `ui-pro-*` compat layer fully removed from `app.css` — all selector aliases (`ui-pro-page`, `ui-pro-panel`, `ui-pro-header`, `ui-pro-title`, `ui-pro-kicker`, `ui-pro-toolbar`, `ui-pro-chip`, `ui-pro-divider`) deleted; `badge` extended with `display: inline-flex; align-items: center; gap: 6px` to cover chip layout; 4 consuming components updated.
 21. Chart.js colors tokenized — `--chart-*` palette added to `:root`; `NetWorthDeltaChart.vue` and `NetWorthTimelineChart.vue` updated to read all colors via `cssVar()` / `getComputedStyle` at render time instead of hardcoded strings.
+22. Accounting hero aligned with Net Worth — removed redundant `<h1>` (`ui-accounting-hero-title`), eyebrow changed to "Contabilidad", donut canvas colors (net balance, center text, legend dots, empty state) tokenized via `cssVar()`. `movements.css`: edit/delete button hover states use `--color-info`/`--color-negative`, tone/balance-delta pills use `--color-positive`/`--color-negative`, cashflow active month uses `--color-accent`.
 
-## Next Passes
-1. Continue visual polish pass on the Accounting view: header (align with Net Worth) and body styles.
-2. Coach financial navigation redesign: fluid integration between coach recommendations and product modules.
-3. Validate the main screens visually after each polish pass.
+## Status
+Foundation pass complete (22 steps). All domain CSS tokenized, compat layer removed, Chart.js palette defined, Accounting view aligned. Ongoing: per-view visual validation as new screens are introduced.

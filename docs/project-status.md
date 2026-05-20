@@ -4,9 +4,8 @@
 >
 > All planned v1 modules are implemented and stable: Net Worth, Budget & Monthly Close,
 > Accounting Movements, Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
-> Residual legacy cleanup complete. Design system: 21 migration steps done — all domain CSS tokenized,
-> ui-pro-* compat layer removed, Chart.js colors tokenized. Remaining: Accounting view visual polish,
-> Coach navigation redesign, user validation.
+> Residual legacy cleanup complete. Design system foundation pass complete (22 steps).
+> Shell: / → /patrimonio, guide at /guia, phase 5 removed. Up next: user validation.
 > Paused: Crypto Tax Report (IRPF Spain). Full details in Spanish below.
 
 ---
@@ -15,7 +14,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-05-20 | **Versión Core:** 0.23.5
+**Última revisión:** 2026-05-20 | **Versión Core:** 0.23.6
 
 ---
 
@@ -50,9 +49,9 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Patrimonio — modales activos/pasivos | Media | ✅ | Revisión completa de modales de creación/edición de activos y pasivos completada. V1 del módulo cerrada a nivel funcional. |
 | Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. |
 | Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
-| Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
+| Coach financiero — navegación | Media | ✅ | v1 simplificado: `/` → `/patrimonio` como landing, guía en `/guia`, fase 5 (Independencia financiera) retirada hasta tener módulo de cartera. Quick actions contextuales por fase ya existían. |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
-| Sistema de diseño unificado | Alta (crítico) | 🔄 | 21 pasos completados (ver `docs/frontend/design-system.md`): vistas canónicas, tokenización completa de CSS de dominio (dashboard ~120 valores, net-worth, budget, guide, accounting), eliminación total de capa `ui-pro-*`, paleta `--chart-*` y Chart.js tokenizado via `getComputedStyle`. Pendiente: pulido visual de Accounting (header + cuerpo) y rediseño navegación Coach. |
+| Sistema de diseño unificado | Alta (crítico) | ✅ | 22 pasos completados (ver `docs/frontend/design-system.md`). Fundación completa: vistas canónicas, tokenización total de CSS de dominio, capa `ui-pro-*` eliminada, paleta `--chart-*`, Accounting hero alineado con Patrimonio. Pulido visual por vista continúa según necesidad. |
 | Limpieza legacy residual | Media | ✅ | Completado 2026-05-20. Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (migración 0042), import externo de `net_worth.services`, `compat.*` en capabilities. Fallback Budget/check-ins: diseño intencional, no deuda técnica. Ver `roadmap/product-roadmap.md`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
@@ -71,7 +70,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. Los summaries mensuales son contrato canónico para ejecución/cobertura; modales de líneas muestran errores backend sin perder formulario; header alineado con Patrimonio. Revisión manual completada el 2026-05-14. |
 | Cierre mensual | ✅ | Integrado con budget y accounting. Modo dual automático, lifecycle DRAFT/FINALIZED/LOCKED y revisión manual completada el 2026-05-14. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
-| Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
+| Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado. Fase 5 retirada hasta tener módulo de cartera. Guía en `/guia`; `/` redirige a `/patrimonio`. |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
 | Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Trazabilidad de movimientos importados mantenida con `origin`, `import_source` e `import_fingerprint`; importador MoneyWiz ad-hoc retirado. Soporte multimoneda en alta/edición rápida de inversión. Vista de movimientos cerrada v1. |
 | Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync`. Tablas con paginación servidor (page_size=50) e infinite scroll en frontend. |
