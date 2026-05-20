@@ -31,7 +31,7 @@ export function useAppShell() {
 
   function isNavItemActive(item: NavItem): boolean {
     if (item.id === 'home') {
-      return route.path === '/' || route.path.startsWith('/guia/');
+      return route.path === '/guia' || route.path.startsWith('/guia/');
     }
     return route.path === item.to || route.path.startsWith(`${item.to}/`);
   }

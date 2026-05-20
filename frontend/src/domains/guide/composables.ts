@@ -577,23 +577,6 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           to: '/presupuesto',
         },
       ],
-      5: [
-        {
-          id: 'net-worth',
-          label: 'Patrimonio',
-          to: '/patrimonio',
-        },
-        {
-          id: 'budget',
-          label: 'Presupuesto',
-          to: '/presupuesto',
-        },
-        {
-          id: 'account',
-          label: 'Cuenta',
-          to: '/account',
-        },
-      ],
     };
 
     return (

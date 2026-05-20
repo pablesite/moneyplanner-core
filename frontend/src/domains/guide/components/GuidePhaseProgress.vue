@@ -23,7 +23,7 @@ void props;
   <section class="ui-section-card ui-section-card-padded ui-guide-phase-head">
     <div class="ui-guide-phase-nav-row">
       <div class="ui-guide-phase-nav-links">
-        <RouterLink class="ui-guide-back-link" to="/">Ver ruta completa</RouterLink>
+        <RouterLink class="ui-guide-back-link" to="/guia">Ver ruta completa</RouterLink>
         <div v-if="phaseQuickActions.length" class="ui-guide-phase-inline-actions">
           <RouterLink
             v-for="action in phaseQuickActions"

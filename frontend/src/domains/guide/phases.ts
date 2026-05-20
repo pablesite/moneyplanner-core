@@ -35,13 +35,6 @@ export const guidePhases: GuidePhase[] = [
     objective: 'Mejorar apalancamiento, respaldo de deuda, concentracion y liquidez.',
     progress: 18,
   },
-  {
-    id: 5,
-    title: 'Independencia financiera',
-    focus: 'Elevar activos productivos',
-    objective: 'Construir ingresos de activos que cubran el estilo de vida.',
-    progress: 6,
-  },
 ];
 
 export function findGuidePhaseById(id: number): GuidePhase | null {
