@@ -118,13 +118,11 @@ body {
   background: var(--color-surface);
 }
 
-.ui-pro-page,
 .ui-page-shell {
   display: grid;
   gap: var(--space-4);
 }
 
-.ui-pro-panel,
 .ui-section-card {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -142,7 +140,6 @@ body {
   padding: var(--space-4);
 }
 
-.ui-pro-header,
 .ui-page-head,
 .ui-section-head {
   display: flex;
@@ -156,7 +153,6 @@ body {
   flex-wrap: wrap;
 }
 
-.ui-pro-title,
 .ui-page-title,
 .ui-section-title {
   margin: 0;
@@ -165,7 +161,6 @@ body {
   letter-spacing: 0;
 }
 
-.ui-pro-kicker,
 .ui-page-eyebrow {
   margin: 0 0 6px;
   font-size: 11px;
@@ -186,7 +181,6 @@ body {
   min-width: min(100%, 420px);
 }
 
-.ui-pro-toolbar,
 .ui-page-actions,
 .ui-section-actions,
 .ui-action-bar {
@@ -194,23 +188,6 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-
-.ui-pro-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  background: var(--color-surface-muted);
-}
-
-.ui-pro-divider {
-  border-top: 1px solid var(--color-border);
-  padding-top: 12px;
 }
 
 /* ── Hero shell — shared layout for budget & net-worth hero sections ── */
@@ -939,6 +916,9 @@ body {
 }
 
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid var(--color-border);

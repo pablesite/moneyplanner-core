@@ -225,16 +225,16 @@ function typeBadgeVariant(movement: {
                         <span :class="`ui-type-badge ui-type-badge-${typeBadgeVariant(movement)}`">
                           {{ state.activityKindLabel(movement) }}
                         </span>
-                        <span class="ui-pro-chip ui-entry-chip">
+                        <span class="badge ui-entry-chip">
                           {{ state.transactionAccountTrailLabel(movement) }}
                         </span>
                         <span
                           v-if="state.transactionOwnershipLabel(movement)"
-                          class="ui-pro-chip ui-entry-chip"
+                          class="badge ui-entry-chip"
                         >
                           {{ state.transactionOwnershipLabel(movement) }}
                         </span>
-                        <span v-if="movement.origin === 'import'" class="ui-pro-chip ui-entry-chip">
+                        <span v-if="movement.origin === 'import'" class="badge ui-entry-chip">
                           {{ movementOriginLabel(movement.origin) }}
                         </span>
                       </div>

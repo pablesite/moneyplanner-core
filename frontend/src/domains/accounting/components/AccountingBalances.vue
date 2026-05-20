@@ -79,7 +79,7 @@ const state = props.page;
       >
         <div class="ui-section-head ui-ledger-technical-head">
           <strong>{{ type.label }}</strong>
-          <span class="ui-pro-chip">{{ state.accountsByType.get(type.value)?.length ?? 0 }}</span>
+          <span class="badge">{{ state.accountsByType.get(type.value)?.length ?? 0 }}</span>
         </div>
         <ul v-if="(state.accountsByType.get(type.value)?.length ?? 0) > 0" class="ui-entry-list">
           <li
@@ -90,8 +90,8 @@ const state = props.page;
             <div class="ui-ledger-account-meta ui-ledger-account-meta-stretch">
               <strong>{{ account.name }}</strong>
               <div class="ui-action-bar ui-ledger-account-chips">
-                <span class="ui-pro-chip">{{ account.currency }}</span>
-                <span class="ui-pro-chip">{{ account.origin }}</span>
+                <span class="badge">{{ account.currency }}</span>
+                <span class="badge">{{ account.origin }}</span>
               </div>
             </div>
             <div class="ui-ledger-account-info">

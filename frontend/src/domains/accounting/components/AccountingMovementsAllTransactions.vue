@@ -189,16 +189,13 @@ function originLabel(origin: LedgerTransaction['origin']): string {
             <span :class="`ui-type-badge ui-type-badge-${typeBadgeVariant(transaction)}`">
               {{ state.activityKindLabel(transaction) }}
             </span>
-            <span class="ui-pro-chip ui-entry-chip">
+            <span class="badge ui-entry-chip">
               {{ state.transactionAccountTrailLabel(transaction) }}
             </span>
-            <span
-              v-if="state.transactionOwnershipLabel(transaction)"
-              class="ui-pro-chip ui-entry-chip"
-            >
+            <span v-if="state.transactionOwnershipLabel(transaction)" class="badge ui-entry-chip">
               {{ state.transactionOwnershipLabel(transaction) }}
             </span>
-            <span v-if="transaction.origin === 'import'" class="ui-pro-chip ui-entry-chip">
+            <span v-if="transaction.origin === 'import'" class="badge ui-entry-chip">
               {{ originLabel(transaction.origin) }}
             </span>
           </div>

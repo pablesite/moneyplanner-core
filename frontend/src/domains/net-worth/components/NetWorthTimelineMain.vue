@@ -99,7 +99,7 @@ const displayedPoints = computed(() => {
 </script>
 
 <template>
-  <div class="ui-pro-panel ui-nw-balance-panel ui-nw-balance-panel-integrated">
+  <div class="ui-nw-balance-panel ui-nw-balance-panel-integrated">
     <NetWorthDonut
       :total-assets="analysis.assets"
       :total-liabilities="analysis.liabilities"
