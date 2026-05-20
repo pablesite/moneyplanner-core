@@ -184,10 +184,7 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
 
 - ✅ **`net_worth.services.py` — import externo eliminado (2026-05-20).** `get_base_currency_for_user` movida a `accounts/services.py`; `get_financed_asset_queryset_for_user` añadida a `services_assets_core.py`; `_serialize_money` localizada en `services_liquidity.py`. `services.py` re-exporta para consumidores internos y mocks; `portable_data.py` ya no importa del módulo. Ningún consumidor externo activo.
 
-- **`compat.*` en capabilities.**
-  - Para qué sirve hoy: puente frontend mientras los checks migran al modelo de capabilities efectivo.
-  - Consumidores activos: `capabilities.people` se accede directamente en `people/api.ts` y `net-worth/extensions.ts` (Core y SaaS). `canUsePeople()` y `canUseOwnership()` usan `source.compat.people/ownership`. `isPremium` no tiene consumidores externos.
-  - Acción recomendada: migrar accesos directos a `capabilities.people` hacia `canUsePeople()`, luego eliminar el spread `...compat` de `withCompat`.
+- ✅ **`compat.*` en capabilities — retirado (2026-05-20).** `AppCapabilitiesCompat`, `buildCompat` y `withCompat` eliminados. `canUsePeople()`/`canUseOwnership()` usan la lógica directa de `core.*`/`premium.*`. Los cuatro consumidores directos de `capabilities.people` migrados a `canUsePeople()` en Core y SaaS.
 
 ### Retirado o aclarado
 
