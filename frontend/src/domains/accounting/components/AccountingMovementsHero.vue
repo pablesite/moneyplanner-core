@@ -14,6 +14,10 @@ import type { AccountingMovementsPageState } from '@/domains/accounting/useAccou
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 type OwnershipFilterValue = 'all' | number | null;
 type OwnershipOption = { value: number | null; label: string };
 
@@ -57,8 +61,8 @@ function formatMoneyLocal(value: number, decimals = 2): string {
   }).format(value);
 }
 
-const ASSET_COLOR = 'rgba(52, 211, 153, 0.92)';
-const LIABILITY_COLOR = 'rgba(251, 113, 133, 0.9)';
+const ASSET_COLOR = cssVar('--chart-positive-stroke');
+const LIABILITY_COLOR = cssVar('--chart-negative-stroke');
 
 const chartData = computed<ChartData<'doughnut'>>(() => ({
   labels: hasDonutData.value ? ['Activos', 'Pasivos'] : ['Sin datos'],
@@ -67,7 +71,7 @@ const chartData = computed<ChartData<'doughnut'>>(() => ({
       data: hasDonutData.value ? [accountingAssets.value, accountingLiabilities.value] : [1],
       backgroundColor: hasDonutData.value
         ? [ASSET_COLOR, LIABILITY_COLOR]
-        : ['rgba(148, 163, 184, 0.25)'],
+        : [cssVar('--color-surface-strong')],
       borderColor: 'rgba(0,0,0,0)',
       borderWidth: 0,
       hoverOffset: 6,
@@ -104,7 +108,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     const cy = (chartArea.top + chartArea.bottom) / 2;
     const netBalance = Number(state.accountingNetBalance ?? 0);
     const netLabel = formatMoneyLocal(netBalance, 2);
-    const netColor = netBalance < 0 ? 'rgba(255, 120, 140, 0.95)' : 'rgba(140, 240, 180, 0.95)';
+    const netColor = netBalance < 0 ? cssVar('--color-negative') : cssVar('--color-positive');
 
     ctx.save();
     ctx.textAlign = 'center';
@@ -115,11 +119,11 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     ctx.fillText(netLabel, cx, cy - 10);
 
     ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    ctx.fillStyle = cssVar('--color-text-muted');
     ctx.fillText('Saldo neto', cx, cy + 8);
 
     ctx.font = '12px "Plus Jakarta Sans", "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillStyle = cssVar('--color-text-soft');
     ctx.fillText('EUR', cx, cy + 26);
 
     ctx.restore();
@@ -130,7 +134,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 <template>
   <section class="ui-section-card ui-section-card-padded ui-hero-shell ui-accounting-hero-panel">
     <div class="ui-hero-topbar">
-      <p class="ui-page-eyebrow ui-hero-topbar-kicker">Accounting Movements</p>
+      <p class="ui-page-eyebrow ui-hero-topbar-kicker">Contabilidad</p>
     </div>
 
     <div class="ui-hero-main">
@@ -156,10 +160,7 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 
       <article class="ui-hero-summary">
         <div class="ui-hero-summary-head">
-          <div>
-            <div class="ui-hero-title">Saldo neto contable</div>
-            <h1 class="ui-accounting-hero-title">Libro diario operativo</h1>
-          </div>
+          <div class="ui-hero-title">Saldo neto contable</div>
           <div class="ui-hero-summary-controls">
             <label class="ui-hero-context">
               <span class="ui-hero-context-label">Titularidad</span>
