@@ -4,30 +4,29 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('net_worth', '0041_alter_asset_amortization_method_alter_asset_category_and_more'),
+        ("net_worth", "0041_alter_asset_amortization_method_alter_asset_category_and_more"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='asset',
-            name='expected_end_date',
+            model_name="asset",
+            name="expected_end_date",
         ),
         migrations.RemoveField(
-            model_name='asset',
-            name='investment_contribution_currency',
+            model_name="asset",
+            name="investment_contribution_currency",
         ),
         migrations.RemoveField(
-            model_name='asset',
-            name='investment_contribution_frequency',
+            model_name="asset",
+            name="investment_contribution_frequency",
         ),
         migrations.RemoveField(
-            model_name='asset',
-            name='investment_contribution_mode',
+            model_name="asset",
+            name="investment_contribution_mode",
         ),
         migrations.RemoveField(
-            model_name='asset',
-            name='monthly_contribution_amount',
+            model_name="asset",
+            name="monthly_contribution_amount",
         ),
     ]

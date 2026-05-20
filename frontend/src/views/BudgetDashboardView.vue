@@ -246,7 +246,7 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
 </script>
 
 <template>
-  <div class="container ui-pro-page relative">
+  <div class="container ui-page-shell relative">
     <BudgetHeroSection
       :is-monthly-close-view="isMonthlyCloseView"
       :month-labels="monthLabels"
@@ -284,16 +284,28 @@ async function removeAnnualExpenseAndRefresh(entryId: number): Promise<void> {
       :select-ownership-filter-option="selectOwnershipFilterOption"
       :select-fiscal-year-option="selectFiscalYearOption"
     />
-    <div v-if="!isMonthlyCloseView && firstError" class="alert mt-3">
+    <div
+      v-if="!isMonthlyCloseView && firstError"
+      class="ui-state-block ui-state-error"
+      role="alert"
+    >
       {{ firstError }}
     </div>
-    <div v-if="!isMonthlyCloseView && expenseExecutionError" class="alert mt-3">
+    <div
+      v-if="!isMonthlyCloseView && expenseExecutionError"
+      class="ui-state-block ui-state-error"
+      role="alert"
+    >
       {{ expenseExecutionError }}
     </div>
-    <div v-if="liquidityExecutionError" class="alert mt-3">
+    <div v-if="liquidityExecutionError" class="ui-state-block ui-state-error" role="alert">
       {{ liquidityExecutionError }}
     </div>
-    <div v-if="isMonthlyCloseView && monthlyCloseError" class="alert mt-3">
+    <div
+      v-if="isMonthlyCloseView && monthlyCloseError"
+      class="ui-state-block ui-state-error"
+      role="alert"
+    >
       {{ monthlyCloseError }}
     </div>
     <BudgetMonthlyCloseExpenseSection

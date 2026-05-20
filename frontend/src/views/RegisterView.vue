@@ -24,12 +24,7 @@ const { username, password, passwordConfirm, error, loading, register } = useReg
 
           <label class="ui-auth-field">
             <span class="ui-auth-label">Contraseña</span>
-            <input
-              v-model="password"
-              type="password"
-              autocomplete="new-password"
-              class="input"
-            />
+            <input v-model="password" type="password" autocomplete="new-password" class="input" />
           </label>
 
           <label class="ui-auth-field">

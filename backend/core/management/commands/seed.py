@@ -79,9 +79,7 @@ class Command(BaseCommand):
         ]
         for f, t, r in fx_fallbacks:
             if not FxRate.objects.filter(from_currency=f, to_currency=t).exists():
-                FxRate.objects.create(
-                    from_currency=f, to_currency=t, rate_date=rate_date, rate=r
-                )
+                FxRate.objects.create(from_currency=f, to_currency=t, rate_date=rate_date, rate=r)
                 self.stdout.write(f"  FX fallback creado: {f}->{t} {rate_date}")
 
         if not InflationIndex.objects.filter(region=InflationIndex.Region.ES).exists():

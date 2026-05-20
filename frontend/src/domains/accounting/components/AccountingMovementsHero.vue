@@ -128,9 +128,9 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 </script>
 
 <template>
-  <section class="card ui-pro-panel ui-hero-shell ui-accounting-hero-panel">
+  <section class="ui-section-card ui-section-card-padded ui-hero-shell ui-accounting-hero-panel">
     <div class="ui-hero-topbar">
-      <p class="ui-pro-kicker ui-hero-topbar-kicker">Accounting Movements</p>
+      <p class="ui-page-eyebrow ui-hero-topbar-kicker">Accounting Movements</p>
     </div>
 
     <div class="ui-hero-main">

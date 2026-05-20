@@ -164,7 +164,7 @@ const liquidityCategoryBlocks = computed<LiquidityCategoryBlock[]>(() => {
 <template>
   <section
     v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'liq'"
-    class="card ui-pro-panel ui-budget-checkin mt-3"
+    class="ui-section-card ui-section-card-padded ui-budget-checkin mt-3"
   >
     <div class="ui-budget-checkin-header">
       <div>

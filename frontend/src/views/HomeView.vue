@@ -18,12 +18,12 @@ const {
 </script>
 
 <template>
-  <div class="container ui-pro-page">
-    <section class="card ui-pro-panel ui-home-intro">
+  <div class="container ui-page-shell">
+    <section class="ui-section-card ui-home-intro">
       <div class="ui-home-intro-text">
-        <p class="ui-pro-kicker">Guia financiera</p>
-        <h1 class="h1 ui-home-title">Mapa de fases financieras</h1>
-        <p class="subtle ui-home-copy">
+        <p class="ui-page-eyebrow">Guia financiera</p>
+        <h1 class="ui-page-title ui-home-title">Mapa de fases financieras</h1>
+        <p class="ui-page-lead ui-home-copy">
           Cada fase refleja una dimension distinta de tu situacion. Mejorar una puede afectar
           temporalmente a otra, asi que conviene revisar el equilibrio global.
         </p>
@@ -65,11 +65,15 @@ const {
       </div>
     </section>
 
-    <article class="section card ui-pro-panel">
-      <h2 class="h2">Ruta por fases</h2>
-      <p class="subtle ui-home-block-copy">
-        Selecciona una fase para abrir su vista de detalle y revisar el diagnostico asociado.
-      </p>
+    <article class="ui-section-card ui-home-phases">
+      <div class="ui-section-head">
+        <div class="ui-section-copy">
+          <h2 class="ui-section-title">Ruta por fases</h2>
+          <p class="ui-section-subtitle ui-home-block-copy">
+            Selecciona una fase para abrir su vista de detalle y revisar el diagnostico asociado.
+          </p>
+        </div>
+      </div>
 
       <ol class="ui-home-phase-row">
         <li

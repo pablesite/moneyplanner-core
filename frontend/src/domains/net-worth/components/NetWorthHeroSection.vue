@@ -79,9 +79,9 @@ function selectOwnershipFilterOption(value: OwnershipFilterValue, event: Event):
 </script>
 
 <template>
-  <section class="card ui-pro-panel ui-hero-shell ui-nw-hero-shell mb-2">
+  <section class="ui-section-card ui-section-card-padded ui-hero-shell ui-nw-hero-shell mb-2">
     <div class="ui-hero-topbar">
-      <p class="ui-pro-kicker ui-hero-topbar-kicker">Patrimonio</p>
+      <p class="ui-page-eyebrow ui-hero-topbar-kicker">Patrimonio</p>
     </div>
 
     <div class="ui-nw-hero">

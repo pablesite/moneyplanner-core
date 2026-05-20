@@ -20,7 +20,7 @@ void props;
 </script>
 
 <template>
-  <section class="card ui-pro-panel ui-guide-phase-head">
+  <section class="ui-section-card ui-section-card-padded ui-guide-phase-head">
     <div class="ui-guide-phase-nav-row">
       <div class="ui-guide-phase-nav-links">
         <RouterLink class="ui-guide-back-link" to="/">Ver ruta completa</RouterLink>
@@ -49,9 +49,9 @@ void props;
     </div>
 
     <template v-if="phase">
-      <h1 class="h1 ui-guide-phase-title ui-guide-phase-title-inline">
-        <span class="ui-pro-kicker ui-guide-phase-title-inline-kicker">Fase {{ phase.id }}</span>
-        <span class="ui-pro-kicker ui-guide-phase-title-inline-name">{{ phase.title }}</span>
+      <h1 class="ui-page-title ui-guide-phase-title ui-guide-phase-title-inline">
+        <span class="ui-page-eyebrow ui-guide-phase-title-inline-kicker">Fase {{ phase.id }}</span>
+        <span class="ui-page-eyebrow ui-guide-phase-title-inline-name">{{ phase.title }}</span>
       </h1>
       <p class="subtle ui-guide-phase-copy">
         {{ phaseDiagnosticCopy }}
@@ -59,7 +59,7 @@ void props;
     </template>
 
     <template v-else>
-      <h1 class="h1 ui-guide-phase-title">Fase no encontrada</h1>
+      <h1 class="ui-page-title ui-guide-phase-title">Fase no encontrada</h1>
     </template>
   </section>
 </template>

@@ -63,7 +63,7 @@ void [
 </script>
 
 <template>
-  <div class="container ui-pro-page">
+  <div class="container ui-page-shell">
     <GuidePhaseProgress
       :guide-phases="guidePhases"
       :phase="phase"
@@ -72,16 +72,20 @@ void [
       :phase-detail-to="phaseDetailTo"
     />
 
-    <section v-if="!phase" class="card ui-pro-panel">
-      <p class="subtle">La fase seleccionada no existe en la guia actual.</p>
+    <section v-if="!phase" class="ui-section-card ui-section-card-padded">
+      <p class="ui-section-subtitle">La fase seleccionada no existe en la guia actual.</p>
     </section>
 
-    <section v-else-if="!hasDiagnosticPhase" class="card ui-pro-panel">
-      <h2 class="h2">Detalle en construccion</h2>
-      <p class="subtle">
-        Esta fase ya tiene su contexto funcional, pero el diagnostico detallado se publicara en
-        siguientes entregas del roadmap.
-      </p>
+    <section v-else-if="!hasDiagnosticPhase" class="ui-section-card ui-section-card-padded">
+      <div class="ui-section-head">
+        <div class="ui-section-copy">
+          <h2 class="ui-section-title">Detalle en construccion</h2>
+          <p class="ui-section-subtitle">
+            Esta fase ya tiene su contexto funcional, pero el diagnostico detallado se publicara en
+            siguientes entregas del roadmap.
+          </p>
+        </div>
+      </div>
       <ul class="list">
         <li>Objetivo: {{ phase.objective }}</li>
         <li>Foco operativo: {{ phase.focus }}</li>
@@ -89,7 +93,7 @@ void [
       </ul>
     </section>
 
-    <section v-else class="card ui-pro-panel ui-guide-score-panel">
+    <section v-else class="ui-section-card ui-guide-score-panel">
       <GuidePhaseSummary
         :is-cash-flow-phase="isCashFlowPhase"
         :cash-flow-hero-summary-cards="cashFlowHeroSummaryCards"
@@ -112,8 +116,12 @@ void [
         :phase2-distribution-info-cards="phase2DistributionInfoCards"
       />
 
-      <div v-if="store.loading" class="ui-status-line">Cargando diagnostico...</div>
-      <div v-else-if="store.error" class="alert">{{ store.error }}</div>
+      <div v-if="store.loading" class="ui-state-block ui-state-loading">
+        Cargando diagnostico...
+      </div>
+      <div v-else-if="store.error" class="ui-state-block ui-state-error" role="alert">
+        {{ store.error }}
+      </div>
     </section>
   </div>
 </template>

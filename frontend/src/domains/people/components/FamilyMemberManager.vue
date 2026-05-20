@@ -40,10 +40,10 @@ onMounted(async () => {
       {{ successMessage }}
     </div>
     <!-- Lista -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-header-title">Miembros</h2>
-        <div class="ui-people-header-actions">
+    <section class="ui-section-card ui-section-card-padded">
+      <div class="ui-section-head mb-3">
+        <h2 class="ui-section-title">Miembros</h2>
+        <div class="ui-section-actions ui-people-header-actions">
           <button class="btn" type="button" :disabled="store.loading" @click="refreshMembers()">
             Refrescar
           </button>

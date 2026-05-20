@@ -165,10 +165,10 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
 </script>
 
 <template>
-  <section v-if="isMonthlyCloseView" class="card ui-pro-panel ui-budget-hero">
+  <section v-if="isMonthlyCloseView" class="ui-section-card ui-section-card-padded ui-budget-hero">
     <div class="ui-budget-hero-header">
       <div>
-        <p class="ui-pro-kicker">Cierre mensual</p>
+        <p class="ui-page-eyebrow">Cierre mensual</p>
         <div class="ui-budget-title-row">
           <h1 class="ui-budget-title">Flujo de cierre mensual</h1>
           <span
@@ -221,9 +221,9 @@ const centerTextPlugin = computed<Plugin<'doughnut'>>(() => ({
     </div>
   </section>
 
-  <section v-else class="card ui-pro-panel ui-hero-shell ui-budget-hero">
+  <section v-else class="ui-section-card ui-section-card-padded ui-hero-shell ui-budget-hero">
     <div class="ui-hero-topbar">
-      <p class="ui-pro-kicker ui-hero-topbar-kicker">Presupuesto</p>
+      <p class="ui-page-eyebrow ui-hero-topbar-kicker">Presupuesto</p>
     </div>
     <div class="ui-hero-main">
       <div class="ui-nw-hero-donut">

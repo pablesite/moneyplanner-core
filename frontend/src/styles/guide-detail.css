@@ -21,7 +21,7 @@
 }
 
 .ui-guide-back-link {
-  color: rgba(45, 212, 191, 0.95);
+  color: var(--color-accent);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
@@ -44,14 +44,14 @@
   font-size: 12px;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-guide-phase-inline-action-link:hover {
-  color: rgba(255, 255, 255, 0.95);
-  border-color: rgba(45, 212, 191, 0.35);
-  background: rgba(45, 212, 191, 0.06);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-muted);
 }
 
 .ui-guide-phase-switch {
@@ -61,18 +61,18 @@
 }
 
 .ui-guide-phase-switch-link {
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
   text-decoration: none;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface-muted);
 }
 
 .ui-guide-phase-switch-link-active {
-  border-color: rgba(45, 212, 191, 0.72);
-  background: rgba(45, 212, 191, 0.12);
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
 }
 
 .ui-guide-phase-title {
@@ -136,8 +136,8 @@
 
 .ui-guide-score-card {
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 12px;
   height: 100%;
 }
@@ -209,9 +209,9 @@
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-  color: hsl(34 100% 72%);
-  border: 1px solid hsl(34 100% 68% / 0.45);
-  background: hsl(34 100% 50% / 0.14);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 46%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
 }
 
 .ui-guide-score-kpi-hint {
@@ -223,7 +223,7 @@
 .ui-guide-score-kpi-pending {
   margin-top: 4px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--color-text-muted);
 }
 
 /* ── Summary grid + cards ── */
@@ -244,9 +244,9 @@
 }
 
 .ui-guide-summary-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface-muted);
   padding: 10px 11px;
 }
 
@@ -262,15 +262,15 @@
 }
 
 .ui-guide-summary-value-positive {
-  color: rgba(110, 231, 183, 0.95);
+  color: var(--color-positive);
 }
 
 .ui-guide-summary-value-negative {
-  color: rgba(251, 113, 133, 0.96);
+  color: var(--color-negative);
 }
 
 .ui-guide-summary-value-warning {
-  color: rgba(253, 224, 71, 0.96);
+  color: var(--color-warning);
 }
 
 .ui-guide-summary-value-neutral {
@@ -287,9 +287,9 @@
 
 .ui-guide-context-details {
   margin-top: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.01);
+  background: var(--color-surface-muted);
   overflow: clip;
 }
 
@@ -316,7 +316,7 @@
 }
 
 .ui-guide-context-details[open] .ui-guide-context-summary {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .ui-guide-context-details-content {
@@ -335,10 +335,10 @@
 }
 
 .ui-guide-summary-section {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
   padding: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.008));
+  background: var(--color-surface-muted);
 }
 
 .ui-guide-summary-section-head {

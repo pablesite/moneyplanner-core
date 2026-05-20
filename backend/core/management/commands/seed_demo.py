@@ -201,7 +201,9 @@ class Command(BaseCommand):
         ]
 
         for data in incomes:
-            AnnualIncomeEntry.objects.create(user=user, fiscal_year=fiscal_year, currency="EUR", **data)
+            AnnualIncomeEntry.objects.create(
+                user=user, fiscal_year=fiscal_year, currency="EUR", **data
+            )
 
         expenses = [
             {

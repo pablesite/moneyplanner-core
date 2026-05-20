@@ -38,11 +38,11 @@ onMounted(async () => {
       {{ successMessage }}
     </div>
 
-    <section class="section card">
-      <div class="card-header">
-        <h2 class="card-header-title">Titularidades</h2>
+    <section class="ui-section-card ui-section-card-padded">
+      <div class="ui-section-head mb-3">
+        <h2 class="ui-section-title">Titularidades</h2>
 
-        <div class="ui-people-header-actions">
+        <div class="ui-section-actions ui-people-header-actions">
           <button class="btn" type="button" :disabled="store.loading" @click="refreshOwnerships()">
             Refrescar
           </button>
@@ -119,7 +119,7 @@ onMounted(async () => {
           Selecciona al menos 2 adultos y reparte los porcentajes (suma 100).
         </div>
 
-        <div class="card ui-people-splits-card">
+        <div class="ui-surface-muted ui-people-splits-card">
           <div class="ui-people-member-list">
             <button
               v-for="m in adults"

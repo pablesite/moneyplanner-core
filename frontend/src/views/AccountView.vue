@@ -92,7 +92,8 @@ async function handleRestoreFile(event: Event) {
     });
     restoreStatus.value = 'Base de datos restaurada. Recarga la página para continuar.';
   } catch {
-    restoreError.value = 'La restauración falló. Comprueba que el archivo es un .dump válido y que eres administrador.';
+    restoreError.value =
+      'La restauración falló. Comprueba que el archivo es un .dump válido y que eres administrador.';
   } finally {
     restoreBusy.value = false;
     input.value = '';
@@ -101,23 +102,30 @@ async function handleRestoreFile(event: Event) {
 </script>
 
 <template>
-  <div class="container ui-pro-page">
-    <h1 class="h1 ui-profile-title">Perfil</h1>
+  <div class="container ui-page-shell">
+    <header class="ui-page-head">
+      <div>
+        <p class="ui-page-eyebrow">Cuenta</p>
+        <h1 class="ui-page-title ui-profile-title">Perfil</h1>
+      </div>
+    </header>
 
-    <div v-if="error" class="alert mt-3">
+    <div v-if="error" class="ui-state-block ui-state-error" role="alert">
       {{ error }}
     </div>
 
-    <div v-if="permissionNotice" class="alert mt-3">
+    <div v-if="permissionNotice" class="ui-state-block ui-state-error" role="alert">
       {{ permissionNotice }}
     </div>
 
-    <div v-if="loading" class="ui-status-line mt-3">Cargando cuenta...</div>
+    <div v-if="loading" class="ui-state-block ui-state-loading">Cargando cuenta...</div>
 
     <div v-else class="grid gap-3.5">
-      <section class="card ui-pro-panel ui-profile-panel">
-        <div class="ui-profile-head">
-          <h2 class="ui-profile-head-title">Cuenta Core</h2>
+      <section class="ui-section-card ui-profile-panel">
+        <div class="ui-section-head ui-profile-head">
+          <div class="ui-section-copy">
+            <h2 class="ui-section-title ui-profile-head-title">Cuenta Core</h2>
+          </div>
         </div>
 
         <div class="ui-profile-layout">
@@ -134,14 +142,16 @@ async function handleRestoreFile(event: Event) {
         </div>
       </section>
 
-      <section class="card ui-pro-panel grid gap-2.5">
-        <div class="ui-profile-head">
-          <h2 class="ui-profile-head-title">Base de datos</h2>
+      <section class="ui-section-card ui-section-card-padded grid gap-2.5">
+        <div class="ui-section-head ui-profile-head">
+          <div class="ui-section-copy">
+            <h2 class="ui-section-title ui-profile-head-title">Base de datos</h2>
+          </div>
         </div>
-        <p class="subtle m-0">
+        <p class="ui-section-subtitle m-0">
           Exporta o restaura la base de datos completa. Solo disponible para administradores.
         </p>
-        <div class="actions m-0">
+        <div class="ui-action-bar m-0">
           <button
             class="btn btn-ghost"
             type="button"
@@ -166,9 +176,9 @@ async function handleRestoreFile(event: Event) {
             @change="handleRestoreFile"
           />
         </div>
-        <p v-if="restoreStatus" class="subtle m-0">{{ restoreStatus }}</p>
-        <p v-if="backupError" class="alert m-0">{{ backupError }}</p>
-        <p v-if="restoreError" class="alert m-0">{{ restoreError }}</p>
+        <p v-if="restoreStatus" class="ui-state-block ui-state-success m-0">{{ restoreStatus }}</p>
+        <p v-if="backupError" class="ui-state-block ui-state-error m-0">{{ backupError }}</p>
+        <p v-if="restoreError" class="ui-state-block ui-state-error m-0">{{ restoreError }}</p>
       </section>
     </div>
   </div>

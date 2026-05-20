@@ -12,7 +12,7 @@
   }
 
   .ui-select-placeholder {
-    @apply text-white/45;
+    color: var(--color-text-soft);
   }
 
   .ui-form-actions {
@@ -350,10 +350,17 @@
   select.input {
     appearance: none;
     color-scheme: dark;
-    @apply w-full box-border min-h-[36px] rounded-[10px] border border-white/15 bg-white/[0.04] pr-9 text-white shadow-none;
+    @apply w-full box-border min-h-[36px] rounded-[10px] border pr-9 shadow-none;
+    border-color: var(--color-border);
+    background-color: var(--color-surface-muted);
+    color: var(--color-text);
     background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='rgba(255,255,255,0.78)' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7.5l5 5 5-5'/%3E%3C/svg%3E"),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23becad8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7.5l5 5 5-5'/%3E%3C/svg%3E"),
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--color-text) 2%, transparent),
+        color-mix(in srgb, var(--color-text) 2%, transparent)
+      );
     background-repeat: no-repeat, no-repeat;
     background-position:
       right 10px center,
@@ -366,8 +373,8 @@
   .select:focus,
   select.input:focus {
     outline: none;
-    border-color: rgba(45, 212, 191, 0.42);
-    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
+    border-color: var(--focus-border);
+    box-shadow: var(--focus-ring);
   }
 
   .select:disabled,
@@ -377,8 +384,8 @@
 
   .select option,
   select.input option {
-    background: #0b1220;
-    color: #eef2ff;
+    background: var(--color-canvas-subtle);
+    color: var(--color-text);
   }
 
   .nw-select-sm {
@@ -575,8 +582,8 @@
     list-style: none;
     min-height: 36px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
     color: var(--text);
     padding: 0 10px;
     font-size: 12px;
@@ -592,8 +599,8 @@
   }
 
   .ui-select-popover[open] .ui-select-popover-trigger {
-    border-color: rgba(45, 212, 191, 0.34);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--focus-border);
+    background: var(--color-surface-strong);
   }
 
   .ui-select-popover-text {
@@ -622,8 +629,8 @@
     gap: 4px;
     padding: 6px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(10, 14, 22, 0.98);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-strong);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     max-height: 220px;
     overflow: auto;
@@ -633,7 +640,7 @@
     width: 100%;
     text-align: left;
     border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--color-surface-muted);
     color: var(--text);
     border-radius: 8px;
     padding: 7px 9px;
@@ -642,12 +649,12 @@
   }
 
   .ui-select-popover-option:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--color-text) 6%, transparent);
   }
 
   .ui-select-popover-option-active {
-    border-color: rgba(45, 212, 191, 0.28);
-    background: rgba(45, 212, 191, 0.1);
+    border-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
+    background: var(--color-accent-muted);
   }
 
   .ui-data-table {
@@ -656,7 +663,8 @@
 
   .ui-data-table th,
   .ui-data-table td {
-    @apply border-b border-white/10 px-1.5 py-2 text-left text-[13px];
+    @apply px-1.5 py-2 text-left text-[13px];
+    border-bottom: 1px solid var(--color-border);
   }
 
   .ui-data-table-actions {
@@ -664,22 +672,35 @@
   }
 
   .ui-data-date-empty {
-    @apply bg-white/5 text-white/50;
+    background: var(--color-surface-muted);
+    color: var(--color-text-soft);
   }
 
   .ui-alert-success {
-    @apply mt-3 rounded-[var(--radius-md)] border border-emerald-300/55 bg-emerald-500/10 p-3 text-sm text-emerald-100;
+    @apply mt-3 rounded-[var(--radius-md)] p-3 text-sm;
+    border: 1px solid color-mix(in srgb, var(--color-positive) 48%, transparent);
+    background: color-mix(in srgb, var(--color-positive) 12%, transparent);
+    color: color-mix(in srgb, var(--color-positive) 72%, white 28%);
   }
 
   .ui-table-empty {
-    @apply px-1.5 py-2 text-sm text-white/65;
+    @apply px-1.5 py-2 text-sm;
+    color: var(--color-text-muted);
   }
 
   .ui-auth-page {
     @apply grid min-h-[calc(100vh-60px)] items-start justify-items-center p-6;
     background:
-      radial-gradient(800px 400px at 10% 0%, rgba(255, 255, 255, 0.06), transparent 60%),
-      radial-gradient(600px 300px at 90% 20%, rgba(255, 255, 255, 0.04), transparent 60%);
+      radial-gradient(
+        800px 400px at 10% 0%,
+        color-mix(in srgb, var(--color-accent) 10%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        600px 300px at 90% 20%,
+        color-mix(in srgb, var(--color-accent-alt) 8%, transparent),
+        transparent 60%
+      );
   }
 
   .ui-auth-shell {
@@ -687,15 +708,26 @@
   }
 
   .ui-auth-card {
-    @apply rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.35)];
+    @apply rounded-[var(--radius-lg)] border p-6;
+    border-color: var(--color-border);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-text) 4%, transparent),
+        color-mix(in srgb, var(--color-text) 1.2%, transparent)
+      ),
+      var(--color-surface);
+    box-shadow: var(--shadow-surface);
   }
 
   .ui-auth-title {
     @apply mb-1.5 text-2xl;
+    color: var(--color-text);
   }
 
   .ui-auth-subtitle {
-    @apply mb-[18px] text-[var(--muted)];
+    @apply mb-[18px];
+    color: var(--color-text-muted);
   }
 
   .ui-auth-form {
@@ -707,7 +739,8 @@
   }
 
   .ui-auth-label {
-    @apply text-[13px] text-[var(--muted)];
+    @apply text-[13px];
+    color: var(--color-text-muted);
   }
 
   .ui-auth-submit {
@@ -716,6 +749,22 @@
 
   .ui-auth-alert {
     @apply mb-3;
+  }
+
+  .ui-auth-footer {
+    @apply mt-4 text-sm;
+    color: var(--color-text-muted);
+  }
+
+  .ui-auth-link {
+    color: var(--color-accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .ui-auth-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .ui-app-header-inner {
@@ -755,7 +804,7 @@
   }
 
   .ui-people-splits-card {
-    @apply p-3;
+    @apply rounded-lg border border-[var(--color-border)] p-3;
   }
 
   .ui-people-member-list {

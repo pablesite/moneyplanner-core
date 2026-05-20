@@ -157,7 +157,7 @@ const expenseCategoryBlocks = computed<ExpenseCategoryBlock[]>(() => {
 <template>
   <section
     v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'expense'"
-    class="card ui-pro-panel ui-budget-checkin mt-3"
+    class="ui-section-card ui-section-card-padded ui-budget-checkin mt-3"
   >
     <div class="ui-budget-checkin-header">
       <div>

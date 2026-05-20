@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const badgeStyle = computed<Record<string, string>>(() => ({
   color: scoreColor(props.score),
-  borderColor: 'rgba(255, 255, 255, 0.22)',
+  borderColor: 'var(--color-border-strong)',
 }));
 
 const grade = computed(() => gradeFromScore(props.score));

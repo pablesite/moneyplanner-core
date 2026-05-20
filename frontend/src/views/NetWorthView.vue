@@ -631,7 +631,7 @@ const {
 </script>
 
 <template>
-  <div class="container ui-pro-page relative">
+  <div class="container ui-page-shell relative">
     <NetWorthHeroSection
       :store="store"
       :currencies="currencies"
@@ -660,7 +660,7 @@ const {
       :monthly-delta="monthlyDelta"
     />
 
-    <section class="card ui-pro-panel ui-nw-hero-shell grid gap-2.5 mb-2">
+    <section class="ui-section-card ui-section-card-padded ui-nw-hero-shell grid gap-2.5 mb-2">
       <div class="ui-nw-hero-timeline">
         <div class="ui-nw-timeline-layout">
           <div ref="timelineColumnRef" class="ui-nw-timeline-column">
@@ -801,7 +801,7 @@ const {
       </div>
     </section>
 
-    <div v-if="store.error" class="alert mt-3">
+    <div v-if="store.error" class="ui-state-block ui-state-error" role="alert">
       {{ prettyError() }}
     </div>
     <NetWorthItemModals

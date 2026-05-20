@@ -165,10 +165,10 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
       </div>
     </section>
 
-    <article class="card ui-pro-panel">
+    <article class="ui-section-card ui-section-card-padded">
       <div class="nw-list-header">
         <div class="nw-list-header-left">
-          <h2 class="card-header-title mt-0">Entradas anuales</h2>
+          <h2 class="ui-section-title mt-0">Entradas anuales</h2>
         </div>
         <div class="nw-list-header-right">
           <div class="nw-list-total-inline">
@@ -190,20 +190,25 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         <div class="nw-list-total-details">Total anual</div>
       </div>
 
-      <div v-if="annualIncomeError" class="alert mt-3">{{ annualIncomeError }}</div>
-      <div v-else-if="annualIncomeApiError" class="alert mt-3">
+      <div v-if="annualIncomeError" class="ui-state-block ui-state-error mt-3" role="alert">
+        {{ annualIncomeError }}
+      </div>
+      <div v-else-if="annualIncomeApiError" class="ui-state-block ui-state-error mt-3" role="alert">
         {{ annualIncomeApiError }}
       </div>
 
-      <div v-if="!annualIncomeEntries.length && !annualIncomeLoading" class="subtle mt-3">
-        No hay ingresos anuales todavia.
+      <div
+        v-if="!annualIncomeEntries.length && !annualIncomeLoading"
+        class="ui-state-block ui-state-empty mt-3"
+      >
+        <p class="ui-state-title">No hay ingresos anuales todavia.</p>
       </div>
 
       <div
         v-else-if="!filteredAnnualIncomeEntries.length && !annualIncomeLoading"
-        class="subtle mt-3"
+        class="ui-state-block ui-state-empty mt-3"
       >
-        No hay ingresos con este filtro.
+        <p class="ui-state-title">No hay ingresos con este filtro.</p>
       </div>
 
       <div v-else class="mt-3 grid gap-4">
@@ -318,13 +323,15 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </section>
       </div>
 
-      <div v-if="annualIncomeLoading" class="ui-status-line mt-2">Cargando ingresos anuales...</div>
+      <div v-if="annualIncomeLoading" class="ui-state-block ui-state-loading mt-2">
+        Cargando ingresos anuales...
+      </div>
     </article>
 
-    <article class="card ui-pro-panel">
+    <article class="ui-section-card ui-section-card-padded">
       <div class="nw-list-header">
         <div class="nw-list-header-left">
-          <h2 class="card-header-title mt-0">Salidas anuales</h2>
+          <h2 class="ui-section-title mt-0">Salidas anuales</h2>
         </div>
         <div class="nw-list-header-right">
           <div class="nw-list-total-inline">
@@ -346,20 +353,29 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         <div class="nw-list-total-details">Total anual</div>
       </div>
 
-      <div v-if="annualExpenseError" class="alert mt-3">{{ annualExpenseError }}</div>
-      <div v-else-if="annualExpenseApiError" class="alert mt-3">
+      <div v-if="annualExpenseError" class="ui-state-block ui-state-error mt-3" role="alert">
+        {{ annualExpenseError }}
+      </div>
+      <div
+        v-else-if="annualExpenseApiError"
+        class="ui-state-block ui-state-error mt-3"
+        role="alert"
+      >
         {{ annualExpenseApiError }}
       </div>
 
-      <div v-if="!annualExpenseEntries.length && !annualExpenseLoading" class="subtle mt-3">
-        No hay salidas anuales todavia.
+      <div
+        v-if="!annualExpenseEntries.length && !annualExpenseLoading"
+        class="ui-state-block ui-state-empty mt-3"
+      >
+        <p class="ui-state-title">No hay salidas anuales todavia.</p>
       </div>
 
       <div
         v-else-if="!filteredAnnualExpenseEntries.length && !annualExpenseLoading"
-        class="subtle mt-3"
+        class="ui-state-block ui-state-empty mt-3"
       >
-        No hay salidas con este filtro.
+        <p class="ui-state-title">No hay salidas con este filtro.</p>
       </div>
 
       <div v-else class="mt-3 grid gap-4">
@@ -490,7 +506,9 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
         </section>
       </div>
 
-      <div v-if="annualExpenseLoading" class="ui-status-line mt-2">Cargando salidas anuales...</div>
+      <div v-if="annualExpenseLoading" class="ui-state-block ui-state-loading mt-2">
+        Cargando salidas anuales...
+      </div>
     </article>
   </div>
 

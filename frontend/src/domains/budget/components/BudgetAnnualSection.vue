@@ -426,7 +426,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
 <template>
   <section
     v-if="!isMonthlyCloseView && !hasAnyPlannedData && !isLoading"
-    class="card ui-pro-panel ui-budget-empty mt-3"
+    class="ui-section-card ui-section-card-padded ui-budget-empty mt-3"
   >
     <h2 class="mt-0">Sin presupuesto anual para {{ fiscalYear }}</h2>
     <p class="subtle mb-0">
@@ -457,7 +457,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     <section
       v-for="section in sections"
       :key="section.id"
-      class="card ui-pro-panel ui-budget-section"
+      class="ui-section-card ui-section-card-padded ui-budget-section"
       :class="section.toneClass"
     >
       <div class="ui-budget-section-header">
@@ -1043,7 +1043,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
     </section>
   </div>
 
-  <div v-if="isLoading" class="ui-status-line">Cargando presupuesto...</div>
+  <div v-if="isLoading" class="ui-state-block ui-state-loading">Cargando presupuesto...</div>
 
   <AnnualEntryModalForm
     v-if="annualEntriesPage"

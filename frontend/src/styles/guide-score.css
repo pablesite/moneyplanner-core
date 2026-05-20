@@ -6,7 +6,7 @@
   padding: 8px 14px;
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--color-border-strong);
   line-height: 1;
 }
 
@@ -18,7 +18,7 @@
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: rgba(255, 255, 255, 0.96);
+  color: var(--color-text);
 }
 
 .ui-guide-health-solid {
@@ -69,13 +69,13 @@
   flex: 1 1 auto;
   height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
   overflow: hidden;
 }
 
 .ui-guide-score-kpi-track {
   height: 7px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-surface-strong);
 }
 
 .ui-score-meter-fill {

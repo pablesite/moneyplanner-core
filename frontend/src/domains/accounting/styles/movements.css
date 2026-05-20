@@ -48,7 +48,7 @@
 
 .ui-accounting-hero-value-note {
   margin: 0;
-  color: rgba(226, 232, 240, 0.72);
+  color: var(--color-text-muted);
   font-size: 0.92rem;
 }
 
@@ -83,8 +83,8 @@
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 8px 12px;
 }
@@ -92,7 +92,7 @@
 .ui-accounting-period-bar {
   padding: 6px 10px;
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-border);
 }
 
 .ui-period-field {
@@ -110,7 +110,7 @@
   padding-top: 0;
   padding-bottom: 0;
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--color-border);
 }
 
 /* Primary CTA � more visual weight than secondary actions */
@@ -142,13 +142,13 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--color-text-soft);
   box-shadow: none;
 }
 
 .ui-accounting-cta-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.75);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   border-radius: 8px;
 }
 
@@ -205,9 +205,9 @@
 
 .ui-accounting-timeline-range-button,
 .ui-accounting-timeline-expand-button {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   border-radius: 999px;
   padding: 0.45rem 0.8rem;
   font-size: 0.82rem;
@@ -221,15 +221,15 @@
 
 .ui-accounting-timeline-range-button:hover,
 .ui-accounting-timeline-expand-button:hover {
-  border-color: rgba(76, 195, 255, 0.28);
-  background: rgba(76, 195, 255, 0.12);
-  color: #fff;
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-muted);
+  color: var(--color-text);
 }
 
 .ui-accounting-timeline-range-button-active {
-  border-color: rgba(76, 195, 255, 0.42);
-  background: rgba(76, 195, 255, 0.18);
-  color: #fff;
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
+  color: var(--color-text);
 }
 
 .ui-accounting-timeline-toolbar-actions {
@@ -246,7 +246,7 @@
 .ui-accounting-timeline-range-caption {
   display: inline-block;
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-soft);
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -261,8 +261,8 @@
   overflow: hidden;
   border-radius: 14px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-timeline-modal {
@@ -280,19 +280,19 @@
 .ui-accounting-timeline-modal-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(241, 245, 249, 0.98);
+  color: var(--color-text);
 }
 
 .ui-accounting-timeline-modal-copy {
   margin-top: 4px;
   font-size: 0.82rem;
-  color: rgba(148, 163, 184, 0.94);
+  color: var(--color-text-muted);
 }
 
 .ui-accounting-timeline-modal-value {
   font-size: 1.2rem;
   font-weight: 700;
-  color: rgba(241, 245, 249, 0.98);
+  color: var(--color-text);
   white-space: nowrap;
 }
 
@@ -305,7 +305,7 @@
 .ui-accounting-timeline-slider-group {
   display: grid;
   gap: 6px;
-  color: rgba(148, 163, 184, 0.9);
+  color: var(--color-text-muted);
   font-size: 0.74rem;
 }
 
@@ -315,7 +315,7 @@
 
 .ui-accounting-timeline-slider-group strong {
   font-size: 0.82rem;
-  color: rgba(226, 232, 240, 0.95);
+  color: var(--color-text);
   font-weight: 600;
 }
 
@@ -381,10 +381,10 @@
   top: 12px;
   z-index: 5;
   padding: 8px 14px;
-  background: rgba(18, 20, 28, 0.92);
+  background: var(--color-surface-strong);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   margin: 0 4px 8px;
@@ -422,24 +422,24 @@
   padding: 7px 10px;
   font-size: 0.82rem;
   border-radius: 8px;
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-filters-floating .input:focus,
 .ui-accounting-filters-floating .select:focus {
-  border-color: rgba(110, 209, 255, 0.3);
-  box-shadow: 0 0 0 2px rgba(110, 209, 255, 0.08);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--focus-border);
+  box-shadow: var(--focus-ring);
+  background: var(--color-surface-strong);
 }
 
 .ui-accounting-filters-floating .input::placeholder {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.36);
+  color: var(--color-text-soft);
 }
 
 .ui-accounting-filters-floating .select {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--color-text-muted);
 }
 
 /* Date preset dropdown */
@@ -454,16 +454,16 @@
   padding: 7px 10px;
   font-size: 0.82rem;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .ui-accounting-date-trigger:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-strong);
 }
 
 .ui-accounting-date-trigger-arrow {
@@ -478,10 +478,10 @@
   z-index: 20;
   min-width: 160px;
   padding: 4px;
-  background: rgba(18, 20, 28, 0.96);
+  background: var(--color-surface-strong);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
@@ -492,7 +492,7 @@
   text-align: left;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
   font-size: 0.8rem;
   padding: 7px 10px;
   border-radius: 6px;
@@ -500,27 +500,27 @@
 }
 
 .ui-accounting-date-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
 }
 
 .ui-accounting-date-menu-item-active {
-  background: rgba(110, 209, 255, 0.12);
-  color: #def6ff;
+  background: var(--color-accent-muted);
+  color: var(--color-text);
 }
 
 .ui-accounting-date-menu-custom {
   display: grid;
   gap: 6px;
   padding: 6px 4px 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--color-border);
   margin-top: 4px;
 }
 
 /* Result count label inside filter bar */
 .ui-accounting-filters-count {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-soft);
   white-space: nowrap;
   margin-left: auto;
 }
@@ -571,9 +571,9 @@
 }
 
 .ui-ledger-category {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface-muted);
   overflow: hidden;
 }
 
@@ -598,18 +598,18 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.01);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 /* -- Account level --------------------------------------------- */
 .ui-ledger-account {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--color-border);
 }
 
 /* Alias kept for test compatibility */
 .ui-accounting-account-timeline {
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--color-surface-muted);
 }
 
 .ui-ledger-account-summary {
@@ -647,7 +647,7 @@
 }
 
 .ui-ledger-account-name {
-  color: rgba(245, 250, 255, 0.92);
+  color: var(--color-text);
 }
 
 .ui-ledger-movs-count {
@@ -663,7 +663,7 @@
 }
 
 .ui-ledger-account-body {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--color-border);
 }
 
 .ui-ledger-empty {
@@ -688,11 +688,11 @@
 }
 
 .ui-entry-row + .ui-entry-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid var(--color-border);
 }
 
 .ui-entry-row:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--color-surface-muted);
 }
 
 .ui-entry-date {
@@ -732,7 +732,7 @@
 
 .ui-entry-accounts {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.64);
+  color: var(--color-text-muted);
   line-height: 1.25;
 }
 
@@ -750,7 +750,7 @@
 
 .ui-entry-balance-after {
   font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--color-text-soft);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -782,9 +782,9 @@
 }
 
 .ui-accounting-balance-delta-neutral {
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
 }
 
 .ui-accounting-entry-action-btn {
@@ -802,7 +802,7 @@
 }
 
 .ui-entry-action-edit {
-  color: rgba(240, 244, 255, 0.88);
+  color: var(--color-text-muted);
 }
 
 .ui-entry-action-edit:hover:not(:disabled) {
@@ -830,7 +830,7 @@
 
 /* -- Technical accounts ---------------------------------------- */
 .ui-ledger-technical {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 12px 16px;
 }
@@ -847,7 +847,7 @@
 
 .ui-ledger-technical-head {
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 4px;
 }
 
@@ -856,7 +856,7 @@
   display: grid;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border);
 }
 
 .ui-accounting-form-head {
@@ -895,14 +895,14 @@
   gap: 10px;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-debt-hint {
   margin: 0;
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.46);
+  color: var(--color-text-soft);
   display: flex;
   align-items: baseline;
   gap: 12px;
@@ -929,11 +929,11 @@
 .ui-accounting-balance-feedback {
   margin: 0;
   font-size: 0.84rem;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-muted);
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-value-date-row {
@@ -945,18 +945,18 @@
 .ui-accounting-value-date-toggle {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--color-text-soft);
   font-size: 0.76rem;
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: rgba(255, 255, 255, 0.15);
+  text-decoration-color: var(--color-border);
   transition: color 0.15s;
 }
 
 .ui-accounting-value-date-toggle:hover {
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--color-text-muted);
 }
 
 .ui-accounting-value-date-input-row {
@@ -968,19 +968,19 @@
 .ui-accounting-value-date-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--color-text-soft);
   font-size: 0.76rem;
   cursor: pointer;
   padding: 0;
   white-space: nowrap;
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: rgba(255, 255, 255, 0.15);
+  text-decoration-color: var(--color-border);
   transition: color 0.15s;
 }
 
 .ui-accounting-value-date-close:hover {
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--color-text-muted);
 }
 
 .ui-accounting-field {
@@ -990,21 +990,21 @@
 
 .ui-accounting-field span {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .ui-accounting-inline-note {
   margin: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
   font-size: 0.82rem;
 }
 
 .ui-accounting-form-grid > .ui-accounting-inline-note,
 .ui-accounting-form-grid-wide > .ui-accounting-inline-note {
   align-self: center;
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--color-text-soft);
   font-size: 0.76rem;
 }
 
@@ -1016,8 +1016,8 @@
 
 .ui-accounting-edit-readonly div {
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
   padding: 10px;
   display: grid;
   gap: 4px;
@@ -1025,7 +1025,7 @@
 
 .ui-accounting-edit-readonly span {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--color-text-soft);
 }
 
 .ui-accounting-modal-copy {
@@ -1053,22 +1053,22 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: rgba(11, 12, 16, 0.72);
+  background: color-mix(in srgb, var(--color-canvas) 76%, transparent);
   backdrop-filter: blur(3px);
 }
 
 .ui-import-loading-overlay p {
   margin: 0;
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
   letter-spacing: 0.01em;
 }
 
 .ui-import-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(45, 212, 191, 0.15);
-  border-top-color: #2dd4bf;
+  border: 3px solid var(--color-accent-muted);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: ui-spin 0.75s linear infinite;
 }
@@ -1086,7 +1086,7 @@
   justify-content: center;
   gap: 12px;
   padding: 48px 16px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-soft);
   font-size: 0.875rem;
 }
 
@@ -1103,7 +1103,7 @@
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: rgba(255, 255, 255, 0.64);
+  color: var(--color-text-soft);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
 }
@@ -1116,17 +1116,17 @@
 .ui-accounting-segmented {
   display: flex;
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-segmented .ui-accounting-segmented-btn {
   flex: 1;
   min-width: 0;
   border: none;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
   padding: 10px 8px;
@@ -1142,21 +1142,21 @@
 }
 
 .ui-accounting-segmented .ui-accounting-segmented-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-surface-strong);
   border-color: transparent;
-  border-right-color: rgba(255, 255, 255, 0.08);
+  border-right-color: var(--color-border);
   transform: none;
 }
 
 .ui-accounting-segmented .ui-accounting-segmented-btn.ui-accounting-segmented-btn-active {
-  background: rgba(45, 212, 191, 0.1);
-  color: rgba(45, 212, 191, 0.95);
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
   font-weight: 600;
 }
 
 .ui-accounting-segmented-divider {
   width: 1px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--color-border-strong);
   flex-shrink: 0;
   margin: 6px 0;
 }
@@ -1164,25 +1164,25 @@
 .ui-accounting-segmented .ui-accounting-segmented-btn-advanced {
   flex: 0.8;
   font-size: 0.76rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--color-text-soft);
 }
 
 .ui-accounting-segmented .ui-accounting-segmented-btn-advanced.ui-accounting-segmented-btn-active {
-  color: rgba(45, 212, 191, 0.95);
+  color: var(--color-accent);
 }
 
 .ui-accounting-annual-link {
   display: grid;
   gap: 10px;
   border-radius: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--color-border);
+  background: var(--color-surface-muted);
   padding: 12px;
 }
 
 .ui-accounting-annual-link summary {
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-muted);
   font-size: 0.84rem;
   list-style: none;
   display: flex;
@@ -1218,8 +1218,8 @@
 .ui-accounting-import-dropzone,
 .ui-accounting-import-card {
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 12px;
 }
 
@@ -1236,8 +1236,8 @@
 
 .ui-accounting-import-kpi {
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
   padding: 10px;
   display: grid;
   gap: 4px;
@@ -1245,7 +1245,7 @@
 
 .ui-accounting-import-kpi span {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--color-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -1264,8 +1264,8 @@
 
 .ui-accounting-import-row {
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 10px 12px;
 }
 
@@ -1280,8 +1280,8 @@
   max-height: 280px;
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-accounting-activation-option {
@@ -1293,7 +1293,7 @@
 }
 
 .ui-accounting-activation-option + .ui-accounting-activation-option {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--color-border);
 }
 
 .ui-accounting-activation-checkbox {
@@ -1307,7 +1307,7 @@
 }
 
 .ui-accounting-activation-meta small {
-  color: rgba(255, 255, 255, 0.64);
+  color: var(--color-text-soft);
   font-size: 0.76rem;
 }
 
@@ -1327,7 +1327,7 @@
 }
 
 .ui-accounting-advanced {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border);
   padding-top: 12px;
 }
 
@@ -1337,7 +1337,7 @@
   gap: 12px;
   align-items: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--color-text-muted);
   font-size: 0.84rem;
 }
 
@@ -1409,7 +1409,7 @@
 
 .ui-accounting-incard-tabs {
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1427,7 +1427,7 @@
 /* Account catalog header when account is selected */
 .ui-accounting-catalog-head {
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .ui-accounting-catalog-info {
@@ -1493,7 +1493,7 @@
 .ui-catalog-group {
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-surface-muted);
 }
 
 .ui-catalog-group-header {
@@ -1504,7 +1504,7 @@
   padding: 10px 14px;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--color-text-muted);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1517,8 +1517,8 @@
 }
 
 .ui-catalog-group-header:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--color-surface-strong);
+  color: var(--color-text);
 }
 
 .ui-catalog-group-label {
@@ -1532,7 +1532,7 @@
 
 .ui-catalog-group-count {
   font-size: 0.7rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-surface-strong);
   padding: 1px 7px;
   border-radius: 20px;
 }
@@ -1562,8 +1562,8 @@
   padding: 10px 14px 10px 20px;
   background: transparent;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.8);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
   font-size: 0.875rem;
   cursor: pointer;
   text-align: left;
@@ -1572,13 +1572,13 @@
 }
 
 .ui-catalog-account-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--color-surface-strong);
 }
 
 .ui-catalog-account-row.selected {
-  background: rgba(0, 188, 167, 0.1);
-  border-left: 3px solid #00bca7;
-  color: #fff;
+  background: var(--color-accent-muted);
+  border-left: 3px solid var(--color-accent);
+  color: var(--color-text);
 }
 
 .ui-catalog-account-name {
@@ -1590,19 +1590,19 @@
 
 .ui-catalog-account-balance {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-soft);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .ui-catalog-account-row.selected .ui-catalog-account-balance {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
 }
 
 .ui-catalog-transactions {
   padding: 0 0 8px 0;
-  border-top: 1px solid rgba(0, 188, 167, 0.2);
-  background: rgba(0, 0, 0, 0.15);
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-canvas) 34%, transparent);
 }
 
 .ui-catalog-transactions .ui-entry-list {

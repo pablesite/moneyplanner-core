@@ -693,10 +693,10 @@ async function saveEdit(id: number) {
 </script>
 
 <template>
-  <div class="card ui-pro-panel ui-nw-list-panel">
+  <section class="ui-section-card ui-section-card-padded ui-nw-list-panel">
     <div class="nw-list-header">
       <div class="nw-list-header-left">
-        <h2 class="card-header-title mt-0">{{ title }}</h2>
+        <h2 class="ui-section-title mt-0">{{ title }}</h2>
         <select
           v-if="showOwnershipFilter !== false"
           v-model="ownershipFilter"
@@ -812,5 +812,5 @@ async function saveEdit(id: number) {
         </div>
       </section>
     </div>
-  </div>
+  </section>
 </template>

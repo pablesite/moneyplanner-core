@@ -9,16 +9,16 @@
 
 .ui-home-skeleton-bar {
   display: block;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   background:
     linear-gradient(
       100deg,
-      rgba(255, 255, 255, 0.05) 30%,
-      rgba(76, 195, 255, 0.24) 50%,
-      rgba(255, 255, 255, 0.05) 70%
+      var(--color-surface-muted) 30%,
+      color-mix(in srgb, var(--color-info) 24%, transparent) 50%,
+      var(--color-surface-muted) 70%
     ),
-    rgba(255, 255, 255, 0.03);
+    var(--color-surface-muted);
   background-size: 220% 100%;
   animation: ui-home-skeleton-pulse 1.2s ease-in-out infinite;
 }
@@ -37,18 +37,18 @@
 .ui-home-skeleton-pct {
   height: 16px;
   width: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .ui-home-phase-donut-loading {
   background:
     linear-gradient(
       100deg,
-      rgba(255, 255, 255, 0.05) 30%,
-      rgba(76, 195, 255, 0.18) 50%,
-      rgba(255, 255, 255, 0.05) 70%
+      var(--color-surface-muted) 30%,
+      color-mix(in srgb, var(--color-info) 18%, transparent) 50%,
+      var(--color-surface-muted) 70%
     ),
-    rgba(255, 255, 255, 0.06);
+    var(--color-surface-strong);
   background-size: 220% 100%;
   animation: ui-home-skeleton-pulse 1.2s ease-in-out infinite;
 }
@@ -56,21 +56,22 @@
 .ui-home-intro {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: var(--space-4);
   align-items: end;
+  padding: var(--space-6);
 }
 
 .ui-home-intro-kpis {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 220px;
 }
 
 .ui-home-intro-kpi {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-surface-muted);
   display: grid;
   gap: 3px;
 }
@@ -87,7 +88,7 @@
 .ui-home-focus-line {
   margin: 4px 0 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
 }
 
 .ui-home-focus-label {
@@ -108,11 +109,17 @@
   height: 100%;
 }
 
+.ui-home-phases {
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+}
+
 .ui-home-phase-cta {
   margin-top: auto;
   font-size: 12px;
   font-weight: 600;
-  color: rgba(45, 212, 191, 0.95);
+  color: color-mix(in srgb, var(--color-accent) 88%, white 12%);
 }
 
 @media (max-width: 860px) {

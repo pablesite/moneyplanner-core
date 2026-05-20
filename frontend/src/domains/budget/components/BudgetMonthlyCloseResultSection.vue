@@ -117,7 +117,7 @@ const resultBridgeRows = computed(() =>
 <template>
   <section
     v-if="isMonthlyCloseView && activeMonthlyCloseStep === 'result'"
-    class="card ui-pro-panel ui-budget-checkin mt-3"
+    class="ui-section-card ui-section-card-padded ui-budget-checkin mt-3"
   >
     <div class="ui-budget-checkin-header">
       <div>
@@ -137,7 +137,7 @@ const resultBridgeRows = computed(() =>
           del mes.
         </p>
       </div>
-      <div v-if="closeStatus" style="display: flex; gap: 8px; align-items: center; flex-shrink: 0">
+      <div v-if="closeStatus" class="ui-budget-result-actions">
         <template v-if="closeStatus === 'locked'">
           <span class="ui-monthly-close-locked-banner">Este mes está bloqueado.</span>
         </template>
@@ -152,8 +152,7 @@ const resultBridgeRows = computed(() =>
           </button>
           <button
             type="button"
-            class="btn"
-            style="color: rgba(255, 140, 140, 0.95); border-color: rgba(255, 92, 92, 0.3)"
+            class="btn ui-budget-result-lock-btn"
             :disabled="monthlyCloseActionBusy"
             @click="onLockClose && onLockClose()"
           >

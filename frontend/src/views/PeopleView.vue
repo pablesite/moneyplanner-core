@@ -9,9 +9,12 @@ const tab = ref<Tab>('members');
 </script>
 
 <template>
-  <div class="container ui-pro-page">
-    <div class="ui-page-header">
-      <h1 class="h1 ui-page-title">Personas</h1>
+  <div class="container ui-page-shell">
+    <header class="ui-page-head">
+      <div>
+        <p class="ui-page-eyebrow">Configuracion familiar</p>
+        <h1 class="ui-page-title">Personas</h1>
+      </div>
 
       <div class="ui-page-actions">
         <button class="btn" type="button" @click="router.push('/account')">Cuenta</button>
@@ -19,10 +22,10 @@ const tab = ref<Tab>('members');
           Volver a Patrimonio
         </button>
       </div>
-    </div>
+    </header>
 
-    <div class="card ui-pro-panel mt-1">
-      <div class="mb-3.5 flex gap-2.5">
+    <section class="mt-1 grid gap-3.5">
+      <div class="ui-action-bar mb-3.5">
         <button
           class="btn opacity-60"
           type="button"
@@ -41,11 +44,8 @@ const tab = ref<Tab>('members');
           Titularidades
         </button>
       </div>
-
-      <div class="grid gap-3.5">
-        <FamilyMemberManager v-if="tab === 'members'" />
-        <OwnershipManager v-else />
-      </div>
-    </div>
+      <FamilyMemberManager v-if="tab === 'members'" />
+      <OwnershipManager v-else />
+    </section>
   </div>
 </template>
