@@ -101,8 +101,8 @@ Convenciones:
 
 ### Para v1
 
-- **Revisión del tracker operativo de cuentas** — 106 cuentas totales, 16 ya revisadas. La coherencia movimientos → cuentas → patrimonio se valida durante esta revisión cuenta a cuenta. Tracker en `core/docs/operations/movements-user1-review-tracker.md`.
-- **Re-revisión de categorías/subcategorías en cuentas ya revisadas** — sobre las cuentas ya procesadas en el tracker, revisar que las categorías y subcategorías de sus movimientos sean coherentes con la última actualización de tipología de movimiento vs categoría/subcategoría.
+- ✅ **Revisión del tracker operativo de cuentas** — 106/106 cuentas revisadas (2026-05-20). Tracker en `core/docs/operations/movements-user1-review-tracker.md`.
+- ✅ **Re-revisión de categorías/subcategorías** — completada junto con el tracker.
 - **Actualizar el header** para que sea exactamente igual al de la vista de Patrimonio.
 - **Revisión del estilo visual del cuerpo de la vista** (ya avanzado, pendiente de cierre).
 

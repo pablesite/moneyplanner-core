@@ -1,9 +1,11 @@
 ﻿# Movimientos - Tracker de Revision por Cuenta (Usuario 1)
 
-Ultima actualizacion: 2026-04-15 (sesion 49)
+Ultima actualizacion: 2026-05-20 — ✅ REVISIÓN COMPLETA (106/106 cuentas)
 
 ## Objetivo
-Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.
+~~Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisando cuentas y contrapartidas de `user_id=1`.~~
+
+Tarea cerrada. Todas las cuentas revisadas y validadas.
 
 ## Patron preferido para cuentas de inversion
 - Revalorizaciones: concepto `Revalorizacion`.
@@ -12,10 +14,9 @@ Checklist operativo para cerrar la tarea manual de "afinar Movimientos" revisand
 - Ownership en aportaciones: usar `ownership_id=1 (Pablo)` cuando aplique.
 
 ## Alcance
-- `A revisar`: todas las cuentas contables de `user_id=1`.
 - `Total cuentas`: 106.
-- `Revisadas`: 47.
-- `Pendientes`: 59.
+- `Revisadas`: 106. ✅
+- `Pendientes`: 0.
 
 ## Cuentas Revisadas
 - `42` - `FIV IVI` (pasivo / Prestamo FIV IVI)
