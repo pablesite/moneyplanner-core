@@ -74,21 +74,15 @@ Convenciones:
 - Mirror Core ↔ SaaS completado.
 
 ### Vista de resultados
+- ✅ Alineación bridge de conciliación corregida (subgrid CSS, 2026-05-20).
 - Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.
 - Mostrar solo insights relevantes; añadir gráficas explicables (ingresos/gastos ejecutados con detalle desplegable).
 
-### Cierre del año
-- Replicar la lógica del cierre mensual para el cierre anual.
-
-### Transferencias de ownership al cierre
-- `(Privado - Futuro)` Añadir lógica para calcular qué transferencia corresponde a cada miembro de la familia al cerrar el mes.
-
-### Vista de resultados
-- Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.
-- Mostrar solo insights relevantes; añadir gráficas explicables (ingresos/gastos ejecutados con detalle desplegable).
+### Perímetro de liquidez
+- ✅ Referencia por cuenta ahora muestra el saldo efectivo del mes anterior, no `asset.amount` (2026-05-20).
 
 ### Cierre del año
-- Replicar la lógica del cierre mensual para el cierre anual.
+- ⛔ Descartado — el cierre mensual es suficiente para v1.
 
 ### Transferencias de ownership al cierre
 - `(Privado - Futuro)` Añadir lógica para calcular qué transferencia corresponde a cada miembro de la familia al cerrar el mes, en base al ownership de activos. Opción habilitada sólo desde settings y sólo si hay varios miembros activos. Objetivo: simplificar el control diario de transferencias entre miembros.

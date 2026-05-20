@@ -47,7 +47,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Trazabilidad de movimientos importados conservada mediante metadatos contables; importador MoneyWiz ad-hoc retirado. |
 | Presupuesto — v1 | Alta | ✅ | Cierre funcional aplicado y revisión manual completada: summaries mensuales canónicos para ejecución/cobertura, precedencia ledger sobre check-ins manuales, errores backend dentro de modales de líneas y header alineado con Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ✅ | Revisión completa de modales de creación/edición de activos y pasivos completada. V1 del módulo cerrada a nivel funcional. |
-| Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. |
+| Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. Bugs v1 corregidos (2026-05-20): alineación de columnas en bridge de conciliación (subgrid CSS) y referencia de liquidez por cuenta (saldo efectivo del mes anterior, no `asset.amount`). |
 | Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
 | Coach financiero — navegación | Media | ✅ | v1 simplificado: `/` → `/patrimonio` como landing, guía en `/guia`, fase 5 (Independencia financiera) retirada hasta tener módulo de cartera. Quick actions contextuales por fase ya existían. |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
@@ -68,7 +68,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 |------|--------|-------|
 | Net Worth (activos, pasivos, liquidez) | ✅ | Base completa. Snapshots eliminados. Modal de revisión de gastos generados por activos de inversión añadido. Intervalos múltiples de aportación periódica completados (phases 1-2 archivadas). Gráficas (timeline + donut) y KPIs validados. Modales de creación/edición de activos y pasivos revisados; v1 del módulo cerrada a nivel funcional. |
 | Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. Los summaries mensuales son contrato canónico para ejecución/cobertura; modales de líneas muestran errores backend sin perder formulario; header alineado con Patrimonio. Revisión manual completada el 2026-05-14. |
-| Cierre mensual | ✅ | Integrado con budget y accounting. Modo dual automático, lifecycle DRAFT/FINALIZED/LOCKED y revisión manual completada el 2026-05-14. |
+| Cierre mensual | ✅ | Integrado con budget y accounting. Modo dual automático, lifecycle DRAFT/FINALIZED/LOCKED y revisión manual completada el 2026-05-14. Bugs corregidos 2026-05-20: alineación bridge y referencia de liquidez por cuenta. |
 | Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado. Fase 5 retirada hasta tener módulo de cartera. Guía en `/guia`; `/` redirige a `/patrimonio`. |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
