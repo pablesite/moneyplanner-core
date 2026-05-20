@@ -40,7 +40,7 @@ type Props = {
 
 const props = withDefaults(defineProps<Props>(), {
   ariaLabel: 'Grafico de evolucion patrimonial',
-  seriesColor: () => cssVar('--chart-series-stroke'),
+  seriesColor: undefined,
   expanded: false,
   yAxisMinZero: false,
 });
@@ -68,37 +68,40 @@ const xTickStep = computed(() => {
 
 const hasNegativePoints = computed(() => props.points.some((point) => point.value < 0));
 
-const chartData = computed<ChartData<'line'>>(() => ({
-  labels: props.points.map((point) => point.shortLabel),
-  datasets: [
-    {
-      label: props.seriesLabel,
-      data: props.points.map((point) => point.value),
-      borderColor: props.seriesColor,
-      backgroundColor: cssVar('--chart-series-fill'),
-      borderWidth: props.expanded ? 3 : 2.5,
-      tension: 0.32,
-      fill: true,
-      pointRadius: props.points.length > 1 ? 2 : 4,
-      pointHoverRadius: 7,
-      pointHitRadius: 20,
-      pointBorderWidth: 2,
-      pointHoverBorderWidth: 3,
-      pointBackgroundColor: props.points.map((p) =>
-        p.isCurrent ? cssVar('--chart-point-current-bg') : cssVar('--chart-point-bg'),
-      ),
-      pointHoverBackgroundColor: props.points.map((p) =>
-        p.isCurrent ? cssVar('--chart-point-current-hover-bg') : cssVar('--chart-point-hover-bg'),
-      ),
-      pointBorderColor: props.points.map((p) =>
-        p.isCurrent ? cssVar('--chart-point-current-bg') : props.seriesColor,
-      ),
-      pointHoverBorderColor: props.points.map((p) =>
-        p.isCurrent ? cssVar('--chart-point-current-hover-bg') : props.seriesColor,
-      ),
-    },
-  ],
-}));
+const chartData = computed<ChartData<'line'>>(() => {
+  const seriesColor = props.seriesColor ?? cssVar('--chart-series-stroke');
+  return {
+    labels: props.points.map((point) => point.shortLabel),
+    datasets: [
+      {
+        label: props.seriesLabel,
+        data: props.points.map((point) => point.value),
+        borderColor: seriesColor,
+        backgroundColor: cssVar('--chart-series-fill'),
+        borderWidth: props.expanded ? 3 : 2.5,
+        tension: 0.32,
+        fill: true,
+        pointRadius: props.points.length > 1 ? 2 : 4,
+        pointHoverRadius: 7,
+        pointHitRadius: 20,
+        pointBorderWidth: 2,
+        pointHoverBorderWidth: 3,
+        pointBackgroundColor: props.points.map((p) =>
+          p.isCurrent ? cssVar('--chart-point-current-bg') : cssVar('--chart-point-bg'),
+        ),
+        pointHoverBackgroundColor: props.points.map((p) =>
+          p.isCurrent ? cssVar('--chart-point-current-hover-bg') : cssVar('--chart-point-hover-bg'),
+        ),
+        pointBorderColor: props.points.map((p) =>
+          p.isCurrent ? cssVar('--chart-point-current-bg') : seriesColor,
+        ),
+        pointHoverBorderColor: props.points.map((p) =>
+          p.isCurrent ? cssVar('--chart-point-current-hover-bg') : seriesColor,
+        ),
+      },
+    ],
+  };
+});
 
 const chartOptions = computed<ChartOptions<'line'>>(() => ({
   responsive: true,
