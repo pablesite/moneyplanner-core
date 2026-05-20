@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar as _calendar
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date
@@ -276,8 +277,16 @@ def _build_liquidity_summary_rows(
     get_effective_liability_amount_fn,
     serialize_money_fn,
 ) -> LiquiditySummaryBuild:
+    prev_year = fiscal_year - 1 if month == 1 else fiscal_year
+    prev_month = 12 if month == 1 else month - 1
+    prev_last_day = _calendar.monthrange(prev_year, prev_month)[1]
+    prev_summary_date = date(prev_year, prev_month, prev_last_day)
+
     build = LiquiditySummaryBuild()
     for asset in inputs.liquid_assets:
+        prev_balance = get_effective_asset_amount_fn(
+            asset=asset, as_of_date=prev_summary_date, position_cache=None
+        )
         row = _build_asset_summary_row(
             user=user,
             asset=asset,
@@ -285,6 +294,7 @@ def _build_liquidity_summary_rows(
             get_effective_asset_amount_fn=get_effective_asset_amount_fn,
             serialize_money_fn=serialize_money_fn,
             totals=build.totals,
+            prev_effective_balance=prev_balance,
         )
         build.rows.append(row)
 
@@ -298,6 +308,9 @@ def _build_liquidity_summary_rows(
     )
 
     for liability in inputs.liquid_liabilities:
+        prev_balance = get_effective_liability_amount_fn(
+            liability=liability, as_of_date=prev_summary_date, position_cache=None
+        )
         row = _build_liability_summary_row(
             user=user,
             liability=liability,
@@ -305,6 +318,7 @@ def _build_liquidity_summary_rows(
             get_effective_liability_amount_fn=get_effective_liability_amount_fn,
             serialize_money_fn=serialize_money_fn,
             totals=build.totals,
+            prev_effective_balance=prev_balance,
         )
         build.rows.append(row)
     return build
@@ -428,8 +442,11 @@ def _build_asset_summary_row(
     get_effective_asset_amount_fn,
     serialize_money_fn,
     totals: LiquiditySummaryTotals,
+    prev_effective_balance: Decimal | None = None,
 ) -> dict[str, object]:
-    planned_native = Decimal(asset.amount or 0)
+    planned_native = (
+        prev_effective_balance if prev_effective_balance is not None else Decimal(asset.amount or 0)
+    )
     checkin = _select_asset_checkin(asset=asset, inputs=inputs)
     effective_native = get_effective_asset_amount_fn(
         asset=asset,
@@ -581,8 +598,11 @@ def _build_liability_summary_row(
     get_effective_liability_amount_fn,
     serialize_money_fn,
     totals: LiquiditySummaryTotals,
+    prev_effective_balance: Decimal | None = None,
 ) -> dict[str, object]:
-    planned_native = Decimal(liability.amount or 0)
+    planned_native = (
+        prev_effective_balance if prev_effective_balance is not None else Decimal(liability.amount or 0)
+    )
     liability_checkin = inputs.liability_checkins.get(liability.id)
     executed_native = get_effective_liability_amount_fn(
         liability=liability,
