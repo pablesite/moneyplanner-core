@@ -4,9 +4,10 @@
 >
 > All planned v1 modules are implemented and stable: Net Worth, Budget & Monthly Close,
 > Accounting Movements, Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
-> Residual legacy cleanup complete. Active work: Unified Design System (UI consistency pass).
-> Paused: Crypto Tax Report (IRPF Spain). Up next: validation with real users.
-> Full details in Spanish below.
+> Residual legacy cleanup complete. Design system: 21 migration steps done — all domain CSS tokenized,
+> ui-pro-* compat layer removed, Chart.js colors tokenized. Remaining: Accounting view visual polish,
+> Coach navigation redesign, user validation.
+> Paused: Crypto Tax Report (IRPF Spain). Full details in Spanish below.
 
 ---
 
@@ -51,7 +52,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
-| Sistema de diseño unificado | Alta (crítico) | 🔄 | 16 pasos de migración completados (ver `docs/frontend/design-system.md`): HomeView, AccountView, PeopleView, GuidePhaseDetailView, Net Worth, Budget, Accounting, BaseModal, People, Guide/Coach, auth, selects, tablas, compat classes. Pendiente: continuar pulido vista a vista. |
+| Sistema de diseño unificado | Alta (crítico) | 🔄 | 21 pasos completados (ver `docs/frontend/design-system.md`): vistas canónicas, tokenización completa de CSS de dominio (dashboard ~120 valores, net-worth, budget, guide, accounting), eliminación total de capa `ui-pro-*`, paleta `--chart-*` y Chart.js tokenizado via `getComputedStyle`. Pendiente: pulido visual de Accounting (header + cuerpo) y rediseño navegación Coach. |
 | Limpieza legacy residual | Media | ✅ | Completado 2026-05-20. Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (migración 0042), import externo de `net_worth.services`, `compat.*` en capabilities. Fallback Budget/check-ins: diseño intencional, no deuda técnica. Ver `roadmap/product-roadmap.md`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |

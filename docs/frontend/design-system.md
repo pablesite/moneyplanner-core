@@ -37,9 +37,17 @@ Define the Core visual foundation used by the MoneyPlanner product UI before scr
 5. Controls: `btn`, `btn-primary`, `btn-ghost`, `btn-sm`, `icon-btn`, `input`, `textarea`.
 6. Modal shell: `ui-modal-backdrop`, `ui-modal-panel`, `ui-modal-head`, `ui-modal-title`, `ui-modal-close`, `ui-modal-body`.
 
+## Chart Token Palette
+Chart.js renders to `<canvas>` and cannot use CSS `var()` directly. Tokens are read at render time via `getComputedStyle(document.documentElement).getPropertyValue(name).trim()` inside computed properties. Defined in `:root` in `app.css`:
+- `--chart-tooltip-bg`, `--chart-series-stroke`, `--chart-series-fill`
+- `--chart-positive-fill`, `--chart-positive-stroke`, `--chart-negative-fill`, `--chart-negative-stroke`
+- `--chart-point-bg`, `--chart-point-hover-bg`, `--chart-point-current-bg`, `--chart-point-current-hover-bg`
+
+Note: `withDefaults(defineProps<>(), {...})` is hoisted to module scope by the Vue compiler. Do not reference locally declared functions (e.g., `cssVar()`) in prop defaults — resolve tokens inside `computed()` instead.
+
 ## Migration Notes
-1. Existing `card` and `ui-pro-*` classes are compatibility classes while views migrate to the shared contract.
-2. New reusable UI should use semantic tokens directly, not raw color values.
+1. The `ui-pro-*` compat layer has been fully removed. Use canonical `ui-page-*` / `ui-section-*` classes and the `badge` primitive.
+2. New reusable UI must use semantic tokens directly, not raw color values or hardcoded `rgba()`.
 3. New page-level CSS should be added only when the shared primitives cannot express the required layout.
 
 ## Migration Log
@@ -59,8 +67,13 @@ Define the Core visual foundation used by the MoneyPlanner product UI before scr
 14. Auth login/register shell, card, labels, subtitle, footer, and auth links use semantic surface, border, text, accent, and shadow tokens.
 15. Shared select controls and `ui-select-popover-*` menus use semantic surface, border, text, focus, and accent tokens for trigger, menu, hover, and active states.
 16. Compatibility `card`, `badge`, `ui-pro-panel`, `ui-pro-chip`, and `ui-pro-divider` use semantic surface, border, text, and shadow tokens; Accounting hero now uses the canonical section shell.
+17. Budget `dashboard.css` fully tokenized — ~120 hardcoded `rgba(255,255,255,x)` values replaced with semantic tokens (`--color-text*`, `--color-border*`, `--color-surface*`) and `color-mix()` for gradient stops with distinct opacity levels.
+18. Net Worth `net-worth-view.css` fully tokenized — ~20 hardcoded rgba values replaced with semantic tokens.
+19. `budget-annual-entries.css`, `guide-detail.css`, `guide-home.css`, `movements.css` cleaned — remaining `var(--muted)` / `var(--text)` aliases and hardcoded rgba values replaced with canonical tokens.
+20. `ui-pro-*` compat layer fully removed from `app.css` — all selector aliases (`ui-pro-page`, `ui-pro-panel`, `ui-pro-header`, `ui-pro-title`, `ui-pro-kicker`, `ui-pro-toolbar`, `ui-pro-chip`, `ui-pro-divider`) deleted; `badge` extended with `display: inline-flex; align-items: center; gap: 6px` to cover chip layout; 4 consuming components updated.
+21. Chart.js colors tokenized — `--chart-*` palette added to `:root`; `NetWorthDeltaChart.vue` and `NetWorthTimelineChart.vue` updated to read all colors via `cssVar()` / `getComputedStyle` at render time instead of hardcoded strings.
 
 ## Next Passes
-1. Continue migrating the most visible Core views to the canonical `ui-page-*` and `ui-section-*` naming.
-2. Review view-specific CSS for raw colors, large radius values, and repeated control styles.
-3. Validate the main screens visually after each migration pass.
+1. Continue visual polish pass on the Accounting view: header (align with Net Worth) and body styles.
+2. Coach financial navigation redesign: fluid integration between coach recommendations and product modules.
+3. Validate the main screens visually after each polish pass.
