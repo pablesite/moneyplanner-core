@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { corePeopleApi, peopleApi, premiumPeopleApi } from '@/domains/people/api';
-import { capabilities } from '@/domains/capabilities';
+import { canUsePeople } from '@/domains/capabilities';
 
 const mocks = vi.hoisted(() => ({
   api: {
@@ -22,7 +22,7 @@ describe('people api (saas)', () => {
   });
 
   it('exports premium adapter as active api in saas', () => {
-    if (capabilities.people) {
+    if (canUsePeople()) {
       expect(peopleApi).toBe(premiumPeopleApi);
       return;
     }

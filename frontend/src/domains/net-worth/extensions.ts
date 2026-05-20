@@ -1,5 +1,5 @@
 import { computed, type Component, type ComputedRef } from 'vue';
-import { capabilities } from '@/domains/capabilities';
+import { canUsePeople } from '@/domains/capabilities';
 
 type ExtensionProps = Record<string, unknown>;
 
@@ -28,7 +28,7 @@ export function useNetWorthViewExtensions(store?: unknown): NetWorthViewExtensio
         : null;
     const baseProps = baseCurrency ? { defaultCurrency: baseCurrency } : {};
 
-    if (!capabilities.people || !store || typeof store !== 'object') {
+    if (!canUsePeople() || !store || typeof store !== 'object') {
       return baseProps;
     }
     if (!('ownerships' in store)) {

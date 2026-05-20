@@ -1,5 +1,5 @@
 import { coreApi } from '@/lib/api';
-import { capabilities } from '@/domains/capabilities';
+import { canUsePeople } from '@/domains/capabilities';
 import type { FamilyMember, OwnershipRead } from '@/domains/people/types';
 
 type MemberCreatePayload = { name: string; role: 'adult' | 'child'; is_active: boolean };
@@ -64,4 +64,4 @@ export const premiumPeopleApi: PeopleApiAdapter = {
 // use the same endpoint contract as SaaS while the backend domain is ported into Core.
 export const corePeopleApi: PeopleApiAdapter = premiumPeopleApi;
 
-export const peopleApi: PeopleApiAdapter = capabilities.people ? premiumPeopleApi : corePeopleApi;
+export const peopleApi: PeopleApiAdapter = canUsePeople() ? premiumPeopleApi : corePeopleApi;

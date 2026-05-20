@@ -1,12 +1,6 @@
 export type DeploymentMode = 'self_hosted' | 'cloud';
 export type PlanCode = 'community_core' | 'cloud_basic' | 'cloud_pro' | 'cloud_premium';
 
-export type AppCapabilitiesCompat = {
-  isPremium: boolean;
-  people: boolean;
-  ownership: boolean;
-};
-
 export type AppCapabilitiesV2 = {
   deploymentMode: DeploymentMode;
   planCode: PlanCode;
@@ -72,32 +66,11 @@ export type AppCapabilitiesV2 = {
     billingPortal: boolean;
     planManagement: boolean;
   };
-  compat: AppCapabilitiesCompat;
 };
 
-export type AppCapabilities = AppCapabilitiesV2 & AppCapabilitiesCompat;
+export type AppCapabilities = AppCapabilitiesV2;
 
-function buildCompat(capabilities: AppCapabilitiesV2): AppCapabilitiesCompat {
-  return {
-    isPremium: capabilities.planCode === 'cloud_pro' || capabilities.planCode === 'cloud_premium',
-    people:
-      capabilities.core.familyLogicalModel ||
-      capabilities.familyCloud.sharedFamilyViews ||
-      capabilities.premium.familyMode,
-    ownership: capabilities.core.familyLogicalModel || capabilities.premium.familyMode,
-  };
-}
-
-function withCompat(base: Omit<AppCapabilitiesV2, 'compat'>): AppCapabilities {
-  const compat = buildCompat(base as AppCapabilitiesV2);
-  return {
-    ...base,
-    compat,
-    ...compat,
-  };
-}
-
-export const capabilities: AppCapabilities = withCompat({
+export const capabilities: AppCapabilities = {
   deploymentMode: 'self_hosted',
   planCode: 'community_core',
   capabilitiesVersion: 1,
@@ -161,7 +134,7 @@ export const capabilities: AppCapabilities = withCompat({
     billingPortal: false,
     planManagement: false,
   },
-});
+};
 
 export type CapabilityPath =
   | 'platform.appAuth'
@@ -237,12 +210,14 @@ export function canUseFamilyMode(source: AppCapabilities = capabilities): boolea
 
 export function canUsePeople(source: AppCapabilities = capabilities): boolean {
   return (
-    source.core.familyLogicalModel || source.familyCloud.sharedFamilyViews || source.compat.people
+    source.core.familyLogicalModel ||
+    source.familyCloud.sharedFamilyViews ||
+    source.premium.familyMode
   );
 }
 
 export function canUseOwnership(source: AppCapabilities = capabilities): boolean {
-  return source.core.familyLogicalModel || source.compat.ownership;
+  return source.core.familyLogicalModel || source.premium.familyMode;
 }
 
 export function canUseAdminInternal(source: AppCapabilities = capabilities): boolean {
