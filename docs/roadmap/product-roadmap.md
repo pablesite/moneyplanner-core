@@ -182,11 +182,7 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
 
 ### Pendiente
 
-- **Desarmar `net_worth.services.py` como facade interna.**
-  - Para qué sirve hoy: mantiene imports estables hacia totales, moneda base e inflación mientras otros módulos/tests siguen acoplados.
-  - Por qué es legacy: replica el patrón de facade ya retirado en `accounting/services.py`.
-  - Consumidor externo actual: `core/portable_data.py` importa `get_base_currency_for_user` y `get_financed_asset_queryset_for_user` — ambas definidas en `services.py` directamente.
-  - Acción recomendada: mover esas dos funciones a un sub-módulo específico (e.g. `services_user.py`) y eliminar la facade cuando no tenga consumidores externos.
+- ✅ **`net_worth.services.py` — import externo eliminado (2026-05-20).** `get_base_currency_for_user` movida a `accounts/services.py`; `get_financed_asset_queryset_for_user` añadida a `services_assets_core.py`; `_serialize_money` localizada en `services_liquidity.py`. `services.py` re-exporta para consumidores internos y mocks; `portable_data.py` ya no importa del módulo. Ningún consumidor externo activo.
 
 - **`compat.*` en capabilities.**
   - Para qué sirve hoy: puente frontend mientras los checks migran al modelo de capabilities efectivo.
