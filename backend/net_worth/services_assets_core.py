@@ -325,7 +325,11 @@ def validate_asset_payload(
 
     purchase_value = initial_purchase_value if initial_purchase_value is not None else amount
 
-    if category == Asset.Category.INVESTMENTS and has_contribution_intervals and purchase_value is None:
+    if (
+        category == Asset.Category.INVESTMENTS
+        and has_contribution_intervals
+        and purchase_value is None
+    ):
         raise DRFValidationError(
             {"amount": ("Requerido para aportacion periodica en inversiones.")}
         )
@@ -1272,3 +1276,7 @@ def get_amount_base_value(
         return str(convert_currency(amount, currency, base_currency, date=ref_date))
     except Exception:
         return None
+
+
+def get_financed_asset_queryset_for_user(*, user):
+    return Asset.objects.filter(user=user, is_active=True)

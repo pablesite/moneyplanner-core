@@ -180,22 +180,26 @@ El coach (fases 1–4) está funcional. Pendiente antes de producción:
 
 Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz activo, `delete-imported`, `accounting/services.py`, `sync_fx_rates` y artefactos `.js` generados. No todo lo legacy es basura: algunas piezas protegen históricos y la portabilidad de datos.
 
-### Pendiente prioritario
-
-- **Cerrar la absorción de Introducción de Datos en Presupuesto.**
-  - Para qué sirve hoy: el flujo de ingresos/gastos anuales ya vive en Presupuesto (`views/budget`, `budget/annual-entries` y `budget/taxonomy`).
-  - Estado: no quedan rutas, dominios, vistas ni CSS con nombre `data-input`; `core.dataInput` también fue retirado de capabilities.
-  - Acción recomendada: revisar si el composable anual de Presupuesto aún puede adelgazar dependencias históricas de patrimonio/portabilidad que quedaron por seguridad durante la migración.
-
-- **Reducir el fallback legacy de Budget/check-ins.**
-  - Para qué sirve hoy: mantiene ejecución manual cuando no hay cobertura ledger suficiente y evita perder meses históricos.
-  - Por qué es legacy: la fuente canónica de ejecución debe ser ledger categorizado cuando existe cobertura segura.
-  - Acción recomendada: medir cobertura real, migrar históricos seguros y dejar el fallback solo como red explícita de seguridad.
+### Pendiente
 
 - **Desarmar `net_worth.services.py` como facade interna.**
   - Para qué sirve hoy: mantiene imports estables hacia totales, moneda base e inflación mientras otros módulos/tests siguen acoplados.
   - Por qué es legacy: replica el patrón de facade ya retirado en `accounting/services.py`.
-  - Acción recomendada: migrar imports a módulos específicos (`services_summaries`, `services_timelines`, `services_assets_core`, etc.) y eliminar la facade cuando no tenga consumidores.
+  - Consumidor externo actual: `core/portable_data.py` importa `get_base_currency_for_user` y `get_financed_asset_queryset_for_user` — ambas definidas en `services.py` directamente.
+  - Acción recomendada: mover esas dos funciones a un sub-módulo específico (e.g. `services_user.py`) y eliminar la facade cuando no tenga consumidores externos.
+
+- **`compat.*` en capabilities.**
+  - Para qué sirve hoy: puente frontend mientras los checks migran al modelo de capabilities efectivo.
+  - Consumidores activos: `capabilities.people` se accede directamente en `people/api.ts` y `net-worth/extensions.ts` (Core y SaaS). `canUsePeople()` y `canUseOwnership()` usan `source.compat.people/ownership`. `isPremium` no tiene consumidores externos.
+  - Acción recomendada: migrar accesos directos a `capabilities.people` hacia `canUsePeople()`, luego eliminar el spread `...compat` de `withCompat`.
+
+### Retirado o aclarado
+
+- ✅ **Absorción de Introducción de Datos en Presupuesto — completada.** No quedan rutas, dominios, vistas ni CSS con nombre `data-input`; `core.dataInput` retirado de capabilities.
+
+- ✅ **Campos legacy de aportaciones periódicas en Patrimonio — retirados (2026-05-19).** Migración `net_worth/0039` migró los datos a `contribution_intervals`; migración `net_worth/0042` eliminó los campos escalares (`monthly_contribution_amount`, `expected_end_date`, `investment_contribution_currency`, `investment_contribution_frequency`, `investment_contribution_mode`). Aplicada y verificada.
+
+- **Fallback Budget/check-ins — no es deuda técnica de código.** El mecanismo de checkins es diseño intencional del modo dual: son autoritativos cuando no hay cobertura ledger, y ledger tiene precedencia cuando existe. La deuda es operativa: meses históricos con cobertura solo por checkin que podrían tener respaldo ledger no migrado. No requiere cambio de código.
 
 ### Mantener por seguridad de datos
 
@@ -206,14 +210,6 @@ Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz a
 - **Trazabilidad de movimientos importados.**
   - Para qué sirve hoy: conserva `origin`, `import_source` e `import_fingerprint` para saber qué movimientos nacieron de una importación histórica.
   - Decisión: mantener. No reintroduce el importador MoneyWiz ni el borrado masivo de importados.
-
-- **Campos legacy de aportaciones periódicas en Patrimonio.**
-  - Para qué sirven hoy: compatibilidad con activos creados antes de los intervalos múltiples.
-  - Acción recomendada: verificar que los datos reales ya tienen `contribution_intervals`; retirar campos/fallbacks solo con migración segura.
-
-- **`compat.*` en capabilities.**
-  - Para qué sirve hoy: puente SaaS/frontend mientras todos los checks migran al modelo de capabilities efectivo.
-  - Acción recomendada: retirar cuando no haya consumidores de `compat.*`.
 
 ### Referencias históricas
 

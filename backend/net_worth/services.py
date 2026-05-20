@@ -6,11 +6,14 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, cast
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone as _timezone
 
-from accounts.models import UserSettings
+from accounts.services import (
+    _ensure_user_settings,
+    get_base_currency_for_user,  # noqa: F401 — re-exported for internal consumers and test mocks
+)
 from core.models import InflationIndex
 from core.services import (
     adjust_for_inflation as _core_adjust_for_inflation,
@@ -19,7 +22,10 @@ from core.services import (
 )
 
 from .models import Asset, Liability
-from .services_assets_core import get_effective_asset_amount
+from .services_assets_core import (
+    get_effective_asset_amount,
+    get_financed_asset_queryset_for_user,  # noqa: F401 — re-exported for internal consumers
+)
 from .services_liabilities_core import (
     _last_day_of_month as _liabilities_last_day_of_month,
     get_effective_liability_amount,
@@ -39,10 +45,6 @@ class NetWorthTotals:
     assets_by_category: dict[str, Decimal]
     assets_by_subcategory: dict[str, Decimal]
     liabilities_by_category: dict[str, Decimal]
-
-
-def get_financed_asset_queryset_for_user(*, user):
-    return Asset.objects.filter(user=user, is_active=True)
 
 
 INTEREST_BEARING_INVESTMENT_SUBCATEGORIES = {
@@ -71,19 +73,6 @@ def get_liquid_liability_queryset_for_user(*, user):
         is_active=True,
         category=Liability.Category.CREDIT_CARD,
     )
-
-
-def _ensure_user_settings(user) -> None:
-    """Ensure the user.settings reverse relation is loaded, creating the row if needed."""
-    try:
-        user.settings  # noqa: B018 – triggers Django cached descriptor
-    except ObjectDoesNotExist:
-        UserSettings.objects.get_or_create(user=user)
-
-
-def get_base_currency_for_user(*, user) -> str:
-    _ensure_user_settings(user)
-    return cast(str, user.settings.base_currency)
 
 
 def get_inflation_region_for_user(*, user) -> str:
@@ -173,12 +162,6 @@ def calculate_totals(
         assets_by_subcategory=assets_by_subcategory,
         liabilities_by_category=liabilities_by_category,
     )
-
-
-def _serialize_money(value: Decimal | None) -> str | None:
-    if value is None:
-        return None
-    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def build_inflation_adjuster(

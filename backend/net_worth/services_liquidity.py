@@ -3,7 +3,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
 from django.core.exceptions import ValidationError
@@ -16,6 +16,12 @@ from .models import AssetValuation, LiabilityValuation, LiquidityMonthlyCheckin
 
 
 ZERO = Decimal("0")
+
+
+def _serialize_money(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 @dataclass
@@ -673,5 +679,5 @@ def build_liquidity_monthly_summary(*, user, fiscal_year: int, month: int) -> di
         get_effective_asset_amount_fn=services_facade.get_effective_asset_amount,
         get_effective_liability_amount_fn=services_facade.get_effective_liability_amount,
         last_day_of_month_fn=services_facade._last_day_of_month,
-        serialize_money_fn=services_facade._serialize_money,
+        serialize_money_fn=_serialize_money,
     )

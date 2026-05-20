@@ -30,7 +30,8 @@ from net_worth.serializers import (
     LiquidityAssetEventSerializer,
     LiquidityMonthlyCheckinSerializer,
 )
-from net_worth.services import get_base_currency_for_user, get_financed_asset_queryset_for_user
+from accounts.services import get_base_currency_for_user
+from net_worth.services_assets_core import get_financed_asset_queryset_for_user
 
 
 def get_current_portable_app_version() -> str:

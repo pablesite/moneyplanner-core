@@ -14,7 +14,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-05-17 | **Versión Core:** 0.23.5
+**Última revisión:** 2026-05-20 | **Versión Core:** 0.23.5
 
 ---
 
@@ -52,7 +52,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Coach financiero — navegación | Media | ⚪ | Rediseñar integración con módulos; flujo natural coach ↔ producto |
 | Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
 | Sistema de diseño unificado | Alta (crítico) | 🔄 | Fundacion inicial de tokens, superficies y controles compartidos creada en `core/frontend/src/styles/app.css`; pendiente migracion/pulido vista a vista. |
-| Limpieza legacy residual | Media | 🔄 | Inventario vivo documentado en `roadmap/product-roadmap.md`. Avance: Introducción de Datos absorbido en Presupuesto y alias `investment_purchase` retirado del contrato activo; quedan fallback Budget/check-ins, facade `net_worth.services`, campos legacy de aportaciones, compat portable y `compat.*`. |
+| Limpieza legacy residual | Media | 🔄 | Inventario en `roadmap/product-roadmap.md`. Quedan: facade `net_worth.services` (1 consumidor externo: `portable_data.py`) y `compat.*` en capabilities (4 ficheros consumidores directos). Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (`monthly_contribution_amount` et al., migración 0042 aplicada 2026-05-19). Fallback Budget/check-ins: diseño intencional del modo dual, no deuda técnica. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
 | Auth y seguridad | Alta | ✅ | Logout endpoint con blacklist, aislamiento cross-user validado con 31 tests (net_worth, accounting, budget, memberships), frontend wired. Pendiente: auditoría CVEs y flujos reales con usuarios. |
