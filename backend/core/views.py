@@ -7,6 +7,7 @@ from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -19,6 +20,12 @@ from .portable_data import (
     import_portable_bundle_from_request,
 )
 from .serializers import FxRateSerializer, InflationIndexSerializer
+
+
+class _MarketDataPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
 
 
 def _pg_env() -> dict[str, str]:
@@ -36,12 +43,14 @@ class FxRateViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = FxRateSerializer
     queryset = FxRate.objects.all().order_by("-rate_date", "from_currency", "to_currency")
+    pagination_class = _MarketDataPagination
 
 
 class InflationIndexViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = InflationIndexSerializer
-    queryset = InflationIndex.objects.all().order_by("-period")
+    queryset = InflationIndex.objects.all().order_by("-period", "region")
+    pagination_class = _MarketDataPagination
 
 
 class PortableDataMetaAPIView(APIView):

@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { auxDataApi } from '@/domains/aux-data/api';
 import { toApiErrorMessage } from '@/lib/errors';
 import type {
@@ -13,26 +13,66 @@ export function useAuxData() {
   const error = ref<string | null>(null);
   const status = ref<MarketDataStatus | null>(null);
 
-  const fxRates = computed<FxRate[]>(() => status.value?.datasets.fx.latest_rows ?? []);
-  const inflation = computed<InflationIndex[]>(
-    () => status.value?.datasets.inflation.latest_rows ?? [],
-  );
-  const fxStates = computed<MarketDataState[]>(() => status.value?.datasets.fx.states ?? []);
-  const inflationStates = computed<MarketDataState[]>(
-    () => status.value?.datasets.inflation.states ?? [],
-  );
-  const supportedInflationRegions = computed(() => status.value?.supported_inflation_regions ?? []);
+  const fxStates = ref<MarketDataState[]>([]);
+  const inflationStates = ref<MarketDataState[]>([]);
+  const supportedInflationRegions = ref<{ code: string; label: string }[]>([]);
+
+  const inflation = ref<InflationIndex[]>([]);
+  const inflationPage = ref(1);
+  const inflationHasMore = ref(true);
+  const inflationLoadingMore = ref(false);
+
+  const fxRates = ref<FxRate[]>([]);
+  const fxPage = ref(1);
+  const fxHasMore = ref(true);
+  const fxLoadingMore = ref(false);
 
   async function loadAll() {
     loading.value = true;
     error.value = null;
     try {
       const response = await auxDataApi.getStatus();
-      status.value = response.data ?? null;
+      const data = response.data ?? null;
+      status.value = data;
+      fxStates.value = data?.datasets.fx.states ?? [];
+      inflationStates.value = data?.datasets.inflation.states ?? [];
+      supportedInflationRegions.value = data?.supported_inflation_regions ?? [];
     } catch (e: unknown) {
       error.value = toApiErrorMessage(e);
     } finally {
       loading.value = false;
+    }
+
+    await Promise.all([loadMoreInflation(), loadMoreFx()]);
+  }
+
+  async function loadMoreInflation() {
+    if (!inflationHasMore.value || inflationLoadingMore.value) return;
+    inflationLoadingMore.value = true;
+    try {
+      const res = await auxDataApi.getInflationPage(inflationPage.value);
+      inflation.value.push(...(res.data?.results ?? []));
+      inflationHasMore.value = res.data?.next != null;
+      inflationPage.value += 1;
+    } catch {
+      // silently stop
+    } finally {
+      inflationLoadingMore.value = false;
+    }
+  }
+
+  async function loadMoreFx() {
+    if (!fxHasMore.value || fxLoadingMore.value) return;
+    fxLoadingMore.value = true;
+    try {
+      const res = await auxDataApi.getFxRatesPage(fxPage.value);
+      fxRates.value.push(...(res.data?.results ?? []));
+      fxHasMore.value = res.data?.next != null;
+      fxPage.value += 1;
+    } catch {
+      // silently stop
+    } finally {
+      fxLoadingMore.value = false;
     }
   }
 
@@ -56,11 +96,17 @@ export function useAuxData() {
     error,
     status,
     fxRates,
+    fxHasMore,
+    fxLoadingMore,
     inflation,
+    inflationHasMore,
+    inflationLoadingMore,
     fxStates,
     inflationStates,
     supportedInflationRegions,
     loadAll,
+    loadMoreInflation,
+    loadMoreFx,
     formatFxRate,
     formatInflationIndex,
   };

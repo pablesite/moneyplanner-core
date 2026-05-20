@@ -12,8 +12,16 @@ from .services import (
 class FxRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FxRate
-        fields = ["id", "rate_date", "from_currency", "to_currency", "rate", "updated_at"]
-        read_only_fields = ["id", "updated_at"]
+        fields = [
+            "id",
+            "rate_date",
+            "from_currency",
+            "to_currency",
+            "rate",
+            "last_synced_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "last_synced_at", "updated_at"]
 
     def validate_from_currency(self, value: str):
         return normalize_currency_code(value)
@@ -34,8 +42,8 @@ class FxRateSerializer(serializers.ModelSerializer):
 class InflationIndexSerializer(serializers.ModelSerializer):
     class Meta:
         model = InflationIndex
-        fields = ["id", "region", "period", "index", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        fields = ["id", "region", "period", "index", "last_synced_at", "created_at", "updated_at"]
+        read_only_fields = ["id", "last_synced_at", "created_at", "updated_at"]
 
     def validate_period(self, value):
         try:

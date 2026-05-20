@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useAuxDataPage } from '@/domains/aux-data';
 import { FamilyMemberManager, OwnershipManager } from '@/domains/people';
 
@@ -7,12 +7,18 @@ const {
   loading,
   error,
   fxRates,
+  fxHasMore,
+  fxLoadingMore,
   inflation,
+  inflationHasMore,
+  inflationLoadingMore,
   fxStates,
   inflationStates,
   supportedInflationRegions,
   formatInflationIndex,
   formatFxRate,
+  loadMoreInflation,
+  loadMoreFx,
 } = useAuxDataPage();
 
 const regionLabelMap = computed(
@@ -36,15 +42,57 @@ function formatTimestamp(value: string | null): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('es-ES');
 }
+
+// Infinite scroll via IntersectionObserver
+const inflationSentinel = ref<HTMLElement | null>(null);
+const fxSentinel = ref<HTMLElement | null>(null);
+
+let inflationObserver: IntersectionObserver | null = null;
+let fxObserver: IntersectionObserver | null = null;
+
+function setupObserver(
+  el: HTMLElement,
+  hasMore: { value: boolean },
+  loadMore: () => void,
+): IntersectionObserver {
+  const obs = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting && hasMore.value) loadMore();
+    },
+    { threshold: 0.1 },
+  );
+  obs.observe(el);
+  return obs;
+}
+
+watch(inflationSentinel, (el) => {
+  inflationObserver?.disconnect();
+  if (el) inflationObserver = setupObserver(el, inflationHasMore, loadMoreInflation);
+});
+
+watch(fxSentinel, (el) => {
+  fxObserver?.disconnect();
+  if (el) fxObserver = setupObserver(el, fxHasMore, loadMoreFx);
+});
+
+onBeforeUnmount(() => {
+  inflationObserver?.disconnect();
+  fxObserver?.disconnect();
+});
 </script>
 
 <template>
-  <div class="container ui-pro-page">
-    <h1 class="h1 ui-settings-page-title">Settings</h1>
+  <div class="container ui-page-shell">
+    <header class="ui-page-head">
+      <div>
+        <p class="ui-page-eyebrow">Datos auxiliares</p>
+        <h1 class="ui-page-title ui-settings-page-title">Settings</h1>
+      </div>
+    </header>
 
-    <div v-if="error" class="alert mt-3">{{ error }}</div>
+    <div v-if="error" class="ui-state-block ui-state-error" role="alert">{{ error }}</div>
 
-    <section class="card ui-pro-panel ui-settings-accordion-item">
+    <section class="ui-section-card ui-settings-accordion-item">
       <button
         class="ui-settings-toggle"
         type="button"
@@ -81,7 +129,7 @@ function formatTimestamp(value: string | null): string {
       </div>
     </section>
 
-    <section class="card ui-pro-panel ui-settings-accordion-item">
+    <section class="ui-section-card ui-settings-accordion-item">
       <button
         class="ui-settings-toggle"
         type="button"
@@ -109,31 +157,40 @@ function formatTimestamp(value: string | null): string {
           </article>
         </div>
 
-        <table class="ui-data-table">
-          <thead>
-            <tr>
-              <th>Periodo</th>
-              <th>Region</th>
-              <th>Indice</th>
-              <th>Sync</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in inflation" :key="r.id">
-              <td>{{ r.period }}</td>
-              <td>{{ regionLabelMap.get(r.region) ?? r.region }}</td>
-              <td>{{ formatInflationIndex(r.index) }}</td>
-              <td>{{ r.last_synced_at ? formatTimestamp(r.last_synced_at) : '-' }}</td>
-            </tr>
-            <tr v-if="!inflation.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay indices IPC sincronizados todavia.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="ui-data-table-wrap">
+          <table class="ui-data-table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Region</th>
+                <th>Indice</th>
+                <th>Sync</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in inflation" :key="r.id">
+                <td>{{ r.period }}</td>
+                <td>{{ regionLabelMap.get(r.region) ?? r.region }}</td>
+                <td>{{ formatInflationIndex(r.index) }}</td>
+                <td>{{ r.last_synced_at ? formatTimestamp(r.last_synced_at) : '-' }}</td>
+              </tr>
+              <tr v-if="!inflation.length && !loading">
+                <td colspan="4" class="ui-table-empty">
+                  No hay indices IPC sincronizados todavia.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div ref="inflationSentinel" class="ui-data-table-sentinel">
+            <span v-if="inflationLoadingMore" class="ui-data-table-sentinel-label"
+              >Cargando...</span
+            >
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="card ui-pro-panel ui-settings-accordion-item">
+    <section class="ui-section-card ui-settings-accordion-item">
       <button
         class="ui-settings-toggle"
         type="button"
@@ -161,30 +218,35 @@ function formatTimestamp(value: string | null): string {
           </article>
         </div>
 
-        <table class="ui-data-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Par</th>
-              <th>Rate</th>
-              <th>Sync</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in fxRates" :key="r.id">
-              <td>{{ r.rate_date }}</td>
-              <td>{{ r.from_currency }} -> {{ r.to_currency }}</td>
-              <td>{{ formatFxRate(r.rate, r.from_currency, r.to_currency) }}</td>
-              <td>{{ r.last_synced_at ? formatTimestamp(r.last_synced_at) : '-' }}</td>
-            </tr>
-            <tr v-if="!fxRates.length && !loading">
-              <td colspan="4" class="ui-table-empty">No hay FX rates sincronizados todavia.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="ui-data-table-wrap">
+          <table class="ui-data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Par</th>
+                <th>Rate</th>
+                <th>Sync</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in fxRates" :key="r.id">
+                <td>{{ r.rate_date }}</td>
+                <td>{{ r.from_currency }} -> {{ r.to_currency }}</td>
+                <td>{{ formatFxRate(r.rate, r.from_currency, r.to_currency) }}</td>
+                <td>{{ r.last_synced_at ? formatTimestamp(r.last_synced_at) : '-' }}</td>
+              </tr>
+              <tr v-if="!fxRates.length && !loading">
+                <td colspan="4" class="ui-table-empty">No hay FX rates sincronizados todavia.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div ref="fxSentinel" class="ui-data-table-sentinel">
+            <span v-if="fxLoadingMore" class="ui-data-table-sentinel-label">Cargando...</span>
+          </div>
+        </div>
       </div>
     </section>
 
-    <div v-if="loading" class="ui-status-line">Cargando datos auxiliares...</div>
+    <div v-if="loading" class="ui-state-block ui-state-loading">Cargando datos auxiliares...</div>
   </div>
 </template>
