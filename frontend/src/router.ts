@@ -15,7 +15,7 @@ import { registerAuthGuard } from '@/domains/auth';
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: LoginView },
   { path: '/registro', name: 'register', component: RegisterView },
-  { path: '/', redirect: '/presupuesto' },
+  { path: '/', redirect: '/patrimonio' },
   { path: '/inicio', redirect: '/guia' },
   { path: '/guia', name: 'home', component: HomeView },
   { path: '/guia/fases/:phaseId', name: 'guide-phase', component: GuidePhaseDetailView },
