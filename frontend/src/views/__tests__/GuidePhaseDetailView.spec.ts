@@ -96,7 +96,7 @@ describe('GuidePhaseDetailView (fase 2)', () => {
     expect(wrapper.text()).toContain('Distribucion del ahorro');
     expect(wrapper.text()).toContain('% inversiones / ingresos recurrentes');
     expect(wrapper.text()).toContain('Colchon mensual tras cargas temporales');
-    expect(wrapper.text()).toContain('Ano con eventos extraordinarios');
+    expect(wrapper.text()).toContain('Año con eventos extraordinarios');
 
     expect(mockNetWorthStore.fetchSettings).toHaveBeenCalledTimes(1);
     expect(mockNetWorthStore.refreshAll).toHaveBeenCalledTimes(1);
@@ -115,7 +115,7 @@ describe('GuidePhaseDetailView (fase 2)', () => {
 
     expect(wrapper.text()).toContain('Tension de caja');
     expect(wrapper.text()).not.toContain('Capacidad de asignacion recurrente mensual');
-    expect(wrapper.text()).not.toContain('Ano con eventos extraordinarios');
+    expect(wrapper.text()).not.toContain('Año con eventos extraordinarios');
   });
 });
 

@@ -44,7 +44,7 @@ export function useLoginForm() {
   const sessionNotice = ref<string | null>(null);
 
   if (route.query.reason === 'session_expired') {
-    sessionNotice.value = 'Tu sesion expiro. Inicia sesion nuevamente.';
+    sessionNotice.value = 'Tu sesión expiró. Inicia sesión nuevamente.';
   }
 
   async function login() {

@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
               :points="page.dailyBalanceSeriesChartPoints"
               :unit="page.dailyBalanceSeriesUnit"
               series-label="Saldo neto contable"
-              aria-label="Evolucion diaria del saldo neto contable"
+              aria-label="Evolución diaria del saldo neto contable"
             />
             <NetWorthDeltaChart
               :rows="page.dailyBalanceSeriesMonthlyRows"
@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
 
       <BaseModal
         :open="dailyTimelineExpanded"
-        title="Evolucion contable diaria"
+        title="Evolución contable diaria"
         panel-class="max-w-[1080px]"
         :close-on-backdrop="true"
         @close="dailyTimelineExpanded = false"
@@ -190,7 +190,7 @@ onBeforeUnmount(() => {
               :points="page.dailyBalanceSeriesChartPoints"
               :unit="page.dailyBalanceSeriesUnit"
               series-label="Saldo neto contable"
-              aria-label="Evolucion diaria del saldo neto contable expandida"
+              aria-label="Evolución diaria del saldo neto contable expandida"
               expanded
             />
             <NetWorthDeltaChart

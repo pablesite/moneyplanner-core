@@ -43,7 +43,7 @@ describe('useLoginForm (core)', () => {
     form.username.value = 'u';
     form.password.value = 'p';
 
-    expect(form.sessionNotice.value).toContain('sesion expiro');
+    expect(form.sessionNotice.value).toContain('sesión expiró');
 
     await form.login();
 

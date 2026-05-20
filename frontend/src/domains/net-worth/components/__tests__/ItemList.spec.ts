@@ -67,7 +67,7 @@ describe('ItemList (core)', () => {
       global: { stubs },
     });
 
-    await wrapper.find('button[aria-label="Anadir"]').trigger('click');
+    await wrapper.find('button[aria-label="Añadir"]').trigger('click');
     expect(onAdd).toHaveBeenCalled();
 
     await wrapper.find('[data-test="toggle"]').trigger('click');

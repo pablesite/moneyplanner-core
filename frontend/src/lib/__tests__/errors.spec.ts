@@ -63,7 +63,7 @@ describe('core api error helper', () => {
       message: 'Request failed with status code 401',
     };
     const spy = vi.spyOn(axios, 'isAxiosError').mockReturnValue(true);
-    expect(toApiErrorMessage(err)).toBe('Usuario o contrasena incorrectos.');
+    expect(toApiErrorMessage(err)).toBe('Usuario o contraseña incorrectos.');
     spy.mockRestore();
   });
 

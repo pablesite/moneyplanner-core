@@ -32,7 +32,7 @@ export const guidePhases: GuidePhase[] = [
     id: 4,
     title: 'Salud patrimonial',
     focus: 'Balancear activos y pasivos',
-    objective: 'Mejorar apalancamiento, respaldo de deuda, concentracion y liquidez.',
+    objective: 'Mejorar apalancamiento, respaldo de deuda, concentración y liquidez.',
     progress: 18,
   },
 ];

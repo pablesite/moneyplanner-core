@@ -718,7 +718,7 @@ async function saveEdit(id: number) {
           v-if="onAdd"
           class="btn btn-primary btn-sm nw-list-add-icon-only"
           type="button"
-          aria-label="Anadir"
+          aria-label="Añadir"
           @click="onAdd"
         >
           <span class="btn-icon">+</span>

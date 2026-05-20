@@ -123,7 +123,7 @@ const assignAccountMenuRef = (element: Element | ComponentPublicInstance | null)
               role="menuitem"
               @click="logout"
             >
-              Cerrar sesion
+              Cerrar sesión
             </button>
           </div>
         </div>

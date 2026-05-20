@@ -497,10 +497,10 @@ export function useAccountingPage() {
     if (!editKindNeedsCounterparty.value) return '';
     if (editCounterpartyOptions.value.length > 0) return '';
     if (editTransactionForm.kind === 'investment') {
-      return 'No hay cuentas de inversion contables activas. Activa tracking contable en la posicion manual para poder usarla aqui.';
+      return 'No hay cuentas de inversión contables activas. Activa tracking contable en la posición manual para poder usarla aquí.';
     }
     if (editTransactionForm.kind === 'debt_payment') {
-      return 'No hay cuentas de pasivo contables activas. Activa tracking contable en el pasivo manual para poder usarlo aqui.';
+      return 'No hay cuentas de pasivo contables activas. Activa tracking contable en el pasivo manual para poder usarlo aquí.';
     }
     return 'No hay contracuentas disponibles para el tipo seleccionado.';
   });
@@ -1972,7 +1972,7 @@ export function useAccountingPage() {
       await Promise.all([store.refreshAll(), refreshManualPositionOptions()]);
       successMessage.value =
         positionIds.length === 1
-          ? 'Tracking contable activado para la posicion seleccionada.'
+          ? 'Tracking contable activado para la posición seleccionada.'
           : `Tracking contable activado para ${positionIds.length} posiciones seleccionadas.`;
     } catch (error: unknown) {
       store.error = toApiErrorMessage(error);
@@ -1992,7 +1992,7 @@ export function useAccountingPage() {
     if (
       !confirm(
         `Quitar tracking contable de "${account.name}"?\n\n` +
-          'La posicion volvera a tracking manual y dejara de formar parte del resumen contable.',
+          'La posición volverá a tracking manual y dejará de formar parte del resumen contable.',
       )
     )
       return;

@@ -709,7 +709,7 @@ const {
 
           <BaseModal
             :open="timelineExpanded"
-            title="Evolucion temporal"
+            title="Evolución temporal"
             panel-class="max-w-[1080px]"
             @close="timelineExpanded = false"
           >

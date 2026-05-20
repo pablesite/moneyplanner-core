@@ -21,7 +21,7 @@ const {
   <div class="container ui-page-shell">
     <section class="ui-section-card ui-home-intro">
       <div class="ui-home-intro-text">
-        <p class="ui-page-eyebrow">Guia financiera</p>
+        <p class="ui-page-eyebrow">Guía financiera</p>
         <h1 class="ui-page-title ui-home-title">Mapa de fases financieras</h1>
         <p class="ui-page-lead ui-home-copy">
           Cada fase refleja una dimension distinta de tu situacion. Mejorar una puede afectar
@@ -37,7 +37,7 @@ const {
       </div>
       <div class="ui-home-intro-kpis">
         <div class="ui-home-intro-kpi" :style="isLoading ? {} : phaseSummaryStyle(mostTensePhase)">
-          <span>Mayor tension</span>
+          <span>Mayor tensión</span>
           <span
             v-if="isLoading"
             class="ui-home-skeleton-bar ui-home-skeleton-kpi"

@@ -89,7 +89,7 @@ void [
       <ul class="list">
         <li>Objetivo: {{ phase.objective }}</li>
         <li>Foco operativo: {{ phase.focus }}</li>
-        <li>Prerrequisito: completar antes la fase activa en Guia.</li>
+        <li>Prerrequisito: completar antes la fase activa en Guía.</li>
       </ul>
     </section>
 

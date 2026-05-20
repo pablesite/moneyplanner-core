@@ -177,7 +177,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
           <button
             class="btn btn-primary btn-sm nw-list-add-icon-only"
             type="button"
-            aria-label="Anadir ingreso"
+            aria-label="Añadir ingreso"
             :disabled="annualIncomeLoading"
             @click="() => page.openIncomeModal()"
           >
@@ -340,7 +340,7 @@ const annualExpenseForm = computed(() => unref(page.annualExpenseForm) ?? {});
           <button
             class="btn btn-primary btn-sm nw-list-add-icon-only"
             type="button"
-            aria-label="Anadir salida"
+            aria-label="Añadir salida"
             :disabled="annualExpenseLoading"
             @click="() => page.openExpenseModal()"
           >

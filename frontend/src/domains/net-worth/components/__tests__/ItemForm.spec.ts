@@ -235,7 +235,7 @@ describe('ItemForm (saas)', () => {
       .find((s) => s.text().includes('decreciente + residual por subcategoría'))!;
     await amortizationMethodSelect.setValue('straight_line');
 
-    expect(wrapper.text()).not.toContain('Plazo de amortizacion (anos) obligatorio');
+    expect(wrapper.text()).not.toContain('Plazo de amortización (anos) obligatorio');
     await wrapper.find('button.btn-primary').trigger('click');
     await flushPromises();
 

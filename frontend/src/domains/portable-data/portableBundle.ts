@@ -447,9 +447,9 @@ export function buildImportPreviewMessageWithVersion(
       ? 'Se borraran primero los datos actuales de estos bloques.'
       : 'La importacion anade registros y actualiza settings/relaciones importados.',
     compatibility === 'legacy_replace_blocked'
-      ? 'Aviso: este archivo no incluye version exportada. El backend bloqueara `replace` por seguridad.'
+      ? 'Aviso: este archivo no incluye versión exportada. El backend bloqueará `replace` por seguridad.'
       : compatibility === 'newer_than_app'
-        ? 'Aviso: el archivo viene de una version mas nueva. El backend bloqueara `replace` para evitar perdida de datos.'
+        ? 'Aviso: el archivo viene de una versión más nueva. El backend bloqueará `replace` para evitar pérdida de datos.'
         : compatibility === 'unknown'
           ? 'Aviso: no se pudo determinar toda la compatibilidad antes de importar.'
           : 'Compatibilidad preliminar: OK.',

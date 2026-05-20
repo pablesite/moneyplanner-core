@@ -54,11 +54,11 @@ describe('LoginView', () => {
   it('renders session expired notice', () => {
     mockUseLoginForm.mockReturnValue(
       makeState({
-        sessionNotice: ref('Tu sesion expiro. Inicia sesion nuevamente.'),
+        sessionNotice: ref('Tu sesión expiró. Inicia sesión nuevamente.'),
       }),
     );
     const wrapper = mount(LoginView);
-    expect(wrapper.text()).toContain('Tu sesion expiro. Inicia sesion nuevamente.');
+    expect(wrapper.text()).toContain('Tu sesión expiró. Inicia sesión nuevamente.');
   });
 
   it('submits credentials through composable login action', async () => {

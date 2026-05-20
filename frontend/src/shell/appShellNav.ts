@@ -7,7 +7,7 @@ export type NavItem = {
 };
 
 export const appShellNavItems: NavItem[] = [
-  { id: 'home', icon: 'GU', label: 'Guia', hint: 'Plan paso a paso', to: '/guia' },
+  { id: 'home', icon: 'GU', label: 'Guía', hint: 'Plan paso a paso', to: '/guia' },
   {
     id: 'net-worth',
     icon: 'PT',

@@ -40,7 +40,7 @@ defineProps({
           v-model="page.activationQuery"
           class="input"
           type="search"
-          placeholder="Buscar posicion por nombre o divisa"
+          placeholder="Buscar posición por nombre o divisa"
           :disabled="!page.availableManualPositionOptions.length"
         />
       </div>

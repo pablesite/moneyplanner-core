@@ -396,7 +396,7 @@ function typeBadgeVariant(movement: {
                     :disabled="state.cuentasLoadingMore"
                     @click="state.loadMoreCuentas"
                   >
-                    {{ state.cuentasLoadingMore ? 'Cargando...' : 'Cargar mas' }}
+                    {{ state.cuentasLoadingMore ? 'Cargando...' : 'Cargar más' }}
                   </button>
                 </div>
                 <p v-else-if="state.cuentasTransactions.length" class="ui-load-more-hint">

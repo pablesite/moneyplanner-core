@@ -339,7 +339,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
         :disabled="state.todosLoadingMore"
         @click="state.loadMoreTodos"
       >
-        {{ state.todosLoadingMore ? 'Cargando...' : 'Cargar mas' }}
+        {{ state.todosLoadingMore ? 'Cargando...' : 'Cargar más' }}
       </button>
     </div>
     <p v-else-if="state.todosTransactions.length" class="ui-load-more-hint">

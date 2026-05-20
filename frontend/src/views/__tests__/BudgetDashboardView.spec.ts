@@ -1263,7 +1263,7 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const expenseSection = wrapper.find('.ui-budget-section-expense');
-    expect(expenseSection.text()).toContain('Evolucion ejecutada');
+    expect(expenseSection.text()).toContain('Evolución ejecutada');
     expect(expenseSection.text()).toContain('Ejecutado real (YTD)');
 
     const toggleDetail = wrapper
@@ -1585,7 +1585,7 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     const incomeSection = wrapper.find('.ui-budget-section-income');
-    expect(incomeSection.text()).toContain('Evolucion ejecutada');
+    expect(incomeSection.text()).toContain('Evolución ejecutada');
     expect(incomeSection.text()).toContain('Ejecutado real (YTD)');
     expect(incomeSection.text()).toContain('Presupuesto previsto (YTD)');
     expect(incomeSection.text()).toContain('Fuera de presupuesto (YTD)');

@@ -514,7 +514,7 @@ async function removeExpense(entry: AnnualExpenseEntry): Promise<void> {
       <div class="ui-budget-evolution-card">
         <div class="ui-budget-evolution-head">
           <div>
-            <h3>Evolucion ejecutada (barras)</h3>
+            <h3>Evolución ejecutada (barras)</h3>
             <p v-if="section.id === 'income'">
               Compara `Previsto` vs `Ejecutado` por mes usando los check-ins del cierre mensual
               {{

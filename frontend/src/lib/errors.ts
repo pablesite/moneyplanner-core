@@ -36,13 +36,13 @@ function humanMessageForAuthFailure(error: unknown): string | null {
   const status = error.response?.status;
   const url = error.config?.url ?? '';
   if (status === 401 && url.includes('/api/auth/token/')) {
-    return 'Usuario o contrasena incorrectos.';
+    return 'Usuario o contraseña incorrectos.';
   }
 
   const data = error.response?.data;
   if (isRecord(data) && typeof data.detail === 'string') {
     if (data.detail.toLowerCase().includes('no active account found')) {
-      return 'Usuario o contrasena incorrectos.';
+      return 'Usuario o contraseña incorrectos.';
     }
   }
 

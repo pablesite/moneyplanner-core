@@ -136,7 +136,7 @@ function onSelectInflationRegion(e: Event) {
           </div>
 
           <div v-if="!canShowReal" class="nw-settings-hint nw-settings-hint-error">
-            El modo IPC solo esta disponible cuando se puede calcular (EUR + IPC cargado).
+            El modo IPC solo está disponible cuando se puede calcular (EUR + IPC cargado).
           </div>
         </div>
       </div>

@@ -1361,7 +1361,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       title: 'Coste y visibilidad de deuda',
       score: phase1DebtCostScoreValue.value,
       description:
-        'Coste financiero de los pasivos y calidad del dato de TAE para priorizar amortizacion.',
+        'Coste financiero de los pasivos y calidad del dato de TAE para priorizar amortización.',
       kpis: [
         {
           id: 'max-liability-tae',
@@ -1392,7 +1392,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       title: 'Riesgo estructural de deuda',
       score: phase1DebtRiskScoreValue.value,
       description:
-        'Respaldo, concentracion y exposicion a deuda cara para ordenar el plan de reduccion.',
+        'Respaldo, concentración y exposicion a deuda cara para ordenar el plan de reduccion.',
       kpis: [
         {
           id: 'unbacked-debt-liabilities',
@@ -1428,7 +1428,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
         { score: cashFlowCommittedLoadScoreValue.value, weight: 0.35 },
       ]),
       description:
-        'Lectura principal de tension recurrente: coste de vida base y carga actual de caja incluyendo compromisos temporales.',
+        'Lectura principal de tensión recurrente: coste de vida base y carga actual de caja incluyendo compromisos temporales.',
       kpis: [
         {
           id: 'structural-operating-ratio',
@@ -1517,7 +1517,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       title: 'Cobertura del colchon',
       score: phase3CoverageScoreValue.value,
       description:
-        'Cobertura de liquidez util medida contra gasto base (Fase 2) y carga actual incluyendo compromisos temporales.',
+        'Cobertura de liquidez útil medida contra gasto base (Fase 2) y carga actual incluyendo compromisos temporales.',
       kpis: [
         {
           id: 'emergency-months-base',
@@ -1554,14 +1554,14 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       kpis: [
         {
           id: 'emergency-liquidity-assets-ratio',
-          label: '% liquidez util / activos',
+          label: '% liquidez útil / activos',
           valueText: formatPct(emergencyLiquidityToAssetsRatioValue.value, 0),
           score: emergencyLiquidityToAssetsScoreValue.value,
           hint: 'Liquidez util disponible para emergencia sobre activos totales. Mayor es mejor.',
         },
         {
           id: 'immediate-liquidity-share',
-          label: '% liquidez inmediata / liquidez util',
+          label: '% liquidez inmediata / liquidez útil',
           valueText: formatPct(immediateLiquidityShareWithinEmergencyValue.value, 0),
           score: emergencyImmediateLiquidityQualityScoreValue.value,
           hint: 'Parte del colchon que esta en cash y acceso inmediato. Mayor es mejor.',
@@ -1887,21 +1887,21 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
     if (!isCashFlowPhase.value) return null;
     if (extraordinaryVolumeRatioValue.value == null) return null;
     if (extraordinaryVolumeRatioValue.value <= 0.25) return null;
-    return `Ano con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score prioriza tension recurrente estructural y cargas temporales de caja.`;
+    return `Año con eventos extraordinarios (${formatPct(extraordinaryVolumeRatioValue.value, 0)} del ingreso total). El score prioriza tensión recurrente estructural y cargas temporales de caja.`;
   });
 
   const phaseDiagnosticCopy = computed(() => {
     if (isDebtPhase.value) {
-      return 'Diagnostico de deuda: coste, respaldo y concentracion para priorizar amortizacion.';
+      return 'Diagnóstico de deuda: coste, respaldo y concentración para priorizar amortización.';
     }
     if (isNetWorthHealthPhase.value) {
-      return 'Diagnostico de salud patrimonial: respaldo patrimonial y distribucion del riesgo.';
+      return 'Diagnóstico de salud patrimonial: respaldo patrimonial y distribución del riesgo.';
     }
     if (isCashFlowPhase.value) {
-      return 'Diagnostico de flujo de caja: score compuesto de tension recurrente (operativo estructural + cargas temporales de caja) y contexto extraordinario separado.';
+      return 'Diagnóstico de flujo de caja: score compuesto de tensión recurrente (operativo estructural + cargas temporales de caja) y contexto extraordinario separado.';
     }
     if (isEmergencyFundPhase.value) {
-      return 'Diagnostico de fondo de emergencia: cobertura del colchon usando liquidez util (baseline Fase 4) contra gasto base y carga actual (semantica Fase 2).';
+      return 'Diagnóstico de fondo de emergencia: cobertura del colchon usando liquidez útil (baseline Fase 4) contra gasto base y carga actual (semántica Fase 2).';
     }
     return phase.value?.objective ?? '';
   });
