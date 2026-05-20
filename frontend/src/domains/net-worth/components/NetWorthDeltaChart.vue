@@ -13,6 +13,10 @@ import {
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip);
 
+function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 type TimelineRow = {
   date: string;
   label: string;
@@ -67,10 +71,10 @@ const chartData = computed<ChartData<'bar'>>(() => ({
       label: 'Variación mensual',
       data: deltaPoints.value.map((p) => p.value),
       backgroundColor: deltaPoints.value.map((p) =>
-        p.value >= 0 ? 'rgba(52, 211, 153, 0.7)' : 'rgba(248, 113, 113, 0.7)',
+        p.value >= 0 ? cssVar('--chart-positive-fill') : cssVar('--chart-negative-fill'),
       ),
       borderColor: deltaPoints.value.map((p) =>
-        p.value >= 0 ? 'rgba(52, 211, 153, 0.9)' : 'rgba(248, 113, 113, 0.9)',
+        p.value >= 0 ? cssVar('--chart-positive-stroke') : cssVar('--chart-negative-stroke'),
       ),
       borderWidth: 1,
       borderRadius: 3,
@@ -91,8 +95,8 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
     legend: { display: false },
     tooltip: {
       displayColors: false,
-      backgroundColor: 'rgba(10, 17, 26, 0.96)',
-      borderColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: cssVar('--chart-tooltip-bg'),
+      borderColor: cssVar('--color-border'),
       borderWidth: 1,
       padding: 12,
       titleFont: { size: 12, weight: 600 },
@@ -111,7 +115,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
       grid: { display: false },
       border: { display: false },
       ticks: {
-        color: 'rgba(226, 232, 240, 0.72)',
+        color: cssVar('--color-text-muted'),
         maxRotation: 0,
         autoSkip: false,
         callback: (_value, index) => {
@@ -123,10 +127,10 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
       },
     },
     y: {
-      grid: { color: 'rgba(148, 163, 184, 0.1)' },
+      grid: { color: cssVar('--color-border') },
       border: { display: false },
       ticks: {
-        color: 'rgba(226, 232, 240, 0.72)',
+        color: cssVar('--color-text-muted'),
         callback: (value) => formatCompact(Number(value)),
       },
     },

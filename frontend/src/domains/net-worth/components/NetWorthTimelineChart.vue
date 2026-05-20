@@ -16,6 +16,10 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
+function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 export type NetWorthTimelineChartPoint = {
   date: string;
   shortLabel: string;
@@ -36,7 +40,7 @@ type Props = {
 
 const props = withDefaults(defineProps<Props>(), {
   ariaLabel: 'Grafico de evolucion patrimonial',
-  seriesColor: '#4cc3ff',
+  seriesColor: () => cssVar('--chart-series-stroke'),
   expanded: false,
   yAxisMinZero: false,
 });
@@ -71,7 +75,7 @@ const chartData = computed<ChartData<'line'>>(() => ({
       label: props.seriesLabel,
       data: props.points.map((point) => point.value),
       borderColor: props.seriesColor,
-      backgroundColor: 'rgba(76, 195, 255, 0.12)',
+      backgroundColor: cssVar('--chart-series-fill'),
       borderWidth: props.expanded ? 3 : 2.5,
       tension: 0.32,
       fill: true,
@@ -80,10 +84,18 @@ const chartData = computed<ChartData<'line'>>(() => ({
       pointHitRadius: 20,
       pointBorderWidth: 2,
       pointHoverBorderWidth: 3,
-      pointBackgroundColor: props.points.map((p) => (p.isCurrent ? '#64748b' : '#f6fbff')),
-      pointHoverBackgroundColor: props.points.map((p) => (p.isCurrent ? '#94a3b8' : '#ffffff')),
-      pointBorderColor: props.points.map((p) => (p.isCurrent ? '#64748b' : props.seriesColor)),
-      pointHoverBorderColor: props.points.map((p) => (p.isCurrent ? '#94a3b8' : props.seriesColor)),
+      pointBackgroundColor: props.points.map((p) =>
+        p.isCurrent ? cssVar('--chart-point-current-bg') : cssVar('--chart-point-bg'),
+      ),
+      pointHoverBackgroundColor: props.points.map((p) =>
+        p.isCurrent ? cssVar('--chart-point-current-hover-bg') : cssVar('--chart-point-hover-bg'),
+      ),
+      pointBorderColor: props.points.map((p) =>
+        p.isCurrent ? cssVar('--chart-point-current-bg') : props.seriesColor,
+      ),
+      pointHoverBorderColor: props.points.map((p) =>
+        p.isCurrent ? cssVar('--chart-point-current-hover-bg') : props.seriesColor,
+      ),
     },
   ],
 }));
@@ -103,8 +115,8 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
     },
     tooltip: {
       displayColors: false,
-      backgroundColor: 'rgba(10, 17, 26, 0.96)',
-      borderColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: cssVar('--chart-tooltip-bg'),
+      borderColor: cssVar('--color-border'),
       borderWidth: 1,
       padding: 12,
       titleFont: {
@@ -133,7 +145,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         display: false,
       },
       ticks: {
-        color: 'rgba(226, 232, 240, 0.72)',
+        color: cssVar('--color-text-muted'),
         maxRotation: 0,
         autoSkip: false,
         callback: (_value, index) => {
@@ -148,13 +160,13 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
       beginAtZero: props.yAxisMinZero && !hasNegativePoints.value,
       min: props.yAxisMinZero && !hasNegativePoints.value ? 0 : undefined,
       grid: {
-        color: 'rgba(148, 163, 184, 0.12)',
+        color: cssVar('--color-border'),
       },
       border: {
         display: false,
       },
       ticks: {
-        color: 'rgba(226, 232, 240, 0.72)',
+        color: cssVar('--color-text-muted'),
         callback: (value) => formatCompact(Number(value)),
       },
     },

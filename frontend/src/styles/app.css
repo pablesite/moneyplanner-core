@@ -47,6 +47,19 @@
   --focus-ring: 0 0 0 3px rgba(124, 199, 255, 0.18);
   --state-error-border: rgba(255, 122, 122, 0.68);
   --state-error-bg: rgba(255, 122, 122, 0.1);
+
+  /* Chart palette — read via getComputedStyle in chart components */
+  --chart-tooltip-bg: rgba(10, 17, 26, 0.96);
+  --chart-positive-fill: rgba(52, 211, 153, 0.7);
+  --chart-positive-stroke: rgba(52, 211, 153, 0.9);
+  --chart-negative-fill: rgba(248, 113, 113, 0.7);
+  --chart-negative-stroke: rgba(248, 113, 113, 0.9);
+  --chart-series-stroke: #4cc3ff;
+  --chart-series-fill: rgba(76, 195, 255, 0.12);
+  --chart-point-bg: #f6fbff;
+  --chart-point-hover-bg: #ffffff;
+  --chart-point-current-bg: #64748b;
+  --chart-point-current-hover-bg: #94a3b8;
 }
 
 body {
