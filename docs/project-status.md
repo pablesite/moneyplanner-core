@@ -1,10 +1,10 @@
 # Project Status — Core
 
-> **English summary** (last updated 2026-05-17 · Core v0.23.5)
+> **English summary** (last updated 2026-05-20 · Core v0.23.5)
 >
 > All planned v1 modules are implemented and stable: Net Worth, Budget & Monthly Close,
-> Accounting Movements, Market Data Sync, Portable Data, Financial Coach v1, Auth & Security.
-> Active work: Unified Design System (UI consistency pass) and residual legacy cleanup.
+> Accounting Movements, Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
+> Residual legacy cleanup complete. Active work: Unified Design System (UI consistency pass).
 > Paused: Crypto Tax Report (IRPF Spain). Up next: validation with real users.
 > Full details in Spanish below.
 
@@ -55,8 +55,8 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Limpieza legacy residual | Media | ✅ | Completado 2026-05-20. Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (migración 0042), import externo de `net_worth.services`, `compat.*` en capabilities. Fallback Budget/check-ins: diseño intencional, no deuda técnica. Ver `roadmap/product-roadmap.md`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
-| Auth y seguridad | Alta | ✅ | Logout endpoint con blacklist, aislamiento cross-user validado con 31 tests (net_worth, accounting, budget, memberships), frontend wired. Pendiente: auditoría CVEs y flujos reales con usuarios. |
-| Importación de datos | Media | ✅ | Importación portable mantenida para migrar/copiar datos. Importador MoneyWiz ad-hoc retirado antes de producción. |
+| Auth y seguridad | Alta | ✅ | Logout con blacklist, aislamiento cross-user (31 tests), registro de usuario desde UI (`/registro`, JWT en signup, rate throttle). Pendiente: auditoría CVEs y flujos reales con usuarios. |
+| Backup/restore de base de datos | Media | ✅ | Endpoints admin-only `GET /api/core/db-backup/` y `POST /api/core/db-restore/` basados en pg_dump/pg_restore. AccountView migrada a este flujo; JSON portable retirado. |
 | Auditoría de seguridad | Alta | ✅ | CVEs frontend saneados (12→0 via npm audit fix: axios, vite, rollup, postcss, lodash…). Backend: pip CVEs resueltos con upgrade en Dockerfile; app deps limpios. Auth/permisos cubiertos en tarea anterior. |
 | Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
@@ -73,10 +73,10 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado |
 | Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
 | Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Trazabilidad de movimientos importados mantenida con `origin`, `import_source` e `import_fingerprint`; importador MoneyWiz ad-hoc retirado. Soporte multimoneda en alta/edición rápida de inversión. Vista de movimientos cerrada v1. |
-| Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync` |
-| Portable data (export/import) | ✅ | Con versionado y validación |
+| Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync`. Tablas con paginación servidor (page_size=50) e infinite scroll en frontend. |
+| DB Backup/Restore (pg_dump) | ✅ | Endpoints admin-only de backup y restore basados en pg_dump/pg_restore. JSON portable data retirado de la UI; sustituido por este flujo. |
 | Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
-| Auth Core (JWT, link-token para SaaS) | ✅ | Incluyendo generación de token para linking con SaaS |
+| Auth Core (JWT, link-token para SaaS) | ✅ | Registro de usuario desde UI (`/registro`). Logout con blacklist. Link-token para integración SaaS. |
 
 ## En progreso activo
 
