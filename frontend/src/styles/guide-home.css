@@ -78,7 +78,7 @@
 
 .ui-home-intro-kpi span {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-home-intro-kpi strong {
@@ -92,13 +92,13 @@
 }
 
 .ui-home-focus-label {
-  color: var(--muted);
+  color: var(--color-text-muted);
   font-weight: 600;
   margin-right: 4px;
 }
 
 .ui-home-focus-meta {
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-home-phase-link {

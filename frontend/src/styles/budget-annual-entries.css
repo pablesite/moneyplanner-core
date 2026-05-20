@@ -19,8 +19,8 @@
   width: 58px;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   transition:
     background-color 120ms ease,
     border-color 120ms ease;
@@ -37,8 +37,8 @@
 }
 
 .ui-amount-period-toggle-off {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-amount-period-toggle-thumb {
@@ -46,7 +46,7 @@
   height: 24px;
   width: 24px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--color-text) 92%, transparent);
   transition: transform 120ms ease;
 }
 
@@ -65,7 +65,7 @@
 }
 
 .ui-amount-period-toggle-label-active {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
 }
 
 .ui-notes-field {

@@ -39,7 +39,7 @@
 }
 
 .ui-guide-phase-inline-action-link {
-  color: var(--muted);
+  color: var(--color-text-muted);
   text-decoration: none;
   font-size: 12px;
   padding: 3px 8px;
@@ -66,7 +66,7 @@
   padding: 4px 10px;
   font-size: 12px;
   text-decoration: none;
-  color: var(--text);
+  color: var(--color-text);
   background: var(--color-surface-muted);
 }
 
@@ -175,7 +175,7 @@
 .ui-guide-score-card-copy {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 /* ── KPI rows inside score cards ── */
@@ -217,7 +217,7 @@
 .ui-guide-score-kpi-hint {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-guide-score-kpi-pending {
@@ -252,7 +252,7 @@
 
 .ui-guide-summary-label {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-guide-summary-value {
@@ -280,7 +280,7 @@
 .ui-guide-summary-meta {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 /* ── Context diagnostics accordion (details/summary) ── */
@@ -312,7 +312,7 @@
 
 .ui-guide-context-summary-copy {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-guide-context-details[open] .ui-guide-context-summary {
@@ -360,7 +360,7 @@
 .ui-guide-summary-section-copy {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-guide-section-filter {
@@ -371,7 +371,7 @@
 
 .ui-guide-section-filter-label {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 @media (max-width: 1024px) {

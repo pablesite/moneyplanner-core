@@ -8,7 +8,7 @@
     radial-gradient(circle at right, rgba(45, 212, 191, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(10, 16, 28, 0.96), rgba(7, 12, 22, 0.98));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 var(--color-surface-muted),
     0 18px 40px rgba(0, 0, 0, 0.22);
 }
 
@@ -24,7 +24,7 @@
   border-radius: 12px;
   border-color: var(--color-border);
   background: var(--color-surface-muted);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 var(--color-surface-muted);
 }
 
 .ui-nw-balance-panel {
@@ -247,9 +247,9 @@
   background:
     linear-gradient(
       100deg,
-      rgba(255, 255, 255, 0.05) 30%,
+      var(--color-surface-muted) 30%,
       rgba(76, 195, 255, 0.24) 50%,
-      rgba(255, 255, 255, 0.05) 70%
+      var(--color-surface-muted) 70%
     ),
     var(--color-surface-muted);
   background-size: 220% 100%;
@@ -417,7 +417,7 @@
   flex-wrap: wrap;
   gap: 8px 12px;
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-category-item-actions {
@@ -569,7 +569,7 @@
 .ui-nw-kpi-label {
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-nw-kpi-value {
@@ -582,7 +582,7 @@
 .ui-nw-kpi-sub {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-nw-timeline-panel {
@@ -604,7 +604,7 @@
 
 .ui-nw-timeline-copy {
   margin: 0;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-nw-position-select {
@@ -917,7 +917,7 @@
 
 .ui-nw-drilldown-copy {
   margin: 0;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 .ui-nw-drilldown-grid {
@@ -945,7 +945,7 @@
 
 .ui-nw-position-column-meta {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.56);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-list {
@@ -960,8 +960,8 @@
   gap: 1rem;
   text-align: left;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 0.8rem 0.9rem;
   color: inherit;
 }
@@ -978,7 +978,7 @@
 
 .ui-nw-position-button-main span {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-button-value {
@@ -988,7 +988,7 @@
 }
 
 .ui-nw-position-detail {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-border);
   padding-top: 1rem;
 }
 
@@ -1003,14 +1003,14 @@
   padding: 14px;
   background:
     radial-gradient(circle at top left, rgba(76, 195, 255, 0.14), transparent 38%),
-    rgba(255, 255, 255, 0.02);
+    var(--color-surface-muted);
 }
 
 .ui-nw-position-detail-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-detail-title {
@@ -1022,14 +1022,14 @@
 .ui-nw-position-detail-meta {
   margin-top: 0.35rem;
   font-size: 0.92rem;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-detail-chart-shell {
   border-radius: 14px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-nw-position-detail-chart {
@@ -1040,7 +1040,7 @@
 
 .ui-nw-position-detail-grid {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.12);
+  stroke: var(--color-border);
   stroke-width: 0.4;
   vector-effect: non-scaling-stroke;
 }
@@ -1065,13 +1065,13 @@
   gap: 0.2rem;
   border-radius: 12px;
   padding: 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-nw-position-detail-point span {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-detail-point strong {
@@ -1107,8 +1107,8 @@
   gap: 1rem;
   padding: 0.8rem 0.9rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .ui-nw-position-activity-row-valuation {
@@ -1141,7 +1141,7 @@
 
 .ui-nw-position-activity-main span {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--color-text-soft);
 }
 
 .ui-nw-position-activity-amount {
@@ -1172,7 +1172,7 @@
 
   .ui-hero-summary {
     border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    border-top: 1px solid var(--color-border);
     padding: 18px 0 0;
   }
 
