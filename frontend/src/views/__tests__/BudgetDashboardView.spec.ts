@@ -572,7 +572,7 @@ describe('BudgetDashboardView', () => {
       ),
     ).toBe(true);
     expect(summaries.some((text) => text.includes('Depositos liquidos'))).toBe(true);
-    expect(summaries.some((text) => text.includes('Tarjetas de credito'))).toBe(true);
+    expect(summaries.some((text) => text.includes('Tarjetas de crédito'))).toBe(true);
     expect(summaries.some((text) => text.includes('Otros liquidos'))).toBe(true);
     expect(wrapper.text()).toContain('Cuenta bancaria - Cuenta nomina');
     expect(wrapper.text()).toContain('Spot/Earn - Spot Binance');
@@ -580,7 +580,7 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.text()).toContain('Cuenta bancaria - Trade Republic efectivo');
     expect(wrapper.text()).toContain('Deposito corto plazo - Deposito 6 meses');
     expect(wrapper.text()).toContain('Liquidez - Urbanitae');
-    expect(wrapper.text()).toContain('Tarjeta de credito - Visa');
+    expect(wrapper.text()).toContain('Tarjeta de crédito - Visa');
   });
 
   it('opens linked manual liquidity checkins with the ledger adjustment controls', async () => {
@@ -681,7 +681,7 @@ describe('BudgetDashboardView', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Perimetro anterior900,00 EUR');
-    expect(wrapper.text()).toContain('Variación perimetro+300,00 EUR');
+    expect(wrapper.text()).toContain('Variación perímetro+300,00 EUR');
 
     const resultStep = wrapper
       .findAll('button.ui-monthly-close-step-chip')
@@ -695,7 +695,7 @@ describe('BudgetDashboardView', () => {
     expect(wrapper.find('.ui-budget-result-bridge').exists()).toBe(true);
     expect(wrapper.find('.ui-budget-result-diagnostic-scale').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Composición del movimiento');
-    expect(wrapper.text()).not.toContain('Variación perimetro');
+    expect(wrapper.text()).not.toContain('Variación perímetro');
   });
 
   it('opens ledger liquidity manual editing without persisting until the user confirms', async () => {

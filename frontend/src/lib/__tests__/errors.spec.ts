@@ -13,7 +13,7 @@ describe('core api error helper', () => {
   it('maps known API codes to human messages', () => {
     const err = { response: { data: { error: { code: 'subscription_blocked' } } } };
     const spy = vi.spyOn(axios, 'isAxiosError').mockReturnValue(true);
-    expect(toApiErrorMessage(err)).toContain('suscripcion');
+    expect(toApiErrorMessage(err)).toContain('suscripción');
     spy.mockRestore();
   });
 

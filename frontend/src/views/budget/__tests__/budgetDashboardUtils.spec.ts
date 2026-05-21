@@ -565,7 +565,7 @@ describe('amountsEqualCents', () => {
 
 describe('shortLiquiditySubcategoryLabel', () => {
   it('maps credit_card', () => {
-    expect(shortLiquiditySubcategoryLabel('credit_card')).toBe('Tarjeta de credito');
+    expect(shortLiquiditySubcategoryLabel('credit_card')).toBe('Tarjeta de crédito');
   });
 
   it('maps bank_account', () => {
@@ -614,7 +614,7 @@ describe('liquidityCheckinRowSummary', () => {
       liability_category: 'credit_card',
       liability_name: 'Visa',
     });
-    expect(liquidityCheckinRowSummary(row)).toBe('Tarjeta de credito - Visa');
+    expect(liquidityCheckinRowSummary(row)).toBe('Tarjeta de crédito - Visa');
   });
 });
 
