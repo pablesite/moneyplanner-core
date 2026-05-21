@@ -24,7 +24,7 @@ export const guidePhases: GuidePhase[] = [
   {
     id: 3,
     title: 'Fondo de emergencia',
-    focus: 'Construir colchon de seguridad',
+    focus: 'Construir colchón de seguridad',
     objective: 'Acumular liquidez para cubrir imprevistos y gastos esenciales.',
     progress: 35,
   },

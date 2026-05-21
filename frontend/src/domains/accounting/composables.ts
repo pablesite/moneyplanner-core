@@ -1486,7 +1486,7 @@ export function useAccountingPage() {
 
     const normalizedCurrency = currency.trim().toUpperCase();
     const accountType = kind === 'income' ? 'income' : 'expense';
-    const defaultName = kind === 'income' ? 'Ingresos sin categoria' : 'Gastos sin categoria';
+    const defaultName = kind === 'income' ? 'Ingresos sin categoría' : 'Gastos sin categoría';
     try {
       const created = await coreAccountingApi.createAccount({
         name: defaultName,
@@ -1633,7 +1633,7 @@ export function useAccountingPage() {
     }
     if (editKindNeedsClassification.value) {
       if (!editTransactionForm.category_key || !editTransactionForm.subcategory_key) {
-        store.error = 'Selecciona categoria y subcategoria para el tipo elegido.';
+        store.error = 'Selecciona categoría y subcategoría para el tipo elegido.';
         return null;
       }
     }
@@ -1666,7 +1666,7 @@ export function useAccountingPage() {
     }
     const selectedAccount = accountMap.value.get(editTransactionForm.account_id);
     if (!selectedAccount) {
-      store.error = 'La cuenta seleccionada no existe o no esta activa.';
+      store.error = 'La cuenta seleccionada no existe o no está activa.';
       return null;
     }
     return { parsedAmount, selectedAccount, debtBreakdown };
@@ -2025,8 +2025,8 @@ export function useAccountingPage() {
     if (
       !confirm(
         `Eliminar cuenta "${accountName}"?\n\n` +
-          'Esto borrara tambien todos sus asientos y transacciones relacionadas. ' +
-          'La accion es irreversible y puede afectar saldos e historico.',
+          'Esto borrará también todos sus asientos y transacciones relacionadas. ' +
+          'La acción es irreversible y puede afectar saldos e histórico.',
       )
     )
       return;
@@ -2259,7 +2259,7 @@ export function useAccountingPage() {
     if (
       !confirm(
         `Eliminar movimiento "${transactionDescription}"?\n\n` +
-          'La accion es irreversible y puede afectar saldos e historico.',
+          'La acción es irreversible y puede afectar saldos e histórico.',
       )
     ) {
       return;
@@ -2307,7 +2307,7 @@ export function useAccountingPage() {
       quickEntryForm.movement_type === 'adjustment' ? quickAdjustmentDelta.value : null;
     if (quickEntryForm.movement_type === 'adjustment' && adjustmentDelta == null) {
       store.error =
-        'Selecciona cuenta y saldo final objetivo para calcular automaticamente el ajuste.';
+        'Selecciona cuenta y saldo final objetivo para calcular automáticamente el ajuste.';
       return;
     }
     const debtBreakdown =

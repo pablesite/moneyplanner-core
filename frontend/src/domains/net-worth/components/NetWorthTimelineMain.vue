@@ -238,7 +238,7 @@ const displayedPoints = computed(() => {
         <span v-if="positionActivityLoading" class="subtle">Cargando...</span>
       </div>
       <div v-if="positionActivityRows.length === 0" class="subtle">
-        No hay eventos ni valoraciones manuales registrados para esta posicion.
+        No hay eventos ni valoraciones manuales registrados para esta posición.
       </div>
       <div v-else class="ui-nw-position-activity-list">
         <div

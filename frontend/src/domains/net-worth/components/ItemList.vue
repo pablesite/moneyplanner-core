@@ -484,7 +484,7 @@ function totalBaseAll() {
 function categoryBaseValue(category: string, items: Item[]) {
   if (ownershipFilter.value === 'all') {
     // Si la lista visible esta filtrada (p.ej. ocultando archivados), el subtotal
-    // de categoria debe salir de los items visibles para evitar descuadres.
+    // de categoría debe salir de los items visibles para evitar descuadres.
     if (props.showArchived === false) {
       return totalBaseForItems(items);
     }
@@ -503,7 +503,7 @@ function categoryBaseValue(category: string, items: Item[]) {
 function subcategoryBaseValue(category: string, subcategory: string | null, items: Item[]) {
   const subKey = subcategory ?? 'other';
   if (ownershipFilter.value === 'all') {
-    // Mismo criterio que en categoria: priorizar filas visibles si hay filtro activo.
+    // Mismo criterio que en categoría: priorizar filas visibles si hay filtro activo.
     if (props.showArchived === false) {
       return totalBaseForItems(items);
     }
@@ -615,7 +615,7 @@ function toggleCategory(key: string) {
 async function handleDelete(id: number) {
   if (!props.onDelete) return;
   const label = isLiabilitiesList.value ? 'pasivo' : 'activo';
-  if (!confirm(`Eliminar este ${label} de forma permanente? Esta accion no se puede deshacer.`)) {
+  if (!confirm(`Eliminar este ${label} de forma permanente? Esta acción no se puede deshacer.`)) {
     return;
   }
   await props.onDelete(id);

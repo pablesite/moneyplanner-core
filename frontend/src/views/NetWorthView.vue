@@ -483,7 +483,7 @@ async function unarchiveItem(item: { id: number; type: 'asset' | 'liability' }):
 
 async function deleteRow(row: PositionRow): Promise<void> {
   const label = row.type === 'asset' ? 'activo' : 'pasivo';
-  if (!confirm(`Eliminar este ${label}? Esta accion no se puede deshacer.`)) return;
+  if (!confirm(`Eliminar este ${label}? Esta acción no se puede deshacer.`)) return;
   if (row.type === 'asset') {
     await store.deleteAsset(row.id);
   } else {

@@ -132,7 +132,7 @@ function originLabel(origin: LedgerTransaction['origin']): string {
           v-model="state.activityFilters.subcategoryKey"
           class="select"
         >
-          <option value="">Subcategoria</option>
+          <option value="">Subcategoría</option>
           <option v-for="sub in state.filterSubcategoryOptions" :key="sub.value" :value="sub.value">
             {{ sub.label }}
           </option>

@@ -304,7 +304,7 @@ const {
           {{ assetAmortizationModelHint }}
         </div>
         <div v-if="defaultDegressiveTermYearsForFurnishings != null" class="ui-form-help">
-          Plazo configurado automaticamente para esta subcategoria:
+          Plazo configurado automáticamente para esta subcategoría:
           {{ defaultDegressiveTermYearsForFurnishings }} años.
         </div>
       </div>

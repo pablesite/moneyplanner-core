@@ -1128,7 +1128,7 @@ export function amountsEqualCents(left: number, right: number): boolean {
 }
 
 export function shortLiquiditySubcategoryLabel(subcategory: string): string {
-  if (subcategory === 'credit_card') return 'Tarjeta de credito';
+  if (subcategory === 'credit_card') return 'Tarjeta de crédito';
   if (subcategory === 'bank_account') return 'Cuenta bancaria';
   if (subcategory === 'short_term_deposit') return 'Deposito corto plazo';
   if (subcategory === 'wallet') return 'Monedero';

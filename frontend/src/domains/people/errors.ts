@@ -18,7 +18,7 @@ export function toPeopleErrorMessage(err: unknown): string {
     if (typeof maybeError === 'object' && maybeError !== null) {
       const code = (maybeError as Record<string, unknown>).code;
       if (code === 'permission_denied') {
-        return 'No tienes permisos para esta accion.';
+        return 'No tienes permisos para esta acción.';
       }
     }
     if (typeof map.detail === 'string') return map.detail;
