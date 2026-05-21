@@ -25,6 +25,11 @@ export type AuxDataApiAdapter = {
   getStatus(): ReturnType<typeof api.get<MarketDataStatus>>;
   getInflationPage(page: number): ReturnType<typeof api.get<PagedResponse<InflationIndex>>>;
   getFxRatesPage(page: number): ReturnType<typeof api.get<PagedResponse<FxRate>>>;
+  syncMarketData(payload?: {
+    datasets?: string[];
+    mode?: 'reconcile' | 'refresh';
+    fx_full_history?: boolean;
+  }): ReturnType<typeof api.post<{ summary: Record<string, number> }>>;
 };
 
 export const coreAuxDataApi: AuxDataApiAdapter = {
@@ -36,6 +41,12 @@ export const coreAuxDataApi: AuxDataApiAdapter = {
   },
   getFxRatesPage(page: number) {
     return api.get<PagedResponse<FxRate>>('/api/core/fx-rates/', { params: { page } });
+  },
+  syncMarketData(payload) {
+    return api.post<{ summary: Record<string, number> }>(
+      '/api/core/market-data/sync/',
+      payload ?? {},
+    );
   },
 };
 

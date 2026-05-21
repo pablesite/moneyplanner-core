@@ -13,7 +13,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .market_data import get_market_data_status
+from .market_data import MarketDataSyncError, get_market_data_status, sync_market_data
 from .models import FxRate, InflationIndex
 from .portable_data import (
     get_current_portable_app_version,
@@ -84,6 +84,25 @@ class MarketDataStatusAPIView(APIView):
 
     def get(self, request):
         return Response(get_market_data_status())
+
+
+class MarketDataSyncAPIView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        datasets = request.data.get("datasets") or ["inflation"]
+        mode = request.data.get("mode") or "reconcile"
+        fx_full_history = bool(request.data.get("fx_full_history"))
+        fx_history_floor_years = None if fx_full_history else 5
+        try:
+            summary = sync_market_data(
+                datasets=datasets,
+                mode=mode,
+                fx_history_floor_years=fx_history_floor_years,
+            )
+        except MarketDataSyncError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({"summary": summary}, status=status.HTTP_200_OK)
 
 
 class DbBackupView(APIView):

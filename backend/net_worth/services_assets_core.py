@@ -484,36 +484,70 @@ def _get_inflation_growth_factor_or_one(
     *,
     start: date,
     end: date,
+    region: str,
     position_cache=None,
 ) -> Decimal:
     if end <= start:
         return Decimal("1")
-    region = cast(str, InflationIndex.Region.ES)
+    normalized_region = str(region or "").strip().upper() or cast(str, InflationIndex.Region.ES)
     start_month = _month_start(start)
     end_month = _month_start(end)
     if position_cache is not None:
         start_index = _get_cached_inflation_index_or_none(
-            region=region,
+            region=normalized_region,
             period_month=start_month,
             position_cache=position_cache,
         )
         end_index = _get_cached_inflation_index_or_none(
-            region=region,
+            region=normalized_region,
             period_month=end_month,
             position_cache=position_cache,
         )
+        # Fallback robusto: si la cache no trae IPC para la region/periodo,
+        # consultar DB en caliente para no perder el ajuste por inflacion.
+        if start_index is None:
+            start_index = _get_inflation_index_or_none(
+                region=normalized_region,
+                period_month=start_month,
+            )
+        if end_index is None:
+            end_index = _get_inflation_index_or_none(
+                region=normalized_region,
+                period_month=end_month,
+            )
     else:
         start_index = _get_inflation_index_or_none(
-            region=region,
+            region=normalized_region,
             period_month=start_month,
         )
         end_index = _get_inflation_index_or_none(
-            region=region,
+            region=normalized_region,
             period_month=end_month,
         )
     if not start_index or not end_index or start_index == 0:
         return Decimal("1")
     return end_index / start_index
+
+
+def _resolve_inflation_region_for_asset(*, asset: Asset, position_cache=None) -> str:
+    if position_cache is not None:
+        cached_region = str(getattr(position_cache, "inflation_region", "") or "").strip().upper()
+        if cached_region:
+            return cached_region
+    try:
+        from accounts.models import UserSettings
+
+        selected_region = (
+            UserSettings.objects.filter(user_id=asset.user_id)
+            .values_list("inflation_region", flat=True)
+            .first()
+        )
+        normalized = str(selected_region or "").strip().upper()
+        if normalized:
+            return normalized
+    except Exception:
+        pass
+    return cast(str, InflationIndex.Region.ES)
 
 
 def get_default_amortization_term_years(
@@ -853,9 +887,13 @@ def get_effective_asset_amount(
 
             effective_value = purchase_value * remaining_ratio
             if asset.category == Asset.Category.FURNISHINGS and asset.currency == "EUR":
+                inflation_region = _resolve_inflation_region_for_asset(
+                    asset=asset, position_cache=position_cache
+                )
                 inflation_growth = _get_inflation_growth_factor_or_one(
                     start=asset.start_date,
                     end=ref_date,
+                    region=inflation_region,
                     position_cache=position_cache,
                 )
                 effective_value *= inflation_growth

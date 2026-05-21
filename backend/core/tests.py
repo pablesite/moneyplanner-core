@@ -35,6 +35,7 @@ from .services import (
     validate_inflation_period_start,
 )
 from .market_data import (
+    _build_fx_scope_requests,
     MarketDataSyncError,
     ensure_market_history,
     sync_inflation_history,
@@ -451,6 +452,41 @@ class CoreServicesTests(TestCase):
         self.assertEqual(fx_state.covered_until, date(2025, 3, 3))
         inflation_state = MarketDataSyncState.objects.get(dataset="inflation", scope="ES")
         self.assertEqual(inflation_state.required_start_date, date(2025, 3, 1))
+
+    def test_build_fx_scope_requests_flips_fiat_to_crypto_pairs(self):
+        user = get_user_model().objects.create_user(username="eth_user", password="pass1234")
+        UserSettings.objects.update_or_create(
+            user=user,
+            defaults={"base_currency": "ETH", "inflation_region": "ES"},
+        )
+        Asset.objects.create(
+            user=user,
+            name="Cuenta EUR",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            start_date=date(2021, 3, 31),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        Asset.objects.create(
+            user=user,
+            name="Wallet BTC",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            start_date=date(2021, 3, 31),
+            annual_interest_tae=Decimal("0.00"),
+            amount=Decimal("1.00"),
+            is_active=True,
+        )
+
+        requests = _build_fx_scope_requests()
+        scopes = {request.scope for request in requests}
+        self.assertIn("ETH->EUR", scopes)
+        self.assertIn("BTC->ETH", scopes)
+        self.assertNotIn("EUR->ETH", scopes)
 
 
 class PortableDataImportAPITests(APITestCase):
@@ -1558,3 +1594,43 @@ class CoreApiTests(APITestCase):
         self.assertIn("supported_inflation_regions", response.data)
         self.assertIn("datasets", response.data)
         self.assertEqual(response.data["datasets"]["fx"]["states"][0]["scope"], "USD->EUR")
+
+    def test_market_data_sync_requires_admin_permissions(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post("/api/core/market-data/sync/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["error"]["code"], "forbidden")
+
+    @patch("core.views.sync_market_data", return_value={"inflation": 42})
+    def test_market_data_sync_runs_manual_inflation_sync(self, sync_mock):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post("/api/core/market-data/sync/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        sync_mock.assert_called_once_with(
+            datasets=["inflation"], mode="reconcile", fx_history_floor_years=5
+        )
+        self.assertEqual(response.data["summary"]["inflation"], 42)
+
+    @patch("core.views.sync_market_data", side_effect=MarketDataSyncError("boom"))
+    def test_market_data_sync_maps_provider_failures(self, sync_mock):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post("/api/core/market-data/sync/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY, response.data)
+        sync_mock.assert_called_once_with(
+            datasets=["inflation"], mode="reconcile", fx_history_floor_years=5
+        )
+        self.assertEqual(response.data["detail"], "boom")
+
+    @patch("core.views.sync_market_data", return_value={"fx": 100})
+    def test_market_data_sync_supports_full_fx_history_mode(self, sync_mock):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(
+            "/api/core/market-data/sync/",
+            {"datasets": ["fx"], "mode": "reconcile", "fx_full_history": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        sync_mock.assert_called_once_with(
+            datasets=["fx"], mode="reconcile", fx_history_floor_years=None
+        )
+        self.assertEqual(response.data["summary"]["fx"], 100)

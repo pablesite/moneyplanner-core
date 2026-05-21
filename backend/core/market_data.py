@@ -500,16 +500,20 @@ def _collect_relevant_position_dates() -> dict[str, date]:
 _FX_DEFAULT_HISTORY_YEARS = 5
 
 
-def _build_fx_scope_requests() -> list[SyncScopeRequest]:
+def _build_fx_scope_requests(
+    *, history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS
+) -> list[SyncScopeRequest]:
     earliest_by_currency = _collect_relevant_position_dates()
     global_start = earliest_by_currency.get("__global__")
     if global_start is None:
         return []
 
-    # Guarantee at least N years of history for every needed pair, regardless of
-    # when the earliest asset was created. This avoids a 24-h gap when a user adds
-    # a foreign-currency asset for the first time.
-    floor_date = date.today() - timedelta(days=365 * _FX_DEFAULT_HISTORY_YEARS)
+    floor_date = None
+    if history_floor_years is not None:
+        # Guarantee at least N years of history for every needed pair, regardless of
+        # when the earliest asset was created. This avoids a 24-h gap when a user adds
+        # a foreign-currency asset for the first time.
+        floor_date = date.today() - timedelta(days=365 * history_floor_years)
 
     base_currencies = {
         str(value or "").strip().upper()
@@ -524,20 +528,36 @@ def _build_fx_scope_requests() -> list[SyncScopeRequest]:
         for currency in earliest_by_currency.keys()
         if currency and currency != "__global__"
     }
-    requests: list[SyncScopeRequest] = []
+    # Provider capability: crypto history is supported only when the source
+    # currency is crypto. For fiat->crypto needs, we sync the inverse pair
+    # (crypto->fiat) and conversion uses inverse lookup.
+    crypto_codes = set(SUPPORTED_CRYPTO_IDS.keys())
+    requests_by_scope: dict[str, date] = {}
     for quote_currency in sorted(base_currencies):
         for from_currency in sorted(source_currencies):
             if from_currency == quote_currency:
                 continue
             asset_start = earliest_by_currency.get(from_currency, global_start)
-            requests.append(
-                SyncScopeRequest(
-                    dataset=cast(str, MarketDataSyncState.Dataset.FX),
-                    scope=f"{from_currency}->{quote_currency}",
-                    required_start_date=min(asset_start, floor_date),
-                )
+            required_start_date = (
+                min(asset_start, floor_date) if floor_date is not None else asset_start
             )
-    return requests
+            if from_currency not in crypto_codes and quote_currency in crypto_codes:
+                scope = f"{quote_currency}->{from_currency}"
+            else:
+                scope = f"{from_currency}->{quote_currency}"
+
+            current_start = requests_by_scope.get(scope)
+            if current_start is None or required_start_date < current_start:
+                requests_by_scope[scope] = required_start_date
+
+    return [
+        SyncScopeRequest(
+            dataset=cast(str, MarketDataSyncState.Dataset.FX),
+            scope=scope,
+            required_start_date=required_start_date,
+        )
+        for scope, required_start_date in sorted(requests_by_scope.items())
+    ]
 
 
 def _build_inflation_scope_requests() -> list[SyncScopeRequest]:
@@ -583,8 +603,11 @@ class FxMarketDataProvider(MarketDataProvider):
     dataset = MarketDataSyncState.Dataset.FX
     source = "fx_provider"
 
+    def __init__(self, *, history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS):
+        self.history_floor_years = history_floor_years
+
     def build_scope_requests(self) -> list[SyncScopeRequest]:
-        return _build_fx_scope_requests()
+        return _build_fx_scope_requests(history_floor_years=self.history_floor_years)
 
     def get_coverage_bounds(self, *, scope: str) -> tuple[date | None, date | None]:
         from_currency, to_currency = scope.split("->", 1)
@@ -710,21 +733,28 @@ class InflationMarketDataProvider(MarketDataProvider):
         return inserted
 
 
-def _get_provider_registry() -> dict[str, MarketDataProvider]:
+def _get_provider_registry(
+    *, fx_history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS
+) -> dict[str, MarketDataProvider]:
     return {
-        cast(str, MarketDataSyncState.Dataset.FX): FxMarketDataProvider(),
+        cast(str, MarketDataSyncState.Dataset.FX): FxMarketDataProvider(
+            history_floor_years=fx_history_floor_years
+        ),
         cast(str, MarketDataSyncState.Dataset.INFLATION): InflationMarketDataProvider(),
     }
 
 
 def sync_market_data(
-    *, datasets: Iterable[str] | None = None, mode: str = "reconcile"
+    *,
+    datasets: Iterable[str] | None = None,
+    mode: str = "reconcile",
+    fx_history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS,
 ) -> dict[str, int]:
     normalized_mode = str(mode or "reconcile").strip().lower()
     if normalized_mode not in {"reconcile", "refresh"}:
         raise MarketDataSyncError("mode must be reconcile or refresh.")
 
-    registry = _get_provider_registry()
+    registry = _get_provider_registry(fx_history_floor_years=fx_history_floor_years)
     dataset_list = [
         str(item).strip().lower() for item in (datasets or registry.keys()) if str(item).strip()
     ]
@@ -785,6 +815,17 @@ def sync_market_data(
 
 def get_market_data_status() -> dict[str, Any]:
     states = list(MarketDataSyncState.objects.all())
+    fx_scope_requests = _build_fx_scope_requests()
+    valid_fx_scopes = {request.scope for request in fx_scope_requests}
+    if valid_fx_scopes:
+        fx_states = [
+            state
+            for state in states
+            if state.dataset == MarketDataSyncState.Dataset.FX and state.scope in valid_fx_scopes
+        ]
+    else:
+        fx_states = [state for state in states if state.dataset == MarketDataSyncState.Dataset.FX]
+
     return {
         "supported_inflation_regions": InflationIndex.supported_regions(),
         "datasets": {
@@ -808,8 +849,7 @@ def get_market_data_status() -> dict[str, Any]:
                         ),
                         "last_error": state.last_error or None,
                     }
-                    for state in states
-                    if state.dataset == MarketDataSyncState.Dataset.FX
+                    for state in fx_states
                 ],
                 "latest_rows": [
                     {

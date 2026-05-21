@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
+from accounts.models import UserSettings
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import build_net_worth_opening_balance_note
 from core.models import InflationIndex
@@ -1476,6 +1477,50 @@ class NetWorthServicesTests(TestCase):
         )
         effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
         self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("6000.00"))
+
+    def test_get_effective_asset_amount_uses_user_inflation_region_for_furnishings(self):
+        UserSettings.objects.update_or_create(
+            user=self.user,
+            defaults={"base_currency": "EUR", "inflation_region": "ES-MD"},
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES",
+            period=date(2026, 2, 1),
+            index=Decimal("120.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES-MD",
+            period=date(2016, 2, 1),
+            index=Decimal("100.0000"),
+        )
+        InflationIndex.objects.create(
+            region="ES-MD",
+            period=date(2026, 2, 1),
+            index=Decimal("130.0000"),
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Sofa Madrid IPC",
+            category=Asset.Category.FURNISHINGS,
+            subcategory=Asset.Subcategory.HOME_FURNISHINGS,
+            currency="EUR",
+            start_date=date(2016, 2, 1),
+            initial_purchase_value=Decimal("20000.00"),
+            amortization_method=Asset.AmortizationMethod.STRAIGHT_LINE,
+            amortization_term_years=20,
+            amount=Decimal("10000.00"),
+            is_active=True,
+        )
+
+        effective = get_effective_asset_amount(asset=asset, as_of_date=date(2026, 2, 1))
+        # Same depreciation base as previous test (5000), but inflation growth uses ES-MD (x1.30)
+        # rather than ES (x1.20).
+        self.assertEqual(effective.quantize(Decimal("0.01")), Decimal("6500.00"))
 
     def test_get_effective_asset_amount_for_auto_home_valuation_includes_improvements(self):
         asset = Asset.objects.create(

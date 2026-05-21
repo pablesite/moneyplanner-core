@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from uuid import uuid4
 import jwt
+from unittest.mock import patch
 
 from .models import ExternalIdentity, UserSettings
 from .services import get_or_create_user_settings, update_user_settings
@@ -131,6 +132,40 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(response.data["base_currency"], "EUR")
         self.assertEqual(response.data["inflation_region"], "ES")
         self.assertTrue(UserSettings.objects.filter(user=self.user).exists())
+
+    @patch("accounts.views.sync_market_data")
+    def test_settings_put_triggers_fx_warmup_when_base_currency_changes(
+        self, sync_market_data_mock
+    ):
+        UserSettings.objects.update_or_create(
+            user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
+        )
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.put(
+            "/api/auth/settings/",
+            {"base_currency": "ETH", "inflation_region": "ES-MD"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        sync_market_data_mock.assert_called_once_with(datasets=["fx"], mode="reconcile")
+
+    @patch("accounts.views.sync_market_data")
+    def test_settings_put_does_not_trigger_fx_warmup_without_currency_change(
+        self, sync_market_data_mock
+    ):
+        UserSettings.objects.update_or_create(
+            user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
+        )
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.put(
+            "/api/auth/settings/",
+            {"base_currency": "EUR", "inflation_region": "ES-MD"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        sync_market_data_mock.assert_not_called()
 
 
 @override_settings(
