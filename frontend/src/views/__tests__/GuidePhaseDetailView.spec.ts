@@ -180,7 +180,7 @@ describe('GuidePhaseDetailView (fase 3)', () => {
 
     expect(wrapper.text()).toContain('Fase 3');
     expect(wrapper.text()).toContain('Fondo de emergencia');
-    expect(wrapper.text()).toContain('Cobertura del colchon');
+    expect(wrapper.text()).toContain('Cobertura del colchón');
     expect(wrapper.text()).toContain('Calidad de liquidez');
     expect(wrapper.text()).toContain('Meses de gasto base cubiertos');
     expect(wrapper.text()).toContain('Liquidez util para emergencia');

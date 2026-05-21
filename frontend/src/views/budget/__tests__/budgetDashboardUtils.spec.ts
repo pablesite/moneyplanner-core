@@ -54,9 +54,9 @@ describe('aggregateBudgetRows', () => {
     const entries = [{ category: 'consumption_expenses', subcategory: 'food', amountAnnual: 500 }];
     const groups = aggregateBudgetRows(entries, catLabels, subLabels);
     expect(groups).toHaveLength(1);
-    expect(groups[0].categoryKey).toBe('consumption_expenses');
-    expect(groups[0].plannedAnnual).toBe(500);
-    expect(groups[0].rows).toHaveLength(1);
+    expect(groups[0]!.categoryKey).toBe('consumption_expenses');
+    expect(groups[0]!.plannedAnnual).toBe(500);
+    expect(groups[0]!.rows).toHaveLength(1);
   });
 
   it('merges two entries in the same category into one group', () => {
@@ -66,8 +66,8 @@ describe('aggregateBudgetRows', () => {
     ];
     const groups = aggregateBudgetRows(entries, catLabels, subLabels);
     expect(groups).toHaveLength(1);
-    expect(groups[0].plannedAnnual).toBe(300);
-    expect(groups[0].rows).toHaveLength(2);
+    expect(groups[0]!.plannedAnnual).toBe(300);
+    expect(groups[0]!.rows).toHaveLength(2);
   });
 
   it('accumulates multiple entries in the same subcategory bucket', () => {
@@ -76,7 +76,7 @@ describe('aggregateBudgetRows', () => {
       { category: 'consumption_expenses', subcategory: 'food', amountAnnual: 150 },
     ];
     const groups = aggregateBudgetRows(entries, catLabels, subLabels);
-    expect(groups[0].rows[0].plannedAnnual).toBe(250);
+    expect(groups[0]!.rows[0]!.plannedAnnual).toBe(250);
   });
 
   it('skips entries with zero or negative amount', () => {
@@ -94,8 +94,8 @@ describe('aggregateBudgetRows', () => {
       { category: 'consumption_expenses', subcategory: 'food', amountAnnual: 100 },
     ];
     const groups = aggregateBudgetRows(entries, catLabels, subLabels);
-    expect(groups[0].rows[0].subcategoryLabel).toBe('Alimentación');
-    expect(groups[0].rows[1].subcategoryLabel).toBe('Transporte');
+    expect(groups[0]!.rows[0]!.subcategoryLabel).toBe('Alimentación');
+    expect(groups[0]!.rows[1]!.subcategoryLabel).toBe('Transporte');
   });
 });
 
@@ -116,14 +116,14 @@ describe('buildMonthlyResultBreakdown', () => {
         planned: 100,
         checkin: { status: 'confirmed' as const },
         executed: 90,
-        executionSource: 'checkin' as const,
+        executionSource: 'categorized_ledger' as const,
       },
     ];
     const groups = buildMonthlyResultBreakdown(rows, catLabels, subLabels, 90);
     expect(groups).toHaveLength(1);
-    expect(groups[0].categoryKey).toBe('consumption_expenses');
-    expect(groups[0].plannedTotal).toBe(100);
-    expect(groups[0].checkedCount).toBe(1);
+    expect(groups[0]!.categoryKey).toBe('consumption_expenses');
+    expect(groups[0]!.plannedTotal).toBe(100);
+    expect(groups[0]!.checkedCount).toBe(1);
   });
 });
 
@@ -565,7 +565,7 @@ describe('amountsEqualCents', () => {
 
 describe('shortLiquiditySubcategoryLabel', () => {
   it('maps credit_card', () => {
-    expect(shortLiquiditySubcategoryLabel('credit_card')).toBe('Tarjeta de credito');
+    expect(shortLiquiditySubcategoryLabel('credit_card')).toBe('Tarjeta de crédito');
   });
 
   it('maps bank_account', () => {
@@ -614,7 +614,7 @@ describe('liquidityCheckinRowSummary', () => {
       liability_category: 'credit_card',
       liability_name: 'Visa',
     });
-    expect(liquidityCheckinRowSummary(row)).toBe('Tarjeta de credito - Visa');
+    expect(liquidityCheckinRowSummary(row)).toBe('Tarjeta de crédito - Visa');
   });
 });
 

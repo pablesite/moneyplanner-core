@@ -260,12 +260,12 @@ describe('toPortableAnnualExpenseRecord', () => {
 describe('evaluateImportCompatibility', () => {
   it('returns compatible when versions match', () => {
     const bundle = minimalBundle({ exported_app_version: '1.0.0' });
-    expect(evaluateImportCompatibility(bundle, 'additive', '1.0.0')).toBe('compatible');
+    expect(evaluateImportCompatibility(bundle, 'append', '1.0.0')).toBe('compatible');
   });
 
   it('returns newer_than_app when bundle is newer', () => {
     const bundle = minimalBundle({ exported_app_version: '2.0.0' });
-    expect(evaluateImportCompatibility(bundle, 'additive', '1.0.0')).toBe('newer_than_app');
+    expect(evaluateImportCompatibility(bundle, 'append', '1.0.0')).toBe('newer_than_app');
   });
 
   it('returns legacy_replace_blocked when version is missing and mode is replace', () => {
@@ -275,14 +275,14 @@ describe('evaluateImportCompatibility', () => {
 
   it('returns unknown when currentAppVersion is not provided', () => {
     const bundle = minimalBundle({ exported_app_version: '1.0.0' });
-    expect(evaluateImportCompatibility(bundle, 'additive')).toBe('unknown');
+    expect(evaluateImportCompatibility(bundle, 'append')).toBe('unknown');
   });
 });
 
 describe('buildImportPreviewMessage', () => {
   it('includes mode and source in output', () => {
     const bundle = minimalBundle({ source_app: 'core', exported_app_version: '1.0.0' });
-    const msg = buildImportPreviewMessage(bundle, 'additive', '1.0.0');
+    const msg = buildImportPreviewMessage(bundle, 'append', '1.0.0');
     expect(msg).toContain('Se importaran datos');
     expect(msg).toContain('core');
     expect(msg).toContain('Compatibilidad preliminar: OK.');

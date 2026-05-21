@@ -439,7 +439,7 @@ describe('ItemForm (saas)', () => {
     expect((termInput.element as HTMLInputElement).value).toBe('10');
 
     expect(wrapper.text()).toContain(
-      'Disponible solo cuando la TAE de financiacion es mayor que 0.',
+      'Disponible solo cuando la TAE de financiación es mayor que 0.',
     );
     expect(wrapper.text()).toContain('Descartar reforma');
   });
