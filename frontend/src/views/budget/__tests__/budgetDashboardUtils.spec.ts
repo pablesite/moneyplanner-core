@@ -45,7 +45,10 @@ import type { AnnualIncomeEntry, AnnualExpenseEntry } from '@/domains/budget/ann
 
 describe('aggregateBudgetRows', () => {
   const catLabels = new Map([['consumption_expenses', 'Gastos']]);
-  const subLabels = new Map([['food', 'Alimentación'], ['transport', 'Transporte']]);
+  const subLabels = new Map([
+    ['food', 'Alimentación'],
+    ['transport', 'Transporte'],
+  ]);
 
   it('groups a single entry into a BudgetGroup', () => {
     const entries = [{ category: 'consumption_expenses', subcategory: 'food', amountAnnual: 500 }];
@@ -107,13 +110,15 @@ describe('buildMonthlyResultBreakdown', () => {
   });
 
   it('groups a single row into a breakdown group', () => {
-    const rows = [{
-      entry: { category: 'consumption_expenses', subcategory: 'food' },
-      planned: 100,
-      checkin: { status: 'confirmed' as const },
-      executed: 90,
-      executionSource: 'checkin' as const,
-    }];
+    const rows = [
+      {
+        entry: { category: 'consumption_expenses', subcategory: 'food' },
+        planned: 100,
+        checkin: { status: 'confirmed' as const },
+        executed: 90,
+        executionSource: 'checkin' as const,
+      },
+    ];
     const groups = buildMonthlyResultBreakdown(rows, catLabels, subLabels, 90);
     expect(groups).toHaveLength(1);
     expect(groups[0].categoryKey).toBe('consumption_expenses');
@@ -131,7 +136,9 @@ describe('isLockedExecutionRow', () => {
 
   it('returns false for other origins', () => {
     expect(isLockedExecutionRow({ executionOrigin: 'none' as 'categorized_ledger' })).toBe(false);
-    expect(isLockedExecutionRow({ executionOrigin: 'legacy_checkin' as 'categorized_ledger' })).toBe(false);
+    expect(
+      isLockedExecutionRow({ executionOrigin: 'legacy_checkin' as 'categorized_ledger' }),
+    ).toBe(false);
   });
 });
 
@@ -252,9 +259,26 @@ describe('hashToUnitInterval', () => {
 
 describe('mockExecutionRatio', () => {
   const seeds = [
-    'a', 'b', 'c', 'd', 'ab', 'abc', 'xyz', '1234', 'seed1', 'seed2',
-    'income-2025-1', 'expense-rent', 'salary', 'housing', 'long-seed-key-for-hashing',
-    'alpha', 'beta', 'gamma', 'delta', 'epsilon',
+    'a',
+    'b',
+    'c',
+    'd',
+    'ab',
+    'abc',
+    'xyz',
+    '1234',
+    'seed1',
+    'seed2',
+    'income-2025-1',
+    'expense-rent',
+    'salary',
+    'housing',
+    'long-seed-key-for-hashing',
+    'alpha',
+    'beta',
+    'gamma',
+    'delta',
+    'epsilon',
   ];
 
   it('always returns a finite positive number for income', () => {
@@ -379,12 +403,29 @@ describe('monthlySummaryExecutedTotal', () => {
   });
 
   it('prefers executed_total when available', () => {
-    const row = { month: 1, planned: '100', executed: '90', pending: '10', completion_ratio: 0.9, checkins_confirmed: 1, checkins_expected: 1, executed_total: '90' };
+    const row = {
+      month: 1,
+      planned: '100',
+      executed: '90',
+      pending: '10',
+      completion_ratio: 0.9,
+      checkins_confirmed: 1,
+      checkins_expected: 1,
+      executed_total: '90',
+    };
     expect(monthlySummaryExecutedTotal(row)).toBe(90);
   });
 
   it('falls back to executed when executed_total missing', () => {
-    const row = { month: 1, planned: '100', executed: '85', pending: '15', completion_ratio: 0.85, checkins_confirmed: 1, checkins_expected: 1 };
+    const row = {
+      month: 1,
+      planned: '100',
+      executed: '85',
+      pending: '15',
+      completion_ratio: 0.85,
+      checkins_confirmed: 1,
+      checkins_expected: 1,
+    };
     expect(monthlySummaryExecutedTotal(row)).toBe(85);
   });
 });
@@ -538,9 +579,7 @@ describe('shortLiquiditySubcategoryLabel', () => {
 
 // ── row summary helpers ───────────────────────────────────────────────────────
 
-function makeLiquidityRow(
-  overrides: Partial<LiquidityExecutionRow> = {},
-): LiquidityExecutionRow {
+function makeLiquidityRow(overrides: Partial<LiquidityExecutionRow> = {}): LiquidityExecutionRow {
   return {
     row_type: 'asset',
     asset_id: 1,
@@ -617,7 +656,20 @@ function makeIncomeRow(overrides: Partial<IncomeExecutionRow> = {}): IncomeExecu
 
 describe('suggestedIncomeExecutedAmountForRow', () => {
   it('returns 0.00 when checkin is skipped', () => {
-    const row = makeIncomeRow({ checkin: { id: 1, annual_income_entry_id: 1, fiscal_year: 2025, month: 1, status: 'skipped', executed_amount: null, note: '', confirmed_at: null, created_at: '', updated_at: '' } });
+    const row = makeIncomeRow({
+      checkin: {
+        id: 1,
+        annual_income_entry_id: 1,
+        fiscal_year: 2025,
+        month: 1,
+        status: 'skipped',
+        executed_amount: null,
+        note: '',
+        confirmed_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    });
     expect(suggestedIncomeExecutedAmountForRow(row)).toBe('0.00');
   });
 
@@ -658,7 +710,20 @@ function makeExpenseRow(overrides: Partial<ExpenseExecutionRow> = {}): ExpenseEx
 
 describe('suggestedExecutedAmountForRow', () => {
   it('returns 0.00 when checkin is skipped', () => {
-    const row = makeExpenseRow({ checkin: { id: 1, annual_expense_entry_id: 1, fiscal_year: 2025, month: 1, status: 'skipped', executed_amount: null, note: '', confirmed_at: null, created_at: '', updated_at: '' } });
+    const row = makeExpenseRow({
+      checkin: {
+        id: 1,
+        annual_expense_entry_id: 1,
+        fiscal_year: 2025,
+        month: 1,
+        status: 'skipped',
+        executed_amount: null,
+        note: '',
+        confirmed_at: null,
+        created_at: '',
+        updated_at: '',
+      },
+    });
     expect(suggestedExecutedAmountForRow(row)).toBe('0.00');
   });
 

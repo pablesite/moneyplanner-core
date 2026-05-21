@@ -97,39 +97,111 @@ describe('toPortableAnnualIncomeRecord', () => {
   });
 
   it('preserves one_off income_type', () => {
-    const input = { id: 2, name: 'Bonus', category: 'a', subcategory: 'b', income_type: 'one_off' as const, amount_annual: '1000', fiscal_year: 2025, currency: 'EUR', notes: '' };
+    const input = {
+      id: 2,
+      name: 'Bonus',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'one_off' as const,
+      amount_annual: '1000',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+    };
     expect(toPortableAnnualIncomeRecord(input).income_type).toBe('one_off');
   });
 
   it('defaults income_type to recurrent for unknown values', () => {
-    const input = { id: 2, name: 'X', category: 'a', subcategory: 'b', income_type: 'unknown' as 'recurrent', amount_annual: '0', fiscal_year: 2025, currency: 'USD', notes: '' };
+    const input = {
+      id: 2,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'unknown' as 'recurrent',
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'USD',
+      notes: '',
+    };
     expect(toPortableAnnualIncomeRecord(input).income_type).toBe('recurrent');
   });
 
   it('preserves monthly amount_input_period', () => {
-    const input = { id: 3, name: 'X', category: 'a', subcategory: 'b', income_type: 'recurrent' as const, amount_input_period: 'monthly' as const, amount_annual: '0', fiscal_year: 2025, currency: 'EUR', notes: '' };
+    const input = {
+      id: 3,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'recurrent' as const,
+      amount_input_period: 'monthly' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+    };
     expect(toPortableAnnualIncomeRecord(input).amount_input_period).toBe('monthly');
   });
 
   it('defaults amount_input_period to annual', () => {
-    const input = { id: 4, name: 'X', category: 'a', subcategory: 'b', income_type: 'recurrent' as const, amount_annual: '0', fiscal_year: 2025, currency: 'EUR', notes: '' };
+    const input = {
+      id: 4,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'recurrent' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+    };
     expect(toPortableAnnualIncomeRecord(input).amount_input_period).toBe('annual');
   });
 
   it('uppercases currency', () => {
-    const input = { id: 5, name: 'X', category: 'a', subcategory: 'b', income_type: 'recurrent' as const, amount_annual: '0', fiscal_year: 2025, currency: 'eur', notes: '' };
+    const input = {
+      id: 5,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'recurrent' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'eur',
+      notes: '',
+    };
     expect(toPortableAnnualIncomeRecord(input).currency).toBe('EUR');
   });
 
   it('respects explicit is_active false', () => {
-    const input = { id: 6, name: 'X', category: 'a', subcategory: 'b', income_type: 'recurrent' as const, amount_annual: '0', fiscal_year: 2025, currency: 'EUR', notes: '', is_active: false };
+    const input = {
+      id: 6,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      income_type: 'recurrent' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+      is_active: false,
+    };
     expect(toPortableAnnualIncomeRecord(input).is_active).toBe(false);
   });
 });
 
 describe('toPortableAnnualExpenseRecord', () => {
   it('normalizes a well-formed record', () => {
-    const input = { id: 10, name: 'Rent', category: 'housing', subcategory: 'rent', expense_type: 'recurrent' as const, amount_annual: '12000', fiscal_year: 2025, currency: 'EUR', notes: 'monthly' };
+    const input = {
+      id: 10,
+      name: 'Rent',
+      category: 'housing',
+      subcategory: 'rent',
+      expense_type: 'recurrent' as const,
+      amount_annual: '12000',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: 'monthly',
+    };
     const result = toPortableAnnualExpenseRecord(input);
     expect(result.id).toBe(10);
     expect(result.expense_type).toBe('recurrent');
@@ -138,17 +210,49 @@ describe('toPortableAnnualExpenseRecord', () => {
   });
 
   it('preserves one_off expense_type', () => {
-    const input = { id: 11, name: 'Vacation', category: 'leisure', subcategory: 'travel', expense_type: 'one_off' as const, amount_annual: '1000', fiscal_year: 2025, currency: 'EUR', notes: '' };
+    const input = {
+      id: 11,
+      name: 'Vacation',
+      category: 'leisure',
+      subcategory: 'travel',
+      expense_type: 'one_off' as const,
+      amount_annual: '1000',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+    };
     expect(toPortableAnnualExpenseRecord(input).expense_type).toBe('one_off');
   });
 
   it('preserves monthly amount_input_period', () => {
-    const input = { id: 12, name: 'X', category: 'a', subcategory: 'b', expense_type: 'recurrent' as const, amount_input_period: 'monthly' as const, amount_annual: '0', fiscal_year: 2025, currency: 'EUR', notes: '' };
+    const input = {
+      id: 12,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      expense_type: 'recurrent' as const,
+      amount_input_period: 'monthly' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+    };
     expect(toPortableAnnualExpenseRecord(input).amount_input_period).toBe('monthly');
   });
 
   it('respects explicit is_active false', () => {
-    const input = { id: 13, name: 'X', category: 'a', subcategory: 'b', expense_type: 'recurrent' as const, amount_annual: '0', fiscal_year: 2025, currency: 'EUR', notes: '', is_active: false };
+    const input = {
+      id: 13,
+      name: 'X',
+      category: 'a',
+      subcategory: 'b',
+      expense_type: 'recurrent' as const,
+      amount_annual: '0',
+      fiscal_year: 2025,
+      currency: 'EUR',
+      notes: '',
+      is_active: false,
+    };
     expect(toPortableAnnualExpenseRecord(input).is_active).toBe(false);
   });
 });
@@ -200,7 +304,12 @@ describe('buildImportPreviewMessage', () => {
 
 describe('toPortableAssetRecord', () => {
   it('normalizes a minimal asset', () => {
-    const result = toPortableAssetRecord({ id: 5, name: 'House', category: 'real_estate', currency: 'eur' });
+    const result = toPortableAssetRecord({
+      id: 5,
+      name: 'House',
+      category: 'real_estate',
+      currency: 'eur',
+    });
     expect(result.id).toBe(5);
     expect(result.currency).toBe('EUR');
     expect(result.tracking_mode).toBe('manual');
@@ -216,14 +325,22 @@ describe('toPortableAssetRecord', () => {
   });
 
   it('defaults contribution_mode to one_time when null', () => {
-    const result = toPortableAssetRecord({ id: 1, investment_contribution_mode: null as unknown as undefined });
+    const result = toPortableAssetRecord({
+      id: 1,
+      investment_contribution_mode: null as unknown as undefined,
+    });
     expect(result.investment_contribution_mode).toBe('one_time');
   });
 });
 
 describe('toPortableLiabilityRecord', () => {
   it('normalizes a minimal liability', () => {
-    const result = toPortableLiabilityRecord({ id: 3, name: 'Mortgage', category: 'mortgage', currency: 'eur' });
+    const result = toPortableLiabilityRecord({
+      id: 3,
+      name: 'Mortgage',
+      category: 'mortgage',
+      currency: 'eur',
+    });
     expect(result.id).toBe(3);
     expect(result.currency).toBe('EUR');
     expect(result.rate_type).toBe('fixed');
@@ -235,7 +352,13 @@ describe('toPortableLiabilityRecord', () => {
 
 describe('toPortableLedgerAccountRecord', () => {
   it('normalizes a ledger account', () => {
-    const result = toPortableLedgerAccountRecord({ id: 10, name: 'Checking', account_type: 'asset', currency: 'EUR', origin: 'user' });
+    const result = toPortableLedgerAccountRecord({
+      id: 10,
+      name: 'Checking',
+      account_type: 'asset',
+      currency: 'EUR',
+      origin: 'user',
+    });
     expect(result.id).toBe(10);
     expect(result.account_type).toBe('asset');
     expect(result.origin).toBe('user');
@@ -287,7 +410,12 @@ describe('toPortableLedgerTransactionRecord', () => {
 
 describe('toPortableFamilyMemberRecord', () => {
   it('normalizes an adult member', () => {
-    const result = toPortableFamilyMemberRecord({ id: 1, name: 'Alice', role: 'adult', is_active: true });
+    const result = toPortableFamilyMemberRecord({
+      id: 1,
+      name: 'Alice',
+      role: 'adult',
+      is_active: true,
+    });
     expect(result.id).toBe(1);
     expect(result.role).toBe('adult');
     expect(result.is_active).toBe(true);
@@ -330,14 +458,22 @@ describe('toPortableOwnershipRecord', () => {
 
 describe('toPortableOwnershipLinkRecord', () => {
   it('normalizes an asset link', () => {
-    const result = toPortableOwnershipLinkRecord({ target_type: 'asset', target_id: 5, ownership_id: 2 });
+    const result = toPortableOwnershipLinkRecord({
+      target_type: 'asset',
+      target_id: 5,
+      ownership_id: 2,
+    });
     expect(result.target_type).toBe('asset');
     expect(result.target_id).toBe(5);
     expect(result.ownership_id).toBe(2);
   });
 
   it('normalizes a liability link', () => {
-    const result = toPortableOwnershipLinkRecord({ target_type: 'liability', target_id: 3, ownership_id: 1 });
+    const result = toPortableOwnershipLinkRecord({
+      target_type: 'liability',
+      target_id: 3,
+      ownership_id: 1,
+    });
     expect(result.target_type).toBe('liability');
   });
 });
