@@ -133,7 +133,7 @@ const resultBridgeRows = computed(() =>
           <button type="button" class="btn ui-monthly-close-step-nav-btn" disabled>&rarr;</button>
         </div>
         <p class="ui-budget-checkin-subtitle">
-          Residual contable provisional a partir del perimetro real y de ingresos/gastos confirmados
+          Residual contable provisional a partir del perímetro real y de ingresos/gastos confirmados
           del mes.
         </p>
       </div>

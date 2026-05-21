@@ -1670,7 +1670,7 @@ export function useBudgetAnnualEntriesPage() {
         amountAnnual: estimatedAnnualInterestNet.toFixed(2),
         fiscalYear: fiscalYear.value,
         currency,
-        notes: `Generado automaticamente desde activo de liquidez remunerado (${assetName}). Interes bruto estimado: ${estimatedAnnualInterestGross.toFixed(2)} ${currency}. Retencion estimada (19%): ${estimatedWithholdingAmount.toFixed(2)} ${currency}. Interes neto estimado: ${estimatedAnnualInterestNet.toFixed(2)} ${currency}.`,
+        notes: `Generado automáticamente desde activo de liquidez remunerado (${assetName}). Interes bruto estimado: ${estimatedAnnualInterestGross.toFixed(2)} ${currency}. Retencion estimada (19%): ${estimatedWithholdingAmount.toFixed(2)} ${currency}. Interes neto estimado: ${estimatedAnnualInterestNet.toFixed(2)} ${currency}.`,
       },
       fiscalYear.value,
     );

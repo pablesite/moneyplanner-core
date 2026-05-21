@@ -1813,7 +1813,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     },
     {
       id: 'expense',
-      label: 'Gastos externos al perimetro',
+      label: 'Gastos externos al perímetro',
       amount: -selectedExpenseMonthExternalExecuted.value,
       tone: 'warning' as const,
       meta:
@@ -1825,7 +1825,7 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
       ? [
           {
             id: 'internal-perimeter-expense',
-            label: 'Aportes dentro del perimetro',
+            label: 'Aportes dentro del perímetro',
             amount: 0,
             tone: 'neutral' as const,
             meta: `${formatMoney(selectedPerimeterInternalExpenseTotal.value)} EUR reclasificados como movimiento interno`,
@@ -1852,10 +1852,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     },
     {
       id: 'real-close',
-      label: 'Cierre real del perimetro',
+      label: 'Cierre real del perímetro',
       amount: selectedLiquidityMonthExecuted.value,
       tone: 'neutral' as const,
-      meta: 'Cierre del perimetro confirmado',
+      meta: 'Cierre del perímetro confirmado',
       isResult: true,
     },
   ]);

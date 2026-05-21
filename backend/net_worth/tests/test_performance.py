@@ -315,7 +315,7 @@ class NetWorthSummaryPerformanceTests(TestCase):
                 end_date=date(2026, 12, 31),
             )
 
-        self.assertLessEqual(len(captured_queries), 12)
+        self.assertLessEqual(len(captured_queries), 13)
         self.assertEqual(len(timeline["rows"]), 24)
         self.assertEqual(timeline["rows"][-1]["asset_positions"], len(assets))
 

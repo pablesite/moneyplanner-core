@@ -73,7 +73,7 @@ void [
     />
 
     <section v-if="!phase" class="ui-section-card ui-section-card-padded">
-      <p class="ui-section-subtitle">La fase seleccionada no existe en la guia actual.</p>
+      <p class="ui-section-subtitle">La fase seleccionada no existe en la guía actual.</p>
     </section>
 
     <section v-else-if="!hasDiagnosticPhase" class="ui-section-card ui-section-card-padded">

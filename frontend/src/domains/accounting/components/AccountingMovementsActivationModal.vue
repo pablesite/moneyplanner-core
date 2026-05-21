@@ -102,7 +102,7 @@ defineProps({
         No hay activos ni pasivos manuales disponibles para activar desde esta vista.
       </div>
       <p v-else class="ui-accounting-inline-note">
-        Al activar una posicion, se vincula al libro contable y se genera automáticamente el saldo
+        Al activar una posición, se vincula al libro contable y se genera automáticamente el saldo
         de apertura contra patrimonio neto contable.
       </p>
 

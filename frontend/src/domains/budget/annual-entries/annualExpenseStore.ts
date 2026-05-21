@@ -166,7 +166,7 @@ function createAnnualExpenseStore() {
       (row) => row.category === draft.category && row.value === draft.subcategory,
     );
     if (!validSubcategory) {
-      return { ok: false, error: 'La subcategoria no corresponde con la categoria elegida.' };
+      return { ok: false, error: 'La subcategoría no corresponde con la categoría elegida.' };
     }
 
     const amount = parseAnnualAmount(draft.amountAnnual);
@@ -219,7 +219,7 @@ function createAnnualExpenseStore() {
       (row) => row.category === draft.category && row.value === draft.subcategory,
     );
     if (!validSubcategory) {
-      return { ok: false, error: 'La subcategoria no corresponde con la categoria elegida.' };
+      return { ok: false, error: 'La subcategoría no corresponde con la categoría elegida.' };
     }
 
     const amount = parseAnnualAmount(draft.amountAnnual);

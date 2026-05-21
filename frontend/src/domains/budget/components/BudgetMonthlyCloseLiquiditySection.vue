@@ -108,7 +108,7 @@ function liquidityBlockLabel(key: string): string {
     cash_accounts: 'Cuentas y efectivo',
     yield_accounts: 'Cuentas remuneradas',
     liquid_deposits: 'Depositos liquidos',
-    credit_cards: 'Tarjetas de credito',
+    credit_cards: 'Tarjetas de crédito',
     other_liquidity: 'Otros liquidos',
   };
   return labels[key] ?? 'Otros liquidos';
@@ -188,7 +188,7 @@ const liquidityCategoryBlocks = computed<LiquidityCategoryBlock[]>(() => {
         </div>
         <h2 v-else class="ui-budget-checkin-title">Cierre de liquidez</h2>
         <p class="ui-budget-checkin-subtitle">
-          Ajusta el perimetro de cierre: caja, activos incluidos y tarjetas de credito.
+          Ajusta el perímetro de cierre: caja, activos incluidos y tarjetas de crédito.
         </p>
       </div>
       <div v-if="!isMonthlyCloseView" class="ui-budget-checkin-controls">
@@ -226,7 +226,7 @@ const liquidityCategoryBlocks = computed<LiquidityCategoryBlock[]>(() => {
           'ui-budget-checkin-kpi-good': selectedLiquidityMonthDeviation > 0,
         }"
       >
-        <span>Variación perimetro</span>
+        <span>Variación perímetro</span>
         <strong>
           {{ selectedLiquidityMonthDeviation > 0 ? '+' : ''
           }}{{ formatMoney(selectedLiquidityMonthDeviation) }} EUR

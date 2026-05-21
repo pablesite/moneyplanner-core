@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { defineComponent, ref } from 'vue';
+import { defineComponent, reactive, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import NetWorthView from '../NetWorthView.vue';
@@ -86,7 +86,8 @@ vi.mock('@/domains/accounting', () => ({
 }));
 
 function makeState(overrides: Record<string, unknown> = {}) {
-  const store = {
+  const { store: storeOverrides, ...otherOverrides } = overrides;
+  const store = reactive({
     loading: false,
     error: null as string | null,
     baseCurrency: 'EUR',
@@ -136,7 +137,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
     updateLiability: vi.fn(),
     archiveLiability: vi.fn(),
     deleteLiability: vi.fn(),
-  };
+    ...((storeOverrides as object) ?? {}),
+  });
 
   return {
     store,
@@ -175,7 +177,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     byCategoryUnit: ref('EUR'),
     summaryAssetBackedLiabilities: ref('150'),
     summaryUnbackedLiabilities: ref('100'),
-    ...overrides,
+    ...otherOverrides,
   };
 }
 

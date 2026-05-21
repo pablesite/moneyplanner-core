@@ -215,7 +215,7 @@ defineProps<{
               />
             </label>
             <label class="ui-item-form-field">
-              <span class="ui-item-form-label">TAE financiacion (%)</span>
+              <span class="ui-item-form-label">TAE financiación (%)</span>
               <input
                 v-model="improvement.annual_interest_tae"
                 inputmode="decimal"
@@ -233,7 +233,7 @@ defineProps<{
             <span>Capitalizar TAE en valor de reforma</span>
           </label>
           <div v-if="!canCapitalizeImprovementInterest(improvement)" class="ui-form-help">
-            Disponible solo cuando la TAE de financiacion es mayor que 0.
+            Disponible solo cuando la TAE de financiación es mayor que 0.
           </div>
           <label class="ui-item-form-field mt-1">
             <span class="ui-item-form-label">Notas</span>

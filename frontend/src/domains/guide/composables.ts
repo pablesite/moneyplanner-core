@@ -1491,21 +1491,21 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           label: '% inversiones / ingresos recurrentes',
           valueText: formatPct(recurrentFinancialInvestmentAllocationRatioValue.value, 0),
           score: null,
-          hint: 'Categoria inversiones financieras / ingresos recurrentes',
+          hint: 'Categoría inversiones financieras / ingresos recurrentes',
         },
         {
           id: 'tangible-assets-income',
           label: '% activos mobiliarios / ingresos recurrentes',
           valueText: formatPct(recurrentTangibleAllocationRatioValue.value, 0),
           score: null,
-          hint: 'Categoria activos mobiliarios / ingresos recurrentes',
+          hint: 'Categoría activos mobiliarios / ingresos recurrentes',
         },
         {
           id: 'real-estate-assets-income',
           label: '% activos inmobiliarios / ingresos recurrentes',
           valueText: formatPct(recurrentRealEstateAllocationRatioValue.value, 0),
           score: null,
-          hint: 'Categoria activos inmobiliarios / ingresos recurrentes',
+          hint: 'Categoría activos inmobiliarios / ingresos recurrentes',
         },
       ],
     },
@@ -1514,7 +1514,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
   const phase3ScoreCards = computed<ScoreCard[]>(() => [
     {
       id: 'emergency-coverage',
-      title: 'Cobertura del colchon',
+      title: 'Cobertura del colchón',
       score: phase3CoverageScoreValue.value,
       description:
         'Cobertura de liquidez útil medida contra gasto base (Fase 2) y carga actual incluyendo compromisos temporales.',
@@ -1550,7 +1550,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       title: 'Calidad de liquidez',
       score: phase3LiquidityQualityScoreValue.value,
       description:
-        'Peso de la liquidez dentro del patrimonio y porcentaje de liquidez inmediata dentro del colchon.',
+        'Peso de la liquidez dentro del patrimonio y porcentaje de liquidez inmediata dentro del colchón.',
       kpis: [
         {
           id: 'emergency-liquidity-assets-ratio',
@@ -1564,7 +1564,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
           label: '% liquidez inmediata / liquidez útil',
           valueText: formatPct(immediateLiquidityShareWithinEmergencyValue.value, 0),
           score: emergencyImmediateLiquidityQualityScoreValue.value,
-          hint: 'Parte del colchon que esta en cash y acceso inmediato. Mayor es mejor.',
+          hint: 'Parte del colchón que está en cash y acceso inmediato. Mayor es mejor.',
         },
       ],
     },
@@ -1901,7 +1901,7 @@ export function useGuidePhaseDetailState(scope: GuideScope) {
       return 'Diagnóstico de flujo de caja: score compuesto de tensión recurrente (operativo estructural + cargas temporales de caja) y contexto extraordinario separado.';
     }
     if (isEmergencyFundPhase.value) {
-      return 'Diagnóstico de fondo de emergencia: cobertura del colchon usando liquidez útil (baseline Fase 4) contra gasto base y carga actual (semántica Fase 2).';
+      return 'Diagnóstico de fondo de emergencia: cobertura del colchón usando liquidez útil (baseline Fase 4) contra gasto base y carga actual (semántica Fase 2).';
     }
     return phase.value?.objective ?? '';
   });

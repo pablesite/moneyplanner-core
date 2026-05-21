@@ -246,7 +246,7 @@ const editMainAccountGroups = computed(() => {
 
       <div class="ui-accounting-form-grid ui-accounting-form-grid-wide">
         <label class="ui-accounting-field">
-          <span>Descripcion</span>
+          <span>Descripción</span>
           <input
             v-model="page.editTransactionForm.description"
             class="input"
@@ -638,7 +638,7 @@ const editMainAccountGroups = computed(() => {
           </template>
         </template>
         <template v-else>
-          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automaticamente.
+          Selecciona la cuenta y el saldo final objetivo para calcular el ajuste automáticamente.
         </template>
       </p>
 
@@ -654,7 +654,7 @@ const editMainAccountGroups = computed(() => {
         class="ui-accounting-form-grid ui-accounting-form-grid-wide"
       >
         <label class="ui-accounting-field">
-          <span>Categoria</span>
+          <span>Categoría</span>
           <select
             v-model="page.editTransactionForm.category_key"
             class="select"
@@ -672,7 +672,7 @@ const editMainAccountGroups = computed(() => {
           </select>
         </label>
         <label class="ui-accounting-field">
-          <span>Subcategoria</span>
+          <span>Subcategoría</span>
           <select
             v-model="page.editTransactionForm.subcategory_key"
             class="select"
@@ -702,7 +702,7 @@ const editMainAccountGroups = computed(() => {
         v-if="!page.editEntryReady && !page.transactionCreationLoading"
         class="ui-accounting-inline-note"
       >
-        Completa descripcion, fechas, importe y cuenta. Algunos tipos requieren campos adicionales.
+        Completa descripción, fechas, importe y cuenta. Algunos tipos requieren campos adicionales.
       </p>
 
       <div class="ui-accounting-submit-row">
@@ -718,7 +718,7 @@ const editMainAccountGroups = computed(() => {
                     : page.editTransactionForm.investment_direction === 'outflow'
                       ? 'La desinversion devuelve liquidez al activo de caja.'
                       : 'El aporte registra el alta en la cuenta de inversion.'
-                : 'Las partidas contables se generan automaticamente.'
+                : 'Las partidas contables se generan automáticamente.'
           }}
         </p>
         <button
