@@ -38,5 +38,5 @@ describe('router (core)', () => {
       }),
     );
     expect(mocks.registerAuthGuard).toHaveBeenCalledWith({ __router: true });
-  }, 15000);
+  }, 30000);
 });

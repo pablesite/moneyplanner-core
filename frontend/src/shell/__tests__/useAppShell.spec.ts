@@ -41,8 +41,8 @@ describe('useAppShell', () => {
     mocks.router.push.mockReset();
     mocks.hasAccessToken.value = false;
     mocks.route.name = 'home';
-    mocks.route.path = '/';
-    mocks.route.fullPath = '/';
+    mocks.route.path = '/guia';
+    mocks.route.fullPath = '/guia';
     document.body.style.overflow = '';
   });
 

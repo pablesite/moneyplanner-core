@@ -16,6 +16,7 @@ export default defineConfig({
     include: ['src/**/*.spec.ts'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     environment: 'jsdom',
+    setupFiles: ['src/test-setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

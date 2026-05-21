@@ -10,6 +10,8 @@ vi.mock('@/domains/auth', () => ({
   useLoginForm: () => mockUseLoginForm(),
 }));
 
+const mountOptions = { global: { stubs: { RouterLink: true } } };
+
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
     username: ref(''),
@@ -29,7 +31,7 @@ describe('LoginView', () => {
 
   it('renders login form with expected labels', () => {
     mockUseLoginForm.mockReturnValue(makeState());
-    const wrapper = mount(LoginView);
+    const wrapper = mount(LoginView, mountOptions);
 
     expect(wrapper.text()).toContain('Acceso');
     expect(wrapper.text()).toContain('Usuario');
@@ -44,7 +46,7 @@ describe('LoginView', () => {
         error: ref('Credenciales inválidas'),
       }),
     );
-    const wrapper = mount(LoginView);
+    const wrapper = mount(LoginView, mountOptions);
 
     expect(wrapper.text()).toContain('Entrando...');
     expect(wrapper.text()).toContain('Credenciales inválidas');
@@ -57,7 +59,7 @@ describe('LoginView', () => {
         sessionNotice: ref('Tu sesión expiró. Inicia sesión nuevamente.'),
       }),
     );
-    const wrapper = mount(LoginView);
+    const wrapper = mount(LoginView, mountOptions);
     expect(wrapper.text()).toContain('Tu sesión expiró. Inicia sesión nuevamente.');
   });
 
@@ -68,7 +70,7 @@ describe('LoginView', () => {
       login: vi.fn(async () => {}),
     });
     mockUseLoginForm.mockReturnValue(state);
-    const wrapper = mount(LoginView);
+    const wrapper = mount(LoginView, mountOptions);
 
     await wrapper.get('form').trigger('submit.prevent');
     expect(state.login).toHaveBeenCalledTimes(1);

@@ -3,12 +3,16 @@ import { useAuxData } from '@/domains/aux-data/composables';
 
 const mocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
+  getFxRatesPage: vi.fn(),
+  getInflationPage: vi.fn(),
   toApiErrorMessage: vi.fn(() => 'mapped-error'),
 }));
 
 vi.mock('@/domains/aux-data/api', () => ({
   auxDataApi: {
     getStatus: mocks.getStatus,
+    getFxRatesPage: mocks.getFxRatesPage,
+    getInflationPage: mocks.getInflationPage,
   },
 }));
 
@@ -26,11 +30,13 @@ describe('useAuxData (core)', () => {
       data: {
         supported_inflation_regions: [{ code: 'ES', label: 'Espana' }],
         datasets: {
-          fx: { states: [{ scope: 'USD->EUR' }], latest_rows: [{ id: 1 }] },
-          inflation: { states: [{ scope: 'ES' }], latest_rows: [{ id: 2 }] },
+          fx: { states: [{ scope: 'USD->EUR' }] },
+          inflation: { states: [{ scope: 'ES' }] },
         },
       },
     });
+    mocks.getFxRatesPage.mockResolvedValueOnce({ data: { results: [{ id: 1 }], next: null } });
+    mocks.getInflationPage.mockResolvedValueOnce({ data: { results: [{ id: 2 }], next: null } });
     const state = useAuxData();
 
     await state.loadAll();
