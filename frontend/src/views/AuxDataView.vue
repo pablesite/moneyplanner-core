@@ -152,7 +152,9 @@ onBeforeUnmount(() => {
           <button class="btn" type="button" :disabled="syncingInflation" @click="syncInflationNow">
             {{ syncingInflation ? 'Sincronizando IPC...' : 'Actualizar IPC ahora' }}
           </button>
-          <span v-if="syncSuccess" class="ui-form-help ui-form-help-success">{{ syncSuccess }}</span>
+          <span v-if="syncSuccess" class="ui-form-help ui-form-help-success">{{
+            syncSuccess
+          }}</span>
           <span v-if="syncError" class="ui-form-help ui-form-help-error">{{ syncError }}</span>
         </div>
 

@@ -62,7 +62,10 @@ export function useAuxData() {
     syncError.value = null;
     syncSuccess.value = null;
     try {
-      const response = await auxDataApi.syncMarketData({ datasets: ['inflation'], mode: 'reconcile' });
+      const response = await auxDataApi.syncMarketData({
+        datasets: ['inflation'],
+        mode: 'reconcile',
+      });
       const rows = response.data?.summary?.inflation ?? 0;
       syncSuccess.value = `Sincronizacion IPC completada (${rows} filas actualizadas).`;
       await loadAll();

@@ -134,7 +134,9 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertTrue(UserSettings.objects.filter(user=self.user).exists())
 
     @patch("accounts.views.sync_market_data")
-    def test_settings_put_triggers_fx_warmup_when_base_currency_changes(self, sync_market_data_mock):
+    def test_settings_put_triggers_fx_warmup_when_base_currency_changes(
+        self, sync_market_data_mock
+    ):
         UserSettings.objects.update_or_create(
             user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
         )

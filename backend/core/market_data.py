@@ -500,7 +500,9 @@ def _collect_relevant_position_dates() -> dict[str, date]:
 _FX_DEFAULT_HISTORY_YEARS = 5
 
 
-def _build_fx_scope_requests(*, history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS) -> list[SyncScopeRequest]:
+def _build_fx_scope_requests(
+    *, history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS
+) -> list[SyncScopeRequest]:
     earliest_by_currency = _collect_relevant_position_dates()
     global_start = earliest_by_currency.get("__global__")
     if global_start is None:
@@ -536,7 +538,9 @@ def _build_fx_scope_requests(*, history_floor_years: int | None = _FX_DEFAULT_HI
             if from_currency == quote_currency:
                 continue
             asset_start = earliest_by_currency.get(from_currency, global_start)
-            required_start_date = min(asset_start, floor_date) if floor_date is not None else asset_start
+            required_start_date = (
+                min(asset_start, floor_date) if floor_date is not None else asset_start
+            )
             if from_currency not in crypto_codes and quote_currency in crypto_codes:
                 scope = f"{quote_currency}->{from_currency}"
             else:

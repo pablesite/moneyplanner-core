@@ -43,7 +43,10 @@ export const coreAuxDataApi: AuxDataApiAdapter = {
     return api.get<PagedResponse<FxRate>>('/api/core/fx-rates/', { params: { page } });
   },
   syncMarketData(payload) {
-    return api.post<{ summary: Record<string, number> }>('/api/core/market-data/sync/', payload ?? {});
+    return api.post<{ summary: Record<string, number> }>(
+      '/api/core/market-data/sync/',
+      payload ?? {},
+    );
   },
 };
 
