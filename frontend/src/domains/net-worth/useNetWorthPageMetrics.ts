@@ -379,11 +379,34 @@ export function useNetWorthPageMetrics(params: {
     })),
   );
 
-  const categoryWorkspaceRows = computed(() =>
-    params.selectedTimelineCategoryType.value === 'liability'
-      ? liabilityPositionRows.value
-      : assetPositionRows.value,
-  );
+  const selectedPosition = computed(() => {
+    const rows =
+      params.selectedPositionType.value === 'liability'
+        ? liabilityPositionRows.value
+        : assetPositionRows.value;
+    return rows.find((row) => row.id === params.selectedPositionId.value) ?? null;
+  });
+
+  const latestSelectedTimelineValue = computed(() => {
+    const rows = params.positionTimelineRowsSource.value;
+    if (!rows.length) return null;
+    const latest = rows[rows.length - 1];
+    if (!latest) return null;
+    return toNumber(latest.value_base || latest.value);
+  });
+
+  const categoryWorkspaceRows = computed(() => {
+    const rows =
+      params.selectedTimelineCategoryType.value === 'liability'
+        ? liabilityPositionRows.value
+        : assetPositionRows.value;
+    const selected = selectedPosition.value;
+    const latest = latestSelectedTimelineValue.value;
+    if (!selected || latest == null) return rows;
+    return rows.map((row) =>
+      row.id === selected.id && row.type === selected.type ? { ...row, value: latest } : row,
+    );
+  });
 
   const categoryWorkspaceCount = computed(() => categoryWorkspaceRows.value.length);
   const categoryWorkspaceTotal = computed(() =>
@@ -396,14 +419,6 @@ export function useNetWorthPageMetrics(params: {
       ? (ownershipFilteredAssets.value.find((item) => item.id === row.id) ?? null)
       : (ownershipFilteredLiabilities.value.find((item) => item.id === row.id) ?? null);
   }
-
-  const selectedPosition = computed(() => {
-    const rows =
-      params.selectedPositionType.value === 'liability'
-        ? liabilityPositionRows.value
-        : assetPositionRows.value;
-    return rows.find((row) => row.id === params.selectedPositionId.value) ?? null;
-  });
 
   const selectedPositionSource = computed(() => {
     const row = selectedPosition.value;
