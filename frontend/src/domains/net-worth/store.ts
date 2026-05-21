@@ -414,6 +414,12 @@ export const useNetWorthStore = defineStore('netWorth', {
         this.assets = attachOwnershipRef(assetsRes.data, assetOwnership);
         this.liabilities = attachOwnershipRef(liabilitiesRes.data, liabilityOwnership);
         this.fetchTimeline(this.timelineCategoryFilter, this.timelineCategoryFilterType);
+        if (this.positionTimeline?.position_id && this.positionTimeline?.position_type) {
+          void this.fetchPositionTimeline(
+            this.positionTimeline.position_type,
+            this.positionTimeline.position_id,
+          );
+        }
       } catch (e: unknown) {
         this.error = toApiErrorMessage(e);
       } finally {

@@ -52,6 +52,7 @@ class PositionDataCache:
     periodic_investment_schedules: dict[tuple[int, date], list[tuple[date, Decimal]]] = field(
         default_factory=dict
     )
+    inflation_region: str | None = None
     inflation_indexes: dict[str, list[tuple[date, Decimal]]] = field(default_factory=dict)
 
 
@@ -151,11 +152,25 @@ def _cache_inflation_indexes_if_needed(
     if not needs_inflation_indexes:
         return
 
+    from accounts.models import UserSettings
     from core.models import InflationIndex
 
-    cache.inflation_indexes[cast(str, InflationIndex.Region.ES)] = [
+    user_ids = {asset.user_id for asset in assets if asset.user_id is not None}
+    region = cast(str, InflationIndex.Region.ES)
+    if user_ids:
+        selected_region = (
+            UserSettings.objects.filter(user_id__in=user_ids)
+            .values_list("inflation_region", flat=True)
+            .first()
+        )
+        normalized_region = str(selected_region or "").strip().upper()
+        if normalized_region:
+            region = normalized_region
+
+    cache.inflation_region = region
+    cache.inflation_indexes[region] = [
         (period, Decimal(index))
-        for period, index in InflationIndex.objects.filter(region=InflationIndex.Region.ES)
+        for period, index in InflationIndex.objects.filter(region=region)
         .order_by("period")
         .values_list("period", "index")
     ]

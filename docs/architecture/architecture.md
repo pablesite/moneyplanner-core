@@ -66,11 +66,12 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
 2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`.
-3. Persisted datasets in Core are:
+3. Core exposes a manual admin trigger endpoint for sync retries from UI: `POST /api/core/market-data/sync/` (defaults to `inflation` in `reconcile` mode).
+4. Persisted datasets in Core are:
    - `FxRate` (daily FX and supported crypto crosses)
    - `InflationIndex` (monthly IPC national + CCAA)
-4. Sync coverage and operational status are tracked in `MarketDataSyncState`.
-5. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
+5. Sync coverage and operational status are tracked in `MarketDataSyncState`.
+6. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
 
 ## Monthly Close Data Model
 

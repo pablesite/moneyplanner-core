@@ -11,6 +11,10 @@ import type {
 export function useAuxData() {
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const syncError = ref<string | null>(null);
+  const syncSuccess = ref<string | null>(null);
+  const syncingInflation = ref(false);
+  const syncingFx = ref(false);
   const status = ref<MarketDataStatus | null>(null);
 
   const fxStates = ref<MarketDataState[]>([]);
@@ -28,6 +32,13 @@ export function useAuxData() {
   const fxLoadingMore = ref(false);
 
   async function loadAll() {
+    inflation.value = [];
+    inflationPage.value = 1;
+    inflationHasMore.value = true;
+    fxRates.value = [];
+    fxPage.value = 1;
+    fxHasMore.value = true;
+
     loading.value = true;
     error.value = null;
     try {
@@ -44,6 +55,42 @@ export function useAuxData() {
     }
 
     await Promise.all([loadMoreInflation(), loadMoreFx()]);
+  }
+
+  async function syncInflationNow() {
+    syncingInflation.value = true;
+    syncError.value = null;
+    syncSuccess.value = null;
+    try {
+      const response = await auxDataApi.syncMarketData({ datasets: ['inflation'], mode: 'reconcile' });
+      const rows = response.data?.summary?.inflation ?? 0;
+      syncSuccess.value = `Sincronizacion IPC completada (${rows} filas actualizadas).`;
+      await loadAll();
+    } catch (e: unknown) {
+      syncError.value = toApiErrorMessage(e);
+    } finally {
+      syncingInflation.value = false;
+    }
+  }
+
+  async function syncFxHistoryNow() {
+    syncingFx.value = true;
+    syncError.value = null;
+    syncSuccess.value = null;
+    try {
+      const response = await auxDataApi.syncMarketData({
+        datasets: ['fx'],
+        mode: 'reconcile',
+        fx_full_history: true,
+      });
+      const rows = response.data?.summary?.fx ?? 0;
+      syncSuccess.value = `Sincronizacion FX completada (${rows} filas actualizadas).`;
+      await loadAll();
+    } catch (e: unknown) {
+      syncError.value = toApiErrorMessage(e);
+    } finally {
+      syncingFx.value = false;
+    }
   }
 
   async function loadMoreInflation() {
@@ -94,6 +141,10 @@ export function useAuxData() {
   return {
     loading,
     error,
+    syncError,
+    syncSuccess,
+    syncingInflation,
+    syncingFx,
     status,
     fxRates,
     fxHasMore,
@@ -107,6 +158,8 @@ export function useAuxData() {
     loadAll,
     loadMoreInflation,
     loadMoreFx,
+    syncInflationNow,
+    syncFxHistoryNow,
     formatFxRate,
     formatInflationIndex,
   };

@@ -11,9 +11,13 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from uuid import uuid4
+import logging
 
 from .serializers import UserSettingsSerializer
 from .services import get_or_create_user_settings, update_user_settings
+from core.market_data import MarketDataSyncError, sync_market_data
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureDisabledException(APIException):
@@ -34,9 +38,21 @@ class UserSettingsAPIView(APIView):
 
     def put(self, request):
         settings_obj = get_or_create_user_settings(user=request.user)
+        previous_base_currency = str(settings_obj.base_currency or "").upper().strip()
         serializer = UserSettingsSerializer(settings_obj, data=request.data)
         serializer.is_valid(raise_exception=True)
         updated = update_user_settings(user=request.user, validated_data=serializer.validated_data)
+        new_base_currency = str(updated.base_currency or "").upper().strip()
+        if new_base_currency and new_base_currency != previous_base_currency:
+            try:
+                sync_market_data(datasets=["fx"], mode="reconcile")
+            except MarketDataSyncError:
+                logger.warning(
+                    "FX market data warmup failed after base currency change %s -> %s.",
+                    previous_base_currency or "-",
+                    new_base_currency,
+                    exc_info=True,
+                )
         return Response(UserSettingsSerializer(updated).data, status=status.HTTP_200_OK)
 
 
