@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -411,22 +411,20 @@ class CoreServicesTests(TestCase):
 
     @patch("core.market_data._fetch_json")
     def test_sync_market_data_updates_sync_state(self, fetch_json_mock):
-        fetch_json_mock.side_effect = [
+        _ine_payload = [
             {
-                "amount": 1.0,
-                "base": "USD",
-                "rates": {
-                    "2025-03-03": {"EUR": 0.92},
-                },
-            },
-            [
-                {
-                    "Nombre": "Total Nacional. Indice general. Indice.",
-                    "MetaData": [{"T3_Variable": "Totales Territoriales", "Nombre": "Nacional"}],
-                    "Data": [{"Fecha": "2025-03-01T00:00:00.000+01:00", "Valor": 99.024}],
-                }
-            ],
+                "Nombre": "Total Nacional. Indice general. Indice.",
+                "MetaData": [{"T3_Variable": "Totales Territoriales", "Nombre": "Nacional"}],
+                "Data": [{"Fecha": "2025-03-01T00:00:00.000+01:00", "Valor": 99.024}],
+            }
         ]
+
+        def _side_effect(*, url: str) -> object:
+            if "frankfurter" in url:
+                return {"amount": 1.0, "base": "USD", "rates": {"2025-03-03": {"EUR": 0.92}}}
+            return _ine_payload
+
+        fetch_json_mock.side_effect = _side_effect
         user = get_user_model().objects.create_user(username="sync_user", password="pass1234")
         UserSettings.objects.update_or_create(
             user=user,
@@ -449,7 +447,7 @@ class CoreServicesTests(TestCase):
         self.assertEqual(summary["fx"], 1)
         self.assertEqual(summary["inflation"], 1)
         fx_state = MarketDataSyncState.objects.get(dataset="fx", scope="USD->EUR")
-        self.assertEqual(fx_state.required_start_date, date(2025, 3, 3))
+        self.assertEqual(fx_state.required_start_date, date.today() - timedelta(days=365 * 5))
         self.assertEqual(fx_state.covered_until, date(2025, 3, 3))
         inflation_state = MarketDataSyncState.objects.get(dataset="inflation", scope="ES")
         self.assertEqual(inflation_state.required_start_date, date(2025, 3, 1))
@@ -1466,6 +1464,11 @@ class CoreApiTests(APITestCase):
             username="core_api_user",
             password="pass1234",
         )
+        self.admin_user = get_user_model().objects.create_user(
+            username="core_api_admin",
+            password="pass1234",
+            is_staff=True,
+        )
 
     def test_fx_rates_requires_auth_with_canonical_error_shape(self):
         response = self.client.get("/api/core/fx-rates/")
@@ -1496,7 +1499,7 @@ class CoreApiTests(APITestCase):
         self.assertEqual(response.data["datasets"]["inflation"]["states"], [])
 
     def test_fx_rates_create_and_list(self):
-        self.client.force_authenticate(user=self.user)
+        self.client.force_authenticate(user=self.admin_user)
         create_response = self.client.post(
             "/api/core/fx-rates/",
             {
@@ -1513,10 +1516,10 @@ class CoreApiTests(APITestCase):
 
         list_response = self.client.get("/api/core/fx-rates/")
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(list_response.data), 1)
+        self.assertEqual(len(list_response.data["results"]), 1)
 
     def test_fx_rates_rejects_invalid_currency_with_canonical_error_shape(self):
-        self.client.force_authenticate(user=self.user)
+        self.client.force_authenticate(user=self.admin_user)
         response = self.client.post(
             "/api/core/fx-rates/",
             {
@@ -1532,7 +1535,7 @@ class CoreApiTests(APITestCase):
         self.assertIn("non_field_errors", response.data["error"]["details"])
 
     def test_inflation_rejects_non_month_start_period_with_canonical_error_shape(self):
-        self.client.force_authenticate(user=self.user)
+        self.client.force_authenticate(user=self.admin_user)
         response = self.client.post(
             "/api/core/inflation/",
             {
