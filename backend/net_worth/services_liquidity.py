@@ -601,7 +601,9 @@ def _build_liability_summary_row(
     prev_effective_balance: Decimal | None = None,
 ) -> dict[str, object]:
     planned_native = (
-        prev_effective_balance if prev_effective_balance is not None else Decimal(liability.amount or 0)
+        prev_effective_balance
+        if prev_effective_balance is not None
+        else Decimal(liability.amount or 0)
     )
     liability_checkin = inputs.liability_checkins.get(liability.id)
     executed_native = get_effective_liability_amount_fn(
