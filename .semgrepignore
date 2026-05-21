@@ -1,0 +1,2 @@
+# Test fixtures with intentionally hardcoded dummy secrets (not production code)
+backend/accounts/tests.py

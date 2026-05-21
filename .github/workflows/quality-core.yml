@@ -6,6 +6,24 @@ on:
   pull_request:
 
 jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan
+        run: >
+          semgrep ci
+          --config=p/python
+          --config=p/django
+          --config=p/typescript
+          --error
+          --exclude=frontend/node_modules
+          --exclude=frontend/dist
+
   backend:
     runs-on: ubuntu-latest
     defaults:
