@@ -44,6 +44,7 @@ jobs:
           DB_NAME: saas
           DB_USER: saas
           DB_PASSWORD: saas
+          DJANGO_SECRET_KEY: "ci-only-insecure-key-not-used-in-production-xK9mP2nQ8rT5vW3yZ7aB4dF6hJ1lN0oR"
     services:
       db:
         image: postgres:16-alpine
