@@ -97,8 +97,8 @@ Convenciones:
 
 - ✅ **Revisión del tracker operativo de cuentas** — 106/106 cuentas revisadas (2026-05-20). Tracker en `core/docs/operations/movements-user1-review-tracker.md`.
 - ✅ **Re-revisión de categorías/subcategorías** — completada junto con el tracker.
-- **Actualizar el header** para que sea exactamente igual al de la vista de Patrimonio.
-- **Revisión del estilo visual del cuerpo de la vista** (ya avanzado, pendiente de cierre).
+- ✅ **Actualizar el header** — alineado con el estilo de Patrimonio.
+- ✅ **Revisión del estilo visual del cuerpo de la vista** — cerrada.
 
 ### Para v2
 

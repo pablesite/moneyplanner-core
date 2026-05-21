@@ -1,11 +1,12 @@
 # Project Status — Core
 
-> **English summary** (last updated 2026-05-20 · Core v0.23.5)
+> **English summary** (last updated 2026-05-21 · Core v0.23.7)
 >
-> All planned v1 modules are implemented and stable: Net Worth, Budget & Monthly Close,
-> Accounting Movements, Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
-> Residual legacy cleanup complete. Design system foundation pass complete (22 steps).
-> Shell: / → /patrimonio, guide at /guia, phase 5 removed. Up next: user validation.
+> All v1 modules complete and stable: Net Worth, Budget & Monthly Close, Accounting,
+> Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
+> Design system foundation pass complete (22 steps). Legacy cleanup done.
+> Shell: / → /patrimonio, guide at /guia, phase 5 removed.
+> Monthly close bugs fixed (bridge alignment + liquidity reference). Ready for GitHub.
 > Paused: Crypto Tax Report (IRPF Spain). Full details in Spanish below.
 
 ---
@@ -14,7 +15,7 @@
 
 Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
 
-**Última revisión:** 2026-05-20 | **Versión Core:** 0.23.6
+**Última revisión:** 2026-05-21 | **Versión Core:** 0.23.7
 
 ---
 
@@ -44,7 +45,7 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 
 | Área | Prioridad | Estado | Descripción |
 |------|-----------|--------|-------------|
-| Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Trazabilidad de movimientos importados conservada mediante metadatos contables; importador MoneyWiz ad-hoc retirado. |
+| Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Header alineado con Patrimonio; estilo visual del cuerpo cerrado. Trazabilidad de movimientos importados conservada mediante metadatos contables; importador MoneyWiz ad-hoc retirado. |
 | Presupuesto — v1 | Alta | ✅ | Cierre funcional aplicado y revisión manual completada: summaries mensuales canónicos para ejecución/cobertura, precedencia ledger sobre check-ins manuales, errores backend dentro de modales de líneas y header alineado con Patrimonio. |
 | Patrimonio — modales activos/pasivos | Media | ✅ | Revisión completa de modales de creación/edición de activos y pasivos completada. V1 del módulo cerrada a nivel funcional. |
 | Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. Bugs v1 corregidos (2026-05-20): alineación de columnas en bridge de conciliación (subgrid CSS) y referencia de liquidez por cuenta (saldo efectivo del mes anterior, no `asset.amount`). |
@@ -55,10 +56,8 @@ Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ve
 | Limpieza legacy residual | Media | ✅ | Completado 2026-05-20. Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (migración 0042), import externo de `net_worth.services`, `compat.*` en capabilities. Fallback Budget/check-ins: diseño intencional, no deuda técnica. Ver `roadmap/product-roadmap.md`. |
 | Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
 | Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
-| Auth y seguridad | Alta | ✅ | Logout con blacklist, aislamiento cross-user (31 tests), registro de usuario desde UI (`/registro`, JWT en signup, rate throttle). Pendiente: auditoría CVEs y flujos reales con usuarios. |
+| Auth y seguridad | Alta | ✅ | Logout con blacklist, aislamiento cross-user (31 tests), registro de usuario desde UI (`/registro`, JWT en signup, rate throttle). CVEs frontend (12→0) y backend resueltos. |
 | Backup/restore de base de datos | Media | ✅ | Endpoints admin-only `GET /api/core/db-backup/` y `POST /api/core/db-restore/` basados en pg_dump/pg_restore. AccountView migrada a este flujo; JSON portable retirado. |
-| Auditoría de seguridad | Alta | ✅ | CVEs frontend saneados (12→0 via npm audit fix: axios, vite, rollup, postcss, lodash…). Backend: pip CVEs resueltos con upgrade en Dockerfile; app deps limpios. Auth/permisos cubiertos en tarea anterior. |
-| Validación con usuarios reales | Alta | ⚪ | Tests con early adopters; feedback UX, comprensión y valor — crítico antes de MVP |
 
 ---
 
