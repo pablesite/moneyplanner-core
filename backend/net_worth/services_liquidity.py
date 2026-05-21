@@ -285,7 +285,7 @@ def _build_liquidity_summary_rows(
     build = LiquiditySummaryBuild()
     for asset in inputs.liquid_assets:
         prev_balance = get_effective_asset_amount_fn(
-            asset=asset, as_of_date=prev_summary_date, position_cache=None
+            asset=asset, as_of_date=prev_summary_date, position_cache=inputs.position_cache
         )
         row = _build_asset_summary_row(
             user=user,
@@ -309,7 +309,7 @@ def _build_liquidity_summary_rows(
 
     for liability in inputs.liquid_liabilities:
         prev_balance = get_effective_liability_amount_fn(
-            liability=liability, as_of_date=prev_summary_date, position_cache=None
+            liability=liability, as_of_date=prev_summary_date, position_cache=inputs.position_cache
         )
         row = _build_liability_summary_row(
             user=user,
