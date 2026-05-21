@@ -9,7 +9,7 @@ from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -39,15 +39,22 @@ def _pg_env() -> dict[str, str]:
     return env
 
 
+class _IsAdminOrReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return bool(request.user and request.user.is_authenticated)
+        return bool(request.user and request.user.is_staff)
+
+
 class FxRateViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [_IsAdminOrReadOnly]
     serializer_class = FxRateSerializer
     queryset = FxRate.objects.all().order_by("-rate_date", "from_currency", "to_currency")
     pagination_class = _MarketDataPagination
 
 
 class InflationIndexViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [_IsAdminOrReadOnly]
     serializer_class = InflationIndexSerializer
     queryset = InflationIndex.objects.all().order_by("-period", "region")
     pagination_class = _MarketDataPagination
