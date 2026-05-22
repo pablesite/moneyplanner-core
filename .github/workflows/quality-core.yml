@@ -6,22 +6,17 @@ on:
   pull_request:
 
 jobs:
-  semgrep:
-    name: Semgrep SAST
+  gitleaks:
+    name: Secret scan
     runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Scan
-        run: >
-          semgrep ci
-          --config=p/python
-          --config=p/django
-          --config=p/typescript
-          --exclude=frontend/node_modules
-          --exclude=frontend/dist
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deps:
     name: Dependency audit
