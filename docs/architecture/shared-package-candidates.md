@@ -41,9 +41,55 @@ pierda dentro del roadmap. Ver tambien:
    dominios con estado.
 4. Conservar `auth`, `capabilities` y `lib/api.ts` como fronteras especificas de cada stack.
 
+## Decisión arquitectónica vigente (2026-05-22)
+
+### Situación actual: Opción A — dos frontends espejo
+
+Core y SaaS mantienen frontends separados que se replican manualmente. Es la opción elegida
+para salir a producción en el corto plazo. El coste es el mantenimiento dual: cada cambio
+en Core debe portarse a SaaS.
+
+Esta decisión es temporal y consciente. No es la arquitectura objetivo.
+
+### Arquitectura objetivo: Opción C — core como librería de componentes Vue
+
+**Visión:** Core exporta sus dominios como un paquete npm (`@moneyplanner/core-ui` o similar).
+SaaS importa ese paquete y añade encima únicamente sus capas específicas (auth, billing,
+capabilities SaaS). Desaparece la replicación manual.
+
+**Por qué tiene sentido:** el backend ya sigue este modelo — SaaS usa Core como submódulo
+Python. El frontend debería espejarlo. Los dominios candidatos ya están preparados (ver
+tabla arriba) y elimina la deuda de sincronización que crece con cada feature nueva.
+
+**Forma aproximada del paquete:**
+```
+@moneyplanner/core-ui
+  /net-worth      → componentes + composables
+  /people         → componentes + composables
+  /guide          → componentes + composables
+  /aux-data       → componentes + composables
+  /data-input     → componentes + composables
+  /ui             → primitivas visuales compartidas
+  /budget         → cuando esté listo para extracción
+```
+
+**Lo que NO entra en el paquete:**
+- `auth` — diferente en Core (sin auth) y SaaS (JWT + memberships)
+- `capabilities` — los planes SaaS no existen en Core standalone
+- `lib/api.ts` — base URL y contexto distintos por stack
+
+**Condiciones para iniciar la extracción:**
+1. Core estable en producción y ritmo de cambios estructurales bajo.
+2. Necesidad concreta que justifique el coste del setup (vite-lib, publicación
+   npm/privada, versionado semver, consumer tests).
+3. Dominio piloto elegido de bajo riesgo (candidato: `ui` o `people`).
+
 ## Siguientes pasos
 
-1. Elegir un dominio con bajo riesgo y alta reutilizacion para la primera extraccion real.
-2. Definir la forma del paquete compartido solo cuando exista una necesidad funcional clara.
-3. Mantener este documento como referencia canonica hasta que la extraccion empiece.
+1. **Corto plazo**: mantener Opción A. Replicar features Core → SaaS manualmente.
+2. **Medio plazo**: cuando Core esté estable en producción, iniciar extracción piloto
+   con el dominio `ui` (primitivas sin estado, menor riesgo).
+3. **Largo plazo**: migrar dominio a dominio hasta que SaaS no tenga código de UI propio,
+   solo extensiones sobre `@moneyplanner/core-ui`.
+4. Mantener este documento como referencia canónica de la decisión.
 

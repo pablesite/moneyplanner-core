@@ -1,0 +1,80 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-core}
+      POSTGRES_USER: ${POSTGRES_USER:-core}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - core_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-core} -d ${POSTGRES_DB:-core}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      DB_NAME: ${POSTGRES_DB:-core}
+      DB_USER: ${POSTGRES_USER:-core}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_HOST: db
+      DB_PORT: "5432"
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  market_data_sync:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      DB_NAME: ${POSTGRES_DB:-core}
+      DB_USER: ${POSTGRES_USER:-core}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_HOST: db
+      DB_PORT: "5432"
+      FX_SYNC_ENABLED: ${FX_SYNC_ENABLED:-1}
+      FX_SYNC_INTERVAL_SECONDS: ${FX_SYNC_INTERVAL_SECONDS:-86400}
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: []
+    command: >
+      sh -c "
+      python manage.py migrate --noinput &&
+      while true; do
+        if [ \"$${FX_SYNC_ENABLED:-1}\" = \"1\" ]; then
+          python manage.py sync_market_data --datasets fx inflation --mode reconcile || true;
+        fi;
+        sleep $${FX_SYNC_INTERVAL_SECONDS:-86400};
+      done
+      "
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - backend
+
+volumes:
+  core_postgres_data:

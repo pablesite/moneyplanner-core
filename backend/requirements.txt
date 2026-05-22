@@ -18,6 +18,10 @@ psycopg[binary]>=3.2
 # Utils
 python-dotenv>=1.0
 
+# Production server
+gunicorn>=21.2
+whitenoise>=6.7
+
 # Dev / quality (opcional pero recomendable)
 ruff>=0.4
 mypy>=1.15
