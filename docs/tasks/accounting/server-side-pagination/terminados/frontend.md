@@ -1,5 +1,5 @@
 # Title
-Core + SaaS frontend — server-side pagination for transactions
+Core frontend — server-side pagination for transactions
 
 ## Context
 Depends on: `server-side-pagination/backend.md`.
@@ -10,7 +10,7 @@ The frontend currently loads all transactions in a single API call, stores the f
 `frontend`
 
 ## Stack
-`both` (Core + SaaS mirror)
+`both` (Core mirror)
 
 ## Scope
 
@@ -22,7 +22,7 @@ The frontend currently loads all transactions in a single API call, stores the f
 5. Keep "Cuentas" tab `impactValue` calculation client-side (trivial once entries are present).
 6. Remove store dependency on a full `transactions[]` array — transactions are now request-scoped.
 7. Update Vue components to use new data sources and show `total_count`.
-8. Mirror all changes Core → SaaS (excluding `revaluation` kind in SaaS).
+8. Mirror all changes Core (excluding `revaluation` kind in Core).
 
 ### Out of scope
 1. Backend changes (separate spec).
@@ -116,9 +116,9 @@ Run lint and typecheck in both stacks.
 - `docker compose -f core/docker-compose.yml exec frontend npm run lint`
 - `docker compose -f core/docker-compose.yml exec frontend npm run format:check`
 - `docker compose -f core/docker-compose.yml exec frontend npm run typecheck`
-- `docker compose exec saas_frontend npm run lint`
-- `docker compose exec saas_frontend npm run format:check`
-- `docker compose exec saas_frontend npm run typecheck`
+- `docker compose exec frontend npm run lint`
+- `docker compose exec frontend npm run format:check`
+- `docker compose exec frontend npm run typecheck`
 
 ## Required Documentation Updates
 - [ ] `core/docs/frontend/accounting-movements-ux-notes.md` — document the new pagination UX: initial load, load-more, debounced search.
@@ -139,7 +139,7 @@ Run lint and typecheck in both stacks.
 - [ ] "Cuentas" tab shows per-account transactions with correct impact values
 - [ ] "N de M movimientos" shows `total_count` from server
 - [ ] Creating/editing/deleting a transaction refreshes the visible list
-- [ ] SaaS frontend mirrors all changes
+- [ ] Core frontend mirrors all changes
 - [ ] All required documentation updates done
 - [ ] Spec moved to `terminados/`
 - [ ] Commit created (Conventional Commits)

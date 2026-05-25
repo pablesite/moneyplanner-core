@@ -50,11 +50,11 @@ Each component receives data and emits actions via props/emits; without direct a
 
 3. **Tests:**
    - mantener `BudgetDashboardView.spec.ts` como smoke dirigido
-   - ejecutar lint/typecheck y test dirigido en Core y SaaS tras cada corte relevante
+   - ejecutar lint/typecheck y test dirigido en Core tras cada corte relevante
 
-### SaaS Replication
-Aplicar los mismos cambios en `frontend/` SaaS. Esta vista no tiene diferencias entre Core
-and SaaS, so replication is direct.
+### Core validation
+Aplicar los mismos cambios en `frontend/` Core. Esta vista no tiene diferencias entre Core
+and Core, so replication is direct.
 
 ## Validation
 ```bash
@@ -64,10 +64,10 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts
 # → BudgetDashboardView <= 2,500 líneas; cobertura global sigue gobernada por Fase 0
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts
 ```
 
 ## Required Documentation Updates
@@ -85,7 +85,7 @@ docker compose exec saas_frontend npm run test:unit -- src/views/__tests__/Budge
 - [x] `BudgetDashboardView.vue` reduced from 5,512 to 2,362 lines, with domain sections and styles extracted
 - [x] Main sections of the annual dashboard and monthly closing extracted to components
 - [ ] Sin cambios de comportamiento observados en browser
-- [x] `lint`, `typecheck` y test dirigido de `BudgetDashboardView` en verde — Core y SaaS
+- [x] `lint`, `typecheck` y test dirigido de `BudgetDashboardView` en verde — Core
 - [x] Updated required documentation
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)

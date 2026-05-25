@@ -40,5 +40,5 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
 
 ## Usage Rule
 1. This directory is the canonical source for Core product and domain documentation.
-2. SaaS documentation must reference Core docs instead of duplicating Core behavior.
+2. Core documentation must reference Core docs instead of duplicating Core behavior.
 3. If Core behavior, architecture, or operational flows change, update these docs first.

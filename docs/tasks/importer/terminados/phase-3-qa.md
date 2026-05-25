@@ -14,9 +14,9 @@ La importacion impacta contabilidad, balances y resumenes mensuales. Esta fase d
 1. In scope
 - Functional E2E testing of the MoneyWiz import flow.
 - Basic accounting regression on movements, accounts and monthly summary.
-- Core/SaaS frontend mirror verification for the import flow.
+- Core frontend mirror verification for the import flow.
 2. Out of scope
-   - Pruebas de billing o capacidades de pago.
+   - Pruebas de packaging de pago o controles de pago.
    - Auditorias de seguridad completas fuera del alcance del bloque.
 
 ## Plan
@@ -38,9 +38,9 @@ La importacion impacta contabilidad, balances y resumenes mensuales. Esta fase d
 5. `docker compose -f core/docker-compose.yml exec frontend npm run lint`
 6. `docker compose -f core/docker-compose.yml exec frontend npm run format:check`
 7. `docker compose -f core/docker-compose.yml exec frontend npm run typecheck`
-8. `docker compose exec saas_frontend npm run lint`
-9. `docker compose exec saas_frontend npm run format:check`
-10. `docker compose exec saas_frontend npm run typecheck`
+8. `docker compose exec frontend npm run lint`
+9. `docker compose exec frontend npm run format:check`
+10. `docker compose exec frontend npm run typecheck`
 
 Expected outcome: todos los comandos en verde y sin regresiones funcionales relevantes.
 
@@ -52,7 +52,7 @@ Expected outcome: todos los comandos en verde y sin regresiones funcionales rele
 ## Risks
 1. Casos borde del CSV (filas incompletas, monedas vacias, transferencias ambiguas) no cubiertos.
 2. Falsos positivos de idempotencia en movimientos parecidos.
-3. Divergencia Core/SaaS en UX de resultado del import.
+3. Divergencia Core en UX de resultado del import.
 
 ## Completion Criteria
 - [ ] All validation commands pass

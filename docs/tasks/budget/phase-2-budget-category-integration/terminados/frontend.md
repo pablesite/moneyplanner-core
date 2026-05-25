@@ -16,7 +16,7 @@ La fase 1 movio el CRUD anual de ingresos/gastos a `Presupuesto`, pero la pantal
    Mantener el uso de stores y taxonomias existentes (`domains/data-input` y `domains/budget`) evitando duplicacion de logica.
    Permitir editar/crear desde el contexto de categoria/subcategoria (acciones in-place o drawers/modales contextuales).
    Conservar filtros clave (fiscal year, ownership, recurrente/puntual) en un unico flujo coherente.
-   Replicar el comportamiento equivalente en `frontend/` (SaaS) por regla de espejo Core -> SaaS.
+   Replicar el comportamiento equivalente en `frontend/` (Core) por regla de espejo Core.
 2. Out of scope
    Cambios de contrato backend que no sean estrictamente necesarios.
    Eliminacion completa de la ruta `/introduccion-datos` (queda para la fase de retirada del modulo).
@@ -31,9 +31,9 @@ La fase 1 movio el CRUD anual de ingresos/gastos a `Presupuesto`, pero la pantal
    Reusar `AnnualEntryModalForm` con contexto de categoria/subcategoria preseleccionado para reducir pasos.
    Ajustar estados vacios, errores y carga para que respondan al flujo integrado (no por bloques aislados).
    Mantener compatibilidad con cierre mensual y calculos de ejecucion.
-   Replicar en SaaS con las mismas reglas de UX/comportamiento.
+   Replicar en Core con las mismas reglas de UX/comportamiento.
 3. Validation
-   Ejecutar lint, format:check, typecheck y test:unit en Core frontend y SaaS frontend.
+   Ejecutar lint, format:check, typecheck y test:unit en Core frontend y Core frontend.
    Validar manualmente que crear/editar/borrar desde categorias actualiza de forma consistente la visualizacion analitica.
 
 ## Validation
@@ -41,31 +41,31 @@ La fase 1 movio el CRUD anual de ingresos/gastos a `Presupuesto`, pero la pantal
 - `docker compose -f core/docker-compose.yml exec frontend npm run format:check`
 - `docker compose -f core/docker-compose.yml exec frontend npm run typecheck`
 - `docker compose -f core/docker-compose.yml exec frontend npm run test:unit`
-- `docker compose exec saas_frontend npm run lint`
-- `docker compose exec saas_frontend npm run format:check`
-- `docker compose exec saas_frontend npm run typecheck`
-- `docker compose exec saas_frontend npm run test:unit`
+- `docker compose exec frontend npm run lint`
+- `docker compose exec frontend npm run format:check`
+- `docker compose exec frontend npm run typecheck`
+- `docker compose exec frontend npm run test:unit`
 - Validacion manual:
   Presupuesto permite alta/edicion/borrado sin salir del contexto de categorias.
   No hay separacion UX en dos bloques independientes para introducir y visualizar presupuesto.
-  Mirror Core -> SaaS verificado.
+  Mirror Core verificado.
 
 ## Required Documentation Updates
 - [ ] `core/docs/project-status.md` — actualizar estado de la fase 2 de Presupuesto
 - [ ] `core/docs/roadmap/product-roadmap.md` — reflejar la fase de integracion UX datos↔categorias
-- [ ] `docs/project-status.md` — reflejar avance del espejo SaaS
+- [ ] `docs/project-status.md` — reflejar avance del espejo Core
 - [ ] `docs/frontend/domain-map.md` — ajustar descripcion del flujo principal de `budget`
 - [ ] `core/docs/tasks/budget/phase-2-budget-category-integration/terminados/frontend.md` — mover la spec al cerrar
 
 ## Risks
 1. Perder claridad si se mezclan demasiadas acciones por fila/categoria. Mitigacion: mantener jerarquia visual simple y una accion primaria clara.
 2. Romper consistencia entre taxonomia y formularios contextuales. Mitigacion: reusar taxonomias y validaciones ya existentes.
-3. Divergencia Core/SaaS en comportamiento de UI. Mitigacion: aplicar espejo en el mismo bloque funcional y validar ambos stacks.
+3. Divergencia Core en comportamiento de UI. Mitigacion: aplicar espejo en el mismo bloque funcional y validar ambos stacks.
 
 ## Completion Criteria
 - [ ] Presupuesto integra introduccion de datos y visualizacion por categorias en un unico flujo
 - [ ] Alta/edicion/borrado funciona desde el contexto de categoria/subcategoria
-- [ ] Mirror Core -> SaaS aplicado o excepcion documentada
+- [ ] Mirror Core aplicado o excepcion documentada
 - [ ] All validation commands pass
 - [ ] Required documentation updates done
 - [ ] Spec moved to `terminados/`

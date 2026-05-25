@@ -79,7 +79,7 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 - [ ] `core/docs/project-status.md` — marcar cierre mensual como 🔄 En curso, añadir tarea a "En curso"
 - [ ] `core/docs/roadmap/product-roadmap.md` — actualizar sección CIERRE DEL MES con decisiones tomadas
 - [ ] `core/docs/architecture/architecture.md` — añadir MonthlyClose al modelo de datos si aplica
-- [ ] `docs/project-status.md` (SaaS) — actualizar referencia si aplica
+- [ ] `docs/project-status.md` (Core) — actualizar referencia si aplica
 
 ## Risks
 - **Performance**: `compute_monthly_close_state` llama a 3 summary builders en secuencia. Aceptable para MVP; cachear en JSONField si se degrada.

@@ -4,7 +4,7 @@ Open-source personal finance app foundation for MoneyPlanner.
 
 ## What It Is
 1. A self-contained product for personal finance management.
-2. The open-core base that evolves independently from the SaaS layer.
+2. The open-core base that evolves independently.
 3. A repository intended to be useful on its own and open to community contributions.
 
 ## Current Scope

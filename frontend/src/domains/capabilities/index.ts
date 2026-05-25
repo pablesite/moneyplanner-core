@@ -1,9 +1,7 @@
 export type DeploymentMode = 'self_hosted' | 'cloud';
-export type PlanCode = 'community_core' | 'cloud_basic' | 'cloud_pro' | 'cloud_premium';
 
 export type AppCapabilitiesV2 = {
   deploymentMode: DeploymentMode;
-  planCode: PlanCode;
   capabilitiesVersion: number;
   platform: {
     selfHosted: boolean;
@@ -60,19 +58,12 @@ export type AppCapabilitiesV2 = {
     importBulkAdvanced: boolean;
     astraSignalsInfo: boolean;
   };
-  saas: {
-    accountPage: boolean;
-    adminInternal: boolean;
-    billingPortal: boolean;
-    planManagement: boolean;
-  };
 };
 
 export type AppCapabilities = AppCapabilitiesV2;
 
 export const capabilities: AppCapabilities = {
   deploymentMode: 'self_hosted',
-  planCode: 'community_core',
   capabilitiesVersion: 1,
   platform: {
     selfHosted: true,
@@ -128,12 +119,6 @@ export const capabilities: AppCapabilities = {
     importBulkAdvanced: false,
     astraSignalsInfo: false,
   },
-  saas: {
-    accountPage: false,
-    adminInternal: false,
-    billingPortal: false,
-    planManagement: false,
-  },
 };
 
 export type CapabilityPath =
@@ -176,11 +161,7 @@ export type CapabilityPath =
   | 'premium.communityBenchmarkingAnonymous'
   | 'premium.inputCaptureAdvanced'
   | 'premium.importBulkAdvanced'
-  | 'premium.astraSignalsInfo'
-  | 'saas.accountPage'
-  | 'saas.adminInternal'
-  | 'saas.billingPortal'
-  | 'saas.planManagement';
+  | 'premium.astraSignalsInfo';
 
 function getByPath(source: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -218,8 +199,4 @@ export function canUsePeople(source: AppCapabilities = capabilities): boolean {
 
 export function canUseOwnership(source: AppCapabilities = capabilities): boolean {
   return source.core.familyLogicalModel || source.premium.familyMode;
-}
-
-export function canUseAdminInternal(source: AppCapabilities = capabilities): boolean {
-  return source.saas.adminInternal;
 }

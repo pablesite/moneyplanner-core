@@ -62,11 +62,11 @@ add tests until you reach ≥80% coverage.
 5. **Update canonical frontend docs:**
    - `docs/frontend/frontend-visual-guide.md` — si quedan actualizaciones pendientes
    - `docs/frontend/frontend-css-workflow.md` — workflow final post-refactor
-- `docs/frontend/domain-map.md` (SaaS) — if the domain structure changed
+- `docs/frontend/domain-map.md` (Core) — if the domain structure changed
    - `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — marcar todas las fases completadas
 
-### SaaS Replication
-Aplicar los mismos pasos en `frontend/` SaaS.
+### Core validation
+Aplicar los mismos pasos en `frontend/` Core.
 `shared-package-candidates.md` is only for Core (unified architecture doc).
 
 ## Validation
@@ -86,11 +86,11 @@ grep -r "@/lib/api\|@/lib/errors\|@/stores/" core/frontend/src/views --include="
 grep -r "@/stores/" core/frontend/src/domains --include="*.ts" --include="*.vue"
 # → 0 resultados
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run format:check
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run format:check
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -100,7 +100,7 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] `docs/frontend/frontend-css-workflow.md` — workflow post-refactor
 - [x] `docs/frontend/domain-map.md` — update if domain structure changed
 - [x] `core/docs/project-status.md` — mark Phase 6 and frontend refactor as completed
-- [x] `docs/project-status.md` — update SaaS frontend refactor state
+- [x] `docs/project-status.md` — update Core frontend refactor state
 
 ## Risks
 - **Risk:** residual warnings in third-party tests or libraries that cannot be resolved.
@@ -112,7 +112,7 @@ non-testable visuals; document what is ignored in this spec file.
 ## Completion Criteria
 - [x] 0 imports legacy en vistas y dominios
 - [x] 0 architecture warnings in the test suite
-- [x] `test:coverage` ≥80% on all metrics — Core and SaaS
+- [x] `test:coverage` ≥80% on all metrics — Core
 - [x] `core/docs/architecture/shared-package-candidates.md` creado
 - [x] All canonical documentation updated
 - [x] Roadmap Core marked as completed in all phases

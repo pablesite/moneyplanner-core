@@ -20,7 +20,7 @@ La mejora objetivo es que la pantalla enseñe el presupuesto como una herramient
    - ejecutado fuera de presupuesto
    Mostrar categorías/subcategorías con gasto real no presupuestado dentro del detalle, con CTA contextual tipo `Añadir al presupuesto` o equivalente.
    Ajustar copy/KPIs para que “completitud” no se interprete como “gasto real total”.
-   Aplicar espejo Core -> SaaS en la misma fase.
+   Aplicar espejo Core en la misma fase.
 2. Out of scope
    Refactor amplio no relacionado de `domains/budget`.
    Automatización avanzada de sugerencias presupuestarias multi-paso.
@@ -37,23 +37,23 @@ La mejora objetivo es que la pantalla enseñe el presupuesto como una herramient
    - un bloque adicional `Detectado en movimientos pero no presupuestado` cuando aplique
    - CTA de alta contextual para convertir una subcategoría detectada en línea anual
    Ajustar barras/captions para que el usuario vea cuándo el ejecutado total supera lo previsto porque hay gasto no modelado, no solo desviación de partidas existentes.
-   Replicar el comportamiento equivalente en `frontend/` (SaaS).
+   Replicar el comportamiento equivalente en `frontend/` (Core).
 3. Validation
    Añadir tests de frontend que cubran:
    - categoría con líneas presupuestadas y subcategorías ejecutadas no presupuestadas
    - categoría completamente no presupuestada con gasto real
    - visibilidad de CTA contextual
-   - coherencia entre Core y SaaS
+   - coherencia entre Core
 
 ## Validation
 - `docker compose -f core/docker-compose.yml exec frontend npm run lint`
 - `docker compose -f core/docker-compose.yml exec frontend npm run format:check`
 - `docker compose -f core/docker-compose.yml exec frontend npm run typecheck`
 - `docker compose -f core/docker-compose.yml exec frontend npm run test:unit`
-- `docker compose exec saas_frontend npm run lint`
-- `docker compose exec saas_frontend npm run format:check`
-- `docker compose exec saas_frontend npm run typecheck`
-- `docker compose exec saas_frontend npm run test:unit`
+- `docker compose exec frontend npm run lint`
+- `docker compose exec frontend npm run format:check`
+- `docker compose exec frontend npm run typecheck`
+- `docker compose exec frontend npm run test:unit`
 - Validación manual:
   El usuario puede identificar claramente el gasto real no presupuestado sin expandir lógica mental adicional.
   Las categorías no presupuestadas pero con gasto ejecutado no desaparecen de la lectura analítica.
@@ -61,20 +61,20 @@ La mejora objetivo es que la pantalla enseñe el presupuesto como una herramient
 
 ## Required Documentation Updates
 - [ ] `core/docs/project-status.md` — actualizar estado de la fase 3 de Presupuesto
-- [ ] `docs/project-status.md` — reflejar el avance del espejo SaaS
+- [ ] `docs/project-status.md` — reflejar el avance del espejo Core
 - [ ] `docs/frontend/domain-map.md` — actualizar la descripción del flujo principal de `budget` si se amplía la interacción contextual
 - [ ] `core/docs/tasks/budget/phase-3-unbudgeted-execution-visibility/terminados/frontend.md` — mover la spec al cerrar
 
 ## Risks
 1. Sobrecargar la tarjeta de categoría con demasiados KPIs. Mitigación: priorizar una jerarquía simple y progresiva.
 2. Confundir `desviación` con `gasto fuera de presupuesto`. Mitigación: separar copy y métricas explícitamente.
-3. Divergencia Core/SaaS en comportamiento de UI. Mitigación: espejar el mismo contrato y la misma interacción en ambas apps.
+3. Divergencia Core en comportamiento de UI. Mitigación: espejar el mismo contrato y la misma interacción en ambas apps.
 
 ## Completion Criteria
 - [ ] Presupuesto muestra de forma explícita el gasto real fuera de presupuesto
 - [ ] Las categorías/subcategorías con gasto ejecutado pero sin línea anual son visibles en la UI
 - [ ] Existe CTA contextual para presupuestar gasto detectado
-- [ ] Mirror Core -> SaaS aplicado o excepción documentada
+- [ ] Mirror Core aplicado o excepción documentada
 - [ ] All validation commands pass
 - [ ] All required documentation updates done
 - [ ] Spec moved to `terminados/`

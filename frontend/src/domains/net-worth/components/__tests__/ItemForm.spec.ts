@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ItemForm from '@/domains/net-worth/components/ItemForm.vue';
 
-describe('ItemForm (saas)', () => {
+describe('ItemForm (core)', () => {
   it('submits normalized payload including ownership and financed asset', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(ItemForm, {

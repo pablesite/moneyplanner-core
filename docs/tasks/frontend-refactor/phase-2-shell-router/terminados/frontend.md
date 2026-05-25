@@ -23,7 +23,7 @@
 4. Tests de shell y router:
    - `src/shell/__tests__/useAppShell.spec.ts`
    - `src/router.spec.ts`
-5. Replicacion equivalente en SaaS (`frontend/`).
+5. Replicacion equivalente en Core (`frontend/`).
 
 ## Validation
 ```bash
@@ -32,10 +32,10 @@ docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 Resultado de cierre (2026-03-19):
@@ -43,7 +43,7 @@ Resultado de cierre (2026-03-19):
    - `lint`: verde
    - `typecheck`: verde
    - `test:coverage`: verde (`statements 98.29%`, `lines 98.29%`, `functions 92.41%`, `branches 81.50%`)
-2. SaaS frontend:
+2. Core frontend:
    - `lint`: verde
    - `typecheck`: verde
    - `test:coverage`: verde (`statements 98.29%`, `lines 98.29%`, `functions 92.41%`, `branches 81.53%`)
@@ -56,13 +56,13 @@ Checks estructurales:
 ## Required Documentation Updates
 - [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` - estado Fase 2 actualizado
 - [x] `core/docs/project-status.md` - Fase 2 marcada como completada
-- [x] `docs/roadmap/frontend-refactor-roadmap.md` - espejo SaaS actualizado
+- [x] `docs/roadmap/frontend-refactor-roadmap.md` - espejo Core actualizado
 
 ## Completion Criteria
 - [x] `App.vue` reducido a ensamblador fino (< 150 lineas)
 - [x] 0 referencias a archivos residuales borrados
 - [x] Tests de shell en verde con cobertura >=80%
-- [x] `lint`, `typecheck`, `test:coverage` >=80% en verde - Core y SaaS
+- [x] `lint`, `typecheck`, `test:coverage` >=80% en verde - Core
 - [x] Documentacion requerida actualizada
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)

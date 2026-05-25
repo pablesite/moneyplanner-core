@@ -35,7 +35,7 @@ function makeOwnership(overrides: Partial<OwnershipRead> = {}): OwnershipRead {
   };
 }
 
-describe('people composables (saas)', () => {
+describe('people composables (core)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal(

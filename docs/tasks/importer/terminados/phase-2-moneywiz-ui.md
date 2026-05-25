@@ -15,37 +15,37 @@ After defining the import backend, we need to enable a minimal experience in `Ac
 - UI flow: upload CSV -> preview -> commit -> result.
    - Integracion con cliente API del dominio `accounting`.
 - Status and handling of errors/warnings of the importer in composables/store.
-   - Replicacion equivalente Core -> SaaS en el frontend espejo (`frontend/`) segun regla de espejado.
+   - Replicacion equivalente Core en el frontend espejo (`frontend/`) segun regla de espejado.
 2. Out of scope
 - Extensive visual redesign of `AccountingMovementsView`.
    - Refactor estructural general de dominios frontend.
 
 ## Plan
 1. Diagnosis
-   - Revisar estructura actual de `domains/accounting` y `AccountingMovementsView` en Core y SaaS.
+   - Revisar estructura actual de `domains/accounting` y `AccountingMovementsView` en Core.
    - Definir puntos de insercion UI sin romper flujos existentes de quick-entry/edicion.
 2. Change implementation
    - Agregar llamadas API de preview/commit en `domains/accounting/api.ts`.
 - Add state and actions in composables/store.
 - Add import block in the movement view with clear validation feedback.
-   - Replicar el cambio equivalente en `frontend/` (SaaS).
+   - Replicar el cambio equivalente en `frontend/` (Core).
 3. Validation
-   - Ejecutar lint/format/typecheck de frontend Core y frontend SaaS en Docker.
+   - Ejecutar lint/format/typecheck del frontend Core en Docker.
 
 ## Validation
 1. `docker compose -f core/docker-compose.yml exec frontend npm run lint` — lint frontend Core en verde.
 2. `docker compose -f core/docker-compose.yml exec frontend npm run format:check` — formato frontend Core correcto.
 3. `docker compose -f core/docker-compose.yml exec frontend npm run typecheck` — types frontend Core en verde.
-4. `docker compose exec saas_frontend npm run lint` — lint frontend SaaS en verde.
-5. `docker compose exec saas_frontend npm run format:check` — formato frontend SaaS correcto.
-6. `docker compose exec saas_frontend npm run typecheck` — types frontend SaaS en verde.
+4. `docker compose exec frontend npm run lint` — lint Core frontend en verde.
+5. `docker compose exec frontend npm run format:check` — formato Core frontend correcto.
+6. `docker compose exec frontend npm run typecheck` — types Core frontend en verde.
 
 ## Required Documentation Updates
 - [ ] `core/docs/project-status.md` — update importer frontend phase status.
-- [ ] `docs/frontend/domain-map.md` — update only if domain surface/path changes in SaaS.
+- [ ] `docs/frontend/domain-map.md` — update only if domain surface/path changes in Core.
 
 ## Risks
-1. Diferencias de UI entre Core y SaaS si no se aplica espejo completo.
+1. Diferencias de UI entre Core si no se aplica espejo completo.
 2. Mala UX de errores puede permitir commits sin entender filas descartadas.
 3. Sobrecarga visual en una vista ya extensa si no se acota el bloque de importacion.
 
@@ -58,4 +58,4 @@ After defining the import backend, we need to enable a minimal experience in `Ac
 ## Assumptions (Locked)
 1. El importador se expone en la vista de movimientos actual.
 2. v1 UI is operational/minimal, not global redesign.
-3. La regla Core->SaaS de espejado es obligatoria para este cambio.
+3. La regla Core->Core de espejado es obligatoria para este cambio.

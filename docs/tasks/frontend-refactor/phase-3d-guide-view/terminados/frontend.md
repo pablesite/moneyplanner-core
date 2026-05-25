@@ -57,8 +57,8 @@ dominio `guide`, descompone la vista en secciones y elimina la duplicación con 
    - Ampliar `domains/guide/__tests__/phaseDiagnostics.spec.ts` con los casos nuevos
    - `domains/guide/__tests__/useGuidePhaseDetail.spec.ts`
 
-### SaaS Replication
-Esta vista es idéntica en Core y SaaS. Replicación directa.
+### Core validation
+Esta vista es idéntica en Core. Replicación directa.
 
 ## Validation
 ```bash
@@ -68,10 +68,10 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → ≥80% todas las métricas; GuidePhaseDetailView <400 líneas
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -88,7 +88,7 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] 0 duplicación de cálculos entre GuidePhaseDetailView y HomeView
 - [x] Composables extraídos con tests ≥80% cobertura
 - [ ] Sin cambios de comportamiento observados en browser
-- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)

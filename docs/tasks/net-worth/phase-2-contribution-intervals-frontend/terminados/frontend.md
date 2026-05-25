@@ -12,7 +12,7 @@ After completing Phase 1 (backend), the `Asset` model exposes `contribution_inte
 `frontend`
 
 ## Stack
-`core` + espejado en `saas`
+`core` + espejado en `external`
 
 ## Scope
 
@@ -21,7 +21,7 @@ After completing Phase 1 (backend), the `Asset` model exposes `contribution_inte
 2. Gestor de intervalos inline en `ItemForm.vue` (Core)
 3. Removal of the 4 flat investment fields from the form
 4. Update composable `composables.ts` to map `contribution_intervals` in edit mode
-5. Espejado de todos los cambios en `frontend/src/` (SaaS)
+5. Espejado de todos los cambios en `frontend/src/` (Core)
 
 ### Fuera de scope
 - Cambios en backend (Phase 1)
@@ -181,7 +181,7 @@ contribution_intervals: contributionIntervals.value
 
 **Clases CSS**: usar las mismas que el resto del formulario. No introducir nuevas clases.
 
-### 4. Espejado SaaS
+### 4. Espejado Core
 
 Aplicar exactamente los mismos cambios en:
 - `frontend/src/domains/net-worth/models.ts`
@@ -193,11 +193,11 @@ Aplicar exactamente los mismos cambios en:
 ```bash
 # Typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
-docker compose exec saas_frontend npm run typecheck
+docker compose exec frontend npm run typecheck
 
 # Lint
 docker compose -f core/docker-compose.yml exec frontend npm run lint
-docker compose exec saas_frontend npm run lint
+docker compose exec frontend npm run lint
 
 # Prueba manual (con backend Phase 1 activo):
 # 1. Crear activo de inversión sin intervalos → guardar → sin gastos generados en presupuesto
@@ -216,7 +216,7 @@ docker compose exec saas_frontend npm run lint
 
 - **Data loss in edit mode:** if `buildEditInvestmentFields` does not correctly map `contribution_intervals`, existing intervals are lost when saving. Verify with an asset that has real intervals (migrated from Phase 1).
 - **Empty payload vs. null:** ensure that sending `contribution_intervals: []` clears all existing ranges (`set` pattern in backend). Test it explicitly.
-- **Saas Compatibility:** If the SaaS frontend consumes a cached version of type `Asset` without `contribution_intervals`, the typecheck will fail. Always update both sides.
+- **Core Compatibility:** If the Core frontend consumes a cached version of type `Asset` without `contribution_intervals`, the typecheck will fail. Keep the local type contract updated.
 
 ## Completion Criteria
 
@@ -225,7 +225,7 @@ docker compose exec saas_frontend npm run lint
 - [ ] Al guardar con intervalos: payload incluye `contribution_intervals` correctamente formateado
 - [ ] When editing active with existing intervals: pre-population correct
 - [ ] Generated expense review modal appears after creating/editing periodic asset (feature implemented in previous session)
-- [ ] Typecheck y lint sin errores en Core y SaaS
-- [ ] Espejado en SaaS verificado
+- [ ] Typecheck y lint sin errores en Core
+- [ ] Espejado en Core verificado
 - [ ] Spec movida a `terminados/`
 - [ ] Commit Conventional: `feat(net-worth): interval-based investment contribution form`

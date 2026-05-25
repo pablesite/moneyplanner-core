@@ -60,7 +60,7 @@ Incorporate in Core a stable layer of automatic external data ingestion for `FX`
 1. Core owns this auxiliary data as a product behavior.
 2. The frontend consumes persisted data; never calls external providers.
 3. La logica de sync no debe vivir en views ni en el request path.
-4. No duplicar logica entre datasets ni entre Core y SaaS.
+4. No duplicar logica entre datasets ni entre Core.
 5. Cambiar lo minimo necesario por fase.
 6. Maintain an architecture extensible to new providers and datasets.
 
@@ -74,8 +74,8 @@ Incorporate in Core a stable layer of automatic external data ingestion for `FX`
 7. `core/docs/operations/fx-sync.md` o su equivalente ampliado
 
 ## Fuera de alcance
-1. Integracion SaaS especifica.
-2. Billing o packaging.
+1. Integracion Core especifica.
+2. Packaging de pago o packaging.
 3. Implementacion efectiva de cotizaciones de acciones en esta iniciativa.
 4. Benchmarking financiero o macrodatos fuera de `FX` e `IPC`.
 5. Edicion manual para usuario final de tablas sincronizadas por sistema.

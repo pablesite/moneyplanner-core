@@ -3,7 +3,7 @@
 Product evolution plan by module. Captures pending work, improvements, and future lines for each Core functional area.
 
 Conventions:
-- `(Shared roadmap)` — item that also applies to, or must be coordinated with, SaaS roadmap.
+- `(Shared roadmap)` — item that also applies to, or must be coordinated with, Core roadmap.
 - `(Private - Future)` — lower-priority item linked to family/ownership private workflows.
 - `~~strikethrough~~` — resolved or discarded.
 
@@ -71,7 +71,7 @@ Conventions:
 - UI lifecycle: status badge (draft/finalized/locked), finalize/reopen/lock buttons in ResultSection.
 - Locked state: inputs disabled with info banner when FINALIZED/LOCKED.
 - "Estimated" badge for check-ins with `estimated` status.
-- Core <-> SaaS mirror completed.
+- Core <-> Core verification completed.
 
 ### Result view
 - ✅ Reconciliation bridge alignment fixed (CSS subgrid, 2026-05-20).
@@ -159,7 +159,7 @@ Coach phases 1-4 are functional. v1 decisions:
 
 ## AUTHENTICATION AND USER MODEL
 
-- Review complete login flow (Core + SaaS).
+- Review complete login flow (Core).
 - Validate users/families/asset-liability ownership system.
 - Verify permissions and security.
 - Full real-flow tests (signup, login, shared ownership, etc.).
@@ -181,7 +181,7 @@ Living inventory of compatibility pieces that still exist after removing active 
 
 - ✅ **`net_worth.services.py` — external import removed (2026-05-20).** `get_base_currency_for_user` moved to `accounts/services.py`; `get_financed_asset_queryset_for_user` added to `services_assets_core.py`; `_serialize_money` moved to `services_liquidity.py`. `services.py` now re-exports for internal consumers and mocks; `portable_data.py` no longer imports from this module. No active external consumers.
 
-- ✅ **`compat.*` in capabilities — removed (2026-05-20).** `AppCapabilitiesCompat`, `buildCompat`, and `withCompat` removed. `canUsePeople()`/`canUseOwnership()` now rely directly on `core.*`/`premium.*`. Four direct consumers of `capabilities.people` migrated to `canUsePeople()` in both Core and SaaS.
+- ✅ **`compat.*` in capabilities — removed (2026-05-20).** `AppCapabilitiesCompat`, `buildCompat`, and `withCompat` removed. `canUsePeople()`/`canUseOwnership()` now rely directly on `core.*`/`premium.*`. Four direct consumers of `capabilities.people` migrated to `canUsePeople()` in both Core.
 
 ### Removed or clarified
 
@@ -229,12 +229,12 @@ Living inventory of compatibility pieces that still exist after removing active 
 - Improve navigation.
 - Review text quality and consistency.
 
-### SaaS — Frontend
+### Core — Frontend
 - Keep aligned with Core frontend; only profile administration view should differ.
-- Separate Core vs SaaS code boundaries clearly.
+- Separate Core vs Core code boundaries clearly.
 
-### SaaS — Backend
-- General SaaS backend review.
+### Core — Backend
+- General Core backend review.
 
 ### Documentation and operations
-- Keep Core and SaaS documentation updated.
+- Keep Core documentation updated.

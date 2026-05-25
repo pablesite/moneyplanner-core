@@ -65,7 +65,7 @@ describe('comparePortableVersions', () => {
 describe('buildPortableFilename', () => {
   it('starts with moneyplanner prefix and ends with .json', () => {
     const name = buildPortableFilename();
-    expect(name).toMatch(/^moneyplanner-saas-data-.*\.json$/);
+    expect(name).toMatch(/^moneyplanner-core-data-.*\.json$/);
   });
 
   it('generates unique filenames for different calls in the same second', () => {

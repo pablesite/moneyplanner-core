@@ -12,16 +12,16 @@ from rest_framework_simplejwt.settings import api_settings
 from .models import ExternalIdentity
 
 
-class CoreSaasJWTAuthentication(JWTAuthentication):
-    _saas_source = "saas"
+class CoreJWTAuthentication(JWTAuthentication):
+    _external_source = "external"
 
-    def _saas_token_backend(self) -> TokenBackend:
+    def _external_token_backend(self) -> TokenBackend:
         return TokenBackend(
             algorithm=api_settings.ALGORITHM,
-            signing_key=getattr(settings, "SAAS_JWT_SIGNING_KEY", settings.SECRET_KEY),
+            signing_key=getattr(settings, "EXTERNAL_JWT_SIGNING_KEY", settings.SECRET_KEY),
             verifying_key="",
-            audience=getattr(settings, "SAAS_JWT_AUDIENCE", "moneyplanner-saas-api"),
-            issuer=getattr(settings, "SAAS_JWT_ISSUER", "moneyplanner-saas"),
+            audience=getattr(settings, "EXTERNAL_JWT_AUDIENCE", "moneyplanner-external-api"),
+            issuer=getattr(settings, "EXTERNAL_JWT_ISSUER", "moneyplanner-external"),
             leeway=api_settings.LEEWAY,
             json_encoder=api_settings.JSON_ENCODER,
         )
@@ -32,18 +32,18 @@ class CoreSaasJWTAuthentication(JWTAuthentication):
             setattr(token, "_identity_source", "core")
             return token
         except InvalidToken as core_error:
-            if not getattr(settings, "AUTH_ACCEPT_SAAS_TOKENS", True):
+            if not getattr(settings, "AUTH_ACCEPT_EXTERNAL_TOKENS", False):
                 raise core_error
 
             try:
-                payload = self._saas_token_backend().decode(raw_token, verify=True)
+                payload = self._external_token_backend().decode(raw_token, verify=True)
             except TokenBackendError:
                 raise core_error
 
             if payload.get("token_type") != "access":
                 raise core_error
 
-            payload["_identity_source"] = self._saas_source
+            payload["_identity_source"] = self._external_source
             return payload
 
     def get_user(self, validated_token):
@@ -52,9 +52,9 @@ class CoreSaasJWTAuthentication(JWTAuthentication):
         else:
             source = getattr(validated_token, "_identity_source", "core")
 
-        if source != self._saas_source:
+        if source != self._external_source:
             return super().get_user(validated_token)
-        return self._get_or_create_user_from_saas_token(validated_token)
+        return self._get_or_create_user_from_external_token(validated_token)
 
     @staticmethod
     def _build_unique_username(base: str) -> str:
@@ -67,17 +67,17 @@ class CoreSaasJWTAuthentication(JWTAuthentication):
         return candidate
 
     @transaction.atomic
-    def _get_or_create_user_from_saas_token(self, payload: dict):
+    def _get_or_create_user_from_external_token(self, payload: dict):
         user_model = get_user_model()
         external_user_id = payload.get(api_settings.USER_ID_CLAIM)
         if external_user_id in (None, ""):
-            raise InvalidToken("Token SaaS sin user_id.")
+            raise InvalidToken("External token without user_id.")
 
         external_user_id_str = str(external_user_id)
         identity = (
             ExternalIdentity.objects.select_related("user")
             .filter(
-                provider=ExternalIdentity.Provider.SAAS,
+                provider=ExternalIdentity.Provider.EXTERNAL,
                 external_user_id=external_user_id_str,
             )
             .first()
@@ -87,11 +87,11 @@ class CoreSaasJWTAuthentication(JWTAuthentication):
                 raise AuthenticationFailed("User is inactive", code="user_inactive")
             return identity.user
 
-        username = self._build_unique_username(f"saas_user_{external_user_id_str}")
+        username = self._build_unique_username(f"external_user_{external_user_id_str}")
         user = user_model.objects.create_user(username=username, password=None, email="")
         ExternalIdentity.objects.create(
             user=user,
-            provider=ExternalIdentity.Provider.SAAS,
+            provider=ExternalIdentity.Provider.EXTERNAL,
             external_user_id=external_user_id_str,
         )
         return user

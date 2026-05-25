@@ -1,11 +1,11 @@
 # Task: Frontend Refactor — Fase 3e: Descomposición de AccountingMovementsView
 
 ## Context
-`AccountingMovementsView.vue` creció de 998 a 2,263 líneas en Core (2,237 en SaaS) y ya
+`AccountingMovementsView.vue` creció de 998 a 2,263 líneas en Core (2,237 en Core) y ya
 supera el umbral de vista mediana-grande. Mezcla hero/filtros, catálogo de cuentas, balances,
 quick-entry y formulario manual avanzado. Esta fase la descompone en secciones controladas
 sin cambiar comportamiento. Es la última de las vistas monolíticas y la de menor riesgo.
-**Importante:** Core tiene una sección de unmapped categories (MoneyWiz) que SaaS no tiene.
+**Importante:** Core tiene una sección de unmapped categories (MoneyWiz) que Core no tiene.
 
 ## Area
 `frontend`
@@ -53,16 +53,16 @@ sin cambiar comportamiento. Es la última de las vistas monolíticas y la de men
    - Instancia `useAccountingMovementsPage()`
    - Renderiza las secciones
    - En Core: incluye `AccountingUnmappedCategories`
-   - En SaaS: no incluye ese componente (diferencia preservada)
+   - En Core: no incluye ese componente (diferencia preservada)
 
 4. **Tests:**
    - `domains/accounting/__tests__/useAccountingMovementsPage.spec.ts`
 
-### SaaS Replication
-- Aplicar los mismos cambios en `frontend/` SaaS.
-- **NO replicar** `AccountingUnmappedCategories.vue` ni su uso en la vista SaaS.
+### Core validation
+- Aplicar los mismos cambios en `frontend/` Core.
+- **NO replicar** `AccountingUnmappedCategories.vue` ni su uso en la vista Core.
 - **NO replicar** el tipo `MoneyWizUnmappedCategory` si se mueve/crea en esta fase.
-- Verificar que `AccountingMovementsView.vue` SaaS sigue sin la sección de unmapped categories.
+- Verificar que `AccountingMovementsView.vue` Core sigue sin la sección de unmapped categories.
 
 ## Validation
 ```bash
@@ -72,10 +72,10 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → ≥80% todas las métricas; AccountingMovementsView <400 líneas
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -90,11 +90,11 @@ docker compose exec saas_frontend npm run test:coverage
   **Mitigación:** aislarla primero como componente dentro de la vista antes de extraerla completamente.
 
 ## Completion Criteria
-- [ ] `AccountingMovementsView.vue` < 400 líneas (Core y SaaS)
-- [ ] Core mantiene sección unmapped categories; SaaS no la tiene
+- [ ] `AccountingMovementsView.vue` < 400 líneas (Core)
+- [ ] Core mantiene sección unmapped categories; Core no la tiene
 - [ ] Composables extraídos con tests ≥80% cobertura
 - [ ] Sin cambios de comportamiento observados en browser
-- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [ ] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core
 - [ ] Documentación requerida actualizada
 - [ ] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)

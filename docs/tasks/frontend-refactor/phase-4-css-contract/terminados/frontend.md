@@ -69,8 +69,8 @@ Are they candidates to merge into `app.css` or to stay separate?
    - `docs/frontend/frontend-visual-guide.md`
    - `docs/frontend/frontend-css-workflow.md`
 
-### SaaS Replication
-Aplicar los mismos cambios en `frontend/` SaaS.
+### Core validation
+Aplicar los mismos cambios en `frontend/` Core.
 The CSS patterns are identical on both frontends; replication is direct.
 
 ## Validation
@@ -82,11 +82,11 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → ≥80% todas las métricas; format:check verde
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run format:check
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run format:check
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -108,7 +108,7 @@ generic names. **Mitigation:** use section prefixes (`.budget-`, `.net-worth-`, 
 - [x] `guide-home.css`, `guide-score.css`, `data-input.css` with decision made and executed
 - [x] Tokens candidatos a shared package documentados en el roadmap
 - [x] Updated canonical frontend docs
-- [x] `lint`, `format:check`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] `lint`, `format:check`, `typecheck`, `test:coverage` ≥80% en verde — Core
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)
 

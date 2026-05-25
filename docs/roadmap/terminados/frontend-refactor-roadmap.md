@@ -4,7 +4,7 @@
 
 Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper contratos
 backend ni introducir cambios funcionales no intencionales.
-El refactor tambien prepara el terreno para un futuro shared package Core/SaaS,
+El refactor tambien prepara el terreno para un futuro shared package Core,
 dejando documentada la extraccion futura en la Fase 6.
 
 ## Status of this document
@@ -13,8 +13,8 @@ dejando documentada la extraccion futura en la Fase 6.
 2. Baseline actualizada el 2026-03-19.
 3. Las fases 0-6 quedan desglosadas en entregables, pasos recomendados y criterios de salida.
 4. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
-5. Core-first: cada fase se ejecuta primero en Core y se replica en SaaS al cerrarla.
-   Ver `docs/roadmap/frontend-refactor-roadmap.md` (SaaS) para el roadmap espejo.
+5. Core-first: cada fase se ejecuta primero en Core y se replica en Core al cerrarla.
+   Ver `docs/roadmap/frontend-refactor-roadmap.md` (Core) para el roadmap espejo.
 
 ## Actual status (2026-03-19)
 
@@ -48,7 +48,7 @@ Con la suite actual en verde, `test:coverage` reporta:
 - `functions: 89.17%`
 - `branches: 81.73%`
 
-Fase 0 cerrada: todos los thresholds de coverage (`>=80%`) pasan en Core y SaaS.
+Fase 0 cerrada: todos los thresholds de coverage (`>=80%`) pasan en Core.
 La exclusion temporal de superficies monoliticas/legacy se reevalua en fases 2-6.
 Fases 4, 5 y 6 cerradas el 2026-03-19: CSS contract, domain contracts y hardening completados,
 con `core/docs/architecture/shared-package-candidates.md` creado y las specs archivadas en `terminados/`.
@@ -82,7 +82,7 @@ con `core/docs/architecture/shared-package-candidates.md` creado y las specs arc
 - riesgo medio: `AccountingMovementsView` (crecio x2.3), `styles/app.css`
 - riesgo bajo: `App.vue` (Fase 2 cerrada), `lib/` re-exports
 
-### Candidatos a shared package Core/SaaS
+### Candidatos a shared package Core
 
 Documentados en `core/docs/architecture/shared-package-candidates.md`.
 
@@ -100,7 +100,7 @@ extraccion y sus limites.
 4. Cada fase deja el repo ejecutable.
 5. Validacion dentro de Docker en cada PR.
 6. Cambiar lo minimo necesario por PR.
-7. Core-first: cada fase termina con SaaS replication (ver spec).
+7. Core-first: cada fase termina con Core validation (ver spec).
 
 ## Alcance
 
@@ -164,7 +164,7 @@ Objective: start from a complete green base with a real safety net.
    - Utilidades sin tests
    - Componentes criticos
 5. Corregir el formateo de `app.css`.
-6. SaaS Replication: mismos pasos en `frontend/` SaaS.
+6. Core validation: mismos pasos en `frontend/` Core.
 
 ### 0.3 Criterio de salida
 
@@ -197,7 +197,7 @@ Objective: set clear boundaries between domains and eliminate bridging wrappers.
 5. Borrar wrappers solo cuando no tengan referencias activas.
 6. Revisar `index.ts` de cada dominio para que resuma su interfaz publica.
 7. Verificar que ningun dominio importa de `@/stores/*` ni `@/components/*` raiz.
-8. SaaS Replication.
+8. Core validation.
 
 ### 1.3 Riesgos a cubrir
 
@@ -235,7 +235,7 @@ Objective: slim down `App.vue` and leave the navigation wiring testable.
 4. Retirar `SettingsFxView.vue` y `SettingsIpcView.vue` (7 lineas cada una).
 5. Retirar `components/HelloWorld.vue` y `style.css`.
 6. Anadir/ajustar tests de shell y router.
-7. SaaS Replication.
+7. Core validation.
 
 ### 2.3 Criterio de salida
 
@@ -291,7 +291,7 @@ Los componentes de seccion reciben: bloques reutilizables, fragmentos grandes de
 #### `AccountingMovementsView` (2,263 lineas)
 
 1. Separar: hero/filtros, catalogo de cuentas, balances, quick-entry, formulario manual avanzado.
-2. En Core: seccion unmapped categories (MoneyWiz). En SaaS: omitir.
+2. En Core: seccion unmapped categories (MoneyWiz). En Core: omitir.
 
 ### 3.4 Criterio de salida
 
@@ -332,7 +332,7 @@ Objetivo: reforzar el contrato visual compartido y reducir CSS ad hoc por pantal
 3. Mover a shared styles cualquier patron usado en >= 2 pantallas.
 4. Evaluar destino de: `guide-home.css`, `guide-score.css`, `data-input.css`.
 5. Actualizar `docs/frontend/frontend-visual-guide.md` y `docs/frontend/frontend-css-workflow.md`.
-6. SaaS Replication.
+6. Core validation.
 
 ### 4.3 Criterio de salida
 
@@ -363,7 +363,7 @@ Objetivo: vistas consumen APIs tipadas de dominio; 0 imports directos a `@/lib/a
 4. Alinear dominios a medio migrar: `net-worth`, `data-input`, `guide`, `aux-data`.
 5. Limpiar `lib/` de re-exports vacios; mantener solo `api.ts`, `errors.ts`, `format.ts`.
 6. Documentar dominios exportables (para futuro shared package).
-7. SaaS Replication.
+7. Core validation.
 
 ### 5.3 Criterio de salida
 
@@ -396,7 +396,7 @@ Objetivo: cerrar deuda residual, 0 warnings conocidos, estructura comprensible y
    - No compartibles y por que: `auth`, `capabilities`, `lib/api.ts`
    - Pasos siguientes para la extraccion (fuera del scope de este roadmap)
 5. Actualizar docs frontend canonicas.
-6. SaaS Replication.
+6. Core validation.
 
 ### 6.3 Criterio de salida
 
@@ -416,7 +416,7 @@ Objetivo: cerrar deuda residual, 0 warnings conocidos, estructura comprensible y
 3. Las vistas no deben importar directamente:
    - `@/lib/api`, `@/lib/errors`, `@/stores/*`, wrappers en `@/components/*` raiz
 4. La capa shared puede alojar: HTTP client, auth session, format helpers, error normalization.
-5. Cualquier patron visual consolidado en `app.css` debe evaluarse para sincronizacion con SaaS.
+5. Cualquier patron visual consolidado en `app.css` debe evaluarse para sincronizacion con Core.
 
 ## Validacion minima por fase
 
@@ -428,11 +428,11 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # -> statements >=80%, lines >=80%, functions >=80%, branches >=80%
 
-# SaaS (al replicar)
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run format:check
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core (al replicar)
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run format:check
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 # -> mismos thresholds
 ```
 
@@ -460,7 +460,7 @@ docker compose exec saas_frontend npm run test:coverage
 ## Nota de trazabilidad
 
 1. Este roadmap define el refactor del frontend Core.
-2. Para SaaS: ver `docs/roadmap/frontend-refactor-roadmap.md`.
+2. Para Core: ver `docs/roadmap/frontend-refactor-roadmap.md`.
 3. Si durante la ejecucion aparece una mejora UX reutilizable, actualizar primero la documentacion canonica.
 4. Si una fase descubre deuda funcional real, aislarla en una subtarea o PR separado.
 

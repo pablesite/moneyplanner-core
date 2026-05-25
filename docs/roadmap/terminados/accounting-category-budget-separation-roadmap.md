@@ -2,7 +2,7 @@
 
 ## Document status
 1. Roadmap terminado.
-2. Alcance Core con espejo frontend SaaS cuando aplique.
+2. Alcance Core con espejo Core frontend cuando aplique.
 3. Este documento conserva el handoff historico de la separacion entre:
    - cuenta contable (donde impacta),
    - categoria/subcategoria (por que ocurre),
@@ -340,7 +340,7 @@ Criterio de salida:
 - `Pending clasificar`
    - `Ledger categorizado`
    - `Fallback legacy`
-5. Replica SaaS
+5. Replica Core
    - cualquier cambio UX compartido implementado en `core/frontend/` debera replicarse en `frontend/`.
 
 ## Migration of data
@@ -368,7 +368,7 @@ Criterio de salida:
    - mitigacion: migrar primero backend de agregacion y luego UX
 3. Acoplamiento excesivo entre plan y ejecucion
    - mitigacion: link a linea anual opcional y secundario
-4. Drift entre Core y SaaS frontend
+4. Drift entre Core frontend
    - mitigacion: replicar en `frontend/` cualquier patron compartido afectado
 5. Casos historicos no clasificables
 - mitigation: visible state `pendiente clasificar`, without hiding the problem
@@ -386,7 +386,7 @@ Criterio de salida:
    - `docker compose exec frontend npm run format:check`
    - `docker compose exec frontend npm run typecheck`
    - `docker compose exec frontend npm run test:unit -- src/domains/accounting/__tests__/store.spec.ts src/views/__tests__/AccountingMovementsView.spec.ts src/views/__tests__/BudgetDashboardView.spec.ts src/views/__tests__/NetWorthView.spec.ts`
-3. Si toca UI compartida en SaaS frontend
+3. Si toca UI compartida en Core frontend
    - `docker compose exec frontend npm run lint`
    - `docker compose exec frontend npm run format:check`
    - `docker compose exec frontend npm run typecheck`

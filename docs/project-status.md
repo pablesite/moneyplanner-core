@@ -38,7 +38,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Monthly Close — dual mode | High | ✅ | Automatic implementation completed (backend + frontend) and operational manual review completed. v1 bugs fixed on 2026-05-20: reconciliation bridge column alignment (CSS subgrid) and per-account liquidity reference (previous month effective balance instead of `asset.amount`). |
 | Crypto Tax Report | Medium | ⏸ | Full Spanish IRPF module: Pionex + Binance, global cross-exchange FIFO, boxes 029/332/337. Paused — reassess before resuming. |
 | Financial coach — navigation | Medium | ✅ | Simplified v1: `/` -> `/patrimonio` landing, guide at `/guia`, phase 5 (financial independence) removed until an investment portfolio module exists. Contextual quick actions by phase already existed. |
-| Remove Data Input module | High | ✅ | `/introduccion-datos` removed in Core and SaaS. Portable data consolidated in `/account`; assets and liabilities in `/patrimonio`. |
+| Remove Data Input module | High | ✅ | `/introduccion-datos` removed in Core. Portable data consolidated in `/account`; assets and liabilities in `/patrimonio`. |
 | Unified design system | High (critical) | ✅ | 22 steps completed (see `docs/frontend/design-system.md`). Full foundation done: canonical views, full domain CSS tokenization, `ui-pro-*` layer removed, `--chart-*` palette, accounting hero aligned with Net Worth. Incremental view-by-view polish continues as needed. |
 | Residual legacy cleanup | Medium | ✅ | Completed 2026-05-20. Removed: Data Input, `investment_purchase` alias, scalar contribution fields (migration 0042), external `net_worth.services` import, and `compat.*` in capabilities. Budget/check-in fallback is intentional design, not technical debt. See `roadmap/product-roadmap.md`. |
 | Core backend refactor | Medium | ✅ | Structural refactor completed (phases 1-5). Contribution backlog remains documented in `roadmap/backend-maintainability-backlog.md`. |
@@ -62,7 +62,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Market data sync (FX, national + regional CPI) | ✅ | Phases 1-6 complete, `market_data_sync` worker live. Tables use server pagination (`page_size=50`) and frontend infinite scroll. |
 | DB Backup/Restore (pg_dump) | ✅ | Admin-only backup/restore endpoints based on pg_dump/pg_restore. Portable JSON flow removed from UI and replaced with this flow. |
 | Financial scoring phases 1-4 | ✅ | Debt, cash flow, emergency fund, net worth health. |
-| Core auth (JWT, link-token for SaaS) | ✅ | User signup from UI (`/registro`), logout with blacklist, and link-token support for SaaS integration. |
+| Core auth (JWT) | ✅ | User signup from UI (`/registro`), logout with blacklist, token refresh, and rate throttling. |
 
 ## Active progress trackers
 

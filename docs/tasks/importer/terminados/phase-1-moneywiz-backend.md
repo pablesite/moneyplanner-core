@@ -20,7 +20,7 @@ We need to incorporate massive import of movements from MoneyWiz to populate rea
    - Endpoints backend de importacion en el dominio `accounting`.
 2. Out of scope
 - Frontend/backend architecture refactors outside the importer.
-   - Billing, accesos SaaS o logica de suscripciones.
+   - Packaging de pago, accesos Core o logica de planes de pago.
    - Importador Excel como fuente primaria (Excel queda para contraste/validacion).
 
 ## Plan

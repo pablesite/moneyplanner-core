@@ -72,10 +72,10 @@ los contratos internos de dominio y prepara los dominios para ser extracción-re
    - Mantener en `lib/` solo: `api.ts` (cliente HTTP), `errors.ts` (normalización),
      `format.ts` (helpers de formato).
 
-### SaaS Replication
-Aplicar los mismos cambios en `frontend/` SaaS respetando:
-- `lib/api.ts` SaaS tiene baseURL diferente → mantener.
-- `domains/accounting/models.ts` SaaS no tiene `MoneyWizUnmappedCategory` → no añadir.
+### Core validation
+Aplicar los mismos cambios en `frontend/` Core respetando:
+- `lib/api.ts` Core tiene baseURL diferente → mantener.
+- `domains/accounting/models.ts` Core no tiene `MoneyWizUnmappedCategory` → no añadir.
 
 ## Validation
 ```bash
@@ -89,10 +89,10 @@ docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 grep -r "@/lib/api\|@/lib/errors" core/frontend/src/views --include="*.vue"
 # → 0 resultados
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -112,7 +112,7 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] Todos los dominios tienen la estructura estandarizada
 - [x] `lib/` contiene solo `api.ts`, `errors.ts` y `format.ts` (más sus tests)
 - [x] Dominios documentados como exportables o con bloqueadores identificados
-- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core y SaaS
+- [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)

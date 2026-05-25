@@ -28,7 +28,7 @@ class UserSettings(models.Model):
 
 class ExternalIdentity(models.Model):
     class Provider(models.TextChoices):
-        SAAS = "saas", "SaaS"
+        EXTERNAL = "external", "External"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

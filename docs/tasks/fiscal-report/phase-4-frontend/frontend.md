@@ -26,7 +26,7 @@ Prerequisito: Phase 3 completada (`GET /api/v1/broker/fiscal-report/?year=2025` 
 - Skill `frontend-system` antes de empezar
 
 ### Out of scope
-- SaaS mirror (diferido, no parte del MVP)
+- Core verification (diferido, no parte del MVP)
 - Exportación a PDF
 
 ## Plan
@@ -146,7 +146,7 @@ Test manual E2E:
 ## Required Documentation Updates
 - [ ] `core/docs/frontend/fiscal-report-ux-notes.md` — crear con notas de UX del módulo
 - [ ] `core/docs/project-status.md` — marcar Phase 4 completada
-- [ ] Verificar si el cambio debe replicarse en `frontend/` SaaS (regla espejado Core→SaaS) — documentar explícitamente si no aplica en este MVP
+- [ ] Verificar si el cambio debe replicarse en `frontend/` Core (regla espejado Core→Core) — documentar explícitamente si no aplica en este MVP
 
 ## Risks
 1. Formateo de decimales para cantidades crypto muy pequeñas (e.g. 0.00000013 ETH) → usar utilidad de formateo ya existente en Core, no inventar nueva

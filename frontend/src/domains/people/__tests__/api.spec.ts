@@ -16,12 +16,12 @@ vi.mock('@/lib/api', () => ({
   coreApi: mocks.api,
 }));
 
-describe('people api (saas)', () => {
+describe('people api (core)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('exports premium adapter as active api in saas', () => {
+  it('exports premium adapter as active api in core', () => {
     if (canUsePeople()) {
       expect(peopleApi).toBe(premiumPeopleApi);
       return;

@@ -24,7 +24,7 @@ vi.mock('@/domains/people/errors', () => ({
   toPeopleErrorMessage: mocks.toPeopleErrorMessage,
 }));
 
-describe('people store (saas)', () => {
+describe('people store (core)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();

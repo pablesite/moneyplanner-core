@@ -30,7 +30,7 @@ Prerequisito: Phase 0 completada (tabla de cobertura rellena).
 - Integración Binance (Phase 2)
 - Motor FIFO / informe fiscal (Phase 3)
 - Frontend (Phase 4)
-- SaaS mirror
+- Core verification
 
 ## Plan
 

@@ -4,7 +4,7 @@ Exponer cobertura presupuestaria y gasto fuera de presupuesto en Presupuesto
 ## Context
 La vista de `Presupuesto` ya combina plan anual y ejecución real desde `accounting`, pero hoy el sistema solo representa con claridad lo que tiene una línea anual explícita en `budget`. Si el usuario gasta en una subcategoría real que no ha presupuestado todavía, ese gasto queda fuera del detalle de categoría/subcategoría y la UX puede inducir a pensar que el ejecutado real es menor de lo que realmente fue.
 
-Este comportamiento rompe la lectura del producto en una situación muy habitual: presupuesto parcial o iterativo. La lógica de “qué parte del gasto real está cubierta por presupuesto” pertenece al dominio Core y debe estar disponible de forma reutilizable para Core frontend y espejo SaaS.
+Este comportamiento rompe la lectura del producto en una situación muy habitual: presupuesto parcial o iterativo. La lógica de “qué parte del gasto real está cubierta por presupuesto” pertenece al dominio Core y debe estar disponible de forma reutilizable para Core frontend y espejo Core.
 
 ## Area
 `backend`
@@ -20,7 +20,7 @@ Este comportamiento rompe la lectura del producto en una situación muy habitual
    - cobertura por categoría y subcategoría
    Reutilizar la taxonomía existente de `budget` y `accounting` sin introducir una taxonomía paralela.
    Hacer que el contrato permita a frontend mostrar categorías/subcategorías con gasto real aunque no exista `AnnualExpenseEntry` para ellas.
-   Diseñar el payload para que el espejo SaaS pueda consumirlo sin recalcular reglas de dominio en el frontend.
+   Diseñar el payload para que el espejo Core pueda consumirlo sin recalcular reglas de dominio en el frontend.
 2. Out of scope
    Cambios de capabilities o packaging.
    Replantear la taxonomía funcional de ingresos/gastos.
@@ -37,7 +37,7 @@ Este comportamiento rompe la lectura del producto en una situación muy habitual
    - subcategorías con gasto real sin presupuesto dentro de una categoría existente
    - totales diferenciados de `planned`, `executed_budgeted`, `executed_unbudgeted` y `executed_total`
    Exponer el contrato mediante endpoint o ampliar el summary existente de budget si encaja mejor en la API actual.
-   Mantener el cálculo centralizado en backend para evitar divergencia Core/SaaS.
+   Mantener el cálculo centralizado en backend para evitar divergencia Core.
 3. Validation
    Añadir tests de servicio/API que cubran:
    - gasto ejecutado en subcategoría no presupuestada dentro de categoría ya planificada
@@ -57,8 +57,8 @@ Este comportamiento rompe la lectura del producto en una situación muy habitual
 ## Required Documentation Updates
 - [ ] `core/docs/project-status.md` — actualizar la fase 3 de Presupuesto al cerrarla
 - [ ] `core/docs/architecture/architecture.md` — reflejar el contrato canónico si se añade o cambia API/summaries de budget
-- [ ] `docs/architecture/api-registry.md` — documentar el endpoint/summary consumido por SaaS si cambia el contrato público
-- [ ] `docs/project-status.md` — reflejar el avance del espejo SaaS cuando se cierre la tarea
+- [ ] `docs/architecture/api-registry.md` — documentar el endpoint/summary consumido por Core si cambia el contrato público
+- [ ] `docs/project-status.md` — reflejar el avance del espejo Core cuando se cierre la tarea
 - [ ] `core/docs/tasks/budget/phase-3-unbudgeted-execution-visibility/terminados/backend.md` — mover la spec al cerrar
 
 ## Risks
