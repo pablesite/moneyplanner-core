@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent } from 'vue';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 
 import { useAccountingPage } from '../composables';
 import { useAccountingStore } from '../store';
@@ -110,7 +110,7 @@ describe('useAccountingPage', () => {
     });
 
     const wrapper = mount(Harness);
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
     wrapper.vm.quickEntryForm.movement_type = 'income';
     wrapper.vm.quickEntryForm.booking_date = '2026-03-15';
