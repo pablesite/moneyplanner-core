@@ -19,7 +19,7 @@ This leaves a gap:
 3. monthly close can reconcile results, but not derive them from a common transactional layer
 
 ## Principles
-1. `accounting` belongs to Core, not to SaaS.
+1. `accounting` belongs to Core, not to Core.
 2. The domain starts with double-entry bookkeeping semantics.
 3. Legacy net-worth event models can coexist while the new domain is rolled out.
 4. `tracking_mode` remains the main complexity control for positions.

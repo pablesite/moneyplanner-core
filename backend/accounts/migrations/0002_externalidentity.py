@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
                         auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
                     ),
                 ),
-                ("provider", models.CharField(choices=[("saas", "SaaS")], max_length=16)),
+                ("provider", models.CharField(choices=[("external", "External")], max_length=16)),
                 ("external_user_id", models.CharField(max_length=64)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),

@@ -11,7 +11,7 @@ El refactor de presupuesto/cierre (fase 3a) ya está completado — los 4 sectio
 `frontend`
 
 ## Stack
-`both` (Core + SaaS mirror)
+`both` (Core mirror)
 
 ## Notas sobre la implementación backend (diferencias vs plan original)
 - **Status code bloqueo de checkins**: el backend retorna **403 Forbidden** (no 409 Conflict) cuando se intenta editar un checkin con cierre FINALIZED/LOCKED. El frontend debe capturar 403 para mostrar mensaje de "reabre el cierre".
@@ -176,7 +176,7 @@ Cambios **aditivos** — el flujo existente se mantiene para modo presupuesto an
 - `.ui-monthly-close-actions` — layout footer de acciones
 - `.ui-monthly-close-locked-banner` — banner de estado bloqueado
 
-### 7. Mirror Core ↔ SaaS
+### 7. Mirror Core
 Replicar todos los cambios entre `core/frontend/src/` y `frontend/src/`.
 
 ## Validation
@@ -184,9 +184,9 @@ Replicar todos los cambios entre `core/frontend/src/` y `frontend/src/`.
 docker compose -f core/docker-compose.yml exec frontend npm run lint
 docker compose -f core/docker-compose.yml exec frontend npm run format:check
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run format:check
-docker compose exec saas_frontend npm run typecheck
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run format:check
+docker compose exec frontend npm run typecheck
 ```
 
 Test manual:
@@ -199,7 +199,7 @@ Test manual:
 - [ ] `core/docs/project-status.md` — actualizar estado cierre mensual frontend
 - [ ] `core/docs/roadmap/product-roadmap.md` — marcar frontend como completado
 - [ ] `docs/frontend/domain-map.md` — actualizar dominio budget con nuevos ficheros
-- [ ] `docs/project-status.md` (SaaS) — actualizar referencia si aplica
+- [ ] `docs/project-status.md` (Core) — actualizar referencia si aplica
 
 ## Risks
 - **Backend no desplegado**: Si la API 404, `monthlyCloseError` se activa y el flujo existente sigue funcionando como fallback (los refs que hidrataría quedan null y los computeds fallback se activan).
@@ -231,7 +231,7 @@ Replicar en `core/frontend/src/` y `frontend/src/`:
 - [ ] Ciclo de vida completo visible: badge status + finalizar/reabrir/bloquear
 - [ ] Inputs deshabilitados cuando cierre FINALIZED/LOCKED
 - [ ] Badge "Estimado" en checkins algorítmicos
-- [ ] Mirror Core ↔ SaaS completo
+- [ ] Mirror Core completo
 - [ ] lint + format:check + typecheck sin errores en ambos stacks
 - [ ] All required documentation updates done
 - [ ] Spec moved to `terminados/`

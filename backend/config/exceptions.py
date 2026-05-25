@@ -1,8 +1,7 @@
 """
 Canonical API error contract handler for backend projects.
 
-When SaaS needs the same contract, mirror this module in
-`backend/saas/exceptions.py` without cross-repo imports.
+External consumers can mirror this module without cross-repo imports.
 """
 
 from __future__ import annotations

@@ -75,9 +75,9 @@ Es un prerequisito para Fase 3 (descomposición de vistas) y para la preparació
 6. **Verificar aislamiento de dominios:**
    - Ningún archivo en `domains/` debe importar de `@/stores/*` ni de `@/components/*` raíz.
 
-### SaaS Replication
-Aplicar los mismos cambios en `frontend/` SaaS respetando las diferencias conocidas:
-- `components/people/` no existe en SaaS (solo en Core): omitir ese paso.
+### Core validation
+Aplicar los mismos cambios en `frontend/` Core respetando las diferencias conocidas:
+- `components/people/` no existe en Core (solo en Core): omitir ese paso.
 - Los 3-4 ficheros distintos (api.ts, accounting/models.ts, AccountingMovementsView) no son
   afectados por esta fase.
 
@@ -94,10 +94,10 @@ grep -r "stores/netWorth\|stores/people\|components/BaseModal\|components/AppHea
   core/frontend/src --include="*.ts" --include="*.vue"
 # → 0 resultados
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 # → ejecutado durante cierre de fase; baseline global (>=80%) sigue en Fase 0
 ```
 
@@ -114,8 +114,8 @@ docker compose exec saas_frontend npm run test:coverage
 ## Completion Criteria
 - [x] 0 imports de `@/stores/netWorth`, `@/stores/people`, `@/components/BaseModal`, `@/components/AppHeader` raíz
 - [x] Dominios no dependen de `@/stores/*` ni `@/components/*` raíz
-- [x] `lint` y `typecheck` en verde — Core y SaaS
-- [x] `test:coverage` ejecutado en Core y SaaS durante el cierre de fase
+- [x] `lint` y `typecheck` en verde — Core
+- [x] `test:coverage` ejecutado en Core durante el cierre de fase
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
@@ -124,7 +124,7 @@ docker compose exec saas_frontend npm run test:coverage
 
 La Fase 1 queda cerrada a nivel estructural:
 
-1. Wrappers puente (`stores/netWorth.ts`, `stores/people.ts`) eliminados en Core y SaaS.
+1. Wrappers puente (`stores/netWorth.ts`, `stores/people.ts`) eliminados en Core.
 2. `BaseModal.vue` y `AppHeader.vue` consolidados en sus dominios (`ui` y `auth`).
 3. Imports legacy de raíz eliminados en fuentes `*.ts` y `*.vue`.
 

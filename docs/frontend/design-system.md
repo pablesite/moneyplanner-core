@@ -6,7 +6,7 @@ Define the Core visual foundation used by the MoneyPlanner product UI before scr
 ## Canonical Source
 1. Tokens and shared classes live in `core/frontend/src/styles/app.css`.
 2. The shared visual contract is documented in `../../docs/frontend/frontend-visual-contract.md`.
-3. Core owns the base product experience; SaaS should only mirror these styles when the task scope includes SaaS.
+3. Core owns the base product experience; Core should only mirror these styles when the task scope includes Core.
 
 ## Visual Direction
 1. Calm, financially credible, and operational rather than decorative.

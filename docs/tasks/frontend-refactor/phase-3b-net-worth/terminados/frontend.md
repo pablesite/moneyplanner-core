@@ -64,8 +64,8 @@ Esta fase la descompone en composables de página y secciones sin cambiar compor
    - Añadir o ampliar specs de dominio para cubrir los composables/componentes extraídos.
    - Ajustar `composables.spec.ts` existente si se mueve lógica.
 
-### SaaS Replication
-Esta vista es idéntica en Core y SaaS. Replicación directa.
+### Core validation
+Esta vista es idéntica en Core. Replicación directa.
 
 ## Validation
 ```bash
@@ -76,11 +76,11 @@ docker compose -f core/docker-compose.yml exec frontend npm run test:unit -- src
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → `NetWorthView` <900 líneas y sin lógica de dominio pesada.
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:unit -- src/views/__tests__/NetWorthView.spec.ts src/domains/net-worth/__tests__/page-refactor.spec.ts
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:unit -- src/views/__tests__/NetWorthView.spec.ts src/domains/net-worth/__tests__/page-refactor.spec.ts
+docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
@@ -101,7 +101,7 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] 0 imports de `@/stores/netWorth` en la vista
 - [x] La vista no hace fetch directo ni concentra cálculos de dominio pesados
 - [x] Sin cambios de comportamiento intencionados; cobertura de regresión reforzada con tests de vista y dominio
-- [x] `lint`, `typecheck` y tests dirigidos en verde — Core y SaaS
+- [x] `lint`, `typecheck` y tests dirigidos en verde — Core
 - [x] `test:coverage` ejecutado en ambos stacks durante el cierre de la fase
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`

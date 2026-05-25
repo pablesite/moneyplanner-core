@@ -14,7 +14,7 @@ antes de mover ninguna estructura.
 
 ## Scope
 **In scope:**
-1. Subir thresholds de coverage a ≥ 80% en `vite.config.ts` de Core y SaaS.
+1. Subir thresholds de coverage a ≥ 80% en `vite.config.ts` de Core.
 2. Escribir los tests unitarios necesarios para alcanzar esos thresholds.
 3. Corregir el formato de `app.css` en ambos frontends.
 4. Documentar la baseline real (suite count, líneas de vistas principales).
@@ -55,13 +55,13 @@ antes de mover ninguna estructura.
    - Los tests deben testar comportamiento observable, no implementación interna.
 5. Repetir hasta que `test:coverage` pase todos los thresholds.
 
-### SaaS Replication
-Repetir exactamente los mismos pasos en el frontend SaaS:
-1. Ejecutar diagnóstico en `saas_frontend`.
+### Core validation
+Repetir exactamente los mismos pasos en el Core frontend:
+1. Ejecutar diagnóstico en `frontend`.
 2. Corregir formato de `frontend/src/styles/app.css`.
 3. Actualizar thresholds en `frontend/vite.config.ts`.
 4. Escribir tests para cerrar gaps (aplicar las mismas diferencias de los 3-4 ficheros distintos).
-5. Validar que `test:coverage` pasa en SaaS.
+5. Validar que `test:coverage` pasa en Core.
 
 ## Validation
 ```bash
@@ -75,11 +75,11 @@ docker compose -f core/docker-compose.yml exec frontend npm run typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run test:coverage
 # → All files: statements ≥80%, lines ≥80%, functions ≥80%, branches ≥80%
 
-# SaaS
-docker compose exec saas_frontend npm run lint
-docker compose exec saas_frontend npm run format:check
-docker compose exec saas_frontend npm run typecheck
-docker compose exec saas_frontend npm run test:coverage
+# Core
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run format:check
+docker compose exec frontend npm run typecheck
+docker compose exec frontend npm run test:coverage
 # → mismos thresholds
 ```
 
@@ -95,14 +95,14 @@ docker compose exec saas_frontend npm run test:coverage
   **Mitigación:** ejecutar `npm run format` y verificar que el diff no cambia reglas semánticas.
 
 ## Completion Criteria
-- [x] `lint`, `format:check`, `typecheck` en verde en Core y SaaS
-- [x] `test:coverage` pasa ≥80% en statements, lines, functions, branches — Core y SaaS
+- [x] `lint`, `format:check`, `typecheck` en verde en Core
+- [x] `test:coverage` pasa ≥80% en statements, lines, functions, branches — Core
 - [x] Baseline documentada en el roadmap
 - [x] Documentación requerida actualizada
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)
 
-## Estado actual (2026-03-19)
+## Current status (2026-03-19)
 
 Resultado de ejecución en Docker durante este bloque:
 
@@ -112,14 +112,14 @@ Resultado de ejecución en Docker durante este bloque:
    - `npm run typecheck`: verde
    - `npm run test:unit`: verde (37 suites)
    - `npm run test:coverage`: verde con thresholds `>=80`
-2. SaaS frontend:
+2. Core frontend:
    - `npm run lint`: verde
    - `npm run format:check`: verde
    - `npm run typecheck`: verde
    - `npm run test:unit`: verde (37 suites)
    - `npm run test:coverage`: verde con thresholds `>=80`
 
-Métricas reales de coverage (Core y SaaS en esta ejecución):
+Métricas reales de coverage (Core en esta ejecución):
 - `statements: 98.29%`
 - `lines: 98.29%`
 - `functions: 92.41%`

@@ -1,241 +1,240 @@
 # Product Roadmap
 
-Planificación de evolución de producto por módulo. Captura pendientes, mejoras y líneas futuras en cada área funcional del Core.
+Product evolution plan by module. Captures pending work, improvements, and future lines for each Core functional area.
 
-Convenciones:
-- `(Roadmap compartido)` — ítem que también aplica o debe coordinarse con el roadmap de SaaS.
-- `(Privado - Futuro)` — ítem de baja prioridad o vinculado a lógica de familia/ownership privada.
-- ~~tachado~~ — ya resuelto o descartado.
-
----
-
-## PATRIMONIO
-
-### Para v1
-
-- ✅ **Revisión completa de modales de creación/edición de activos y pasivos.** Coherencia visual, validaciones y flujo revisados; v1 del módulo cerrada a nivel funcional.
-
-### Para v2
-
-- **Onboarding — Asistente para meter activos más fácilmente.** Formulario/flujo ultrasencillo de alta de activos. Activable en cualquier momento desde la vista (no solo al inicio del uso de la aplicación).
+Conventions:
+- `(Shared roadmap)` — item that also applies to, or must be coordinated with, Core roadmap.
+- `(Private - Future)` — lower-priority item linked to family/ownership private workflows.
+- `~~strikethrough~~` — resolved or discarded.
 
 ---
 
-## PRESUPUESTO
+## NET WORTH
 
-- ✅ Migración fase 1 completada (2026-03-20): formularios de ingresos/gastos previstos integrados en la vista de Presupuesto.
-- ✅ Integración fase 2 completada (2026-03-20): introducción de datos y visualización por categorías unificadas en un único flujo contextual dentro de Presupuesto.
-- ✅ Conexión gastos presupuesto ↔ cierre y movimientos contables completada.
-- ✅ Estilo de evolución ejecutada mensual revisado.
-- ✅ Interpretación del estado financiero simplificada.
-- ✅ UX general mejorada (barras de progreso, estado del presupuesto).
-- ✅ Cierre v1 aplicado y validado manualmente (2026-05-14): summaries mensuales como contrato canónico para barras/cobertura, precedencia ledger sobre check-ins manuales, modales de líneas con errores backend persistentes y header alineado con Patrimonio.
+### For v1
 
-### Para v2
+- ✅ **Full review of create/edit asset and liability modals.** Visual consistency, validations, and flow reviewed; module v1 functionally closed.
 
-- **Asistente de revisión anual del presupuesto.** Detectar automáticamente desviaciones recurrentes y proponer ajustes por categoría/subcategoría con confirmación manual.
+### For v2
+
+- **Onboarding assistant for easier asset input.** Ultra-simple flow to add assets, available anytime from the view (not only at first-time onboarding).
 
 ---
 
-## CIERRE DEL MES / AÑO
+## BUDGET
 
-> Backend modo dual implementado (2026-03-19). Frontend integrado (2026-03-19) — spec: `core/docs/tasks/monthly-close/terminados/dual-mode-frontend.md`. Revisión manual v1 completada (2026-05-14).
+- ✅ Phase 1 migration completed (2026-03-20): annual income/expense forms integrated into Budget view.
+- ✅ Phase 2 integration completed (2026-03-20): data input and category visualization unified in a single contextual budget flow.
+- ✅ Budget expense <-> monthly close <-> accounting movements connection completed.
+- ✅ Monthly executed-evolution visual style reviewed.
+- ✅ Financial status interpretation simplified.
+- ✅ General UX improved (progress bars, budget status).
+- ✅ v1 closeout applied and manually validated (2026-05-14): monthly summaries as canonical contract for bars/coverage, ledger precedence over manual check-ins, persistent backend errors inside line modals, and header aligned with Net Worth.
 
-### Modos de cierre — decisiones tomadas
-- **Sin selección explícita de modo.** El sistema detecta automáticamente cobertura (ledger / checkin / ninguna) y adapta lo que muestra y sugiere.
-- Tres perfiles de usuario servidos con un único flujo adaptativo:
-  - **Power user:** registra movimientos → cierre = verificación + sign-off
-  - **Casual user:** introduce saldos bancarios → sistema sugiere distribución proporcional al presupuesto
-  - **Mixto:** registra algunos movimientos → sistema completa los huecos
-- `MonthlyClose` es el lifecycle wrapper sobre los checkins existentes. Ciclo de vida: DRAFT → FINALIZED → LOCKED, con reapertura (FINALIZED → DRAFT).
-- Status `estimated` añadido a los 3 modelos de checkin para distinguir distribuciones algorítmicas de datos manuales.
+### For v2
 
-### Algoritmo de distribución inteligente
-- Usa presupuesto como prior; resta movimientos conocidos (ledger + checkins existentes); distribuye el residual proporcional entre entradas sin cobertura.
-- Si hay datos de liquidez: residual = delta_liquidez - (ingresos_conocidos - gastos_conocidos). Si no: usa importe presupuestado directamente.
-
-### Integración con movimientos
-- La vista de detalle del cierre autocompletará desde ledger y checkins existentes.
-- A partir de ahí, ajustes manuales o aceptar sugerencias (endpoint PATCH accept_suggestions=true).
-
-### API (implementada)
-- `GET /api/budget/monthly-close/{year}/{month}/` — estado completo + sugerencias
-- `PATCH /api/budget/monthly-close/{year}/{month}/` — actualizar notas / aceptar sugerencias
-- `POST /api/budget/monthly-close/{year}/{month}/finalize/` — DRAFT → FINALIZED
-- `POST /api/budget/monthly-close/{year}/{month}/reopen/` — FINALIZED → DRAFT
-- `POST /api/budget/monthly-close/{year}/{month}/lock/` — FINALIZED → LOCKED
-
-### Frontend integrado ✅
-- Fetch unificado (`getMonthlyClose`) en modo cierre; `types.ts` + `api.ts` en dominio budget.
-- Distribución inteligente: inputs pre-rellenados con sugerencias del backend para entradas sin cobertura.
-- Ciclo de vida UI: badge status (draft/finalized/locked), botones finalizar/reabrir/bloquear en ResultSection.
-- Estado locked: inputs deshabilitados con banner informativo cuando cierre FINALIZED/LOCKED.
-- Badge "Estimado" para checkins con status `estimated`.
-- Mirror Core ↔ SaaS completado.
-
-### Vista de resultados
-- ✅ Alineación bridge de conciliación corregida (subgrid CSS, 2026-05-20).
-- Simplificar: actualmente hay dos bloques de conciliación con datos repetidos — reducir duplicación.
-- Mostrar solo insights relevantes; añadir gráficas explicables (ingresos/gastos ejecutados con detalle desplegable).
-
-### Perímetro de liquidez
-- ✅ Referencia por cuenta ahora muestra el saldo efectivo del mes anterior, no `asset.amount` (2026-05-20).
-
-### Cierre del año
-- ⛔ Descartado — el cierre mensual es suficiente para v1.
-
-### Transferencias de ownership al cierre
-- `(Privado - Futuro)` Añadir lógica para calcular qué transferencia corresponde a cada miembro de la familia al cerrar el mes, en base al ownership de activos. Opción habilitada sólo desde settings y sólo si hay varios miembros activos. Objetivo: simplificar el control diario de transferencias entre miembros.
+- **Annual budget review assistant.** Automatically detect recurring deviations and propose category/subcategory adjustments with manual confirmation.
 
 ---
 
-## MÓDULO DE CONTABILIDAD
+## MONTHLY / YEARLY CLOSE
 
-> ✅ **Revisión manual completada (usuario) el 2026-03-17.** Los ajustes finos de contabilidad se validarán durante la implementación y pruebas del importador.
+> Dual-mode backend implemented (2026-03-19). Frontend integrated (2026-03-19) — spec: `core/docs/tasks/monthly-close/terminados/dual-mode-frontend.md`. v1 manual review completed (2026-05-14).
 
-### Para v1
+### Close modes — decisions made
+- **No explicit mode selector.** The system automatically detects coverage (ledger / check-in / none) and adapts displayed data and suggestions.
+- Three user profiles served by one adaptive flow:
+  - **Power user:** records movements -> close = verification + sign-off
+  - **Casual user:** provides bank balances -> system suggests proportional distribution over budget
+  - **Hybrid user:** records only some movements -> system fills gaps
+- `MonthlyClose` is the lifecycle wrapper around existing check-ins. Lifecycle: `DRAFT -> FINALIZED -> LOCKED`, with reopen (`FINALIZED -> DRAFT`).
+- `estimated` status added to all three check-in models to distinguish algorithmic suggestions from manual data.
 
-- ✅ **Revisión del tracker operativo de cuentas** — 106/106 cuentas revisadas (2026-05-20). Tracker en `core/docs/operations/movements-user1-review-tracker.md`.
-- ✅ **Re-revisión de categorías/subcategorías** — completada junto con el tracker.
-- ✅ **Actualizar el header** — alineado con el estilo de Patrimonio.
-- ✅ **Revisión del estilo visual del cuerpo de la vista** — cerrada.
+### Smart distribution algorithm
+- Uses budget as prior; subtracts known movements (ledger + existing check-ins); distributes residual proportionally across uncovered entries.
+- If liquidity data exists: residual = liquidity_delta - (known_income - known_expense). If not: uses budgeted amount.
 
-### Para v2
+### Movements integration
+- Close detail view auto-fills from ledger and existing check-ins.
+- Then user can adjust manually or accept suggestions (`PATCH accept_suggestions=true`).
 
-- **UX de entrada rápida**: registro simple de movimientos, formulario ultrasencillo tipo app bancaria. Opcionalmente como asistente rápido o agente conversacional (cuatro datos clave → listo).
+### API (implemented)
+- `GET /api/budget/monthly-close/{year}/{month}/` — complete state + suggestions
+- `PATCH /api/budget/monthly-close/{year}/{month}/` — update notes / accept suggestions
+- `POST /api/budget/monthly-close/{year}/{month}/finalize/` — DRAFT -> FINALIZED
+- `POST /api/budget/monthly-close/{year}/{month}/reopen/` — FINALIZED -> DRAFT
+- `POST /api/budget/monthly-close/{year}/{month}/lock/` — FINALIZED -> LOCKED
 
-### Importación de datos
+### Frontend integration ✅
+- Unified fetch (`getMonthlyClose`) in close mode; `types.ts` + `api.ts` in budget domain.
+- Smart distribution: inputs prefilled with backend suggestions for uncovered rows.
+- UI lifecycle: status badge (draft/finalized/locked), finalize/reopen/lock buttons in ResultSection.
+- Locked state: inputs disabled with info banner when FINALIZED/LOCKED.
+- "Estimated" badge for check-ins with `estimated` status.
+- Core <-> Core verification completed.
 
-- ✅ Importador MoneyWiz ad-hoc retirado antes de producción.
-- ✅ La trazabilidad de movimientos importados se mantiene en contabilidad mediante `origin`, `import_source` e `import_fingerprint`.
-- ✅ La importación portable sigue siendo el flujo soportado para mover/copiar la base de datos entre instancias.
+### Result view
+- ✅ Reconciliation bridge alignment fixed (CSS subgrid, 2026-05-20).
+- Pending simplification: there are still two reconciliation blocks with repeated data; reduce duplication.
+- Show only relevant insights; add explainable charts (executed income/expense with expandable detail).
 
----
+### Liquidity perimeter
+- ✅ Per-account reference now uses previous month's effective balance, not `asset.amount` (2026-05-20).
 
-## FX-RATES E INFLACIÓN
+### Yearly close
+- ⛔ Discarded — monthly close is sufficient for v1.
 
-- `(Roadmap compartido)` Introducir soporte para nuevas monedas a medida que se necesiten.
-
----
-
-## COACH FINANCIERO
-
-El coach (fases 1–4) está funcional. Decisiones tomadas para v1:
-
-- ~~Las barras del coach no se renderizan en el frontend del Core.~~ (resuelto)
-- ✅ **Navegación v1 simplificada** (2026-05-20): `/` redirige a `/patrimonio`; guía en `/guia` y `/guia/fases/:id`. Quick actions contextuales por fase ya existían. Integración más profunda coach ↔ producto aparcada para v2.
-- ✅ **Fase 5 (Independencia financiera) retirada** — se reincorporará cuando exista módulo de cartera de inversión con datos reales.
-
-### Para v2
-- Integración fluida coach ↔ módulos: pasar de una recomendación directamente al punto concreto del módulo relevante sin perder contexto.
-
----
-
-## MÓDULO INTRODUCCIÓN DE DATOS
-
-- ✅ Retirado el módulo/ruta `/introduccion-datos` (2026-03-20).
-- Reubicación aplicada:
-  - Formularios de ingresos/gastos previstos → Presupuesto.
-  - Entradas relacionadas con activos/pasivos → Patrimonio.
-  - Portable data (export/import/replace) → Cuenta (`/account`).
-
----
-
-## DISEÑO Y EXPERIENCIA DE USUARIO
-
-### Sistema de diseño unificado (crítico para producción)
-- 🔄 Fundacion inicial creada en `core/frontend/src/styles/app.css`: tokens semanticos de color, layout, radio, sombras, estados y controles base. Ver `core/docs/frontend/design-system.md`.
-- Crear sistema de diseño coherente: colores, tipografías, espaciados, componentes base.
-- Unificar todas las vistas bajo el mismo sistema.
-- Elevar calidad visual a nivel SaaS profesional.
-- ⚠️ Rediseño ≠ refactor técnico — ambos son necesarios y pueden hacerse en paralelo.
-
-### UX transversal
-- Simplificar flujos de entrada de datos.
-- Mejorar navegación entre módulos.
-- Reducir fricción general para el usuario final.
+### Ownership transfers on close
+- `(Private - Future)` Add logic to calculate per-member transfer amounts at month close based on asset ownership. Option enabled only in settings and only for multi-member households.
 
 ---
 
-## AUTENTICACIÓN Y MODELO DE USUARIO
+## ACCOUNTING MODULE
 
-- Revisar login completo (Core + SaaS).
-- Validar sistema de usuarios, familias y ownership de activos/pasivos.
-- Verificar permisos y seguridad.
-- Test completo de flujos reales (registro, login, ownership compartido, etc.).
+> ✅ **Manual review completed (user) on 2026-03-17.** Fine-grained accounting adjustments will be validated during importer implementation/testing.
 
----
+### For v1
 
-## IMPORTACIÓN DE DATOS
+- ✅ **Operational account tracker review** — 106/106 accounts reviewed (2026-05-20). Tracker: `core/docs/operations/movements-user1-review-tracker.md`.
+- ✅ **Category/subcategory re-review** — completed together with tracker.
+- ✅ **Header update** — aligned with Net Worth style.
+- ✅ **View body style review** — closed.
 
-- Mantener importación/exportación portable como flujo soportado.
-- No reintroducir importadores ad-hoc por proveedor salvo decisión explícita de producto.
+### For v2
 
----
+- **Fast-entry UX:** simple movement entry flow, ultra-light banking-app-like form. Optionally exposed as quick assistant or conversational agent (four key inputs -> done).
 
-## LEGACY RESIDUAL
+### Data import
 
-Inventario vivo de compatibilidades que siguen presentes tras retirar MoneyWiz activo, `delete-imported`, `accounting/services.py`, `sync_fx_rates` y artefactos `.js` generados. No todo lo legacy es basura: algunas piezas protegen históricos y la portabilidad de datos.
-
-### Pendiente
-
-- ✅ **`net_worth.services.py` — import externo eliminado (2026-05-20).** `get_base_currency_for_user` movida a `accounts/services.py`; `get_financed_asset_queryset_for_user` añadida a `services_assets_core.py`; `_serialize_money` localizada en `services_liquidity.py`. `services.py` re-exporta para consumidores internos y mocks; `portable_data.py` ya no importa del módulo. Ningún consumidor externo activo.
-
-- ✅ **`compat.*` en capabilities — retirado (2026-05-20).** `AppCapabilitiesCompat`, `buildCompat` y `withCompat` eliminados. `canUsePeople()`/`canUseOwnership()` usan la lógica directa de `core.*`/`premium.*`. Los cuatro consumidores directos de `capabilities.people` migrados a `canUsePeople()` en Core y SaaS.
-
-### Retirado o aclarado
-
-- ✅ **Absorción de Introducción de Datos en Presupuesto — completada.** No quedan rutas, dominios, vistas ni CSS con nombre `data-input`; `core.dataInput` retirado de capabilities.
-
-- ✅ **Campos legacy de aportaciones periódicas en Patrimonio — retirados (2026-05-19).** Migración `net_worth/0039` migró los datos a `contribution_intervals`; migración `net_worth/0042` eliminó los campos escalares (`monthly_contribution_amount`, `expected_end_date`, `investment_contribution_currency`, `investment_contribution_frequency`, `investment_contribution_mode`). Aplicada y verificada.
-
-- **Fallback Budget/check-ins — no es deuda técnica de código.** El mecanismo de checkins es diseño intencional del modo dual: son autoritativos cuando no hay cobertura ledger, y ledger tiene precedencia cuando existe. La deuda es operativa: meses históricos con cobertura solo por checkin que podrían tener respaldo ledger no migrado. No requiere cambio de código.
-
-### Mantener por seguridad de datos
-
-- **Compatibilidad de portable import/export con bundles antiguos.**
-  - Para qué sirve hoy: protege bases exportadas con versiones previas, bundles sin metadata y formatos históricos parcialmente migrables.
-  - Decisión: mantener. Es parte de la garantía de no perder datos.
-
-- **Trazabilidad de movimientos importados.**
-  - Para qué sirve hoy: conserva `origin`, `import_source` e `import_fingerprint` para saber qué movimientos nacieron de una importación histórica.
-  - Decisión: mantener. No reintroduce el importador MoneyWiz ni el borrado masivo de importados.
-
-### Referencias históricas
-
-- Los documentos archivados en `core/docs/tasks/**/terminados/` y `core/docs/roadmap/terminados/` pueden seguir mencionando MoneyWiz, `sync_fx_rates`, `accounting/services.py` o flujos antiguos porque describen decisiones pasadas. No implican código activo.
+- ✅ Ad-hoc MoneyWiz importer removed before production.
+- ✅ Imported movement traceability is preserved in accounting via `origin`, `import_source`, and `import_fingerprint`.
+- ✅ Portable import remains the supported path to move/copy datasets between instances.
 
 ---
 
-## SEGURIDAD
+## FX RATES AND INFLATION
 
-- Auditoría de código: vulnerabilidades backend, validaciones de inputs.
-- Auditoría de dependencias: librerías, CVEs conocidos.
-- Validación básica: auth, permisos, sanitización de inputs.
+- `(Shared roadmap)` Add support for additional currencies as needed.
 
 ---
 
-## REFACTOR Y DEUDA TÉCNICA
+## FINANCIAL COACH
 
-> Aparcado deliberadamente hasta completar funcionalidad y rediseño. No es prioritario frente a funcionalidad.
+Coach phases 1-4 are functional. v1 decisions:
+
+- ~~Coach bars were not rendered in Core frontend~~ (resolved)
+- ✅ **Simplified v1 navigation** (2026-05-20): `/` redirects to `/patrimonio`; guide at `/guia` and `/guia/fases/:id`. Contextual phase quick actions already existed. Deeper coach <-> product integration is parked for v2.
+- ✅ **Phase 5 (Financial Independence) removed** — will return once an investment portfolio module with real data exists.
+
+### For v2
+- Smooth coach <-> modules integration: jump from a recommendation directly to the exact module point without losing context.
+
+---
+
+## DATA INPUT MODULE
+
+- ✅ `/introduccion-datos` module/route removed (2026-03-20).
+- Applied relocation:
+  - Annual income/expense forms -> Budget.
+  - Asset/liability-related inputs -> Net Worth.
+  - Portable data (export/import/replace) -> Account (`/account`).
+
+---
+
+## DESIGN AND USER EXPERIENCE
+
+### Unified design system (critical for production)
+- ✅ Foundation completed (2026-05-20): 22 steps closed in `core/frontend/src/styles/app.css` and canonical views. Semantic tokens for color/layout/radius/shadow/state/base controls applied; `ui-pro-*` layer removed. See `core/docs/frontend/design-system.md`.
+- ✅ Coherent design system applied: colors, typography, spacing, and base components.
+- ✅ Views unified under a common system.
+- ✅ Visual quality raised to production baseline.
+- Incremental per-view polish continues as needed.
+
+### Cross-cutting UX
+- Simplify data input flows.
+- Improve navigation across modules.
+- Reduce general friction for end users.
+
+---
+
+## AUTHENTICATION AND USER MODEL
+
+- Review complete login flow (Core).
+- Validate users/families/asset-liability ownership system.
+- Verify permissions and security.
+- Full real-flow tests (signup, login, shared ownership, etc.).
+
+---
+
+## DATA IMPORT
+
+- Keep portable import/export as supported flow.
+- Do not reintroduce vendor-specific ad-hoc importers unless explicitly decided at product level.
+
+---
+
+## RESIDUAL LEGACY
+
+Living inventory of compatibility pieces that still exist after removing active MoneyWiz import, `delete-imported`, `accounting/services.py`, `sync_fx_rates`, and generated `.js` artifacts. Not all legacy is waste: some pieces protect historical datasets and data portability.
+
+### Pending
+
+- ✅ **`net_worth.services.py` — external import removed (2026-05-20).** `get_base_currency_for_user` moved to `accounts/services.py`; `get_financed_asset_queryset_for_user` added to `services_assets_core.py`; `_serialize_money` moved to `services_liquidity.py`. `services.py` now re-exports for internal consumers and mocks; `portable_data.py` no longer imports from this module. No active external consumers.
+
+- ✅ **`compat.*` in capabilities — removed (2026-05-20).** `AppCapabilitiesCompat`, `buildCompat`, and `withCompat` removed. `canUsePeople()`/`canUseOwnership()` now rely directly on `core.*`/`premium.*`. Four direct consumers of `capabilities.people` migrated to `canUsePeople()` in both Core.
+
+### Removed or clarified
+
+- ✅ **Data Input absorption into Budget — complete.** No remaining routes, domains, views, or CSS named `data-input`; `core.dataInput` removed from capabilities.
+
+- ✅ **Legacy periodic-contribution fields in Net Worth — removed (2026-05-19).** Migration `net_worth/0039` moved data to `contribution_intervals`; migration `net_worth/0042` removed scalar fields (`monthly_contribution_amount`, `expected_end_date`, `investment_contribution_currency`, `investment_contribution_frequency`, `investment_contribution_mode`). Applied and verified.
+
+- **Budget/check-in fallback — not technical code debt.** Check-in behavior is intentional in dual mode: authoritative when ledger coverage is missing, and ledger takes precedence when coverage exists. Remaining debt is operational: historical months that only have check-in coverage might still lack migrated ledger backing. No code change required.
+
+### Keep for data safety
+
+- **Portable import/export compatibility with legacy bundles.**
+  - Current value: protects datasets exported from previous versions, bundles without metadata, and partially migrable historical formats.
+  - Decision: keep. This is part of the "no data loss" guarantee.
+
+- **Imported movement traceability.**
+  - Current value: preserves `origin`, `import_source`, and `import_fingerprint` to identify movements created by historical imports.
+  - Decision: keep. This does not reintroduce MoneyWiz importer or bulk delete for imported rows.
+
+### Historical references
+
+- Archived docs in `core/docs/tasks/**/terminados/` and `core/docs/roadmap/terminados/` may still mention MoneyWiz, `sync_fx_rates`, `accounting/services.py`, or old flows because they describe past decisions. They do not imply active code.
+
+---
+
+## SECURITY
+
+- Code audit: backend vulnerabilities and input validations.
+- Dependency audit: third-party libraries and known CVEs.
+- Baseline verification: auth, permissions, input sanitization.
+
+---
+
+## REFACTOR AND TECHNICAL DEBT
+
+> Deliberately parked until feature completion and visual redesign are done. Not a priority over product functionality.
 
 ### Core — Backend
-- Revisar que funcionen correctamente las funciones de exportar/importar datos.
-- Revisión general de backend Core: limpieza de lógica, estructura consistente, eliminación de deuda técnica.
+- Verify import/export functions continue to work correctly.
+- General Core backend review: logic cleanup, consistent structure, technical debt removal.
 
 ### Core — Frontend
-- Extraer lógica de negocio hacia el backend donde corresponda.
-- Hacer que los estilos sean coherentes en todas las vistas (después del sistema de diseño).
-- Mejorar la navegabilidad.
-- Revisar tildes y textos.
+- Move business logic to backend where appropriate.
+- Make styles coherent across views (after design-system foundation).
+- Improve navigation.
+- Review text quality and consistency.
 
-### SaaS — Frontend
-- Alinear con el frontend del Core; la única diferencia debe ser la vista de administración de perfiles.
-- Separar claramente código Core vs SaaS.
+### Core — Frontend
+- Keep aligned with Core frontend; only profile administration view should differ.
+- Separate Core vs Core code boundaries clearly.
 
-### SaaS — Backend
-- Revisión general de backend SaaS.
+### Core — Backend
+- General Core backend review.
 
-### Documentación y operaciones
-- Actualizar la documentación del Core y del SaaS.
-- Incluir buenas prácticas de CI/CD.
+### Documentation and operations
+- Keep Core documentation updated.

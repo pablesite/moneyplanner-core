@@ -24,9 +24,6 @@ function humanMessageForApiCode(code: string | null): string | null {
   if (code === 'permission_denied') {
     return 'No tienes permisos para realizar esta acción.';
   }
-  if (code === 'subscription_blocked') {
-    return 'Tu suscripción no habilita esta funcionalidad premium.';
-  }
   return null;
 }
 

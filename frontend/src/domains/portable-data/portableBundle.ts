@@ -276,7 +276,7 @@ export type PortablePremiumData = {
 export type PortableDataBundle = {
   schema_version: 1;
   exported_at: string;
-  source_app: 'core' | 'saas';
+  source_app: 'core' | 'external';
   exported_app_version?: string;
   settings?: PortableSettingsRecord;
   data: {
@@ -460,7 +460,7 @@ export function buildImportPreviewMessageWithVersion(
 
 export function buildPortableFilename(): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `moneyplanner-saas-data-${timestamp}.json`;
+  return `moneyplanner-core-data-${timestamp}.json`;
 }
 
 export function toPortableAnnualIncomeRecord(
@@ -890,7 +890,7 @@ export function parsePortableDataBundle(raw: string): PortableDataBundle {
     liability_valuations,
     accounting,
   } = assertPortableDataCollections(parsed.data as PortableDataBundle['data']);
-  const sourceApp = parsed.source_app === 'saas' ? 'saas' : 'core';
+  const sourceApp = parsed.source_app === 'core' ? 'core' : 'external';
   const premium = parsePortablePremium(parsed.premium);
   return {
     schema_version: 1,

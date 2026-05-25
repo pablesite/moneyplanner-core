@@ -27,7 +27,7 @@ Prerequisitos: Phases 1 y 2 completadas con datos reales en DB.
 
 ### Out of scope
 - Frontend (Phase 4)
-- SaaS mirror
+- Core verification
 
 ## Plan
 

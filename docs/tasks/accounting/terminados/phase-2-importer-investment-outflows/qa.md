@@ -15,7 +15,7 @@ Investment withdrawals affect balances, movement semantics, and user trust in th
 2. Validate preview and commit behavior for a representative MoneyWiz withdrawal dataset.
 3. Validate that mirrored income rows are no longer created for investment exits.
 4. Validate regressions for investment inflows, transfers, and debt payments.
-5. Verify whether any later importer UI changes must be mirrored in SaaS.
+5. Verify whether any later importer UI changes must be mirrored in Core.
 6. Out of scope
 7. Full portfolio accounting audit.
 8. Fiscal correctness of realized gains/losses.
@@ -30,7 +30,7 @@ Investment withdrawals affect balances, movement semantics, and user trust in th
 7. Re-run import to confirm idempotency and stable preview warnings.
 8. Validation
 9. Regress classic investment inflow, plain transfer, and debt payment imports.
-10. If importer UI changes in a later implementation phase, confirm whether the same user-facing flow must be mirrored in SaaS.
+10. If importer UI changes in a later implementation phase, confirm whether the same user-facing flow must be mirrored in Core.
 
 ## Validation
 - `docker compose -f core/docker-compose.yml exec backend ruff check .`
@@ -47,7 +47,7 @@ Investment withdrawals affect balances, movement semantics, and user trust in th
 ## Risks
 1. Preview may look correct while commit still generates wrong account impacts.
 2. Existing importer regressions may reappear in transfer or debt mirror logic.
-3. Core/SaaS UX may drift later if the importer modal changes and the mirror is not reviewed explicitly.
+3. Core UX may drift later if the importer modal changes and the mirror is not reviewed explicitly.
 
 ## Completion Criteria
 - [ ] All validation commands pass

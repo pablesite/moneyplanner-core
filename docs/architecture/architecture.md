@@ -5,7 +5,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 
 ## Summary
 1. Core owns the product domain and shared business behavior.
-2. Core is designed to be useful on its own, without requiring the SaaS layer.
+2. Core is designed to be useful on its own.
 3. Core includes both backend and frontend for the main personal-finance product experience.
 
 ## Core Stack
@@ -30,7 +30,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 ## Architectural Rule
 1. Shared product behavior belongs in Core.
 2. Domain rules should live in backend domain layers, not in deployment-specific integrations.
-3. Core documentation must remain self-contained and understandable without SaaS documentation.
+3. Core documentation must remain self-contained and understandable without Core documentation.
 
 ## Internal Structure
 1. Backend apps organize domain areas such as accounts, budget, net worth, accounting, memberships, and shared core services.
@@ -47,7 +47,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 4. Responses include taxonomy breakdowns by category/subcategory (with monthly detail):
    - `income_execution_breakdown` for income summary
    - `expense_execution_breakdown` for expense summary
-   so Core and SaaS frontends can render unbudgeted execution visibility without duplicating backend rules.
+   so Core frontends can render unbudgeted execution visibility without duplicating backend rules.
 
 ## Net Worth Investment Contribution Intervals
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.

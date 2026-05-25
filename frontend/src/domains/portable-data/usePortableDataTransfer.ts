@@ -38,7 +38,7 @@ type PortableImportResponse = {
   mode: ImportMode;
   meta: {
     schema_version: number;
-    source_app: 'core' | 'saas';
+    source_app: 'core' | 'external';
     exported_at: string;
     exported_app_version?: string;
     imported_into_app_version: string;

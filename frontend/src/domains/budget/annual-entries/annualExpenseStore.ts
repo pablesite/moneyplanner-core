@@ -98,7 +98,7 @@ type TotalsResponse = {
   currency_hint: string;
 };
 
-type StoreScope = 'saas' | 'core';
+type StoreScope = 'core';
 
 type AnnualExpenseStore = ReturnType<typeof createAnnualExpenseStore>;
 
@@ -302,7 +302,7 @@ function createAnnualExpenseStore() {
 
 const annualExpenseStoreCache = new Map<StoreScope, AnnualExpenseStore>();
 
-export function useAnnualExpenseStore(scope: StoreScope = 'saas') {
+export function useAnnualExpenseStore(scope: StoreScope = 'core') {
   let store = annualExpenseStoreCache.get(scope);
   if (!store) {
     store = createAnnualExpenseStore();

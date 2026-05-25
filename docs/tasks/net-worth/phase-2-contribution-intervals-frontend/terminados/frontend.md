@@ -1,10 +1,10 @@
 # Task: Contribution Intervals — Frontend
 
 ## Title
-Intervalos de aportación periódica en activos de inversión (frontend)
+Periodic contribution intervals in investment assets (frontend)
 
 ## Context
-Tras completar la Phase 1 (backend), el modelo `Asset` expone `contribution_intervals` como lista nested. Esta phase reemplaza los campos planos del formulario de inversión (`monthly_contribution_amount`, `investment_contribution_frequency`, `investment_contribution_currency`, `expected_end_date`, selector `investment_contribution_mode`) por un gestor de intervalos inline en el modal de creación/edición de activos.
+After completing Phase 1 (backend), the `Asset` model exposes `contribution_intervals` as a nested list. This phase replaces the flat fields of the investment form (`monthly_contribution_amount`, `investment_contribution_frequency`, `investment_contribution_currency`, `expected_end_date`, selector `investment_contribution_mode`) with an inline interval manager in the asset creation/editing modal.
 
 **Prerrequisito:** Phase 1 completada y desplegada en Core.
 
@@ -12,21 +12,21 @@ Tras completar la Phase 1 (backend), el modelo `Asset` expone `contribution_inte
 `frontend`
 
 ## Stack
-`core` + espejado en `saas`
+`core` + espejado en `external`
 
 ## Scope
 
 ### En scope
 1. Nuevo tipo `ContributionInterval` en `models.ts`
 2. Gestor de intervalos inline en `ItemForm.vue` (Core)
-3. Eliminación de los 4 campos planos de inversión del formulario
-4. Actualización de composable `composables.ts` para mapear `contribution_intervals` en modo edit
-5. Espejado de todos los cambios en `frontend/src/` (SaaS)
+3. Removal of the 4 flat investment fields from the form
+4. Update composable `composables.ts` to map `contribution_intervals` in edit mode
+5. Espejado de todos los cambios en `frontend/src/` (Core)
 
 ### Fuera de scope
 - Cambios en backend (Phase 1)
-- Validación de solapamiento en servidor (se hace en backend; el frontend solo muestra el error de respuesta)
-- Visualización de intervalos en la vista de patrimonio (solo el formulario de creación/edición)
+- Overlap validation on server (done in backend; frontend only shows response error)
+- Display of intervals in the estate view (create/edit form only)
 
 ## Plan
 
@@ -49,12 +49,12 @@ contribution_intervals?: ContributionInterval[];
 ### 2. Composable (`core/frontend/src/domains/net-worth/composables.ts`)
 
 En `buildEditInvestmentFields()` (o equivalente):
-- Mapear `asset.contribution_intervals ?? []` al estado local del formulario
-- Eliminar la extracción de `investment_contribution_mode`, `monthly_contribution_amount`, etc. del asset para el init de la sección de aportaciones
+- Map `asset.contribution_intervals ?? []` to the local state of the form
+- Remove extraction of `investment_contribution_mode`, `monthly_contribution_amount`, etc. of the asset for the init of the contributions section
 
 ### 3. Formulario `ItemForm.vue` (`core/frontend/src/domains/net-worth/components/ItemForm.vue`)
 
-**Eliminar** (de la sección de inversiones, solo visible cuando `category === 'investments'`):
+**Delete** (from investments section, only visible when `category === 'investments'`):
 - Selector `investment_contribution_mode` (one_time / periodic_contribution)
 - Campo `monthly_contribution_amount`
 - Campo `investment_contribution_frequency`
@@ -62,9 +62,9 @@ En `buildEditInvestmentFields()` (o equivalente):
 - Campo `expected_end_date`
 - Computed `showInvestmentPeriodicFields`
 
-**Añadir** en su lugar:
+**Add** instead:
 
-Estado local:
+Home state:
 ```typescript
 const contributionIntervals = ref<ContributionIntervalDraft[]>([])
 
@@ -181,7 +181,7 @@ contribution_intervals: contributionIntervals.value
 
 **Clases CSS**: usar las mismas que el resto del formulario. No introducir nuevas clases.
 
-### 4. Espejado SaaS
+### 4. Espejado Core
 
 Aplicar exactamente los mismos cambios en:
 - `frontend/src/domains/net-worth/models.ts`
@@ -193,11 +193,11 @@ Aplicar exactamente los mismos cambios en:
 ```bash
 # Typecheck
 docker compose -f core/docker-compose.yml exec frontend npm run typecheck
-docker compose exec saas_frontend npm run typecheck
+docker compose exec frontend npm run typecheck
 
 # Lint
 docker compose -f core/docker-compose.yml exec frontend npm run lint
-docker compose exec saas_frontend npm run lint
+docker compose exec frontend npm run lint
 
 # Prueba manual (con backend Phase 1 activo):
 # 1. Crear activo de inversión sin intervalos → guardar → sin gastos generados en presupuesto
@@ -209,23 +209,23 @@ docker compose exec saas_frontend npm run lint
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/project-status.md` — actualizar estado de la tarea a ✅ y mover spec a `terminados/`
+- [ ] `core/docs/project-status.md` — update task status to ✅ and move spec to `terminados/`
 - [ ] `core/docs/frontend/net-worth-ux-notes.md` — documentar el gestor de intervalos si hay notas UX relevantes
 
 ## Risks
 
-- **Pérdida de datos en modo edit:** si `buildEditInvestmentFields` no mapea correctamente `contribution_intervals`, los intervalos existentes se pierden al guardar. Verificar con un activo que tenga intervalos reales (migrados de la Phase 1).
-- **Payload vacío vs. null:** asegurar que enviar `contribution_intervals: []` borra todos los intervalos existentes (patrón `set` en backend). Probarlo explícitamente.
-- **Compatibilidad SaaS:** si el SaaS frontend consume una versión cacheada del tipo `Asset` sin `contribution_intervals`, el typecheck fallará. Actualizar siempre ambos lados.
+- **Data loss in edit mode:** if `buildEditInvestmentFields` does not correctly map `contribution_intervals`, existing intervals are lost when saving. Verify with an asset that has real intervals (migrated from Phase 1).
+- **Empty payload vs. null:** ensure that sending `contribution_intervals: []` clears all existing ranges (`set` pattern in backend). Test it explicitly.
+- **Core Compatibility:** If the Core frontend consumes a cached version of type `Asset` without `contribution_intervals`, the typecheck will fail. Keep the local type contract updated.
 
 ## Completion Criteria
 
-- [ ] Campos planos de inversión (`monthly_contribution_amount`, etc.) eliminados del formulario
-- [ ] Gestor de intervalos funcional: añadir, editar, eliminar sin guardar
+- [ ] Flat inversion fields (`monthly_contribution_amount`, etc.) removed from the form
+- [ ] Functional interval manager: add, edit, delete without saving
 - [ ] Al guardar con intervalos: payload incluye `contribution_intervals` correctamente formateado
-- [ ] Al editar activo con intervalos existentes: pre-populación correcta
-- [ ] Modal de revisión de gastos generados aparece tras crear/editar activo periódico (feature implementada en sesión anterior)
-- [ ] Typecheck y lint sin errores en Core y SaaS
-- [ ] Espejado en SaaS verificado
+- [ ] When editing active with existing intervals: pre-population correct
+- [ ] Generated expense review modal appears after creating/editing periodic asset (feature implemented in previous session)
+- [ ] Typecheck y lint sin errores en Core
+- [ ] Espejado en Core verificado
 - [ ] Spec movida a `terminados/`
 - [ ] Commit Conventional: `feat(net-worth): interval-based investment contribution form`

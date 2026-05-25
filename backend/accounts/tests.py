@@ -169,29 +169,29 @@ class CoreAuthModeApiTests(APITestCase):
 
 
 @override_settings(
-    AUTH_ACCEPT_SAAS_TOKENS=True,
-    SAAS_JWT_ISSUER="moneyplanner-saas",
-    SAAS_JWT_AUDIENCE="moneyplanner-saas-api",
-    SAAS_JWT_SIGNING_KEY="saas-signing-secret-32-bytes-minimum",
+    AUTH_ACCEPT_EXTERNAL_TOKENS=True,
+    EXTERNAL_JWT_ISSUER="moneyplanner-external",
+    EXTERNAL_JWT_AUDIENCE="moneyplanner-external-api",
+    EXTERNAL_JWT_SIGNING_KEY="external-signing-secret-32-bytes-min",
 )
-class CoreCrossStackSaasTokenTests(APITestCase):
-    def _build_saas_access_token(self, *, saas_user_id: int) -> str:
+class CoreExternalTokenTests(APITestCase):
+    def _build_external_access_token(self, *, external_user_id: int) -> str:
         now = timezone.now()
         payload = {
             "token_type": "access",
             "exp": int((now + timedelta(minutes=30)).timestamp()),
             "iat": int(now.timestamp()),
             "jti": str(uuid4()),
-            api_settings.USER_ID_CLAIM: saas_user_id,
-            "iss": "moneyplanner-saas",
-            "aud": "moneyplanner-saas-api",
+            api_settings.USER_ID_CLAIM: external_user_id,
+            "iss": "moneyplanner-external",
+            "aud": "moneyplanner-external-api",
         }
         return jwt.encode(
-            payload, "saas-signing-secret-32-bytes-minimum", algorithm=api_settings.ALGORITHM
+            payload, "external-signing-secret-32-bytes-min", algorithm=api_settings.ALGORITHM
         )
 
-    def test_saas_token_can_access_core_settings(self):
-        token = self._build_saas_access_token(saas_user_id=42)
+    def test_external_token_can_access_core_settings(self):
+        token = self._build_external_access_token(external_user_id=42)
         response = self.client.get(
             "/api/auth/settings/",
             HTTP_AUTHORIZATION=f"Bearer {token}",
@@ -201,14 +201,14 @@ class CoreCrossStackSaasTokenTests(APITestCase):
         self.assertEqual(response.data["inflation_region"], "ES")
 
         mapped = ExternalIdentity.objects.get(
-            provider=ExternalIdentity.Provider.SAAS,
+            provider=ExternalIdentity.Provider.EXTERNAL,
             external_user_id="42",
         )
-        self.assertEqual(mapped.user.username, "saas_user_42")
+        self.assertEqual(mapped.user.username, "external_user_42")
 
-    def test_saas_token_never_reuses_core_user_id(self):
+    def test_external_token_never_reuses_core_user_id(self):
         core_user = get_user_model().objects.create_user(username="root", password="pass1234")
-        token = self._build_saas_access_token(saas_user_id=core_user.id)
+        token = self._build_external_access_token(external_user_id=core_user.id)
         response = self.client.get(
             "/api/auth/settings/",
             HTTP_AUTHORIZATION=f"Bearer {token}",
@@ -216,7 +216,7 @@ class CoreCrossStackSaasTokenTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         mapped = ExternalIdentity.objects.get(
-            provider=ExternalIdentity.Provider.SAAS,
+            provider=ExternalIdentity.Provider.EXTERNAL,
             external_user_id=str(core_user.id),
         )
         self.assertNotEqual(mapped.user.id, core_user.id)

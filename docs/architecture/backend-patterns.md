@@ -2,7 +2,7 @@
 
 Guia corta de patrones vigentes para backend Core.
 
-> Nota de mantenimiento: actualizar este documento cuando cambien boundaries o contratos de arquitectura.
+> Maintenance note: update this document when architectural boundaries or contracts change.
 
 ## Views (`views.py`)
 - Thin adapters: reciben request, llaman services y retornan response.
@@ -33,7 +33,7 @@ Guia corta de patrones vigentes para backend Core.
 - Para features desactivadas: usar helper canonico (`feature_disabled`) cuando aplique.
 
 ## `UserScopedQuerySetMixin`
-- Usar en ViewSets con datos usuario-especificos.
+- Use in ViewSets with user-specific data.
 - Asegura filtrado por `request.user` de forma consistente.
 
 ## Modulo `config/`

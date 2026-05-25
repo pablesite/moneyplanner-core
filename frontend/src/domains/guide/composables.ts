@@ -13,7 +13,7 @@ import {
 import { computeGuidePhaseDiagnostics } from './phaseDiagnostics';
 import { gradeFromScore, scoreColor } from './scoreVisuals';
 
-export type GuideScope = 'core' | 'saas';
+export type GuideScope = 'core';
 
 export function useGuideHomeState(scope: GuideScope) {
   const phases = guidePhases;

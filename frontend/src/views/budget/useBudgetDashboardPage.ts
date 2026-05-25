@@ -106,8 +106,8 @@ import { useAccountingExecutionData } from '@/views/budget/useAccountingExecutio
 
 export type BudgetDashboardMode = 'budget' | 'monthly-close';
 export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
-  const incomeStore = useAnnualIncomeStore('saas');
-  const expenseStore = useAnnualExpenseStore('saas');
+  const incomeStore = useAnnualIncomeStore('core');
+  const expenseStore = useAnnualExpenseStore('core');
 
   const fiscalYear = ref(new Date().getFullYear());
   const ownershipFilter = ref<string>('all');

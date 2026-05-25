@@ -84,9 +84,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "saas"),
-        "USER": os.getenv("DB_USER", "saas"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "saas"),
+        "NAME": os.getenv("DB_NAME", "core"),
+        "USER": os.getenv("DB_USER", "core"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "core"),
         "HOST": os.getenv("DB_HOST", "db"),
         "PORT": os.getenv("DB_PORT", "5432"),
     }
@@ -117,7 +117,7 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ("accounts.authentication.CoreSaasJWTAuthentication",),
+    "DEFAULT_AUTHENTICATION_CLASSES": ("accounts.authentication.CoreJWTAuthentication",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {
@@ -159,15 +159,14 @@ CORE_LINKING_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CORE_LINKING_TOKEN_MAX_AGE_S
 AUTH_TRANSITION_MODE = os.getenv("AUTH_TRANSITION_MODE", "stable").strip().lower()
 AUTH_SESSION_COMPAT_ENABLED = os.getenv("AUTH_SESSION_COMPAT_ENABLED", "1") == "1"
 
-# Hito 05B extension: allow SaaS JWT access in Core while keeping local Core identities.
-AUTH_ACCEPT_SAAS_TOKENS = os.getenv("AUTH_ACCEPT_SAAS_TOKENS", "1") == "1"
-SAAS_JWT_ISSUER = os.getenv("SAAS_JWT_ISSUER", "moneyplanner-saas")
-SAAS_JWT_AUDIENCE = os.getenv("SAAS_JWT_AUDIENCE", "moneyplanner-saas-api")
-SAAS_JWT_SIGNING_KEY = os.getenv("SAAS_JWT_SIGNING_KEY", SECRET_KEY).strip()
+AUTH_ACCEPT_EXTERNAL_TOKENS = os.getenv("AUTH_ACCEPT_EXTERNAL_TOKENS", "0") == "1"
+EXTERNAL_JWT_ISSUER = os.getenv("EXTERNAL_JWT_ISSUER", "moneyplanner-external")
+EXTERNAL_JWT_AUDIENCE = os.getenv("EXTERNAL_JWT_AUDIENCE", "moneyplanner-external-api")
+EXTERNAL_JWT_SIGNING_KEY = os.getenv("EXTERNAL_JWT_SIGNING_KEY", SECRET_KEY).strip()
 
 validate_secret("DJANGO_SECRET_KEY", SECRET_KEY)
 validate_secret("JWT_SIGNING_KEY", JWT_SIGNING_KEY)
-if AUTH_ACCEPT_SAAS_TOKENS:
-    validate_secret("SAAS_JWT_SIGNING_KEY", SAAS_JWT_SIGNING_KEY)
+if AUTH_ACCEPT_EXTERNAL_TOKENS:
+    validate_secret("EXTERNAL_JWT_SIGNING_KEY", EXTERNAL_JWT_SIGNING_KEY)
 if CORE_LINKING_SHARED_SECRET:
     validate_secret("CORE_LINKING_SHARED_SECRET", CORE_LINKING_SHARED_SECRET)

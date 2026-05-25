@@ -13,7 +13,7 @@ The goal is to prove auto-link/auto-create behavior, preserve safety (`needs_rev
    - coexistence and precedence checks (ledger first, legacy fallback only when ledger coverage is unsafe/absent)
 2. Out of scope
    - external connector validation
-   - non-Core SaaS packaging behavior
+   - non-Core Core packaging behavior
 
 ## Scenario Matrix (minimum)
 1. Existing asset/liability without linked account

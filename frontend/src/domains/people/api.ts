@@ -60,8 +60,6 @@ export const premiumPeopleApi: PeopleApiAdapter = {
   },
 };
 
-// Transitional behavior for Core v0 consolidation:
-// use the same endpoint contract as SaaS while the backend domain is ported into Core.
 export const corePeopleApi: PeopleApiAdapter = premiumPeopleApi;
 
 export const peopleApi: PeopleApiAdapter = canUsePeople() ? premiumPeopleApi : corePeopleApi;

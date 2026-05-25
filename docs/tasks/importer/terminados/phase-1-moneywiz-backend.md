@@ -2,7 +2,7 @@
 Importador MoneyWiz v1 (backend)
 
 ## Context
-Necesitamos incorporar importacion masiva de movimientos desde MoneyWiz para poblar contabilidad real y validar el comportamiento end-to-end de Core con datos de uso diario. Esta fase define la base backend y el contrato tecnico para ejecutar importaciones seguras y repetibles.
+We need to incorporate massive import of movements from MoneyWiz to populate real accounting and validate the end-to-end behavior of Core with daily use data. This phase defines the backend foundation and the technical contract to execute secure and repeatable imports.
 
 ## Area
 `backend`
@@ -13,14 +13,14 @@ Necesitamos incorporar importacion masiva de movimientos desde MoneyWiz para pob
 ## Scope
 1. In scope
    - Parser CSV MoneyWiz (incluyendo encabezado `sep=` y formato numerico/fechas del export real).
-   - Flujo `preview` + `commit` para importar por lotes.
+- Flow `preview` + `commit` for batch import.
    - Idempotencia por huella de fila (reimport sin duplicados).
    - Auto-creacion de `LedgerAccount` cuando falte cuenta destino/origen.
    - Fallback seguro de clasificacion cuando no exista mapeo exacto de categoria.
    - Endpoints backend de importacion en el dominio `accounting`.
 2. Out of scope
-   - Refactors de arquitectura frontend/backend fuera del importador.
-   - Billing, accesos SaaS o logica de suscripciones.
+- Frontend/backend architecture refactors outside the importer.
+   - Packaging de pago, accesos Core o logica de planes de pago.
    - Importador Excel como fuente primaria (Excel queda para contraste/validacion).
 
 ## Plan
@@ -31,7 +31,7 @@ Necesitamos incorporar importacion masiva de movimientos desde MoneyWiz para pob
    - Implementar servicio de parsing y normalizacion.
    - Implementar preview (estadisticas, warnings, errores por fila, cuentas detectadas).
    - Implementar commit idempotente con persistencia de huella y reporte final.
-   - Exponer endpoints bajo `api/accounting/` y pruebas unitarias/integracion del flujo.
+- Expose endpoints under `api/accounting/` and unit tests/integration flow.
 3. Validation
    - Ejecutar calidad backend y test suite de `accounting` en Docker Core.
 
@@ -42,8 +42,8 @@ Necesitamos incorporar importacion masiva de movimientos desde MoneyWiz para pob
 4. `docker compose -f core/docker-compose.yml exec backend python manage.py test accounting` — tests del dominio contable en verde.
 
 ## Required Documentation Updates
-- [ ] `core/docs/project-status.md` — registrar task por fase y actualizar estado al cerrar.
-- [ ] `core/docs/roadmap/product-roadmap.md` — reflejar estado del importador MoneyWiz en contabilidad/importacion.
+- [ ] `core/docs/project-status.md` — register task per phase and update status on shutdown.
+- [ ] `core/docs/roadmap/product-roadmap.md` — reflect status of the MoneyWiz importer in accounting/import.
 - [ ] `core/docs/architecture/architecture.md` — documentar API publica si se publica nuevo endpoint de importacion.
 
 ## Risks
