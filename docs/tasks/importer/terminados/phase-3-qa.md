@@ -12,9 +12,9 @@ La importacion impacta contabilidad, balances y resumenes mensuales. Esta fase d
 
 ## Scope
 1. In scope
-   - Pruebas E2E funcionales del flujo de importacion MoneyWiz.
-   - Regresion contable basica sobre movimientos, cuentas y resumen mensual.
-   - Verificacion de espejo frontend Core/SaaS para el flujo de importacion.
+- Functional E2E testing of the MoneyWiz import flow.
+- Basic accounting regression on movements, accounts and monthly summary.
+- Core/SaaS frontend mirror verification for the import flow.
 2. Out of scope
    - Pruebas de billing o capacidades de pago.
    - Auditorias de seguridad completas fuera del alcance del bloque.
@@ -24,7 +24,7 @@ La importacion impacta contabilidad, balances y resumenes mensuales. Esta fase d
    - Preparar dataset de prueba representativo (CSV MoneyWiz real o anonimizable).
    - Definir baseline de cuentas/saldos antes de importar.
 2. Change implementation
-   - Ejecutar flujo completo preview/commit con evidencias.
+- Execute complete preview/commit flow with evidence.
    - Verificar clasificacion, cuentas creadas y no duplicacion por reimport.
    - Validar impacto en resumenes contables del periodo.
 3. Validation
@@ -45,7 +45,7 @@ La importacion impacta contabilidad, balances y resumenes mensuales. Esta fase d
 Expected outcome: todos los comandos en verde y sin regresiones funcionales relevantes.
 
 ## Required Documentation Updates
-- [ ] `core/docs/project-status.md` — cerrar estado de QA del bloque importador.
+- [ ] `core/docs/project-status.md` — close QA status of the importing block.
 - [ ] `core/docs/roadmap/product-roadmap.md` — reflejar progreso real del importador.
 - [ ] `core/docs/architecture/architecture.md` — actualizar si durante QA se ajusta el contrato publico de API.
 
@@ -69,12 +69,12 @@ Expected outcome: todos los comandos en verde y sin regresiones funcionales rele
 6. Verificacion de impacto en resumenes mensuales.
 
 ## Assumptions (Locked)
-1. MoneyWiz es la fuente canonica del flujo v1.
+1. MoneyWiz is the canonical source of the v1 stream.
 2. Excel queda para contraste/validacion.
 3. Idempotencia por huella obligatoria.
 4. Fallback seguro de categorias es el comportamiento esperado, no error bloqueante por defecto.
 
 ## Follow-up abierto (2026-03-18)
-1. Con el CSV real del usuario, la preview del importador muestra 682 filas con error `La fecha no es valida o falta en la fila.`.
-2. El mismo caso genera cuentas provisionales `MoneyWiz source ...`, lo que indica que el campo `Account` del export real no se está normalizando como esperábamos.
-3. La preview clasifica todas las filas como `income` y con importe `0.00 EUR`, por lo que mañana hay que depurar juntos el parser contra ese export real antes de seguir usando el flujo en producción personal.
+1. With the user's actual CSV, the importer preview shows 682 rows with `La fecha no es valida o falta en la fila.` error.
+2. The same case generates provisional counts `MoneyWiz source ...`, indicating that the field `Account` of the actual export is not being normalized as we expected.
+3. The preview classifies all the rows as `income` and with amount `0.00 EUR`, so tomorrow we have to debug the parser together against that real export before continuing to use the flow in personal production.

@@ -3,7 +3,7 @@
 ## Tipo: Manual
 ## Stack: core
 
-## Objetivo
+## Objective
 
 Verificar qué endpoints cubren qué datos antes de implementar. Rellenar la tabla de cobertura
 y actualizar las specs de Phase 1 y 2 en consecuencia.

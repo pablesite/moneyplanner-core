@@ -1,6 +1,6 @@
 # Shared Package Candidates
 
-_Fecha de cierre documental: 2026-03-19_
+_Documentary closing date: 2026-03-19_
 
 Este documento resume los dominios del frontend Core/SaaS que ya estan preparados para una
 futura extraccion como shared package. No implementa nada: solo deja constancia de que
@@ -16,7 +16,7 @@ pierda dentro del roadmap. Ver tambien:
 
 ## Candidatos preparados
 
-| Dominio | Estado | Motivo |
+| Domain | Status | Reason |
 |---------|--------|--------|
 | `net-worth` | Listo | Dominio compartido en Core y SaaS, con estructura ya separada por dominio y dependencias acotadas. |
 | `people` | Listo | UI y logica de dominio equivalentes en ambos frontends. |
@@ -38,28 +38,28 @@ pierda dentro del roadmap. Ver tambien:
 1. Mantener la separacion de dominios antes de extraer.
 2. No mover logica de negocio que dependa de contratos SaaS o Core especificos.
 3. Extraer primero primitivas UI y helpers puros, despues composables y finalmente
-   dominios con estado.
+stateful domains.
 4. Conservar `auth`, `capabilities` y `lib/api.ts` como fronteras especificas de cada stack.
 
-## Decisión arquitectónica vigente (2026-05-22)
+## Current architectural decision (2026-05-22)
 
-### Situación actual: Opción A — dos frontends espejo
+### Current situation: Option A — two mirror frontends
 
-Core y SaaS mantienen frontends separados que se replican manualmente. Es la opción elegida
-para salir a producción en el corto plazo. El coste es el mantenimiento dual: cada cambio
+Core and SaaS maintain separate frontends that are manually replicated. It is the chosen option
+to go into production in the short term. The cost is dual maintenance: each change
 en Core debe portarse a SaaS.
 
-Esta decisión es temporal y consciente. No es la arquitectura objetivo.
+This decision is temporary and conscious. It is not the target architecture.
 
-### Arquitectura objetivo: Opción C — core como librería de componentes Vue
+### Target architecture: Option C — core as Vue component library
 
-**Visión:** Core exporta sus dominios como un paquete npm (`@moneyplanner/core-ui` o similar).
-SaaS importa ese paquete y añade encima únicamente sus capas específicas (auth, billing,
-capabilities SaaS). Desaparece la replicación manual.
+**Vision:** Core exports its domains as an npm package (`@moneyplanner/core-ui` or similar).
+SaaS imports that package and adds only its specific layers on top (auth, billing,
+SaaS capabilities). Manual replication disappears.
 
-**Por qué tiene sentido:** el backend ya sigue este modelo — SaaS usa Core como submódulo
-Python. El frontend debería espejarlo. Los dominios candidatos ya están preparados (ver
-tabla arriba) y elimina la deuda de sincronización que crece con cada feature nueva.
+**Why it makes sense:** the backend already follows this model — SaaS uses Core as a submodule
+Python. The frontend should mirror it. The candidate domains are already prepared (see
+table above) and eliminates the synchronization debt that grows with each new feature.
 
 **Forma aproximada del paquete:**
 ```
@@ -78,18 +78,18 @@ tabla arriba) y elimina la deuda de sincronización que crece con cada feature n
 - `capabilities` — los planes SaaS no existen en Core standalone
 - `lib/api.ts` — base URL y contexto distintos por stack
 
-**Condiciones para iniciar la extracción:**
-1. Core estable en producción y ritmo de cambios estructurales bajo.
-2. Necesidad concreta que justifique el coste del setup (vite-lib, publicación
+**Conditions to start the extraction:**
+1. Stable core in production and low rate of structural changes.
+2. Specific need that justifies the cost of the setup (vite-lib, publication
    npm/privada, versionado semver, consumer tests).
 3. Dominio piloto elegido de bajo riesgo (candidato: `ui` o `people`).
 
 ## Siguientes pasos
 
-1. **Corto plazo**: mantener Opción A. Replicar features Core → SaaS manualmente.
-2. **Medio plazo**: cuando Core esté estable en producción, iniciar extracción piloto
-   con el dominio `ui` (primitivas sin estado, menor riesgo).
-3. **Largo plazo**: migrar dominio a dominio hasta que SaaS no tenga código de UI propio,
+1. **Short term**: maintain Option A. Replicate Core → SaaS features manually.
+2. **Medium term**: when Core is stable in production, start pilot mining
+with the domain `ui` (stateless primitives, lower risk).
+3. **Long term**: migrate domain to domain until SaaS has no UI code of its own,
    solo extensiones sobre `@moneyplanner/core-ui`.
-4. Mantener este documento como referencia canónica de la decisión.
+4. Keep this document as a canonical reference of the decision.
 

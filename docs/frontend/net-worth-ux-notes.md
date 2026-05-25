@@ -72,7 +72,7 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 
 ## Liability form (loan grace period)
 1. Liability creation/edit now separates:
-   - `Fecha contratación préstamo` (`start_date`)
+- `Fecha contratación préstamo` (`start_date`)
    - `Fecha inicio pago` (`payment_start_date`, optional)
 2. When `payment_start_date` is set, the installment schedule is anchored to that date.
 3. When `payment_start_date` is empty, legacy behavior is preserved (first installment one period after `start_date`).
@@ -102,12 +102,12 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 ## Related implementation
 1. `frontend/src/views/NetWorthView.vue`
 2. `frontend/src/domains/net-worth/components/NetWorthDonut.vue`
-3. La vista ahora actúa como orquestador ligero y delega bloques principales en:
+3. The view now acts as a lightweight orchestrator and delegates main blocks to:
    - `frontend/src/domains/net-worth/components/NetWorthHeroSection.vue`
    - `frontend/src/domains/net-worth/components/NetWorthTimelineMain.vue`
    - `frontend/src/domains/net-worth/components/NetWorthCategoryWorkspace.vue`
    - `frontend/src/domains/net-worth/components/NetWorthItemModals.vue`
-4. La coordinación de ownership, métricas, timeline, layout y acciones vive en composables
-   del dominio `net-worth`, manteniendo el comportamiento UX sin rediseño funcional.
-5. El cálculo del delta mensual (`monthlyDelta`) se hace en `NetWorthView.vue` a partir de
-   los dos últimos puntos de `timelineRows`, y se pasa como prop a `NetWorthHeroSection`.
+4. The coordination of ownership, metrics, timeline, layout and actions lives in composables
+of the `net-worth` domain, maintaining the UX behavior without functional redesign.
+5. The calculation of the monthly delta (`monthlyDelta`) is done in `NetWorthView.vue` from
+the last two points of `timelineRows`, and is passed as a prop to `NetWorthHeroSection`.

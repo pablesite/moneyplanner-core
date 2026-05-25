@@ -91,9 +91,9 @@ Procesar por tipo de Operación:
 **`csv_importers/binance_convert.py`**
 
 Leer `Historial-de-órdenes-de-Convert-*.csv`:
-`Hora, Billetera, Par, Tipo, Vender, Comprar, Precio, Precio inverso, Fecha actualizada, Estado`
+`Hora, Billetera, Par, Tipo, Vender, Comprar, Precio, Precio inverso, Fecha actualizada, Status`
 
-- Filtrar Estado=Successful únicamente
+- Filtrar Status=Successful únicamente
 - Parsear Vender: `"10.00000000 USDC"` → amount=10.0, asset=USDC
 - Parsear Comprar: `"0.00333867 ETH"` → amount=0.00333867, asset=ETH
 - → `BrokerTrade` (source=binance_csv, side=BUY)
@@ -107,9 +107,9 @@ Leer `Historial-de-órdenes-de-Convert-*.csv`:
 **`csv_importers/binance_recurring.py`**
 
 Leer `Historial-de-Recurrente-de-compras-recurrentes-de-Convert-*.csv`:
-`Fecha, Billetera, Frecuencia, Por hora, Monto original, Moneda original, Monto final, Moneda final, Precio, Precio inverso, Fecha de liquidación, ID del plan, Estado`
+`Fecha, Billetera, Frecuencia, Por hora, Monto original, Moneda original, Monto final, Moneda final, Precio, Precio inverso, Fecha de liquidación, ID del plan, Status`
 
-- Filtrar Estado=SUCCESS únicamente (ignorar FAILED)
+- Filtrar Status=SUCCESS únicamente (ignorar FAILED)
 - → `BrokerTrade` (source=binance_csv, side=BUY)
 - trade_id = SHA256(Fecha + ID del plan + Monto original)
 - Dedup automático vía `unique_together(source, trade_id)`: si ya existe de binance_convert.py, se ignora

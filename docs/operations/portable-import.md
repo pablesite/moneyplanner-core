@@ -1,8 +1,8 @@
 # Importacion Portable
 
-## Estado actual
+## Current status
 1. La exportacion portable incluye `exported_app_version`.
-2. `Reemplazar datos` se ejecuta en Core como operacion atomica: o importa todo o no modifica nada.
+2. `Reemplazar datos` is executed in Core as an atomic operation: either it imports everything or it does not modify anything.
 3. `append` y `replace` usan un unico endpoint backend.
 4. El bloque `data` incluye presupuesto, patrimonio y contabilidad (`accounting.accounts` + `accounting.transactions`).
 5. Los movimientos importados remapean referencias internas (activos, pasivos y ownership) al entorno destino.
@@ -16,4 +16,4 @@
 ## Operativa recomendada
 1. Exportar desde el origen y conservar el JSON hasta verificar el destino.
 2. Si el destino va mas atrasado, actualizar Core antes de intentar `replace`.
-3. Si solo necesitas mezclar datos y el archivo pasa validacion, usar `Importar datos`.
+3. If you only need to mix data and the file passes validation, use `Importar datos`.

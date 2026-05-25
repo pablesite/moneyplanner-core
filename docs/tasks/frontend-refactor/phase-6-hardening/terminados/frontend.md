@@ -1,9 +1,9 @@
 # Task: Frontend Refactor — Fase 6: Hardening, limpieza final y shared package doc
 
 ## Context
-Fase de cierre del refactor. Verifica que no quedan wrappers o imports legacy activos,
-resuelve warnings conocidos de tests, completa la cobertura de regresión sobre composables
-extraídos y documenta los dominios listos para extracción como shared package.
+Refactor closure phase. Verify that there are no active legacy wrappers or imports left,
+resolves known test warnings, completes regression coverage on composables
+extracted and documents the extraction-ready domains as a shared package.
 
 ## Area
 `frontend`
@@ -13,11 +13,11 @@ extraídos y documenta los dominios listos para extracción como shared package.
 
 ## Scope
 **In scope:**
-1. Verificación final de 0 imports legacy en vistas y dominios.
-2. Resolución del warning `onMounted` en `net-worth/__tests__/composables.spec.ts`.
-3. Tests de regresión completos sobre composables/componentes extraídos en fases 2-5.
-4. Creación de `core/docs/architecture/shared-package-candidates.md`.
-5. Actualización de docs frontend canónicas.
+1. Final verification of 0 imports legacy in views and domains.
+2. Resolution of the warning `onMounted` in `net-worth/__tests__/composables.spec.ts`.
+3. Complete regression tests on extracted composables/components in phases 2-5.
+4. Creation of `core/docs/architecture/shared-package-candidates.md`.
+5. Update canonical frontend docs.
 
 **Out of scope:**
 1. Nuevas funcionalidades.
@@ -46,28 +46,28 @@ extraídos y documenta los dominios listos para extracción como shared package.
 2. **Resolver warning `onMounted`:**
    - `core/frontend/src/domains/net-worth/__tests__/composables.spec.ts`
    - El warning indica que se usa `onMounted` fuera de una instancia Vue activa.
-   - Solución: envolver el composable bajo test en `withSetup()` helper o usar `mount()` de Vue Test Utils.
+- Solution: wrap the composable under test in `withSetup()` helper or use `mount()` from Vue Test Utils.
 
-3. **Tests de regresión:**
-   - Para cada composable extraído en fases 2-5 que no tenga tests o los tenga incompletos:
-     añadir tests hasta alcanzar ≥80% de cobertura.
+3. **Regression tests:**
+- For each composable extracted in phases 2-5 that does not have tests or has incomplete ones:
+add tests until you reach ≥80% coverage.
    - Prioridad: composables de shell (Fase 2), composables de vistas grandes (Fase 3).
 
 4. **Crear `core/docs/architecture/shared-package-candidates.md`:**
    - Listar dominios exportables: `net-worth`, `people`, `guide`, `aux-data`, `data-input`, `ui`
-   - Para cada uno: estado de preparación, bloqueadores resueltos, pasos siguientes
-   - Listar lo que NO es compartible y por qué: `auth`, `capabilities`, `lib/api.ts`
+- For each: preparation status, blockers resolved, next steps
+- List what is NOT shareable and why: `auth`, `capabilities`, `lib/api.ts`
    - Estructura propuesta para el futuro shared package (sin implementar)
 
-5. **Actualizar docs frontend canónicas:**
+5. **Update canonical frontend docs:**
    - `docs/frontend/frontend-visual-guide.md` — si quedan actualizaciones pendientes
    - `docs/frontend/frontend-css-workflow.md` — workflow final post-refactor
-   - `docs/frontend/domain-map.md` (SaaS) — si cambió la estructura de dominios
+- `docs/frontend/domain-map.md` (SaaS) — if the domain structure changed
    - `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — marcar todas las fases completadas
 
 ### SaaS Replication
 Aplicar los mismos pasos en `frontend/` SaaS.
-`shared-package-candidates.md` es solo para Core (doc de arquitectura unificada).
+`shared-package-candidates.md` is only for Core (unified architecture doc).
 
 ## Validation
 ```bash
@@ -98,24 +98,24 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — marcar todas las fases completadas
 - [x] `docs/frontend/frontend-visual-guide.md` — si hay actualizaciones pendientes
 - [x] `docs/frontend/frontend-css-workflow.md` — workflow post-refactor
-- [x] `docs/frontend/domain-map.md` — actualizar si cambió estructura de dominios
-- [x] `core/docs/project-status.md` — marcar Fase 6 y refactor frontend como completado
-- [x] `docs/project-status.md` — actualizar estado refactor frontend SaaS
+- [x] `docs/frontend/domain-map.md` — update if domain structure changed
+- [x] `core/docs/project-status.md` — mark Phase 6 and frontend refactor as completed
+- [x] `docs/project-status.md` — update SaaS frontend refactor state
 
 ## Risks
-- **Riesgo:** warnings residuales en tests de terceros o librería que no se pueden resolver.
-  **Mitigación:** documentar explícitamente cuáles warnings son externos y aceptados.
-- **Riesgo:** la cobertura de branches puede ser difícil de alcanzar en componentes de UI.
-  **Mitigación:** usar `/* v8 ignore */` con comentario justificativo para ramas puramente
-  visuales no testeables; documentar qué se ignora en este fichero de spec.
+- **Risk:** residual warnings in third-party tests or libraries that cannot be resolved.
+**Mitigation:** Explicitly document which warnings are external and accepted.
+- **Risk:** Branch coverage may be difficult to achieve in UI components.
+**Mitigation:** use `/* v8 ignore */` with supporting comment for purely branches
+non-testable visuals; document what is ignored in this spec file.
 
 ## Completion Criteria
 - [x] 0 imports legacy en vistas y dominios
-- [x] 0 warnings de arquitectura en la suite de tests
-- [x] `test:coverage` ≥80% en todas las métricas — Core y SaaS
+- [x] 0 architecture warnings in the test suite
+- [x] `test:coverage` ≥80% on all metrics — Core and SaaS
 - [x] `core/docs/architecture/shared-package-candidates.md` creado
-- [x] Toda la documentación canónica actualizada
-- [x] Roadmap Core marcado como completado en todas las fases
+- [x] All canonical documentation updated
+- [x] Roadmap Core marked as completed in all phases
 - [x] Spec movida a `terminados/`
 - [x] Commit final creado (Conventional Commits)
 

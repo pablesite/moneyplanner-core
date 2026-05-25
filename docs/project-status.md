@@ -1,103 +1,90 @@
 # Project Status — Core
 
-> **English summary** (last updated 2026-05-21 · Core v0.23.7)
->
-> All v1 modules complete and stable: Net Worth, Budget & Monthly Close, Accounting,
-> Market Data Sync, DB Backup/Restore, Financial Coach v1, Auth & Security.
-> Design system foundation pass complete (22 steps). Legacy cleanup done.
-> Shell: / → /patrimonio, guide at /guia, phase 5 removed.
-> Monthly close bugs fixed (bridge alignment + liquidity reference). Ready for GitHub.
-> Paused: Crypto Tax Report (IRPF Spain). Full details in Spanish below.
+Current feature status by area. Update this file whenever functionality status changes.
+
+**Last review:** 2026-05-21 | **Core Version:** 0.23.7
 
 ---
 
-# Estado del Proyecto — Core
+## Current and Next Tasks
 
-Estado actual de funcionalidades por área. Actualizar cuando cambie el estado de una funcionalidad.
+> Task type convention:
+> - **(Manual)** — requires direct user guidance; direction is defined interactively and should not be delegated without that guidance.
+> - **(Agent)** — delegable; requires a master plan but not continuous user decisions.
 
-**Última revisión:** 2026-05-21 | **Versión Core:** 0.23.7
+### In progress
 
----
-
-## En curso y próximas tareas
-
-> Convención de tipo de tarea:
-> - **(Manual)** — requiere guía directa del usuario; la dirección se define sobre la marcha. No delegable a un agente sin esa guía.
-> - **(Agente)** — delegable; requiere un plan maestro pero no decisiones continuas del usuario.
-
-### En curso
-
-| Módulo | Tipo | Descripción | Spec |
+| Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| _(ninguno)_ | — | — | — |
+| _(none)_ | — | — | — |
 
-### Siguiente tarea disponible
+### Next available task
 
-Seleccionar segun disponibilidad: ejecutar tareas **(Agente)** cuando haya capacidad para delegar; **(Manual)** cuando haya tiempo para guiar.
+Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exists; execute **(Manual)** tasks when guided collaboration time is available.
 
-| Modulo | Tipo | Descripcion | Spec |
+| Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| _(ninguno)_ | — | — | — |
+| _(none)_ | — | — | — |
 
-### Hoja de ruta pre-producción (resumen por área)
+### Pre-production roadmap snapshot (by area)
 
-Vista consolidada de todo lo pendiente en Core antes de lanzar a producción. Ver `roadmap/product-roadmap.md` para detalle por módulo.
+Consolidated view of what remains in Core before production launch. See `roadmap/product-roadmap.md` for module-level details.
 
-| Área | Prioridad | Estado | Descripción |
-|------|-----------|--------|-------------|
-| Contabilidad — v1 | Alta | ✅ | Vista de movimientos cerrada v1. Header alineado con Patrimonio; estilo visual del cuerpo cerrado. Trazabilidad de movimientos importados conservada mediante metadatos contables; importador MoneyWiz ad-hoc retirado. |
-| Presupuesto — v1 | Alta | ✅ | Cierre funcional aplicado y revisión manual completada: summaries mensuales canónicos para ejecución/cobertura, precedencia ledger sobre check-ins manuales, errores backend dentro de modales de líneas y header alineado con Patrimonio. |
-| Patrimonio — modales activos/pasivos | Media | ✅ | Revisión completa de modales de creación/edición de activos y pasivos completada. V1 del módulo cerrada a nivel funcional. |
-| Cierre mensual — modo dual | Alta | ✅ | Implementación automática completada (backend+frontend) y revisión manual operativa completada. Bugs v1 corregidos (2026-05-20): alineación de columnas en bridge de conciliación (subgrid CSS) y referencia de liquidez por cuenta (saldo efectivo del mes anterior, no `asset.amount`). |
-| Informe Fiscal Crypto | Media | ⏸ | Módulo completo IRPF español: Pionex + Binance, FIFO global cross-exchange, casillas 029/332/337. Aparcado — revisar estado antes de retomar. |
-| Coach financiero — navegación | Media | ✅ | v1 simplificado: `/` → `/patrimonio` como landing, guía en `/guia`, fase 5 (Independencia financiera) retirada hasta tener módulo de cartera. Quick actions contextuales por fase ya existían. |
-| Eliminar módulo Introducción de Datos | Alta | ✅ | Ruta `/introduccion-datos` retirada en Core y SaaS. Portable data consolidado en `/account`; activos y pasivos en `/patrimonio`. |
-| Sistema de diseño unificado | Alta (crítico) | ✅ | 22 pasos completados (ver `docs/frontend/design-system.md`). Fundación completa: vistas canónicas, tokenización total de CSS de dominio, capa `ui-pro-*` eliminada, paleta `--chart-*`, Accounting hero alineado con Patrimonio. Pulido visual por vista continúa según necesidad. |
-| Limpieza legacy residual | Media | ✅ | Completado 2026-05-20. Retirados: Introducción de Datos, alias `investment_purchase`, campos escalares de aportaciones (migración 0042), import externo de `net_worth.services`, `compat.*` en capabilities. Fallback Budget/check-ins: diseño intencional, no deuda técnica. Ver `roadmap/product-roadmap.md`. |
-| Refactor backend Core | Media | ✅ | Refactor estructural completado (fases 1-5). Queda backlog de contribucion documentado en `roadmap/backend-maintainability-backlog.md`. |
-| Refactor frontend Core | Media | ✅ | Roadmap estructural completado; backlog de contribucion documentado en `roadmap/frontend-maintainability-backlog.md`; ver `roadmap/terminados/frontend-refactor-roadmap.md` y `core/docs/architecture/shared-package-candidates.md`. |
-| Auth y seguridad | Alta | ✅ | Logout con blacklist, aislamiento cross-user (31 tests), registro de usuario desde UI (`/registro`, JWT en signup, rate throttle). CVEs frontend (12→0) y backend resueltos. |
-| Backup/restore de base de datos | Media | ✅ | Endpoints admin-only `GET /api/core/db-backup/` y `POST /api/core/db-restore/` basados en pg_dump/pg_restore. AccountView migrada a este flujo; JSON portable retirado. |
+| Area | Priority | Status | Description |
+|------|----------|--------|-------------|
+| Accounting — v1 | High | ✅ | Movements view closed as v1. Header aligned with Net Worth and body visual style finalized. Imported movement traceability preserved in accounting metadata; ad-hoc MoneyWiz importer removed. |
+| Budget — v1 | High | ✅ | Functional closeout applied and manually reviewed: canonical monthly summaries for execution/coverage, ledger precedence over manual check-ins, backend errors shown inside line modals, and header aligned with Net Worth. |
+| Net Worth — asset/liability modals | Medium | ✅ | Full review of asset and liability create/edit modals completed. Module v1 functionally closed. |
+| Monthly Close — dual mode | High | ✅ | Automatic implementation completed (backend + frontend) and operational manual review completed. v1 bugs fixed on 2026-05-20: reconciliation bridge column alignment (CSS subgrid) and per-account liquidity reference (previous month effective balance instead of `asset.amount`). |
+| Crypto Tax Report | Medium | ⏸ | Full Spanish IRPF module: Pionex + Binance, global cross-exchange FIFO, boxes 029/332/337. Paused — reassess before resuming. |
+| Financial coach — navigation | Medium | ✅ | Simplified v1: `/` -> `/patrimonio` landing, guide at `/guia`, phase 5 (financial independence) removed until an investment portfolio module exists. Contextual quick actions by phase already existed. |
+| Remove Data Input module | High | ✅ | `/introduccion-datos` removed in Core and SaaS. Portable data consolidated in `/account`; assets and liabilities in `/patrimonio`. |
+| Unified design system | High (critical) | ✅ | 22 steps completed (see `docs/frontend/design-system.md`). Full foundation done: canonical views, full domain CSS tokenization, `ui-pro-*` layer removed, `--chart-*` palette, accounting hero aligned with Net Worth. Incremental view-by-view polish continues as needed. |
+| Residual legacy cleanup | Medium | ✅ | Completed 2026-05-20. Removed: Data Input, `investment_purchase` alias, scalar contribution fields (migration 0042), external `net_worth.services` import, and `compat.*` in capabilities. Budget/check-in fallback is intentional design, not technical debt. See `roadmap/product-roadmap.md`. |
+| Core backend refactor | Medium | ✅ | Structural refactor completed (phases 1-5). Contribution backlog remains documented in `roadmap/backend-maintainability-backlog.md`. |
+| Core frontend refactor | Medium | ✅ | Structural roadmap completed; contribution backlog documented in `roadmap/frontend-maintainability-backlog.md`; see `roadmap/terminados/frontend-refactor-roadmap.md` and `core/docs/architecture/shared-package-candidates.md`. |
+| Auth and security | High | ✅ | Logout with blacklist, cross-user isolation (31 tests), user signup in UI (`/registro`, JWT on signup, rate throttling). Frontend (12->0) and backend CVEs resolved. |
+| DB backup/restore | Medium | ✅ | Admin-only endpoints `GET /api/core/db-backup/` and `POST /api/core/db-restore/` based on pg_dump/pg_restore. AccountView migrated to this flow; portable JSON removed. |
 
 ---
 
-## Funcionalidades implementadas y estables
+## Implemented and Stable Features
 
-| Área | Estado | Notas |
+| Area | Status | Notes |
 |------|--------|-------|
-| Net Worth (activos, pasivos, liquidez) | ✅ | Base completa. Snapshots eliminados. Modal de revisión de gastos generados por activos de inversión añadido. Intervalos múltiples de aportación periódica completados (phases 1-2 archivadas). Gráficas (timeline + donut) y KPIs validados. Modales de creación/edición de activos y pasivos revisados; v1 del módulo cerrada a nivel funcional. |
-| Budget (ingresos/gastos anuales, check-ins mensuales) | ✅ | Flujo por categorías completo. Evolución ejecutada (barras), filtro recurrente/puntual, barras YTD y cobertura canónica funcionales. Los summaries mensuales son contrato canónico para ejecución/cobertura; modales de líneas muestran errores backend sin perder formulario; header alineado con Patrimonio. Revisión manual completada el 2026-05-14. |
-| Cierre mensual | ✅ | Integrado con budget y accounting. Modo dual automático, lifecycle DRAFT/FINALIZED/LOCKED y revisión manual completada el 2026-05-14. Bugs corregidos 2026-05-20: alineación bridge y referencia de liquidez por cuenta. |
-| Data Input (entradas anuales) | ✅ | Módulo/ruta retirados. Responsabilidades reubicadas: ingresos/salidas en Presupuesto, activos/pasivos en Patrimonio y portable data en Cuenta. |
-| Guía financiera / Coach v1 | ✅ | Fases 1-4 con scoring implementado. Fase 5 retirada hasta tener módulo de cartera. Guía en `/guia`; `/` redirige a `/patrimonio`. |
-| Family & Ownership (FamilyMember, OwnershipLink) | ✅ | Completo |
-| Accounting Movements (LedgerAccount/Transaction/Entry) | ✅ | Fases 1-5 completas + flujo bidireccional de inversión (`investment` con `inflow`/`outflow`, metadatos realizados manuales y agregados de capital aportado). Listado de transacciones migrado a paginación servidor con cursor + filtros server-side + `activity_kind` en API. Trazabilidad de movimientos importados mantenida con `origin`, `import_source` e `import_fingerprint`; importador MoneyWiz ad-hoc retirado. Soporte multimoneda en alta/edición rápida de inversión. Vista de movimientos cerrada v1. |
-| Market data sync (FX, IPC nacional + CCAA) | ✅ | Fases 1-6 completas, worker `market_data_sync`. Tablas con paginación servidor (page_size=50) e infinite scroll en frontend. |
-| DB Backup/Restore (pg_dump) | ✅ | Endpoints admin-only de backup y restore basados en pg_dump/pg_restore. JSON portable data retirado de la UI; sustituido por este flujo. |
-| Scoring financiero fases 1-4 | ✅ | Deuda, flujo de caja, fondo emergencia, salud patrimonial |
-| Auth Core (JWT, link-token para SaaS) | ✅ | Registro de usuario desde UI (`/registro`). Logout con blacklist. Link-token para integración SaaS. |
+| Net Worth (assets, liabilities, liquidity) | ✅ | Complete baseline. Snapshots removed. Added investment-asset generated-expense review modal. Multiple periodic contribution intervals completed (phases 1-2 archived). Charts (timeline + donut) and KPIs validated. Asset and liability create/edit modals reviewed; module v1 functionally closed. |
+| Budget (annual income/expense, monthly check-ins) | ✅ | Full category-based flow. Executed evolution bars, recurring/one-time filter, YTD bars, and canonical coverage all functional. Monthly summaries are the canonical execution/coverage contract; line modals show backend errors without losing form state; header aligned with Net Worth. Manual review completed on 2026-05-14. |
+| Monthly Close | ✅ | Integrated with budget and accounting. Automatic dual mode, DRAFT/FINALIZED/LOCKED lifecycle, and manual review completed on 2026-05-14. Bug fixes on 2026-05-20: bridge alignment and per-account liquidity reference. |
+| Data Input (annual entries) | ✅ | Module/route removed. Responsibilities moved to Budget (income/expense), Net Worth (assets/liabilities), and Account (portable data). |
+| Financial Guide / Coach v1 | ✅ | Phases 1-4 scoring implemented. Phase 5 removed until portfolio module exists. Guide at `/guia`; `/` redirects to `/patrimonio`. |
+| Family & Ownership (`FamilyMember`, `OwnershipLink`) | ✅ | Complete. |
+| Accounting Movements (`LedgerAccount` / `LedgerTransaction` / `LedgerEntry`) | ✅ | Phases 1-5 complete plus bidirectional investment flow (`investment` with `inflow`/`outflow`), optional manual realized metadata, and invested-capital aggregates. Transaction list migrated to cursor server pagination with server-side filters and `activity_kind` in API. Imported-movement traceability preserved via `origin`, `import_source`, and `import_fingerprint`; ad-hoc MoneyWiz importer removed. Multi-currency support in quick investment create/edit. Movements view closed as v1. |
+| Market data sync (FX, national + regional CPI) | ✅ | Phases 1-6 complete, `market_data_sync` worker live. Tables use server pagination (`page_size=50`) and frontend infinite scroll. |
+| DB Backup/Restore (pg_dump) | ✅ | Admin-only backup/restore endpoints based on pg_dump/pg_restore. Portable JSON flow removed from UI and replaced with this flow. |
+| Financial scoring phases 1-4 | ✅ | Debt, cash flow, emergency fund, net worth health. |
+| Core auth (JWT, link-token for SaaS) | ✅ | User signup from UI (`/registro`), logout with blacklist, and link-token support for SaaS integration. |
 
-## En progreso activo
+## Active progress trackers
 
-| Área | Estado | Roadmap canónico |
-|------|--------|-----------------|
-| Accounting-budget separation | ✅ Fases 1-5 completadas | `roadmap/terminados/accounting-category-budget-separation-roadmap.md` |
-| Refactor frontend | ✅ Completado | Fases 0-6 cerradas; specs archivadas en `core/docs/tasks/frontend-refactor/*/terminados/`; `core/docs/architecture/shared-package-candidates.md` creado. |
+| Area | Status | Canonical roadmap |
+|------|--------|-------------------|
+| Accounting-budget separation | ✅ Phases 1-5 complete | `roadmap/terminados/accounting-category-budget-separation-roadmap.md` |
+| Frontend refactor | ✅ Completed | Phases 0-6 closed; archived specs in `core/docs/tasks/frontend-refactor/*/terminados/`; `core/docs/architecture/shared-package-candidates.md` created. |
 
-## Deliberadamente aparcado (funcionalidad futura)
+## Deliberately parked (future functionality)
 
-| Módulo | Descripción | Specs |
+| Module | Description | Specs |
 |--------|-------------|-------|
-| Informe Fiscal Crypto | Módulo completo IRPF español: integración Pionex + Binance, motor FIFO global cross-exchange, casillas 029/332/337. Aparcado antes de publicación pública del repo; revisar estado de la exploración antes de retomar. | `core/docs/tasks/fiscal-report/` |
+| Crypto Tax Report | Full Spanish IRPF module: Pionex + Binance integration, global cross-exchange FIFO engine, and tax boxes 029/332/337. Parked before public OSS publication; reassess exploration status before resuming. | `core/docs/tasks/fiscal-report/` |
 
 ---
 
-## Leyenda
+## Legend
 
-| Símbolo | Significado |
-|---------|-------------|
-| ✅ | Implementado y funcionando |
-| 🔄 | En progreso |
-| ⚪ | No iniciado (en scope futuro) |
-| ⛔ | Fuera de alcance explícito (decisión tomada) |
-| ⏸ | Aparcado conscientemente |
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Implemented and working |
+| 🔄 | In progress |
+| ⚪ | Not started (future scope) |
+| ⛔ | Explicitly out of scope (decision made) |
+| ⏸ | Deliberately parked |

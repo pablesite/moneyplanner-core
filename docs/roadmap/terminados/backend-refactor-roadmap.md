@@ -1,13 +1,13 @@
-# Roadmap: backend refactor (Core) - continuidad sobre el estado real
+# Roadmap: backend refactor (Core) - continuity over real state
 
-## Objetivo
+## Aim
 Dejar el backend del Core mas facil de mantener, probar y extender, sin romper el comportamiento funcional actual ni reabrir trabajo ya estabilizado.
 
-## Actualización 2026-03-18 — Refactor reactivo con cobertura profesional
+## Update 2026-03-18 — Reactive refactor with professional coverage
 
-### Plan de ejecución (fases activas)
+### Execution plan (active phases)
 
-| Fase | Título | Spec | Estado |
+| Phase | Title | Spec | State |
 |------|--------|------|--------|
 | 1 | Test coverage baseline (≥80% por app) | `core/docs/tasks/backend-refactor/terminados/phase-1-test-coverage-baseline/backend.md` | ✅ |
 | 2 | Particion `accounting/services.py` | `core/docs/tasks/backend-refactor/terminados/phase-2-accounting-services-partition/backend.md` | Completada |
@@ -24,7 +24,7 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 | `accounting` | Registrar movimientos reales del ledger, balances de cuentas y clasificacion funcional de entries. | No modificar entradas de `budget` directamente ni operar `assets`/`liabilities` fuera de contratos publicos. |
 | `budget` | Gestionar plan anual y seguimiento mensual (incluyendo convivencia ledger/fallback). | No escribir directamente en el ledger contable ni recalcular balances de cuentas. |
 | `net_worth` | Calcular posicion patrimonial y sincronizar compromisos presupuestarios ligados a activos/pasivos. | No escribir en el ledger directamente ni duplicar reglas de clasificacion anual. |
-| `memberships` | Gestionar ownership y sincronizacion de ownership-links por usuario. | No persistir side effects parciales fuera de un bloque transaccional en sync cross-domain. |
+| `memberships` | Manage ownership and synchronization of ownership-links per user. | Do not persist partial side effects outside of a transactional block in sync cross-domain. |
 
 #### Flujos atomicos garantizados
 
@@ -43,36 +43,36 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 
 ### Hotspots reales (2026-03-18)
 
-| Archivo | Líneas | Riesgo | Acción |
+| Archive | Lines | Risk | Action |
 |---------|--------|--------|--------|
-| `accounting/services_*.py` + `services.py` facade | 920 aprox. (5 m�dulos + facade) | Medio | Fase 2 completada: partici�n aplicada y facade de compatibilidad mantenida |
+| `accounting/services_*.py` + `services.py` facade | 920 aprox. (5 m�dulos + facade) | Medio | Fase 2 completada: partici�n aplicada y facade de compatibilidad mantenida |
 | `net_worth/services_assets_core.py` + `services_assets_budget.py` | 1082 aprox. | Medio | Fase 3 completada: particion por subdominio aplicada |
 | `net_worth/services_liabilities_core.py` + `services_liabilities_budget.py` | 935 aprox. | Medio | Fase 3 completada: particion por subdominio aplicada |
 | `net_worth/services.py` (facade) | 63 | Bajo | Fase 3 completada: facade residual y minima |
 | `net_worth/tests/test_*.py` (7 ficheros) | 4,509 | Medio | Fase 1 completada: suite dividida por dominio |
-| `budget/test_services.py` | 43 | Alto | Fase 1: expandir a ≥300 líneas |
-| `core/tests.py` | 715 | Medio | Fase 1: añadir unit tests portable_data/market_data |
+| `budget/test_services.py` | 43 | High | Phase 1: Expand to ≥300 lines |
+| `core/tests.py` | 715 | Medium | Phase 1: add unit tests portable_data/market_data |
 
-### Definición de cobertura profesional
+### Definition of professional coverage
 - ≥80% statement coverage por app
 - 100% de endpoints con: happy path + auth failure + validation error
 - Integration tests para todos los flujos cross-domain
 - Unit tests para todas las funciones de negocio en services
 
-### Ejecución real de Fase 1 (2026-03-18)
-1. `backend/net_worth/tests/test_net_worth.py` se reemplazó por 7 ficheros (`test_assets.py`, `test_liabilities.py`, `test_snapshots.py`, `test_summaries.py`, `test_liquidity.py`, `test_timelines.py`, `test_integration.py`).
-2. `backend/budget/tests/test_services.py` se expandió de 43 a 426 líneas con cobertura ledger/fallback, edge-cases y resúmenes mensuales.
-3. Se reforzó cobertura de `accounting`, `accounts`, `core` y `memberships` en tests de servicios/API y casos de error.
-4. Validación ejecutada en Docker:
+### Actual execution of Phase 1 (2026-03-18)
+1. `backend/net_worth/tests/test_net_worth.py` was replaced by 7 files (`test_assets.py`, `test_liabilities.py`, `test_snapshots.py`, `test_summaries.py`, `test_liquidity.py`, `test_timelines.py`, `test_integration.py`).
+2. `backend/budget/tests/test_services.py` expanded from 43 to 426 lines with ledger/fallback coverage, edge-cases and monthly summaries.
+3. Coverage of `accounting`, `accounts`, `core` and `memberships` was reinforced in service/API tests and error cases.
+4. Validation executed in Docker:
    - `python manage.py test accounting accounts budget memberships net_worth core` (310 tests, OK)
    - `ruff check .` (OK)
    - `ruff format --check .` (OK)
    - `mypy .` (OK)
-5. Nota: la métrica porcentual por app (coverage.py / pytest-cov) sigue pendiente porque `pytest` no está instalado en el contenedor backend actual.
+5. Note: The per-app percentage metric (coverage.py / pytest-cov) is still pending because `pytest` is not installed in the current backend container.
 
 ---
 
-## Estado real (2026-03-16)
+## Actual status (2026-03-16)
 1. El backend Core ya no es un stack pre-`accounting`: hoy incluye `accounts`, `budget`, `core`, `memberships`, `net_worth`, `accounting` y `config`.
 2. 2026-02-27: `budget/views.py` se simplifico para reducir duplicacion en parseo de query params y logica de `confirmed_at`.
 3. 2026-02-27: helpers de `budget` extraidos a:
@@ -132,12 +132,12 @@ Dejar el backend del Core mas facil de mantener, probar y extender, sin romper e
 
 ## Referencias cruzadas obligatorias
 1. El roadmap funcional cerrado de `accounting` vive en `terminados/accounting-movements-roadmap.md`.
-2. La separacion entre cuenta contable, categoria/subcategoria y linea anual de presupuesto vive en `terminados/accounting-category-budget-separation-roadmap.md` (completado).
+2. The separation between accounting account, category/subcategory and annual budget line lives in `terminados/accounting-category-budget-separation-roadmap.md` (completed).
 3. Este documento no reemplaza esos roadmaps: define la continuidad del refactor de mantenibilidad del backend completo.
 4. Cuando cambien los boundaries entre `accounting`, `budget` y `net_worth`, este documento debe actualizarse en paralelo para mantener trazabilidad.
 
 ## Fase 0 - Baseline y mapa del backend actual
-Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vigentes.
+Objective: leave a realistic photo of today's Core backend and its current hotspots.
 
 ### 0.1 Inventario por app
 
@@ -198,8 +198,8 @@ Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vige
 ### 0.3 Riesgos y hotspots reales
 
 #### Riesgo alto
-1. `backend/net_worth/services_liabilities.py` sigue siendo el hotspot mas fuerte del modulo por volumen, side effects y reglas financieras.
-2. El split de `net_worth/tests` ya está aplicado; el riesgo pasa a ser mantener límites de dominio claros entre los 7 ficheros para evitar volver al monolito.
+1. `backend/net_worth/services_liabilities.py` remains the strongest hotspot in the module due to volume, side effects and financial rules.
+2. The `net_worth/tests` split is already applied; The risk becomes maintaining clear domain boundaries between the 7 files to avoid returning to the monolith.
 3. Los boundaries entre `accounting`, `budget` y `net_worth` siguen siendo una deuda activa:
    - ejecucion ledger
    - plan anual
@@ -209,11 +209,11 @@ Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vige
 
 #### Riesgo medio-alto
 1. `backend/accounting/services.py` crecio mucho y ya concentra logica de balances, quick-entry, summaries y suggestions.
-2. `accounting` cruza cada vez mas con taxonomias y contratos de `budget`, por lo que el riesgo ya no es solo interno del modulo.
+2. `accounting` increasingly crosses with taxonomies and contracts from `budget`, so the risk is no longer just internal to the module.
 
 #### Riesgo medio
 1. `budget` ya simplifico views, pero sigue teniendo deuda de convivencia ledger/fallback y contratos que dependen de boundaries aun en evolucion.
-2. `core` crecio con `market_data` y `portable_data`; ya no conviene tratarlo como modulo casi trivial.
+2. `core` grew with `market_data` and `portable_data`; It is no longer convenient to treat it as an almost trivial module.
 3. `memberships` ya no es el gran hueco de cobertura, pero sigue siendo un punto sensible por side effects sobre `budget` y `net_worth`.
 4. `config` sigue siendo transversal: cualquier drift en `custom_exception_handler` o mixins pega en todos los modulos.
 
@@ -229,7 +229,7 @@ Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vige
 1. [ ] Seguir desarmando hotspots reales de liabilities, snapshots y compatibilidad interna.
 2. [ ] Mantener `views.py` delgado y sin recaer en logica de negocio.
 3. [ ] Revisar transacciones y side effects hacia `budget` y `accounting`.
-4. [x] Reorganización de `net_worth` aplicada sin pérdida de discovery (suite partida en 7 ficheros).
+4. [x] Reorganization of `net_worth` applied without loss of discovery (suite split into 7 files).
 
 #### `budget` (prioridad MEDIA-ALTA)
 1. [ ] Congelar boundaries de convivencia ledger/fallback.
@@ -238,7 +238,7 @@ Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vige
 
 #### `core` (prioridad MEDIA)
 1. [ ] Mantener contratos estables para `fx`, `inflation`, `market-data` y `portable-data`.
-2. [ ] Reorganizar tests solo si el crecimiento del modulo ya lo justifica.
+2. [ ] Reorganize tests only if the growth of the module already justifies it.
 
 #### `memberships` (prioridad MEDIA)
 1. [ ] Mantener coberturas de `ensure-primary`, ownerships y ownership-links.
@@ -250,7 +250,7 @@ Objetivo: dejar una foto realista del backend Core de hoy y de sus hotspots vige
 2. [ ] Evitar volver a respuestas manuales con shape ad hoc.
 
 ## Fase 1 - Baseline y contratos vigentes
-Objetivo: documentar con precision que contratos del backend ya quedaron estabilizados y cuales siguen fragiles o incompletos.
+Objective: document precisely which backend contracts have been stabilized and which remain fragile or incomplete.
 
 ### Entregables
 1. Inventario de endpoints activos por app, actualizado al backend real.
@@ -276,7 +276,7 @@ Objetivo: documentar con precision que contratos del backend ya quedaron estabil
 2. Queda claro que contratos estan estables y cuales siguen en transicion controlada.
 
 ## Fase 2 - Boundaries entre accounting, budget y net_worth
-Objetivo: evitar duplicacion, drift funcional y mezclar capas de ejecucion, plan y patrimonio.
+Objective: avoid duplication, functional drift and mix execution, plan and heritage layers.
 
 ### Prioridades
 1. Definir con claridad que pertenece a `accounting` como capa de ejecucion.
@@ -297,16 +297,16 @@ Objetivo: evitar duplicacion, drift funcional y mezclar capas de ejecucion, plan
 2. Las siguientes fases de refactor ya no dependen de adivinar donde vive cada regla.
 
 ## Fase 3 - Hotspots de mantenibilidad restantes
-Objetivo: atacar los puntos del backend que mas frenan cambios pequenos y seguros.
+Objective: attack the points of the backend that most slow down small and safe changes.
 
 ### Prioridad alta
 1. `backend/accounting/services.py` como siguiente candidato claro a particion interna.
-2. `backend/net_worth/services_liabilities.py` como hotspot principal del modulo `net_worth`.
+2. `backend/net_worth/services_liabilities.py` as the main hotspot of the `net_worth` module.
 3. `backend/net_worth/services.py` como facade temporal a adelgazar gradualmente, sin romper imports internos de golpe.
 
 ### Prioridad media
-1. Evaluar reorganizacion de `backend/core/tests.py` si el modulo sigue creciendo en `portable_data` y `market_data`.
-2. Vigilar crecimiento de `backend/net_worth/tests/test_*.py` para mantener separación por dominio y evitar re-monolitización.
+1. Evaluate reorganization of `backend/core/tests.py` if the module continues to grow in `portable_data` and `market_data`.
+2. Monitor growth of `backend/net_worth/tests/test_*.py` to maintain separation by domain and avoid re-monolithization.
 3. Revisar `backend/memberships/services.py`; hoy la deuda existe, pero no justifica prioridad alta salvo que aparezcan nuevos side effects o duplicacion real.
 
 ### Criterio de salida
@@ -314,7 +314,7 @@ Objetivo: atacar los puntos del backend que mas frenan cambios pequenos y seguro
 2. El roadmap prioriza los monolitos reales de hoy, no los de febrero.
 
 ## Fase 4 - Tests, atomicidad y regresion cruzada
-Objetivo: aumentar seguridad de cambio en los flujos donde ya hay integracion entre dominios.
+Objective: increase change security in flows where there is already integration between domains.
 
 ### Escenarios prioritarios
 1. `accounting <-> budget`:
@@ -348,7 +348,7 @@ Objetivo: aumentar seguridad de cambio en los flujos donde ya hay integracion en
 2. Las decisiones de atomicidad y side effects quedan explicitadas en PRs o docs asociadas.
 
 ## Fase 5 - DX y contribucion
-Objetivo: facilitar que otra persona continue el refactor sin contexto tribal.
+Objective: make it easier for someone else to continue the refactor without tribal context.
 
 ### Entregables
 1. Checklist de PR de refactor reutilizable.
@@ -371,19 +371,19 @@ Objetivo: facilitar que otra persona continue el refactor sin contexto tribal.
 5. Medir y documentar baseline de latencia para endpoints criticos de `accounting`, `budget` y `net_worth`.
 6. Revisar oportunidades de particion adicional en hotspots que superen umbral de complejidad acordado.
 
-### Cierre formal del refactor estructural
-Fecha de cierre: 2026-03-18
+### Formal closure of the structural refactoring
+Closing date: 2026-03-18
 Version Core de referencia: 0.23.1
 
-Resumen por fase:
+Summary by phase:
 1. Fase 1: baseline de cobertura y reorganizacion de suites por dominio.
 2. Fase 2: particion de `accounting/services.py` con facade de compatibilidad.
 3. Fase 3: limpieza de dominio `net_worth` y separacion por submodulos.
 4. Fase 4: boundaries cross-domain estabilizados y atomicidad reforzada.
 5. Fase 5: documentacion DX (checklist PR, patrones backend y backlog publicable).
 
-Estado final:
-1. Refactor estructural backend completado.
+Final state:
+1. Backend structural refactor completed.
 2. Continuidad definida mediante backlog acotado y documentacion de handoff.
 ## Secuencia de ejecucion recomendada
 1. Actualizar y mantener el baseline documental del backend real.
@@ -426,9 +426,9 @@ Ejecutar dentro de contenedores. No usar `docker compose down -v`.
 1. [ ] Hay test de regresion para el comportamiento que se protege o mueve.
 2. [ ] No cambia el contrato API sin documentarlo.
 3. [ ] La logica de negocio se mueve hacia services, no hacia views.
-4. [ ] El diff evita refactors cosméticos fuera de alcance.
+4. [ ] The diff prevents out-of-scope cosmetic refactors.
 5. [ ] Validado con calidad y tests dentro de Docker.
-6. [ ] Docs actualizadas si cambia contrato, boundary o flujo operativo.
+6. [ ] Docs updated if contract, boundary or operational flow changes.
 7. [ ] Commit con Conventional Commits.
 
 ## Riesgos a vigilar durante toda la ejecucion

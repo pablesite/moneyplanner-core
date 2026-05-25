@@ -3,19 +3,19 @@
 Canonical documentation for the open-source `MoneyPlanner Core` repository.
 
 ## Read First
-1. `project-status.md` -> estado actual de funcionalidades y tareas en curso
+1. `project-status.md` -> current feature status and active tasks
 2. `architecture/architecture.md` -> current Core architecture
-2. `architecture/accounting-movements-architecture.md` -> canonical accounting movements architecture
-3. `operations/dev-setup.md` -> local setup, validation, and troubleshooting
-4. `roadmap/product-roadmap.md` -> product evolution roadmap by module
-5. `roadmap/community-roadmap.md` -> high-level future areas and ideas (public-facing)
-6. `roadmap/terminados/backend-refactor-roadmap.md` -> completed backend structural refactor roadmap
-7. `roadmap/terminados/accounting-category-budget-separation-roadmap.md` -> completed roadmap for the accounting/budget boundary (all 5 phases done)
-8. `roadmap/terminados/frontend-refactor-roadmap.md` -> completed frontend structural refactor roadmap
-9. `roadmap/frontend-maintainability-backlog.md` -> frontend maintainability backlog
-10. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
-11. `../CONTRIBUTING.md` -> contribution workflow
-12. `../RELEASING.md` -> release process
+3. `architecture/accounting-movements-architecture.md` -> canonical accounting movements architecture
+4. `operations/dev-setup.md` -> local setup, validation, and troubleshooting
+5. `roadmap/product-roadmap.md` -> product evolution roadmap by module
+6. `roadmap/community-roadmap.md` -> high-level public roadmap and future ideas
+7. `roadmap/terminados/backend-refactor-roadmap.md` -> completed backend structural refactor roadmap
+8. `roadmap/terminados/accounting-category-budget-separation-roadmap.md` -> completed accounting/budget boundary roadmap (all 5 phases done)
+9. `roadmap/terminados/frontend-refactor-roadmap.md` -> completed frontend structural refactor roadmap
+10. `roadmap/frontend-maintainability-backlog.md` -> frontend maintainability backlog
+11. `roadmap/terminados/accounting-movements-roadmap.md` -> completed accounting movements rollout
+12. `../CONTRIBUTING.md` -> contribution workflow
+13. `../RELEASING.md` -> release process
 
 ## Active Documents
 1. `architecture/`
@@ -26,7 +26,7 @@ Canonical documentation for the open-source `MoneyPlanner Core` repository.
    - portable import
 3. `roadmap/`
    - community roadmap
-   - backend maintainability backlog + frontend maintainability backlog + completed structural roadmaps
+   - backend/frontend maintainability backlogs
    - active execution roadmaps
    - `terminados/` for completed roadmaps
 4. `frontend/`

@@ -1,13 +1,13 @@
 # Roadmap: refactor integral del frontend (Core) — plan ejecutable
 
-## Objetivo
+## Aim
 
 Dejar el frontend del Core mas facil de mantener, probar y extender, sin romper contratos
 backend ni introducir cambios funcionales no intencionales.
 El refactor tambien prepara el terreno para un futuro shared package Core/SaaS,
 dejando documentada la extraccion futura en la Fase 6.
 
-## Estado de este documento
+## Status of this document
 
 1. Este documento define el plan operativo del refactor del frontend Core.
 2. Baseline actualizada el 2026-03-19.
@@ -16,7 +16,7 @@ dejando documentada la extraccion futura en la Fase 6.
 5. Core-first: cada fase se ejecuta primero en Core y se replica en SaaS al cerrarla.
    Ver `docs/roadmap/frontend-refactor-roadmap.md` (SaaS) para el roadmap espejo.
 
-## Estado real (2026-03-19)
+## Actual status (2026-03-19)
 
 ### Baseline del stack Core
 
@@ -123,7 +123,7 @@ extraccion y sus limites.
 4. Implementar el shared package (solo preparar el terreno).
 5. Introduccion de nuevas capacidades de negocio.
 
-## Arquitectura objetivo
+## Target architecture
 
 1. `domains/*` como unica capa de negocio del frontend.
 2. `views/*` como ensamblado de pagina:
@@ -140,7 +140,7 @@ extraccion y sus limites.
 
 ## Fase 0 — Baseline limpia y cobertura >= 80%
 
-Objetivo: partir de una base verde completa con red de seguridad real.
+Objective: start from a complete green base with a real safety net.
 
 ### 0.1 Entregables
 
@@ -176,9 +176,9 @@ Objetivo: partir de una base verde completa con red de seguridad real.
 
 ---
 
-## Fase 1 — Fronteras de arquitectura y capa legacy
+## Phase 1 — Architecture and legacy layer boundaries
 
-Objetivo: fijar limites claros entre dominios y eliminar wrappers puente.
+Objective: set clear boundaries between domains and eliminate bridging wrappers.
 
 ### 1.1 Entregables
 
@@ -217,7 +217,7 @@ Objetivo: fijar limites claros entre dominios y eliminar wrappers puente.
 
 ## Fase 2 — Shell global, router y componentes residuales
 
-Objetivo: adelgazar `App.vue` y dejar el wiring de navegacion testeable.
+Objective: slim down `App.vue` and leave the navigation wiring testable.
 
 ### 2.1 Entregables
 
@@ -250,11 +250,11 @@ Objetivo: adelgazar `App.vue` y dejar el wiring de navegacion testeable.
 
 ## Fase 3 — Descomposicion de vistas monoliticas
 
-Objetivo: dividir las vistas grandes en composables de pagina, secciones y componentes de dominio.
+Goal: Split large views into page composables, sections, and domain components.
 
 ### 3.1 Orden recomendado (mayor a menor riesgo)
 
-1. `BudgetDashboardView.vue` (5,512 lineas al inicio, 2,362 tras cierre) — **spec 3a completada**
+1. `BudgetDashboardView.vue` (5,512 lines at start, 2,362 after closing) — **spec 3a completed**
 2. `NetWorthView.vue` (3,608 lineas al inicio, 542 tras cierre) — **spec 3b completada**
 3. `DataInputView.vue` (2,742 lineas al inicio, 16 tras cierre) — **spec 3c completada**
 4. `GuidePhaseDetailView.vue` (2,207 lineas al inicio, 111 tras cierre) — **spec 3d completada**
@@ -319,7 +319,7 @@ Objetivo: reforzar el contrato visual compartido y reducir CSS ad hoc por pantal
 
 1. `app.css` (20,633 lineas) con patrones consolidados y organizados.
 2. Reduccion sustancial de `<style scoped>` en shell y vistas grandes.
-3. Estados loading/empty/error/success estandarizados.
+3. Statuss loading/empty/error/success estandarizados.
 4. Tokens CSS candidatos a `shared/styles/` documentados.
 
 ### 4.2 Paso a paso recomendado

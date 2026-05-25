@@ -102,7 +102,7 @@ docker compose exec saas_frontend npm run test:coverage
 - [x] Spec movida a `terminados/`
 - [x] Commit creado (Conventional Commits)
 
-## Estado actual (2026-03-19)
+## Current status (2026-03-19)
 
 Resultado de ejecución en Docker durante este bloque:
 

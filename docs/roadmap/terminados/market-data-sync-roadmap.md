@@ -1,19 +1,19 @@
-# Roadmap: market data sync y UX de datos auxiliares (Core) - plan ejecutable
+# Roadmap: market data sync and auxiliary data UX (Core) - executable plan
 
-## Objetivo
-Incorporar en Core una capa estable de ingesta automatica de datos externos para `FX` e `IPC`, con cobertura historica automatica, refresco diario, seleccion de region IPC en patrimonio y una UX orientada a consulta, no a edicion manual.
+## Aim
+Incorporate in Core a stable layer of automatic external data ingestion for `FX` and `IPC`, with automatic historical coverage, daily refresh, IPC region selection in heritage and a UX oriented towards consultation, not manual editing.
 
-## Estado de este documento
+## Status of this document
 1. Este documento define el plan operativo completo de la iniciativa.
 2. La implementacion debe vivir en `core/`.
 3. El trabajo debe ejecutarse en PRs pequenas, reversibles y validadas dentro de Docker.
-4. El resultado debe dejar preparada la arquitectura para futuros datasets como cotizaciones de acciones.
+4. The result should prepare the architecture for future datasets such as stock quotes.
 
-## Estado real (2026-03-16)
+## Actual status (2026-03-16)
 1. La iniciativa figura implementada en codigo y documentacion operativa.
 2. Fase 1 implementada y cerrada:
    - existe el comando canonico `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`
-   - existe `MarketDataSyncState` como tabla de cobertura/estado
+- `MarketDataSyncState` exists as coverage/state table
    - `sync_fx_rates` queda como wrapper de compatibilidad
    - Docker ya usa `market_data_sync` como worker dedicado
 3. Fase 2 implementada y cerrada:
@@ -23,17 +23,17 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 4. Fase 3 implementada y cerrada:
    - `InflationIndex` soporta `ES + CCAA`
    - el status endpoint devuelve `supported_inflation_regions`
-   - existen datos y estado por region
+- there is data and status by region
 5. Fase 4 implementada y cerrada:
    - `accounts.UserSettings` persiste `inflation_region`
    - `SettingsPopover` expone selector de region IPC
    - `net_worth` usa la region efectiva en `summary` y `timeline`
 6. Fase 5 implementada y cerrada:
    - `AuxDataView` ya no es CRUD manual
-   - `/data` actua como vista observacional de FX/IPC y estado de sync
+- `/data` acts as FX/IPC observational view and sync status
    - el frontend consume `GET /api/core/market-data/status/`
 7. Fase 6 implementada y cerrada:
-   - la arquitectura ya refleja `market_data_sync` y `sync_market_data`
+- the architecture already reflects `market_data_sync` and `sync_market_data`
    - existen docs operativas en `core/docs/operations/market-data-sync.md`
    - `core/docs/operations/dev-setup.md` ya incorpora el worker en el arranque estandar
 
@@ -44,10 +44,10 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
    - `FX` diario
    - `IPC` nacional y por comunidad autonoma
 4. La region IPC sera una preferencia persistente por usuario.
-5. La vista de datos auxiliares deja de ser un CRUD manual.
-6. El frontend no debe permitir editar ni eliminar FX/IPC como flujo normal.
+5. The auxiliary data view is no longer a manual CRUD.
+6. The frontend must not allow editing or deleting FX/IPC as a normal flow.
 
-## Estado real de partida
+## Actual starting state
 1. Ya existe `FxRate` en `core/backend/core/models.py`.
 2. Ya existe `InflationIndex` en `core/backend/core/models.py`, hoy limitado a `ES`.
 3. Ya existe `fx_sync` en `core/docker-compose.yml`.
@@ -57,12 +57,12 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 7. Existe una vista `/data` con CRUD manual de FX/IPC en frontend.
 
 ## Principios de trabajo
-1. Core es duenyo de estos datos auxiliares como comportamiento de producto.
-2. El frontend consume datos persistidos; nunca llama a proveedores externos.
+1. Core owns this auxiliary data as a product behavior.
+2. The frontend consumes persisted data; never calls external providers.
 3. La logica de sync no debe vivir en views ni en el request path.
 4. No duplicar logica entre datasets ni entre Core y SaaS.
 5. Cambiar lo minimo necesario por fase.
-6. Mantener una arquitectura extensible a nuevos providers y datasets.
+6. Maintain an architecture extensible to new providers and datasets.
 
 ## Alcance
 1. `core/backend/core`
@@ -80,7 +80,7 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 4. Benchmarking financiero o macrodatos fuera de `FX` e `IPC`.
 5. Edicion manual para usuario final de tablas sincronizadas por sistema.
 
-## Arquitectura objetivo
+## Target architecture
 ### Worker de market data
 1. Sustituir el concepto actual de `fx_sync` por un worker de `market data`.
 2. El worker ejecuta una pasada al arrancar y luego un bucle periodico.
@@ -116,10 +116,10 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 3. Dejar preparado el registro de providers para futuros datasets como `security_price`.
 
 ### Consumo del dominio
-1. `net_worth` y el resto del dominio consumen solo datos persistidos en Core.
+1. `net_worth` and the rest of the domain consume only data persisted in Core.
 2. El backend de patrimonio debe usar la region IPC elegida por el usuario.
 3. Si no hay cobertura suficiente para una region, el backend debe responder de forma controlada.
-4. No debe haber comportamiento silencioso inconsistente ante datos faltantes.
+4. There should be no inconsistent silent behavior in the face of missing data.
 
 ## Fase 1 - Base tecnica del worker
 ### Entregables
@@ -130,11 +130,11 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 5. Wrapper de compatibilidad para `sync_fx_rates`.
 
 ### Tareas
-1. Diseñar `sync_market_data --datasets ... --mode ...`.
+1. Design `sync_market_data --datasets ... --mode ...`.
 2. Crear interfaz base de provider.
 3. Crear modelo de cobertura/sync state.
 4. Renombrar o evolucionar `fx_sync` a `market_data_sync` en Docker.
-5. Mantener compatibilidad temporal con el flujo actual de FX.
+5. Maintain temporary compatibility with the current FX flow.
 
 ### Criterios de salida
 1. El worker puede sincronizar FX sin romper el comportamiento actual.
@@ -159,7 +159,7 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 4. Garantizar idempotencia en la reconciliacion.
 
 ### Criterios de salida
-1. Un alta retroactiva amplía la cobertura en la siguiente pasada del worker.
+1. A retroactive registration extends coverage on the worker's next pass.
 2. No se repiten descargas si la cobertura ya existe.
 3. Los fallos de proveedor no bloquean la UX de patrimonio.
 
@@ -193,11 +193,11 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 4. Payload con `inflation_region` e `inflation_base_period`.
 
 ### Tareas
-1. Añadir persistencia backend para la preferencia.
+1. Add backend persistence for preference.
 2. Leer la preferencia desde `net_worth`.
 3. Mantener `real` deshabilitado si no hay cobertura o si la moneda base no es `EUR`.
 4. Actualizar ayudas y labels del modo IPC.
-5. Definir `ES` como default para usuarios sin preferencia.
+5. Define `ES` as default for users without preference.
 
 ### Criterios de salida
 1. El usuario puede elegir region desde patrimonio.
@@ -206,34 +206,34 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 
 ## Fase 5 - Sustitucion del CRUD manual por vista observacional
 ### Entregables
-1. Eliminacion del flujo de alta/borrado manual de FX/IPC.
+1. Elimination of the FX/IPC manual registration/deletion flow.
 2. Nueva vista `/data` orientada a observabilidad.
 3. Visualizacion basica de:
    - cobertura temporal
    - ultima actualizacion
-   - estado de sync
+- sync status
    - grafica simple de FX
    - grafica simple de IPC por region
 4. Endpoints de lectura adaptados a esta UX.
 
 ### Tareas
 1. Retirar formularios y botones de eliminar de `AuxDataView`.
-2. Reconstruir `/data` como vista de estado del sistema.
-3. Mostrar errores de sync como estado operativo, no como accion manual.
+2. Rebuild `/data` as system status view.
+3. Show sync errors as operational status, not as manual action.
 4. Reconducir o retirar `SettingsFxView` y `SettingsIpcView`.
 5. Mantener los endpoints mutables fuera de la UX y restringidos si siguen existiendo.
 
 ### Criterios de salida
-1. No existe flujo normal de editar/eliminar FX/IPC desde frontend.
+1. There is no normal flow of editing/deleting FX/IPC from frontend.
 2. La nueva pantalla aporta trazabilidad operativa.
-3. La UX resulta coherente con datos gestionados por sistema.
+3. The UX is consistent with data managed by the system.
 
 ## Fase 6 - Documentacion y extensibilidad
 ### Entregables
 1. Documentacion arquitectonica actualizada.
 2. Documentacion operativa del nuevo worker.
 3. Contrato base para futuros datasets.
-4. Checklist para añadir providers.
+4. Checklist to add providers.
 
 ### Tareas
 1. Actualizar `core/docs/architecture/architecture.md`.
@@ -245,7 +245,7 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 ### Criterios de salida
 1. Otra persona puede continuar sin contexto tribal.
 2. La operacion local queda clara.
-3. La extension a nuevos datasets no exige rediseño.
+3. The extension to new datasets does not require redesign.
 
 ## Cambios de interfaz esperados
 ### Backend
@@ -256,12 +256,12 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 4. Nuevo endpoint o ampliacion de payload para:
    - regiones disponibles
    - cobertura efectiva
-   - estado de sync
+- sync status
 
 ### Frontend
 1. `SettingsPopover` gana selector de region IPC.
 2. `/data` deja de ser CRUD y pasa a ser dashboard observacional.
-3. Las vistas de datos auxiliares dejan de mostrar acciones de alta/edicion/borrado.
+3. Auxiliary data views stop showing registration/edit/delete actions.
 
 ### Compatibilidad
 1. Las lecturas existentes de FX/IPC pueden mantenerse mientras alimenten la nueva UX.
@@ -284,7 +284,7 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 2. La region se guarda y se recupera.
 3. El modo IPC refleja region y periodo base correctos.
 4. `/data` ya no muestra formularios ni botones de borrado.
-5. `/data` muestra estados de carga, vacio, error y datos.
+5. `/data` shows loading, empty, error and data statuses.
 6. La vista observacional renderiza tablas/graficas de forma estable.
 
 ## Secuencia de ejecucion recomendada
@@ -323,7 +323,7 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 3. [ ] La logica de negocio queda en backend, no en la UI.
 4. [ ] El diff evita refactors fuera de alcance.
 5. [ ] Se valida en Docker.
-6. [ ] Se actualiza documentacion canonica si cambia arquitectura o flujo.
+6. [ ] Canonical documentation is updated if architecture or flow changes.
 7. [ ] Se usa Conventional Commit.
 
 ## Riesgos a vigilar
@@ -331,12 +331,12 @@ Incorporar en Core una capa estable de ingesta automatica de datos externos para
 2. Mantener a la vez UX manual y automatica, creando doble fuente de verdad.
 3. Hacer la seleccion de region solo en frontend y no persistirla.
 4. Seguir basando cobertura en posiciones activas en vez de fecha minima real.
-5. Añadir nuevos providers sin interfaz comun.
+5. Add new providers without a common interface.
 6. Permitir overrides manuales sin politica clara.
 
 ## Criterio de exito
 1. Core sincroniza FX e IPC sin intervencion manual del usuario final.
-2. La cobertura historica se amplia automaticamente ante datos retroactivos.
+2. Historical coverage is automatically expanded with retroactive data.
 3. Patrimonio soporta IPC por region seleccionable y persistente.
-4. La pantalla de datos auxiliares pasa a ser observabilidad, no CRUD.
-5. La arquitectura queda lista para futuros datasets como cotizaciones de acciones.
+4. The auxiliary data screen becomes observability, not CRUD.
+5. The architecture is ready for future datasets such as stock quotes.

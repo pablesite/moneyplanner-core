@@ -1,6 +1,6 @@
 # Roadmap: separacion entre cuenta contable, categoria y presupuesto anual
 
-## Estado del documento
+## Document status
 1. Roadmap terminado.
 2. Alcance Core con espejo frontend SaaS cuando aplique.
 3. Este documento conserva el handoff historico de la separacion entre:
@@ -8,13 +8,13 @@
    - categoria/subcategoria (por que ocurre),
    - linea anual de presupuesto (que plan cubre).
 
-## Estado final (2026-05-16)
+## Final status (2026-05-16)
 1. `LedgerEntry` conserva solo la clasificacion funcional (`flow_family`, `category_key`, `subcategory_key`) y enlaces a patrimonio (`Asset`/`Liability`) cuando aplican.
 2. Los enlaces operativos `annual_income_entry_id` y `annual_expense_entry_id` fueron eliminados de modelo, API, quick-entry, portable data y frontend.
 3. Presupuesto calcula ejecutado desde movimientos publicados por taxonomia + mes; los check-ins manuales siguen siendo fallback del plan, pero ya no existe fallback ledger por FK a linea anual.
 4. La trazabilidad de movimientos importados se conserva mediante `origin`, `import_source` e `import_fingerprint`.
 
-## Estado de avance (2026-03-16)
+## Progress status (2026-03-16)
 1. Fase 1 implementada en `core/backend/accounting`:
    - `LedgerEntry` ya persiste `flow_family`, `category_key` y `subcategory_key`.
    - La API de `transactions` y `entries` ya devuelve la nueva clasificacion.
@@ -27,43 +27,43 @@
    - `budget` ya agrega ejecucion mensual por taxonomia `category_key`/`subcategory_key` del ledger como fuente primaria.
    - `budget` mantiene fallback legacy de lectura por `annual_*` cuando faltan clasificaciones nuevas en historico.
    - `accounting` ya genera resumen mensual y sugerencias de presupuesto consumiendo clasificacion propia del ledger con fallback legacy.
-   - `BudgetDashboardView` distingue `Ledger categorizado`, `Fallback legacy` y `Pendiente clasificar` cuando la alineacion automatica no es segura.
+- `BudgetDashboardView` distinguishes `Ledger categorizado`, `Fallback legacy` and `Pending clasificar` when automatic alignment is not safe.
 4. Fase 4 implementada en `core/backend` y tests:
    - el backfill historico desde `annual_*` a `flow_family` + `category_key` + `subcategory_key` ya se completo y el comando operativo temporal fue retirado.
    - la compatibilidad de lectura `annual_*` queda solo como fallback para historicos no migrados.
-   - los casos ambiguos o parcialmente clasificados no se fuerzan: permanecen sin clasificacion nueva y se muestran como `Pendiente clasificar`.
+- ambiguous or partially classified cases are not forced: they remain without new classification and are displayed as `Pending clasificar`.
 5. Fase 5 implementada en `core/frontend`, `core/backend` residual y tests:
    - la creacion manual de cuentas oculta `income` y `expense` como tipos operativos visibles.
    - las cuentas legacy quedan relegadas a `Contrapartidas tecnicas del sistema` en la UX.
    - `quick-entry` deja la vinculacion `annual_*` en un bloque secundario opcional y ya no envia ids legacy vacios cuando no hay alineacion explicita con el plan.
 
-## Objetivo
+## Aim
 Separar de forma explicita y reversible las tres capas funcionales que hoy se mezclan parcialmente en `accounting` y `budget`, de modo que:
 1. `accounting` sea la fuente de verdad de la ejecucion diaria y del impacto patrimonial.
 2. La categoria/subcategoria sea una clasificacion funcional propia del movimiento y no una consecuencia obligatoria de una linea anual.
 3. `budget` siga siendo la capa de plan anual y consuma ejecucion categorizada sin convertirse en la fuente de clasificacion del ledger.
 
 ## Problema funcional a resolver
-Hoy el producto ya soporta movimientos diarios, cierre mensual, sugerencias de presupuesto y actividad contextual en patrimonio. Sin embargo, la separacion conceptual entre capas sigue incompleta:
+Today the product already supports daily movements, monthly closing, budget suggestions and contextual activity in assets. However, the conceptual separation between layers remains incomplete:
 1. `LedgerAccount.account_type` todavia incluye `income` y `expense`, lo que empuja a tratar ingreso/gasto como cuentas operativas en vez de como categorias mentales del usuario.
 2. `LedgerEntry` clasifica ejecucion principalmente mediante `annual_income_entry` / `annual_expense_entry`.
 3. `budget` resume ejecucion ledger por FK directa a linea anual, no por una capa propia de categoria/subcategoria en `accounting`.
 4. `AccountingMovementsView` pide una "categoria anual opcional", no una categoria funcional autonoma del movimiento.
 5. `net_worth` esta mejor alineado: depende de cuentas y saldos, no del plan.
 
-El caso de uso objetivo es registrar, por ejemplo, un ingreso como `Ayuda por Madre Trabajadora` en:
+The target use case is to log, for example, an entry like `Ayuda por Madre Trabajadora` in:
 1. cuenta de impacto: `Kutxa / EUR`,
 2. categoria/subcategoria: `Prestaciones y ayudas -> Subsidio/Ayuda publica`,
 3. linea anual de presupuesto: una fila del plan alineada con esa misma categoria/subcategoria.
 
-## Estado real actual
+## Current actual status
 1. Modelo `accounting`
    - `LedgerAccount` mantiene `asset`, `liability`, `equity`, `income`, `expense`.
    - `LedgerEntry` puede enlazar `AnnualIncomeEntry` y `AnnualExpenseEntry`.
    - `QuickLedgerTransactionSerializer` crea o reutiliza cuentas de sistema `income` / `expense` cuando no se informa contrapartida explicita.
 2. API `accounting`
    - `POST /api/accounting/transactions/quick-entry/` soporta `income`, `expense`, `transfer`, `investment_purchase`, `debt_payment`.
-   - `GET /api/accounting/transactions/monthly-summary/` resume ingresos/gastos en funcion de los links `annual_*`.
+- `GET /api/accounting/transactions/monthly-summary/` summarizes income/expenses based on the `annual_*` links.
    - `GET /api/accounting/transactions/budget-suggestions/` agrega historico por categoria/subcategoria derivadas de `AnnualIncomeEntry` / `AnnualExpenseEntry`.
 3. `budget`
    - `build_income_monthly_plan_vs_executed_summary` y `build_expense_monthly_plan_vs_executed_summary` mezclan ledger y check-ins legacy con cobertura parcial.
@@ -78,7 +78,7 @@ El caso de uso objetivo es registrar, por ejemplo, un ingreso como `Ayuda por Ma
    - Sigue centrado en cuentas `asset` / `liability`.
    - La actividad contable contextual para posiciones `tracking_mode=accounting` no depende del plan anual.
 
-## Decisiones de diseño ya tomadas
+## Design decisions already made
 1. Taxonomia unica compartida
    - La clasificacion funcional del ledger reutilizara la taxonomia canonica de `budget`.
    - No se abrira una taxonomia paralela en `accounting` en esta iniciativa.
@@ -158,12 +158,12 @@ El caso de uso objetivo es registrar, por ejemplo, un ingreso como `Ayuda por Ma
 
 ## Plan por fases
 ### Fase 0 - Documentacion y contrato
-Objetivo:
+Aim:
 1. Cerrar el contrato funcional y la estrategia de transicion antes de tocar codigo.
 
 Cambios:
 1. Documentar el target y las decisiones cerradas.
-2. Enlazar este roadmap desde arquitectura y roadmap operativo general.
+2. Link this roadmap from architecture and general operational roadmap.
 
 Riesgos:
 1. Dejar ambiguedades en precedencia o ownership del dato.
@@ -175,16 +175,16 @@ Criterio de salida:
 1. Otro agente puede implementar sin decidir taxonomia, precedencia ni boundaries.
 
 ### Fase 1 - Clasificacion funcional en ledger
-Objetivo:
+Aim:
 1. Introducir en `accounting` una clasificacion funcional propia del movimiento.
 
 Cambios:
 1. Extender el modelo/serializers del ledger para guardar:
-   - familia de flujo (`income` / `expense`),
+- flow family (`income` / `expense`),
    - `category_key`,
    - `subcategory_key`.
 2. Mantener temporalmente `annual_income_entry_id` / `annual_expense_entry_id`.
-3. Añadir lectura API de la nueva clasificacion.
+3. Add API reading of the new classification.
 
 Riesgos:
 1. Doble fuente temporal entre clasificacion nueva y links legacy.
@@ -199,7 +199,7 @@ Criterio de salida:
 1. El ledger puede persistir y devolver categoria/subcategoria sin romper los movimientos actuales.
 
 ### Fase 2 - `quick-entry` y UX de `accounting`
-Objetivo:
+Aim:
 1. Cambiar la captura operativa a un modelo `category-first`.
 
 Cambios:
@@ -227,7 +227,7 @@ Criterio de salida:
 1. Un ingreso/gasto nuevo se registra con categoria/subcategoria sin necesitar `annual_*_entry_id`.
 
 ### Fase 3 - Consumo de `budget`
-Objetivo:
+Aim:
 1. Hacer que `budget` consuma ejecucion desde la clasificacion nueva del ledger.
 
 Cambios:
@@ -236,7 +236,7 @@ Cambios:
 3. Ajustar `BudgetDashboardView` para etiquetar la fuente como:
    - `Ledger categorizado`,
    - `Fallback legacy`,
-   - `Pendiente clasificar`.
+- `Pending clasificar`.
 
 Riesgos:
 1. Descuadres de ejecucion frente al plan.
@@ -248,19 +248,19 @@ Validacion Docker:
 3. `docker compose exec frontend npm run test:unit -- src/views/__tests__/BudgetDashboardView.spec.ts`
 
 Criterio de salida:
-1. El dashboard y el cierre mensual dejan de depender de nuevas escrituras `annual_*` para leer ejecucion ledger.
+1. The dashboard and the monthly closing stop depending on new writes `annual_*` to read ledger execution.
 
-### Fase 4 - Backfill y migracion de datos
-Objetivo:
+### Phase 4 - Backfill and data migration
+Aim:
 1. Migrar historico legacy a la nueva clasificacion funcional.
 
 Cambios:
 1. Backfill desde `annual_income_entry_id` / `annual_expense_entry_id` a categoria/subcategoria en ledger.
-2. Marcar como `pendiente clasificar` los casos sin mapping seguro.
+2. Mark cases without secure mapping as `pendiente clasificar`.
 3. Mantener lectura legacy solo como red de seguridad temporal.
 
 Riesgos:
-1. Datos ambiguos o incompletos.
+1. Ambiguous or incomplete data.
 2. Duplicidad funcional si conviven ambos criterios demasiado tiempo.
 
 Validacion Docker:
@@ -273,12 +273,12 @@ Criterio de salida:
 2. Los casos ambiguos quedan trazables y no ocultos.
 
 ### Fase 5 - Retirada controlada de semantica legacy
-Objetivo:
+Aim:
 1. Quitar dependencia operativa de `income` / `expense` como cuentas visibles y de nuevas escrituras `annual_*`.
 
 Cambios:
 1. Ocultar en UX los tipos de cuenta legacy como piezas mentales del usuario.
-2. Dejar `annual_*_entry_id` como compatibilidad residual o deprecacion final segun estado del backfill.
+2. Leave `annual_*_entry_id` as residual compatibility or final deprecation depending on the status of the backfill.
 3. Limpiar contratos y docs para reflejar el modelo final.
 
 Riesgos:
@@ -319,7 +319,7 @@ Criterio de salida:
 2. Se tratan como compatibilidad legacy y no como contrato funcional primario.
 
 ### Deprecaciones
-1. `income` / `expense` como cuentas visibles para el usuario final pasan a estado deprecado en UX.
+1. `income` / `expense` as accounts visible to the end user go to a deprecated state in UX.
 2. Las nuevas escrituras no deben depender de `annual_*_entry_id` una vez cerrada la Fase 2.
 
 ## UX/UI
@@ -336,14 +336,14 @@ Criterio de salida:
 3. Defaults
    - recordar ultima categoria/subcategoria usada por tipo o cuenta cuando sea seguro
    - si existe linea anual opcional, filtrarla por ejercicio y taxonomia compatible
-4. Estados visibles
-   - `Pendiente clasificar`
+4. Statuss visibles
+- `Pending clasificar`
    - `Ledger categorizado`
    - `Fallback legacy`
 5. Replica SaaS
    - cualquier cambio UX compartido implementado en `core/frontend/` debera replicarse en `frontend/`.
 
-## Migracion de datos
+## Migration of data
 1. Fuente principal de backfill
    - `annual_income_entry_id`
    - `annual_expense_entry_id`
@@ -355,10 +355,10 @@ Criterio de salida:
 4. Casos ambiguos
    - sin link `annual_*`
    - link inconsistente con el tipo de movimiento
-   - datos legacy incompletos
+- incomplete legacy data
 5. Politica para ambiguos
    - no inventar categoria
-   - marcar el caso como `pendiente clasificar`
+- mark the case as `pendiente clasificar`
    - mantener trazabilidad para correccion posterior
 
 ## Riesgos y mitigaciones
@@ -371,7 +371,7 @@ Criterio de salida:
 4. Drift entre Core y SaaS frontend
    - mitigacion: replicar en `frontend/` cualquier patron compartido afectado
 5. Casos historicos no clasificables
-   - mitigacion: estado visible `pendiente clasificar`, sin ocultar el problema
+- mitigation: visible state `pendiente clasificar`, without hiding the problem
 
 ## Testing y validacion en Docker
 1. Backend Core (`core/backend/`)
