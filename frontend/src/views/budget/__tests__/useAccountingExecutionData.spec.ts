@@ -66,7 +66,9 @@ describe('useAccountingExecutionData', () => {
             booking_date: '2024-03-15',
             member_tag: null,
             quick_entry_kind: null,
-            entries: [{ asset_id: 42, account_id: 1, side: 'debit', amount: '100.00', currency: 'EUR' }],
+            entries: [
+              { asset_id: 42, account_id: 1, side: 'debit', amount: '100.00', currency: 'EUR' },
+            ],
           },
         ],
         next_cursor: null,
@@ -76,8 +78,10 @@ describe('useAccountingExecutionData', () => {
       data: [{ id: 42, subcategory: 'bank_account' }],
     } as never);
 
-    const { accountingPostedEntries, refreshAccountingExecutionData } =
-      useAccountingExecutionData(ref(2024), ref('all'));
+    const { accountingPostedEntries, refreshAccountingExecutionData } = useAccountingExecutionData(
+      ref(2024),
+      ref('all'),
+    );
 
     await refreshAccountingExecutionData();
 
@@ -143,8 +147,10 @@ describe('useAccountingExecutionData', () => {
     } as never);
     vi.mocked(coreNetWorthApi.getAssets).mockResolvedValue({ data: [] } as never);
 
-    const { accountingExecutionError, refreshAccountingExecutionData } =
-      useAccountingExecutionData(ref(2024), ref('all'));
+    const { accountingExecutionError, refreshAccountingExecutionData } = useAccountingExecutionData(
+      ref(2024),
+      ref('all'),
+    );
 
     const first = refreshAccountingExecutionData();
     const second = refreshAccountingExecutionData();
