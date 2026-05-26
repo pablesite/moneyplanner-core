@@ -549,7 +549,9 @@ def _resolve_inflation_region_for_asset(*, asset: Asset, position_cache=None) ->
         if normalized:
             return normalized
     except Exception:
-        logger.exception("Could not resolve inflation region for asset %d; defaulting to ES", asset.id)
+        logger.exception(
+            "Could not resolve inflation region for asset %d; defaulting to ES", asset.id
+        )
     return cast(str, InflationIndex.Region.ES)
 
 

@@ -517,7 +517,5 @@ def delete_ledger_account(*, account: LedgerAccount) -> None:
         .distinct()
     )
     if transaction_ids:
-        LedgerTransaction.objects.filter(
-            user_id=account.user_id, id__in=transaction_ids
-        ).delete()
+        LedgerTransaction.objects.filter(user_id=account.user_id, id__in=transaction_ids).delete()
     account.delete()
