@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -48,6 +49,7 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=(is_active == "true"))
         return queryset.order_by("account_type", "name", "id")
 
+    @transaction.atomic
     def perform_destroy(self, instance: LedgerAccount) -> None:
         if instance.origin == LedgerAccount.Origin.SYSTEM:
             raise ValidationError(
@@ -181,10 +183,10 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             transaction_ids=newer_transaction_ids,
         )
         by_transaction_id: dict[int, Decimal] = {}
-        for transaction in rows:
-            by_transaction_id[transaction.id] = running_balance
+        for txn in rows:
+            by_transaction_id[txn.id] = running_balance
             impact = Decimal("0")
-            for entry in transaction.entries.all():
+            for entry in txn.entries.all():
                 if entry.account_id != account.id:
                     continue
                 impact += self._signed_impact_for_account(
