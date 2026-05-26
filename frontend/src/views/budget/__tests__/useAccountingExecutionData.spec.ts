@@ -85,7 +85,7 @@ describe('useAccountingExecutionData', () => {
 
     await refreshAccountingExecutionData();
 
-    expect(accountingPostedEntries.value[0].assetSubcategory).toBe('bank_account');
+    expect(accountingPostedEntries.value[0]?.assetSubcategory).toBe('bank_account');
   });
 
   it('sets error and clears data on fetch failure', async () => {
