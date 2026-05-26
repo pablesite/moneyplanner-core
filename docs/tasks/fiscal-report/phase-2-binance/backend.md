@@ -2,10 +2,10 @@
 
 ## Context
 
-Extender `broker_integrations` con la integración Binance. Mismos modelos que Phase 1.
+Extend `broker_integrations` with Binance integration. Same models as Phase 1.
 API-first; CSVs de `finance_data/binance/` como fallback.
 
-Para este usuario: no hay spot trades clásicos en libro de órdenes — todas las compras
+For this user: no classic spot trades in order book — all purchases
 de BTC/ETH son vía Convert (USDC→BTC/ETH) o Transaction Buy (DCA).
 
 Prerequisito: Phase 1 completada + tabla de cobertura de Phase 0 rellena para Binance.
@@ -64,7 +64,7 @@ class BinanceClient:
 Leer `Historial-de-transacciones-*.csv`:
 `ID de usuario, Hora, Cuenta, Operación, Moneda, Cambiar, Comentario`
 
-Procesar por tipo de Operación:
+Process by type of Operation:
 
 - `Simple Earn Flexible Interest`:
   → `IncomeEvent` (source=binance_earn_csv, income_type=binance_earn)
@@ -90,10 +90,10 @@ Procesar por tipo de Operación:
 
 **`csv_importers/binance_convert.py`**
 
-Leer `Historial-de-órdenes-de-Convert-*.csv`:
+Learn `Historial-de-órdenes-de-Convert-*.csv`:
 `Hora, Billetera, Par, Tipo, Vender, Comprar, Precio, Precio inverso, Fecha actualizada, Status`
 
-- Filtrar Status=Successful únicamente
+- Filter Status=Successful only
 - Parsear Vender: `"10.00000000 USDC"` → amount=10.0, asset=USDC
 - Parsear Comprar: `"0.00333867 ETH"` → amount=0.00333867, asset=ETH
 - → `BrokerTrade` (source=binance_csv, side=BUY)
@@ -109,10 +109,10 @@ Leer `Historial-de-órdenes-de-Convert-*.csv`:
 Leer `Historial-de-Recurrente-de-compras-recurrentes-de-Convert-*.csv`:
 `Fecha, Billetera, Frecuencia, Por hora, Monto original, Moneda original, Monto final, Moneda final, Precio, Precio inverso, Fecha de liquidación, ID del plan, Status`
 
-- Filtrar Status=SUCCESS únicamente (ignorar FAILED)
+- Filter Status=SUCCESS only (ignore FAILED)
 - → `BrokerTrade` (source=binance_csv, side=BUY)
 - trade_id = SHA256(Fecha + ID del plan + Monto original)
-- Dedup automático vía `unique_together(source, trade_id)`: si ya existe de binance_convert.py, se ignora
+- Automatic dedup via `unique_together(source, trade_id)`: if it already exists from binance_convert.py, it is ignored
 
 **Extender `services/broker_sync.py`**
 ```python
@@ -137,9 +137,9 @@ Smoke tests manuales:
    - 619 IncomeEvent con source=binance_earn_csv
    - 13 BrokerTrade con source=binance_csv (de Transaction Buy)
    - 5 IncomeEvent con income_type=commission
-2. Upload `Historial-de-órdenes-de-Convert-*.csv` → verificar 27 BrokerTrade adicionales
-3. Verificar que no hay duplicados: total BrokerTrade Binance = 13 (TxBuy) + 27 (Convert) = 40 máx
-4. `POST /api/v1/broker/sync/{id}/` con credenciales Binance → verificar datos API vs CSV
+2. Upload `Historial-de-órdenes-de-Convert-*.csv` → check 27 additional BrokerTrade
+3. Verify that there are no duplicates: total BrokerTrade Binance = 13 (TxBuy) + 27 (Convert) = 40 max
+4. `POST /api/v1/broker/sync/{id}/` with Binance credentials → verify API vs CSV data
 
 ## Required Documentation Updates
 - [ ] `core/docs/architecture/api-registry.md` — actualizar endpoints Binance
@@ -147,14 +147,14 @@ Smoke tests manuales:
 
 ## Risks
 1. Triplets Transaction Buy/Spend/Fee: si el timestamp no es exactamente el mismo segundo en todos los rows, el agrupamiento falla → usar ventana de ±2s y validar que el triplet tenga exactamente Spend + Buy + Fee del mismo par antes de crear BrokerTrade
-2. Dedup entre `binance_convert` y `binance_recurring`: trade_id determinístico basado en timestamp+par+amount garantiza idempotencia; si coinciden exactamente es el mismo trade
-3. Binance API ventana máxima por request para `/convert/tradeFlow` es 30 días → paginar por meses
+2. Dedup between `binance_convert` and `binance_recurring`: deterministic trade_id based on timestamp+par+amount guarantees idempotence; If they match exactly it is the same trade
+3. Binance API maximum window per request for `/convert/tradeFlow` is 30 days → page by month
 
 ## Completion Criteria
-- [ ] `BinanceClient` conecta con API real y devuelve datos para año 2025
+- [ ] `BinanceClient` connects with real API and returns data for year 2025
 - [ ] CSV importers cargan los 3 ficheros de `finance_data/binance/` sin errores
 - [ ] Sin duplicados entre fuentes (verificar con `BrokerTrade.objects.filter(source__startswith='binance').count()`)
-- [ ] Todos los comandos de validación pasan
+- [ ] All validation commands pass
 - [ ] Documentation updates done
 - [ ] Spec movida a `terminados/`
 - [ ] Commit: `feat(broker-integrations): add binance data layer with API + CSV fallback`

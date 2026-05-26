@@ -5,10 +5,10 @@ Core backend — enforcement de boundaries cross-domain y atomicidad
 
 ## Context
 Los tres dominios principales del backend Core (`accounting`, `budget`, `net_worth`)
-interactúan en múltiples flujos: `quick-entry` genera entradas contables que afectan
+interact in multiple flows: `quick-entry` generates accounting entries that affect
 summaries de budget; los activos y pasivos sincronizan compromisos presupuestarios;
-los snapshots pueden depender de balances contables. Estos cruces existen pero no están
-documentados de forma explícita ni tienen garantías de atomicidad consistentes.
+snapshots can depend on accounting balances. These crossings exist but are not
+explicitly documented nor do they have consistent atomicity guarantees.
 Esta fase cierra la deuda estructural del refactor sin tocar contratos API.
 
 **Prerequisito:** Phase 3 completada.
@@ -23,48 +23,48 @@ Esta fase cierra la deuda estructural del refactor sin tocar contratos API.
 
 ### En scope
 1. Auditar y documentar la tabla de responsabilidades de cada dominio.
-2. Añadir `transaction.atomic` donde haya side effects cruzados sin protección.
-3. Añadir integration tests específicos para cada cruce de dominio que hoy no existan.
-4. Actualizar `backend-refactor-roadmap.md` como cierre formal del refactor estructural.
+2. Add `transaction.atomic` where there are unprotected crossed side effects.
+3. Add specific integration tests for each domain crossing that do not exist today.
+4. Update `backend-refactor-roadmap.md` as a formal closure of the structural refactor.
 
 ### Fuera de scope
 1. Cambios de comportamiento funcional o de contrato API.
-2. Refactors dentro de un único dominio (ya cubiertos en fases anteriores).
-3. Optimización de rendimiento (solo si hay evidencia de N+1, no como preventivo).
+2. Refactors within a single domain (already covered in previous phases).
+3. Performance optimization (only if there is evidence of N+1, not as a preventative).
 
 ## Plan
 
 ### 1. Tabla de responsabilidades (a documentar en el roadmap)
 
-| Dominio | Responsabilidad única | No debe hacer |
+| Domain | Single responsibility | Shouldn't do |
 |---------|----------------------|---------------|
 | `accounting` | Registrar movimientos contables reales. Calcular balances de cuentas. Clasificar entries. | Modificar directamente entradas de budget. Acceder a assets/liabilities. |
 | `budget` | Plan anual y seguimiento mensual. Generar compromisos presupuestarios para activos/pasivos. | Escribir en el ledger contable. Calcular balances de cuentas. |
-| `net_worth` | Calcular posición patrimonial. Leer balances contables via `accounting.services`. Sincronizar compromisos en budget para activos/pasivos. | Escribir en el ledger directamente. Acceder a budget entries de forma distinta a la sincronización de compromisos. |
+| `net_worth` | Calculate equity position. Read accounting balances via `accounting.services`. Synchronize commitments in budget for assets/liabilities. | Write to the ledger directly. Access budget entries in a way other than commitment synchronization. |
 
-### 2. Auditoría de `transaction.atomic`
+### 2. `transaction.atomic` audit
 
-Revisar los siguientes flujos y añadir `@transaction.atomic` o `with transaction.atomic()` donde falten:
+Review the following flows and add `@transaction.atomic` or `with transaction.atomic()` where they are missing:
 
 a) **`accounting/services_quick_entry.py` → `create_quick_transaction`**:
-   - Crea la transacción + entries en una operación atómica
-   - Si el entry lleva clasificación anual (income/expense link), la asignación debe ser parte del mismo atomic block
+- Create the transaction + entries in an atomic operation
+- If the entry has an annual classification (income/expense link), the assignment must be part of the same atomic block
 
 b) **`net_worth/services_assets_budget.py` → `sync_generated_budget_commitments_for_asset`**:
-   - Borrado + recreación de compromisos debe ser atómica
+- Deletion + recreation of commits must be atomic
 
 c) **`net_worth/services_liabilities_budget.py` → `sync_generated_budget_commitments_for_liability`**:
-   - Ídem para pasivos
+- Ditto for liabilities
 
 d) **`memberships/services.py` → sync de ownership-links**:
-   - Actualización de ownership + side effects en budget deben estar en el mismo atomic block
+- Ownership update + side effects in budget must be in the same atomic block
 
 e) **`net_worth/services_snapshots.py` → `import_snapshots_bulk_for_user`**:
    - Import bulk debe ser todo-o-nada
 
 ### 3. Integration tests cross-domain
 
-Añadir en `accounting/tests/test_accounting.py` o en un nuevo
+Add in `accounting/tests/test_accounting.py` or in a new
 `accounting/tests/test_integration.py`:
 
 **accounting ↔ budget:**
@@ -106,11 +106,11 @@ def test_asset_budget_sync_is_atomic(): ...
 def test_ownership_sync_updates_asset_percentages(): ...
 ```
 
-### 4. Actualizar documentación de boundaries
+### 4. Update boundaries documentation
 
-Añadir en `backend-refactor-roadmap.md` una sección **"Boundaries estabilizados"**:
+Add a **"Stabilized Boundaries"** section in `backend-refactor-roadmap.md`:
 - Tabla de responsabilidades definitiva
-- Lista de flujos atómicos garantizados
+- List of guaranteed atomic flows
 - Lista de side effects documentados por dominio
 
 ### 5. Ejecutar suite completa
@@ -136,22 +136,22 @@ docker compose exec backend mypy .
 Resultados esperados:
 - Todos los tests pasan
 - Todos los flujos cross-domain tienen `transaction.atomic` donde corresponde
-- Tests de integración cross-domain existen y pasan
+- Cross-domain integration tests exist and pass
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/roadmap/backend-refactor-roadmap.md` — añadir sección "Boundaries estabilizados"; marcar Phase 4 completada
-- [ ] `core/docs/project-status.md` — actualizar estado de la tarea
+- [ ] `core/docs/roadmap/backend-refactor-roadmap.md` — add "Stabilized Boundaries" section; mark Phase 4 completed
+- [ ] `core/docs/project-status.md` — update task status
 
 ## Risks
 
-1. **Añadir `transaction.atomic` puede revelar deadlocks** en tests que usan transacciones anidadas: verificar con `ATOMIC_REQUESTS=False` en tests de integración si es necesario.
+1. **Adding `transaction.atomic` may reveal deadlocks** in tests that use nested transactions: check with `ATOMIC_REQUESTS=False` in integration tests if necessary.
 2. **Los tests de atomicidad con rollback** pueden ser complejos de escribir correctamente en Django TestCase (que ya usa transacciones). Usar `TestCase.assertRaises` + `transaction.on_commit` hooks si es necesario.
 
 ## Completion Criteria
 
 - [ ] Tabla de responsabilidades documentada en `backend-refactor-roadmap.md`
-- [ ] `transaction.atomic` añadido en los 5 flujos identificados
+- [ ] `transaction.atomic` added in all 5 identified flows
 - [ ] Integration tests cross-domain existen en `accounting/tests/` o `net_worth/tests/test_integration.py`
 - [ ] `python manage.py test accounting accounts budget memberships net_worth core` pasa
 - [ ] `ruff check .` y `mypy .` limpios

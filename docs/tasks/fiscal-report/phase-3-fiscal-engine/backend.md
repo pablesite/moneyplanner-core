@@ -1,14 +1,14 @@
-# Phase 3 — Informe fiscal: motor FIFO + generación de informe
+# Phase 3 — Tax Report: FIFO Engine + Report Generation
 
 ## Context
 
-Con datos de Pionex y Binance en DB (Phases 1 y 2 completadas), implementar el motor
+With Pionex and Binance data in DB (Phases 1 and 2 completed), implement the engine
 FIFO global cross-exchange y el servicio que genera el JSON del informe fiscal para el frontend.
 
 La AEAT aplica FIFO globalmente por cripto (no por exchange): compras en Binance y ventas
-en Pionex deben tratarse como un pool único ordenado por timestamp.
+on Pionex they should be treated as a single pool ordered by timestamp.
 
-Prerequisitos: Phases 1 y 2 completadas con datos reales en DB.
+Prerequisites: Phases 1 and 2 completed with real data in DB.
 
 ## Area
 `backend`
@@ -19,11 +19,11 @@ Prerequisitos: Phases 1 y 2 completadas con datos reales en DB.
 ## Scope
 
 ### In scope
-- `eur_converter.py`: wrapper FX Frankfurter (reutilizar cliente existente en Core) con caché en memoria
-- `fifo_calculator.py`: FIFO estricto global cross-exchange por `base_asset` + año fiscal
+- `eur_converter.py`: FX Frankfurter wrapper (reuse existing client in Core) with in-memory cache
+- `fifo_calculator.py`: strict FIFO global cross-exchange by `base_asset` + fiscal year
 - `fiscal_report.py`: servicio que genera el JSON completo del informe
 - Endpoint `GET /api/v1/broker/fiscal-report/?year=YYYY`
-- Tests unitarios: FIFO, conversión EUR, informe completo
+- Unit tests: FIFO, EUR conversion, full report
 
 ### Out of scope
 - Frontend (Phase 4)
@@ -33,7 +33,7 @@ Prerequisitos: Phases 1 y 2 completadas con datos reales en DB.
 
 ### 1. Diagnosis
 - Localizar el cliente Frankfurter existente en Core (`core/backend/`) — reutilizarlo, no reimplementar
-- Verificar que hay BrokerTrade, BotNetResult, FuturesPosition, IncomeEvent con datos de 2025
+- Verify that there is BrokerTrade, BotNetResult, FuturesPosition, IncomeEvent with data from 2025
 
 ### 2. Change implementation
 
@@ -168,7 +168,7 @@ Output JSON:
 }
 ```
 
-Añadir a `views.py` + `serializers.py` + `urls.py`:
+Add a `views.py` + `serializers.py` + `urls.py`:
 ```
 GET /api/v1/broker/fiscal-report/?year=YYYY
 ```
@@ -182,15 +182,15 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 docker compose -f core/docker-compose.yml exec backend python manage.py test broker_integrations
 ```
 
-Tests unitarios críticos para `fifo_calculator.py`:
+Critical unit tests for `fifo_calculator.py`:
 - Compra y venta en el mismo exchange → coste correcto
 - Compra en Binance, venta en Pionex (cross-exchange) → coste de Binance
 - Venta sin compra previa suficiente → aviso en `avisos[]`, cost_eur=0 para parte no cubierta
-- Compra parcial: un BUY cubre múltiples SELLs parciales
+- Partial purchase: a BUY covers multiple partial SELLs
 
 Smoke test manual:
 - `GET /api/v1/broker/fiscal-report/?year=2025`
-- Verificar que `capital_mobiliario` suma todos los IncomeEvent del año
+- Verify that `capital_mobiliario` adds all the IncomeEvents of the year
 - Verificar que los lotes de BTC muestran el exchange de compra correcto
 - Verificar `aviso_derivados: true` en futuros
 - Verificar `data_sources` refleja CSV fallback donde aplique
@@ -200,15 +200,15 @@ Smoke test manual:
 - [ ] `core/docs/project-status.md` — marcar Phase 3 completada
 
 ## Risks
-1. FX no disponible para alguna fecha (fin de semana, festivo) → usar último día hábil anterior (`get_eur_rate` debe hacer lookup hacia atrás máx 3 días)
-2. BUYs insuficientes para cubrir SELLs (falta historial pre-2024) → emitir aviso explícito y no fallar el cálculo
-3. Frankfurter no tiene precios históricos de BTC/ETH directamente → puede requerir fuente alternativa (CoinGecko API) para cripto; verificar antes de implementar
+1. FX not available for some date (weekend, holiday) → use last previous business day (`get_eur_rate` must look back max 3 days)
+2. Insufficient BUYs to cover SELLs (lack of pre-2024 history) → issue explicit notice and do not fail the calculation
+3. Frankfurter does not have historical BTC/ETH prices directly → may require alternative source (CoinGecko API) for crypto; check before deploy
 
 ## Completion Criteria
-- [ ] Tests FIFO pasan todos los casos (mismo exchange, cross-exchange, gap de datos)
-- [ ] Endpoint devuelve JSON completo con totales numéricos coherentes
-- [ ] capital_mobiliario total coincide con suma manual de IncomeEvent del año
-- [ ] Todos los comandos de validación pasan
+- [ ] FIFO tests pass all cases (same exchange, cross-exchange, data gap)
+- [ ] Endpoint returns full JSON with consistent numeric totals
+- [ ] total capital_movable matches manual sum of IncomeEvent for the year
+- [ ] All validation commands pass
 - [ ] Documentation updates done
 - [ ] Spec movida a `terminados/`
 - [ ] Commit: `feat(broker-integrations): add FIFO engine and fiscal report endpoint`
