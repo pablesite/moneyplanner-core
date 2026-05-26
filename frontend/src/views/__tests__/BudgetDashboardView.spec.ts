@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import BudgetDashboardView from '../BudgetDashboardView.vue';
 
+vi.mock('vue-chartjs', () => ({
+  Bar: { name: 'BarChartStub', template: '<div data-test="chart-stub" />' },
+  Doughnut: { name: 'DoughnutChartStub', template: '<div data-test="chart-stub" />' },
+  Line: { name: 'LineChartStub', template: '<div data-test="chart-stub" />' },
+}));
+
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
@@ -2130,5 +2136,132 @@ describe('BudgetDashboardView', () => {
       ?.trigger('click');
     await flushPromises();
     expect(januaryExec().classes()).toContain('ui-budget-month-exec-pending');
+  });
+
+  it('updates expense YTD totals and evolution when switching recurrent/one-off filter', async () => {
+    mockExpenseStore.entries.value = [
+      {
+        id: 1,
+        name: 'Gasto recurrente',
+        category: 'consumption_expenses',
+        subcategory: 'living_expenses',
+        owner: '',
+        expenseType: 'recurrent',
+        timeProfile: 'structural_recurrent',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: null,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 12000,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+      {
+        id: 2,
+        name: 'Gasto puntual',
+        category: 'consumption_expenses',
+        subcategory: 'living_expenses',
+        owner: '',
+        expenseType: 'one_off',
+        timeProfile: 'one_off',
+        cashflowRole: 'operating',
+        eventGroup: '',
+        targetMonth: currentMonth,
+        termEndMonth: null,
+        termEndYear: null,
+        amountInputPeriod: 'annual',
+        amountAnnual: 100,
+        fiscalYear: currentYear,
+        currency: 'EUR',
+        notes: '',
+        createdAt: '',
+      },
+    ];
+    mockExpenseStore.totalAnnual.value = 13200;
+    configureCoreApi({
+      expenseSummary: makeMonthlySummary('1100.00', {
+        planned_total: '13200.00',
+        executed_total: '1100.00',
+        months: [
+          {
+            month: currentMonth,
+            planned: '1100.00',
+            executed: '1100.00',
+            pending: '0.00',
+            completion_ratio: 1,
+            checkins_confirmed: 1,
+            checkins_expected: 1,
+          },
+        ],
+        expense_execution_breakdown: {
+          categories: [
+            {
+              category: 'consumption_expenses',
+              planned_total: '1100.00',
+              executed_budgeted_total: '1100.00',
+              executed_unbudgeted_total: '0.00',
+              executed_total: '1100.00',
+              has_budgeted_lines: true,
+              has_unbudgeted_execution: false,
+              subcategories: [
+                {
+                  subcategory: 'living_expenses',
+                  planned_total: '1100.00',
+                  executed_budgeted_total: '1100.00',
+                  executed_unbudgeted_total: '0.00',
+                  executed_total: '1100.00',
+                  has_budgeted_line: true,
+                  has_unbudgeted_execution: false,
+                  months: [
+                    {
+                      month: currentMonth,
+                      planned: '1100.00',
+                      executed_budgeted: '1100.00',
+                      executed_unbudgeted: '0.00',
+                      executed_total: '1100.00',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    mockAccountingApi.getMonthlySummary.mockResolvedValue({
+      data: { fiscal_year: currentYear, months: [] },
+    } as never);
+    mockAccountingApi.getTransactions.mockResolvedValue({
+      data: { results: [], next_cursor: null, total_count: 0 },
+    } as never);
+
+    const wrapper = mountBudgetView();
+    await flushPromises();
+
+    const filterButtons = () => wrapper.findAll('.ui-budget-filter-segment-hero button');
+    const expenseSection = () => wrapper.find('.ui-budget-section-expense');
+    const selectedMonthExecTitle = () => {
+      const monthCol = expenseSection().findAll('.ui-budget-month-col')[currentMonth - 1];
+      if (!monthCol) throw new Error('Expense selected month column not found');
+      return monthCol.find('div[class^="ui-budget-month-exec"]').attributes('title');
+    };
+
+    await filterButtons()
+      .find((candidate) => candidate.text().includes('Recurrentes'))
+      ?.trigger('click');
+    await flushPromises();
+    expect(expenseSection().text()).toContain('1.000,00 EUR');
+    expect(selectedMonthExecTitle()).toContain('1.000,00 EUR');
+
+    await filterButtons()
+      .find((candidate) => candidate.text().includes('Puntuales'))
+      ?.trigger('click');
+    await flushPromises();
+    expect(expenseSection().text()).toContain('100,00 EUR');
+    expect(selectedMonthExecTitle()).toContain('100,00 EUR');
   });
 });
