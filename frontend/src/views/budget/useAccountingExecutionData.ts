@@ -17,6 +17,7 @@ import {
 export function useAccountingExecutionData(fiscalYear: Ref<number>, ownershipFilter: Ref<string>) {
   const accountingExecutionLoading = ref(false);
   const accountingExecutionError = ref<string | null>(null);
+  let currentGeneration = 0;
   const accountingMonthlySummary = ref<MonthlyAccountingSummary | null>(null);
   const accountingPostedEntries = ref<AccountingPostedEntry[]>([]);
 
@@ -52,6 +53,7 @@ export function useAccountingExecutionData(fiscalYear: Ref<number>, ownershipFil
   });
 
   async function refreshAccountingExecutionData(): Promise<void> {
+    const generation = ++currentGeneration;
     accountingExecutionLoading.value = true;
     accountingExecutionError.value = null;
     try {
@@ -64,6 +66,7 @@ export function useAccountingExecutionData(fiscalYear: Ref<number>, ownershipFil
             page_size: 200,
             cursor,
           });
+          if (generation !== currentGeneration) return null;
           allResults.push(
             ...(response.data.results ?? []).flatMap((transaction: LedgerTransaction) => {
               const bookingMonth = bookingMonthFromDate(transaction.booking_date);
@@ -86,22 +89,26 @@ export function useAccountingExecutionData(fiscalYear: Ref<number>, ownershipFil
         fetchAllTransactions({ year: fiscalYear.value, status: 'posted' }),
         coreNetWorthApi.getAssets(),
       ]);
+      if (generation !== currentGeneration) return;
       const assetSubcategoryById = new Map<number, string>();
       for (const asset of assetsResponse.data ?? []) {
         assetSubcategoryById.set(asset.id, asset.subcategory ?? '');
       }
       accountingMonthlySummary.value = summaryResponse.data ?? null;
-      accountingPostedEntries.value = transactionsResponse.map((entry) => ({
+      accountingPostedEntries.value = (transactionsResponse ?? []).map((entry) => ({
         ...entry,
         assetSubcategory:
           entry.asset_id != null ? (assetSubcategoryById.get(entry.asset_id) ?? '') : '',
       }));
     } catch (e: unknown) {
+      if (generation !== currentGeneration) return;
       accountingExecutionError.value = toBudgetErrorMessage(e);
       accountingMonthlySummary.value = null;
       accountingPostedEntries.value = [];
     } finally {
-      accountingExecutionLoading.value = false;
+      if (generation === currentGeneration) {
+        accountingExecutionLoading.value = false;
+      }
     }
   }
 
