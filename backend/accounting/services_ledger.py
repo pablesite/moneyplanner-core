@@ -483,3 +483,39 @@ def ensure_net_worth_opening_balance_transaction(
         currency=normalized_currency,
     )
     return transaction_row
+
+
+@transaction.atomic
+def delete_ledger_account(*, account: LedgerAccount) -> None:
+    """Delete a ledger account with all its transactions and cross-domain unlinking.
+
+    Unlinks any associated net_worth Asset or Liability (resets tracking mode to MANUAL)
+    before cascading the delete, so neither domain ends up with a dangling reference.
+    Lazy imports are used to avoid a circular import with net_worth.
+    """
+    if account.asset_id is not None:
+        from net_worth.models import Asset
+
+        Asset.objects.filter(
+            id=account.asset_id,
+            user_id=account.user_id,
+            accounting_account_id=account.id,
+        ).update(accounting_account_id=None, tracking_mode=Asset.TrackingMode.MANUAL)
+
+    if account.liability_id is not None:
+        from net_worth.models import Liability
+
+        Liability.objects.filter(
+            id=account.liability_id,
+            user_id=account.user_id,
+            accounting_account_id=account.id,
+        ).update(accounting_account_id=None, tracking_mode=Liability.TrackingMode.MANUAL)
+
+    transaction_ids = list(
+        LedgerEntry.objects.filter(account_id=account.id)
+        .values_list("transaction_id", flat=True)
+        .distinct()
+    )
+    if transaction_ids:
+        LedgerTransaction.objects.filter(user_id=account.user_id, id__in=transaction_ids).delete()
+    account.delete()

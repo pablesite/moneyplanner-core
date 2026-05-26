@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -391,6 +392,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries")
         request = self.context["request"]
@@ -412,6 +414,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         sync_position_start_dates_for_transaction(transaction=transaction)
         return transaction
 
+    @transaction.atomic
     def update(self, instance: LedgerTransaction, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries", None)
         target_quick_entry_kind = validated_data.get("quick_entry_kind", instance.quick_entry_kind)

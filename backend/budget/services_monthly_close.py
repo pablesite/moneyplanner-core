@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     pass
 
 from accounting.models import LedgerEntry
+
+logger = logging.getLogger(__name__)
 
 
 def _prev_year_month(fiscal_year: int, month: int) -> tuple[int, int]:
@@ -69,7 +72,12 @@ def _get_previous_month_liquidity_total(*, user, fiscal_year: int, month: int) -
         if executed is not None:
             return Decimal(str(executed))
     except Exception:
-        pass
+        logger.exception(
+            "Could not compute previous liquidity for user %s (%d/%d); using None",
+            user,
+            prev_year,
+            prev_month,
+        )
 
     return None
 

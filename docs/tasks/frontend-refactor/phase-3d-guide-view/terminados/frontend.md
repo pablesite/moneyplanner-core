@@ -1,9 +1,9 @@
-# Task: Frontend Refactor — Fase 3d: Descomposición de GuidePhaseDetailView
+# Task: Frontend Refactor — 3d Phase: GuidePhaseDetailView Decomposition
 
 ## Context
-`GuidePhaseDetailView.vue` tiene 2,207 líneas y concentra scoring, diagnósticos y formatos
-de visualización que también usa `HomeView.vue`. Esta fase extrae la lógica compartida al
-dominio `guide`, descompone la vista en secciones y elimina la duplicación con HomeView.
+`GuidePhaseDetailView.vue` has 2,207 lines and concentrates scoring, diagnostics and formats
+display that also uses `HomeView.vue`. This phase extracts the shared logic to the
+domain `guide`, breaks the view into sections and eliminates duplication with HomeView.
 
 ## Area
 `frontend`
@@ -13,52 +13,52 @@ dominio `guide`, descompone la vista en secciones y elimina la duplicación con 
 
 ## Scope
 **In scope:**
-1. Extraer scoring, diagnósticos y formatos compartidos a `domains/guide/`.
-2. Crear componentes de sección para los bloques de la guía.
-3. Reducir la vista al wiring de secciones (objetivo: < 400 líneas).
-4. Eliminar duplicación de cálculos entre `GuidePhaseDetailView` y `HomeView`.
-5. Tests unitarios para los composables extraídos (≥80% cobertura).
+1. Extract scoring, diagnostics and shared formats to `domains/guide/`.
+2. Create section components for the guide blocks.
+3. Reduce the view to the wiring of sections (goal: < 400 lines).
+4. Eliminate duplication of calculations between `GuidePhaseDetailView` and `HomeView`.
+5. Unit tests for the extracted composables (≥80% coverage).
 
 **Out of scope:**
-1. Cambios de contenido o lógica del coach financiero.
-2. Rediseño de UX de la guía.
+1. Changes to the content or logic of the financial coach.
+2. UX redesign of the guide.
 3. Fases del coach no implementadas.
 
 ## Plan
 
 ### Diagnosis
 1. Leer `GuidePhaseDetailView.vue` completo e identificar:
-   - Lógica de scoring/diagnóstico duplicada o similar a `HomeView.vue`
-   - Formatos de visualización de fases
-   - Side effects (fetch de datos del scoring)
+- Duplicate scoring/diagnosis logic or similar to `HomeView.vue`
+- Phase display formats
+- Side effects (fetch de datos del scoring)
 2. Leer `HomeView.vue` y comparar con `GuidePhaseDetailView.vue` para detectar duplicaciones.
 3. Revisar `domains/guide/` actual: `phases.ts`, `phaseDiagnostics.ts`, `scoreVisuals.ts`.
 
 ### Change implementation
 1. **Consolidar en `domains/guide/`:**
-   - Mover cálculos de scoring que estén en la vista a `phaseDiagnostics.ts` o nuevo fichero.
-   - Mover formatos de visualización compartidos con HomeView a `scoreVisuals.ts`.
+- Move scoring calculations that are in the view to `phaseDiagnostics.ts` or new file.
+- Move display formats shared with HomeView to `scoreVisuals.ts`.
    - Actualizar `domains/guide/index.ts` con las nuevas exportaciones.
 
-2. **Composable de página:** `useGuidePhaseDetail.ts`
-   - fetch de datos de la fase
-   - cálculo de score y estado de salud
-   - estado de navegación entre fases
+2. **Page Composable:** `useGuidePhaseDetail.ts`
+- phase data fetch
+- score and health status calculation
+- navigation status between phases
 
 3. **Secciones como componentes:**
    - `GuidePhaseSummary.vue` — cabecera de fase, score, badge
-   - `GuidePhaseDiagnostics.vue` — diagnósticos y recomendaciones
+- `GuidePhaseDiagnostics.vue` — diagnostics and recommendations
    - `GuidePhaseProgress.vue` — progreso y criterios de la fase
    Reusar los componentes de `domains/guide/components/` existentes.
 
-4. **Ajustar `HomeView.vue`:** reemplazar código duplicado por importaciones del dominio.
+4. **Adjust `HomeView.vue`:** replace duplicate code by domain imports.
 
 5. **Tests:**
    - Ampliar `domains/guide/__tests__/phaseDiagnostics.spec.ts` con los casos nuevos
    - `domains/guide/__tests__/useGuidePhaseDetail.spec.ts`
 
 ### Core validation
-Esta vista es idéntica en Core. Replicación directa.
+This view is identical in Core. Direct replication.
 
 ## Validation
 ```bash
@@ -75,21 +75,21 @@ docker compose exec frontend npm run test:coverage
 ```
 
 ## Required Documentation Updates
-- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — actualizar estado Fase 3d
+- [x] `core/docs/roadmap/terminados/frontend-refactor-roadmap.md` — update Phase 3d state
 - [x] `core/docs/project-status.md` — marcar Fase 3d como completada
 
 ## Risks
-- **Riesgo:** `HomeView.vue` y `GuidePhaseDetailView.vue` pueden compartir estado reactivo
-  de formas no evidentes. **Mitigación:** auditar los stores usados en ambas vistas antes de
-  mover lógica; no crear dependencias circulares entre dominio y vista.
+- **Risk:** `HomeView.vue` and `GuidePhaseDetailView.vue` may share reactive status
+in non-obvious ways. **Mitigation:** audit the stores used in both views before
+move logic; do not create circular dependencies between domain and view.
 
 ## Completion Criteria
-- [x] `GuidePhaseDetailView.vue` < 400 líneas
-- [x] 0 duplicación de cálculos entre GuidePhaseDetailView y HomeView
-- [x] Composables extraídos con tests ≥80% cobertura
+- [x] `GuidePhaseDetailView.vue` < 400 lines
+- [x] 0 duplication of calculations between GuidePhaseDetailView and HomeView
+- [x] Composables extracted with tests ≥80% coverage
 - [ ] Sin cambios de comportamiento observados en browser
 - [x] `lint`, `typecheck`, `test:coverage` ≥80% en verde — Core
-- [x] Documentación requerida actualizada
+- [x] Updated required documentation
 - [x] Spec movida a `terminados/`
 - [ ] Commit creado (Conventional Commits)
 

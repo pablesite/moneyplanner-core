@@ -187,8 +187,8 @@ Resultados esperados:
 - [ ] `python manage.py test accounting accounts budget memberships net_worth core` pasa sin errores
 - [ ] `ruff check .` limpio
 - [ ] `mypy .` limpio
-- [ ] `accounting/services.py` no contiene lógica de negocio — solo re-exports
-- [ ] Todos los módulos nuevos < 300 líneas
-- [ ] Todos los imports en el codebase apuntan a los módulos directos, no a la facade
+- [ ] `accounting/services.py` does not contain business logic — only re-exports
+- [ ] All new modules < 300 lines
+- [ ] All imports in the codebase point to the direct modules, not the facade
 - [ ] Spec movida a `terminados/`
 - [ ] Commit: `refactor(accounting): partition services.py into domain modules`

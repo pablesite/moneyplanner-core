@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from bisect import bisect_right
 from datetime import date, timedelta
 from decimal import Decimal
@@ -25,6 +26,8 @@ from .models import (
     LiquidityAssetEvent,
     LiquidityMonthlyCheckin,
 )
+
+logger = logging.getLogger(__name__)
 
 ASSET_CASH_SUBCATEGORIES_REQUIRING_TAE = {
     Asset.Subcategory.BANK_ACCOUNT,
@@ -546,7 +549,9 @@ def _resolve_inflation_region_for_asset(*, asset: Asset, position_cache=None) ->
         if normalized:
             return normalized
     except Exception:
-        pass
+        logger.exception(
+            "Could not resolve inflation region for asset %d; defaulting to ES", asset.id
+        )
     return cast(str, InflationIndex.Region.ES)
 
 
@@ -1313,6 +1318,13 @@ def get_amount_base_value(
             )
         return str(convert_currency(amount, currency, base_currency, date=ref_date))
     except Exception:
+        logger.warning(
+            "Currency conversion failed: %s %s -> %s on %s",
+            amount,
+            currency,
+            base_currency,
+            as_of_date,
+        )
         return None
 
 

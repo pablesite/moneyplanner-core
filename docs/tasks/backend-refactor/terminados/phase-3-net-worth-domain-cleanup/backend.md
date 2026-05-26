@@ -1,15 +1,15 @@
 # Core backend — Phase 3: net_worth domain cleanup
 
 ## Title
-Core backend — partición de hotspots `net_worth` y adelgazamiento de la facade
+Core backend — `net_worth` hotspot partitioning and facade thinning
 
 ## Context
-`net_worth` tiene dos hotspots que siguen siendo grandes incluso tras la separación
-inicial: `services_assets.py` (1,232 líneas, 35 funciones) y `services_liabilities.py`
-(1,053 líneas). Ambos mezclan lógica de dominio puro (valuación, eventos, calendarios de
-pago) con lógica de sincronización con `budget` (generación y borrado de compromisos
-presupuestarios generados). Además, `services.py` es una facade de compatibilidad con
-imports dobles que añade una capa innecesaria de indirección una vez que los módulos
+`net_worth` has two hotspots that remain large even after separation
+initial: `services_assets.py` (1,232 lines, 35 functions) and `services_liabilities.py`
+(1,053 lines). Both mix pure domain logic (valuation, events,
+payment) with synchronization logic with `budget` (generation and deletion of commitments
+generated budgets). Additionally, `services.py` is a support facade for
+double imports which adds an unnecessary layer of indirection once the modules
 directos son estables.
 
 **Prerequisito:** Phase 2 completada.
@@ -25,8 +25,8 @@ directos son estables.
 ### En scope
 1. Partir `services_assets.py` en `services_assets_core.py` + `services_assets_budget.py`.
 2. Partir `services_liabilities.py` en `services_liabilities_core.py` + `services_liabilities_budget.py`.
-3. Migrar imports en `services.py` para apuntar directamente a los nuevos submódulos.
-4. Reducir `services.py` a únicamente las funciones sin dominio natural en submódulos:
+3. Migrate imports in `services.py` to point directly to the new submodules.
+4. Reduce `services.py` to only functions without natural domain in submodules:
    - `calculate_totals`
    - `get_base_currency_for_user`
    - `get_inflation_region_for_user`
@@ -35,17 +35,17 @@ directos son estables.
    - `get_liquidity_asset_queryset_for_user`
    - `NetWorthTotals` (dataclass)
    - `_serialize_money`
-5. Actualizar `views.py` para importar directamente desde los módulos, no desde la facade.
+5. Update `views.py` to import directly from the modules, not from the facade.
 6. Actualizar tests para reflejar la nueva estructura de imports.
 
 ### Fuera de scope
-1. Eliminar `services.py` completamente (deuda técnica residual a evaluar en Phase 4).
+1. Eliminate `services.py` completely (residual technical debt to be evaluated in Phase 4).
 2. Cambios de comportamiento funcional.
 3. Cambios de contrato API.
 
 ## Plan
 
-### 1. Diagnóstico
+### 1. Diagnosis
 Listar todos los importadores de `net_worth.services`:
 ```bash
 cd core
@@ -53,9 +53,9 @@ grep -r "from net_worth.services import\|from net_worth import services\|net_wor
   backend/ --include="*.py" -l
 ```
 
-### 2. Partición de `services_assets.py`
+### 2. Partition of `services_assets.py`
 
-**`services_assets_core.py`** — valuación, eventos, helpers de cálculo:
+**`services_assets_core.py`** — valuation, events, calculation helpers:
 - `AccountingIntegrationState`
 - `_get_accounting_asset_account`
 - `ensure_asset_accounting_account`
@@ -84,7 +84,7 @@ grep -r "from net_worth.services import\|from net_worth import services\|net_wor
 - `get_effective_asset_improvement_amount`
 - `get_amount_base_value`
 
-**`services_assets_budget.py`** — sincronización con budget:
+**`services_assets_budget.py`** — sync with budget:
 - `_format_ownership_percent`
 - `_get_generated_asset_owner_name`
 - `_get_generated_asset_expense_profile`
@@ -94,9 +94,9 @@ grep -r "from net_worth.services import\|from net_worth import services\|net_wor
 - `sync_generated_budget_commitments_for_asset`
 - `delete_generated_budget_commitments_for_asset`
 
-### 3. Partición de `services_liabilities.py`
+### 3. Partition of `services_liabilities.py`
 
-**`services_liabilities_core.py`** — creación, valuación, calendario de pagos:
+**`services_liabilities_core.py`** — creation, valuation, payment schedule:
 - `_last_day_of_month`
 - `validate_liability_payload`
 - `create_liability_for_user`
@@ -109,14 +109,14 @@ grep -r "from net_worth.services import\|from net_worth import services\|net_wor
 - `get_liability_first_payment_date`
 - `infer_liability_is_asset_backed`
 
-**`services_liabilities_budget.py`** — sincronización con budget:
+**`services_liabilities_budget.py`** — sync with budget:
 - `get_generated_liability_expense_profile`
 - `sync_generated_budget_commitments_for_liability`
 - `delete_generated_budget_commitments_for_liability`
 
 ### 4. Actualizar `services.py` (facade residual)
-Mantener solo las funciones sin módulo natural (listadas en scope) y actualizar los
-re-exports para apuntar a los nuevos submódulos:
+Keep only the functions without natural module (listed in scope) and update the
+re-exports to target the new submodules:
 ```python
 from .services_assets_core import (
     validate_asset_payload,
@@ -131,7 +131,7 @@ from .services_assets_budget import (
 ```
 
 ### 5. Actualizar `views.py` y tests
-- `views.py`: importar desde módulos directos donde sea posible
+- `views.py`: import from direct modules where possible
 - `tests/test_assets.py`: importar desde `services_assets_core` / `services_assets_budget`
 - `tests/test_liabilities.py`: importar desde `services_liabilities_core` / `services_liabilities_budget`
 
@@ -160,20 +160,20 @@ docker compose exec backend mypy .
 
 Resultados esperados:
 - Todos los tests pasan
-- Ningún módulo nuevo > 400 líneas
-- `services.py` ≤ 80 líneas (solo re-exports + funciones base)
+- No new module > 400 lines
+- `services.py` ≤ 80 lines (only re-exports + base functions)
 - `ruff` y `mypy` en verde
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/roadmap/backend-refactor-roadmap.md` — actualizar estado de Fase 3, marcar net_worth hotspots como atendidos
-- [ ] `core/docs/project-status.md` — actualizar estado de la tarea
+- [ ] `core/docs/roadmap/backend-refactor-roadmap.md` — update Phase 3 status, mark net_worth hotspots as served
+- [ ] `core/docs/project-status.md` — update task status
 
 ## Risks
 
-1. **`_last_day_of_month` duplicada** en assets y liabilities: consolidar en un único módulo utilitario o en `services_liabilities_core.py` e importar desde assets si necesita.
-2. **imports circulares** entre `services_assets_budget.py` y `budget.services`: verificar que la dirección del import es assets → budget (no budget → assets).
-3. **facade `services.py` con re-exports anidados**: mypy puede tener dificultades con re-exports en cadena. Asegurarse de que los `__all__` están definidos en los módulos hoja.
+1. **`_last_day_of_month` duplicated** in assets and liabilities: consolidate into a single utility module or into `services_liabilities_core.py` and import from assets if needed.
+2. **circular imports** between `services_assets_budget.py` and `budget.services`: verify that the import direction is assets → budget (not budget → assets).
+3. **facade `services.py` with nested re-exports**: mypy may have difficulties with chained re-exports. Make sure the `__all__` are defined in the leaf modules.
 
 ## Completion Criteria
 
@@ -183,6 +183,6 @@ Resultados esperados:
 - [ ] `mypy .` limpio
 - [ ] `services_assets.py` eliminado; reemplazado por `services_assets_core.py` + `services_assets_budget.py`
 - [ ] `services_liabilities.py` eliminado; reemplazado por `services_liabilities_core.py` + `services_liabilities_budget.py`
-- [ ] `services.py` ≤ 80 líneas
+- [ ] `services.py` ≤ 80 lines
 - [ ] Spec movida a `terminados/`
 - [ ] Commit: `refactor(net_worth): split services_assets and services_liabilities by subdomain`

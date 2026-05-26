@@ -26,6 +26,7 @@ from .services_summaries import (
     build_monthly_accounting_summary,
     validate_budget_suggestion_filters,
 )
+from .services_ledger import delete_ledger_account
 from .services_transactions import (
     apply_transaction_list_filters,
     validate_balance_summary_filters,
@@ -58,39 +59,7 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
                     )
                 }
             )
-        if instance.asset_id is not None:
-            from net_worth.models import Asset
-
-            Asset.objects.filter(
-                id=instance.asset_id,
-                user_id=instance.user_id,
-                accounting_account_id=instance.id,
-            ).update(
-                accounting_account_id=None,
-                tracking_mode=Asset.TrackingMode.MANUAL,
-            )
-        if instance.liability_id is not None:
-            from net_worth.models import Liability
-
-            Liability.objects.filter(
-                id=instance.liability_id,
-                user_id=instance.user_id,
-                accounting_account_id=instance.id,
-            ).update(
-                accounting_account_id=None,
-                tracking_mode=Liability.TrackingMode.MANUAL,
-            )
-
-        transaction_ids = list(
-            LedgerEntry.objects.filter(account_id=instance.id)
-            .values_list("transaction_id", flat=True)
-            .distinct()
-        )
-        if transaction_ids:
-            LedgerTransaction.objects.filter(
-                user_id=instance.user_id, id__in=transaction_ids
-            ).delete()
-        instance.delete()
+        delete_ledger_account(account=instance)
 
     @action(detail=False, methods=["get"], url_path="balances")
     def balances(self, request):
@@ -181,10 +150,10 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
             transaction_ids=newer_transaction_ids,
         )
         by_transaction_id: dict[int, Decimal] = {}
-        for transaction in rows:
-            by_transaction_id[transaction.id] = running_balance
+        for txn in rows:
+            by_transaction_id[txn.id] = running_balance
             impact = Decimal("0")
-            for entry in transaction.entries.all():
+            for entry in txn.entries.all():
                 if entry.account_id != account.id:
                     continue
                 impact += self._signed_impact_for_account(
