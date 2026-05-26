@@ -16,6 +16,7 @@ htmlcov/
 node_modules/
 dist/
 .vite/
+frontend/coverage/
 
 # Local Docker overrides
 docker-compose.override.yml
