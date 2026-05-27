@@ -1,9 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "simple",
+  "bump-minor-pre-major": true,
   "packages": {
     ".": {
       "release-type": "simple",
+      "bump-minor-pre-major": true,
       "component": "moneyplanner-core",
       "version-file": "VERSION",
       "changelog-path": "CHANGELOG.md",
@@ -12,6 +14,16 @@
           "type": "json",
           "path": "frontend/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$[\"packages\"][\"\"].version"
         }
       ]
     }

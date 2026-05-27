@@ -2,7 +2,7 @@
 
 Current feature status by area. Update this file whenever functionality status changes.
 
-**Last review:** 2026-05-21 | **Core Version:** 0.23.7
+**Last review:** 2026-05-21 | **Core Version:** see `VERSION`
 
 ---
 
