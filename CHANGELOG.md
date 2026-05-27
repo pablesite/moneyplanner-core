@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.24.0...moneyplanner-core-v0.24.1) (2026-05-27)
+
+
+### Bug Fixes
+
+* **release:** add last-release-sha to stop commit backfilling ([#44](https://github.com/pablesite/moneyplanner-core/issues/44)) ([ea2015b](https://github.com/pablesite/moneyplanner-core/commit/ea2015b1f300495aa60220bac6dd8a657d590391))
+
 ## [0.24.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.23.0...moneyplanner-core-v0.24.0) (2026-05-27)
 
 
