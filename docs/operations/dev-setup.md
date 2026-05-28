@@ -9,6 +9,11 @@ Describe how to run, validate, and troubleshoot `MoneyPlanner Core` locally.
 3. Frontend: `http://localhost:5173`
 4. Backend: `http://localhost:8000`
 
+The frontend points to `http://localhost:8000` by default, so a clean Core clone does not need
+`frontend/.env`. If you run the Core backend on a different URL, set only
+`VITE_API_BASE_URL` in `frontend/.env`. `VITE_CORE_API_BASE_URL` is an optional override for
+hybrid deployments where Core API traffic must use a different backend than the default API URL.
+
 `market_data_sync` is part of the standard Core startup. It reconciles and refreshes persisted
 market datasets (`FX` and `IPC`) used by net worth calculations and the `/data` observability view.
 
