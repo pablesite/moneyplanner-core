@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { authApi, toAuthErrorMessage } from '@/domains/auth';
+import { clearAuthTokens } from '@/domains/auth/session';
 import { coreApi } from '@/lib/api';
 
 const route = useRoute();
@@ -90,7 +91,8 @@ async function handleRestoreFile(event: Event) {
     await coreApi.post('/api/core/db-restore/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    restoreStatus.value = 'Base de datos restaurada. Recarga la página para continuar.';
+    clearAuthTokens();
+    window.location.replace('/login?reason=db_restored');
   } catch {
     restoreError.value =
       'La restauración falló. Comprueba que el archivo es un .dump válido y que eres administrador.';

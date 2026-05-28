@@ -45,6 +45,8 @@ export function useLoginForm() {
 
   if (route.query.reason === 'session_expired') {
     sessionNotice.value = 'Tu sesión expiró. Inicia sesión nuevamente.';
+  } else if (route.query.reason === 'db_restored') {
+    sessionNotice.value = 'Base de datos restaurada. Inicia sesión nuevamente.';
   }
 
   async function login() {
