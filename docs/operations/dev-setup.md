@@ -14,6 +14,10 @@ The frontend points to `http://localhost:8000` by default, so a clean Core clone
 `VITE_API_BASE_URL` in `frontend/.env`. `VITE_CORE_API_BASE_URL` is an optional override for
 hybrid deployments where Core API traffic must use a different backend than the default API URL.
 
+Local startup creates an admin user from `SEED_ADMIN_*` and loads demo data by default.
+Use `demo` / `demo1234demo` to explore the app with sample data. Set `SEED_CREATE_DEMO=0`
+in `backend/.env` to skip demo data in a new local database.
+
 `market_data_sync` is part of the standard Core startup. It reconciles and refreshes persisted
 market datasets (`FX` and `IPC`) used by net worth calculations and the `/data` observability view.
 

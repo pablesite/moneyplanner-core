@@ -40,6 +40,10 @@ Works on Linux, macOS, and Windows (WSL2). See [Windows / WSL notes](docs/operat
 5. Backend: `http://localhost:8000`
 
 A default admin user is created automatically (credentials in `backend/.env` → `SEED_ADMIN_*`).
+Demo data is also loaded by default for local Core development:
+- User: `demo`
+- Password: `demo1234demo`
+- Disable with `SEED_CREATE_DEMO=0` in `backend/.env`.
 
 ## Documentation
 1. `docs/README.md` — documentation index and reading order
