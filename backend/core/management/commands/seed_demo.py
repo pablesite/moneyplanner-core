@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import os
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -19,6 +20,10 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if os.getenv("SEED_CREATE_DEMO", "1") != "1":
+            self.stdout.write("SEED_CREATE_DEMO=0 -> skipping demo user creation.")
+            return
+
         User = get_user_model()
 
         if User.objects.filter(username=DEMO_USERNAME).exists():
