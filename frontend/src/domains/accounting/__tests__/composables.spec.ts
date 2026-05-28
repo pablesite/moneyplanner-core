@@ -17,6 +17,7 @@ vi.mock('../api', () => ({
     getTransactions: vi.fn(),
     getMonthlySummary: vi.fn(),
     getAccountBalances: vi.fn(),
+    getDailyBalanceSeries: vi.fn(),
     createAccount: vi.fn(),
     deleteAccount: vi.fn(),
     createTransaction: vi.fn(),
@@ -31,6 +32,13 @@ vi.mock('@/domains/net-worth/api', () => ({
     updateAsset: vi.fn(),
     updateLiability: vi.fn(),
   },
+}));
+
+vi.mock('@/domains/people/store', () => ({
+  usePeopleStore: () => ({
+    ownerships: [],
+    fetchOwnerships: vi.fn(async () => {}),
+  }),
 }));
 
 vi.mock('@/domains/budget/taxonomy', () => ({
@@ -85,6 +93,9 @@ function seedRefreshResponses() {
       accounts: [],
     },
   } as never);
+  vi.mocked(coreAccountingApi.getDailyBalanceSeries).mockResolvedValue({
+    data: { base_currency: 'EUR', rows: [] },
+  } as never);
 }
 
 function seedNetWorthResponses() {
@@ -123,6 +134,7 @@ describe('useAccountingPage', () => {
     vi.mocked(coreAccountingApi.createQuickEntry).mockResolvedValue({ data: {} } as never);
 
     await wrapper.vm.submitQuickEntry();
+    await flushPromises();
 
     expect(coreAccountingApi.createQuickEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -132,5 +144,6 @@ describe('useAccountingPage', () => {
       }),
     );
     expect(store.transactionCreationLoading).toBe(false);
+    wrapper.unmount();
   });
 });
