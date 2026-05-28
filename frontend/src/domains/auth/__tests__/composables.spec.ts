@@ -55,6 +55,12 @@ describe('useLoginForm (core)', () => {
     expect(form.error.value).toBeNull();
   });
 
+  it('shows database restored notice', () => {
+    mocks.route.query = { reason: 'db_restored' };
+    const form = useLoginForm();
+    expect(form.sessionNotice.value).toBe('Base de datos restaurada. Inicia sesión nuevamente.');
+  });
+
   it('maps login errors', async () => {
     mocks.login.mockRejectedValueOnce(new Error('boom'));
     const form = useLoginForm();
