@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.24.1...moneyplanner-core-v0.25.0) (2026-06-04)
+
+
+### Features
+
+* **deploy:** harden core production settings ([#58](https://github.com/pablesite/moneyplanner-core/issues/58)) ([22a3ef1](https://github.com/pablesite/moneyplanner-core/commit/22a3ef1abf6d5b5afd953539e81cd8ec6962b62f))
+
+
+### Bug Fixes
+
+* **deploy:** patch core frontend image packages ([#59](https://github.com/pablesite/moneyplanner-core/issues/59)) ([a801733](https://github.com/pablesite/moneyplanner-core/commit/a801733410b9533ab31c1a452781351ccd77820a))
+
 ## [0.24.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.24.0...moneyplanner-core-v0.24.1) (2026-05-27)
 
 
