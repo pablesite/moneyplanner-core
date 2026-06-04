@@ -5,6 +5,15 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def env_bool(name: str, default: str = "0") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name: str, default: str = "") -> list[str]:
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
 DEFAULT_DEV_SECRET_KEY = "dev-only-not-for-production-change-me-please-32b"
 INSECURE_SECRET_VALUES = {
     "",
@@ -14,7 +23,7 @@ INSECURE_SECRET_VALUES = {
 }
 
 
-def validate_secret(name: str, value: str, *, min_length: int = 32) -> None:
+def validate_secret(name: str, value: str, *, min_length: int = 50) -> None:
     if DEBUG:
         return
     if value in INSECURE_SECRET_VALUES:
@@ -24,10 +33,29 @@ def validate_secret(name: str, value: str, *, min_length: int = 32) -> None:
 
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", DEFAULT_DEV_SECRET_KEY).strip()
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
-ALLOWED_HOSTS = [
-    h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost").split(",") if h.strip()
-]
+DEBUG = env_bool("DJANGO_DEBUG", "0")
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost")
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
+USE_X_FORWARDED_HOST = env_bool("USE_X_FORWARDED_HOST", "0" if DEBUG else "1")
+
+SECURE_PROXY_SSL_HEADER = None
+if env_bool("SECURE_PROXY_SSL_HEADER_ENABLED", "0" if DEBUG else "1"):
+    SECURE_PROXY_SSL_HEADER = (
+        os.getenv("SECURE_PROXY_SSL_HEADER_NAME", "HTTP_X_FORWARDED_PROTO").strip(),
+        os.getenv("SECURE_PROXY_SSL_HEADER_VALUE", "https").strip(),
+    )
+
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", "0" if DEBUG else "1")
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", "0" if DEBUG else "1")
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", "0" if DEBUG else "1")
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", "0" if DEBUG else "1")
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", "0" if DEBUG else "1")
+SECURE_CONTENT_TYPE_NOSNIFF = env_bool("SECURE_CONTENT_TYPE_NOSNIFF", "1")
+SECURE_REFERRER_POLICY = os.getenv(
+    "SECURE_REFERRER_POLICY",
+    "same-origin" if DEBUG else "strict-origin-when-cross-origin",
+).strip()
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -111,9 +139,7 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CORS_ALLOWED_ORIGINS = [
-    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
-]
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
@@ -153,13 +179,13 @@ JWT_SIGNING_KEY = os.getenv("JWT_SIGNING_KEY", SECRET_KEY).strip()
 SIMPLE_JWT["SIGNING_KEY"] = JWT_SIGNING_KEY
 
 # Roadmap 03 flag: keep core auth standalone.
-AUTH_MODE_CORE_LOCAL = os.getenv("AUTH_MODE_CORE_LOCAL", "1") == "1"
+AUTH_MODE_CORE_LOCAL = env_bool("AUTH_MODE_CORE_LOCAL", "1")
 CORE_LINKING_SHARED_SECRET = os.getenv("CORE_LINKING_SHARED_SECRET", "").strip()
 CORE_LINKING_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CORE_LINKING_TOKEN_MAX_AGE_SECONDS", "300"))
 AUTH_TRANSITION_MODE = os.getenv("AUTH_TRANSITION_MODE", "stable").strip().lower()
-AUTH_SESSION_COMPAT_ENABLED = os.getenv("AUTH_SESSION_COMPAT_ENABLED", "1") == "1"
+AUTH_SESSION_COMPAT_ENABLED = env_bool("AUTH_SESSION_COMPAT_ENABLED", "1")
 
-AUTH_ACCEPT_EXTERNAL_TOKENS = os.getenv("AUTH_ACCEPT_EXTERNAL_TOKENS", "0") == "1"
+AUTH_ACCEPT_EXTERNAL_TOKENS = env_bool("AUTH_ACCEPT_EXTERNAL_TOKENS", "0")
 EXTERNAL_JWT_ISSUER = os.getenv("EXTERNAL_JWT_ISSUER", "moneyplanner-external")
 EXTERNAL_JWT_AUDIENCE = os.getenv("EXTERNAL_JWT_AUDIENCE", "moneyplanner-external-api")
 EXTERNAL_JWT_SIGNING_KEY = os.getenv("EXTERNAL_JWT_SIGNING_KEY", SECRET_KEY).strip()
