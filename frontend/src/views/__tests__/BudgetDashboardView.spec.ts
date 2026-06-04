@@ -1417,7 +1417,7 @@ describe('BudgetDashboardView', () => {
     expect(mockAccountingApi.getTransactions).not.toHaveBeenCalledWith(
       expect.objectContaining({ month: currentMonth }),
     );
-    expect(wrapper.text()).toContain('2.500,00 EUR');
+    expect(wrapper.text()).toContain('3.000,00 EUR');
   });
 
   it('shows unbudgeted detected expense rows with contextual CTA', async () => {
