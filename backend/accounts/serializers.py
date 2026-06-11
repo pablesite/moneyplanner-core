@@ -45,3 +45,37 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         if normalized not in allowed:
             raise serializers.ValidationError("Region IPC no soportada.")
         return normalized
+
+
+class ExternalIdentitySerializer(serializers.Serializer):
+    provider = serializers.CharField()
+    external_user_id = serializers.CharField()
+
+
+class CoreAdminUserSerializer(serializers.ModelSerializer):
+    external_identities = serializers.SerializerMethodField()
+    origin = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "is_active",
+            "is_staff",
+            "origin",
+            "external_identities",
+        ]
+
+    def get_external_identities(self, obj) -> list[dict[str, str]]:
+        identities = getattr(obj, "prefetched_external_identities", None)
+        if identities is None:
+            identities = obj.external_identities.all()
+        return ExternalIdentitySerializer(identities, many=True).data
+
+    def get_origin(self, obj) -> str:
+        identities = getattr(obj, "prefetched_external_identities", None)
+        if identities is None:
+            identities = obj.external_identities.all()
+        return "saas_bootstrap" if any(identities) else "core_native"
