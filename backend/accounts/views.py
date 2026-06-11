@@ -2,9 +2,11 @@ from rest_framework import status
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
+from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny
+from rest_framework.permissions import BasePermission
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -13,9 +15,9 @@ from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from uuid import uuid4
 import logging
 
-from .serializers import UserSettingsSerializer
+from .models import ExternalIdentity
+from .serializers import CoreAdminUserSerializer, UserSettingsSerializer
 from .services import get_or_create_user_settings, update_user_settings
-from core.market_data import MarketDataSyncError, sync_market_data
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,13 @@ class FeatureDisabledException(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "feature_disabled"
     default_detail = "Feature disabled."
+
+
+class CoreSaasBridgePermission(BasePermission):
+    def has_permission(self, request, view):
+        secret = getattr(settings, "CORE_LINKING_SHARED_SECRET", "").strip()
+        provided = request.headers.get("X-SaaS-Bridge-Secret", "").strip()
+        return bool(secret and provided and constant_time_compare(provided, secret))
 
 
 class UserSettingsAPIView(APIView):
@@ -38,21 +47,9 @@ class UserSettingsAPIView(APIView):
 
     def put(self, request):
         settings_obj = get_or_create_user_settings(user=request.user)
-        previous_base_currency = str(settings_obj.base_currency or "").upper().strip()
         serializer = UserSettingsSerializer(settings_obj, data=request.data)
         serializer.is_valid(raise_exception=True)
         updated = update_user_settings(user=request.user, validated_data=serializer.validated_data)
-        new_base_currency = str(updated.base_currency or "").upper().strip()
-        if new_base_currency and new_base_currency != previous_base_currency:
-            try:
-                sync_market_data(datasets=["fx"], mode="reconcile")
-            except MarketDataSyncError:
-                logger.warning(
-                    "FX market data warmup failed after base currency change %s -> %s.",
-                    previous_base_currency or "-",
-                    new_base_currency,
-                    exc_info=True,
-                )
         return Response(UserSettingsSerializer(updated).data, status=status.HTTP_200_OK)
 
 
@@ -98,6 +95,25 @@ class CoreAuthOpsMetricsAPIView(APIView):
             "auth_mode": "core_local",
         }
         return Response(payload)
+
+
+class CoreAdminUsersAPIView(APIView):
+    permission_classes = [CoreSaasBridgePermission]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_ops_metrics"
+
+    def get(self, request):
+        users = list(
+            get_user_model()
+            .objects.all()
+            .prefetch_related("external_identities")
+            .order_by("id")
+        )
+        for user in users:
+            user.prefetched_external_identities = list(
+                user.external_identities.filter(provider=ExternalIdentity.Provider.EXTERNAL)
+            )
+        return Response(CoreAdminUserSerializer(users, many=True).data)
 
 
 class CoreLinkTokenAPIView(APIView):

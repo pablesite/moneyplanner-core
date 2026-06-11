@@ -9,7 +9,7 @@ class UserSettings(models.Model):
         related_name="settings",
     )
 
-    # ISO 4217 (EUR, USD, GBP...). En v1 lista cerrada en frontend.
+    # ISO 4217. En v1 el frontend de producto expone una lista cerrada (hoy: EUR, USD).
     base_currency = models.CharField(max_length=3, default="EUR")
     inflation_region = models.CharField(max_length=10, default="ES")
 

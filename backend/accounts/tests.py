@@ -8,7 +8,6 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from uuid import uuid4
 import jwt
-from unittest.mock import patch
 
 from .models import ExternalIdentity, UserSettings
 from .services import get_or_create_user_settings, update_user_settings
@@ -37,6 +36,44 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(response.data["auth_mode"], "core_local")
         self.assertIn("users_total", response.data)
         self.assertIn("jwt_outstanding_tokens", response.data)
+
+    @override_settings(CORE_LINKING_SHARED_SECRET="bridge-secret-32-bytes-minimum-value")
+    def test_admin_users_requires_bridge_secret(self):
+        response = self.client.get("/api/auth/admin/users/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @override_settings(CORE_LINKING_SHARED_SECRET="bridge-secret-32-bytes-minimum-value")
+    def test_admin_users_returns_core_and_external_metadata(self):
+        get_user_model().objects.create_user(
+            username="native_core_user",
+            email="native@example.com",
+            password="pass1234",
+            is_staff=True,
+        )
+        external_user = get_user_model().objects.create_user(
+            username="external_user_12",
+            email="",
+            password="pass1234",
+        )
+        ExternalIdentity.objects.create(
+            user=external_user,
+            provider=ExternalIdentity.Provider.EXTERNAL,
+            external_user_id="12",
+        )
+
+        response = self.client.get(
+            "/api/auth/admin/users/",
+            HTTP_X_SAAS_BRIDGE_SECRET="bridge-secret-32-bytes-minimum-value",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        by_username = {item["username"]: item for item in response.data}
+        self.assertEqual(by_username["native_core_user"]["origin"], "core_native")
+        self.assertEqual(by_username["native_core_user"]["external_identities"], [])
+        self.assertEqual(by_username["external_user_12"]["origin"], "saas_bootstrap")
+        self.assertEqual(
+            by_username["external_user_12"]["external_identities"][0]["external_user_id"], "12"
+        )
 
     def test_token_login_rejects_invalid_credentials_with_unauthorized(self):
         response = self.client.post(
@@ -133,10 +170,7 @@ class CoreAuthModeApiTests(APITestCase):
         self.assertEqual(response.data["inflation_region"], "ES")
         self.assertTrue(UserSettings.objects.filter(user=self.user).exists())
 
-    @patch("accounts.views.sync_market_data")
-    def test_settings_put_triggers_fx_warmup_when_base_currency_changes(
-        self, sync_market_data_mock
-    ):
+    def test_settings_put_persists_base_currency_change_without_extra_warmup_side_effects(self):
         UserSettings.objects.update_or_create(
             user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
         )
@@ -148,24 +182,7 @@ class CoreAuthModeApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        sync_market_data_mock.assert_called_once_with(datasets=["fx"], mode="reconcile")
-
-    @patch("accounts.views.sync_market_data")
-    def test_settings_put_does_not_trigger_fx_warmup_without_currency_change(
-        self, sync_market_data_mock
-    ):
-        UserSettings.objects.update_or_create(
-            user=self.user, defaults={"base_currency": "EUR", "inflation_region": "ES"}
-        )
-        self.client.force_authenticate(user=self.user)
-
-        response = self.client.put(
-            "/api/auth/settings/",
-            {"base_currency": "EUR", "inflation_region": "ES-MD"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        sync_market_data_mock.assert_not_called()
+        self.assertEqual(response.data["base_currency"], "ETH")
 
 
 @override_settings(
