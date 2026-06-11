@@ -104,10 +104,7 @@ class CoreAdminUsersAPIView(APIView):
 
     def get(self, request):
         users = list(
-            get_user_model()
-            .objects.all()
-            .prefetch_related("external_identities")
-            .order_by("id")
+            get_user_model().objects.all().prefetch_related("external_identities").order_by("id")
         )
         for user in users:
             user.prefetched_external_identities = list(
