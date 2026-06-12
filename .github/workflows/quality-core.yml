@@ -1,9 +1,8 @@
 name: Quality Core
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
+    branches: [main, develop]
 
 jobs:
   gitleaks:
@@ -51,10 +50,25 @@ jobs:
         working-directory: frontend
 
   backend:
+    name: Backend - lint, types, tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: saas
+          POSTGRES_USER: saas
+          POSTGRES_PASSWORD: saas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U saas -d saas"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -78,6 +92,17 @@ jobs:
       - name: Mypy
         run: mypy .
 
+      - name: Migration consistency check
+        run: python manage.py makemigrations --check --dry-run
+        env:
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_NAME: saas
+          DB_USER: saas
+          DB_PASSWORD: saas
+          DJANGO_DEBUG: "1"
+          DJANGO_SECRET_KEY: "ci-only-insecure-key-not-used-in-production-xK9mP2nQ8rT5vW3yZ7aB4dF6hJ1lN0oR"
+
       - name: Django coverage (core apps)
         run: |
           coverage run --rcfile=.coveragerc manage.py test accounts net_worth core
@@ -90,22 +115,9 @@ jobs:
           DB_PASSWORD: saas
           DJANGO_DEBUG: "1"
           DJANGO_SECRET_KEY: "ci-only-insecure-key-not-used-in-production-xK9mP2nQ8rT5vW3yZ7aB4dF6hJ1lN0oR"
-    services:
-      db:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: saas
-          POSTGRES_USER: saas
-          POSTGRES_PASSWORD: saas
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U saas -d saas"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
   frontend:
+    name: Frontend - lint, types, tests
     runs-on: ubuntu-latest
     defaults:
       run:

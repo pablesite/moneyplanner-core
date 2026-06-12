@@ -10,6 +10,7 @@ jobs:
   analyze:
     name: Analyze — ${{ matrix.language }}
     runs-on: ubuntu-latest
+    if: vars.ENABLE_CODE_SCANNING_UPLOAD == '1'
     permissions:
       actions: read
       contents: read
