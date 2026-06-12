@@ -1,5 +1,11 @@
 # Core Development Setup
 
+This document covers the standalone Core development workflow for contributors working directly
+inside `./core`.
+
+If you are developing from the integrated `moneyplanner-saas` root repo and want to run SaaS and
+Core together, use `../../docs/operations/dev-setup.md` instead.
+
 ## Objective
 Describe how to run, validate, and troubleshoot `MoneyPlanner Core` locally.
 
