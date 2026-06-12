@@ -24,8 +24,9 @@ inside containers.
 - Docker 24+ and Docker Compose v2 — verify with `docker compose version`
 - Works on Linux, macOS, and Windows (WSL2)
 
-> **Windows / WSL2**: if file-watching doesn't trigger hot-reloads, set
-> `FRONTEND_USE_POLLING=true` in `docker-compose.override.yml`. See
+> **Windows / WSL2**: if file-watching doesn't trigger hot-reloads, copy
+> `docker-compose.override.yml.example` to `docker-compose.override.yml` and set
+> `FRONTEND_USE_POLLING: "true"`. See
 > [docs/operations/dev-setup.md](docs/operations/dev-setup.md#windows--wsl) for details.
 
 ---

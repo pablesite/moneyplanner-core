@@ -103,12 +103,16 @@ docker compose exec backend python manage.py test budget accounting --keepdb
 
 If file changes in the frontend container are not triggering hot-reload:
 
-1. Copy `.env.example` to `.env` in the project root (next to `docker-compose.yml`) and uncomment:
+1. Copy `docker-compose.override.yml.example` to `docker-compose.override.yml` in `core/`
+2. Uncomment:
+   ```yaml
+   services:
+     frontend:
+       environment:
+         FRONTEND_USE_POLLING: "true"
+         FRONTEND_POLLING_INTERVAL: "500"
    ```
-   FRONTEND_USE_POLLING=true
-   FRONTEND_POLLING_INTERVAL=500
-   ```
-2. Restart the frontend service:
+3. Restart the frontend service:
    ```bash
    docker compose restart frontend
    ```
@@ -128,7 +132,7 @@ Ensure Docker has access to the source directory. On macOS, check Docker Desktop
 ### How to reset the database
 Only do this if you intentionally want to destroy local data:
 ```bash
-docker compose down -v   # removes volumes
+docker compose down -v
 docker compose up --build -d
 ```
 

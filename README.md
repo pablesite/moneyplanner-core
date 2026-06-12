@@ -29,15 +29,18 @@ Works on Linux, macOS, and Windows (WSL2). See [Windows / WSL notes](docs/operat
 
 ## Quick Start
 
-> **Windows:** clone this repo inside the WSL2 filesystem (e.g. `~/projects/`) so that hot-reload works without extra config. If you clone under `C:\...`, copy `.env.example` to `.env` and uncomment `FRONTEND_USE_POLLING=true` before step 2.
+> **Windows:** clone this repo inside the WSL2 filesystem (e.g. `~/projects/`) so that hot-reload works without extra config. If you clone under `C:\...`, copy `docker-compose.override.yml.example` to `docker-compose.override.yml` and enable `FRONTEND_USE_POLLING` before step 2.
 
 1. Copy the environment template:
    - Linux / macOS / WSL: `cp backend/.env.example backend/.env`
    - Windows CMD: `copy backend\.env.example backend\.env`
-2. Start all services: `docker compose up --build -d`
-3. Verify all services are `Up`: `docker compose ps`
-4. Frontend: `http://localhost:5173`
-5. Backend: `http://localhost:8000`
+2. Optional for Windows files under `C:\...`: copy `docker-compose.override.yml.example` to `docker-compose.override.yml` and uncomment:
+   - `FRONTEND_USE_POLLING: "true"`
+   - `FRONTEND_POLLING_INTERVAL: "500"`
+3. Start all services: `docker compose up --build -d`
+4. Verify all services are `Up`: `docker compose ps`
+5. Frontend: `http://localhost:5173`
+6. Backend: `http://localhost:8000`
 
 A default admin user is created automatically (credentials in `backend/.env` → `SEED_ADMIN_*`).
 Demo data is also loaded by default for local Core development:
