@@ -182,7 +182,10 @@ fork → feature branch → commits → open PR to main → CI passes → review
 
 ## CI pipeline
 
-Three workflow files run automatically:
+Core keeps quality, security, versioning, and optional image publishing as separate concerns.
+The production deploy of the integrated SaaS stack is intentionally handled outside this repo.
+
+Four workflow files exist in this repository:
 
 ### `quality-core.yml` — runs on every PR and on push to `main`
 
@@ -201,16 +204,29 @@ Static analysis (SAST) for Python and TypeScript/JavaScript using GitHub CodeQL.
 Results appear in **GitHub → Security → Code scanning**. This job is **informational** — it does
 not block merging. Review findings before shipping to production.
 
-### `ci-main.yml` — runs on push to `main` only
+### `release-please.yml` — runs on push to `main`
 
-Triggered after merge. Builds Docker images, scans them with Trivy (CRITICAL/HIGH CVEs,
-`ignore-unfixed: true`), pushes to GitHub Container Registry, and runs
-[Release Please](https://github.com/googleapis/release-please) to manage versioning.
+Runs [Release Please](https://github.com/googleapis/release-please) after merge to `main`.
+It opens or updates the release PR that bumps:
 
-> **`ignore-unfixed: true`**: Trivy skips CVEs that have no upstream patch yet. This prevents the
-> pipeline from being blocked by OS-level CVEs in the base image that nobody can fix. See
-> [docs/security/ci-security-decisions.md](docs/security/ci-security-decisions.md) for the full
-> rationale.
+- `VERSION`
+- `.release-please-manifest.json`
+- `CHANGELOG.md`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+
+This workflow does not build or publish Docker images.
+
+### `publish-images.yml` — manual only
+
+Builds and publishes standalone Core Docker images to GitHub Container Registry:
+
+- `ghcr.io/pablesite/moneyplanner-core-backend`
+- `ghcr.io/pablesite/moneyplanner-core-frontend`
+
+This workflow is triggered only with `workflow_dispatch`. It is intended for maintainers who want
+to publish standalone Core images for community/self-hosted usage without tying image publication
+to every push on `main`.
 
 ### Running CI checks locally before pushing
 
@@ -233,7 +249,15 @@ make lint-frontend && make test-frontend
 
 ## Self-hosted production setup
 
-Use `docker-compose.prod.yml` to self-host MoneyPlanner Core:
+Use `docker-compose.prod.yml` to self-host MoneyPlanner Core.
+
+You have two valid production paths:
+
+1. Community/self-hosted: build locally from this repo with `docker-compose.prod.yml`
+2. Maintainer-controlled images: publish GHCR images manually with `publish-images.yml`, then use
+   those tags in your own deployment setup
+
+The standalone Core repo does not auto-deploy anything on push.
 
 ```bash
 # 1. Create a .env.prod file with required secrets

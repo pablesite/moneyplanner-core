@@ -24,7 +24,17 @@
 ## Image Publishing Policy
 - Core keeps community-facing quality, security, and semantic versioning workflows.
 - Core does not publish production Docker images automatically on every `push` to `main`.
-- Private production image build and deploy for the integrated SaaS stack are orchestrated from the root `moneyplanner-saas` repository, using the submodule commit pinned there.
+- Standalone Core images can be published manually from `./core` via `.github/workflows/publish-images.yml`.
+- Private production image build and deploy for the integrated SaaS stack remain orchestrated from the root `moneyplanner-saas` repository, using the submodule commit pinned there.
+
+## Manual Image Publishing
+1. Open GitHub Actions in the `moneyplanner-core` repository.
+2. Run `Publish Core Images`.
+3. Provide the tag you want to publish, for example `v1.4.0` or `latest`.
+4. The workflow builds:
+   - `ghcr.io/pablesite/moneyplanner-core-backend:<tag>`
+   - `ghcr.io/pablesite/moneyplanner-core-frontend:<tag>`
+5. Each image is scanned with Trivy before push. High or critical findings fail the run.
 
 ## Local Quality Matrix
    - `docker compose exec backend ruff check .`
