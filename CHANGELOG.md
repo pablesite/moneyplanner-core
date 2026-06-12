@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.25.0...moneyplanner-core-v0.26.0) (2026-06-12)
+
+
+### Features
+
+* **auth:** expose core users for saas admin bridge ([#62](https://github.com/pablesite/moneyplanner-core/issues/62)) ([24127c8](https://github.com/pablesite/moneyplanner-core/commit/24127c8aecff3d5706e2a9e2f9ce6dc549bced6b))
+
 ## [0.25.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.24.1...moneyplanner-core-v0.25.0) (2026-06-04)
 
 
