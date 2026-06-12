@@ -10,15 +10,21 @@
 
 ## Release Process
 1. Merge normal feature/fix PRs into `main` only after the local quality matrix passes.
-2. On every push to `main`, `.github/workflows/ci-main.yml` runs CI and then `release-please`.
-3. `release-please` opens or updates a release PR. That PR is the only place where release metadata is changed:
+2. Quality and security checks run through `.github/workflows/quality-core.yml` and related workflows.
+3. On every push to `main`, `.github/workflows/release-please.yml` runs `release-please`.
+4. `release-please` opens or updates a release PR. That PR is the only place where release metadata is changed:
    - `VERSION`
    - `.release-please-manifest.json`
    - `CHANGELOG.md`
    - `frontend/package.json`
    - `frontend/package-lock.json`
-4. Review and merge the release PR when ready to publish. Do not edit version files manually in feature/fix PRs.
-5. After the release PR is merged, `release-please` creates the GitHub release and tag.
+5. Review and merge the release PR when ready to publish. Do not edit version files manually in feature/fix PRs.
+6. After the release PR is merged, `release-please` creates the GitHub release and tag.
+
+## Image Publishing Policy
+- Core keeps community-facing quality, security, and semantic versioning workflows.
+- Core does not publish production Docker images automatically on every `push` to `main`.
+- Private production image build and deploy for the integrated SaaS stack are orchestrated from the root `moneyplanner-saas` repository, using the submodule commit pinned there.
 
 ## Local Quality Matrix
    - `docker compose exec backend ruff check .`
