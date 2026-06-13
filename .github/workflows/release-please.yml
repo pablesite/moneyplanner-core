@@ -24,4 +24,5 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-        run: gh pr merge --squash --auto "${{ steps.release.outputs.pr }}"
+          RELEASE_PR_NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+        run: gh pr merge --squash --auto "$RELEASE_PR_NUMBER"
