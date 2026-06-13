@@ -14,7 +14,7 @@ export function useAppShell() {
   const accountRole = ref('');
   const accountPlan = ref('');
 
-  const pageTitle = 'moneyplanner';
+  const pageTitle = 'The Arkenstone Core';
   const hasToken = computed(() => hasAccessToken.value);
   const isLoginRoute = computed(() => route.name === 'login');
   const navItems = computed<NavItem[]>(() => appShellNavItems);

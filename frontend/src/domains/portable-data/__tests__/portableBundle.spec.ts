@@ -63,9 +63,9 @@ describe('comparePortableVersions', () => {
 });
 
 describe('buildPortableFilename', () => {
-  it('starts with moneyplanner prefix and ends with .json', () => {
+  it('starts with the arkenstone prefix and ends with .json', () => {
     const name = buildPortableFilename();
-    expect(name).toMatch(/^moneyplanner-core-data-.*\.json$/);
+    expect(name).toMatch(/^the-arkenstone-core-data-.*\.json$/);
   });
 
   it('generates unique filenames for different calls in the same second', () => {

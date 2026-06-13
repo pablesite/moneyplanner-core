@@ -160,8 +160,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "MoneyPlanner Core API",
-    "DESCRIPTION": "API del core de MoneyPlanner.",
+    "TITLE": "The Arkenstone Core API",
+    "DESCRIPTION": "API del core abierto de The Arkenstone.",
     "VERSION": "0.19.0",
 }
 

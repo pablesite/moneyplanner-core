@@ -110,7 +110,7 @@ class DbBackupView(APIView):
 
     def get(self, request):
         env = _pg_env()
-        filename = f"moneyplanner_backup_{date.today().isoformat()}.dump"
+        filename = f"the_arkenstone_backup_{date.today().isoformat()}.dump"
 
         proc = subprocess.Popen(
             ["pg_dump", "-Fc", "--no-owner", "--no-privileges"],

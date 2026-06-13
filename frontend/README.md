@@ -1,6 +1,6 @@
 ﻿# Frontend Core
 
-Frontend OSS de MoneyPlanner Core.
+Frontend OSS de The Arkenstone Core.
 
 ## Stack
 

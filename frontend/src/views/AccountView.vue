@@ -44,7 +44,7 @@ async function downloadBackup() {
   try {
     const res = await coreApi.get('/api/core/db-backup/', { responseType: 'blob' });
     const today = new Date().toISOString().slice(0, 10);
-    const filename = `moneyplanner_backup_${today}.dump`;
+    const filename = `the_arkenstone_backup_${today}.dump`;
     const url = URL.createObjectURL(res.data as Blob);
     const a = document.createElement('a');
     a.href = url;

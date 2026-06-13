@@ -16,7 +16,7 @@ function logout() {
 <template>
   <header class="app-header">
     <div class="container ui-app-header-inner">
-      <div class="ui-app-header-title">moneyplanner core</div>
+      <div class="ui-app-header-title">The Arkenstone Core</div>
 
       <div v-if="hasToken" class="ui-app-header-actions">
         <button class="btn" type="button" @click="logout">Logout</button>
