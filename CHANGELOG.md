@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.26.0...moneyplanner-core-v0.27.0) (2026-06-14)
+
+
+### Features
+
+* **brand:** rename core app to the arkenstone ([d7a7d76](https://github.com/pablesite/moneyplanner-core/commit/d7a7d76b5fcb28d9293914fcbff1ae683d6d658a))
+
+
+### Bug Fixes
+
+* **ci:** avoid release please json template parsing ([ce6141e](https://github.com/pablesite/moneyplanner-core/commit/ce6141ef94f108a47bf3fed480f6d2e1ea4c2265))
+* **ci:** parse release please pr output ([484fe88](https://github.com/pablesite/moneyplanner-core/commit/484fe886cb4709042eb8a92e1fb458a29347ea48))
+* **ci:** pass repository to release pr commands ([d1e3780](https://github.com/pablesite/moneyplanner-core/commit/d1e378056611a04e4c13862f58f2ee4d69d58e31))
+
 ## [0.26.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.25.0...moneyplanner-core-v0.26.0) (2026-06-12)
 
 
