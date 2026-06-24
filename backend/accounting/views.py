@@ -29,6 +29,7 @@ from .services_summaries import (
 from .services_ledger import delete_ledger_account
 from .services_transactions import (
     apply_transaction_list_filters,
+    filter_transactions_by_review_state,
     validate_balance_summary_filters,
 )
 
@@ -180,8 +181,19 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         return queryset.order_by("-booking_date", "-id")
 
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        queryset = apply_transaction_list_filters(queryset, request.query_params)
+        queryset_without_review = apply_transaction_list_filters(
+            self.get_queryset(),
+            request.query_params,
+        )
+        needs_review_count = filter_transactions_by_review_state(
+            queryset_without_review, "needs_review"
+        ).count()
+        review_state = (request.query_params.get("review_state") or "").strip()
+        queryset = (
+            filter_transactions_by_review_state(queryset_without_review, review_state)
+            if review_state
+            else queryset_without_review
+        )
 
         page_size = parse_optional_int_query_param(request.query_params, "page_size") or 50
         if page_size < 1 or page_size > 200:
@@ -226,6 +238,7 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
                 "results": serializer.data,
                 "next_cursor": next_cursor,
                 "total_count": total_count,
+                "needs_review_count": needs_review_count,
             }
         )
 
@@ -243,8 +256,10 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
         date_to_raw = (request.query_params.get("date_to") or "").strip()
         status_raw = (request.query_params.get("status") or "").strip()
         ownership_id_raw = (request.query_params.get("ownership_id") or "").strip()
+        account_ids_raw = (request.query_params.get("account_ids") or "").strip()
         ownership_is_null = None
         ownership_id = None
+        account_ids = None
         try:
             date_from = parse_date(date_from_raw) if date_from_raw else None
         except ValueError as exc:
@@ -280,6 +295,17 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
                     ) from exc
                 if ownership_id < 1:
                     raise ValidationError({"ownership_id": "Query param 'ownership_id' invalido."})
+        if account_ids_raw:
+            try:
+                account_ids = list(
+                    dict.fromkeys(int(value.strip()) for value in account_ids_raw.split(","))
+                )
+            except ValueError as exc:
+                raise ValidationError(
+                    {"account_ids": "Query param 'account_ids' invalido."}
+                ) from exc
+            if not account_ids or any(account_id < 1 for account_id in account_ids):
+                raise ValidationError({"account_ids": "Query param 'account_ids' invalido."})
 
         return Response(
             build_daily_balance_series(
@@ -289,6 +315,7 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
                 status=status_value,
                 ownership_id=ownership_id,
                 ownership_is_null=ownership_is_null,
+                account_ids=account_ids,
             )
         )
 

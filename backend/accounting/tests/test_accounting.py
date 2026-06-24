@@ -1622,6 +1622,87 @@ class AccountingApiTests(APITestCase):
             by_account_name_query.data["results"][0]["description"], "Transferencia ahorro"
         )
 
+    def test_transactions_list_exposes_and_filters_needs_review(self):
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Gasto pendiente",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        pending = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 15),
+            value_date=date(2026, 2, 15),
+            description="Gasto sin clasificar",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE,
+        )
+        reviewed = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 14),
+            value_date=date(2026, 2, 14),
+            description="Gasto clasificado",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE,
+        )
+        transfer = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 2, 13),
+            value_date=date(2026, 2, 13),
+            description="Transferencia sin clasificacion",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        for transaction, classified in ((pending, False), (reviewed, True)):
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=expense_account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=Decimal("10.00"),
+                currency="EUR",
+                flow_family=LedgerEntry.FlowFamily.EXPENSE if classified else "",
+                category_key="consumption_expenses" if classified else "",
+                subcategory_key="living_expenses" if classified else "",
+            )
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=self.cash_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=Decimal("10.00"),
+                currency="EUR",
+            )
+        LedgerEntry.objects.create(
+            transaction=transfer,
+            account=self.cash_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("5.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transfer,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("5.00"),
+            currency="EUR",
+        )
+
+        response = self.client.get(
+            "/api/accounting/transactions/?date_from=2026-02-01&review_state=needs_review"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["needs_review_count"], 1)
+        self.assertEqual(response.data["total_count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], pending.id)
+        self.assertTrue(response.data["results"][0]["needs_review"])
+
+        reviewed_response = self.client.get(
+            "/api/accounting/transactions/?date_from=2026-02-01&review_state=reviewed"
+        )
+        self.assertEqual(reviewed_response.status_code, status.HTTP_200_OK, reviewed_response.data)
+        self.assertEqual(reviewed_response.data["total_count"], 2)
+        self.assertTrue(all(not row["needs_review"] for row in reviewed_response.data["results"]))
+
+        invalid = self.client.get("/api/accounting/transactions/?review_state=unknown")
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST, invalid.data)
+
     def test_transactions_list_kind_transfer_includes_legacy_asset_transfers(self):
         savings_account = LedgerAccount.objects.create(
             user=self.user,
@@ -3808,6 +3889,75 @@ class AccountingApiTests(APITestCase):
             invalid_status.data,
         )
         self.assertIn("status", invalid_status.data["error"]["details"])
+
+    def test_daily_balance_series_filters_and_validates_selected_accounts(self):
+        second_asset = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta secundaria",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        technical_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta tecnica",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        for account, amount in (
+            (self.cash_account, Decimal("100.00")),
+            (second_asset, Decimal("50.00")),
+        ):
+            transaction = LedgerTransaction.objects.create(
+                user=self.user,
+                booking_date=date(2026, 1, 1),
+                value_date=date(2026, 1, 1),
+                description=f"Apertura {account.name}",
+                status=LedgerTransaction.Status.POSTED,
+            )
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=amount,
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=self.income_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=amount,
+                currency="EUR",
+            )
+
+        response = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/"
+            f"?date_from=2026-01-01&date_to=2026-01-01&account_ids={second_asset.id}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["filters"]["account_ids"], [second_asset.id])
+        self.assertEqual(response.data["rows"][0]["assets_total"], "50.00")
+
+        invalid = self.client.get(
+            "/api/accounting/transactions/daily-balance-series/"
+            f"?account_ids={second_asset.id},{technical_account.id}"
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST, invalid.data)
+        self.assertIn("account_ids", invalid.data["error"]["details"])
+
+        other_user = get_user_model().objects.create_user(
+            username="daily-other",
+            password="secret123",
+        )
+        foreign_account = LedgerAccount.objects.create(
+            user=other_user,
+            name="Cuenta ajena",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        foreign = self.client.get(
+            f"/api/accounting/transactions/daily-balance-series/?account_ids={foreign_account.id}"
+        )
+        self.assertEqual(foreign.status_code, status.HTTP_400_BAD_REQUEST, foreign.data)
 
     def test_daily_balance_series_without_date_from_uses_earliest_registered_movement(self):
         tx_old = LedgerTransaction.objects.create(

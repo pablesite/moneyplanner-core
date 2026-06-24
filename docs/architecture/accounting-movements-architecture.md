@@ -135,6 +135,15 @@ This leaves a gap:
    - only for operational accounts (`asset`/`liability`)
    - optional `counterparty_account_id`; if omitted, backend auto-creates/reuses a system equity account (`Ajustes de conciliacion`) in the same currency
    - `amount` can be positive or negative and is applied as a delta on the selected account
+7. Operational review contract:
+   - every serialized transaction exposes calculated `needs_review`; it is never persisted
+   - income, expense, debt-payment and non-reinvestment investment rows need review when they have no complete functional classification (`flow_family`, `category_key`, `subcategory_key`)
+   - transfers, adjustments, opening balances, revaluations and reinvestments never need functional review
+   - the list accepts `review_state=needs_review|reviewed` and returns `needs_review_count` under the other active filters
+8. Daily balance selection:
+   - `daily-balance-series` accepts optional comma-separated `account_ids`
+   - selected accounts must belong to the user, be active and use `asset` or `liability` account type
+   - the returned `filters.account_ids` records the effective selection
 
 ## Rollout phases
 1. Base module

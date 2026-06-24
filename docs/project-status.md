@@ -2,7 +2,7 @@
 
 Current feature status by area. Update this file whenever functionality status changes.
 
-**Last review:** 2026-05-21 | **Core Version:** see `VERSION`
+**Last review:** 2026-06-23 | **Core Version:** see `VERSION`
 
 ---
 
@@ -32,7 +32,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 
 | Area | Priority | Status | Description |
 |------|----------|--------|-------------|
-| Accounting — v1 | High | ✅ | Movements view closed as v1. Header aligned with Net Worth and body visual style finalized. Imported movement traceability preserved in accounting metadata; ad-hoc MoneyWiz importer removed. |
+| Accounting — v1 | High | ✅ | Core contract supports the SaaS daily-operations workspace: calculated classification review queue and validated account-scoped daily balance series. Imported movement traceability remains preserved. |
 | Budget — v1 | High | ✅ | Functional closeout applied and manually reviewed: canonical monthly summaries for execution/coverage, ledger precedence over manual check-ins, backend errors shown inside line modals, and header aligned with Net Worth. |
 | Net Worth — asset/liability modals | Medium | ✅ | Full review of asset and liability create/edit modals completed. Module v1 functionally closed. |
 | Monthly Close — dual mode | High | ✅ | Automatic implementation completed (backend + frontend) and operational manual review completed. v1 bugs fixed on 2026-05-20: reconciliation bridge column alignment (CSS subgrid) and per-account liquidity reference (previous month effective balance instead of `asset.amount`). |
@@ -58,7 +58,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Data Input (annual entries) | ✅ | Module/route removed. Responsibilities moved to Budget (income/expense), Net Worth (assets/liabilities), and Account (portable data). |
 | Financial Guide / Coach v1 | ✅ | Phases 1-4 scoring implemented. Phase 5 removed until portfolio module exists. Guide at `/guia`; `/` redirects to `/patrimonio`. |
 | Family & Ownership (`FamilyMember`, `OwnershipLink`) | ✅ | Complete. |
-| Accounting Movements (`LedgerAccount` / `LedgerTransaction` / `LedgerEntry`) | ✅ | Phases 1-5 complete plus bidirectional investment flow (`investment` with `inflow`/`outflow`), optional manual realized metadata, and invested-capital aggregates. Transaction list migrated to cursor server pagination with server-side filters and `activity_kind` in API. Imported-movement traceability preserved via `origin`, `import_source`, and `import_fingerprint`; ad-hoc MoneyWiz importer removed. Multi-currency support in quick investment create/edit. Movements view closed as v1. |
+| Accounting Movements (`LedgerAccount` / `LedgerTransaction` / `LedgerEntry`) | ✅ | Cursor-paginated transaction API includes server filters, `activity_kind`, calculated `needs_review`, review counts and safe daily series scoped by accounts. Bidirectional and multi-currency investment flows, manual realized metadata, invested-capital aggregates and import traceability remain supported. |
 | Market data sync (FX, national + regional CPI) | ✅ | Phases 1-6 complete, `market_data_sync` worker live. Tables use server pagination (`page_size=50`) and frontend infinite scroll. |
 | DB Backup/Restore (pg_dump) | ✅ | Admin-only backup/restore endpoints based on pg_dump/pg_restore. Portable JSON flow removed from UI and replaced with this flow. |
 | Financial scoring phases 1-4 | ✅ | Debt, cash flow, emergency fund, net worth health. |

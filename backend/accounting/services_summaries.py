@@ -191,6 +191,7 @@ def build_daily_balance_series(
     status: str = LedgerTransaction.Status.POSTED,
     ownership_id: int | None = None,
     ownership_is_null: bool | None = None,
+    account_ids: list[int] | None = None,
 ) -> dict:
     context = _build_daily_balance_context(
         user_id=user_id,
@@ -199,6 +200,7 @@ def build_daily_balance_series(
         status=status,
         ownership_id=ownership_id,
         ownership_is_null=ownership_is_null,
+        selected_account_ids=account_ids,
     )
     rows = (
         _build_daily_balance_rows(user_id=user_id, context=context)
@@ -220,11 +222,13 @@ def _build_daily_balance_context(
     status: str,
     ownership_id: int | None,
     ownership_is_null: bool | None,
+    selected_account_ids: list[int] | None,
 ) -> DailyBalanceContext:
     accounts = _load_daily_balance_accounts(
         user_id=user_id,
         ownership_id=ownership_id,
         ownership_is_null=ownership_is_null,
+        selected_account_ids=selected_account_ids,
     )
     resolved_date_from = _resolve_daily_balance_start_date(
         user_id=user_id,
@@ -257,8 +261,12 @@ def _load_daily_balance_accounts(
     user_id: int,
     ownership_id: int | None,
     ownership_is_null: bool | None,
+    selected_account_ids: list[int] | None,
 ) -> DailyBalanceAccounts:
-    account_rows = _load_active_balance_account_rows(user_id=user_id)
+    account_rows = _load_active_balance_account_rows(
+        user_id=user_id,
+        selected_account_ids=selected_account_ids,
+    )
     account_multiplier_by_id = {int(row["id"]): Decimal("1") for row in account_rows}
     if ownership_id is not None or ownership_is_null:
         account_rows = _filter_account_rows_by_ownership(
@@ -282,16 +290,26 @@ def _load_daily_balance_accounts(
     )
 
 
-def _load_active_balance_account_rows(*, user_id: int) -> list[dict]:
-    return list(
-        LedgerAccount.objects.filter(
-            user_id=user_id,
-            is_active=True,
-            account_type__in=[LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.LIABILITY],
-        )
-        .values("id", "account_type", "currency", "asset_id", "liability_id")
-        .order_by("id")
+def _load_active_balance_account_rows(
+    *, user_id: int, selected_account_ids: list[int] | None
+) -> list[dict]:
+    queryset = LedgerAccount.objects.filter(
+        user_id=user_id,
+        is_active=True,
+        account_type__in=[LedgerAccount.AccountType.ASSET, LedgerAccount.AccountType.LIABILITY],
     )
+    if selected_account_ids is not None:
+        queryset = queryset.filter(id__in=selected_account_ids)
+    rows = list(
+        queryset.values("id", "account_type", "currency", "asset_id", "liability_id").order_by("id")
+    )
+    if selected_account_ids is not None and {int(row["id"]) for row in rows} != set(
+        selected_account_ids
+    ):
+        raise ValidationError(
+            {"account_ids": "Alguna cuenta no existe, no esta activa o no es operativa."}
+        )
+    return rows
 
 
 def _filter_account_rows_by_ownership(
@@ -490,6 +508,7 @@ def _build_daily_balance_filters(*, context: DailyBalanceContext) -> dict:
         "ownership_id": context.ownership_id,
         "ownership_is_null": context.ownership_is_null,
         "base_currency": context.base_currency,
+        "account_ids": context.accounts.account_ids,
     }
 
 

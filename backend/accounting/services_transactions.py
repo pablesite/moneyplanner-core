@@ -178,6 +178,79 @@ def _get_legacy_transfer_transaction_ids(queryset: QuerySet) -> list[int]:
     return legacy_transfer_ids
 
 
+def transaction_needs_review(transaction: LedgerTransaction) -> bool:
+    """Return whether an operational movement still lacks functional classification."""
+    kind = classify_transaction_activity_kind(transaction)
+    if kind not in {"income", "expense", "investment", "debt_payment"}:
+        return False
+    if (
+        kind == "investment"
+        and transaction.investment_direction == LedgerTransaction.InvestmentDirection.REINVESTMENT
+    ):
+        return False
+    return not any(
+        entry.flow_family and entry.category_key and entry.subcategory_key
+        for entry in transaction.entries.all()
+    )
+
+
+def filter_transactions_by_review_state(queryset: QuerySet, review_state: str) -> QuerySet:
+    if review_state not in {"needs_review", "reviewed"}:
+        raise ValidationError({"review_state": "Query param 'review_state' invalido."})
+
+    entry_subquery = LedgerEntry.objects.filter(transaction_id=OuterRef("pk"))
+    has_complete_classification = Exists(
+        entry_subquery.exclude(flow_family="").exclude(category_key="").exclude(subcategory_key="")
+    )
+    legacy_review_candidate = (
+        Q(quick_entry_kind="")
+        & ~Q(origin=LedgerTransaction.Origin.SYSTEM)
+        & (
+            Exists(
+                entry_subquery.filter(
+                    flow_family__in=[LedgerEntry.FlowFamily.INCOME, LedgerEntry.FlowFamily.EXPENSE]
+                )
+            )
+            | Exists(entry_subquery.filter(liability_id__isnull=False))
+            | Exists(
+                entry_subquery.filter(
+                    asset_id__isnull=False,
+                    account__account_type=LedgerAccount.AccountType.ASSET,
+                    account__asset_id__isnull=False,
+                )
+            )
+        )
+    )
+    explicit_review_candidate = Q(
+        quick_entry_kind__in=[
+            LedgerTransaction.QuickEntryKind.INCOME,
+            LedgerTransaction.QuickEntryKind.EXPENSE,
+            LedgerTransaction.QuickEntryKind.DEBT_PAYMENT,
+        ]
+    ) | (
+        Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT)
+        & ~Q(investment_direction=LedgerTransaction.InvestmentDirection.REINVESTMENT)
+    )
+    needs_review = (
+        explicit_review_candidate | legacy_review_candidate
+    ) & ~has_complete_classification
+    return queryset.filter(needs_review if review_state == "needs_review" else ~needs_review)
+
+
+def _filter_transactions_by_ownership(queryset: QuerySet, ownership_id: str) -> QuerySet:
+    if not ownership_id:
+        return queryset
+    if ownership_id.lower() in {"null", "none"}:
+        return queryset.filter(ownership_id__isnull=True)
+    try:
+        ownership_id_int = int(ownership_id)
+    except ValueError as exc:
+        raise ValidationError({"ownership_id": "Query param 'ownership_id' invalido."}) from exc
+    if ownership_id_int < 1:
+        raise ValidationError({"ownership_id": "Query param 'ownership_id' invalido."})
+    return queryset.filter(ownership_id=ownership_id_int)
+
+
 def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     date_from = (params.get("date_from") or "").strip()
     date_to = (params.get("date_to") or "").strip()
@@ -186,6 +259,7 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
     kind = (params.get("kind") or "").strip()
     category_key = (params.get("category_key") or "").strip()
     subcategory_key = (params.get("subcategory_key") or "").strip()
+    ownership_id = (params.get("ownership_id") or "").strip()
 
     if date_from:
         parsed = parse_date(date_from)
@@ -204,6 +278,8 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
         except ValueError as exc:
             raise ValidationError({"account_id": "Query param 'account_id' invalido."}) from exc
         queryset = queryset.filter(entries__account_id=account_id_int).distinct()
+
+    queryset = _filter_transactions_by_ownership(queryset, ownership_id)
 
     if query:
         matching_account_ids = LedgerAccount.objects.filter(name__icontains=query).values("id")
@@ -241,15 +317,15 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
 
     entry_subquery = LedgerEntry.objects.filter(transaction_id=OuterRef("pk"))
     if kind == "income":
-        return queryset.filter(
+        queryset = queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INCOME)
             | (
                 Q(quick_entry_kind="")
                 & Exists(entry_subquery.filter(flow_family=LedgerEntry.FlowFamily.INCOME))
             )
         )
-    if kind == "expense":
-        return queryset.filter(
+    elif kind == "expense":
+        queryset = queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE)
             | (
                 Q(quick_entry_kind="")
@@ -261,8 +337,8 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 )
             )
         )
-    if kind == "debt_payment":
-        return queryset.filter(
+    elif kind == "debt_payment":
+        queryset = queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.DEBT_PAYMENT)
             | (
                 Q(quick_entry_kind="")
@@ -271,8 +347,8 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 & Exists(entry_subquery.filter(liability_id__isnull=False))
             ),
         )
-    if kind == "investment":
-        return queryset.filter(
+    elif kind == "investment":
+        queryset = queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT)
             | (
                 Q(quick_entry_kind="")
@@ -287,23 +363,25 @@ def apply_transaction_list_filters(queryset: QuerySet, params) -> QuerySet:
                 )
             ),
         )
-    if kind == "revaluation":
-        return queryset.filter(
+    elif kind == "revaluation":
+        queryset = queryset.filter(
             Q(origin=LedgerTransaction.Origin.SYSTEM)
             & ~Q(notes__startswith=NET_WORTH_OPENING_NOTE_PREFIX)
             | Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION)
         )
-    if kind == "opening_balance":
-        return queryset.filter(
+    elif kind == "opening_balance":
+        queryset = queryset.filter(
             Q(origin=LedgerTransaction.Origin.SYSTEM)
             & Q(notes__startswith=NET_WORTH_OPENING_NOTE_PREFIX)
         )
-    if kind == "transfer":
+    elif kind == "transfer":
         legacy_transfer_ids = _get_legacy_transfer_transaction_ids(queryset)
-        return queryset.filter(
+        queryset = queryset.filter(
             Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER)
             | Q(id__in=legacy_transfer_ids)
         )
-    if kind == "adjustment":
-        return queryset.filter(Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT))
-    raise ValidationError({"kind": "Query param 'kind' invalido."})
+    elif kind == "adjustment":
+        queryset = queryset.filter(Q(quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT))
+    else:
+        raise ValidationError({"kind": "Query param 'kind' invalido."})
+    return queryset

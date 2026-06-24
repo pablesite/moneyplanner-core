@@ -62,6 +62,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 5. Quick-entry investment payloads support optional manual realized metadata (`realized_cost_basis`, `realized_gain_loss`) without enforcing automatic PnL calculation in this phase.
 6. The accounting timeline API exposes a daily consolidated balance series for active ledger accounts:
    - `GET /api/accounting/transactions/daily-balance-series/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&status=posted|draft`
+   - optional `account_ids=1,2,3` scopes the series to validated active asset/liability accounts
+7. Transaction lists expose the calculated `needs_review` classification signal, accept `review_state=needs_review|reviewed`, and return a filtered `needs_review_count` for operational review queues.
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.

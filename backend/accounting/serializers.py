@@ -30,6 +30,7 @@ from .services_quick_entry import create_quick_transaction
 from .services_start_dates import sync_position_start_dates_for_transaction
 from .services_transactions import (
     classify_transaction_activity_kind,
+    transaction_needs_review,
     validate_booking_and_value_dates,
     validate_transaction_entries,
 )
@@ -316,6 +317,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     entries = LedgerEntrySerializer(many=True)
     activity_kind = serializers.SerializerMethodField()
     account_balance_after = serializers.SerializerMethodField()
+    needs_review = serializers.SerializerMethodField()
     ownership_id = serializers.PrimaryKeyRelatedField(
         source="ownership",
         queryset=Ownership.objects.all(),
@@ -343,6 +345,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "realized_gain_loss",
             "activity_kind",
             "account_balance_after",
+            "needs_review",
             "entries",
             "created_at",
             "updated_at",
@@ -376,6 +379,9 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             return None
         value = by_tx_id.get(obj.id)
         return str(value) if value is not None else None
+
+    def get_needs_review(self, obj: LedgerTransaction) -> bool:
+        return transaction_needs_review(obj)
 
     def validate(self, attrs: dict) -> dict:
         request = self.context.get("request")
