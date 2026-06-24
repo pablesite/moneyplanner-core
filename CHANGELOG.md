@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.27.0...moneyplanner-core-v0.28.0) (2026-06-24)
+
+
+### Features
+
+* **accounting:** add review queue and account-scoped daily series ([8ad0ef8](https://github.com/pablesite/moneyplanner-core/commit/8ad0ef8049f41b8f463d235fbdfc0b736f5df839))
+
+
+### Bug Fixes
+
+* **deploy:** avoid market sync migration race ([1cfc6c6](https://github.com/pablesite/moneyplanner-core/commit/1cfc6c6583fd5eb7ce763e38b85f60c4488efadf))
+* **frontend:** refresh audited lockfile ([860e5dc](https://github.com/pablesite/moneyplanner-core/commit/860e5dcfb8906d4d7fa384ec8da5dccee1fb62bc))
+
 ## [0.27.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.26.0...moneyplanner-core-v0.27.0) (2026-06-14)
 
 
