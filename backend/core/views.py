@@ -2,8 +2,10 @@ import os
 import subprocess
 import tempfile
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
@@ -20,6 +22,7 @@ from .portable_data import (
     import_portable_bundle_from_request,
 )
 from .serializers import FxRateSerializer, InflationIndexSerializer
+from .services import convert_currency_detailed
 
 
 class _MarketDataPagination(PageNumberPagination):
@@ -103,6 +106,55 @@ class MarketDataSyncAPIView(APIView):
         except MarketDataSyncError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({"summary": summary}, status=status.HTTP_200_OK)
+
+
+class FxConvertAPIView(APIView):
+    """Convierte un importe entre divisas usando los FxRate diarios.
+
+    Query params: amount, from, to, date (ISO, opcional → hoy).
+    Devuelve el importe convertido a precisión de cripto/fiat y cómo se resolvió
+    el tipo (exact/synced/fallback), para que el cliente pueda avisar al usuario.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        params = request.query_params
+        amount_raw = params.get("amount")
+        from_currency = params.get("from")
+        to_currency = params.get("to")
+        date_raw = params.get("date")
+
+        if not amount_raw or not from_currency or not to_currency:
+            raise ValidationError("amount, from y to son obligatorios.")
+        try:
+            amount = Decimal(str(amount_raw))
+        except (InvalidOperation, ValueError):
+            raise ValidationError("amount no es un número válido.")
+        on_date: date | None = None
+        if date_raw:
+            try:
+                on_date = date.fromisoformat(date_raw)
+            except ValueError:
+                raise ValidationError("date debe ser una fecha ISO (YYYY-MM-DD).")
+
+        try:
+            result = convert_currency_detailed(amount, from_currency, to_currency, on_date=on_date)
+        except DjangoValidationError as exc:
+            raise ValidationError(getattr(exc, "message", None) or str(exc))
+
+        return Response(
+            {
+                "amount": str(result.amount),
+                "from_currency": result.from_currency,
+                "to_currency": result.to_currency,
+                "converted": str(result.converted),
+                "rate": str(result.rate),
+                "rate_date": result.rate_date.isoformat() if result.rate_date else None,
+                "resolution": result.resolution,
+                "requested_date": (on_date or date.today()).isoformat(),
+            }
+        )
 
 
 class DbBackupView(APIView):

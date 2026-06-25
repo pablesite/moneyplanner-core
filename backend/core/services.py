@@ -1,5 +1,6 @@
 import os
 
+from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
 
@@ -159,6 +160,154 @@ def convert_currency(amount: Decimal, from_currency: str, to_currency: str, date
         return _quantize_2(amount * factor1 * factor2)
 
     raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
+
+
+# ---------------------------------------------------------------------------
+# Detailed conversion (precision-aware, with metadata + on-demand sync)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FxConversion:
+    """Result of a precision-aware currency conversion.
+
+    ``resolution`` indicates how the rate was obtained:
+    - ``same``: source and target currency are identical (rate 1).
+    - ``exact``: a quote exists for the requested date.
+    - ``synced``: the quote was fetched on demand for the requested date.
+    - ``fallback``: no quote for that date; nearest earlier quote was used.
+    """
+
+    amount: Decimal
+    from_currency: str
+    to_currency: str
+    converted: Decimal
+    rate: Decimal
+    rate_date: date | None
+    resolution: str
+
+
+def _quantize_8(amount: Decimal) -> Decimal:
+    # Hasta 8 decimales: suficiente para cripto (BTC, ETH...) y fiat.
+    return amount.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+
+
+def _quantize_rate(rate: Decimal) -> Decimal:
+    # El tipo efectivo puede venir de una división (inverso/triangulación).
+    return rate.quantize(Decimal("0.000000000001"), rounding=ROUND_HALF_UP)
+
+
+def _fx_effective_rate(from_c: str, to_c: str, rate_date: date) -> tuple[Decimal, date] | None:
+    """Tipo efectivo from->to y la fecha del quote usado (directo/inverso/triangulación)."""
+    direct = _fx_lookup_with_fallback(from_c, to_c, rate_date)
+    if direct:
+        return Decimal(direct.rate), direct.rate_date
+    inverse = _fx_lookup_with_fallback(to_c, from_c, rate_date)
+    if inverse and inverse.rate != 0:
+        return Decimal("1") / Decimal(inverse.rate), inverse.rate_date
+
+    pivot = (os.getenv("FX_PIVOT", "USD") or "USD").upper().strip()
+    if pivot in (from_c, to_c):
+        return None
+    leg1 = _fx_lookup_with_fallback(from_c, pivot, rate_date)
+    leg1_inv = None if leg1 else _fx_lookup_with_fallback(pivot, from_c, rate_date)
+    leg2 = _fx_lookup_with_fallback(pivot, to_c, rate_date)
+    leg2_inv = None if leg2 else _fx_lookup_with_fallback(to_c, pivot, rate_date)
+    if (leg1 or leg1_inv) and (leg2 or leg2_inv):
+        factor1 = Decimal(leg1.rate) if leg1 else Decimal("1") / Decimal(leg1_inv.rate)
+        factor2 = Decimal(leg2.rate) if leg2 else Decimal("1") / Decimal(leg2_inv.rate)
+        leg_dates = [row.rate_date for row in (leg1, leg1_inv, leg2, leg2_inv) if row]
+        return factor1 * factor2, min(leg_dates)
+    return None
+
+
+def _ensure_fx_for_date(from_c: str, to_c: str, rate_date: date) -> bool:
+    """Pide al módulo de market data el quote del par/fecha (best-effort).
+
+    No propaga errores de red/proveedor: si falla, el llamador cae al fallback.
+    """
+    try:
+        from .market_data import (
+            SUPPORTED_CRYPTO_IDS,
+            sync_crypto_history,
+            sync_fiat_history,
+        )
+
+        if from_c in SUPPORTED_CRYPTO_IDS or to_c in SUPPORTED_CRYPTO_IDS:
+            crypto = from_c if from_c in SUPPORTED_CRYPTO_IDS else to_c
+            fiat = to_c if crypto == from_c else from_c
+            sync_crypto_history(
+                from_currency=crypto, to_currency=fiat, start_date=rate_date, end_date=rate_date
+            )
+        else:
+            sync_fiat_history(
+                from_currency=from_c, to_currency=to_c, start_date=rate_date, end_date=rate_date
+            )
+        return True
+    except Exception:
+        return False
+
+
+def convert_currency_detailed(
+    amount: Decimal,
+    from_currency: str,
+    to_currency: str,
+    *,
+    on_date: date | None = None,
+    allow_sync: bool = True,
+) -> FxConversion:
+    """Convierte preservando precisión (hasta 8 decimales) y devuelve metadatos.
+
+    Resuelve el tipo de la ``on_date`` (devengo). Si no hay quote ese día y
+    ``allow_sync``, pide al módulo de market data que lo obtenga; si sigue sin
+    estar disponible, usa el quote anterior más cercano (fallback).
+    """
+    if amount is None:
+        raise ValidationError("Amount is required.")
+    from_c = (from_currency or "").upper().strip()
+    to_c = (to_currency or "").upper().strip()
+    if len(from_c) != 3 or len(to_c) != 3:
+        raise ValidationError("Invalid currency code.")
+
+    amount = Decimal(amount)
+    if from_c == to_c:
+        return FxConversion(
+            amount=amount,
+            from_currency=from_c,
+            to_currency=to_c,
+            converted=_quantize_8(amount),
+            rate=Decimal("1"),
+            rate_date=None,
+            resolution="same",
+        )
+
+    rate_date = on_date or timezone.localdate()
+    resolved = _fx_effective_rate(from_c, to_c, rate_date)
+    resolution: str | None = None
+
+    if (resolved is None or resolved[1] != rate_date) and allow_sync:
+        if _ensure_fx_for_date(from_c, to_c, rate_date):
+            synced = _fx_effective_rate(from_c, to_c, rate_date)
+            if synced and synced[1] == rate_date:
+                resolved = synced
+                resolution = "synced"
+
+    if resolved is None:
+        raise ValidationError(f"Missing FX rate for {from_c}->{to_c} on or before {rate_date}.")
+
+    rate, used_date = resolved
+    if resolution is None:
+        resolution = "exact" if used_date == rate_date else "fallback"
+
+    return FxConversion(
+        amount=amount,
+        from_currency=from_c,
+        to_currency=to_c,
+        converted=_quantize_8(amount * rate),
+        rate=_quantize_rate(rate),
+        rate_date=used_date,
+        resolution=resolution,
+    )
 
 
 # ---------------------------------------------------------------------------

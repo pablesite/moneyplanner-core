@@ -29,6 +29,7 @@ from .services import (
     _normalize_month_start,
     adjust_for_inflation,
     convert_currency,
+    convert_currency_detailed,
     get_latest_inflation_period,
     normalize_currency_code,
     validate_fx_currency_pair,
@@ -487,6 +488,101 @@ class CoreServicesTests(TestCase):
         self.assertIn("ETH->EUR", scopes)
         self.assertIn("BTC->ETH", scopes)
         self.assertNotIn("EUR->ETH", scopes)
+
+
+class ConvertCurrencyDetailedTests(TestCase):
+    def test_same_currency_keeps_full_precision_and_marks_same(self):
+        result = convert_currency_detailed(Decimal("10.12345678"), "EUR", "EUR")
+        self.assertEqual(result.resolution, "same")
+        self.assertEqual(result.rate, Decimal("1"))
+        self.assertIsNone(result.rate_date)
+        self.assertEqual(result.converted, Decimal("10.12345678"))
+
+    def test_exact_inverse_rate_preserves_crypto_precision(self):
+        # 1 BTC = 90000 EUR el 2026-06-16; 45 EUR -> 0.0005 BTC (8 decimales).
+        FxRate.objects.create(
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("90000"),
+            rate_date=date(2026, 6, 16),
+        )
+        result = convert_currency_detailed(
+            Decimal("45"), "EUR", "BTC", on_date=date(2026, 6, 16), allow_sync=False
+        )
+        self.assertEqual(result.resolution, "exact")
+        self.assertEqual(result.rate_date, date(2026, 6, 16))
+        self.assertEqual(result.converted, Decimal("0.00050000"))
+
+    def test_falls_back_to_nearest_earlier_rate(self):
+        FxRate.objects.create(
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("90000"),
+            rate_date=date(2026, 6, 10),
+        )
+        result = convert_currency_detailed(
+            Decimal("45"), "EUR", "BTC", on_date=date(2026, 6, 16), allow_sync=False
+        )
+        self.assertEqual(result.resolution, "fallback")
+        self.assertEqual(result.rate_date, date(2026, 6, 10))
+        self.assertEqual(result.converted, Decimal("0.00050000"))
+
+    def test_missing_rate_without_sync_raises(self):
+        with self.assertRaises(ValidationError):
+            convert_currency_detailed(
+                Decimal("45"), "EUR", "BTC", on_date=date(2026, 6, 16), allow_sync=False
+            )
+
+    def test_sync_is_attempted_then_resolves_exact(self):
+        def _fake_sync(*, from_currency, to_currency, start_date, end_date):
+            FxRate.objects.create(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                rate=Decimal("90000"),
+                rate_date=start_date,
+            )
+            return 1
+
+        with patch("core.market_data.sync_crypto_history", side_effect=_fake_sync):
+            result = convert_currency_detailed(
+                Decimal("45"), "EUR", "BTC", on_date=date(2026, 6, 16), allow_sync=True
+            )
+        self.assertEqual(result.resolution, "synced")
+        self.assertEqual(result.rate_date, date(2026, 6, 16))
+        self.assertEqual(result.converted, Decimal("0.00050000"))
+
+
+class FxConvertEndpointTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="fx_convert_user",
+            password="pass1234",
+        )
+
+    def test_requires_auth(self):
+        response = self.client.get("/api/core/fx/convert/?amount=45&from=EUR&to=BTC")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_converts_with_exact_rate(self):
+        FxRate.objects.create(
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("90000"),
+            rate_date=date(2026, 6, 16),
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            "/api/core/fx/convert/?amount=45&from=EUR&to=BTC&date=2026-06-16"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["converted"], "0.00050000")
+        self.assertEqual(response.data["resolution"], "exact")
+        self.assertEqual(response.data["rate_date"], "2026-06-16")
+
+    def test_missing_params_returns_400(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/core/fx/convert/?amount=45&from=EUR")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class PortableDataImportAPITests(APITestCase):
