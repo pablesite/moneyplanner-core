@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.28.0...moneyplanner-core-v0.29.0) (2026-06-28)
+
+
+### Features
+
+* **core:** endpoint de conversión de divisas con precisión cripto y sync on-demand ([91e373d](https://github.com/pablesite/moneyplanner-core/commit/91e373d018f9549e8282894a7be02b35784326bb))
+* **net-worth:** expose timeline comparison baselines ([8692560](https://github.com/pablesite/moneyplanner-core/commit/86925605c85a96b29733592b760fd66b326741fb))
+
 ## [0.28.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.27.0...moneyplanner-core-v0.28.0) (2026-06-24)
 
 
