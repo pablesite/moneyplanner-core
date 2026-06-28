@@ -54,6 +54,16 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
 3. Legacy flat fields in `Asset` remain available for backward compatibility, while the schedule builder prioritizes interval rows when present.
 
+## Net Worth Timeline Contract
+1. `GET /api/net-worth/timeline/` returns monthly rows for the chart plus a `comparisons` object for summary UIs.
+2. `comparisons` exposes four baseline points calculated by Core in the user's base currency:
+   - `previous_month_close`
+   - `same_day_previous_month`
+   - `previous_year_close`
+   - `same_day_previous_year`
+3. Each point has `{date, total_assets, total_liabilities, net_worth}` or `null` when the reference date does not exist or predates the timeline range.
+4. `prev_month_same_day` remains as a compatibility alias for `comparisons.same_day_previous_month`.
+
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.
 2. Imported accounting rows remain traceable through `LedgerTransaction.origin`, `import_source` and `import_fingerprint`; consolidated imported rows are no longer treated as disposable cleanup data.

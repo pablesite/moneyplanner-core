@@ -42,15 +42,15 @@ Describe the current UX structure and interaction model of the `Patrimonio` view
 2. The "Balance actual" badge sits at the top of the summary head.
 3. The ownership filter and settings gear are grouped in the summary head controls.
 
-## Monthly delta indicator
-1. Appears below the main net-worth value at all times (independent of category selection).
-2. Shows the change between the last two monthly points of the **global** timeline:
-   - Format: `+29.998 € este mes (+13,4%)`
-   - Green badge when positive, red badge when negative, grey when zero.
-3. When a category is selected, `store.timeline` is overwritten with category data, but the
-   delta is computed from `globalTimelineRows` — a ref that caches the last known global
-   timeline and only updates when no category is active.
-4. Hidden only when there are fewer than two global timeline data points.
+## Summary comparison indicators
+1. The timeline API exposes explicit comparison baselines for summary UIs in `comparisons`:
+   - `previous_month_close`
+   - `same_day_previous_month`
+   - `previous_year_close`
+   - `same_day_previous_year`
+2. Each baseline contains the reference date, assets, liabilities, and net worth in base currency.
+3. Clients compute deltas against the currently displayed net worth so the chart rows can stay monthly while the summary can explain close-vs-same-day comparisons.
+4. `prev_month_same_day` remains available as a compatibility alias for older clients.
 
 ## Ownership filter
 1. The ownership filter lives in the summary head beside the settings gear.

@@ -71,3 +71,41 @@ class NetWorthTimelineServicesTests(TestCase):
                 ("2026-03-31", 1, 1),
             ],
         )
+
+    def test_net_worth_timeline_exposes_comparison_points(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            start_date=date(2025, 1, 1),
+            is_active=True,
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Tarjeta",
+            category=Liability.Category.CREDIT_CARD,
+            amount=Decimal("200.00"),
+            currency="EUR",
+            start_date=date(2026, 6, 1),
+            is_active=True,
+        )
+
+        timeline = build_net_worth_timeline(
+            user=self.user,
+            start_date=date(2025, 1, 1),
+            end_date=date(2026, 6, 28),
+        )
+
+        comparisons = timeline["comparisons"]
+        self.assertEqual(comparisons["previous_month_close"]["date"], "2026-05-31")
+        self.assertEqual(comparisons["previous_month_close"]["net_worth"], "1000.00")
+        self.assertEqual(comparisons["same_day_previous_month"]["date"], "2026-05-28")
+        self.assertEqual(comparisons["same_day_previous_month"]["net_worth"], "1000.00")
+        self.assertEqual(comparisons["previous_year_close"]["date"], "2025-12-31")
+        self.assertEqual(comparisons["previous_year_close"]["net_worth"], "1000.00")
+        self.assertEqual(comparisons["same_day_previous_year"]["date"], "2025-06-28")
+        self.assertEqual(comparisons["same_day_previous_year"]["net_worth"], "1000.00")
+        self.assertEqual(timeline["prev_month_same_day"], comparisons["same_day_previous_month"])
