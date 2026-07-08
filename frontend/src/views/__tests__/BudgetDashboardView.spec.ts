@@ -13,6 +13,13 @@ vi.mock('vue-chartjs', () => ({
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
 
+function formatTestMoneyWithCurrency(value: number): string {
+  const fixed = value.toFixed(2);
+  const [integerPart = '0', decimalPart = '00'] = fixed.split('.');
+  const withThousands = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${withThousands},${decimalPart} EUR`;
+}
+
 const mockUseRoute = vi.fn(() => ({ name: 'budget', path: '/presupuesto' }));
 const mockUseRouter = vi.fn(() => ({ push: vi.fn() }));
 const mockCoreApiGet = vi.hoisted(() => vi.fn());
@@ -1417,7 +1424,7 @@ describe('BudgetDashboardView', () => {
     expect(mockAccountingApi.getTransactions).not.toHaveBeenCalledWith(
       expect.objectContaining({ month: currentMonth }),
     );
-    expect(wrapper.text()).toContain('3.000,00 EUR');
+    expect(wrapper.text()).toContain(formatTestMoneyWithCurrency((6000 / 12) * currentMonth));
   });
 
   it('shows unbudgeted detected expense rows with contextual CTA', async () => {
