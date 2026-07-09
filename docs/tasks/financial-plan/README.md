@@ -56,7 +56,7 @@ Motor determinista (sin LLM), tres escenarios de hipótesis (prudente / esperado
 | Fase | Prioridad | Alcance | Spec |
 |------|-----------|---------|------|
 | 1 — Motor de proyección | P0 ✅ | Core backend, sin UI. App `plan`, modelos base, `AssetClassificationService`, `ProjectionService`, calidad de datos, API de plan/proyección, tests financieros. | `phase-1-projection-engine/terminados/backend.md` |
-| 2 — Mi Plan UI + onboarding | P0 | Frontend SaaS. Dominio `plan/`, capability `core.plan`, `/plan` + `/plan/setup`, hero, progreso, trayectoria, calidad de datos. | `../../../../docs/tasks/financial-plan/phase-2-mi-plan-ui/frontend.md` (repo raíz) |
+| 2 — Mi Plan UI + onboarding | P0 ✅ | Frontend SaaS. Dominio `plan/`, capability `core.plan`, `/plan` + `/plan/setup`, hero, progreso, trayectoria, calidad de datos. | `../../../../docs/tasks/financial-plan/phase-2-mi-plan-ui/terminados/frontend.md` (repo raíz) |
 | 3 — Laboratorio de escenarios | P1 | Backend + frontend. `Scenario`/`ScenarioEvent`/`PlanEvent`, comparación, incorporación, marcadores en Patrimonio. | `phase-3-scenarios/backend.md` + `../../../../docs/tasks/financial-plan/phase-3-scenarios/frontend.md` |
 | 4 — Cimientos, cierre y recomendaciones | P2 | Backend + frontend. `Finding`/`Recommendation`, port del scoring del guide, plan-impact del cierre mensual. | `phase-4-findings-close/backend.md` + `../../../../docs/tasks/financial-plan/phase-4-findings-close/frontend.md` |
 | 5 — Absorción de Estado financiero | P2 | Frontend SaaS + docs. Redirect `/estado-financiero` → `/plan`, retirada del dominio `guide/`, capability. | `../../../../docs/tasks/financial-plan/phase-5-absorb-financial-state/frontend.md` |
