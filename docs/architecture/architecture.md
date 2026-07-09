@@ -25,7 +25,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 4. Account workspace (includes portable data transfer: export/import/replace)
 5. Financial guide v1
 6. Family and ownership
-7. Supporting product capabilities that belong to the Core domain baseline
+7. Financial Plan (`plan`): deterministic projection engine and `/api/plan/*`
+8. Supporting product capabilities that belong to the Core domain baseline
 
 ## Architectural Rule
 1. Shared product behavior belongs in Core.
@@ -63,6 +64,17 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `same_day_previous_year`
 3. Each point has `{date, total_assets, total_liabilities, net_worth}` or `null` when the reference date does not exist or predates the timeline range.
 4. `prev_month_same_day` remains as a compatibility alias for `comparisons.same_day_previous_month`.
+
+## Financial Plan Projection Contract
+1. Core owns the `plan` app and exposes `/api/plan/*` for the SaaS frontend. The MVP has no Core frontend UI.
+2. Each user has one `FinancialPlan`; `POST /api/plan/` is idempotent and updates the existing plan when present.
+3. `AssumptionSet` is globally seeded with `prudent`, `expected` (default), and `favorable`; snapshots freeze the exact hypothesis values used.
+4. `AssetClassificationService` infers asset function from net-worth taxonomy and applies optional `PlanAssetFunction` overrides. Associated liabilities through `Liability.financed_asset` are subtracted from the asset's functional net value to avoid double counting.
+5. `ProjectionService` projects yearly in the user's base currency. Current positions are converted to `UserSettings.base_currency`; FX rates are not projected.
+6. Target spending is entered in today's euros. Forward projection inflates target income and future pension/other income using the selected assumptions.
+7. Planned contribution precedence for the projection is `InvestmentContributionInterval` plus active `AnnualExpenseEntry` rows with `cashflow_role in {savings, investment}`. The engine deliberately avoids using one recent month as the contribution baseline.
+8. If the target date is before pension start, the required capital is split into a bridge period plus post-pension gap capital. The engine does not apply a single withdrawal-rate rule to the full lifetime need.
+9. In Phase 1, financial cases such as car purchase, second home purchase, and sabbatical are represented as already-incorporated base data. Hypothetical non-contaminating scenarios are Phase 3 scope.
 
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.

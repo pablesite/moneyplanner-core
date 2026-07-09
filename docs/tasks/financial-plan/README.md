@@ -29,6 +29,7 @@ Motor determinista (sin LLM), tres escenarios de hipótesis (prudente / esperado
 | 8 | **Inflación** | Histórico con IPC real (`InflationIndex`, INE nacional + CCAA); hipótesis de inflación solo hacia futuro (`AssumptionSet`). |
 | 9 | **Multi-divisa** | El motor proyecta en moneda base del usuario (`UserSettings.base_currency`) convirtiendo la posición actual con el FX existente. No se proyectan tipos de cambio. |
 | 10 | **Rutas frontend** | `/plan`, `/plan/setup`, `/plan/escenarios`, `/plan/escenarios/:id` (castellano, coherente con `/patrimonio`, `/cierre-mensual`). |
+| 11 | **Casos financieros mínimos en Fase 1** | Los casos "compra de coche", "compra de segunda vivienda" y "excedencia" se cubren como datos base ya incorporados al plan. La simulación hipotética de esos eventos queda para Fase 3 (`Scenario`/`ScenarioEvent`). |
 
 ## Mapa de correspondencia spec ↔ código
 
@@ -46,6 +47,7 @@ Motor determinista (sin LLM), tres escenarios de hipótesis (prudente / esperado
 | Titularidad | `Ownership`/`OwnershipSplit`/`OwnershipLink` | ✅ Existe | NO se usa en cálculos MVP (unidad consolidada). |
 | FinancialPlan, AssumptionSet, ProjectionSnapshot, Scenario, ScenarioEvent, PlanEvent, Finding, Recommendation | No existen | ❌ Nuevos | Modelos nuevos en app `plan`, todos aditivos. |
 | Motor de proyección | Solo timelines históricos | ❌ Nuevo | `ProjectionService` determinista, granularidad anual, 3 escenarios, periodo puente. |
+| Casos tipo coche/segunda vivienda/excedencia | Activos, deudas, presupuesto e ingresos actuales | ✅ Como estado base | Fase 1 no crea escenarios: esos casos se prueban como datos ya incorporados al plan. Fase 3 añadirá comparación hipotética no contaminante. |
 | Feature flag | Capabilities estáticas SaaS (`frontend/src/domains/capabilities/index.ts`, helpers `canUse...`) | ✅ Sí | Añadir `core.plan` + `canUsePlan()`. |
 | Diagnósticos/recomendaciones | Scoring 4 fases 100% en frontend (`frontend/src/domains/guide/`, ~2.500 líneas TS) | ⚠️ Lógica portable | Port a backend en Fase 4; retirada de `/estado-financiero` en Fase 5. |
 
@@ -53,7 +55,7 @@ Motor determinista (sin LLM), tres escenarios de hipótesis (prudente / esperado
 
 | Fase | Prioridad | Alcance | Spec |
 |------|-----------|---------|------|
-| 1 — Motor de proyección | P0 | Core backend, sin UI. App `plan`, modelos base, `AssetClassificationService`, `ProjectionService`, calidad de datos, API de plan/proyección, tests financieros. | `phase-1-projection-engine/backend.md` |
+| 1 — Motor de proyección | P0 ✅ | Core backend, sin UI. App `plan`, modelos base, `AssetClassificationService`, `ProjectionService`, calidad de datos, API de plan/proyección, tests financieros. | `phase-1-projection-engine/terminados/backend.md` |
 | 2 — Mi Plan UI + onboarding | P0 | Frontend SaaS. Dominio `plan/`, capability `core.plan`, `/plan` + `/plan/setup`, hero, progreso, trayectoria, calidad de datos. | `../../../../docs/tasks/financial-plan/phase-2-mi-plan-ui/frontend.md` (repo raíz) |
 | 3 — Laboratorio de escenarios | P1 | Backend + frontend. `Scenario`/`ScenarioEvent`/`PlanEvent`, comparación, incorporación, marcadores en Patrimonio. | `phase-3-scenarios/backend.md` + `../../../../docs/tasks/financial-plan/phase-3-scenarios/frontend.md` |
 | 4 — Cimientos, cierre y recomendaciones | P2 | Backend + frontend. `Finding`/`Recommendation`, port del scoring del guide, plan-impact del cierre mensual. | `phase-4-findings-close/backend.md` + `../../../../docs/tasks/financial-plan/phase-4-findings-close/frontend.md` |

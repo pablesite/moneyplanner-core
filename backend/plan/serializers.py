@@ -1,0 +1,160 @@
+from django.db import transaction
+from rest_framework import serializers
+
+from memberships.models import FamilyMember
+from net_worth.models import Asset
+
+from .models import FinancialPlan, PlanAssetFunction, ProjectionSnapshot
+
+
+class FinancialPlanSerializer(serializers.ModelSerializer):
+    member_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        write_only=True,
+    )
+    members = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = FinancialPlan
+        fields = [
+            "id",
+            "household_type",
+            "target_date",
+            "target_monthly_income_today_eur",
+            "projection_end_date",
+            "preservation_target_eur",
+            "preserved_asset_ids",
+            "profile",
+            "status",
+            "member_ids",
+            "members",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_members(self, obj):
+        return PlanFamilyMemberSerializer(obj.members.all(), many=True).data
+
+    def validate_member_ids(self, value):
+        request = self.context["request"]
+        members = list(
+            FamilyMember.objects.filter(
+                user=request.user,
+                id__in=value,
+                role=FamilyMember.Role.ADULT,
+                is_active=True,
+            )
+        )
+        if len(members) != len(set(value)):
+            raise serializers.ValidationError(
+                "Only active adult members owned by the user can be linked."
+            )
+        if len(members) > 2:
+            raise serializers.ValidationError("A financial plan can include at most two adults.")
+        return value
+
+    def validate(self, attrs):
+        target_date = attrs.get("target_date", getattr(self.instance, "target_date", None))
+        projection_end_date = attrs.get(
+            "projection_end_date",
+            getattr(self.instance, "projection_end_date", None),
+        )
+        if target_date and projection_end_date and projection_end_date < target_date:
+            raise serializers.ValidationError(
+                {"projection_end_date": "Must be greater than or equal to target_date."}
+            )
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        member_ids = validated_data.pop("member_ids", None)
+        request = self.context["request"]
+        plan, _created = FinancialPlan.objects.update_or_create(
+            user=request.user,
+            defaults=validated_data,
+        )
+        if member_ids is not None:
+            plan.members.set(FamilyMember.objects.filter(user=request.user, id__in=member_ids))
+        return plan
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        member_ids = validated_data.pop("member_ids", None)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.full_clean()
+        instance.save()
+        if member_ids is not None:
+            instance.members.set(FamilyMember.objects.filter(user=instance.user, id__in=member_ids))
+        return instance
+
+
+class PlanFamilyMemberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FamilyMember
+        fields = [
+            "id",
+            "name",
+            "role",
+            "is_active",
+            "birth_date",
+            "employment_income_end_date",
+            "pension_start_date",
+            "estimated_monthly_pension_today_eur",
+            "other_future_income_today_eur",
+        ]
+        read_only_fields = ["id"]
+
+    def validate_role(self, value):
+        if value != FamilyMember.Role.ADULT:
+            raise serializers.ValidationError("Only adults can be linked to a financial plan.")
+        return value
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["role"] = FamilyMember.Role.ADULT
+        member = FamilyMember.objects.create(user=request.user, **validated_data)
+        plan = FinancialPlan.objects.filter(user=request.user).first()
+        if plan:
+            if plan.members.count() >= 2:
+                raise serializers.ValidationError(
+                    "A financial plan can include at most two adults."
+                )
+            plan.members.add(member)
+        return member
+
+    def update(self, instance, validated_data):
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.full_clean()
+        instance.save()
+        return instance
+
+
+class ProjectionSnapshotSerializer(serializers.ModelSerializer):
+    assumption_set = serializers.CharField(source="assumption_set.name")
+
+    class Meta:
+        model = ProjectionSnapshot
+        fields = [
+            "id",
+            "assumption_set",
+            "calculated_at",
+            "input_hash",
+            "quality_level",
+            "is_official",
+            "result_json",
+        ]
+
+
+class AssetFunctionUpdateSerializer(serializers.Serializer):
+    asset_id = serializers.IntegerField(min_value=1)
+    function = serializers.ChoiceField(choices=PlanAssetFunction.Function.choices, allow_null=True)
+
+    def validate_asset_id(self, value):
+        request = self.context["request"]
+        if not Asset.objects.filter(user=request.user, id=value, is_active=True).exists():
+            raise serializers.ValidationError("Asset not found.")
+        return value

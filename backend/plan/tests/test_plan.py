@@ -1,0 +1,414 @@
+from datetime import date
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from memberships.models import FamilyMember
+from net_worth.models import Asset, Liability
+
+from plan.models import AssumptionSet, FinancialPlan, PlanAssetFunction, ProjectionSnapshot
+from plan.services_classification import AssetClassificationService
+from plan.services_projection import ProjectionService, get_assumption_set
+
+
+def create_plan(user, **overrides):
+    data = {
+        "user": user,
+        "household_type": FinancialPlan.HouseholdType.SINGLE,
+        "target_date": date(2040, 1, 1),
+        "target_monthly_income_today_eur": Decimal("2000.00"),
+        "projection_end_date": date(2065, 1, 1),
+        "profile": FinancialPlan.Profile.BALANCED,
+    }
+    data.update(overrides)
+    return FinancialPlan.objects.create(**data)
+
+
+def create_investment(user, amount=Decimal("100000.00"), name="ETF"):
+    return Asset.objects.create(
+        user=user,
+        name=name,
+        category=Asset.Category.INVESTMENTS,
+        subcategory=Asset.Subcategory.ETFS,
+        amount=amount,
+        currency="EUR",
+    )
+
+
+def create_income(user, amount=Decimal("36000.00")):
+    return AnnualIncomeEntry.objects.create(
+        user=user,
+        name="Salario",
+        category=AnnualIncomeEntry.Category.SALARY,
+        subcategory="salary",
+        amount_annual=amount,
+        fiscal_year=2026,
+    )
+
+
+def create_operating_expense(user, amount=Decimal("24000.00"), name="Vida"):
+    return AnnualExpenseEntry.objects.create(
+        user=user,
+        name=name,
+        category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+        subcategory="living_expenses",
+        cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+        amount_annual=amount,
+        fiscal_year=2026,
+    )
+
+
+class AssumptionSetSeedTests(TestCase):
+    def test_seeded_assumption_sets_match_mvp_decision(self):
+        expected = AssumptionSet.objects.get(name="expected")
+        self.assertTrue(expected.is_default)
+        self.assertEqual(expected.inflation_rate, Decimal("0.0250"))
+        self.assertEqual(expected.productive_return_rate, Decimal("0.0500"))
+        self.assertEqual(expected.non_productive_appreciation_rate, Decimal("0.0150"))
+        self.assertEqual(expected.income_growth_rate, Decimal("0.0200"))
+        self.assertEqual(expected.contribution_growth_rate, Decimal("0.0200"))
+        self.assertEqual(expected.withdrawal_rate, Decimal("0.0350"))
+        self.assertEqual(expected.default_liability_rate, Decimal("0.0450"))
+
+
+class AssetClassificationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="plan_class", password="pass1234")
+
+    def test_infers_override_and_subtracts_associated_debt(self):
+        investment = create_investment(self.user, Decimal("50000.00"))
+        home = Asset.objects.create(
+            user=self.user,
+            name="Casa",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            amount=Decimal("200000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("120000.00"),
+            currency="EUR",
+            financed_asset=home,
+            is_asset_backed=True,
+        )
+        PlanAssetFunction.objects.create(
+            user=self.user,
+            asset=home,
+            function=PlanAssetFunction.Function.PRODUCTIVE,
+        )
+
+        summary = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
+
+        self.assertEqual(summary.productive_capital, Decimal("130000.00000000"))
+        home_row = next(row for row in summary.assets if row.asset_id == home.id)
+        self.assertEqual(home_row.inferred_function, PlanAssetFunction.Function.FAMILY_USE)
+        self.assertEqual(home_row.function, PlanAssetFunction.Function.PRODUCTIVE)
+        self.assertEqual(home_row.net_value, Decimal("80000.00000000"))
+        investment_row = next(row for row in summary.assets if row.asset_id == investment.id)
+        self.assertEqual(investment_row.function, PlanAssetFunction.Function.PRODUCTIVE)
+
+
+class ProjectionFinancialCasesTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_projection", password="pass1234"
+        )
+
+    def calculate(self, plan):
+        return ProjectionService().calculate(
+            plan=plan,
+            assumption_set=get_assumption_set(name="expected"),
+        )
+
+    def test_case_1_person_without_assets(self):
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["summary"]["productive_capital"]["value"], "0.00")
+        self.assertGreater(Decimal(result["summary"]["target_capital"]["value"]), Decimal("0"))
+        self.assertIsNone(result["summary"]["projected_year"]["value"])
+
+    def test_case_2_investments_without_debt_project_a_date(self):
+        create_investment(self.user, Decimal("900000.00"))
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["summary"]["productive_capital"]["value"], "900000.00")
+        self.assertIsNotNone(result["summary"]["projected_year"]["value"])
+
+    def test_case_3_primary_home_mortgage_stays_out_of_productive_capital(self):
+        home = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            amount=Decimal("250000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("150000.00"),
+            currency="EUR",
+            financed_asset=home,
+            term_months=300,
+        )
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["summary"]["productive_capital"]["value"], "0.00")
+        self.assertEqual(result["classification"]["family_use_capital"], "100000.00")
+
+    def test_case_4_couple_with_two_pensions_uses_future_income(self):
+        plan = create_plan(self.user, household_type=FinancialPlan.HouseholdType.FAMILY)
+        member_1 = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto 1",
+            role=FamilyMember.Role.ADULT,
+            pension_start_date=date(2045, 1, 1),
+            estimated_monthly_pension_today_eur=Decimal("1200.00"),
+        )
+        member_2 = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto 2",
+            role=FamilyMember.Role.ADULT,
+            pension_start_date=date(2047, 1, 1),
+            estimated_monthly_pension_today_eur=Decimal("800.00"),
+        )
+        plan.members.set([member_1, member_2])
+
+        result = self.calculate(plan)
+
+        self.assertLess(
+            Decimal(result["summary"]["target_capital"]["value"]),
+            Decimal("900000.00"),
+        )
+
+    def test_case_5_retirement_before_pension_creates_bridge_capital(self):
+        plan = create_plan(self.user, target_date=date(2035, 1, 1))
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto",
+            role=FamilyMember.Role.ADULT,
+            pension_start_date=date(2045, 1, 1),
+            estimated_monthly_pension_today_eur=Decimal("1000.00"),
+        )
+        plan.members.add(member)
+
+        target = Decimal(self.calculate(plan)["summary"]["target_capital"]["value"])
+        no_bridge_plan = create_plan(
+            get_user_model().objects.create_user(username="plan_no_bridge", password="pass1234"),
+            target_date=date(2046, 1, 1),
+        )
+        no_bridge_member = FamilyMember.objects.create(
+            user=no_bridge_plan.user,
+            name="Adulto",
+            role=FamilyMember.Role.ADULT,
+            pension_start_date=date(2045, 1, 1),
+            estimated_monthly_pension_today_eur=Decimal("1000.00"),
+        )
+        no_bridge_plan.members.add(no_bridge_member)
+        no_bridge_target = Decimal(
+            self.calculate(no_bridge_plan)["summary"]["target_capital"]["value"]
+        )
+
+        self.assertGreater(target, no_bridge_target)
+
+    def test_case_6_high_emergency_fund_counts_as_security_capital(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Fondo emergencia",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("30000.00"),
+            currency="EUR",
+        )
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["summary"]["security_capital"]["value"], "30000.00")
+
+    def test_case_7_car_purchase_as_existing_base_data(self):
+        car = Asset.objects.create(
+            user=self.user,
+            name="Coche",
+            category=Asset.Category.VEHICLE,
+            subcategory=Asset.Subcategory.VEHICLES,
+            amount=Decimal("20000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Prestamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            amount=Decimal("12000.00"),
+            currency="EUR",
+            financed_asset=car,
+            term_months=60,
+        )
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["classification"]["family_use_capital"], "8000.00")
+
+    def test_case_8_second_home_as_existing_base_data_is_productive(self):
+        home = Asset.objects.create(
+            user=self.user,
+            name="Segunda vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.SECOND_HOME,
+            amount=Decimal("180000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca segunda vivienda",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("100000.00"),
+            currency="EUR",
+            financed_asset=home,
+            term_months=240,
+        )
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["summary"]["productive_capital"]["value"], "80000.00")
+
+    def test_case_9_sabbatical_as_base_income_drop(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Caja",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("5000.00"),
+            currency="EUR",
+        )
+        create_income(self.user, Decimal("0.00"))
+        create_operating_expense(self.user)
+        plan = create_plan(self.user)
+
+        result = self.calculate(plan)
+
+        self.assertEqual(result["quality_level"], "medium")
+        self.assertEqual(result["summary"]["productive_capital"]["value"], "0.00")
+
+    def test_case_10_incompatible_preservation_target_blocks_projected_year(self):
+        create_investment(self.user, Decimal("900000.00"))
+        plan = create_plan(self.user, preservation_target_eur=Decimal("9000000.00"))
+
+        result = self.calculate(plan)
+
+        self.assertIsNone(result["summary"]["projected_year"]["value"])
+
+    def test_determinism_same_inputs_same_hash_and_result(self):
+        create_investment(self.user, Decimal("100000.00"))
+        plan = create_plan(self.user)
+        service = ProjectionService()
+
+        result_1 = service.calculate(plan=plan, assumption_set=get_assumption_set(name="expected"))
+        result_2 = service.calculate(plan=plan, assumption_set=get_assumption_set(name="expected"))
+
+        self.assertEqual(result_1["input_hash"], result_2["input_hash"])
+        self.assertEqual(result_1["summary"], result_2["summary"])
+        self.assertEqual(result_1["trajectory"], result_2["trajectory"])
+
+    def test_three_scenarios_share_schema(self):
+        plan = create_plan(self.user)
+
+        result = ProjectionService().calculate_all_scenarios(plan=plan)
+
+        self.assertEqual(set(result), {"favorable", "prudent", "expected"})
+        self.assertEqual(
+            set(result["expected"]["summary"]),
+            set(result["prudent"]["summary"]),
+        )
+
+
+class PlanApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="plan_api", password="pass1234")
+        self.other = get_user_model().objects.create_user(
+            username="plan_other", password="pass1234"
+        )
+        self.client.force_authenticate(self.user)
+
+    def payload(self, **overrides):
+        data = {
+            "household_type": "single",
+            "target_date": "2040-01-01",
+            "target_monthly_income_today_eur": "2000.00",
+            "projection_end_date": "2065-01-01",
+            "profile": "balanced",
+        }
+        data.update(overrides)
+        return data
+
+    def test_post_is_idempotent(self):
+        response_1 = self.client.post(reverse("financial-plan"), self.payload(), format="json")
+        response_2 = self.client.post(
+            reverse("financial-plan"),
+            self.payload(target_monthly_income_today_eur="2500.00"),
+            format="json",
+        )
+
+        self.assertEqual(response_1.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response_2.status_code, status.HTTP_200_OK)
+        self.assertEqual(FinancialPlan.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(response_2.data["target_monthly_income_today_eur"], "2500.00")
+
+    def test_recalculate_persists_snapshot(self):
+        create_plan(self.user)
+
+        response = self.client.post(reverse("financial-plan-recalculate"), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(ProjectionSnapshot.objects.filter(plan__user=self.user).count(), 1)
+        self.assertIn("assumptions", response.data)
+
+    def test_member_linking_is_user_scoped(self):
+        other_member = FamilyMember.objects.create(
+            user=self.other,
+            name="Otro",
+            role=FamilyMember.Role.ADULT,
+        )
+
+        response = self.client.post(
+            reverse("financial-plan"),
+            self.payload(member_ids=[other_member.id]),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_asset_function_override_is_user_scoped(self):
+        own_asset = create_investment(self.user, Decimal("1000.00"))
+        other_asset = create_investment(self.other, Decimal("1000.00"))
+
+        response = self.client.put(
+            reverse("financial-plan-asset-functions"),
+            [
+                {"asset_id": own_asset.id, "function": "security"},
+                {"asset_id": other_asset.id, "function": "productive"},
+            ],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            PlanAssetFunction.objects.filter(user=self.user, asset=other_asset).exists()
+        )

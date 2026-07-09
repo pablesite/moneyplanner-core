@@ -15,6 +15,23 @@ class FamilyMember(models.Model):
 
     name = models.CharField(max_length=80)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.ADULT)
+    birth_date = models.DateField(null=True, blank=True)
+    employment_income_end_date = models.DateField(null=True, blank=True)
+    pension_start_date = models.DateField(null=True, blank=True)
+    estimated_monthly_pension_today_eur = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    other_future_income_today_eur = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+    )
 
     is_active = models.BooleanField(default=True)
 

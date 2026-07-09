@@ -24,7 +24,6 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| Financial Plan | Agent | Phase 1 — Projection engine: new `plan` app, deterministic projection service, asset classification, data quality, `/api/plan/*` API, no UI. Sequential prerequisite for all other phases. | `tasks/financial-plan/phase-1-projection-engine/backend.md` |
 | Financial Plan | Agent | Phase 3 — Scenario lab backend: `Scenario`/`ScenarioEvent`/`PlanEvent`, non-contaminating comparison, accept/discard. Requires phase 1. | `tasks/financial-plan/phase-3-scenarios/backend.md` |
 | Financial Plan | Agent | Phase 4 — Findings/recommendations engine (guide scoring ported to backend) + monthly close plan-impact. Requires phases 1 and 3. | `tasks/financial-plan/phase-4-findings-close/backend.md` |
 
@@ -67,6 +66,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | DB Backup/Restore (pg_dump) | ✅ | Admin-only backup/restore endpoints based on pg_dump/pg_restore. Portable JSON flow removed from UI and replaced with this flow. |
 | Financial scoring phases 1-4 | ✅ | Debt, cash flow, emergency fund, net worth health. |
 | Core auth (JWT) | ✅ | User signup from UI (`/registro`), logout with blacklist, token refresh, and rate throttling. |
+| Financial Plan — projection engine | ✅ | New Core `plan` app: single financial plan, seeded assumptions, deterministic yearly projection, bridge-period capital, asset function overrides, data quality, snapshots and `/api/plan/*`. Phase 1 financial cases that sound like scenarios are represented as already-incorporated base data; hypothetical scenario comparison remains Phase 3. |
 
 ## Active progress trackers
 

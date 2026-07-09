@@ -1,0 +1,515 @@
+from __future__ import annotations
+
+import hashlib
+import json
+
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
+
+from accounts.models import UserSettings
+from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from memberships.models import FamilyMember
+from net_worth.models import InvestmentContributionInterval, Liability
+
+from .models import AssumptionSet, FinancialPlan, ProjectionSnapshot
+from .services_classification import AssetClassificationService, ClassificationSummary
+from .services_quality import DataQualityService
+
+
+MONEY = Decimal("0.01")
+
+
+def q2(value: Decimal) -> Decimal:
+    return value.quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def decimal_str(value: Decimal) -> str:
+    return str(q2(value))
+
+
+@dataclass(frozen=True)
+class ProjectionInputs:
+    plan_id: int
+    target_date: date
+    target_monthly_income_today_eur: Decimal
+    projection_end_date: date
+    preservation_target_eur: Decimal | None
+    productive_capital: Decimal
+    security_capital: Decimal
+    family_use_capital: Decimal
+    short_term_goal_capital: Decimal
+    unknown_capital: Decimal
+    total_liabilities: Decimal
+    net_worth: Decimal
+    annual_income: Decimal
+    annual_operating_expenses: Decimal
+    annual_planned_contributions: Decimal
+    annual_pension_income_today: Decimal
+    annual_other_future_income_today: Decimal
+    earliest_pension_start_date: date | None
+    liability_principal: Decimal
+    liability_weighted_rate: Decimal
+    liability_max_term_years: int
+
+
+class ProjectionService:
+    def recalculate(
+        self, *, plan: FinancialPlan, assumption_name: str = "expected"
+    ) -> dict[str, Any]:
+        assumption_set = get_assumption_set(name=assumption_name)
+        result = self.calculate(plan=plan, assumption_set=assumption_set)
+        ProjectionSnapshot.objects.create(
+            plan=plan,
+            assumption_set=assumption_set,
+            assumption_values=result["assumptions"],
+            input_hash=result["input_hash"],
+            result_json=result,
+            quality_level=result["quality_level"],
+            is_official=True,
+        )
+        return result
+
+    def calculate(self, *, plan: FinancialPlan, assumption_set: AssumptionSet) -> dict[str, Any]:
+        inputs, classification, quality = build_projection_inputs(plan=plan)
+        assumptions = serialize_assumptions(assumption_set)
+        input_hash = stable_hash({"inputs": serialize_inputs(inputs), "assumptions": assumptions})
+        metrics = calculate_projection(inputs=inputs, assumptions=assumptions)
+        calculated_at = None
+        return {
+            "scenario": assumption_set.name,
+            "input_hash": input_hash,
+            "calculated_at": calculated_at,
+            "quality_level": quality.level,
+            "quality_factors": quality.factors,
+            "assumptions": assumptions,
+            "summary": wrap_metrics(metrics["summary"], assumptions, quality.level, calculated_at),
+            "trajectory": metrics["trajectory"],
+            "classification": serialize_classification(classification),
+        }
+
+    def calculate_all_scenarios(self, *, plan: FinancialPlan) -> dict[str, Any]:
+        return {
+            assumption.name: self.calculate(plan=plan, assumption_set=assumption)
+            for assumption in AssumptionSet.objects.filter(
+                name__in=["prudent", "expected", "favorable"]
+            ).order_by("name")
+        }
+
+
+def get_assumption_set(*, name: str | None = None) -> AssumptionSet:
+    if name:
+        found = AssumptionSet.objects.filter(name=name).first()
+        if found:
+            return found
+    return AssumptionSet.objects.filter(is_default=True).first() or AssumptionSet.objects.first()
+
+
+def build_projection_inputs(
+    *, plan: FinancialPlan
+) -> tuple[ProjectionInputs, ClassificationSummary, Any]:
+    settings, _ = UserSettings.objects.get_or_create(user=plan.user)
+    base_currency = (settings.base_currency or "EUR").upper()
+    classification = AssetClassificationService().summarize(
+        user=plan.user, base_currency=base_currency
+    )
+    annual_income = sum_active_amounts(
+        AnnualIncomeEntry.objects.filter(user=plan.user, is_active=True)
+    )
+    operating_expenses = sum_active_amounts(
+        AnnualExpenseEntry.objects.filter(
+            user=plan.user,
+            is_active=True,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+        )
+    )
+    planned_contributions = planned_contribution_amount(user=plan.user)
+    members = list(plan.members.filter(role=FamilyMember.Role.ADULT, is_active=True).order_by("id"))
+    pension_income = sum(
+        (
+            Decimal(member.estimated_monthly_pension_today_eur or 0) * Decimal("12")
+            for member in members
+        ),
+        Decimal("0"),
+    )
+    other_future_income = sum(
+        (Decimal(member.other_future_income_today_eur or 0) * Decimal("12") for member in members),
+        Decimal("0"),
+    )
+    pension_dates = [member.pension_start_date for member in members if member.pension_start_date]
+    liabilities = list(Liability.objects.filter(user=plan.user, is_active=True))
+    liability_principal = sum(
+        (Decimal(liability.amount) for liability in liabilities),
+        Decimal("0"),
+    )
+    weighted_rate = weighted_liability_rate(liabilities=liabilities)
+    max_term_years = max(
+        [liability_term_years(liability) for liability in liabilities],
+        default=0,
+    )
+    quality = DataQualityService().evaluate(user=plan.user)
+    return (
+        ProjectionInputs(
+            plan_id=plan.id,
+            target_date=plan.target_date,
+            target_monthly_income_today_eur=Decimal(plan.target_monthly_income_today_eur),
+            projection_end_date=plan.projection_end_date,
+            preservation_target_eur=(
+                Decimal(plan.preservation_target_eur)
+                if plan.preservation_target_eur is not None
+                else None
+            ),
+            productive_capital=classification.productive_capital,
+            security_capital=classification.security_capital,
+            family_use_capital=classification.family_use_capital,
+            short_term_goal_capital=classification.short_term_goal_capital,
+            unknown_capital=classification.unknown_capital,
+            total_liabilities=classification.total_liabilities,
+            net_worth=classification.net_worth,
+            annual_income=annual_income,
+            annual_operating_expenses=operating_expenses,
+            annual_planned_contributions=planned_contributions,
+            annual_pension_income_today=pension_income,
+            annual_other_future_income_today=other_future_income,
+            earliest_pension_start_date=min(pension_dates) if pension_dates else None,
+            liability_principal=liability_principal,
+            liability_weighted_rate=weighted_rate,
+            liability_max_term_years=max_term_years,
+        ),
+        classification,
+        quality,
+    )
+
+
+def calculate_projection(
+    *, inputs: ProjectionInputs, assumptions: dict[str, str]
+) -> dict[str, Any]:
+    inflation = Decimal(assumptions["inflation_rate"])
+    productive_return = Decimal(assumptions["productive_return_rate"])
+    non_productive_return = Decimal(assumptions["non_productive_appreciation_rate"])
+    contribution_growth = Decimal(assumptions["contribution_growth_rate"])
+    withdrawal_rate = Decimal(assumptions["withdrawal_rate"])
+
+    start_year = date.today().year
+    target_year = inputs.target_date.year
+    end_year = inputs.projection_end_date.year
+    productive = inputs.productive_capital
+    security = inputs.security_capital
+    non_productive = (
+        inputs.family_use_capital + inputs.short_term_goal_capital + inputs.unknown_capital
+    )
+    liabilities = inputs.total_liabilities
+    rows: list[dict[str, Any]] = []
+    projected_year: int | None = None
+
+    denominator = target_capital_for_year(
+        inputs=inputs,
+        assumptions=assumptions,
+        candidate_year=target_year,
+        start_year=start_year,
+    )
+    sustainable_income = productive * withdrawal_rate / Decimal("12")
+    progress = (
+        Decimal("100")
+        if denominator <= 0
+        else min(Decimal("100"), productive / denominator * Decimal("100"))
+    )
+
+    for offset, year in enumerate(range(start_year, end_year + 1)):
+        nominal_target_income = inflate(
+            inputs.target_monthly_income_today_eur * Decimal("12"),
+            inflation,
+            max(0, year - start_year),
+        )
+        future_income = future_income_for_year(
+            inputs=inputs,
+            assumptions=assumptions,
+            year=year,
+            start_year=start_year,
+        )
+        withdrawals = (
+            max(Decimal("0"), nominal_target_income - future_income)
+            if year >= target_year
+            else Decimal("0")
+        )
+        if offset > 0:
+            contribution = inflate(
+                inputs.annual_planned_contributions,
+                contribution_growth,
+                offset,
+            )
+            productive = max(
+                Decimal("0"),
+                productive * (Decimal("1") + productive_return) + contribution - withdrawals,
+            )
+            security = security
+            non_productive = non_productive * (Decimal("1") + non_productive_return)
+            liabilities = projected_liability_balance(
+                initial=inputs.total_liabilities,
+                current_balance=liabilities,
+                term_years=inputs.liability_max_term_years,
+                year_offset=offset,
+            )
+        required = target_capital_for_year(
+            inputs=inputs,
+            assumptions=assumptions,
+            candidate_year=year,
+            start_year=start_year,
+        )
+        net_worth = productive + security + non_productive - liabilities
+        preservation_ok = (
+            inputs.preservation_target_eur is None or net_worth >= inputs.preservation_target_eur
+        )
+        if projected_year is None and productive >= required and preservation_ok:
+            projected_year = year
+        rows.append(
+            {
+                "year": year,
+                "productive_capital": decimal_str(productive),
+                "security_capital": decimal_str(security),
+                "non_productive_assets": decimal_str(non_productive),
+                "liabilities": decimal_str(liabilities),
+                "net_worth": decimal_str(net_worth),
+                "target_capital": decimal_str(required),
+                "annual_target_income": decimal_str(nominal_target_income),
+                "future_income": decimal_str(future_income),
+                "annual_withdrawals": decimal_str(withdrawals),
+                "preservation_ok": preservation_ok,
+            }
+        )
+
+    summary = {
+        "target_capital": denominator,
+        "target_capital_denominator": denominator,
+        "productive_capital": inputs.productive_capital,
+        "security_capital": inputs.security_capital,
+        "net_worth": inputs.net_worth,
+        "monthly_sustainable_income": sustainable_income,
+        "progress_percent": progress,
+        "projected_year": projected_year,
+        "target_year": target_year,
+        "preservation_target_eur": inputs.preservation_target_eur,
+    }
+    return {"summary": summary, "trajectory": rows}
+
+
+def target_capital_for_year(
+    *,
+    inputs: ProjectionInputs,
+    assumptions: dict[str, str],
+    candidate_year: int,
+    start_year: int,
+) -> Decimal:
+    inflation = Decimal(assumptions["inflation_rate"])
+    productive_return = Decimal(assumptions["productive_return_rate"])
+    withdrawal_rate = Decimal(assumptions["withdrawal_rate"])
+    target_year = max(candidate_year, inputs.target_date.year)
+    pension_year = (
+        inputs.earliest_pension_start_date.year if inputs.earliest_pension_start_date else None
+    )
+    target_income = inflate(
+        inputs.target_monthly_income_today_eur * Decimal("12"),
+        inflation,
+        max(0, target_year - start_year),
+    )
+    post_pension_income = inflate(
+        inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
+        inflation,
+        max(0, target_year - start_year),
+    )
+    if pension_year is None or target_year >= pension_year:
+        return q2(max(Decimal("0"), target_income - post_pension_income) / withdrawal_rate)
+
+    bridge = Decimal("0")
+    for year in range(target_year, pension_year):
+        nominal_need = inflate(
+            inputs.target_monthly_income_today_eur * Decimal("12"),
+            inflation,
+            max(0, year - start_year),
+        )
+        other_income = inflate(
+            inputs.annual_other_future_income_today,
+            inflation,
+            max(0, year - start_year),
+        )
+        gap = max(Decimal("0"), nominal_need - other_income)
+        discount_years = year - target_year
+        bridge += gap / ((Decimal("1") + productive_return) ** discount_years)
+    pension_need = inflate(
+        inputs.target_monthly_income_today_eur * Decimal("12"),
+        inflation,
+        max(0, pension_year - start_year),
+    )
+    pension_income = inflate(
+        inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
+        inflation,
+        max(0, pension_year - start_year),
+    )
+    post_pension_capital = max(Decimal("0"), pension_need - pension_income) / withdrawal_rate
+    bridge += post_pension_capital / (
+        (Decimal("1") + productive_return) ** max(0, pension_year - target_year)
+    )
+    return q2(bridge)
+
+
+def future_income_for_year(
+    *,
+    inputs: ProjectionInputs,
+    assumptions: dict[str, str],
+    year: int,
+    start_year: int,
+) -> Decimal:
+    inflation = Decimal(assumptions["inflation_rate"])
+    income_growth = Decimal(assumptions["income_growth_rate"])
+    labor_income = inflate(inputs.annual_income, income_growth, max(0, year - start_year))
+    pension_income = Decimal("0")
+    if inputs.earliest_pension_start_date and year >= inputs.earliest_pension_start_date.year:
+        pension_income = inflate(
+            inputs.annual_pension_income_today,
+            inflation,
+            max(0, year - start_year),
+        )
+    other = inflate(
+        inputs.annual_other_future_income_today,
+        inflation,
+        max(0, year - start_year),
+    )
+    return labor_income + pension_income + other
+
+
+def inflate(amount: Decimal, rate: Decimal, years: int) -> Decimal:
+    return amount * ((Decimal("1") + rate) ** years)
+
+
+def projected_liability_balance(
+    *,
+    initial: Decimal,
+    current_balance: Decimal,
+    term_years: int,
+    year_offset: int,
+) -> Decimal:
+    if initial <= 0 or term_years <= 0:
+        return Decimal("0")
+    annual_principal = initial / Decimal(term_years)
+    return max(Decimal("0"), current_balance - annual_principal)
+
+
+def sum_active_amounts(queryset) -> Decimal:
+    return sum((Decimal(row.amount_annual) for row in queryset), Decimal("0"))
+
+
+def planned_contribution_amount(*, user) -> Decimal:
+    budgeted = sum_active_amounts(
+        AnnualExpenseEntry.objects.filter(
+            user=user,
+            is_active=True,
+            cashflow_role__in=[
+                AnnualExpenseEntry.CashflowRole.SAVINGS,
+                AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            ],
+        )
+    )
+    intervals = Decimal("0")
+    for interval in InvestmentContributionInterval.objects.filter(
+        asset__user=user,
+        asset__is_active=True,
+    ):
+        if interval.frequency == "weekly":
+            intervals += Decimal(interval.amount) * Decimal("52")
+        else:
+            intervals += Decimal(interval.amount) * Decimal("12")
+    return budgeted + intervals
+
+
+def weighted_liability_rate(*, liabilities: list[Liability]) -> Decimal:
+    total = sum((Decimal(liability.amount) for liability in liabilities), Decimal("0"))
+    if total <= 0:
+        return Decimal("0")
+    weighted = Decimal("0")
+    for liability in liabilities:
+        rate = Decimal(liability.annual_interest_tae or 0) / Decimal("100")
+        weighted += Decimal(liability.amount) / total * rate
+    return weighted
+
+
+def liability_term_years(liability: Liability) -> int:
+    if liability.term_months:
+        return max(1, int((liability.term_months + 11) // 12))
+    if liability.expected_end_date:
+        return max(1, liability.expected_end_date.year - date.today().year)
+    return 0
+
+
+def serialize_assumptions(assumption_set: AssumptionSet) -> dict[str, str]:
+    return {
+        "name": assumption_set.name,
+        "inflation_rate": str(assumption_set.inflation_rate),
+        "productive_return_rate": str(assumption_set.productive_return_rate),
+        "non_productive_appreciation_rate": str(assumption_set.non_productive_appreciation_rate),
+        "income_growth_rate": str(assumption_set.income_growth_rate),
+        "contribution_growth_rate": str(assumption_set.contribution_growth_rate),
+        "withdrawal_rate": str(assumption_set.withdrawal_rate),
+        "default_liability_rate": str(assumption_set.default_liability_rate),
+    }
+
+
+def serialize_inputs(inputs: ProjectionInputs) -> dict[str, Any]:
+    return {
+        key: str(value) if isinstance(value, (Decimal, date)) else value
+        for key, value in inputs.__dict__.items()
+    }
+
+
+def stable_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def wrap_metrics(
+    metrics: dict[str, Any],
+    assumptions: dict[str, str],
+    quality_level: str,
+    calculated_at: str,
+) -> dict[str, Any]:
+    return {
+        key: {
+            "value": decimal_str(value) if isinstance(value, Decimal) else value,
+            "unit": "EUR"
+            if key not in {"progress_percent", "projected_year", "target_year"}
+            else ("percent" if key == "progress_percent" else "year"),
+            "assumptions": assumptions,
+            "calculated_at": calculated_at,
+            "quality_level": quality_level,
+        }
+        for key, value in metrics.items()
+    }
+
+
+def serialize_classification(classification: ClassificationSummary) -> dict[str, Any]:
+    return {
+        "productive_capital": decimal_str(classification.productive_capital),
+        "security_capital": decimal_str(classification.security_capital),
+        "family_use_capital": decimal_str(classification.family_use_capital),
+        "short_term_goal_capital": decimal_str(classification.short_term_goal_capital),
+        "unknown_capital": decimal_str(classification.unknown_capital),
+        "total_assets": decimal_str(classification.total_assets),
+        "total_liabilities": decimal_str(classification.total_liabilities),
+        "net_worth": decimal_str(classification.net_worth),
+        "assets": [
+            {
+                "asset_id": row.asset_id,
+                "name": row.name,
+                "category": row.category,
+                "subcategory": row.subcategory,
+                "function": row.function,
+                "inferred_function": row.inferred_function,
+                "override_function": row.override_function,
+                "gross_value": decimal_str(row.gross_value),
+                "associated_liabilities": decimal_str(row.associated_liabilities),
+                "net_value": decimal_str(row.net_value),
+                "currency": row.currency,
+            }
+            for row in classification.assets
+        ],
+    }
