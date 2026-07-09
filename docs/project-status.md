@@ -24,7 +24,11 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| _(none)_ | — | — | — |
+| Financial Plan | Agent | Phase 1 — Projection engine: new `plan` app, deterministic projection service, asset classification, data quality, `/api/plan/*` API, no UI. Sequential prerequisite for all other phases. | `tasks/financial-plan/phase-1-projection-engine/backend.md` |
+| Financial Plan | Agent | Phase 3 — Scenario lab backend: `Scenario`/`ScenarioEvent`/`PlanEvent`, non-contaminating comparison, accept/discard. Requires phase 1. | `tasks/financial-plan/phase-3-scenarios/backend.md` |
+| Financial Plan | Agent | Phase 4 — Findings/recommendations engine (guide scoring ported to backend) + monthly close plan-impact. Requires phases 1 and 3. | `tasks/financial-plan/phase-4-findings-close/backend.md` |
+
+> Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5) live in the SaaS repo root (`docs/tasks/financial-plan/`).
 
 ### Pre-production roadmap snapshot (by area)
 
