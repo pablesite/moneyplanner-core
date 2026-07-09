@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.29.0...moneyplanner-core-v0.29.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **accounting:** compute account balances in bulk on list endpoint ([c5fac0f](https://github.com/pablesite/moneyplanner-core/commit/c5fac0f36ad20dfb56c1287231c8d64cac9228ef))
+
 ## [0.29.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.28.0...moneyplanner-core-v0.29.0) (2026-06-28)
 
 
