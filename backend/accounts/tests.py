@@ -91,6 +91,7 @@ class CoreAuthModeApiTests(APITestCase):
         response = self.client.get("/api/auth/link-token/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @override_settings(CORE_LINKING_SHARED_SECRET="")
     def test_link_token_returns_400_when_feature_disabled(self):
         self.client.force_authenticate(user=self.user)
         response = self.client.get("/api/auth/link-token/")
