@@ -26,7 +26,7 @@ from .services_summaries import (
     build_monthly_accounting_summary,
     validate_budget_suggestion_filters,
 )
-from .services_ledger import delete_ledger_account
+from .services_ledger import delete_ledger_account, get_account_balances_bulk
 from .services_transactions import (
     apply_transaction_list_filters,
     filter_transactions_by_review_state,
@@ -49,6 +49,22 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
         if is_active in {"true", "false"}:
             queryset = queryset.filter(is_active=(is_active == "true"))
         return queryset.order_by("account_type", "name", "id")
+
+    def list(self, request, *args, **kwargs):
+        accounts = list(self.filter_queryset(self.get_queryset()))
+        serializer = self.get_serializer(
+            accounts,
+            many=True,
+            context={
+                **self.get_serializer_context(),
+                "account_balances_by_id": get_account_balances_bulk(
+                    user_id=request.user.id,
+                    accounts=accounts,
+                    status=LedgerTransaction.Status.POSTED,
+                ),
+            },
+        )
+        return Response(serializer.data)
 
     def perform_destroy(self, instance: LedgerAccount) -> None:
         if instance.origin == LedgerAccount.Origin.SYSTEM:

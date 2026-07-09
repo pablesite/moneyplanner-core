@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import cast
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -105,6 +105,46 @@ def get_account_balance(
         account_id=account.id,
     )
     return compute_account_balance_from_totals(account_type=account.account_type, totals=totals)
+
+
+def get_account_balances_bulk(
+    *,
+    user_id: int,
+    accounts: list[LedgerAccount],
+    status: str | None = None,
+) -> dict[int, Decimal]:
+    if not accounts:
+        return {}
+
+    # Safety boundary: same rule as get_account_entries — only entries from
+    # transactions owned by the same user contribute to balances.
+    entries = LedgerEntry.objects.filter(
+        account_id__in=[account.id for account in accounts],
+        transaction__user_id=user_id,
+    )
+    if status is not None:
+        entries = entries.filter(transaction__status=status)
+
+    debit_totals: dict[int, Decimal] = {}
+    credit_totals: dict[int, Decimal] = {}
+    for row in entries.values("account_id", "side").annotate(amount_total=Sum("amount")):
+        amount = row["amount_total"] or ZERO
+        if row["side"] == LedgerEntry.Side.DEBIT:
+            debit_totals[row["account_id"]] = amount
+        else:
+            credit_totals[row["account_id"]] = amount
+
+    return {
+        account.id: compute_account_balance_from_totals(
+            account_type=account.account_type,
+            totals=LedgerBalanceTotals(
+                debit_total=debit_totals.get(account.id, ZERO),
+                credit_total=credit_totals.get(account.id, ZERO),
+            ),
+        )
+        for account in accounts
+        if account.user_id == user_id
+    }
 
 
 def validate_liquidity_account(

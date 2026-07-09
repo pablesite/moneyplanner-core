@@ -99,6 +99,11 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
         return fields
 
     def get_current_balance(self, obj: LedgerAccount) -> str:
+        # En listados el viewset precalcula todos los saldos en una sola query
+        # agregada; el fallback por cuenta queda para respuestas individuales.
+        balances_by_id = self.context.get("account_balances_by_id")
+        if balances_by_id is not None:
+            return str(balances_by_id.get(obj.id, Decimal("0")))
         return str(
             get_account_balance(account=obj, status=cast(str, LedgerTransaction.Status.POSTED))
         )
