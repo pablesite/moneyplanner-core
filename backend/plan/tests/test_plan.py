@@ -11,9 +11,17 @@ from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember
 from net_worth.models import Asset, Liability
 
-from plan.models import AssumptionSet, FinancialPlan, PlanAssetFunction, ProjectionSnapshot
+from plan.models import (
+    AssumptionSet,
+    FinancialPlan,
+    PlanAssetFunction,
+    PlanEvent,
+    ProjectionSnapshot,
+    Scenario,
+)
 from plan.services_classification import AssetClassificationService
 from plan.services_projection import ProjectionService, get_assumption_set
+from plan.services_scenarios import ScenarioService
 
 
 def create_plan(user, **overrides):
@@ -412,3 +420,166 @@ class PlanApiTests(APITestCase):
         self.assertFalse(
             PlanAssetFunction.objects.filter(user=self.user, asset=other_asset).exists()
         )
+
+
+class ScenarioServiceTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_scenario", password="pass1234"
+        )
+        create_investment(self.user, Decimal("100000.00"))
+        Asset.objects.create(
+            user=self.user,
+            name="Caja",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("6000.00"),
+            currency="EUR",
+        )
+        self.plan = create_plan(self.user)
+
+    def create_vehicle_scenario(self):
+        scenario = Scenario.objects.create(
+            plan=self.plan,
+            name="Comprar coche",
+            template_type=Scenario.TemplateType.VEHICLE,
+        )
+        scenario.events.create(
+            start_date=date(2028, 3, 1),
+            initial_outflow=Decimal("10000.00"),
+            monthly_expense_delta=Decimal("250.00"),
+            new_asset_value=Decimal("25000.00"),
+            new_asset_type=PlanAssetFunction.Function.FAMILY_USE,
+            new_debt_principal=Decimal("15000.00"),
+            new_debt_interest_rate=Decimal("0.0700"),
+            new_debt_term_months=60,
+        )
+        return scenario
+
+    def test_comparison_creates_only_non_official_snapshot_and_does_not_mutate_plan(self):
+        scenario = self.create_vehicle_scenario()
+
+        result = ScenarioService().compare(scenario=scenario)
+
+        self.assertEqual(result["scenario"]["id"], scenario.id)
+        self.assertEqual(PlanEvent.objects.count(), 0)
+        self.assertEqual(AnnualExpenseEntry.objects.count(), 0)
+        snapshot = ProjectionSnapshot.objects.get(scenario=scenario)
+        self.assertFalse(snapshot.is_official)
+
+    def test_accept_creates_plan_event_official_snapshot_and_budget_entries(self):
+        scenario = self.create_vehicle_scenario()
+
+        result = ScenarioService().accept(scenario=scenario)
+
+        scenario.refresh_from_db()
+        self.assertEqual(scenario.status, Scenario.Status.ACCEPTED)
+        self.assertEqual(PlanEvent.objects.filter(plan=self.plan).count(), 1)
+        self.assertGreaterEqual(result["budget_entries_created"], 3)
+        self.assertTrue(
+            ProjectionSnapshot.objects.filter(plan=self.plan, is_official=True).exists()
+        )
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                fiscal_year=2028,
+                category=AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+                subcategory="vehicle_purchase",
+                amount_annual=Decimal("10000.00"),
+            ).exists()
+        )
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+                subcategory="personal_loan_repayment",
+            ).exists()
+        )
+
+    def test_accepted_plan_event_affects_future_projection(self):
+        scenario = self.create_vehicle_scenario()
+        before = ProjectionService().calculate(
+            plan=self.plan,
+            assumption_set=get_assumption_set(name="expected"),
+        )
+
+        ScenarioService().accept(scenario=scenario)
+
+        after = ProjectionService().calculate(
+            plan=self.plan,
+            assumption_set=get_assumption_set(name="expected"),
+        )
+        before_2028 = next(row for row in before["trajectory"] if row["year"] == 2028)
+        after_2028 = next(row for row in after["trajectory"] if row["year"] == 2028)
+        self.assertGreater(
+            Decimal(after_2028["liabilities"]),
+            Decimal(before_2028["liabilities"]),
+        )
+
+
+class ScenarioApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_scenario_api", password="pass1234"
+        )
+        self.other = get_user_model().objects.create_user(
+            username="plan_scenario_other", password="pass1234"
+        )
+        self.plan = create_plan(self.user)
+        self.other_plan = create_plan(self.other)
+        self.client.force_authenticate(self.user)
+
+    def scenario_payload(self):
+        return {
+            "name": "Comprar coche",
+            "template_type": "vehicle",
+            "events": [
+                {
+                    "start_date": "2028-03-01",
+                    "initial_outflow": "10000.00",
+                    "monthly_expense_delta": "250.00",
+                    "new_asset_value": "25000.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "15000.00",
+                    "new_debt_interest_rate": "0.0700",
+                    "new_debt_term_months": 60,
+                    "metadata_json": {},
+                }
+            ],
+        }
+
+    def test_create_compare_and_accept_scenario(self):
+        create_response = self.client.post(
+            reverse("financial-plan-scenarios"),
+            self.scenario_payload(),
+            format="json",
+        )
+        scenario_id = create_response.data["id"]
+
+        compare_response = self.client.get(
+            reverse("financial-plan-scenario-comparison", kwargs={"pk": scenario_id})
+        )
+        accept_response = self.client.post(
+            reverse("financial-plan-scenario-accept", kwargs={"pk": scenario_id}),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(compare_response.status_code, status.HTTP_200_OK)
+        self.assertIn("simulated", compare_response.data)
+        self.assertEqual(accept_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(accept_response.data["event"]["event_type"], "vehicle")
+
+    def test_scenarios_are_user_scoped(self):
+        other_scenario = Scenario.objects.create(
+            plan=self.other_plan,
+            name="Otro",
+            template_type=Scenario.TemplateType.GENERIC,
+        )
+
+        response = self.client.get(
+            reverse("financial-plan-scenario-detail", kwargs={"pk": other_scenario.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

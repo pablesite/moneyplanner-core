@@ -157,13 +157,143 @@ class AssumptionSet(models.Model):
         return self.name
 
 
+class Scenario(models.Model):
+    class TemplateType(models.TextChoices):
+        HOUSING = "housing", "Vivienda"
+        VEHICLE = "vehicle", "Vehiculo"
+        STUDIES = "studies", "Estudios"
+        RENOVATION = "renovation", "Reforma"
+        SABBATICAL = "sabbatical", "Excedencia"
+        REDUCED_HOURS = "reduced_hours", "Reduccion de jornada"
+        BUSINESS = "business", "Negocio"
+        DEBT_PAYOFF = "debt_payoff", "Amortizacion de deuda"
+        GENERIC = "generic", "Generico"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Borrador"
+        ACCEPTED = "accepted", "Aceptado"
+        DISCARDED = "discarded", "Descartado"
+
+    plan = models.ForeignKey(
+        FinancialPlan,
+        on_delete=models.CASCADE,
+        related_name="scenarios",
+    )
+    name = models.CharField(max_length=140)
+    template_type = models.CharField(
+        max_length=32,
+        choices=TemplateType.choices,
+        default=TemplateType.GENERIC,
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["plan", "status"]),
+            models.Index(fields=["plan", "-created_at"]),
+        ]
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.plan_id} - {self.name}"
+
+
+class ScenarioEvent(models.Model):
+    scenario = models.ForeignKey(
+        Scenario,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    initial_outflow = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    monthly_expense_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    monthly_income_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    monthly_contribution_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    new_asset_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    new_asset_type = models.CharField(
+        max_length=32,
+        choices=PlanAssetFunction.Function.choices,
+        null=True,
+        blank=True,
+    )
+    new_debt_principal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    new_debt_interest_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    new_debt_term_months = models.PositiveIntegerField(null=True, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["scenario", "start_date"])]
+        ordering = ["start_date", "id"]
+
+    def clean(self) -> None:
+        if self.end_date and self.end_date < self.start_date:
+            raise ValidationError("end_date must be >= start_date.")
+
+    def __str__(self) -> str:
+        return f"{self.scenario_id} - {self.start_date}"
+
+
+class PlanEvent(models.Model):
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planificado"
+        OCCURRED = "occurred", "Ocurrido"
+        CANCELLED = "cancelled", "Cancelado"
+
+    plan = models.ForeignKey(
+        FinancialPlan,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    source_scenario = models.ForeignKey(
+        Scenario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plan_events",
+    )
+    name = models.CharField(max_length=140)
+    event_type = models.CharField(max_length=32, choices=Scenario.TemplateType.choices)
+    planned_date = models.DateField()
+    actual_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PLANNED)
+    planned_impact_json = models.JSONField(default=dict, blank=True)
+    actual_impact_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["plan", "status"]),
+            models.Index(fields=["plan", "planned_date"]),
+        ]
+        ordering = ["planned_date", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.plan_id} - {self.name}"
+
+
 class ProjectionSnapshot(models.Model):
     plan = models.ForeignKey(
         FinancialPlan,
         on_delete=models.CASCADE,
         related_name="projection_snapshots",
     )
-    scenario = models.IntegerField(null=True, blank=True)
+    scenario = models.ForeignKey(
+        Scenario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="projection_snapshots",
+    )
     assumption_set = models.ForeignKey(
         AssumptionSet,
         on_delete=models.PROTECT,

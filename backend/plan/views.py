@@ -13,10 +13,14 @@ from .serializers import (
     AssetFunctionUpdateSerializer,
     FinancialPlanSerializer,
     PlanFamilyMemberSerializer,
+    PlanEventSerializer,
     ProjectionSnapshotSerializer,
+    ScenarioSerializer,
 )
+from .models import PlanEvent, Scenario
 from .services_classification import AssetClassificationService
 from .services_projection import ProjectionService, get_assumption_set, serialize_classification
+from .services_scenarios import ScenarioService
 
 
 def attach_calculated_at(result: dict, calculated_at: str) -> dict:
@@ -168,3 +172,102 @@ class AssetFunctionsView(APIView):
                     defaults={"function": item["function"]},
                 )
         return self.get(request)
+
+
+class ScenarioListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        scenarios = Scenario.objects.filter(plan=plan).prefetch_related("events")
+        return Response(ScenarioSerializer(scenarios, many=True).data)
+
+    def post(self, request):
+        get_object_or_404(FinancialPlan, user=request.user)
+        serializer = ScenarioSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        scenario = serializer.save()
+        return Response(ScenarioSerializer(scenario).data, status=status.HTTP_201_CREATED)
+
+
+class ScenarioDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, request, pk: int) -> Scenario:
+        return get_object_or_404(
+            Scenario.objects.prefetch_related("events"),
+            pk=pk,
+            plan__user=request.user,
+        )
+
+    def get(self, request, pk: int):
+        return Response(ScenarioSerializer(self.get_object(request, pk)).data)
+
+    def patch(self, request, pk: int):
+        scenario = self.get_object(request, pk)
+        serializer = ScenarioSerializer(
+            scenario,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        return Response(ScenarioSerializer(serializer.save()).data)
+
+
+class ScenarioComparisonView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        scenario = get_object_or_404(
+            Scenario.objects.select_related("plan").prefetch_related("events"),
+            pk=pk,
+            plan__user=request.user,
+        )
+        assumption = request.query_params.get("scenario") or "expected"
+        return Response(ScenarioService().compare(scenario=scenario, assumption_name=assumption))
+
+
+class ScenarioAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        scenario = get_object_or_404(Scenario, pk=pk, plan__user=request.user)
+        assumption = (
+            request.query_params.get("scenario") or request.data.get("scenario") or "expected"
+        )
+        result = ScenarioService().accept(scenario=scenario, assumption_name=assumption)
+        return Response(
+            {
+                "event": PlanEventSerializer(result["event"]).data,
+                "projection": result["projection"],
+                "budget_entries_created": result["budget_entries_created"],
+            }
+        )
+
+
+class ScenarioDiscardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        scenario = get_object_or_404(Scenario, pk=pk, plan__user=request.user)
+        return Response(ScenarioSerializer(ScenarioService().discard(scenario=scenario)).data)
+
+
+class PlanEventsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        events = PlanEvent.objects.filter(plan=plan)
+        return Response(PlanEventSerializer(events, many=True).data)
+
+
+class PlanEventDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        serializer = PlanEventSerializer(event, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(PlanEventSerializer(serializer.save()).data)

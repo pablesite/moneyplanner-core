@@ -13,7 +13,7 @@ from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember
 from net_worth.models import InvestmentContributionInterval, Liability
 
-from .models import AssumptionSet, FinancialPlan, ProjectionSnapshot
+from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
 
@@ -52,6 +52,7 @@ class ProjectionInputs:
     liability_principal: Decimal
     liability_weighted_rate: Decimal
     liability_max_term_years: int
+    plan_events: tuple[dict[str, Any], ...] = ()
 
 
 class ProjectionService:
@@ -71,8 +72,19 @@ class ProjectionService:
         )
         return result
 
-    def calculate(self, *, plan: FinancialPlan, assumption_set: AssumptionSet) -> dict[str, Any]:
-        inputs, classification, quality = build_projection_inputs(plan=plan)
+    def calculate(
+        self,
+        *,
+        plan: FinancialPlan,
+        assumption_set: AssumptionSet,
+        extra_events: list[dict[str, Any]] | None = None,
+        include_plan_events: bool = True,
+    ) -> dict[str, Any]:
+        inputs, classification, quality = build_projection_inputs(
+            plan=plan,
+            extra_events=extra_events,
+            include_plan_events=include_plan_events,
+        )
         assumptions = serialize_assumptions(assumption_set)
         input_hash = stable_hash({"inputs": serialize_inputs(inputs), "assumptions": assumptions})
         metrics = calculate_projection(inputs=inputs, assumptions=assumptions)
@@ -107,7 +119,10 @@ def get_assumption_set(*, name: str | None = None) -> AssumptionSet:
 
 
 def build_projection_inputs(
-    *, plan: FinancialPlan
+    *,
+    plan: FinancialPlan,
+    extra_events: list[dict[str, Any]] | None = None,
+    include_plan_events: bool = True,
 ) -> tuple[ProjectionInputs, ClassificationSummary, Any]:
     settings, _ = UserSettings.objects.get_or_create(user=plan.user)
     base_currency = (settings.base_currency or "EUR").upper()
@@ -149,6 +164,11 @@ def build_projection_inputs(
         default=0,
     )
     quality = DataQualityService().evaluate(user=plan.user)
+    event_payloads: list[dict[str, Any]] = []
+    if include_plan_events:
+        event_payloads.extend(plan_event_payloads(plan=plan))
+    if extra_events:
+        event_payloads.extend(extra_events)
     return (
         ProjectionInputs(
             plan_id=plan.id,
@@ -176,6 +196,7 @@ def build_projection_inputs(
             liability_principal=liability_principal,
             liability_weighted_rate=weighted_rate,
             liability_max_term_years=max_term_years,
+            plan_events=tuple(event_payloads),
         ),
         classification,
         quality,
@@ -200,8 +221,11 @@ def calculate_projection(
         inputs.family_use_capital + inputs.short_term_goal_capital + inputs.unknown_capital
     )
     liabilities = inputs.total_liabilities
+    base_liabilities = inputs.total_liabilities
     rows: list[dict[str, Any]] = []
     projected_year: int | None = None
+    applied_one_off_events: set[int] = set()
+    active_event_debts: list[dict[str, Decimal | int]] = []
 
     denominator = target_capital_for_year(
         inputs=inputs,
@@ -217,16 +241,27 @@ def calculate_projection(
     )
 
     for offset, year in enumerate(range(start_year, end_year + 1)):
-        nominal_target_income = inflate(
-            inputs.target_monthly_income_today_eur * Decimal("12"),
-            inflation,
-            max(0, year - start_year),
-        )
-        future_income = future_income_for_year(
-            inputs=inputs,
-            assumptions=assumptions,
+        event_delta = event_deltas_for_year(
+            events=inputs.plan_events,
             year=year,
             start_year=start_year,
+        )
+        nominal_target_income = (
+            inflate(
+                inputs.target_monthly_income_today_eur * Decimal("12"),
+                inflation,
+                max(0, year - start_year),
+            )
+            + event_delta["annual_expense_delta"]
+        )
+        future_income = (
+            future_income_for_year(
+                inputs=inputs,
+                assumptions=assumptions,
+                year=year,
+                start_year=start_year,
+            )
+            + event_delta["annual_income_delta"]
         )
         withdrawals = (
             max(Decimal("0"), nominal_target_income - future_income)
@@ -234,10 +269,13 @@ def calculate_projection(
             else Decimal("0")
         )
         if offset > 0:
-            contribution = inflate(
-                inputs.annual_planned_contributions,
-                contribution_growth,
-                offset,
+            contribution = (
+                inflate(
+                    inputs.annual_planned_contributions,
+                    contribution_growth,
+                    offset,
+                )
+                + event_delta["annual_contribution_delta"]
             )
             productive = max(
                 Decimal("0"),
@@ -245,12 +283,48 @@ def calculate_projection(
             )
             security = security
             non_productive = non_productive * (Decimal("1") + non_productive_return)
-            liabilities = projected_liability_balance(
+            base_liabilities = projected_liability_balance(
                 initial=inputs.total_liabilities,
-                current_balance=liabilities,
+                current_balance=base_liabilities,
                 term_years=inputs.liability_max_term_years,
                 year_offset=offset,
             )
+        for event_index, event in enumerate(inputs.plan_events):
+            if event_index in applied_one_off_events:
+                continue
+            if int(str(event["start_year"])) != year:
+                continue
+            productive, security = apply_initial_outflow(
+                productive=productive,
+                security=security,
+                amount=Decimal(str(event.get("initial_outflow") or "0")),
+            )
+            asset_value = Decimal(str(event.get("new_asset_value") or "0"))
+            asset_type = event.get("new_asset_type")
+            if asset_value > 0:
+                if asset_type == "productive":
+                    productive += asset_value
+                elif asset_type == "security":
+                    security += asset_value
+                else:
+                    non_productive += asset_value
+            debt_principal = Decimal(str(event.get("new_debt_principal") or "0"))
+            if debt_principal > 0:
+                term_years = max(1, int(str(event.get("new_debt_term_years") or "1")))
+                rate = Decimal(str(event.get("new_debt_interest_rate") or "0"))
+                active_event_debts.append(
+                    {
+                        "start_year": year,
+                        "principal": debt_principal,
+                        "term_years": term_years,
+                        "rate": rate,
+                    }
+                )
+            applied_one_off_events.add(event_index)
+        liabilities = max(
+            Decimal("0"),
+            base_liabilities + event_debt_balance(debts=active_event_debts, year=year),
+        )
         required = target_capital_for_year(
             inputs=inputs,
             assumptions=assumptions,
@@ -308,43 +382,82 @@ def target_capital_for_year(
     pension_year = (
         inputs.earliest_pension_start_date.year if inputs.earliest_pension_start_date else None
     )
-    target_income = inflate(
-        inputs.target_monthly_income_today_eur * Decimal("12"),
-        inflation,
-        max(0, target_year - start_year),
+    event_delta = event_deltas_for_year(
+        events=inputs.plan_events,
+        year=target_year,
+        start_year=start_year,
     )
-    post_pension_income = inflate(
-        inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
-        inflation,
-        max(0, target_year - start_year),
+    target_income = (
+        inflate(
+            inputs.target_monthly_income_today_eur * Decimal("12"),
+            inflation,
+            max(0, target_year - start_year),
+        )
+        + event_delta["annual_expense_delta"]
+    )
+    post_pension_income = (
+        inflate(
+            inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
+            inflation,
+            max(0, target_year - start_year),
+        )
+        + event_delta["annual_income_delta"]
     )
     if pension_year is None or target_year >= pension_year:
         return q2(max(Decimal("0"), target_income - post_pension_income) / withdrawal_rate)
 
     bridge = Decimal("0")
     for year in range(target_year, pension_year):
-        nominal_need = inflate(
-            inputs.target_monthly_income_today_eur * Decimal("12"),
-            inflation,
-            max(0, year - start_year),
+        nominal_need = (
+            inflate(
+                inputs.target_monthly_income_today_eur * Decimal("12"),
+                inflation,
+                max(0, year - start_year),
+            )
+            + event_deltas_for_year(
+                events=inputs.plan_events,
+                year=year,
+                start_year=start_year,
+            )["annual_expense_delta"]
         )
-        other_income = inflate(
-            inputs.annual_other_future_income_today,
-            inflation,
-            max(0, year - start_year),
+        other_income = (
+            inflate(
+                inputs.annual_other_future_income_today,
+                inflation,
+                max(0, year - start_year),
+            )
+            + event_deltas_for_year(
+                events=inputs.plan_events,
+                year=year,
+                start_year=start_year,
+            )["annual_income_delta"]
         )
         gap = max(Decimal("0"), nominal_need - other_income)
         discount_years = year - target_year
         bridge += gap / ((Decimal("1") + productive_return) ** discount_years)
-    pension_need = inflate(
-        inputs.target_monthly_income_today_eur * Decimal("12"),
-        inflation,
-        max(0, pension_year - start_year),
+    pension_need = (
+        inflate(
+            inputs.target_monthly_income_today_eur * Decimal("12"),
+            inflation,
+            max(0, pension_year - start_year),
+        )
+        + event_deltas_for_year(
+            events=inputs.plan_events,
+            year=pension_year,
+            start_year=start_year,
+        )["annual_expense_delta"]
     )
-    pension_income = inflate(
-        inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
-        inflation,
-        max(0, pension_year - start_year),
+    pension_income = (
+        inflate(
+            inputs.annual_pension_income_today + inputs.annual_other_future_income_today,
+            inflation,
+            max(0, pension_year - start_year),
+        )
+        + event_deltas_for_year(
+            events=inputs.plan_events,
+            year=pension_year,
+            start_year=start_year,
+        )["annual_income_delta"]
     )
     post_pension_capital = max(Decimal("0"), pension_need - pension_income) / withdrawal_rate
     bridge += post_pension_capital / (
@@ -439,6 +552,99 @@ def liability_term_years(liability: Liability) -> int:
     if liability.expected_end_date:
         return max(1, liability.expected_end_date.year - date.today().year)
     return 0
+
+
+def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
+    return [
+        payload
+        for event in PlanEvent.objects.filter(
+            plan=plan,
+            status=PlanEvent.Status.PLANNED,
+        ).order_by("planned_date", "id")
+        for payload in event.planned_impact_json.get("events", [])
+    ]
+
+
+def event_deltas_for_year(
+    *, events: tuple[dict[str, Any], ...], year: int, start_year: int
+) -> dict[str, Decimal]:
+    del start_year
+    result = {
+        "annual_expense_delta": Decimal("0"),
+        "annual_income_delta": Decimal("0"),
+        "annual_contribution_delta": Decimal("0"),
+    }
+    for event in events:
+        event_start = int(str(event["start_year"]))
+        event_end = event.get("end_year")
+        if year < event_start:
+            continue
+        if event_end is not None and year > int(str(event_end)):
+            continue
+        debt_end_year = event.get("debt_end_year")
+        expense_end_year = event_end
+        if expense_end_year is None and debt_end_year is not None:
+            expense_end_year = debt_end_year
+        if expense_end_year is None or year <= int(str(expense_end_year)):
+            result["annual_expense_delta"] += Decimal(
+                str(event.get("monthly_expense_delta") or "0")
+            ) * Decimal("12")
+        result["annual_income_delta"] += Decimal(
+            str(event.get("monthly_income_delta") or "0")
+        ) * Decimal("12")
+        result["annual_contribution_delta"] += Decimal(
+            str(event.get("monthly_contribution_delta") or "0")
+        ) * Decimal("12")
+    return result
+
+
+def apply_initial_outflow(
+    *, productive: Decimal, security: Decimal, amount: Decimal
+) -> tuple[Decimal, Decimal]:
+    if amount <= 0:
+        return productive, security
+    from_security = min(security, amount)
+    security -= from_security
+    remaining = amount - from_security
+    if remaining > 0:
+        productive = max(Decimal("0"), productive - remaining)
+    return productive, security
+
+
+def event_debt_balance(*, debts: list[dict[str, Decimal | int]], year: int) -> Decimal:
+    total = Decimal("0")
+    for debt in debts:
+        elapsed = max(0, year - int(debt["start_year"]))
+        principal = Decimal(debt["principal"])
+        term_years = int(debt["term_years"])
+        rate = Decimal(debt["rate"])
+        if rate > 0:
+            balance = amortized_balance(
+                principal=principal, annual_rate=rate, term_years=term_years, elapsed_years=elapsed
+            )
+        else:
+            balance = max(
+                Decimal("0"), principal - principal / Decimal(term_years) * Decimal(elapsed)
+            )
+        total += balance
+    return total
+
+
+def amortized_balance(
+    *, principal: Decimal, annual_rate: Decimal, term_years: int, elapsed_years: int
+) -> Decimal:
+    months = max(1, term_years * 12)
+    elapsed_months = min(months, max(0, elapsed_years * 12))
+    monthly_rate = annual_rate / Decimal("12")
+    if monthly_rate <= 0:
+        return max(Decimal("0"), principal - principal / Decimal(months) * Decimal(elapsed_months))
+    payment = principal * monthly_rate / (Decimal("1") - (Decimal("1") + monthly_rate) ** -months)
+    balance = principal
+    for _ in range(elapsed_months):
+        interest = balance * monthly_rate
+        principal_paid = payment - interest
+        balance = max(Decimal("0"), balance - principal_paid)
+    return balance
 
 
 def serialize_assumptions(assumption_set: AssumptionSet) -> dict[str, str]:

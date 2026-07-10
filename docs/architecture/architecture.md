@@ -76,6 +76,16 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 8. If the target date is before pension start, the required capital is split into a bridge period plus post-pension gap capital. The engine does not apply a single withdrawal-rate rule to the full lifetime need.
 9. In Phase 1, financial cases such as car purchase, second home purchase, and sabbatical are represented as already-incorporated base data. Hypothetical non-contaminating scenarios are Phase 3 scope.
 
+## Financial Plan Scenario Contract
+1. `Scenario` and `ScenarioEvent` model hypothetical decisions without mutating real net worth, budget execution, or accounting.
+2. Scenario comparison runs the projection engine with current accepted plan events plus the draft scenario deltas. It persists only non-official `ProjectionSnapshot` rows (`is_official=False`) linked to the scenario.
+3. Accepted scenarios create a `PlanEvent` with the exact event payload in `planned_impact_json`. Active planned events are included in later official projections.
+4. Scenario payments apply the agreed MVP rule: initial outflows reduce security capital first and then productive capital. New assets are classified with the same plan functions (`productive`, `security`, `short_term_goal`, `family_use`, `unknown`).
+5. Monthly deltas apply from the event start date to the explicit end date. If no end date exists and the delta is tied to a new debt, it ends when that debt term ends; otherwise it remains active for projection purposes.
+6. New scenario debt uses an amortizing monthly payment when term and interest are present; if no interest is present, it falls back to linear principal amortization.
+7. Accepting a scenario does not create real `Asset`, `Liability`, `LedgerTransaction`, or check-in rows. It does create future budget entries from existing budget taxonomy defaults or from editable `metadata_json.budget_lines` supplied by the UI.
+8. Budget auto-creation is intentionally limited by the current budget model: annual entries are created with correct yearly totals and target month/term metadata, while recurring entries do not yet have a persisted start-month field.
+
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.
 2. Imported accounting rows remain traceable through `LedgerTransaction.origin`, `import_source` and `import_fingerprint`; consolidated imported rows are no longer treated as disposable cleanup data.

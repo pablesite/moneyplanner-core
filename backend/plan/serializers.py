@@ -4,7 +4,14 @@ from rest_framework import serializers
 from memberships.models import FamilyMember
 from net_worth.models import Asset
 
-from .models import FinancialPlan, PlanAssetFunction, ProjectionSnapshot
+from .models import (
+    FinancialPlan,
+    PlanAssetFunction,
+    PlanEvent,
+    ProjectionSnapshot,
+    Scenario,
+    ScenarioEvent,
+)
 
 
 class FinancialPlanSerializer(serializers.ModelSerializer):
@@ -147,6 +154,101 @@ class ProjectionSnapshotSerializer(serializers.ModelSerializer):
             "is_official",
             "result_json",
         ]
+
+
+class ScenarioEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScenarioEvent
+        fields = [
+            "id",
+            "start_date",
+            "end_date",
+            "initial_outflow",
+            "monthly_expense_delta",
+            "monthly_income_delta",
+            "monthly_contribution_delta",
+            "new_asset_value",
+            "new_asset_type",
+            "new_debt_principal",
+            "new_debt_interest_rate",
+            "new_debt_term_months",
+            "metadata_json",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError(
+                {"end_date": "Must be greater than or equal to start_date."}
+            )
+        return attrs
+
+
+class ScenarioSerializer(serializers.ModelSerializer):
+    events = ScenarioEventSerializer(many=True, required=False)
+
+    class Meta:
+        model = Scenario
+        fields = [
+            "id",
+            "name",
+            "template_type",
+            "status",
+            "events",
+            "created_at",
+            "accepted_at",
+        ]
+        read_only_fields = ["id", "status", "created_at", "accepted_at"]
+
+    @transaction.atomic
+    def create(self, validated_data):
+        events = validated_data.pop("events", [])
+        request = self.context["request"]
+        plan = FinancialPlan.objects.get(user=request.user)
+        scenario = Scenario.objects.create(plan=plan, **validated_data)
+        for event in events:
+            ScenarioEvent.objects.create(scenario=scenario, **event)
+        return scenario
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        if instance.status != Scenario.Status.DRAFT:
+            raise serializers.ValidationError("Only draft scenarios can be edited.")
+        events = validated_data.pop("events", None)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        if events is not None:
+            instance.events.all().delete()
+            for event in events:
+                ScenarioEvent.objects.create(scenario=instance, **event)
+        return instance
+
+
+class PlanEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlanEvent
+        fields = [
+            "id",
+            "source_scenario",
+            "name",
+            "event_type",
+            "planned_date",
+            "actual_date",
+            "status",
+            "planned_impact_json",
+            "actual_impact_json",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "source_scenario", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        if "actual_impact_json" in attrs and attrs.get("status") != PlanEvent.Status.OCCURRED:
+            attrs["status"] = PlanEvent.Status.OCCURRED
+        return attrs
 
 
 class AssetFunctionUpdateSerializer(serializers.Serializer):
