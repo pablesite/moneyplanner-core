@@ -438,6 +438,12 @@ def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose
         liq = state["liquidity"].get("current_total")
         mc.liquidity_total_snapshot = Decimal(liq) if liq is not None else None
         mc.save()
+        try:
+            from plan.services_monthly_close import MonthlyClosePlanService
+
+            MonthlyClosePlanService().on_monthly_close_finalized(monthly_close=mc)
+        except Exception:
+            logger.exception("Could not run plan hook for monthly close %s", mc.pk)
         return mc
 
 

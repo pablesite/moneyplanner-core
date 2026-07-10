@@ -281,6 +281,112 @@ class PlanEvent(models.Model):
         return f"{self.plan_id} - {self.name}"
 
 
+class Finding(models.Model):
+    class Code(models.TextChoices):
+        EMERGENCY_FUND_BELOW_TARGET = (
+            "EMERGENCY_FUND_BELOW_TARGET",
+            "Fondo de emergencia bajo objetivo",
+        )
+        NEGATIVE_CASH_FLOW = "NEGATIVE_CASH_FLOW", "Flujo de caja negativo"
+        HIGH_COST_DEBT = "HIGH_COST_DEBT", "Deuda cara"
+        RETIREMENT_TARGET_OFF_TRACK = (
+            "RETIREMENT_TARGET_OFF_TRACK",
+            "Objetivo principal desviado",
+        )
+        SECONDARY_GOAL_UNDERFUNDED = (
+            "SECONDARY_GOAL_UNDERFUNDED",
+            "Objetivo secundario infrafinanciado",
+        )
+        PRODUCTIVE_CAPITAL_STAGNANT = (
+            "PRODUCTIVE_CAPITAL_STAGNANT",
+            "Capital productivo estancado",
+        )
+        DATA_INCOMPLETE = "DATA_INCOMPLETE", "Datos incompletos"
+
+    class Severity(models.TextChoices):
+        INFO = "info", "Informativo"
+        WARNING = "warning", "Atencion"
+        CRITICAL = "critical", "Critico"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Abierto"
+        RESOLVED = "resolved", "Resuelto"
+        DISMISSED = "dismissed", "Descartado"
+
+    plan = models.ForeignKey(
+        FinancialPlan,
+        on_delete=models.CASCADE,
+        related_name="findings",
+    )
+    code = models.CharField(max_length=64, choices=Code.choices)
+    severity = models.CharField(max_length=16, choices=Severity.choices)
+    period = models.CharField(max_length=16)
+    evidence_json = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["plan", "code", "period"], name="uniq_finding_period")
+        ]
+        indexes = [
+            models.Index(fields=["plan", "status"]),
+            models.Index(fields=["plan", "period"]),
+        ]
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.plan_id} - {self.code} ({self.period})"
+
+
+class Recommendation(models.Model):
+    class Code(models.TextChoices):
+        REBUILD_EMERGENCY_FUND = "REBUILD_EMERGENCY_FUND", "Reconstruir fondo"
+        REDUCE_HIGH_COST_DEBT = "REDUCE_HIGH_COST_DEBT", "Reducir deuda cara"
+        INCREASE_CONTRIBUTION = "INCREASE_CONTRIBUTION", "Aumentar aportacion"
+        ADJUST_TARGET_DATE = "ADJUST_TARGET_DATE", "Ajustar fecha objetivo"
+        ADJUST_TARGET_INCOME = "ADJUST_TARGET_INCOME", "Ajustar nivel de vida"
+        RESCHEDULE_SECONDARY_GOAL = "RESCHEDULE_SECONDARY_GOAL", "Reprogramar objetivo"
+        REDUCE_EVENT_OUTFLOW = "REDUCE_EVENT_OUTFLOW", "Reducir desembolso"
+        COMPLETE_DATA = "COMPLETE_DATA", "Completar datos"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Abierta"
+        ACCEPTED = "accepted", "Aceptada"
+        DISMISSED = "dismissed", "Descartada"
+        SNOOZED = "snoozed", "Pospuesta"
+
+    finding = models.ForeignKey(
+        Finding,
+        on_delete=models.CASCADE,
+        related_name="recommendations",
+    )
+    code = models.CharField(max_length=64, choices=Code.choices)
+    priority = models.PositiveSmallIntegerField(default=100)
+    action_json = models.JSONField(default=dict, blank=True)
+    impact_json = models.JSONField(default=dict, blank=True)
+    alternatives_json = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["finding", "code"], name="uniq_recommendation_finding_code"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["finding", "status"]),
+            models.Index(fields=["status", "priority"]),
+        ]
+        ordering = ["priority", "-created_at", "-id"]
+
+    def __str__(self) -> str:
+        return f"{self.finding_id} - {self.code}"
+
+
 class ProjectionSnapshot(models.Model):
     plan = models.ForeignKey(
         FinancialPlan,

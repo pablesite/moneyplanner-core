@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     AssetFunctionsView,
     FinancialPlanView,
+    FindingsView,
+    FoundationsView,
     PlanEventDetailView,
     PlanEventsView,
     PlanMemberDetailView,
@@ -10,6 +12,10 @@ from .views import (
     ProjectionHistoryView,
     ProjectionView,
     RecalculateProjectionView,
+    RecommendationAcceptView,
+    RecommendationDismissView,
+    RecommendationSimulateView,
+    RecommendationsView,
     ScenarioAcceptView,
     ScenarioComparisonView,
     ScenarioDetailView,
@@ -25,6 +31,24 @@ urlpatterns = [
     path("members/", PlanMembersView.as_view(), name="financial-plan-members"),
     path("members/<int:pk>/", PlanMemberDetailView.as_view(), name="financial-plan-member-detail"),
     path("asset-functions/", AssetFunctionsView.as_view(), name="financial-plan-asset-functions"),
+    path("foundations/", FoundationsView.as_view(), name="financial-plan-foundations"),
+    path("findings/", FindingsView.as_view(), name="financial-plan-findings"),
+    path("recommendations/", RecommendationsView.as_view(), name="financial-plan-recommendations"),
+    path(
+        "recommendations/<int:pk>/accept/",
+        RecommendationAcceptView.as_view(),
+        name="financial-plan-recommendation-accept",
+    ),
+    path(
+        "recommendations/<int:pk>/dismiss/",
+        RecommendationDismissView.as_view(),
+        name="financial-plan-recommendation-dismiss",
+    ),
+    path(
+        "recommendations/<int:pk>/simulate/",
+        RecommendationSimulateView.as_view(),
+        name="financial-plan-recommendation-simulate",
+    ),
     path("scenarios/", ScenarioListView.as_view(), name="financial-plan-scenarios"),
     path(
         "scenarios/<int:pk>/", ScenarioDetailView.as_view(), name="financial-plan-scenario-detail"

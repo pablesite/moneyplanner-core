@@ -12,14 +12,19 @@ from .models import FinancialPlan, PlanAssetFunction, ProjectionSnapshot
 from .serializers import (
     AssetFunctionUpdateSerializer,
     FinancialPlanSerializer,
+    FindingSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
     ProjectionSnapshotSerializer,
+    RecommendationSerializer,
     ScenarioSerializer,
 )
-from .models import PlanEvent, Scenario
+from .models import PlanEvent, Recommendation, Scenario
 from .services_classification import AssetClassificationService
+from .services_findings import FindingService
+from .services_foundations import FoundationService
 from .services_projection import ProjectionService, get_assumption_set, serialize_classification
+from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
 
 
@@ -271,3 +276,56 @@ class PlanEventDetailView(APIView):
         serializer = PlanEventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         return Response(PlanEventSerializer(serializer.save()).data)
+
+
+class FoundationsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        return Response(FoundationService().calculate(plan=plan))
+
+
+class FindingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        findings = FindingService().evaluate(plan=plan)
+        return Response(FindingSerializer(findings, many=True).data)
+
+
+class RecommendationsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        recommendations = RecommendationService().refresh(plan=plan)
+        return Response(RecommendationSerializer(recommendations, many=True).data)
+
+
+class RecommendationActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, request, pk: int) -> Recommendation:
+        return get_object_or_404(Recommendation, pk=pk, finding__plan__user=request.user)
+
+
+class RecommendationAcceptView(RecommendationActionView):
+    def post(self, request, pk: int):
+        recommendation = RecommendationService().accept(recommendation=self.get_object(request, pk))
+        return Response(RecommendationSerializer(recommendation).data)
+
+
+class RecommendationDismissView(RecommendationActionView):
+    def post(self, request, pk: int):
+        recommendation = RecommendationService().dismiss(
+            recommendation=self.get_object(request, pk)
+        )
+        return Response(RecommendationSerializer(recommendation).data)
+
+
+class RecommendationSimulateView(RecommendationActionView):
+    def post(self, request, pk: int):
+        scenario = RecommendationService().simulate(recommendation=self.get_object(request, pk))
+        return Response(ScenarioSerializer(scenario).data, status=status.HTTP_201_CREATED)

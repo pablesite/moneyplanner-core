@@ -24,7 +24,7 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| Financial Plan | Agent | Phase 4 — Findings/recommendations engine (guide scoring ported to backend) + monthly close plan-impact. Requires phases 1 and 3. | `tasks/financial-plan/phase-4-findings-close/backend.md` |
+| _(none)_ | — | — | — |
 
 > Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5) live in the SaaS repo root (`docs/tasks/financial-plan/`).
 
@@ -67,6 +67,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Core auth (JWT) | ✅ | User signup from UI (`/registro`), logout with blacklist, token refresh, and rate throttling. |
 | Financial Plan — projection engine | ✅ | New Core `plan` app: single financial plan, seeded assumptions, deterministic yearly projection, bridge-period capital, asset function overrides, data quality, snapshots and `/api/plan/*`. Phase 1 financial cases that sound like scenarios are represented as already-incorporated base data; hypothetical scenario comparison remains Phase 3. |
 | Financial Plan — scenario lab backend | ✅ | Phase 3 backend complete: `Scenario`/`ScenarioEvent`/`PlanEvent`, non-contaminating comparison snapshots, accept/discard API, accepted events in future projections, and automatic future budget entries without creating real assets/liabilities/accounting rows. |
+| Financial Plan — findings/recommendations backend | ✅ | Phase 4 backend complete: `Finding`/`Recommendation`, backend-owned foundations, deterministic recommendation templates, recommendation-to-scenario simulation, monthly-close hook and plan-impact API. |
 
 ## Active progress trackers
 

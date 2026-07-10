@@ -1,0 +1,472 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
+
+from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from net_worth.models import Asset, Liability
+
+from .models import FinancialPlan
+from .services_projection import planned_contribution_amount
+
+MONEY = Decimal("0.01")
+PCT = Decimal("0.0001")
+
+ILLIQUID_INVESTMENT_SUBCATEGORIES = {
+    Asset.Subcategory.PENSION_PLANS,
+    Asset.Subcategory.REAL_ESTATE_CROWD,
+    Asset.Subcategory.CROWDLENDING,
+    Asset.Subcategory.OTHER,
+}
+LIQUID_INVESTMENT_SUBCATEGORIES = {
+    Asset.Subcategory.DEPOSITS,
+    Asset.Subcategory.FUNDS,
+    Asset.Subcategory.ETFS,
+    Asset.Subcategory.ROBOADVISOR,
+    Asset.Subcategory.STOCKS,
+    Asset.Subcategory.CRYPTOCURRENCIES,
+}
+
+
+@dataclass(frozen=True)
+class FoundationMetrics:
+    payload: dict[str, Any]
+
+
+def q2(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def q4(value: Decimal | None) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(value).quantize(PCT, rounding=ROUND_HALF_UP)
+
+
+def clamp(value: Decimal, minimum: Decimal, maximum: Decimal) -> Decimal:
+    return max(minimum, min(maximum, value))
+
+
+def score_increasing(value: Decimal | None, minimum: Decimal, maximum: Decimal) -> Decimal:
+    if value is None or maximum <= minimum:
+        return Decimal("0")
+    return clamp(
+        (value - minimum) / (maximum - minimum) * Decimal("100"), Decimal("0"), Decimal("100")
+    )
+
+
+def score_decreasing(value: Decimal | None, minimum: Decimal, maximum: Decimal) -> Decimal:
+    if value is None or maximum <= minimum:
+        return Decimal("0")
+    return clamp(
+        (maximum - value) / (maximum - minimum) * Decimal("100"), Decimal("0"), Decimal("100")
+    )
+
+
+def weighted_score(items: list[tuple[Decimal, Decimal]]) -> Decimal:
+    total_weight = sum((weight for _score, weight in items), Decimal("0"))
+    if total_weight <= 0:
+        return Decimal("0")
+    total = sum((score * weight for score, weight in items), Decimal("0"))
+    return clamp(total / total_weight, Decimal("0"), Decimal("100"))
+
+
+def money(value: Decimal) -> str:
+    return str(q2(value))
+
+
+def ratio(value: Decimal | None) -> str | None:
+    rounded = q4(value)
+    return str(rounded) if rounded is not None else None
+
+
+def score(value: Decimal) -> int:
+    return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def annual_income_entries(plan: FinancialPlan):
+    return AnnualIncomeEntry.objects.filter(user=plan.user, is_active=True)
+
+
+def annual_expense_entries(plan: FinancialPlan):
+    return AnnualExpenseEntry.objects.filter(user=plan.user, is_active=True)
+
+
+def active_assets(plan: FinancialPlan) -> list[Asset]:
+    return list(Asset.objects.filter(user=plan.user, is_active=True))
+
+
+def active_liabilities(plan: FinancialPlan) -> list[Liability]:
+    return list(Liability.objects.filter(user=plan.user, is_active=True))
+
+
+def structural_income(plan: FinancialPlan) -> Decimal:
+    return sum(
+        (
+            Decimal(entry.amount_annual)
+            for entry in annual_income_entries(plan).exclude(
+                time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF
+            )
+        ),
+        Decimal("0"),
+    )
+
+
+def structural_operating_expense(plan: FinancialPlan) -> Decimal:
+    return sum(
+        (
+            Decimal(entry.amount_annual)
+            for entry in annual_expense_entries(plan).filter(
+                time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+                cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+            )
+        ),
+        Decimal("0"),
+    )
+
+
+def temporary_commitment_expense(plan: FinancialPlan) -> Decimal:
+    return sum(
+        (
+            Decimal(entry.amount_annual)
+            for entry in annual_expense_entries(plan).filter(
+                time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            )
+        ),
+        Decimal("0"),
+    )
+
+
+def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
+    assets_value = sum((max(Decimal(asset.amount), Decimal("0")) for asset in assets), Decimal("0"))
+    by_category: dict[str, Decimal] = {}
+    illiquid = Decimal("0")
+    emergency_liquid = Decimal("0")
+    immediate_liquid = Decimal("0")
+
+    for asset in assets:
+        amount = max(Decimal(asset.amount), Decimal("0"))
+        if amount <= 0:
+            continue
+        by_category[asset.category] = by_category.get(asset.category, Decimal("0")) + amount
+        illiquid_by_category = asset.category in {
+            Asset.Category.REAL_ESTATE,
+            Asset.Category.FURNISHINGS,
+            Asset.Category.OTHER,
+        }
+        illiquid_by_investment = (
+            asset.category == Asset.Category.INVESTMENTS
+            and asset.subcategory in ILLIQUID_INVESTMENT_SUBCATEGORIES
+        )
+        illiquid_by_cash_deposit = (
+            asset.category == Asset.Category.CASH
+            and asset.subcategory == Asset.Subcategory.OTHER
+            and Decimal(asset.annual_interest_tae or 0) > 0
+        )
+        if illiquid_by_category or illiquid_by_investment or illiquid_by_cash_deposit:
+            illiquid += amount
+
+        if asset.category == Asset.Category.CASH:
+            emergency_liquid += amount
+            immediate_liquid += amount
+        elif (
+            asset.category == Asset.Category.INVESTMENTS
+            and asset.subcategory in LIQUID_INVESTMENT_SUBCATEGORIES
+        ):
+            emergency_liquid += amount
+
+    category_values = [value for value in by_category.values() if value > 0]
+    top_share = (
+        max(category_values) / assets_value if assets_value > 0 and category_values else None
+    )
+    diversification_index = None
+    if assets_value > 0 and category_values:
+        hhi = sum(((value / assets_value) ** 2 for value in category_values), Decimal("0"))
+        diversification_index = clamp(
+            (Decimal("1") - hhi) / (Decimal("1") - Decimal("0.2")),
+            Decimal("0"),
+            Decimal("1"),
+        )
+
+    return {
+        "assets_value": assets_value,
+        "illiquid_assets_value": illiquid,
+        "illiquid_assets_share": illiquid / assets_value if assets_value > 0 else None,
+        "emergency_liquid_assets_value": emergency_liquid,
+        "immediate_liquidity_assets_value": immediate_liquid,
+        "emergency_liquidity_to_assets": emergency_liquid / assets_value
+        if assets_value > 0
+        else None,
+        "immediate_liquidity_share_within_emergency": (
+            immediate_liquid / emergency_liquid if emergency_liquid > 0 else None
+        ),
+        "top_asset_share": top_share,
+        "diversification_index": diversification_index,
+    }
+
+
+def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str, Any]:
+    liabilities_value = sum(
+        (max(Decimal(liability.amount), Decimal("0")) for liability in liabilities), Decimal("0")
+    )
+    unbacked = sum(
+        (
+            max(Decimal(liability.amount), Decimal("0"))
+            for liability in liabilities
+            if not liability.is_asset_backed
+        ),
+        Decimal("0"),
+    )
+    known_rate_rows = [row for row in liabilities if row.annual_interest_tae is not None]
+    weighted_tae = None
+    if known_rate_rows:
+        denominator = sum((Decimal(row.amount) for row in known_rate_rows), Decimal("0"))
+        if denominator > 0:
+            weighted_tae = (
+                sum(
+                    (
+                        Decimal(row.amount) * Decimal(row.annual_interest_tae or 0)
+                        for row in known_rate_rows
+                    ),
+                    Decimal("0"),
+                )
+                / denominator
+            )
+    max_tae = (
+        max(Decimal(row.annual_interest_tae or 0) for row in known_rate_rows)
+        if known_rate_rows
+        else None
+    )
+    high_cost_threshold = Decimal("8")
+    high_cost_debt = sum(
+        (
+            Decimal(row.amount)
+            for row in liabilities
+            if row.annual_interest_tae is not None
+            and Decimal(row.annual_interest_tae) >= high_cost_threshold
+        ),
+        Decimal("0"),
+    )
+    recurrent_income = structural_income(plan)
+    monthly_income = recurrent_income / Decimal("12") if recurrent_income > 0 else None
+    monthly_debt_payment = sum(
+        (
+            Decimal(entry.amount_annual) / Decimal("12")
+            for entry in annual_expense_entries(plan).filter(
+                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+            )
+        ),
+        Decimal("0"),
+    )
+    debt_payment_to_income = (
+        monthly_debt_payment / monthly_income
+        if monthly_income is not None and monthly_income > 0 and monthly_debt_payment > 0
+        else None
+    )
+    top_liability_share = (
+        max((Decimal(row.amount) for row in liabilities), default=Decimal("0")) / liabilities_value
+        if liabilities_value > 0
+        else None
+    )
+    return {
+        "liabilities_value": liabilities_value,
+        "unbacked_debt_value": unbacked,
+        "unbacked_debt_to_liabilities": unbacked / liabilities_value
+        if liabilities_value > 0
+        else None,
+        "weighted_liability_tae_pct": weighted_tae,
+        "max_liability_tae_pct": max_tae,
+        "high_cost_debt_value": high_cost_debt,
+        "high_cost_debt_share": high_cost_debt / liabilities_value
+        if liabilities_value > 0
+        else None,
+        "debt_payment_to_income": debt_payment_to_income,
+        "top_liability_share": top_liability_share,
+    }
+
+
+class FoundationService:
+    def calculate(self, *, plan: FinancialPlan) -> dict[str, Any]:
+        assets = active_assets(plan)
+        liabilities = active_liabilities(plan)
+        asset_metrics = asset_liquidity_metrics(assets)
+        debt = debt_metrics(plan, liabilities)
+
+        annual_income = structural_income(plan)
+        operating_expense = structural_operating_expense(plan)
+        commitment_expense = temporary_commitment_expense(plan)
+        monthly_operating_expense = (
+            operating_expense / Decimal("12") if operating_expense > 0 else None
+        )
+        committed_expense = operating_expense + commitment_expense
+        monthly_committed_expense = (
+            committed_expense / Decimal("12") if committed_expense > 0 else None
+        )
+        operating_surplus = annual_income - operating_expense
+        committed_surplus = annual_income - committed_expense
+        planned_contribution = planned_contribution_amount(user=plan.user)
+
+        emergency_months_base = (
+            asset_metrics["emergency_liquid_assets_value"] / monthly_operating_expense
+            if monthly_operating_expense is not None and monthly_operating_expense > 0
+            else None
+        )
+        emergency_months_committed = (
+            asset_metrics["emergency_liquid_assets_value"] / monthly_committed_expense
+            if monthly_committed_expense is not None and monthly_committed_expense > 0
+            else None
+        )
+
+        cash_flow_score = weighted_score(
+            [
+                (
+                    score_decreasing(
+                        operating_expense / annual_income if annual_income > 0 else None,
+                        Decimal("0.5"),
+                        Decimal("1"),
+                    ),
+                    Decimal("0.45"),
+                ),
+                (
+                    score_decreasing(
+                        committed_expense / annual_income if annual_income > 0 else None,
+                        Decimal("0.65"),
+                        Decimal("1.05"),
+                    ),
+                    Decimal("0.35"),
+                ),
+                (
+                    score_increasing(
+                        operating_surplus / annual_income if annual_income > 0 else None,
+                        Decimal("-0.2"),
+                        Decimal("0.2"),
+                    ),
+                    Decimal("0.20"),
+                ),
+            ]
+        )
+        emergency_score = weighted_score(
+            [
+                (
+                    score_increasing(emergency_months_base, Decimal("3"), Decimal("12")),
+                    Decimal("0.55"),
+                ),
+                (
+                    score_increasing(emergency_months_committed, Decimal("3"), Decimal("12")),
+                    Decimal("0.25"),
+                ),
+                (
+                    score_increasing(
+                        asset_metrics["emergency_liquidity_to_assets"],
+                        Decimal("0.05"),
+                        Decimal("0.3"),
+                    ),
+                    Decimal("0.20"),
+                ),
+            ]
+        )
+        debt_score = weighted_score(
+            [
+                (
+                    score_decreasing(
+                        debt["weighted_liability_tae_pct"], Decimal("0.5"), Decimal("10")
+                    ),
+                    Decimal("0.35"),
+                ),
+                (
+                    score_decreasing(
+                        debt["unbacked_debt_to_liabilities"], Decimal("0.01"), Decimal("0.5")
+                    ),
+                    Decimal("0.35"),
+                ),
+                (
+                    score_decreasing(debt["high_cost_debt_share"], Decimal("0.05"), Decimal("0.6")),
+                    Decimal("0.30"),
+                ),
+            ]
+        )
+        net_worth_health_score = weighted_score(
+            [
+                (
+                    score_decreasing(
+                        debt["unbacked_debt_value"] / asset_metrics["assets_value"]
+                        if asset_metrics["assets_value"] > 0
+                        else None,
+                        Decimal("0.05"),
+                        Decimal("0.35"),
+                    ),
+                    Decimal("0.4"),
+                ),
+                (
+                    score_decreasing(
+                        asset_metrics["illiquid_assets_share"], Decimal("0.25"), Decimal("0.8")
+                    ),
+                    Decimal("0.3"),
+                ),
+                (
+                    score_decreasing(
+                        asset_metrics["top_asset_share"], Decimal("0.4"), Decimal("0.9")
+                    ),
+                    Decimal("0.3"),
+                ),
+            ]
+        )
+
+        quality_flags = {
+            "has_income": annual_income > 0,
+            "has_operating_expense": operating_expense > 0,
+            "has_assets": asset_metrics["assets_value"] > 0,
+            "liability_rates_complete": all(
+                row.annual_interest_tae is not None for row in liabilities
+            ),
+        }
+        quality_score = (
+            sum(1 for value in quality_flags.values() if value) / len(quality_flags) * 100
+        )
+
+        return {
+            "period": "current",
+            "cash_flow": {
+                "score": score(cash_flow_score),
+                "structural_annual_income": money(annual_income),
+                "structural_operating_expense": money(operating_expense),
+                "temporary_commitment_expense": money(commitment_expense),
+                "operating_surplus": money(operating_surplus),
+                "committed_surplus": money(committed_surplus),
+                "operating_surplus_ratio": ratio(
+                    operating_surplus / annual_income if annual_income > 0 else None
+                ),
+            },
+            "emergency_fund": {
+                "score": score(emergency_score),
+                "eligible_liquidity": money(asset_metrics["emergency_liquid_assets_value"]),
+                "coverage_months_base": ratio(emergency_months_base),
+                "coverage_months_committed": ratio(emergency_months_committed),
+                "target_months": "6.0000",
+            },
+            "debt": {
+                "score": score(debt_score),
+                "total_debt": money(debt["liabilities_value"]),
+                "unbacked_debt": money(debt["unbacked_debt_value"]),
+                "high_cost_debt": money(debt["high_cost_debt_value"]),
+                "weighted_tae_pct": ratio(debt["weighted_liability_tae_pct"]),
+                "debt_payment_to_income": ratio(debt["debt_payment_to_income"]),
+            },
+            "net_worth_health": {
+                "score": score(net_worth_health_score),
+                "assets_value": money(asset_metrics["assets_value"]),
+                "illiquid_assets_share": ratio(asset_metrics["illiquid_assets_share"]),
+                "top_asset_share": ratio(asset_metrics["top_asset_share"]),
+                "diversification_index": ratio(asset_metrics["diversification_index"]),
+            },
+            "planned_contribution": {
+                "annual_amount": money(planned_contribution),
+                "monthly_amount": money(planned_contribution / Decimal("12")),
+            },
+            "data_quality": {
+                "score": int(round(quality_score)),
+                "flags": quality_flags,
+            },
+        }

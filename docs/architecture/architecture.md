@@ -86,6 +86,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 7. Accepting a scenario does not create real `Asset`, `Liability`, `LedgerTransaction`, or check-in rows. It does create future budget entries from existing budget taxonomy defaults or from editable `metadata_json.budget_lines` supplied by the UI.
 8. Temporary recurrent budget entries support `term_start_month`, `term_end_month`, and `term_end_year`, so scenario-generated rows can start and end in the intended months.
 
+## Financial Plan Foundations And Recommendations
+1. `Finding` and `Recommendation` live in the Core `plan` app. Findings are unique per `(plan, code, period)` and recommendations are unique per `(finding, code)`.
+2. `FoundationService` ports the former frontend guide diagnostics into backend-owned metrics: cash flow, emergency fund, debt, net-worth health, planned contribution and data quality.
+3. `FindingService` evaluates deterministic MVP findings from those foundations and the expected projection. Resolved findings are closed instead of duplicated.
+4. `RecommendationService` generates deterministic template-based actions with full explanation payloads (`action_json`, `impact_json`, `alternatives_json`). The plan profile only shifts priority; it does not change accounting calculations.
+5. Recommendation simulation creates a draft `Scenario` and nested `ScenarioEvent`; it does not mutate plan, budget, net worth or accounting until the scenario is explicitly accepted.
+6. `MonthlyClosePlanService` is invoked after monthly-close finalization. It is a no-op when the user has no financial plan and logs failures without breaking the monthly-close lifecycle.
+7. Monthly-close plan impact exposes at most two open findings and one open recommendation. Projected-year deltas are only communicated when the rounded year change is material (`abs(delta) >= 1`).
+
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.
 2. Imported accounting rows remain traceable through `LedgerTransaction.origin`, `import_source` and `import_fingerprint`; consolidated imported rows are no longer treated as disposable cleanup data.

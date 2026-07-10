@@ -133,3 +133,24 @@ class MonthlyCloseLockView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         state = compute_monthly_close_state(user=request.user, fiscal_year=year, month=month)
         return Response(state, status=status.HTTP_200_OK)
+
+
+class MonthlyClosePlanImpactView(APIView):
+    """GET the financial-plan impact for a finalized monthly close."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int) -> Response:
+        from plan.services_monthly_close import MonthlyClosePlanService
+
+        try:
+            monthly_close = MonthlyClose.objects.get(pk=pk, user=request.user)
+        except MonthlyClose.DoesNotExist:
+            return Response(
+                {"detail": "No existe cierre mensual."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        impact = MonthlyClosePlanService().impact(monthly_close=monthly_close)
+        if impact is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(impact)

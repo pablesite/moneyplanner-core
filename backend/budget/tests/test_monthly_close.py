@@ -19,6 +19,8 @@ from budget.services_monthly_close import (
     lock_monthly_close,
     reopen_monthly_close,
 )
+from net_worth.models import Asset, Liability
+from plan.models import FinancialPlan, Finding, Recommendation
 
 
 User = get_user_model()
@@ -400,6 +402,44 @@ class MonthlyCloseApiTests(APITestCase):
         self.client.get(self._url())
         response = self.client.post(self._url() + "lock/")
         self.assertEqual(response.status_code, 409)
+
+    def test_plan_impact_returns_limited_findings_and_action(self):
+        FinancialPlan.objects.create(
+            user=self.user,
+            household_type=FinancialPlan.HouseholdType.SINGLE,
+            target_date="2040-01-01",
+            target_monthly_income_today_eur=Decimal("2000.00"),
+            projection_end_date="2065-01-01",
+            profile=FinancialPlan.Profile.BALANCED,
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="ETF",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Tarjeta",
+            category=Liability.Category.CREDIT_CARD,
+            amount=Decimal("2500.00"),
+            currency="EUR",
+            annual_interest_tae=Decimal("19.00"),
+        )
+        _make_income_entry(self.user, amount=12000)
+        _make_expense_entry(self.user, amount=18000)
+
+        self.client.post(self._url() + "finalize/")
+        monthly_close = MonthlyClose.objects.get(user=self.user, fiscal_year=2026, month=3)
+        response = self.client.get(f"/api/budget/monthly-closes/{monthly_close.id}/plan-impact/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(response.data["findings"]), 2)
+        self.assertIsNotNone(response.data["recommended_action"])
+        self.assertTrue(Finding.objects.filter(plan__user=self.user).exists())
+        self.assertTrue(Recommendation.objects.filter(finding__plan__user=self.user).exists())
 
     def test_user_isolation(self):
         other_user = _make_user("other_mc_user")

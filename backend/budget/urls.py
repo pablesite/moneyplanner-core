@@ -10,6 +10,7 @@ from .views import (
 from .views_monthly_close import (
     MonthlyCloseFinalizeView,
     MonthlyCloseLockView,
+    MonthlyClosePlanImpactView,
     MonthlyCloseReopenView,
     MonthlyCloseView,
 )
@@ -49,5 +50,10 @@ urlpatterns = [
         "monthly-close/<int:year>/<int:month>/lock/",
         MonthlyCloseLockView.as_view(),
         name="monthly-close-lock",
+    ),
+    path(
+        "monthly-closes/<int:pk>/plan-impact/",
+        MonthlyClosePlanImpactView.as_view(),
+        name="monthly-close-plan-impact",
     ),
 ]

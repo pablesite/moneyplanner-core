@@ -55,17 +55,17 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend r
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` — contrato de findings/recommendations y hook del cierre
-- [ ] `docs/architecture/api-registry.md` — nuevos endpoints
-- [ ] `core/docs/project-status.md` y `docs/project-status.md` — estado de la fase
+- [x] `core/docs/architecture/architecture.md` — contrato de findings/recommendations y hook del cierre
+- [x] `docs/architecture/api-registry.md` — nuevos endpoints
+- [x] `core/docs/project-status.md` y `docs/project-status.md` — estado de la fase
 
 ## Risks
 - Paridad de fórmulas con el guide: si el port no alcanza paridad razonable, documentar divergencias y posponer la Fase 5 sin bloquear esta.
 - El hook en `finalize_monthly_close` toca un flujo crítico validado: debe ser no-op seguro sin plan y no alterar el resultado del cierre; cubrir con tests de regresión de `budget`.
 
 ## Completion Criteria
-- [ ] AC-E05-001..004 cumplidos
-- [ ] All validation commands pass
-- [ ] All required documentation updates done
-- [ ] Spec moved to `terminados/`
-- [ ] Commit created (Conventional Commits, `feat(plan): ...`)
+- [x] AC-E05-001..004 cumplidos
+- [x] All validation commands pass
+- [x] All required documentation updates done
+- [x] Spec moved to `terminados/`
+- [x] Commit created (Conventional Commits, `feat(plan): ...`)

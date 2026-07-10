@@ -6,9 +6,11 @@ from net_worth.models import Asset
 
 from .models import (
     FinancialPlan,
+    Finding,
     PlanAssetFunction,
     PlanEvent,
     ProjectionSnapshot,
+    Recommendation,
     Scenario,
     ScenarioEvent,
 )
@@ -260,3 +262,39 @@ class AssetFunctionUpdateSerializer(serializers.Serializer):
         if not Asset.objects.filter(user=request.user, id=value, is_active=True).exists():
             raise serializers.ValidationError("Asset not found.")
         return value
+
+
+class FindingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Finding
+        fields = [
+            "id",
+            "code",
+            "severity",
+            "period",
+            "evidence_json",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class RecommendationSerializer(serializers.ModelSerializer):
+    finding = serializers.IntegerField(source="finding_id", read_only=True)
+
+    class Meta:
+        model = Recommendation
+        fields = [
+            "id",
+            "finding",
+            "code",
+            "priority",
+            "action_json",
+            "impact_json",
+            "alternatives_json",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

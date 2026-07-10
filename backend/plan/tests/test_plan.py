@@ -14,9 +14,11 @@ from net_worth.models import Asset, Liability
 from plan.models import (
     AssumptionSet,
     FinancialPlan,
+    Finding,
     PlanAssetFunction,
     PlanEvent,
     ProjectionSnapshot,
+    Recommendation,
     Scenario,
 )
 from plan.services_classification import AssetClassificationService
@@ -584,3 +586,56 @@ class ScenarioApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class FindingsRecommendationsApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_findings_api", password="pass1234"
+        )
+        self.client.force_authenticate(self.user)
+        self.plan = create_plan(self.user)
+        create_income(self.user, Decimal("30000.00"))
+        create_operating_expense(self.user, Decimal("36000.00"))
+        Liability.objects.create(
+            user=self.user,
+            name="Tarjeta",
+            category=Liability.Category.CREDIT_CARD,
+            amount=Decimal("2500.00"),
+            currency="EUR",
+            annual_interest_tae=Decimal("19.00"),
+            is_asset_backed=False,
+        )
+
+    def test_foundations_findings_and_recommendations_are_exposed(self):
+        foundations = self.client.get(reverse("financial-plan-foundations"))
+        findings = self.client.get(reverse("financial-plan-findings"))
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+
+        self.assertEqual(foundations.status_code, status.HTTP_200_OK)
+        self.assertIn("cash_flow", foundations.data)
+        self.assertEqual(findings.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            any(item["code"] == Finding.Code.NEGATIVE_CASH_FLOW for item in findings.data)
+        )
+        self.assertEqual(recommendations.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            any(
+                item["code"] == Recommendation.Code.INCREASE_CONTRIBUTION
+                for item in recommendations.data
+            )
+        )
+
+    def test_recommendation_simulate_creates_draft_scenario_for_same_user(self):
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+        recommendation_id = recommendations.data[0]["id"]
+
+        response = self.client.post(
+            reverse("financial-plan-recommendation-simulate", kwargs={"pk": recommendation_id}),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], Scenario.Status.DRAFT)
+        self.assertEqual(Scenario.objects.get(id=response.data["id"]).plan, self.plan)
