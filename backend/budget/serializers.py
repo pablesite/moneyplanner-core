@@ -54,6 +54,13 @@ class AnnualEntryValidationMixin:
             raise serializers.ValidationError("Mes objetivo invalido (1-12).")
         return value
 
+    def validate_term_start_month(self, value: int | None):
+        if value is None:
+            return value
+        if value < 1 or value > 12:
+            raise serializers.ValidationError("Mes inicio del compromiso invalido (1-12).")
+        return value
+
 
 def income_type_from_time_profile(time_profile: str) -> str:
     return "one_off" if time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF else "recurrent"
@@ -162,6 +169,7 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
             "cashflow_role",
             "event_group",
             "target_month",
+            "term_start_month",
             "term_end_month",
             "term_end_year",
             "amount_input_period",
@@ -192,6 +200,9 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
         attrs["income_type"] = income_type_from_time_profile(attrs["time_profile"])
 
         fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
+        term_start_month = attrs.get("term_start_month")
+        if "term_start_month" not in attrs and self.instance is not None:
+            term_start_month = self.instance.term_start_month
         term_end_month = attrs.get("term_end_month")
         if "term_end_month" not in attrs and self.instance is not None:
             term_end_month = self.instance.term_end_month
@@ -214,15 +225,31 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
         ):
             term_end_month = 12
             attrs["term_end_month"] = term_end_month
+        if (
+            attrs["time_profile"] == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
+            and term_start_month is None
+        ):
+            term_start_month = 1
+            attrs["term_start_month"] = term_start_month
         if term_end_year is not None and fiscal_year is not None and term_end_year < fiscal_year:
             raise serializers.ValidationError(
                 {"term_end_year": "El ano fin no puede ser anterior al ejercicio fiscal."}
+            )
+        if (
+            term_end_year == fiscal_year
+            and term_start_month is not None
+            and term_end_month is not None
+            and term_end_month < term_start_month
+        ):
+            raise serializers.ValidationError(
+                {"term_end_month": "El mes fin no puede ser anterior al mes inicio."}
             )
         if attrs["time_profile"] == AnnualIncomeEntry.TimeProfile.ONE_OFF and target_month is None:
             raise serializers.ValidationError(
                 {"target_month": "El mes objetivo es obligatorio para ingresos puntuales."}
             )
         if attrs["time_profile"] != AnnualIncomeEntry.TimeProfile.TERM_RECURRENT:
+            attrs["term_start_month"] = None
             attrs["term_end_month"] = None
             attrs["term_end_year"] = None
         return attrs
@@ -245,6 +272,7 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             "cashflow_role",
             "event_group",
             "target_month",
+            "term_start_month",
             "term_end_month",
             "term_end_year",
             "amount_input_period",
@@ -303,6 +331,7 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             )
         ):
             attrs["event_group"] = self.instance.event_group
+            attrs["term_start_month"] = self.instance.term_start_month
             attrs["term_end_month"] = self.instance.term_end_month
             attrs["term_end_year"] = self.instance.term_end_year
 
@@ -310,6 +339,9 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         target_month = attrs.get("target_month")
         if "target_month" not in attrs and self.instance is not None:
             target_month = self.instance.target_month
+        term_start_month = attrs.get("term_start_month")
+        if "term_start_month" not in attrs and self.instance is not None:
+            term_start_month = self.instance.term_start_month
         term_end_month = attrs.get("term_end_month")
         if "term_end_month" not in attrs and self.instance is not None:
             term_end_month = self.instance.term_end_month
@@ -329,15 +361,31 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
         ):
             term_end_month = 12
             attrs["term_end_month"] = term_end_month
+        if (
+            attrs["time_profile"] == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
+            and term_start_month is None
+        ):
+            term_start_month = 1
+            attrs["term_start_month"] = term_start_month
         if term_end_year is not None and fiscal_year is not None and term_end_year < fiscal_year:
             raise serializers.ValidationError(
                 {"term_end_year": "El ano fin no puede ser anterior al ejercicio fiscal."}
+            )
+        if (
+            term_end_year == fiscal_year
+            and term_start_month is not None
+            and term_end_month is not None
+            and term_end_month < term_start_month
+        ):
+            raise serializers.ValidationError(
+                {"term_end_month": "El mes fin no puede ser anterior al mes inicio."}
             )
         if attrs["time_profile"] == AnnualExpenseEntry.TimeProfile.ONE_OFF and target_month is None:
             raise serializers.ValidationError(
                 {"target_month": "El mes objetivo es obligatorio para gastos puntuales."}
             )
         if attrs["time_profile"] != AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
+            attrs["term_start_month"] = None
             attrs["term_end_month"] = None
             attrs["term_end_year"] = None
         if attrs["time_profile"] != AnnualExpenseEntry.TimeProfile.ONE_OFF:

@@ -51,6 +51,7 @@ class AnnualIncomeEntry(models.Model):
     )
     event_group = models.CharField(max_length=64, blank=True, default="")
     target_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    term_start_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
     amount_input_period = models.CharField(
@@ -147,6 +148,7 @@ class AnnualExpenseEntry(models.Model):
     )
     event_group = models.CharField(max_length=64, blank=True, default="")
     target_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    term_start_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_month = models.PositiveSmallIntegerField(null=True, blank=True)
     term_end_year = models.PositiveSmallIntegerField(null=True, blank=True)
     amount_input_period = models.CharField(

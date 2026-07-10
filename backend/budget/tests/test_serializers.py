@@ -148,6 +148,47 @@ class BudgetSerializerTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["expense_type"], "recurrent")
         self.assertEqual(serializer.validated_data["cashflow_role"], "temporary_commitment")
+        self.assertEqual(serializer.validated_data["term_start_month"], 1)
+
+    def test_expense_serializer_accepts_term_start_month(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Cuota coche",
+                "category": "consumption_expenses",
+                "subcategory": "personal_loan_repayment",
+                "expense_type": "recurrent",
+                "time_profile": "term_recurrent",
+                "cashflow_role": "temporary_commitment",
+                "term_start_month": 3,
+                "term_end_month": 6,
+                "term_end_year": 2026,
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["term_start_month"], 3)
+
+    def test_expense_serializer_rejects_term_end_before_start_same_year(self):
+        serializer = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Cuota coche",
+                "category": "consumption_expenses",
+                "subcategory": "personal_loan_repayment",
+                "expense_type": "recurrent",
+                "time_profile": "term_recurrent",
+                "cashflow_role": "temporary_commitment",
+                "term_start_month": 7,
+                "term_end_month": 6,
+                "term_end_year": 2026,
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("term_end_month", serializer.errors)
 
     def test_expense_serializer_normalizes_term_recurrent_cashflow_role_to_temporary_commitment(
         self,

@@ -30,6 +30,7 @@ export type AnnualIncomeEntry = {
   cashflowRole: AnnualIncomeCashflowRole;
   eventGroup: string;
   targetMonth: number | null;
+  termStartMonth: number | null;
   termEndMonth: number | null;
   termEndYear: number | null;
   amountInputPeriod: 'annual' | 'monthly';
@@ -51,6 +52,7 @@ export type AnnualIncomeDraft = {
   cashflowRole?: AnnualIncomeCashflowRole;
   eventGroup?: string;
   targetMonth?: number | null;
+  termStartMonth?: number | null;
   termEndMonth?: number | null;
   termEndYear?: number | null;
   amountInputPeriod?: 'annual' | 'monthly';
@@ -73,6 +75,7 @@ type AnnualIncomeApiItem = {
   cashflow_role?: AnnualIncomeCashflowRole;
   event_group?: string;
   target_month?: number | null;
+  term_start_month?: number | null;
   term_end_month?: number | null;
   term_end_year?: number | null;
   amount_input_period?: 'annual' | 'monthly';
@@ -107,6 +110,7 @@ function mapApiItem(item: AnnualIncomeApiItem): AnnualIncomeEntry {
     cashflowRole: item.cashflow_role ?? 'operating',
     eventGroup: item.event_group ?? '',
     targetMonth: item.target_month == null ? null : Number(item.target_month),
+    termStartMonth: item.term_start_month == null ? null : Number(item.term_start_month),
     termEndMonth: item.term_end_month == null ? null : Number(item.term_end_month),
     termEndYear: item.term_end_year == null ? null : Number(item.term_end_year),
     amountInputPeriod: item.amount_input_period === 'monthly' ? 'monthly' : 'annual',
@@ -175,6 +179,7 @@ function createAnnualIncomeStore() {
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
         target_month: draft.targetMonth ?? null,
+        term_start_month: draft.termStartMonth ?? null,
         term_end_month: draft.termEndMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
         amount_input_period: draft.amountInputPeriod === 'monthly' ? 'monthly' : 'annual',
@@ -228,6 +233,7 @@ function createAnnualIncomeStore() {
         cashflow_role: draft.cashflowRole ?? 'operating',
         event_group: (draft.eventGroup ?? '').trim(),
         target_month: draft.targetMonth ?? null,
+        term_start_month: draft.termStartMonth ?? null,
         term_end_month: draft.termEndMonth ?? null,
         term_end_year: draft.termEndYear ?? null,
         amount_input_period: draft.amountInputPeriod === 'monthly' ? 'monthly' : 'annual',

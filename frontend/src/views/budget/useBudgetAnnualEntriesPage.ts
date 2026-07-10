@@ -136,6 +136,7 @@ export function useBudgetAnnualEntriesPage() {
       timeProfile: string;
       eventGroup: string;
       targetMonth: number | null;
+      termStartMonth: number | null;
       termEndMonth: number | null;
       termEndYear: number | null;
       amountInputPeriod: 'annual' | 'monthly';
@@ -162,6 +163,7 @@ export function useBudgetAnnualEntriesPage() {
       timeProfile: string;
       eventGroup: string;
       targetMonth: number | null;
+      termStartMonth: number | null;
       termEndMonth: number | null;
       termEndYear: number | null;
       amountInputPeriod: 'annual' | 'monthly';
@@ -182,6 +184,7 @@ export function useBudgetAnnualEntriesPage() {
     cashflowRole: 'operating' as AnnualIncomeCashflowRole,
     eventGroup: '',
     targetMonth: '',
+    termStartMonth: '',
     termEndMonth: '',
     termEndYear: '',
     amountInputPeriod: 'annual' as 'annual' | 'monthly',
@@ -199,6 +202,7 @@ export function useBudgetAnnualEntriesPage() {
     cashflowRole: 'operating' as AnnualExpenseCashflowRole,
     eventGroup: '',
     targetMonth: '',
+    termStartMonth: '',
     termEndMonth: '',
     termEndYear: '',
     amountInputPeriod: 'annual' as 'annual' | 'monthly',
@@ -216,6 +220,7 @@ export function useBudgetAnnualEntriesPage() {
     cashflowRole: string;
     eventGroup: string;
     targetMonth: string;
+    termStartMonth: string;
     termEndMonth: string;
     termEndYear: string;
     amountInputPeriod: 'annual' | 'monthly';
@@ -1084,6 +1089,7 @@ export function useBudgetAnnualEntriesPage() {
     annualIncomeForm.cashflowRole = defaultIncomeCashflowRole(annualIncomeForm.category);
     annualIncomeForm.eventGroup = '';
     annualIncomeForm.targetMonth = '';
+    annualIncomeForm.termStartMonth = '';
     annualIncomeForm.termEndMonth = '';
     annualIncomeForm.termEndYear = '';
     annualIncomeForm.amountInputPeriod = 'annual';
@@ -1105,6 +1111,7 @@ export function useBudgetAnnualEntriesPage() {
     );
     annualExpenseForm.eventGroup = '';
     annualExpenseForm.targetMonth = '';
+    annualExpenseForm.termStartMonth = '';
     annualExpenseForm.termEndMonth = '';
     annualExpenseForm.termEndYear = '';
     annualExpenseForm.amountInputPeriod = 'annual';
@@ -1128,6 +1135,8 @@ export function useBudgetAnnualEntriesPage() {
       annualIncomeForm.eventGroup = entry.eventGroup || '';
       annualIncomeForm.targetMonth =
         entry.targetMonth == null ? '' : String(Number(entry.targetMonth));
+      annualIncomeForm.termStartMonth =
+        entry.termStartMonth == null ? '' : String(Number(entry.termStartMonth));
       annualIncomeForm.termEndMonth =
         entry.termEndMonth == null ? '' : String(Number(entry.termEndMonth));
       annualIncomeForm.termEndYear =
@@ -1168,6 +1177,8 @@ export function useBudgetAnnualEntriesPage() {
       annualExpenseForm.eventGroup = sourceEntry.eventGroup || '';
       annualExpenseForm.targetMonth =
         sourceEntry.targetMonth == null ? '' : String(Number(sourceEntry.targetMonth));
+      annualExpenseForm.termStartMonth =
+        sourceEntry.termStartMonth == null ? '' : String(Number(sourceEntry.termStartMonth));
       annualExpenseForm.termEndMonth =
         sourceEntry.termEndMonth == null ? '' : String(Number(sourceEntry.termEndMonth));
       annualExpenseForm.termEndYear =
@@ -1289,6 +1300,7 @@ export function useBudgetAnnualEntriesPage() {
         timeProfile: entry.timeProfile,
         eventGroup: entry.eventGroup,
         targetMonth: entry.targetMonth,
+        termStartMonth: entry.termStartMonth,
         termEndMonth: entry.termEndMonth,
         termEndYear: entry.termEndYear,
         amountInputPeriod: entry.amountInputPeriod,
@@ -1370,6 +1382,7 @@ export function useBudgetAnnualEntriesPage() {
         timeProfile: entry.timeProfile,
         eventGroup: entry.eventGroup,
         targetMonth: entry.targetMonth,
+        termStartMonth: entry.termStartMonth,
         termEndMonth: entry.termEndMonth,
         termEndYear: entry.termEndYear,
         amountInputPeriod: entry.amountInputPeriod,
@@ -1747,6 +1760,7 @@ export function useBudgetAnnualEntriesPage() {
     (timeProfile) => {
       annualIncomeForm.isRecurrent = timeProfile !== 'one_off';
       if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndMonth = '';
+      if (timeProfile !== 'term_recurrent') annualIncomeForm.termStartMonth = '';
       if (timeProfile !== 'term_recurrent') annualIncomeForm.termEndYear = '';
     },
   );
@@ -1755,6 +1769,7 @@ export function useBudgetAnnualEntriesPage() {
     (timeProfile) => {
       annualExpenseForm.isRecurrent = timeProfile !== 'one_off';
       if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndMonth = '';
+      if (timeProfile !== 'term_recurrent') annualExpenseForm.termStartMonth = '';
       if (timeProfile !== 'term_recurrent') annualExpenseForm.termEndYear = '';
       if (timeProfile !== 'one_off') annualExpenseForm.targetMonth = '';
       normalizeExpenseCashflowRoleForCurrentTimeProfile();
@@ -1799,6 +1814,11 @@ export function useBudgetAnnualEntriesPage() {
         annualIncomeForm.timeProfile === 'term_recurrent' &&
         String(annualIncomeForm.termEndMonth).trim()
           ? Number(annualIncomeForm.termEndMonth)
+          : null,
+      termStartMonth:
+        annualIncomeForm.timeProfile === 'term_recurrent' &&
+        String(annualIncomeForm.termStartMonth).trim()
+          ? Number(annualIncomeForm.termStartMonth)
           : null,
       termEndYear:
         annualIncomeForm.timeProfile === 'term_recurrent' &&
@@ -1857,6 +1877,11 @@ export function useBudgetAnnualEntriesPage() {
         String(annualExpenseForm.termEndYear).trim()
           ? Number(annualExpenseForm.termEndYear)
           : null,
+      termStartMonth:
+        annualExpenseForm.timeProfile === 'term_recurrent' &&
+        String(annualExpenseForm.termStartMonth).trim()
+          ? Number(annualExpenseForm.termStartMonth)
+          : null,
       termEndMonth:
         annualExpenseForm.timeProfile === 'term_recurrent' &&
         String(annualExpenseForm.termEndMonth).trim()
@@ -1885,6 +1910,7 @@ export function useBudgetAnnualEntriesPage() {
             cashflow_role: draft.cashflowRole,
             event_group: draft.eventGroup,
             target_month: draft.targetMonth,
+            term_start_month: draft.termStartMonth,
             term_end_month: draft.termEndMonth,
             term_end_year: draft.termEndYear,
             amount_input_period: draft.amountInputPeriod,

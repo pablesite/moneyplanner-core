@@ -27,6 +27,7 @@ class BudgetLine:
     amount: Decimal
     fiscal_year: int
     target_month: int | None
+    term_start_month: int | None
     term_end_year: int | None
     term_end_month: int | None
     cashflow_role: str
@@ -231,6 +232,7 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
                 amount=q2(Decimal(event.initial_outflow)),
                 fiscal_year=event.start_date.year,
                 target_month=event.start_date.month,
+                term_start_month=None,
                 term_end_year=None,
                 term_end_month=None,
                 cashflow_role=role,
@@ -317,6 +319,7 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 cashflow_role=line.cashflow_role,
                 event_group=f"plan_event:{scenario.id}",
                 target_month=line.target_month,
+                term_start_month=line.term_start_month,
                 term_end_year=line.term_end_year,
                 term_end_month=line.term_end_month,
                 amount_annual=line.amount,
@@ -341,6 +344,7 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 cashflow_role=line.cashflow_role,
                 event_group=f"plan_event:{scenario.id}",
                 target_month=line.target_month,
+                term_start_month=line.term_start_month,
                 term_end_year=line.term_end_year,
                 term_end_month=line.term_end_month,
                 amount_annual=line.amount,
@@ -361,6 +365,7 @@ def line_from_metadata(line: dict[str, Any]) -> BudgetLine:
         amount=q2(Decimal(str(line["amount"]))),
         fiscal_year=int(line["fiscal_year"]),
         target_month=line.get("target_month"),
+        term_start_month=line.get("term_start_month"),
         term_end_year=line.get("term_end_year"),
         term_end_month=line.get("term_end_month"),
         cashflow_role=str(line.get("cashflow_role") or AnnualExpenseEntry.CashflowRole.OPERATING),
@@ -460,6 +465,7 @@ def recurring_budget_lines(
                 amount=q2(monthly_amount * Decimal(months)),
                 fiscal_year=year,
                 target_month=None,
+                term_start_month=start_month if year == start.year else 1,
                 term_end_year=end.year if end else None,
                 term_end_month=end.month if end else None,
                 cashflow_role=cashflow_role,
@@ -486,6 +492,7 @@ def recurring_income_lines(
                 amount=q2(monthly_amount * Decimal(months)),
                 fiscal_year=year,
                 target_month=None,
+                term_start_month=start_month if year == start.year else 1,
                 term_end_year=end.year if end else None,
                 term_end_month=end.month if end else None,
                 cashflow_role=cast(str, AnnualIncomeEntry.CashflowRole.OTHER),

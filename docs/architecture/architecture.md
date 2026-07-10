@@ -84,7 +84,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 5. Monthly deltas apply from the event start date to the explicit end date. If no end date exists and the delta is tied to a new debt, it ends when that debt term ends; otherwise it remains active for projection purposes.
 6. New scenario debt uses an amortizing monthly payment when term and interest are present; if no interest is present, it falls back to linear principal amortization.
 7. Accepting a scenario does not create real `Asset`, `Liability`, `LedgerTransaction`, or check-in rows. It does create future budget entries from existing budget taxonomy defaults or from editable `metadata_json.budget_lines` supplied by the UI.
-8. Budget auto-creation is intentionally limited by the current budget model: annual entries are created with correct yearly totals and target month/term metadata, while recurring entries do not yet have a persisted start-month field.
+8. Temporary recurrent budget entries support `term_start_month`, `term_end_month`, and `term_end_year`, so scenario-generated rows can start and end in the intended months.
 
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.

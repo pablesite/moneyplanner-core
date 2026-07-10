@@ -493,6 +493,7 @@ class ScenarioServiceTests(TestCase):
                 user=self.user,
                 category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
                 subcategory="personal_loan_repayment",
+                term_start_month=3,
             ).exists()
         )
 

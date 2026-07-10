@@ -174,6 +174,7 @@ def _effective_annual_amount_for_term_entry(
     amount: Decimal,
     amount_input_period: str,
     time_profile: str,
+    term_start_month: int | None,
     term_end_year: int | None,
     term_end_month: int | None,
     fiscal_year: int,
@@ -186,7 +187,9 @@ def _effective_annual_amount_for_term_entry(
         return amount
     if term_end_year is not None and term_end_year != fiscal_year:
         return amount
-    months = max(1, min(12, int(term_end_month or 12)))
+    start_month = max(1, min(12, int(term_start_month or 1)))
+    end_month = max(start_month, min(12, int(term_end_month or 12)))
+    months = max(1, end_month - start_month + 1)
     return _round_money((amount * Decimal(months)) / Decimal("12"))
 
 
@@ -528,6 +531,7 @@ def planned_expense_monthly_distribution(
         amount=Decimal(entry.amount_annual or 0),
         amount_input_period=entry.amount_input_period,
         time_profile=entry.time_profile,
+        term_start_month=entry.term_start_month,
         term_end_year=entry.term_end_year,
         term_end_month=entry.term_end_month,
         fiscal_year=fiscal_year,
@@ -544,13 +548,18 @@ def planned_expense_monthly_distribution(
             return {}
         return {int(entry.target_month): _round_money(amount)}
 
+    start_month = 1
+    if entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
+        start_month = entry.term_start_month or 1
     end_month = 12
     if entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT and (
         entry.term_end_year is None or entry.term_end_year == fiscal_year
     ):
         end_month = entry.term_end_month or 12
-    base = _round_money(amount / Decimal(end_month))
-    distribution = {month: base for month in range(1, end_month + 1)}
+    end_month = max(start_month, end_month)
+    active_months = end_month - start_month + 1
+    base = _round_money(amount / Decimal(active_months))
+    distribution = {month: base for month in range(start_month, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)
     if delta:
@@ -579,6 +588,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             "time_profile",
             "amount_input_period",
             "target_month",
+            "term_start_month",
             "term_end_month",
             "term_end_year",
             "amount_annual",
@@ -809,6 +819,7 @@ def planned_income_monthly_distribution(
         amount=Decimal(entry.amount_annual or 0),
         amount_input_period=entry.amount_input_period,
         time_profile=entry.time_profile,
+        term_start_month=entry.term_start_month,
         term_end_year=entry.term_end_year,
         term_end_month=entry.term_end_month,
         fiscal_year=fiscal_year,
@@ -822,17 +833,22 @@ def planned_income_monthly_distribution(
             return {}
         return {int(entry.target_month): _round_money(amount)}
 
+    start_month = 1
+    if entry.time_profile == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT:
+        start_month = entry.term_start_month or 1
     end_month = 12
     if (
         entry.time_profile == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
         and entry.term_end_year == fiscal_year
     ):
         end_month = entry.term_end_month or 12
-    if entry.target_month and 1 <= int(entry.target_month) <= end_month:
+    if entry.target_month and start_month <= int(entry.target_month) <= end_month:
         return {int(entry.target_month): _round_money(amount)}
 
-    base = _round_money(amount / Decimal("12"))
-    distribution = {month: base for month in range(1, end_month + 1)}
+    end_month = max(start_month, end_month)
+    active_months = end_month - start_month + 1
+    base = _round_money(amount / Decimal(active_months))
+    distribution = {month: base for month in range(start_month, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
     delta = _round_money(amount - total)
     if delta:
@@ -851,6 +867,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             "time_profile",
             "amount_input_period",
             "target_month",
+            "term_start_month",
             "term_end_month",
             "term_end_year",
             "amount_annual",

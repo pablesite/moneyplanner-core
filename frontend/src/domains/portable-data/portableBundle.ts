@@ -9,6 +9,7 @@ export type PortableAnnualIncomeRecord = {
   cashflow_role?: 'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
   event_group?: string;
   target_month?: number | null;
+  term_start_month?: number | null;
   term_end_month?: number | null;
   term_end_year?: number | null;
   amount_input_period?: 'annual' | 'monthly';
@@ -38,6 +39,7 @@ export type PortableAnnualExpenseRecord = {
     | 'other';
   event_group?: string;
   target_month?: number | null;
+  term_start_month?: number | null;
   term_end_month?: number | null;
   term_end_year?: number | null;
   amount_input_period?: 'annual' | 'monthly';
@@ -477,6 +479,7 @@ export function toPortableAnnualIncomeRecord(
     cashflow_role: entry.cashflow_role,
     event_group: String(entry.event_group ?? ''),
     target_month: entry.target_month ?? null,
+    term_start_month: entry.term_start_month ?? null,
     term_end_month: entry.term_end_month ?? null,
     term_end_year: entry.term_end_year ?? null,
     amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',
@@ -502,6 +505,7 @@ export function toPortableAnnualExpenseRecord(
     cashflow_role: entry.cashflow_role,
     event_group: String(entry.event_group ?? ''),
     target_month: entry.target_month ?? null,
+    term_start_month: entry.term_start_month ?? null,
     term_end_month: entry.term_end_month ?? null,
     term_end_year: entry.term_end_year ?? null,
     amount_input_period: entry.amount_input_period === 'monthly' ? 'monthly' : 'annual',

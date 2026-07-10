@@ -286,6 +286,27 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(distribution[9], Decimal("1374.00"))
         self.assertEqual(sum(distribution.values()), Decimal("12366.00"))
 
+    def test_planned_expense_distribution_uses_term_start_month(self):
+        term = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuota coche desde marzo",
+            category="consumption_expenses",
+            subcategory="personal_loan_repayment",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=3,
+            term_end_month=6,
+            term_end_year=2026,
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        distribution = planned_expense_monthly_distribution(entry=term, fiscal_year=2026)
+        self.assertEqual(set(distribution), {3, 4, 5, 6})
+        self.assertEqual(distribution[3], Decimal("300.00"))
+        self.assertEqual(sum(distribution.values()), Decimal("1200.00"))
+
     def test_planned_expense_distribution_uses_expense_type_for_legacy_one_off_rows(self):
         legacy_one_off = AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -393,6 +414,24 @@ class BudgetServicesTests(TestCase):
         distribution = planned_income_monthly_distribution(entry=term, fiscal_year=2026)
         self.assertEqual(len(distribution), 4)
         self.assertEqual(sum(distribution.values()), Decimal("4000.00"))
+
+    def test_planned_income_distribution_uses_term_start_month(self):
+        term = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Contrato desde marzo",
+            category="business",
+            subcategory="self_employed_services",
+            time_profile=AnnualIncomeEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=3,
+            term_end_month=4,
+            term_end_year=2026,
+            amount_annual=Decimal("2000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        distribution = planned_income_monthly_distribution(entry=term, fiscal_year=2026)
+        self.assertEqual(distribution, {3: Decimal("1000.00"), 4: Decimal("1000.00")})
 
     def test_income_summary_returns_none_coverage_without_entries(self):
         summary = build_income_monthly_plan_vs_executed_summary(user=self.user, fiscal_year=2026)
