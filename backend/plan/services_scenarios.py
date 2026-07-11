@@ -31,6 +31,7 @@ class BudgetLine:
     term_end_year: int | None
     term_end_month: int | None
     cashflow_role: str
+    time_profile: str = "one_off"
 
 
 class ScenarioService:
@@ -310,12 +311,10 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 name=line.name,
                 category=line.category,
                 subcategory=line.subcategory,
-                income_type=AnnualIncomeEntry.IncomeType.RECURRENT
-                if line.term_end_year
-                else AnnualIncomeEntry.IncomeType.ONE_OFF,
-                time_profile=AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
-                if line.term_end_year
-                else AnnualIncomeEntry.TimeProfile.ONE_OFF,
+                income_type=AnnualIncomeEntry.IncomeType.ONE_OFF
+                if line.time_profile == "one_off"
+                else AnnualIncomeEntry.IncomeType.RECURRENT,
+                time_profile=line.time_profile,
                 cashflow_role=line.cashflow_role,
                 event_group=f"plan_event:{scenario.id}",
                 target_month=line.target_month,
@@ -335,12 +334,10 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 name=line.name,
                 category=line.category,
                 subcategory=line.subcategory,
-                expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT
-                if line.term_end_year
-                else AnnualExpenseEntry.ExpenseType.ONE_OFF,
-                time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
-                if line.term_end_year
-                else AnnualExpenseEntry.TimeProfile.ONE_OFF,
+                expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF
+                if line.time_profile == "one_off"
+                else AnnualExpenseEntry.ExpenseType.RECURRENT,
+                time_profile=line.time_profile,
                 cashflow_role=line.cashflow_role,
                 event_group=f"plan_event:{scenario.id}",
                 target_month=line.target_month,
@@ -357,6 +354,7 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
 
 
 def line_from_metadata(line: dict[str, Any]) -> BudgetLine:
+    default_profile = "term_recurrent" if line.get("term_end_year") else "one_off"
     return BudgetLine(
         kind=line.get("kind", "expense"),
         name=str(line["name"]),
@@ -369,6 +367,7 @@ def line_from_metadata(line: dict[str, Any]) -> BudgetLine:
         term_end_year=line.get("term_end_year"),
         term_end_month=line.get("term_end_month"),
         cashflow_role=str(line.get("cashflow_role") or AnnualExpenseEntry.CashflowRole.OPERATING),
+        time_profile=str(line.get("time_profile") or default_profile),
     )
 
 
@@ -448,57 +447,109 @@ def recurring_budget_lines(
     end: date | None,
     cashflow_role: str,
 ) -> list[BudgetLine]:
-    end_year = end.year if end else start.year
-    if end is None:
-        end_year = start.year
-    lines = []
-    for year in range(start.year, end_year + 1):
-        start_month = start.month if year == start.year else 1
-        end_month = end.month if end and year == end.year else 12
-        months = max(1, end_month - start_month + 1)
-        lines.append(
-            BudgetLine(
-                kind="expense",
-                name=name,
-                category=category,
-                subcategory=subcategory,
-                amount=q2(monthly_amount * Decimal(months)),
-                fiscal_year=year,
-                target_month=None,
-                term_start_month=start_month if year == start.year else 1,
-                term_end_year=end.year if end else None,
-                term_end_month=end.month if end else None,
-                cashflow_role=cashflow_role,
-            )
+    return [
+        BudgetLine(
+            kind="expense",
+            name=name,
+            category=category,
+            subcategory=subcategory,
+            amount=slot.amount(monthly_amount),
+            fiscal_year=slot.fiscal_year,
+            target_month=None,
+            term_start_month=slot.term_start_month,
+            term_end_year=slot.term_end_year,
+            term_end_month=slot.term_end_month,
+            cashflow_role=cashflow_role,
+            time_profile=slot.time_profile,
         )
-    return lines
+        for slot in recurring_year_slots(start=start, end=end)
+    ]
 
 
 def recurring_income_lines(
     *, name: str, monthly_amount: Decimal, start: date, end: date | None
 ) -> list[BudgetLine]:
-    end_year = end.year if end else start.year
-    lines = []
-    for year in range(start.year, end_year + 1):
-        start_month = start.month if year == start.year else 1
-        end_month = end.month if end and year == end.year else 12
-        months = max(1, end_month - start_month + 1)
-        lines.append(
-            BudgetLine(
-                kind="income",
-                name=name,
-                category=cast(str, AnnualIncomeEntry.Category.OTHER_INCOME),
-                subcategory="other",
-                amount=q2(monthly_amount * Decimal(months)),
-                fiscal_year=year,
-                target_month=None,
-                term_start_month=start_month if year == start.year else 1,
-                term_end_year=end.year if end else None,
-                term_end_month=end.month if end else None,
-                cashflow_role=cast(str, AnnualIncomeEntry.CashflowRole.OTHER),
+    return [
+        BudgetLine(
+            kind="income",
+            name=name,
+            category=cast(str, AnnualIncomeEntry.Category.OTHER_INCOME),
+            subcategory="other",
+            amount=slot.amount(monthly_amount),
+            fiscal_year=slot.fiscal_year,
+            target_month=None,
+            term_start_month=slot.term_start_month,
+            term_end_year=slot.term_end_year,
+            term_end_month=slot.term_end_month,
+            cashflow_role=cast(str, AnnualIncomeEntry.CashflowRole.OTHER),
+            time_profile=slot.time_profile,
+        )
+        for slot in recurring_year_slots(start=start, end=end)
+    ]
+
+
+@dataclass(frozen=True)
+class RecurringYearSlot:
+    fiscal_year: int
+    months: int
+    term_start_month: int | None
+    term_end_year: int | None
+    term_end_month: int | None
+    time_profile: str
+
+    def amount(self, monthly_amount: Decimal) -> Decimal:
+        return q2(monthly_amount * Decimal(self.months))
+
+
+def recurring_year_slots(*, start: date, end: date | None) -> list[RecurringYearSlot]:
+    """Genera un slot por año con el término recortado a ese año.
+
+    Cada línea anual debe declarar solo su propio tramo: si compartieran el
+    término global del evento, el filtro anual del presupuesto las contaría
+    en todos los años que cubre el término (duplicando importes). Sin fecha
+    fin, el gasto es estructural: un slot de término para el año inicial
+    parcial (si lo hay) y un slot estructural indefinido desde el siguiente
+    año completo.
+    """
+    if end is None:
+        slots = []
+        if start.month > 1:
+            slots.append(
+                RecurringYearSlot(
+                    fiscal_year=start.year,
+                    months=12 - start.month + 1,
+                    term_start_month=start.month,
+                    term_end_year=start.year,
+                    term_end_month=12,
+                    time_profile="term_recurrent",
+                )
+            )
+        slots.append(
+            RecurringYearSlot(
+                fiscal_year=start.year + 1 if start.month > 1 else start.year,
+                months=12,
+                term_start_month=None,
+                term_end_year=None,
+                term_end_month=None,
+                time_profile="structural_recurrent",
             )
         )
-    return lines
+        return slots
+    slots = []
+    for year in range(start.year, end.year + 1):
+        start_month = start.month if year == start.year else 1
+        end_month = end.month if year == end.year else 12
+        slots.append(
+            RecurringYearSlot(
+                fiscal_year=year,
+                months=max(1, end_month - start_month + 1),
+                term_start_month=start_month,
+                term_end_year=year,
+                term_end_month=end_month,
+                time_profile="term_recurrent",
+            )
+        )
+    return slots
 
 
 def debt_monthly_payment(*, principal: Decimal, annual_rate: Decimal, term_months: int) -> Decimal:

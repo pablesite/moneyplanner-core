@@ -521,6 +521,57 @@ class ScenarioServiceTests(TestCase):
             ).exists()
         )
 
+    def test_accept_clips_budget_line_terms_to_their_fiscal_year(self):
+        scenario = self.create_vehicle_scenario()
+
+        ScenarioService().accept(scenario=scenario)
+
+        financing = AnnualExpenseEntry.objects.filter(
+            user=self.user, subcategory="personal_loan_repayment"
+        ).order_by("fiscal_year")
+        # 60 meses desde 2028-03 -> fin 2033-02: una línea por año, sin solaparse.
+        self.assertEqual(
+            list(financing.values_list("fiscal_year", flat=True)),
+            [2028, 2029, 2030, 2031, 2032, 2033],
+        )
+        for entry in financing:
+            self.assertEqual(entry.term_end_year, entry.fiscal_year)
+            self.assertEqual(entry.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
+        first, last = financing.first(), financing.last()
+        self.assertEqual((first.term_start_month, first.term_end_month), (3, 12))
+        self.assertEqual((last.term_start_month, last.term_end_month), (1, 2))
+
+    def test_accept_indefinite_recurring_creates_structural_line(self):
+        scenario = Scenario.objects.create(
+            plan=self.plan,
+            name="Aportar mas",
+            template_type=Scenario.TemplateType.GENERIC,
+        )
+        scenario.events.create(
+            start_date=date(2028, 3, 1),
+            monthly_contribution_delta=Decimal("100.00"),
+        )
+
+        ScenarioService().accept(scenario=scenario)
+
+        contributions = AnnualExpenseEntry.objects.filter(
+            user=self.user, subcategory="other_financial_investments"
+        ).order_by("fiscal_year")
+        self.assertEqual(contributions.count(), 2)
+        partial, structural = contributions.first(), contributions.last()
+        # Año inicial parcial: término mar-dic del propio año.
+        self.assertEqual(partial.fiscal_year, 2028)
+        self.assertEqual(partial.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
+        self.assertEqual((partial.term_start_month, partial.term_end_year), (3, 2028))
+        self.assertEqual(partial.amount_annual, Decimal("1000.00"))
+        # Desde el siguiente año completo: estructural indefinida.
+        self.assertEqual(structural.fiscal_year, 2029)
+        self.assertEqual(
+            structural.time_profile, AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+        )
+        self.assertIsNone(structural.term_end_year)
+        self.assertEqual(structural.amount_annual, Decimal("1200.00"))
+
     def test_accepted_plan_event_affects_future_projection(self):
         scenario = self.create_vehicle_scenario()
         before = ProjectionService().calculate(
