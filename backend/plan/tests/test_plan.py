@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -124,6 +125,27 @@ class AssetClassificationTests(TestCase):
         self.assertEqual(home_row.net_value, Decimal("80000.00000000"))
         investment_row = next(row for row in summary.assets if row.asset_id == investment.id)
         self.assertEqual(investment_row.function, PlanAssetFunction.Function.PRODUCTIVE)
+
+    def test_uses_effective_value_not_raw_amount(self):
+        # Activos con tracking contable guardan amount=0; el valor real llega
+        # por market_value_override o saldos. La clasificación debe verlo.
+        etf = Asset.objects.create(
+            user=self.user,
+            name="ETF contable",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            amount=Decimal("0"),
+            currency="EUR",
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            market_value_override=Decimal("1500.00"),
+            market_value_override_date=timezone.localdate(),
+        )
+
+        summary = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
+
+        self.assertEqual(summary.productive_capital, Decimal("1500.00"))
+        etf_row = next(row for row in summary.assets if row.asset_id == etf.id)
+        self.assertEqual(etf_row.gross_value, Decimal("1500.00"))
 
 
 class ProjectionFinancialCasesTests(TestCase):

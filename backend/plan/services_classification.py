@@ -8,6 +8,8 @@ from django.utils import timezone
 
 from core.services import convert_currency_detailed
 from net_worth.models import Asset, Liability
+from net_worth.services import get_effective_asset_amount, get_effective_liability_amount
+from net_worth.services_timelines import _build_position_data_cache
 
 from .models import PlanAssetFunction
 
@@ -75,9 +77,17 @@ class AssetClassificationService:
         liabilities_by_asset: dict[int, Decimal] = {}
         total_liabilities = Decimal("0")
         as_of = timezone.localdate()
+        # Mismo resolutor de valor efectivo que Patrimonio (saldos contables,
+        # override de mercado, amortización...); Asset.amount crudo puede ser 0
+        # para activos con tracking_mode=accounting.
+        position_cache = _build_position_data_cache(assets, liabilities)
         for liability in liabilities:
             liability_value = self._convert(
-                Decimal(liability.amount),
+                get_effective_liability_amount(
+                    liability=liability,
+                    as_of_date=as_of,
+                    position_cache=position_cache,
+                ),
                 liability.currency,
                 base_currency,
                 as_of=as_of,
@@ -103,7 +113,11 @@ class AssetClassificationService:
             override = overrides.get(asset.id)
             function = str(override or inferred)
             gross_value = self._convert(
-                Decimal(asset.amount),
+                get_effective_asset_amount(
+                    asset=asset,
+                    as_of_date=as_of,
+                    position_cache=position_cache,
+                ),
                 asset.currency,
                 base_currency,
                 as_of=as_of,
