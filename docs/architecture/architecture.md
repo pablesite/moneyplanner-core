@@ -94,6 +94,10 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 5. Recommendation simulation creates a draft `Scenario` and nested `ScenarioEvent`; it does not mutate plan, budget, net worth or accounting until the scenario is explicitly accepted.
 6. `MonthlyClosePlanService` is invoked after monthly-close finalization. It is a no-op when the user has no financial plan and logs failures without breaking the monthly-close lifecycle.
 7. Monthly-close plan impact exposes at most two open findings and one open recommendation. Projected-year deltas are only communicated when the rounded year change is material (`abs(delta) >= 1`).
+8. The plan engine has one active fiscal-year window: the current natural year, resolved by `plan_fiscal_year()`. Foundations, structural income, and budget-based contributions never aggregate rows from different fiscal years.
+9. Structural income excludes one-off rows. One-off income is not converted into recurring labour income or capital automatically in the MVP; future capital effects require an explicit plan event.
+10. Aggregated labour income stops after the latest configured `employment_income_end_date` among active plan adults. This is an explicit approximation until budget income has canonical per-member attribution; missing dates are reported as a data-quality factor.
+11. Expense inputs use one exhaustive role-based classifier shared by foundations and projection: operating, temporary commitment, contribution, asset purchase, tax/other, or unclassifiable. Unknown values are surfaced through data quality instead of disappearing silently.
 
 ## Import Traceability And Accounting API
 1. The old ad-hoc MoneyWiz CSV importer has been retired from the public Core API.

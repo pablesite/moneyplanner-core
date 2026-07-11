@@ -51,6 +51,14 @@ Arkenstone calcula: capital productivo necesario, capital productivo actual, fec
 
 Los objetivos de gasto e ingresos se expresarán por defecto en euros actuales. La inflación se aplicará internamente para las proyecciones nominales.
 
+### Decisiones vinculantes de inputs del motor (Fase 7)
+
+1. El FY activo del plan es el año natural actual (`date.today().year`) y se resuelve en un único helper. Cimientos, renta estructural y aportaciones presupuestadas solo leen partidas activas de ese FY.
+2. La renta estructural excluye `time_profile=one_off`. En el MVP los ingresos puntuales no se capitalizan automáticamente: se ignoran en la renta recurrente; un efecto patrimonial futuro debe modelarse explícitamente como `PlanEvent`.
+3. La renta laboral agregada se corta tras `employment_income_end_date`. Como las partidas de ingreso actuales no están atribuidas de forma fiable a cada miembro, en hogares con varios adultos se usa la fecha más tardía y se expone la falta de fechas en calidad de datos. Esta aproximación debe sustituirse por renta por adulto cuando exista atribución canónica.
+4. La taxonomía de gasto del plan es exhaustiva y se resuelve por `cashflow_role` en un único clasificador: operativo, compromiso temporal, aportación, compra de activo, impuesto/otros o no clasificable. Cimientos y proyección consumen esa misma clasificación.
+5. Los snapshots anteriores se conservan como histórico de los cálculos efectuados con inputs antiguos. Todo recálculo posterior genera un snapshot y un hash nuevos.
+
 > **[Validación]** El histórico usa IPC real (`InflationIndex`, INE nacional + CCAA, ya sincronizado por `market_data_sync`); las hipótesis de inflación solo se aplican hacia futuro.
 
 ## PP-005 — Incertidumbre explícita

@@ -95,10 +95,10 @@ Validación funcional obligatoria (no basta con los tests): recargar `/plan` con
 - las recomendaciones que se muestran siguen teniendo sentido con el diagnóstico saneado.
 
 ## Required Documentation Updates
-- [ ] `core/docs/tasks/financial-plan/spec.md` — ventana de año fiscal, definición de ingreso estructural, corte de renta laboral y taxonomía de gasto como decisiones vinculantes
-- [ ] `core/docs/architecture/architecture.md` — contrato de los cimientos y de los inputs del motor
-- [ ] `core/docs/project-status.md` + `docs/project-status.md` — estado de la fase
-- [ ] `docs/tasks/financial-plan/browser-audit-2026-07-11.md` — marcar A-1..A-5 como resueltos
+- [x] `core/docs/tasks/financial-plan/spec.md` — ventana de año fiscal, definición de ingreso estructural, corte de renta laboral y taxonomía de gasto como decisiones vinculantes
+- [x] `core/docs/architecture/architecture.md` — contrato de los cimientos y de los inputs del motor
+- [x] `core/docs/project-status.md` + `docs/project-status.md` — estado de la fase
+- [x] `docs/tasks/financial-plan/browser-audit-2026-07-11.md` — marcar A-1..A-5 como resueltos
 
 ## Risks
 - **La fecha proyectada del usuario empeorará** al retirar los ingresos puntuales y cortar la renta laboral. Es el resultado correcto, pero es un cambio visible y brusco: conviene comunicarlo en el drawer de Supuestos y avisar al usuario antes de dar la fase por cerrada.
@@ -107,8 +107,15 @@ Validación funcional obligatoria (no basta con los tests): recargar `/plan` con
 - Los snapshots ya guardados (`ProjectionSnapshot`) contienen proyecciones calculadas con los inputs viejos: decidir si se invalidan o se conservan como histórico.
 
 ## Completion Criteria
-- [ ] All validation commands pass
-- [ ] Validación funcional en navegador con datos reales ejecutada y anotada
-- [ ] All required documentation updates done
-- [ ] Spec moved to `terminados/`
-- [ ] Commit created (Conventional Commits)
+- [x] All validation commands pass
+- [x] Validación funcional en navegador con datos reales ejecutada y anotada
+- [x] All required documentation updates done
+- [x] Spec moved to `terminados/`
+- [x] Commit created (Conventional Commits)
+
+## Completion note (2026-07-11)
+
+- Datos reales: `committed_surplus` cambia de `-78.834,58 €` a `-31.771,75 €`; la renta estructural queda en `56.434,08 €`, las aportaciones en `9.860,00 €` y el corte laboral agregado en `2049-10-13`.
+- La fecha proyectada pasa de una estimación optimista a `null` / «Sin fecha estimada», resultado esperado al excluir `159.304,40 €` puntuales y cortar la renta laboral.
+- Validación Playwright desktop (1440×900) sobre `/plan`: muestra «Sin fecha estimada», Cimientos `52/100`, superávit `-31.771,75 €`, cobertura `5,5 meses` y aportación `821,67 €/mes`.
+- El balance total FY2026 de Presupuesto y el superávit estructural de Cimientos no son métricas idénticas: el primero incluye ingresos puntuales y el segundo los excluye deliberadamente.

@@ -23,7 +23,9 @@ from plan.models import (
     Scenario,
 )
 from plan.services_classification import AssetClassificationService
-from plan.services_projection import ProjectionService, get_assumption_set
+from plan.services_foundations import FoundationService
+from plan.services_inputs import ExpenseBucket, expense_bucket, plan_fiscal_year
+from plan.services_projection import ProjectionService, build_projection_inputs, get_assumption_set
 from plan.services_scenarios import ScenarioService
 
 
@@ -371,6 +373,73 @@ class ProjectionFinancialCasesTests(TestCase):
         )
 
 
+class ProjectionInputCorrectnessTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_inputs", password="pass1234"
+        )
+        self.plan = create_plan(self.user)
+
+    def test_foundations_only_use_active_fiscal_year(self):
+        year = plan_fiscal_year(self.plan)
+        create_income(self.user, Decimal("60000.00"))
+        current = create_operating_expense(self.user, Decimal("12000.00"))
+        current.fiscal_year = year
+        current.save(update_fields=["fiscal_year"])
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Prestamo extinguido",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="loans",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            amount_annual=Decimal("90000.00"),
+            fiscal_year=year - 1,
+        )
+
+        cash_flow = FoundationService().calculate(plan=self.plan)["cash_flow"]
+
+        self.assertEqual(cash_flow["committed_surplus"], "48000.00")
+
+    def test_one_off_income_is_not_projected_and_labor_income_stops(self):
+        year = plan_fiscal_year(self.plan)
+        recurring = create_income(self.user, Decimal("36000.00"))
+        recurring.fiscal_year = year
+        recurring.save(update_fields=["fiscal_year"])
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Venta",
+            category=AnnualIncomeEntry.Category.CAPITAL_GAINS,
+            subcategory="capital_gains",
+            time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
+            income_type=AnnualIncomeEntry.IncomeType.ONE_OFF,
+            amount_annual=Decimal("150000.00"),
+            fiscal_year=year,
+        )
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto",
+            role=FamilyMember.Role.ADULT,
+            employment_income_end_date=date(year + 1, 12, 31),
+        )
+        self.plan.members.add(member)
+
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        result = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+
+        self.assertEqual(inputs.annual_income, Decimal("36000.00"))
+        row_after_end = next(row for row in result["trajectory"] if row["year"] == year + 2)
+        self.assertEqual(row_after_end["future_income"], "0.00")
+
+    def test_expense_taxonomy_is_exhaustive_for_declared_roles(self):
+        for role, _label in AnnualExpenseEntry.CashflowRole.choices:
+            for time_profile, _label in AnnualExpenseEntry.TimeProfile.choices:
+                entry = AnnualExpenseEntry(cashflow_role=role, time_profile=time_profile)
+                self.assertNotEqual(expense_bucket(entry), ExpenseBucket.UNCLASSIFIABLE)
+
+
 class PlanApiTests(APITestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="plan_api", password="pass1234")
@@ -511,6 +580,12 @@ class ScenarioServiceTests(TestCase):
                 subcategory="vehicle_purchase",
                 amount_annual=Decimal("10000.00"),
             ).exists()
+        )
+        self.assertTrue(
+            all(
+                expense_bucket(entry) != ExpenseBucket.UNCLASSIFIABLE
+                for entry in AnnualExpenseEntry.objects.filter(user=self.user)
+            )
         )
         self.assertTrue(
             AnnualExpenseEntry.objects.filter(

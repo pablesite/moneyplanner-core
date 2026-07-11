@@ -9,13 +9,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from accounts.models import UserSettings
-from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.models import AnnualExpenseEntry
 from memberships.models import FamilyMember
 from net_worth.models import InvestmentContributionInterval, Liability
 
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
+from .services_inputs import plan_fiscal_year, structural_income
 
 
 MONEY = Decimal("0.01")
@@ -44,11 +45,11 @@ class ProjectionInputs:
     total_liabilities: Decimal
     net_worth: Decimal
     annual_income: Decimal
-    annual_operating_expenses: Decimal
     annual_planned_contributions: Decimal
     annual_pension_income_today: Decimal
     annual_other_future_income_today: Decimal
     earliest_pension_start_date: date | None
+    employment_income_end_date: date | None
     liability_principal: Decimal
     liability_weighted_rate: Decimal
     liability_max_term_years: int
@@ -129,17 +130,8 @@ def build_projection_inputs(
     classification = AssetClassificationService().summarize(
         user=plan.user, base_currency=base_currency
     )
-    annual_income = sum_active_amounts(
-        AnnualIncomeEntry.objects.filter(user=plan.user, is_active=True)
-    )
-    operating_expenses = sum_active_amounts(
-        AnnualExpenseEntry.objects.filter(
-            user=plan.user,
-            is_active=True,
-            cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
-        )
-    )
-    planned_contributions = planned_contribution_amount(user=plan.user)
+    annual_income = structural_income(plan)
+    planned_contributions = planned_contribution_amount(plan=plan)
     members = list(plan.members.filter(role=FamilyMember.Role.ADULT, is_active=True).order_by("id"))
     pension_income = sum(
         (
@@ -153,6 +145,9 @@ def build_projection_inputs(
         Decimal("0"),
     )
     pension_dates = [member.pension_start_date for member in members if member.pension_start_date]
+    employment_end_dates = [
+        member.employment_income_end_date for member in members if member.employment_income_end_date
+    ]
     liabilities = list(Liability.objects.filter(user=plan.user, is_active=True))
     liability_principal = sum(
         (Decimal(liability.amount) for liability in liabilities),
@@ -188,11 +183,11 @@ def build_projection_inputs(
             total_liabilities=classification.total_liabilities,
             net_worth=classification.net_worth,
             annual_income=annual_income,
-            annual_operating_expenses=operating_expenses,
             annual_planned_contributions=planned_contributions,
             annual_pension_income_today=pension_income,
             annual_other_future_income_today=other_future_income,
             earliest_pension_start_date=min(pension_dates) if pension_dates else None,
+            employment_income_end_date=max(employment_end_dates) if employment_end_dates else None,
             liability_principal=liability_principal,
             liability_weighted_rate=weighted_rate,
             liability_max_term_years=max_term_years,
@@ -475,7 +470,9 @@ def future_income_for_year(
 ) -> Decimal:
     inflation = Decimal(assumptions["inflation_rate"])
     income_growth = Decimal(assumptions["income_growth_rate"])
-    labor_income = inflate(inputs.annual_income, income_growth, max(0, year - start_year))
+    labor_income = Decimal("0")
+    if inputs.employment_income_end_date is None or year <= inputs.employment_income_end_date.year:
+        labor_income = inflate(inputs.annual_income, income_growth, max(0, year - start_year))
     pension_income = Decimal("0")
     if inputs.earliest_pension_start_date and year >= inputs.earliest_pension_start_date.year:
         pension_income = inflate(
@@ -512,11 +509,13 @@ def sum_active_amounts(queryset) -> Decimal:
     return sum((Decimal(row.amount_annual) for row in queryset), Decimal("0"))
 
 
-def planned_contribution_amount(*, user) -> Decimal:
+def planned_contribution_amount(*, plan: FinancialPlan) -> Decimal:
+    user = plan.user
     budgeted = sum_active_amounts(
         AnnualExpenseEntry.objects.filter(
             user=user,
             is_active=True,
+            fiscal_year=plan_fiscal_year(plan),
             cashflow_role__in=[
                 AnnualExpenseEntry.CashflowRole.SAVINGS,
                 AnnualExpenseEntry.CashflowRole.INVESTMENT,

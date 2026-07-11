@@ -4,11 +4,16 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.models import AnnualExpenseEntry
 from net_worth.models import Asset, Liability
 
 from .models import FinancialPlan
 from .services_projection import planned_contribution_amount
+from .services_inputs import (
+    annual_expense_entries,
+    expense_buckets,
+    structural_income,
+)
 
 MONEY = Decimal("0.01")
 PCT = Decimal("0.0001")
@@ -85,14 +90,6 @@ def score(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def annual_income_entries(plan: FinancialPlan):
-    return AnnualIncomeEntry.objects.filter(user=plan.user, is_active=True)
-
-
-def annual_expense_entries(plan: FinancialPlan):
-    return AnnualExpenseEntry.objects.filter(user=plan.user, is_active=True)
-
-
 def active_assets(plan: FinancialPlan) -> list[Asset]:
     return list(Asset.objects.filter(user=plan.user, is_active=True))
 
@@ -101,42 +98,12 @@ def active_liabilities(plan: FinancialPlan) -> list[Liability]:
     return list(Liability.objects.filter(user=plan.user, is_active=True))
 
 
-def structural_income(plan: FinancialPlan) -> Decimal:
-    return sum(
-        (
-            Decimal(entry.amount_annual)
-            for entry in annual_income_entries(plan).exclude(
-                time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF
-            )
-        ),
-        Decimal("0"),
-    )
-
-
 def structural_operating_expense(plan: FinancialPlan) -> Decimal:
-    return sum(
-        (
-            Decimal(entry.amount_annual)
-            for entry in annual_expense_entries(plan).filter(
-                time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
-                cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
-            )
-        ),
-        Decimal("0"),
-    )
+    return expense_buckets(annual_expense_entries(plan)).operating
 
 
 def temporary_commitment_expense(plan: FinancialPlan) -> Decimal:
-    return sum(
-        (
-            Decimal(entry.amount_annual)
-            for entry in annual_expense_entries(plan).filter(
-                time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
-                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
-            )
-        ),
-        Decimal("0"),
-    )
+    return expense_buckets(annual_expense_entries(plan)).temporary_commitment
 
 
 def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
@@ -306,7 +273,7 @@ class FoundationService:
         )
         operating_surplus = annual_income - operating_expense
         committed_surplus = annual_income - committed_expense
-        planned_contribution = planned_contribution_amount(user=plan.user)
+        planned_contribution = planned_contribution_amount(plan=plan)
 
         emergency_months_base = (
             asset_metrics["emergency_liquid_assets_value"] / monthly_operating_expense
