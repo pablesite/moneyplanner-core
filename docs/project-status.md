@@ -24,9 +24,10 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| _(none)_ | — | — | — |
+| financial-plan — Phase 7 | Agent | **P0 — engine correctness.** Browser audit with real data proved Mi Plan's on-screen diagnosis is wrong: foundations sum budget entries across all fiscal years (`committed_surplus = -78.834,58 €` while `/presupuesto` FY2026 shows `+44.579,57 €`), `one_off` income is projected as perpetual labour income, `employment_income_end_date` is never applied, and expense buckets diverge between projection and foundations. | `tasks/financial-plan/phase-7-engine-correctness/backend.md` (context: root `docs/tasks/financial-plan/browser-audit-2026-07-11.md`) |
+| financial-plan — Phase 8 | Agent | Budget ↔ plan boundary: plan-managed budget lines (`event_group=plan_event:*`) become read-only outside Mi Plan, the reserved lineage stops being user-writable free text, and `GET /api/plan/events/{id}/budget-lines/` exposes an event's real budget trace. Precondition for phase 6. | `tasks/financial-plan/phase-8-budget-plan-boundary/backend.md` |
 
-> Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5) live in the SaaS repo root (`docs/tasks/financial-plan/`).
+> Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5, 8, 9) live in the SaaS repo root (`docs/tasks/financial-plan/`).
 
 ### Pre-production roadmap snapshot (by area)
 

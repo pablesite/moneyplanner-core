@@ -59,9 +59,15 @@ Motor determinista (sin LLM), tres escenarios de hipótesis (prudente / esperado
 | 2 — Mi Plan UI + onboarding | P0 ✅ | Frontend SaaS. Dominio `plan/`, capability `core.plan`, `/plan` + `/plan/setup`, hero, progreso, trayectoria, calidad de datos. | `../../../../docs/tasks/financial-plan/phase-2-mi-plan-ui/terminados/frontend.md` (repo raíz) |
 | 3 — Laboratorio de escenarios | P1 ✅ | Backend Core + frontend SaaS completados. `Scenario`/`ScenarioEvent`/`PlanEvent`, comparación, incorporación, marcadores en Patrimonio. | `phase-3-scenarios/terminados/backend.md` + `../../../../docs/tasks/financial-plan/phase-3-scenarios/terminados/frontend.md` |
 | 4 — Cimientos, cierre y recomendaciones | P2 ✅ | Backend + frontend completados. `Finding`/`Recommendation`, port del scoring del guide, plan-impact del cierre mensual. | `phase-4-findings-close/terminados/backend.md` + `../../../../docs/tasks/financial-plan/phase-4-findings-close/terminados/frontend.md` |
-| 5 — Absorción de Estado financiero | P2 | Frontend SaaS + docs. Redirect `/estado-financiero` → `/plan`, retirada del dominio `guide/`, capability. | `../../../../docs/tasks/financial-plan/phase-5-absorb-financial-state/frontend.md` |
+| 5 — Absorción de Estado financiero | P2 ✅ | Frontend SaaS + docs. Redirect `/estado-financiero` → `/plan`, retirada del dominio `guide/`, capability. | `../../../../docs/tasks/financial-plan/phase-5-absorb-financial-state/terminados/frontend.md` |
+| 6 — Ciclo de vida de acontecimientos | P2 | Core + SaaS. Cierre de un acontecimiento incorporado: retirada de sus líneas recurrentes y de sus deltas. **Requiere la Fase 8** (sin linaje protegido, `event_group` no es fuente de verdad fiable). | `phase-6-event-lifecycle/backend.md` + `../../../../docs/tasks/financial-plan/phase-6-event-lifecycle/frontend.md` |
+| 7 — Correctitud del motor | **P0** | Core backend. Ventana de año fiscal en cimientos y aportaciones, ingresos estructurales vs puntuales, corte de la renta laboral, taxonomía de gasto exhaustiva. El diagnóstico que hoy ve el usuario es incorrecto. | `phase-7-engine-correctness/backend.md` |
+| 8 — Frontera presupuesto ↔ plan | P1 | Core + SaaS. Los dos niveles de presupuesto (recurrente manual vs partidas de plan de solo lectura), linaje `plan_event` protegido y trazabilidad inversa. | `phase-8-budget-plan-boundary/backend.md` + `../../../../docs/tasks/financial-plan/phase-8-budget-plan-boundary/frontend.md` |
+| 9 — Errores + revelación progresiva + móvil | P1 | Frontend SaaS. Contrato de errores real, titular primero y detalle bajo demanda, escenarios navegables, móvil usable. **Ejecutar después de la Fase 7.** | `../../../../docs/tasks/financial-plan/phase-9-plan-ux-3/frontend.md` |
 
-Regla de ejecución: las fases son secuenciales. El primer PR de código es la Fase 1 (motor + tipos + tests, sin UI, sin reglas de recomendación — spec §19.D).
+Regla de ejecución: las fases son secuenciales. El primer PR de código fue la Fase 1 (motor + tipos + tests, sin UI, sin reglas de recomendación — spec §19.D).
+
+**Orden vigente tras la auditoría del 2026-07-11** (`../../../../docs/tasks/financial-plan/browser-audit-2026-07-11.md`): **7 → 8 → 9 → 6**. La 7 va primero porque los cimientos, los findings y la recomendación principal que el usuario ve hoy salen de inputs mal acotados; mejorar la UX (9) antes de la 7 solo haría más legible un diagnóstico falso. La 8 precede a la 6 porque la baja de un acontecimiento necesita que el linaje `event_group` sea fiable.
 
 ## Riesgos
 
