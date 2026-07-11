@@ -261,9 +261,9 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
         category, subcategory, role = default_recurring_expense_budget_mapping(
             scenario.template_type
         )
-        end = event.end_date
-        if end is None and event.new_debt_term_months:
-            end = end_date_from_term(event.start_date, event.new_debt_term_months)
+        # Sin fecha fin, el gasto recurrente es indefinido (p. ej. el coste de
+        # un coche sigue tras amortizar el préstamo); la baja del activo será
+        # la que retire el gasto en el futuro.
         lines.extend(
             recurring_budget_lines(
                 name=f"{scenario.name} - gasto recurrente",
@@ -271,7 +271,7 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
                 subcategory=subcategory,
                 monthly_amount=Decimal(event.monthly_expense_delta),
                 start=event.start_date,
-                end=end,
+                end=event.end_date,
                 cashflow_role=role,
             )
         )

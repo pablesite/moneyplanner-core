@@ -541,6 +541,27 @@ class ScenarioServiceTests(TestCase):
         self.assertEqual((first.term_start_month, first.term_end_month), (3, 12))
         self.assertEqual((last.term_start_month, last.term_end_month), (1, 2))
 
+    def test_vehicle_recurring_expense_is_indefinite_without_end_date(self):
+        scenario = self.create_vehicle_scenario()
+
+        ScenarioService().accept(scenario=scenario)
+
+        recurring = AnnualExpenseEntry.objects.filter(
+            user=self.user, subcategory="transport_mobility"
+        ).order_by("fiscal_year")
+        # El coste de uso no termina con el préstamo: año parcial + estructural.
+        self.assertEqual(recurring.count(), 2)
+        partial, structural = recurring.first(), recurring.last()
+        self.assertEqual(partial.fiscal_year, 2028)
+        self.assertEqual((partial.term_start_month, partial.term_end_year), (3, 2028))
+        self.assertEqual(partial.amount_annual, Decimal("2500.00"))
+        self.assertEqual(structural.fiscal_year, 2029)
+        self.assertEqual(
+            structural.time_profile, AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+        )
+        self.assertIsNone(structural.term_end_year)
+        self.assertEqual(structural.amount_annual, Decimal("3000.00"))
+
     def test_accept_indefinite_recurring_creates_structural_line(self):
         scenario = Scenario.objects.create(
             plan=self.plan,
