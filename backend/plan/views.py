@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from memberships.models import FamilyMember
+from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
 
 from .models import FinancialPlan, PlanAssetFunction, ProjectionSnapshot
 from .serializers import (
@@ -276,6 +278,27 @@ class PlanEventDetailView(APIView):
         serializer = PlanEventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         return Response(PlanEventSerializer(serializer.save()).data)
+
+
+class PlanEventBudgetLinesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        event_group = f"plan_event:{event.id}"
+        incomes = AnnualIncomeEntry.objects.filter(
+            user=request.user, event_group=event_group
+        ).order_by("fiscal_year", "id")
+        expenses = AnnualExpenseEntry.objects.filter(
+            user=request.user, event_group=event_group
+        ).order_by("fiscal_year", "id")
+        return Response(
+            {
+                "event": {"id": event.id, "name": event.name},
+                "income": AnnualIncomeEntrySerializer(incomes, many=True).data,
+                "expenses": AnnualExpenseEntrySerializer(expenses, many=True).data,
+            }
+        )
 
 
 class FoundationsView(APIView):

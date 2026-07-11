@@ -85,6 +85,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 6. New scenario debt uses an amortizing monthly payment when term and interest are present; if no interest is present, it falls back to linear principal amortization.
 7. Accepting a scenario does not create real `Asset`, `Liability`, `LedgerTransaction`, or check-in rows. It does create future budget entries from existing budget taxonomy defaults or from editable `metadata_json.budget_lines` supplied by the UI.
 8. Temporary recurrent budget entries support `term_start_month`, `term_end_month`, and `term_end_year`, so scenario-generated rows can start and end in the intended months.
+9. Scenario-generated annual budget rows use reserved lineage `plan_event:<PlanEvent.id>`. Budget serializers expose `is_plan_managed`, `plan_event_id`, and `plan_event_name`; general budget `PUT`/`PATCH`/`DELETE` operations reject managed rows with `403 plan_managed_entry`.
+10. `GET /api/plan/events/{id}/budget-lines/` is the inverse trace from a user-owned plan event to its income and expense rows. `audit_plan_budget_lineage` reports invalid/orphan lineage and can explicitly repair the legacy scenario-ID format; it never deletes rows.
 
 ## Financial Plan Foundations And Recommendations
 1. `Finding` and `Recommendation` live in the Core `plan` app. Findings are unique per `(plan, code, period)` and recommendations are unique per `(finding, code)`.

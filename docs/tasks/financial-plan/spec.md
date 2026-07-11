@@ -58,6 +58,7 @@ Los objetivos de gasto e ingresos se expresarán por defecto en euros actuales. 
 3. La renta laboral agregada se corta tras `employment_income_end_date`. Como las partidas de ingreso actuales no están atribuidas de forma fiable a cada miembro, en hogares con varios adultos se usa la fecha más tardía y se expone la falta de fechas en calidad de datos. Esta aproximación debe sustituirse por renta por adulto cuando exista atribución canónica.
 4. La taxonomía de gasto del plan es exhaustiva y se resuelve por `cashflow_role` en un único clasificador: operativo, compromiso temporal, aportación, compra de activo, impuesto/otros o no clasificable. Cimientos y proyección consumen esa misma clasificación.
 5. Los snapshots anteriores se conservan como histórico de los cálculos efectuados con inputs antiguos. Todo recálculo posterior genera un snapshot y un hash nuevos.
+6. El presupuesto tiene dos niveles: las partidas recurrentes manuales se crean y editan en Presupuesto; las partidas originadas al incorporar decisiones se gobiernan desde Mi Plan. Estas últimas conservan linaje `plan_event:<PlanEvent.id>`, son de solo lectura en la API general de presupuesto y se consultan de forma inversa desde el acontecimiento.
 
 > **[Validación]** El histórico usa IPC real (`InflationIndex`, INE nacional + CCAA, ya sincronizado por `market_data_sync`); las hipótesis de inflación solo se aplican hacia futuro.
 

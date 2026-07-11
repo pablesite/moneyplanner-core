@@ -24,7 +24,6 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| financial-plan — Phase 8 | Agent | Budget ↔ plan boundary: plan-managed budget lines (`event_group=plan_event:*`) become read-only outside Mi Plan, the reserved lineage stops being user-writable free text, and `GET /api/plan/events/{id}/budget-lines/` exposes an event's real budget trace. Precondition for phase 6. | `tasks/financial-plan/phase-8-budget-plan-boundary/backend.md` |
 
 > Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5, 8, 9) live in the SaaS repo root (`docs/tasks/financial-plan/`).
 
@@ -69,6 +68,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Financial Plan — scenario lab backend | ✅ | Phase 3 backend complete: `Scenario`/`ScenarioEvent`/`PlanEvent`, non-contaminating comparison snapshots, accept/discard API, accepted events in future projections, and automatic future budget entries without creating real assets/liabilities/accounting rows. |
 | Financial Plan — findings/recommendations backend | ✅ | Phase 4 backend complete: `Finding`/`Recommendation`, backend-owned foundations, deterministic recommendation templates, recommendation-to-scenario simulation, monthly-close hook and plan-impact API. |
 | Financial Plan — engine correctness | ✅ | Phase 7 complete: current-FY inputs, structural-only income, aggregate labour cut-off, exhaustive expense buckets and explicit data-quality factors. Historical snapshots remain immutable. |
+| Financial Plan — budget/plan boundary | ✅ | Phase 8 complete: reserved `PlanEvent` lineage, read-only managed budget rows, inverse budget trace endpoint and non-destructive lineage audit/repair command. |
 
 ## Active progress trackers
 

@@ -344,3 +344,32 @@ class BudgetSerializerTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data["event_group"], "liability_123")
         self.assertEqual(serializer.validated_data["term_end_year"], 2032)
+
+    def test_manual_entries_cannot_forge_plan_event_lineage(self):
+        income = AnnualIncomeEntrySerializer(
+            data={
+                "name": "Ingreso",
+                "category": "salary",
+                "subcategory": "employee_salary",
+                "amount_annual": "12000.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+                "event_group": "plan_event:7",
+            }
+        )
+        expense = AnnualExpenseEntrySerializer(
+            data={
+                "name": "Gasto",
+                "category": "consumption_expenses",
+                "subcategory": "living_expenses",
+                "amount_annual": "1200.00",
+                "fiscal_year": 2026,
+                "currency": "EUR",
+                "event_group": "plan_event:7",
+            }
+        )
+
+        self.assertFalse(income.is_valid())
+        self.assertFalse(expense.is_valid())
+        self.assertIn("event_group", income.errors)
+        self.assertIn("event_group", expense.errors)

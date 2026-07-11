@@ -102,7 +102,9 @@ class ScenarioService:
                 ],
             },
         )
-        created_budget_entries = create_budget_entries_for_scenario(scenario=locked)
+        created_budget_entries = create_budget_entries_for_scenario(
+            scenario=locked, plan_event=plan_event
+        )
         locked.status = Scenario.Status.ACCEPTED
         locked.accepted_at = timezone.now()
         locked.save(update_fields=["status", "accepted_at"])
@@ -299,7 +301,7 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
     return lines
 
 
-def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
+def create_budget_entries_for_scenario(*, scenario: Scenario, plan_event: PlanEvent) -> int:
     created = 0
     for line in budget_lines_for_scenario(scenario):
         if line.amount <= 0:
@@ -316,7 +318,7 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 else AnnualIncomeEntry.IncomeType.RECURRENT,
                 time_profile=line.time_profile,
                 cashflow_role=line.cashflow_role,
-                event_group=f"plan_event:{scenario.id}",
+                event_group=f"plan_event:{plan_event.id}",
                 target_month=line.target_month,
                 term_start_month=line.term_start_month,
                 term_end_year=line.term_end_year,
@@ -339,7 +341,7 @@ def create_budget_entries_for_scenario(*, scenario: Scenario) -> int:
                 else AnnualExpenseEntry.ExpenseType.RECURRENT,
                 time_profile=line.time_profile,
                 cashflow_role=line.cashflow_role,
-                event_group=f"plan_event:{scenario.id}",
+                event_group=f"plan_event:{plan_event.id}",
                 target_month=line.target_month,
                 term_start_month=line.term_start_month,
                 term_end_year=line.term_end_year,

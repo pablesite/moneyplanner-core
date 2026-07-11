@@ -8,6 +8,7 @@ from .models import (
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
 )
+from .plan_lineage import is_reserved_plan_event_group, plan_lineage_for_entry
 from .services import (
     normalize_currency_code,
     normalize_annual_expense_taxonomy_keys,
@@ -156,6 +157,10 @@ def normalize_expense_cashflow_role_for_time_profile(
 
 
 class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
+    is_plan_managed = serializers.SerializerMethodField()
+    plan_event_id = serializers.SerializerMethodField()
+    plan_event_name = serializers.SerializerMethodField()
+
     class Meta:
         model = AnnualIncomeEntry
         fields = [
@@ -168,6 +173,9 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
             "time_profile",
             "cashflow_role",
             "event_group",
+            "is_plan_managed",
+            "plan_event_id",
+            "plan_event_name",
             "target_month",
             "term_start_month",
             "term_end_month",
@@ -183,7 +191,20 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def get_is_plan_managed(self, obj):
+        return plan_lineage_for_entry(obj).is_managed
+
+    def get_plan_event_id(self, obj):
+        return plan_lineage_for_entry(obj).event_id
+
+    def get_plan_event_name(self, obj):
+        return plan_lineage_for_entry(obj).event_name
+
     def validate(self, attrs):
+        if "event_group" in attrs and is_reserved_plan_event_group(attrs["event_group"]):
+            raise serializers.ValidationError(
+                {"event_group": "El prefijo plan_event: está reservado para Mi Plan."}
+            )
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
         income_type = attrs.get("income_type") or getattr(
@@ -256,6 +277,10 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
 
 
 class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
+    is_plan_managed = serializers.SerializerMethodField()
+    plan_event_id = serializers.SerializerMethodField()
+    plan_event_name = serializers.SerializerMethodField()
+
     class Meta:
         model = AnnualExpenseEntry
         fields = [
@@ -271,6 +296,9 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             "time_profile",
             "cashflow_role",
             "event_group",
+            "is_plan_managed",
+            "plan_event_id",
+            "plan_event_name",
             "target_month",
             "term_start_month",
             "term_end_month",
@@ -293,7 +321,20 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             "updated_at",
         ]
 
+    def get_is_plan_managed(self, obj):
+        return plan_lineage_for_entry(obj).is_managed
+
+    def get_plan_event_id(self, obj):
+        return plan_lineage_for_entry(obj).event_id
+
+    def get_plan_event_name(self, obj):
+        return plan_lineage_for_entry(obj).event_name
+
     def validate(self, attrs):
+        if "event_group" in attrs and is_reserved_plan_event_group(attrs["event_group"]):
+            raise serializers.ValidationError(
+                {"event_group": "El prefijo plan_event: está reservado para Mi Plan."}
+            )
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
         category, subcategory = normalize_annual_expense_taxonomy_keys(

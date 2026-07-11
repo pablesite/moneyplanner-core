@@ -756,6 +756,54 @@ class ScenarioApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_plan_budget_lines_are_traceable_and_protected(self):
+        create_response = self.client.post(
+            reverse("financial-plan-scenarios"), self.scenario_payload(), format="json"
+        )
+        accept_response = self.client.post(
+            reverse("financial-plan-scenario-accept", kwargs={"pk": create_response.data["id"]}),
+            {},
+            format="json",
+        )
+        event_id = accept_response.data["event"]["id"]
+        trace = self.client.get(
+            reverse("financial-plan-event-budget-lines", kwargs={"pk": event_id})
+        )
+        expense = AnnualExpenseEntry.objects.filter(event_group=f"plan_event:{event_id}").first()
+
+        self.assertEqual(trace.status_code, status.HTTP_200_OK)
+        self.assertEqual(trace.data["event"], {"id": event_id, "name": "Comprar coche"})
+        self.assertEqual(
+            len(trace.data["expenses"]),
+            AnnualExpenseEntry.objects.filter(event_group=f"plan_event:{event_id}").count(),
+        )
+        self.assertTrue(trace.data["expenses"][0]["is_plan_managed"])
+        self.assertEqual(trace.data["expenses"][0]["plan_event_id"], event_id)
+
+        update = self.client.patch(
+            reverse("annual-expense-detail", kwargs={"pk": expense.id}),
+            {"amount_annual": "1.00"},
+            format="json",
+        )
+        delete = self.client.delete(reverse("annual-expense-detail", kwargs={"pk": expense.id}))
+        self.assertEqual(update.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(update.data["error"]["code"], "plan_managed_entry")
+        self.assertEqual(delete.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_budget_line_trace_is_user_scoped(self):
+        event = PlanEvent.objects.create(
+            plan=self.other_plan,
+            name="Privado",
+            event_type=Scenario.TemplateType.GENERIC,
+            planned_date=date.today(),
+        )
+
+        response = self.client.get(
+            reverse("financial-plan-event-budget-lines", kwargs={"pk": event.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
 
 class FindingsRecommendationsApiTests(APITestCase):
     def setUp(self):

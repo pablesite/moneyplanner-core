@@ -22,6 +22,8 @@ def _normalize_error_details(detail):
 
 
 def _infer_error_code(status_code: int, exc) -> str:
+    if isinstance(exc, APIException) and getattr(exc, "default_code", None) == "plan_managed_entry":
+        return "plan_managed_entry"
     if isinstance(exc, APIException) and getattr(exc, "default_code", None) == "feature_disabled":
         return "feature_disabled"
     if isinstance(exc, ValidationError):

@@ -61,11 +61,11 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend m
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/tasks/financial-plan/spec.md` — los dos niveles de presupuesto como decisión vinculante
-- [ ] `core/docs/architecture/architecture.md` — linaje `plan_event` y contrato de solo lectura
-- [ ] `docs/architecture/api-registry.md` — `GET /api/plan/events/{id}/budget-lines/` y nuevos campos de los serializers de partida
-- [ ] `core/docs/project-status.md` + `docs/project-status.md`
-- [ ] `docs/tasks/financial-plan/browser-audit-2026-07-11.md` — marcar A-7 (y A-8 en su parte de backend) como resueltos
+- [x] `core/docs/tasks/financial-plan/spec.md` — los dos niveles de presupuesto como decisión vinculante
+- [x] `core/docs/architecture/architecture.md` — linaje `plan_event` y contrato de solo lectura
+- [x] `docs/architecture/api-registry.md` — `GET /api/plan/events/{id}/budget-lines/` y nuevos campos de los serializers de partida
+- [x] `core/docs/project-status.md` + `docs/project-status.md`
+- [x] `docs/tasks/financial-plan/browser-audit-2026-07-11.md` — marcar A-7 (y A-8 en su parte de backend) como resueltos
 
 ## Risks
 - Bloquear el borrado puede **atrapar** al usuario si tiene líneas gestionadas de un escenario que ya no quiere: la salida debe existir antes de cerrar la fase (descartar/cerrar el evento desde Mi Plan → fase 6). Si la fase 6 aún no está, dejar una válvula de escape documentada.
@@ -73,7 +73,13 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend m
 - Un 403 mal comunicado se lee como un bug: el mensaje debe decir qué hacer y dónde.
 
 ## Completion Criteria
-- [ ] All validation commands pass
-- [ ] All required documentation updates done
-- [ ] Spec moved to `terminados/`
-- [ ] Commit created (Conventional Commits)
+- [x] All validation commands pass
+- [x] All required documentation updates done
+- [x] Spec moved to `terminados/`
+- [x] Commit created (Conventional Commits)
+
+## Completion note (2026-07-11)
+
+- Se eligió linaje derivado sin migración de modelo: `event_group` persiste `plan_event:<PlanEvent.id>` y la API expone campos de lectura.
+- La auditoría reportó ocho líneas legacy con ID de escenario; `--repair-legacy-scenario-ids` las migró de forma determinista y la segunda pasada devolvió cero huérfanas.
+- No existe edición parcial de importes: toda partida gestionada queda protegida hasta que la Fase 6 ofrezca su cierre desde Mi Plan.

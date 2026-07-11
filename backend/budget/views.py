@@ -1,7 +1,7 @@
 from django.db.models import Q, Sum
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -17,6 +17,7 @@ from .query_params import (
     parse_optional_int_query_param,
     parse_required_int_query_param,
 )
+from .plan_lineage import plan_lineage_for_entry
 from .serializers import (
     AnnualExpenseEntrySerializer,
     AnnualExpenseMonthlyCheckinSerializer,
@@ -62,7 +63,32 @@ class AnnualEntrySummaryMixin:
         return Response(payload)
 
 
-class AnnualIncomeEntryViewSet(AnnualEntrySummaryMixin, viewsets.ModelViewSet):
+class PlanManagedEntry(APIException):
+    status_code = 403
+    default_code = "plan_managed_entry"
+    default_detail = (
+        "Esta partida está gestionada por Mi Plan. Abre el acontecimiento correspondiente para "
+        "modificarla o retirarla."
+    )
+
+
+class PlanManagedEntryProtectionMixin:
+    def _assert_not_plan_managed(self, instance) -> None:
+        if plan_lineage_for_entry(instance).is_managed:
+            raise PlanManagedEntry()
+
+    def update(self, request, *args, **kwargs):
+        self._assert_not_plan_managed(self.get_object())
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        self._assert_not_plan_managed(self.get_object())
+        return super().destroy(request, *args, **kwargs)
+
+
+class AnnualIncomeEntryViewSet(
+    PlanManagedEntryProtectionMixin, AnnualEntrySummaryMixin, viewsets.ModelViewSet
+):
     permission_classes = [IsAuthenticated]
     serializer_class = AnnualIncomeEntrySerializer
     monthly_summary_builder = staticmethod(build_income_monthly_plan_vs_executed_summary)
@@ -89,7 +115,9 @@ class AnnualIncomeEntryViewSet(AnnualEntrySummaryMixin, viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class AnnualExpenseEntryViewSet(AnnualEntrySummaryMixin, viewsets.ModelViewSet):
+class AnnualExpenseEntryViewSet(
+    PlanManagedEntryProtectionMixin, AnnualEntrySummaryMixin, viewsets.ModelViewSet
+):
     permission_classes = [IsAuthenticated]
     serializer_class = AnnualExpenseEntrySerializer
     monthly_summary_builder = staticmethod(build_expense_monthly_plan_vs_executed_summary)
