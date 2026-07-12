@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.30.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.29.1...moneyplanner-core-v0.30.0) (2026-07-12)
+
+
+### Features
+
+* **budget:** support term start month ([a73df42](https://github.com/pablesite/moneyplanner-core/commit/a73df42dc01547bd6bf42cc4bd927e361b61ec88))
+* **plan:** add findings recommendations and close impact ([1732fee](https://github.com/pablesite/moneyplanner-core/commit/1732fee5586d3b596bff11426e0f6542dbb7ae32))
+* **plan:** add projection engine ([0e5aea4](https://github.com/pablesite/moneyplanner-core/commit/0e5aea47014f4ded403229a5511f1f4963563559))
+* **plan:** add scenario lab backend ([2aee7c4](https://github.com/pablesite/moneyplanner-core/commit/2aee7c4146ba37f1459b1c530cd5a670c479e384))
+* **plan:** close incorporated events ([a9f843c](https://github.com/pablesite/moneyplanner-core/commit/a9f843c63ccec44faa2e23cdda4132ed09ff6b83))
+* **plan:** complete the decision lifecycle and stop double counting forecasts ([10473d8](https://github.com/pablesite/moneyplanner-core/commit/10473d8e934b09ad91ba774e3f0ce4a00596ea20))
+* **plan:** derive retirement and itemize one-off costs ([2ed39ba](https://github.com/pablesite/moneyplanner-core/commit/2ed39ba193259e0b90a0ceae620147fbe6fb1c06))
+* **plan:** expose product status bands on foundation scores ([0ff2999](https://github.com/pablesite/moneyplanner-core/commit/0ff29994f5c599f467a79f9153c7df99b63c0b0b))
+* **plan:** link decisions to the assets and liabilities they brought ([5808767](https://github.com/pablesite/moneyplanner-core/commit/58087671355c540dd2e7be6267b950d2f1fc7c91))
+* **plan:** protect managed budget lineage ([39953f7](https://github.com/pablesite/moneyplanner-core/commit/39953f71e540a5e752b0d335d04cce6da8fbc93b))
+* **plan:** register decisions already taken and adopt their budget lines ([d096d6a](https://github.com/pablesite/moneyplanner-core/commit/d096d6ab8bf54fed914e869b48edb039edfb8031))
+
+
+### Bug Fixes
+
+* **deps:** raise Django floor to 5.2.16 to close PYSEC-2026-2090/91/92 ([46c8225](https://github.com/pablesite/moneyplanner-core/commit/46c8225057190d0dac815bc05c329cad7892a0c4))
+* **plan:** add missing Spanish accents to user-facing strings ([2c82d6c](https://github.com/pablesite/moneyplanner-core/commit/2c82d6c7d2189ca1ba7d5e2881f4c768fac80e36))
+* **plan:** classify assets by effective value, not raw amount ([3b94b1d](https://github.com/pablesite/moneyplanner-core/commit/3b94b1d98434aa29e84930f9e5a12ba405466ad6))
+* **plan:** recurring scenario expense without end date is indefinite ([ff22948](https://github.com/pablesite/moneyplanner-core/commit/ff22948d7182f3864e5cf2dc491b74debce9524f))
+* **plan:** sanitize projection engine inputs ([3e98067](https://github.com/pablesite/moneyplanner-core/commit/3e980670f217d869fe4144b84403ad0fc5cca064))
+* **plan:** scenario budget lines no longer overlap across fiscal years ([1a436b0](https://github.com/pablesite/moneyplanner-core/commit/1a436b05d42ce8f9fa10dbfadf26d38647e957fa))
+
 ## [0.29.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.29.0...moneyplanner-core-v0.29.1) (2026-07-09)
 
 
