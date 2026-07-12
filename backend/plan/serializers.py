@@ -239,18 +239,30 @@ class PlanEventSerializer(serializers.ModelSerializer):
             "event_type",
             "planned_date",
             "actual_date",
+            "effective_end_date",
             "status",
             "planned_impact_json",
             "actual_impact_json",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "source_scenario", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "source_scenario",
+            "effective_end_date",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
         if "actual_impact_json" in attrs and attrs.get("status") != PlanEvent.Status.OCCURRED:
             attrs["status"] = PlanEvent.Status.OCCURRED
         return attrs
+
+
+class PlanEventCloseSerializer(serializers.Serializer):
+    effective_date = serializers.DateField()
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
 class AssetFunctionUpdateSerializer(serializers.Serializer):

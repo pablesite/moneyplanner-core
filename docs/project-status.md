@@ -69,6 +69,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Financial Plan — findings/recommendations backend | ✅ | Phase 4 backend complete: `Finding`/`Recommendation`, backend-owned foundations, deterministic recommendation templates, recommendation-to-scenario simulation, monthly-close hook and plan-impact API. |
 | Financial Plan — engine correctness | ✅ | Phase 7 complete: current-FY inputs, structural-only income, aggregate labour cut-off, exhaustive expense buckets and explicit data-quality factors. Historical snapshots remain immutable. |
 | Financial Plan — budget/plan boundary | ✅ | Phase 8 complete: reserved `PlanEvent` lineage, read-only managed budget rows, inverse budget trace endpoint and non-destructive lineage audit/repair command. |
+| Financial Plan — event lifecycle | ✅ | Phase 6 complete: event closure date, traced budget-line retirement, recurring projection cut-off and isolated close API. Real asset disposal remains in Patrimonio. |
 
 ## Active progress trackers
 

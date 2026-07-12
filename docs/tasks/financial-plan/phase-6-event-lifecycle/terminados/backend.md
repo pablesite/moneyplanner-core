@@ -49,9 +49,9 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend r
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` — contrato de cierre de eventos y semántica `effective_end_date`
-- [ ] `docs/architecture/api-registry.md` — endpoint `POST /api/plan/events/{id}/close/`
-- [ ] `core/docs/project-status.md` y `docs/project-status.md` — estado de la fase
+- [x] `core/docs/architecture/architecture.md` — contrato de cierre de eventos y semántica `effective_end_date`
+- [x] `docs/architecture/api-registry.md` — endpoint `POST /api/plan/events/{id}/close/`
+- [x] `core/docs/project-status.md` y `docs/project-status.md` — estado de la fase
 
 ## Risks
 - Recorte/prorrateo incorrecto de líneas → presupuesto inflado o mermado: cubrir con tests de tabla (año parcial, año completo, años posteriores, histórico).
@@ -59,7 +59,13 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend r
 - Las líneas pueden haber sido editadas o borradas a mano por el usuario tras la incorporación: el cierre debe tolerar `event_group` incompleto sin fallar.
 
 ## Completion Criteria
-- [ ] All validation commands pass
-- [ ] All required documentation updates done
-- [ ] Spec moved to `terminados/`
-- [ ] Commit created (Conventional Commits)
+- [x] All validation commands pass
+- [x] All required documentation updates done
+- [x] Spec moved to `terminados/`
+- [x] Commit created (Conventional Commits)
+
+## Completion note (2026-07-12)
+
+- `effective_end_date` tiene granularidad mensual: el mes efectivo ya no produce deltas ni presupuesto recurrente.
+- Una línea estructural se divide en tramo histórico completo y último año parcial; líneas futuras se eliminan y `one_off` se conserva.
+- El activo virtual mantiene su valor residual porque esta fase no modela el precio de venta; la baja real continúa en Patrimonio.

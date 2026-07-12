@@ -7,6 +7,7 @@ from .views import (
     FoundationsView,
     PlanEventDetailView,
     PlanEventBudgetLinesView,
+    PlanEventCloseView,
     PlanEventsView,
     PlanMemberDetailView,
     PlanMembersView,
@@ -75,5 +76,10 @@ urlpatterns = [
         "events/<int:pk>/budget-lines/",
         PlanEventBudgetLinesView.as_view(),
         name="financial-plan-event-budget-lines",
+    ),
+    path(
+        "events/<int:pk>/close/",
+        PlanEventCloseView.as_view(),
+        name="financial-plan-event-close",
     ),
 ]

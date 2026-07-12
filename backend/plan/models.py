@@ -264,6 +264,7 @@ class PlanEvent(models.Model):
     event_type = models.CharField(max_length=32, choices=Scenario.TemplateType.choices)
     planned_date = models.DateField()
     actual_date = models.DateField(null=True, blank=True)
+    effective_end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PLANNED)
     planned_impact_json = models.JSONField(default=dict, blank=True)
     actual_impact_json = models.JSONField(default=dict, blank=True)

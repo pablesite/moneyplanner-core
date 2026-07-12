@@ -24,6 +24,7 @@ from plan.models import (
 )
 from plan.services_classification import AssetClassificationService
 from plan.services_foundations import FoundationService
+from plan.services_events import close_plan_event
 from plan.services_inputs import ExpenseBucket, expense_bucket, plan_fiscal_year
 from plan.services_projection import ProjectionService, build_projection_inputs, get_assumption_set
 from plan.services_scenarios import ScenarioService
@@ -688,6 +689,63 @@ class ScenarioServiceTests(TestCase):
             Decimal(before_2028["liabilities"]),
         )
 
+    def test_close_event_retires_budget_lines_and_stops_future_deltas(self):
+        scenario = self.create_vehicle_scenario()
+        accepted = ScenarioService().accept(scenario=scenario)
+        event = accepted["event"]
+        financing_before = AnnualExpenseEntry.objects.get(
+            event_group=f"plan_event:{event.id}",
+            fiscal_year=2030,
+            subcategory="personal_loan_repayment",
+        ).amount_annual
+
+        result = close_plan_event(
+            event=event,
+            effective_date=date(2030, 7, 1),
+            disposal_note="Venta del coche",
+        )
+
+        event.refresh_from_db()
+        self.assertEqual(event.effective_end_date, date(2030, 7, 1))
+        self.assertEqual(event.actual_impact_json["closure"]["note"], "Venta del coche")
+        self.assertTrue(result["budget_changes"]["changed"])
+        self.assertTrue(result["budget_changes"]["deleted"])
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                event_group=f"plan_event:{event.id}", fiscal_year__gt=2030
+            ).exists()
+        )
+        partial = AnnualExpenseEntry.objects.get(
+            event_group=f"plan_event:{event.id}",
+            fiscal_year=2030,
+            subcategory="transport_mobility",
+        )
+        self.assertEqual(partial.term_end_month, 6)
+        self.assertEqual(partial.amount_annual, Decimal("1500.00"))
+        financing_after = AnnualExpenseEntry.objects.get(
+            event_group=f"plan_event:{event.id}",
+            fiscal_year=2030,
+            subcategory="personal_loan_repayment",
+        )
+        self.assertEqual(financing_after.term_end_month, 6)
+        self.assertEqual(financing_after.amount_annual, financing_before / 2)
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                event_group=f"plan_event:{event.id}", fiscal_year=2028
+            ).exists()
+        )
+        payload = next(item for item in result["projection"]["trajectory"] if item["year"] == 2031)
+        baseline = ProjectionService().calculate(
+            plan=self.plan,
+            assumption_set=get_assumption_set(name="expected"),
+            include_plan_events=False,
+        )
+        baseline_row = next(item for item in baseline["trajectory"] if item["year"] == 2031)
+        self.assertEqual(payload["annual_target_income"], baseline_row["annual_target_income"])
+
+        with self.assertRaisesMessage(Exception, "ya está cerrado"):
+            close_plan_event(event=event, effective_date=date(2031, 1, 1))
+
 
 class ScenarioApiTests(APITestCase):
     def setUp(self):
@@ -800,6 +858,22 @@ class ScenarioApiTests(APITestCase):
 
         response = self.client.get(
             reverse("financial-plan-event-budget-lines", kwargs={"pk": event.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_close_event_endpoint_is_user_scoped(self):
+        event = PlanEvent.objects.create(
+            plan=self.other_plan,
+            name="Privado",
+            event_type=Scenario.TemplateType.GENERIC,
+            planned_date=date(2028, 1, 1),
+        )
+
+        response = self.client.post(
+            reverse("financial-plan-event-close", kwargs={"pk": event.id}),
+            {"effective_date": "2030-01-01"},
+            format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

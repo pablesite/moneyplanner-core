@@ -556,6 +556,14 @@ def liability_term_years(liability: Liability) -> int:
 def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
     return [
         payload
+        | {
+            "effective_end_year": event.effective_end_date.year
+            if event.effective_end_date
+            else None,
+            "effective_end_month": event.effective_end_date.month
+            if event.effective_end_date
+            else None,
+        }
         for event in PlanEvent.objects.filter(
             plan=plan,
             status=PlanEvent.Status.PLANNED,
@@ -575,8 +583,12 @@ def event_deltas_for_year(
     }
     for event in events:
         event_start = int(str(event["start_year"]))
+        effective_end_year = event.get("effective_end_year")
+        effective_end_month = event.get("effective_end_month")
         event_end = event.get("end_year")
         if year < event_start:
+            continue
+        if effective_end_year is not None and year > int(str(effective_end_year)):
             continue
         if event_end is not None and year > int(str(event_end)):
             continue
@@ -584,16 +596,19 @@ def event_deltas_for_year(
         expense_end_year = event_end
         if expense_end_year is None and debt_end_year is not None:
             expense_end_year = debt_end_year
+        active_months = Decimal("12")
+        if effective_end_year is not None and year == int(str(effective_end_year)):
+            active_months = Decimal(max(0, int(str(effective_end_month or 1)) - 1))
         if expense_end_year is None or year <= int(str(expense_end_year)):
-            result["annual_expense_delta"] += Decimal(
-                str(event.get("monthly_expense_delta") or "0")
-            ) * Decimal("12")
-        result["annual_income_delta"] += Decimal(
-            str(event.get("monthly_income_delta") or "0")
-        ) * Decimal("12")
-        result["annual_contribution_delta"] += Decimal(
-            str(event.get("monthly_contribution_delta") or "0")
-        ) * Decimal("12")
+            result["annual_expense_delta"] += (
+                Decimal(str(event.get("monthly_expense_delta") or "0")) * active_months
+            )
+        result["annual_income_delta"] += (
+            Decimal(str(event.get("monthly_income_delta") or "0")) * active_months
+        )
+        result["annual_contribution_delta"] += (
+            Decimal(str(event.get("monthly_contribution_delta") or "0")) * active_months
+        )
     return result
 
 

@@ -17,6 +17,7 @@ from .serializers import (
     FindingSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
+    PlanEventCloseSerializer,
     ProjectionSnapshotSerializer,
     RecommendationSerializer,
     ScenarioSerializer,
@@ -25,6 +26,7 @@ from .models import PlanEvent, Recommendation, Scenario
 from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
+from .services_events import close_plan_event
 from .services_projection import ProjectionService, get_assumption_set, serialize_classification
 from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
@@ -297,6 +299,27 @@ class PlanEventBudgetLinesView(APIView):
                 "event": {"id": event.id, "name": event.name},
                 "income": AnnualIncomeEntrySerializer(incomes, many=True).data,
                 "expenses": AnnualExpenseEntrySerializer(expenses, many=True).data,
+            }
+        )
+
+
+class PlanEventCloseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        serializer = PlanEventCloseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = close_plan_event(
+            event=event,
+            effective_date=serializer.validated_data["effective_date"],
+            disposal_note=serializer.validated_data.get("note", ""),
+        )
+        return Response(
+            {
+                "event": PlanEventSerializer(result["event"]).data,
+                "projection": result["projection"],
+                "budget_changes": result["budget_changes"],
             }
         )
 
