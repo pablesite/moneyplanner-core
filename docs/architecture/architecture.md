@@ -92,6 +92,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 12. Event closure stops recurring income, expense, and contribution deltas. The virtual asset residual remains in the projection because disposal proceeds are not modeled in this phase; real asset disposal remains owned by Patrimonio.
 13. `ScenarioEvent.metadata_json.one_off_items` may preserve several named one-off expenses within one decision. The serializer makes their sum the canonical `initial_outflow`; comparison applies that total once, while acceptance creates one traceable managed budget row per concept. Events without this metadata retain the legacy aggregate initial-outflow behavior.
 
+## Occurred (Retrospective) Decisions
+
+1. `POST /api/plan/events/occurred/` registers a decision the user already took. It creates a `PlanEvent` with `status=occurred` and `actual_date`, and creates **no** budget rows: the rows already exist.
+2. Occurred events are excluded from the projection by construction — `plan_event_payloads` only reads `planned` events. This is required, not cosmetic: the effects of a past decision are already inside current net worth and the current fiscal year's budget, so re-applying its deltas would double-count them.
+3. Registration **adopts** existing budget rows by rewriting their `event_group` to `plan_event:<id>`, which makes them `is_plan_managed` (so general budget writes reject them) and puts them under the event's closure lineage. Amounts, dates and taxonomy are never modified.
+4. Rows whose `source_liability` or `source_asset` is set cannot be adopted. Liability/asset budget synchronization does `get_or_create` keyed on its own `event_group` (`liability_<id>`, `asset_<id>`), so rewriting it would make the next sync miss the row and create a duplicate. Their lineage is already the asset or liability.
+5. Rows already owned by another plan event cannot be adopted twice.
+6. `DELETE /api/plan/events/{id}/` releases an occurred event: every adopted row returns to the `previous_event_group` recorded in `actual_impact_json.registration`, and the event is deleted. Without this, a mistaken registration would leave real user rows frozen as plan-managed.
+
 ## Financial Plan Foundations And Recommendations
 1. `Finding` and `Recommendation` live in the Core `plan` app. Findings are unique per `(plan, code, period)` and recommendations are unique per `(finding, code)`.
 2. `FoundationService` ports the former frontend guide diagnostics into backend-owned metrics: cash flow, emergency fund, debt, net-worth health, planned contribution and data quality.

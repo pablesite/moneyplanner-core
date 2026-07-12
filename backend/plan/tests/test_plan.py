@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APITestCase
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
@@ -24,7 +25,11 @@ from plan.models import (
 )
 from plan.services_classification import AssetClassificationService
 from plan.services_foundations import FoundationService
-from plan.services_events import close_plan_event
+from plan.services_events import (
+    close_plan_event,
+    register_occurred_event,
+    release_occurred_event,
+)
 from plan.services_inputs import ExpenseBucket, expense_bucket, plan_fiscal_year
 from plan.services_projection import ProjectionService, build_projection_inputs, get_assumption_set
 from plan.services_scenarios import ScenarioService
@@ -1013,3 +1018,210 @@ class FindingsRecommendationsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], Scenario.Status.DRAFT)
         self.assertEqual(Scenario.objects.get(id=response.data["id"]).plan, self.plan)
+
+
+class OccurredEventTests(TestCase):
+    """Decisiones ya tomadas: registrar sin duplicar presupuesto ni proyeccion."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_occurred", password="pass1234"
+        )
+        create_investment(self.user, Decimal("100000.00"))
+        create_income(self.user)
+        create_operating_expense(self.user)
+        self.plan = create_plan(self.user)
+        self.line = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Tratamiento - cuota",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="family_childcare",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=1,
+            term_end_year=2027,
+            term_end_month=1,
+            amount_annual=Decimal("7297.56"),
+            fiscal_year=2026,
+        )
+
+    def register(self, **overrides):
+        payload = {
+            "plan": self.plan,
+            "name": "Clinica",
+            "event_type": Scenario.TemplateType.GENERIC,
+            "decision_date": date(2024, 2, 5),
+            "expense_entry_ids": [self.line.id],
+        }
+        payload.update(overrides)
+        return register_occurred_event(**payload)
+
+    def test_registers_event_as_occurred_and_adopts_existing_lines(self):
+        event = self.register(note="Decidido en febrero")
+
+        self.line.refresh_from_db()
+        self.assertEqual(event.status, PlanEvent.Status.OCCURRED)
+        self.assertEqual(event.actual_date, date(2024, 2, 5))
+        self.assertEqual(self.line.event_group, f"plan_event:{event.id}")
+        adopted = event.actual_impact_json["registration"]["adopted_lines"]
+        self.assertEqual([line["id"] for line in adopted], [self.line.id])
+        self.assertEqual(adopted[0]["previous_event_group"], "")
+
+    def test_does_not_create_budget_entries(self):
+        before = AnnualExpenseEntry.objects.filter(user=self.user).count()
+
+        self.register()
+
+        self.assertEqual(AnnualExpenseEntry.objects.filter(user=self.user).count(), before)
+
+    def test_is_excluded_from_the_projection(self):
+        service = ProjectionService()
+        assumptions = get_assumption_set(name="expected")
+        before = service.calculate(plan=self.plan, assumption_set=assumptions)
+
+        self.register()
+
+        after = service.calculate(plan=self.plan, assumption_set=assumptions)
+        self.assertEqual(after["input_hash"], before["input_hash"])
+        self.assertEqual(after["trajectory"], before["trajectory"])
+        self.assertEqual(after["summary"], before["summary"])
+
+    def test_rejects_a_future_decision_date(self):
+        with self.assertRaises(DRFValidationError):
+            self.register(decision_date=date.today() + timedelta(days=1))
+
+    def test_rejects_lines_already_owned_by_another_event(self):
+        self.register()
+
+        with self.assertRaises(DRFValidationError):
+            self.register(name="Otra decision")
+
+    def test_rejects_lines_from_another_user(self):
+        other = get_user_model().objects.create_user(username="plan_other", password="pass1234")
+        foreign = create_operating_expense(other, name="Ajena")
+
+        with self.assertRaises(DRFValidationError):
+            self.register(expense_entry_ids=[foreign.id])
+
+    def test_rejects_lines_generated_by_a_liability(self):
+        """Adoptarlas rompería la sincronizacion del pasivo, que busca por su event_group."""
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo",
+            category=Liability.Category.PERSONAL_LOAN,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        generated = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            source_liability=liability,
+            is_system_generated=True,
+            name="Compromiso pasivo: Prestamo",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="personal_loan_repayment",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            event_group=f"liability_{liability.id}",
+            amount_annual=Decimal("2400.00"),
+            fiscal_year=2026,
+        )
+
+        with self.assertRaises(DRFValidationError):
+            self.register(expense_entry_ids=[generated.id])
+
+        generated.refresh_from_db()
+        self.assertEqual(generated.event_group, f"liability_{liability.id}")
+
+    def test_release_restores_the_previous_group_and_deletes_the_event(self):
+        self.line.event_group = "compra_atrio"
+        self.line.save(update_fields=["event_group"])
+        event = self.register()
+
+        result = release_occurred_event(event=event)
+
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.event_group, "compra_atrio")
+        self.assertEqual(len(result["released_lines"]), 1)
+        self.assertFalse(PlanEvent.objects.filter(id=event.id).exists())
+
+    def test_release_refuses_a_planned_event(self):
+        event = PlanEvent.objects.create(
+            plan=self.plan,
+            name="Coche",
+            event_type=Scenario.TemplateType.VEHICLE,
+            planned_date=date(2028, 3, 1),
+            status=PlanEvent.Status.PLANNED,
+        )
+
+        with self.assertRaises(DRFValidationError):
+            release_occurred_event(event=event)
+
+
+class OccurredEventApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_occurred_api", password="pass1234"
+        )
+        self.other = get_user_model().objects.create_user(
+            username="plan_occurred_other", password="pass1234"
+        )
+        self.plan = create_plan(self.user)
+        create_plan(self.other)
+        self.line = create_operating_expense(self.user, name="Cuota clinica")
+        self.client.force_authenticate(self.user)
+
+    def test_registers_an_occurred_decision(self):
+        response = self.client.post(
+            reverse("financial-plan-event-occurred"),
+            {
+                "name": "Clinica",
+                "event_type": "generic",
+                "decision_date": "2024-02-05",
+                "expense_entry_ids": [self.line.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], PlanEvent.Status.OCCURRED)
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.event_group, f"plan_event:{response.data['id']}")
+
+    def test_cannot_adopt_a_line_from_another_user(self):
+        foreign = create_operating_expense(self.other, name="Ajena")
+
+        response = self.client.post(
+            reverse("financial-plan-event-occurred"),
+            {
+                "name": "Clinica",
+                "event_type": "generic",
+                "decision_date": "2024-02-05",
+                "expense_entry_ids": [foreign.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.event_group, "")
+
+    def test_delete_releases_the_adopted_lines(self):
+        created = self.client.post(
+            reverse("financial-plan-event-occurred"),
+            {
+                "name": "Clinica",
+                "event_type": "generic",
+                "decision_date": "2024-02-05",
+                "expense_entry_ids": [self.line.id],
+            },
+            format="json",
+        )
+
+        response = self.client.delete(
+            reverse("financial-plan-event-detail", args=[created.data["id"]])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.event_group, "")
+        self.assertFalse(PlanEvent.objects.filter(id=created.data["id"]).exists())

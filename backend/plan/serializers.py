@@ -304,6 +304,21 @@ class PlanEventCloseSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class OccurredEventRegisterSerializer(serializers.Serializer):
+    """Alta de una decision ya tomada, adoptando las lineas de presupuesto que generó."""
+
+    name = serializers.CharField(max_length=140)
+    event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    decision_date = serializers.DateField()
+    expense_entry_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    income_entry_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
 class AssetFunctionUpdateSerializer(serializers.Serializer):
     asset_id = serializers.IntegerField(min_value=1)
     function = serializers.ChoiceField(choices=PlanAssetFunction.Function.choices, allow_null=True)

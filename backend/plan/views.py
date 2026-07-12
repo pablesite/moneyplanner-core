@@ -15,6 +15,7 @@ from .serializers import (
     AssetFunctionUpdateSerializer,
     FinancialPlanSerializer,
     FindingSerializer,
+    OccurredEventRegisterSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
     PlanEventCloseSerializer,
@@ -26,7 +27,7 @@ from .models import PlanEvent, Recommendation, Scenario
 from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
-from .services_events import close_plan_event
+from .services_events import close_plan_event, register_occurred_event, release_occurred_event
 from .services_projection import ProjectionService, get_assumption_set, serialize_classification
 from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
@@ -280,6 +281,24 @@ class PlanEventDetailView(APIView):
         serializer = PlanEventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         return Response(PlanEventSerializer(serializer.save()).data)
+
+    def delete(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        result = release_occurred_event(event=event)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class OccurredEventView(APIView):
+    """Alta de una decision ya tomada: no crea presupuesto, adopta el que ya existe."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        serializer = OccurredEventRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        event = register_occurred_event(plan=plan, **serializer.validated_data)
+        return Response(PlanEventSerializer(event).data, status=status.HTTP_201_CREATED)
 
 
 class PlanEventBudgetLinesView(APIView):

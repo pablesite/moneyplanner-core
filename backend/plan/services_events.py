@@ -8,11 +8,19 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.plan_lineage import parse_plan_event_id
 
-from .models import PlanEvent
+from .models import FinancialPlan, PlanEvent
 from .services_projection import ProjectionService
 
 MONEY = Decimal("0.01")
+
+BudgetEntryModel = type[AnnualExpenseEntry] | type[AnnualIncomeEntry]
+
+BUDGET_MODELS: dict[str, BudgetEntryModel] = {
+    "AnnualExpenseEntry": AnnualExpenseEntry,
+    "AnnualIncomeEntry": AnnualIncomeEntry,
+}
 
 
 def _q2(value: Decimal) -> Decimal:
@@ -128,6 +136,141 @@ def _retire_budget_entries(*, event: PlanEvent, effective_date: date) -> dict[st
             entry.save(update_fields=["amount_annual", "term_end_year", "term_end_month"])
             changed.append({"before": before, "after": _snapshot(entry)})
     return {"changed": changed, "deleted": deleted}
+
+
+@transaction.atomic
+def register_occurred_event(
+    *,
+    plan: FinancialPlan,
+    name: str,
+    event_type: str,
+    decision_date: date,
+    expense_entry_ids: list[int] | None = None,
+    income_entry_ids: list[int] | None = None,
+    note: str = "",
+) -> PlanEvent:
+    """Registra una decision ya tomada y adopta las lineas de presupuesto que generó.
+
+    A diferencia de aceptar un escenario, aquí no se crea nada en el presupuesto: las
+    lineas ya existen. El evento nace en estado ``occurred``, que la proyección excluye
+    (``plan_event_payloads`` solo lee eventos ``planned``), porque sus efectos ya están
+    en el patrimonio y en el presupuesto actuales: volver a aplicarlos los contaría dos
+    veces.
+    """
+    if decision_date > date.today():
+        raise ValidationError(
+            {"decision_date": "Una decisión ya tomada no puede tener fecha futura."}
+        )
+
+    event = PlanEvent.objects.create(
+        plan=plan,
+        name=name.strip(),
+        event_type=event_type,
+        planned_date=decision_date,
+        actual_date=decision_date,
+        status=PlanEvent.Status.OCCURRED,
+        planned_impact_json={},
+    )
+    adopted = _adopt_budget_entries(
+        event=event,
+        expense_entry_ids=expense_entry_ids or [],
+        income_entry_ids=income_entry_ids or [],
+    )
+    event.actual_impact_json = {
+        "registration": {
+            "decision_date": decision_date.isoformat(),
+            "note": note.strip(),
+            "adopted_lines": adopted,
+        }
+    }
+    event.save(update_fields=["actual_impact_json", "updated_at"])
+    return event
+
+
+def _adopt_budget_entries(
+    *, event: PlanEvent, expense_entry_ids: list[int], income_entry_ids: list[int]
+) -> list[dict[str, Any]]:
+    """Reetiqueta lineas existentes al evento, guardando su grupo previo para poder deshacer."""
+    adopted: list[dict[str, Any]] = []
+    for model_name, entry_ids in (
+        ("AnnualExpenseEntry", expense_entry_ids),
+        ("AnnualIncomeEntry", income_entry_ids),
+    ):
+        if not entry_ids:
+            continue
+        model = BUDGET_MODELS[model_name]
+        entries = list(model.objects.filter(user=event.plan.user, id__in=entry_ids))
+        missing = sorted(set(entry_ids) - {entry.id for entry in entries})
+        if missing:
+            raise ValidationError(
+                {"budget_lines": f"Partidas inexistentes o de otro usuario: {missing}."}
+            )
+        for entry in entries:
+            previous_group = entry.event_group or ""
+            owner_id = parse_plan_event_id(previous_group)
+            if owner_id is not None:
+                raise ValidationError(
+                    {
+                        "budget_lines": (
+                            f"«{entry.name}» ya pertenece a otro acontecimiento del plan."
+                        )
+                    }
+                )
+            # Las lineas derivadas de un activo o pasivo se sincronizan buscando por
+            # su propio event_group: si se lo cambiamos, la siguiente sincronizacion
+            # no las encontraria y crearia un duplicado. Su linaje ya es el activo.
+            if getattr(entry, "source_liability_id", None) or getattr(
+                entry, "source_asset_id", None
+            ):
+                raise ValidationError(
+                    {
+                        "budget_lines": (
+                            f"«{entry.name}» la genera un activo o pasivo de Patrimonio "
+                            "y se gestiona desde allí."
+                        )
+                    }
+                )
+            entry.event_group = f"plan_event:{event.id}"
+            entry.save(update_fields=["event_group"])
+            adopted.append(
+                {
+                    "model": model_name,
+                    "id": entry.id,
+                    "name": entry.name,
+                    "fiscal_year": entry.fiscal_year,
+                    "amount_annual": str(entry.amount_annual),
+                    "previous_event_group": previous_group,
+                }
+            )
+    return adopted
+
+
+@transaction.atomic
+def release_occurred_event(*, event: PlanEvent) -> dict[str, Any]:
+    """Deshace un registro retrospectivo: devuelve cada linea a su grupo previo y borra el evento.
+
+    Necesario porque adoptar una linea la vuelve ``is_plan_managed`` y el presupuesto
+    bloquea su edicion: sin marcha atras, un registro erroneo dejaria partidas reales
+    congeladas.
+    """
+    if event.status != PlanEvent.Status.OCCURRED:
+        raise ValidationError(
+            {"status": "Solo se pueden deshacer los acontecimientos registrados como ocurridos."}
+        )
+
+    event_group = f"plan_event:{event.id}"
+    released: list[dict[str, Any]] = []
+    for line in event.actual_impact_json.get("registration", {}).get("adopted_lines", []):
+        model = BUDGET_MODELS.get(str(line.get("model")))
+        if model is None:
+            continue
+        updated = model.objects.filter(
+            user=event.plan.user, id=line["id"], event_group=event_group
+        ).update(event_group=line.get("previous_event_group") or "")
+        if updated:
+            released.append(line)
+    event.delete()
+    return {"released_lines": released}
 
 
 @transaction.atomic
