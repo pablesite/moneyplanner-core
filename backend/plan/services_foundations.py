@@ -90,6 +90,16 @@ def score(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def health_status(value: int) -> str:
+    """Banda de producto del score 0-100 ya redondeado (el que se muestra), para que
+    el frontend coloree sin inventar umbrales y sin discrepar en los bordes."""
+    if value >= 70:
+        return "good"
+    if value >= 40:
+        return "warning"
+    return "critical"
+
+
 def active_assets(plan: FinancialPlan) -> list[Asset]:
     return list(Asset.objects.filter(user=plan.user, is_active=True))
 
@@ -397,6 +407,7 @@ class FoundationService:
             "period": "current",
             "cash_flow": {
                 "score": score(cash_flow_score),
+                "status": health_status(score(cash_flow_score)),
                 "structural_annual_income": money(annual_income),
                 "structural_operating_expense": money(operating_expense),
                 "temporary_commitment_expense": money(commitment_expense),
@@ -408,6 +419,7 @@ class FoundationService:
             },
             "emergency_fund": {
                 "score": score(emergency_score),
+                "status": health_status(score(emergency_score)),
                 "eligible_liquidity": money(asset_metrics["emergency_liquid_assets_value"]),
                 "coverage_months_base": ratio(emergency_months_base),
                 "coverage_months_committed": ratio(emergency_months_committed),
@@ -415,6 +427,7 @@ class FoundationService:
             },
             "debt": {
                 "score": score(debt_score),
+                "status": health_status(score(debt_score)),
                 "total_debt": money(debt["liabilities_value"]),
                 "unbacked_debt": money(debt["unbacked_debt_value"]),
                 "high_cost_debt": money(debt["high_cost_debt_value"]),
@@ -423,6 +436,7 @@ class FoundationService:
             },
             "net_worth_health": {
                 "score": score(net_worth_health_score),
+                "status": health_status(score(net_worth_health_score)),
                 "assets_value": money(asset_metrics["assets_value"]),
                 "illiquid_assets_share": ratio(asset_metrics["illiquid_assets_share"]),
                 "top_asset_share": ratio(asset_metrics["top_asset_share"]),
@@ -434,6 +448,7 @@ class FoundationService:
             },
             "data_quality": {
                 "score": int(round(quality_score)),
+                "status": health_status(int(round(quality_score))),
                 "flags": quality_flags,
             },
         }

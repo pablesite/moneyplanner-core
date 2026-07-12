@@ -279,7 +279,7 @@ class AssetImprovement(models.Model):
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
-        help_text="TAE anual asociada a la financiacion de la reforma (opcional).",
+        help_text="TAE anual asociada a la financiación de la reforma (opcional).",
     )
     capitalize_interest = models.BooleanField(
         default=False,

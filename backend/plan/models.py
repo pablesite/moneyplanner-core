@@ -358,7 +358,7 @@ class Recommendation(models.Model):
     class Code(models.TextChoices):
         REBUILD_EMERGENCY_FUND = "REBUILD_EMERGENCY_FUND", "Reconstruir fondo"
         REDUCE_HIGH_COST_DEBT = "REDUCE_HIGH_COST_DEBT", "Reducir deuda cara"
-        INCREASE_CONTRIBUTION = "INCREASE_CONTRIBUTION", "Aumentar aportacion"
+        INCREASE_CONTRIBUTION = "INCREASE_CONTRIBUTION", "Aumentar aportación"
         ADJUST_TARGET_DATE = "ADJUST_TARGET_DATE", "Ajustar fecha objetivo"
         ADJUST_TARGET_INCOME = "ADJUST_TARGET_INCOME", "Ajustar nivel de vida"
         RESCHEDULE_SECONDARY_GOAL = "RESCHEDULE_SECONDARY_GOAL", "Reprogramar objetivo"

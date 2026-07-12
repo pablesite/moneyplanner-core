@@ -413,6 +413,30 @@ class ProjectionInputCorrectnessTests(TestCase):
 
         self.assertEqual(cash_flow["committed_surplus"], "48000.00")
 
+    def test_foundations_expose_status_bands_for_scores(self):
+        """Cada bloque puntuado publica su banda para que el frontend no invente umbrales."""
+        year = plan_fiscal_year(self.plan)
+        income = create_income(self.user, Decimal("60000.00"))
+        income.fiscal_year = year
+        income.save(update_fields=["fiscal_year"])
+        expense = create_operating_expense(self.user, Decimal("12000.00"))
+        expense.fiscal_year = year
+        expense.save(update_fields=["fiscal_year"])
+
+        payload = FoundationService().calculate(plan=self.plan)
+
+        for block in ("cash_flow", "emergency_fund", "debt", "net_worth_health", "data_quality"):
+            section = payload[block]
+            self.assertIn(section["status"], {"good", "warning", "critical"}, block)
+            expected = (
+                "good"
+                if section["score"] >= 70
+                else "warning"
+                if section["score"] >= 40
+                else "critical"
+            )
+            self.assertEqual(section["status"], expected, block)
+
     def test_one_off_income_is_not_projected_and_labor_income_stops(self):
         year = plan_fiscal_year(self.plan)
         recurring = create_income(self.user, Decimal("36000.00"))
