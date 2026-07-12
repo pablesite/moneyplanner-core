@@ -22,6 +22,7 @@ from .serializers import (
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
     PlanEventCloseSerializer,
+    PlanEventMaterializeSerializer,
     ProjectionSnapshotSerializer,
     RecommendationSerializer,
     ScenarioSerializer,
@@ -31,6 +32,7 @@ from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
 from .services_events import close_plan_event, register_occurred_event, release_occurred_event
+from .services_lifecycle import cancel_plan_event, materialize_plan_event
 from .services_projection import ProjectionService, get_assumption_set, serialize_classification
 from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
@@ -384,6 +386,47 @@ class PlanEventCloseView(APIView):
                 "budget_changes": result["budget_changes"],
             }
         )
+
+
+class PlanEventMaterializeView(APIView):
+    """La previsión se hace realidad: nace el activo/pasivo y el plan suelta el presupuesto."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        serializer = PlanEventMaterializeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = materialize_plan_event(
+            event=event,
+            actual_date=serializer.validated_data["actual_date"],
+            note=serializer.validated_data.get("note", ""),
+        )
+        return Response(
+            {
+                "event": PlanEventSerializer(result["event"]).data,
+                "projection": result["projection"],
+                "created_assets": [
+                    {"id": item.id, "name": item.name} for item in result["created_assets"]
+                ],
+                "created_liabilities": [
+                    {"id": item.id, "name": item.name} for item in result["created_liabilities"]
+                ],
+                "budget_lines_dropped": result["budget_lines_dropped"],
+                "budget_lines_released": result["budget_lines_released"],
+            }
+        )
+
+
+class PlanEventCancelView(APIView):
+    """Cambio de opinión sobre lo que aún no ha pasado: se borra la previsión, no la realidad."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        result = cancel_plan_event(event=event)
+        return Response(result)
 
 
 class FoundationsView(APIView):

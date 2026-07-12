@@ -8,7 +8,9 @@ from .views import (
     OccurredEventView,
     PlanEventDetailView,
     PlanEventBudgetLinesView,
+    PlanEventCancelView,
     PlanEventCloseView,
+    PlanEventMaterializeView,
     PlanEventsView,
     PlanMemberDetailView,
     PlanMembersView,
@@ -87,5 +89,15 @@ urlpatterns = [
         "events/<int:pk>/close/",
         PlanEventCloseView.as_view(),
         name="financial-plan-event-close",
+    ),
+    path(
+        "events/<int:pk>/materialize/",
+        PlanEventMaterializeView.as_view(),
+        name="financial-plan-event-materialize",
+    ),
+    path(
+        "events/<int:pk>/cancel/",
+        PlanEventCancelView.as_view(),
+        name="financial-plan-event-cancel",
     ),
 ]

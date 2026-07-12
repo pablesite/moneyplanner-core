@@ -31,7 +31,13 @@ from plan.services_events import (
     release_occurred_event,
 )
 from plan.services_inputs import ExpenseBucket, expense_bucket, plan_fiscal_year
-from plan.services_projection import ProjectionService, build_projection_inputs, get_assumption_set
+from plan.services_lifecycle import cancel_plan_event, materialize_plan_event
+from plan.services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    get_assumption_set,
+    plan_event_payloads,
+)
 from plan.services_scenarios import ScenarioService
 
 
@@ -1262,3 +1268,194 @@ class OccurredEventApiTests(APITestCase):
         self.line.refresh_from_db()
         self.assertEqual(self.line.event_group, "")
         self.assertFalse(PlanEvent.objects.filter(id=created.data["id"]).exists())
+
+
+class PlannedEventBaselineTests(TestCase):
+    """Un evento aceptado cuyo año ya llegó vive en el presupuesto: no puede sumarse dos veces."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_baseline", password="pass1234"
+        )
+        create_investment(self.user, Decimal("100000.00"))
+        create_income(self.user)
+        create_operating_expense(self.user)
+        self.plan = create_plan(self.user)
+        self.this_year = date.today().year
+
+    def project(self):
+        return ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+
+    def accept_contribution_scenario(self):
+        scenario = Scenario.objects.create(
+            plan=self.plan,
+            name="Mas aportacion",
+            template_type=Scenario.TemplateType.GENERIC,
+        )
+        scenario.events.create(
+            start_date=date(self.this_year, 1, 1),
+            monthly_contribution_delta=Decimal("500.00"),
+        )
+        ScenarioService().accept(scenario=scenario)
+
+    def test_accepted_contribution_is_not_counted_twice_once_its_year_arrived(self):
+        """Aceptar el escenario debe dar lo mismo que tener ya esa aportacion en presupuesto."""
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportacion equivalente",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="other_financial_investments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=Decimal("6000.00"),
+            fiscal_year=self.this_year,
+        )
+        reality = self.project()["trajectory"]
+        AnnualExpenseEntry.objects.filter(user=self.user, name="Aportacion equivalente").delete()
+
+        self.accept_contribution_scenario()
+
+        with_event = self.project()["trajectory"]
+        self.assertEqual(
+            [row["productive_capital"] for row in with_event],
+            [row["productive_capital"] for row in reality],
+        )
+
+
+class PlanEventLifecycleTests(TestCase):
+    """Previsto -> materializado (la verdad se muda a Patrimonio) o -> cancelado."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="plan_lifecycle", password="pass1234"
+        )
+        create_investment(self.user, Decimal("100000.00"))
+        create_income(self.user)
+        create_operating_expense(self.user)
+        self.plan = create_plan(self.user)
+        self.next_year = date.today().year + 1
+
+    def accept_vehicle_scenario(self):
+        scenario = Scenario.objects.create(
+            plan=self.plan,
+            name="Coche",
+            template_type=Scenario.TemplateType.VEHICLE,
+        )
+        scenario.events.create(
+            start_date=date(self.next_year, 6, 1),
+            initial_outflow=Decimal("10000.00"),
+            monthly_expense_delta=Decimal("400.00"),
+            new_asset_value=Decimal("25000.00"),
+            new_asset_type=PlanAssetFunction.Function.FAMILY_USE,
+            new_debt_principal=Decimal("20000.00"),
+            new_debt_interest_rate=Decimal("0.0800"),
+            new_debt_term_months=48,
+        )
+        result = ScenarioService().accept(scenario=scenario)
+        return scenario, result["event"]
+
+    def event_lines(self, event):
+        return AnnualExpenseEntry.objects.filter(
+            user=self.user, event_group=f"plan_event:{event.id}"
+        )
+
+    def test_materializing_creates_the_real_asset_and_liability_from_the_scenario(self):
+        _scenario, event = self.accept_vehicle_scenario()
+
+        result = materialize_plan_event(event=event, actual_date=date.today())
+
+        event.refresh_from_db()
+        asset = result["created_assets"][0]
+        liability = result["created_liabilities"][0]
+        self.assertEqual(event.status, PlanEvent.Status.OCCURRED)
+        self.assertEqual(event.actual_date, date.today())
+        self.assertEqual(asset.amount, Decimal("25000.00"))
+        self.assertEqual(liability.principal_amount, Decimal("20000.00"))
+        self.assertEqual(liability.annual_interest_tae, Decimal("8.00"))
+        self.assertEqual(liability.term_months, 48)
+        self.assertEqual(liability.financed_asset, asset)
+        # La funcion simulada manda sobre la inferida por categoria.
+        self.assertEqual(
+            PlanAssetFunction.objects.get(user=self.user, asset=asset).function,
+            PlanAssetFunction.Function.FAMILY_USE,
+        )
+
+    def test_materializing_drops_the_forecast_financing_and_hands_the_rest_back(self):
+        _scenario, event = self.accept_vehicle_scenario()
+        planned_names = {line.name for line in self.event_lines(event)}
+        self.assertIn("Coche - financiacion", planned_names)
+
+        result = materialize_plan_event(event=event, actual_date=date.today())
+
+        # La financiacion prevista se borra: el pasivo real regenera sus cuotas.
+        dropped = {line["name"] for line in result["budget_lines_dropped"]}
+        self.assertEqual(dropped, {"Coche - financiacion"})
+        # El resto vuelve al usuario: son gastos reales suyos, editables en Presupuesto.
+        released = {line["name"] for line in result["budget_lines_released"]}
+        self.assertIn("Coche - entrada", released)
+        self.assertIn("Coche - gasto recurrente", released)
+        self.assertEqual(self.event_lines(event).count(), 0)
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user, name="Coche - gasto recurrente", event_group=""
+            ).exists()
+        )
+        liability = result["created_liabilities"][0]
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user, event_group=f"liability_{liability.id}"
+            ).exists()
+        )
+
+    def test_materialized_event_stops_feeding_the_projection_as_a_forecast(self):
+        _scenario, event = self.accept_vehicle_scenario()
+
+        materialize_plan_event(event=event, actual_date=date.today())
+
+        event.refresh_from_db()
+        self.assertEqual(event.status, PlanEvent.Status.OCCURRED)
+        payloads = plan_event_payloads(plan=self.plan)
+        self.assertEqual(payloads, [])
+
+    def test_materializing_refuses_an_event_that_already_occurred(self):
+        _scenario, event = self.accept_vehicle_scenario()
+        materialize_plan_event(event=event, actual_date=date.today())
+
+        with self.assertRaises(DRFValidationError):
+            materialize_plan_event(event=event, actual_date=date.today())
+
+    def test_cancelling_deletes_the_forecast_and_restores_the_projection(self):
+        before = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        scenario, event = self.accept_vehicle_scenario()
+        after_accept = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        self.assertNotEqual(after_accept["trajectory"], before["trajectory"])
+
+        result = cancel_plan_event(event=event)
+
+        scenario.refresh_from_db()
+        self.assertFalse(PlanEvent.objects.filter(id=event.id).exists())
+        self.assertEqual(scenario.status, Scenario.Status.DRAFT)
+        self.assertIsNone(scenario.accepted_at)
+        self.assertGreater(len(result["budget_lines_deleted"]), 0)
+        self.assertEqual(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user, event_group=f"plan_event:{event.id}"
+            ).count(),
+            0,
+        )
+        restored = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        self.assertEqual(restored["trajectory"], before["trajectory"])
+
+    def test_cancelling_refuses_an_event_that_already_happened(self):
+        _scenario, event = self.accept_vehicle_scenario()
+        materialize_plan_event(event=event, actual_date=date.today())
+
+        with self.assertRaises(DRFValidationError):
+            cancel_plan_event(event=event)

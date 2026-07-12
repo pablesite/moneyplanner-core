@@ -313,6 +313,11 @@ class PlanEventCloseSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class PlanEventMaterializeSerializer(serializers.Serializer):
+    actual_date = serializers.DateField()
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
 class OccurredEventRegisterSerializer(serializers.Serializer):
     """Alta de una decision ya tomada, adoptando las lineas de presupuesto que generó."""
 

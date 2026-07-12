@@ -561,6 +561,7 @@ def liability_term_years(liability: Liability) -> int:
 
 
 def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
+    current_year = plan_fiscal_year(plan)
     return [
         payload
         | {
@@ -570,6 +571,11 @@ def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
             "effective_end_month": event.effective_end_date.month
             if event.effective_end_date
             else None,
+            # Aceptar un escenario crea sus lineas de presupuesto. En cuanto llega su
+            # año, esas lineas entran en el año fiscal en curso, que es de donde salen
+            # la aportacion y el ingreso base de la proyeccion: el evento ya esta dentro
+            # de la linea base y volver a sumar sus deltas los contaria dos veces.
+            "baseline_absorbed": int(str(payload["start_year"])) <= current_year,
         }
         for event in PlanEvent.objects.filter(
             plan=plan,
@@ -607,9 +613,13 @@ def event_deltas_for_year(
         if effective_end_year is not None and year == int(str(effective_end_year)):
             active_months = Decimal(max(0, int(str(effective_end_month or 1)) - 1))
         if expense_end_year is None or year <= int(str(expense_end_year)):
+            # El gasto sube el nivel de vida objetivo, que el usuario declara y el
+            # presupuesto no alimenta: nunca queda absorbido por la linea base.
             result["annual_expense_delta"] += (
                 Decimal(str(event.get("monthly_expense_delta") or "0")) * active_months
             )
+        if event.get("baseline_absorbed"):
+            continue
         result["annual_income_delta"] += (
             Decimal(str(event.get("monthly_income_delta") or "0")) * active_months
         )
