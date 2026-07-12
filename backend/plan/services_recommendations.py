@@ -67,7 +67,7 @@ class RecommendationService:
         plan = recommendation.finding.plan
         scenario = Scenario.objects.create(
             plan=plan,
-            name=recommendation.action_json.get("title", "Simulacion recomendada"),
+            name=recommendation.action_json.get("title", "Simulación recomendada"),
             template_type=recommendation.action_json.get(
                 "scenario_template", Scenario.TemplateType.GENERIC
             ),
@@ -112,8 +112,8 @@ class RecommendationService:
                 "priority": self._priority(plan=plan, code="REBUILD_EMERGENCY_FUND", base=20),
                 "action": {
                     "title": "Reforzar el fondo de emergencia",
-                    "summary": "Reservar una aportacion mensual temporal hasta acercarse a 6 meses de gasto.",
-                    "reason": "La liquidez elegible no cubre todavia el objetivo de seguridad.",
+                    "summary": "Reservar una aportación mensual temporal hasta acercarse a 6 meses de gasto.",
+                    "reason": "La liquidez elegible no cubre todavía el objetivo de seguridad.",
                     "rule": "EMERGENCY_FUND_BELOW_TARGET",
                     "scenario_template": Scenario.TemplateType.GENERIC,
                     "scenario_event": {
@@ -132,7 +132,7 @@ class RecommendationService:
                 "priority": self._priority(plan=plan, code="REDUCE_HIGH_COST_DEBT", base=30),
                 "action": {
                     "title": "Amortizar deuda cara",
-                    "summary": "Simular una amortizacion parcial de la deuda con TAE alta.",
+                    "summary": "Simular una amortización parcial de la deuda con TAE alta.",
                     "reason": "Hay deuda con coste superior al umbral MVP del 8%.",
                     "rule": "HIGH_COST_DEBT",
                     "scenario_template": Scenario.TemplateType.DEBT_PAYOFF,
@@ -142,7 +142,7 @@ class RecommendationService:
                     },
                 },
                 "impact": {"candidate_payoff": str(payoff), "high_cost_debt": str(debt)},
-                "alternatives": ["Renegociar tipo", "Priorizar la deuda con TAE mas alta"],
+                "alternatives": ["Renegociar tipo", "Priorizar la deuda con TAE más alta"],
             }
         if finding.code in {
             Finding.Code.NEGATIVE_CASH_FLOW,
@@ -154,8 +154,8 @@ class RecommendationService:
                 "code": Recommendation.Code.INCREASE_CONTRIBUTION,
                 "priority": self._priority(plan=plan, code="INCREASE_CONTRIBUTION", base=40),
                 "action": {
-                    "title": "Aumentar aportacion planificada",
-                    "summary": "Probar una aportacion mensual adicional antes de cambiar el objetivo.",
+                    "title": "Aumentar aportación planificada",
+                    "summary": "Probar una aportación mensual adicional antes de cambiar el objetivo.",
                     "reason": "La trayectoria estimada no llega al objetivo con suficiente holgura.",
                     "rule": finding.code,
                     "scenario_template": Scenario.TemplateType.GENERIC,
@@ -173,8 +173,8 @@ class RecommendationService:
                 "priority": 90,
                 "action": {
                     "title": "Completar datos clave",
-                    "summary": "Revisar ingresos, gastos, activos y tipos de deuda para mejorar el diagnostico.",
-                    "reason": "La calidad de datos limita la precision del plan.",
+                    "summary": "Revisar ingresos, gastos, activos y tipos de deuda para mejorar el diagnóstico.",
+                    "reason": "La calidad de datos limita la precisión del plan.",
                     "rule": "DATA_INCOMPLETE",
                     "scenario_template": Scenario.TemplateType.GENERIC,
                     "scenario_event": {

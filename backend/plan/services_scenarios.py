@@ -269,7 +269,7 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
         category, subcategory, role = default_debt_budget_mapping(scenario.template_type)
         lines.extend(
             recurring_budget_lines(
-                name=f"{scenario.name} - financiacion",
+                name=f"{scenario.name} - financiación",
                 category=category,
                 subcategory=subcategory,
                 monthly_amount=monthly_payment,
@@ -299,7 +299,7 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
     if event.monthly_contribution_delta > 0:
         lines.extend(
             recurring_budget_lines(
-                name=f"{scenario.name} - aportacion",
+                name=f"{scenario.name} - aportación",
                 category=cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
                 subcategory="other_financial_investments",
                 monthly_amount=Decimal(event.monthly_contribution_delta),

@@ -1384,13 +1384,13 @@ class PlanEventLifecycleTests(TestCase):
     def test_materializing_drops_the_forecast_financing_and_hands_the_rest_back(self):
         _scenario, event = self.accept_vehicle_scenario()
         planned_names = {line.name for line in self.event_lines(event)}
-        self.assertIn("Coche - financiacion", planned_names)
+        self.assertIn("Coche - financiación", planned_names)
 
         result = materialize_plan_event(event=event, actual_date=date.today())
 
         # La financiacion prevista se borra: el pasivo real regenera sus cuotas.
         dropped = {line["name"] for line in result["budget_lines_dropped"]}
-        self.assertEqual(dropped, {"Coche - financiacion"})
+        self.assertEqual(dropped, {"Coche - financiación"})
         # El resto vuelve al usuario: son gastos reales suyos, editables en Presupuesto.
         released = {line["name"] for line in result["budget_lines_released"]}
         self.assertIn("Coche - entrada", released)
