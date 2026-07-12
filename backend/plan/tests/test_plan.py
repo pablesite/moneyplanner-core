@@ -1132,6 +1132,43 @@ class OccurredEventTests(TestCase):
         generated.refresh_from_db()
         self.assertEqual(generated.event_group, f"liability_{liability.id}")
 
+    def test_links_assets_and_liabilities_without_touching_their_budget_lines(self):
+        """Enlazar, no adoptar: Patrimonio sigue generando (y gobernando) sus lineas."""
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Prestamo FIV",
+            category=Liability.Category.PERSONAL_LOAN,
+            amount=Decimal("14000.00"),
+            currency="EUR",
+        )
+        generated = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            source_liability=liability,
+            is_system_generated=True,
+            name="Compromiso pasivo: Prestamo FIV",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="financial_commitments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            event_group=f"liability_{liability.id}",
+            amount_annual=Decimal("7297.56"),
+            fiscal_year=2026,
+        )
+
+        event = self.register(liability_ids=[liability.id])
+
+        generated.refresh_from_db()
+        self.assertEqual(list(event.linked_liabilities.all()), [liability])
+        self.assertEqual(generated.event_group, f"liability_{liability.id}")
+        linked = event.actual_impact_json["registration"]["linked"]
+        self.assertEqual(linked["liabilities"], [{"id": liability.id, "name": "Prestamo FIV"}])
+
+    def test_rejects_net_worth_from_another_user(self):
+        other = get_user_model().objects.create_user(username="plan_nw_other", password="pass1234")
+        foreign = create_investment(other, name="Ajeno")
+
+        with self.assertRaises(DRFValidationError):
+            self.register(asset_ids=[foreign.id])
+
     def test_release_restores_the_previous_group_and_deletes_the_event(self):
         self.line.event_group = "compra_atrio"
         self.line.save(update_fields=["event_group"])

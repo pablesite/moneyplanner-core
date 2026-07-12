@@ -100,6 +100,15 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 4. Rows whose `source_liability` or `source_asset` is set cannot be adopted. Liability/asset budget synchronization does `get_or_create` keyed on its own `event_group` (`liability_<id>`, `asset_<id>`), so rewriting it would make the next sync miss the row and create a duplicate. Their lineage is already the asset or liability.
 5. Rows already owned by another plan event cannot be adopted twice.
 6. `DELETE /api/plan/events/{id}/` releases an occurred event: every adopted row returns to the `previous_event_group` recorded in `actual_impact_json.registration`, and the event is deleted. Without this, a mistaken registration would leave real user rows frozen as plan-managed.
+7. Real assets and liabilities are **linked**, never adopted: `PlanEvent.linked_assets` / `linked_liabilities` (M2M to `net_worth`). Net worth stays their owner and keeps generating their budget rows. Linking is what lets a decision state its full impact (outflow **and** debt taken on) without stealing that lineage. `GET /api/plan/events/{id}/budget-lines/` returns the linked entities and the annual expense they generate, alongside the adopted rows.
+
+## Decision Lifecycle (planned)
+
+The current model only covers the two ends of a decision's life: a **planned** event holds the forecast the plan itself generated, and an **occurred** event records something the user already did. The transition between them does not exist yet, and it is the next block of work:
+
+1. **Materialization.** When a planned decision actually happens, the truth must move to net worth: create the real `Asset`/`Liability` prefilled from the `ScenarioEvent` (principal, rate, term, start date) and retire the plan's forecast budget rows in the same act. The liability then owns the real commitment and generates the real budget rows. Until this exists, accepting a scenario creates forecast rows that nobody ever replaces with reality.
+2. **Cancellation.** An accepted scenario cannot be undone today (`discard` rejects accepted ones; closing only shortens from a date). Changing your mind about a decision that has not happened yet must delete its forecast rows entirely and restore the projection, without touching present-day reality.
+3. **Double counting.** While an event stays `planned` it contributes deltas to the projection, but its budget rows enter the current fiscal year's budget once that year arrives. The overlap — contribution deltas in particular — needs verification. Moving the event out of `planned` on materialization is what closes this hole.
 
 ## Financial Plan Foundations And Recommendations
 1. `Finding` and `Recommendation` live in the Core `plan` app. Findings are unique per `(plan, code, period)` and recommendations are unique per `(finding, code)`.

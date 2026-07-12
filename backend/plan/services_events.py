@@ -9,6 +9,7 @@ from rest_framework.exceptions import ValidationError
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.plan_lineage import parse_plan_event_id
+from net_worth.models import Asset, Liability
 
 from .models import FinancialPlan, PlanEvent
 from .services_projection import ProjectionService
@@ -147,15 +148,21 @@ def register_occurred_event(
     decision_date: date,
     expense_entry_ids: list[int] | None = None,
     income_entry_ids: list[int] | None = None,
+    asset_ids: list[int] | None = None,
+    liability_ids: list[int] | None = None,
     note: str = "",
 ) -> PlanEvent:
-    """Registra una decision ya tomada y adopta las lineas de presupuesto que generó.
+    """Registra una decision ya tomada: adopta sus lineas manuales y apunta a lo real.
 
     A diferencia de aceptar un escenario, aquí no se crea nada en el presupuesto: las
     lineas ya existen. El evento nace en estado ``occurred``, que la proyección excluye
     (``plan_event_payloads`` solo lee eventos ``planned``), porque sus efectos ya están
     en el patrimonio y en el presupuesto actuales: volver a aplicarlos los contaría dos
     veces.
+
+    Los activos y pasivos se *enlazan*, no se adoptan: Patrimonio sigue siendo su dueño
+    y quien genera sus lineas de presupuesto. Enlazar es lo que permite que la decisión
+    cuente su impacto completo (desembolso + deuda contraída) sin robarle el linaje.
     """
     if decision_date > date.today():
         raise ValidationError(
@@ -176,15 +183,43 @@ def register_occurred_event(
         expense_entry_ids=expense_entry_ids or [],
         income_entry_ids=income_entry_ids or [],
     )
+    linked = _link_net_worth(
+        event=event, asset_ids=asset_ids or [], liability_ids=liability_ids or []
+    )
     event.actual_impact_json = {
         "registration": {
             "decision_date": decision_date.isoformat(),
             "note": note.strip(),
             "adopted_lines": adopted,
+            "linked": linked,
         }
     }
     event.save(update_fields=["actual_impact_json", "updated_at"])
     return event
+
+
+def _link_net_worth(
+    *, event: PlanEvent, asset_ids: list[int], liability_ids: list[int]
+) -> dict[str, list[dict[str, Any]]]:
+    assets = list(Asset.objects.filter(user=event.plan.user, id__in=asset_ids))
+    liabilities = list(Liability.objects.filter(user=event.plan.user, id__in=liability_ids))
+    missing_assets = sorted(set(asset_ids) - {asset.id for asset in assets})
+    missing_liabilities = sorted(set(liability_ids) - {liability.id for liability in liabilities})
+    if missing_assets or missing_liabilities:
+        raise ValidationError(
+            {
+                "linked": (
+                    "Activos o pasivos inexistentes o de otro usuario: "
+                    f"{missing_assets + missing_liabilities}."
+                )
+            }
+        )
+    event.linked_assets.set(assets)
+    event.linked_liabilities.set(liabilities)
+    return {
+        "assets": [{"id": asset.id, "name": asset.name} for asset in assets],
+        "liabilities": [{"id": liability.id, "name": liability.name} for liability in liabilities],
+    }
 
 
 def _adopt_budget_entries(

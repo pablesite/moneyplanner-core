@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -318,8 +321,48 @@ class PlanEventBudgetLinesView(APIView):
                 "event": {"id": event.id, "name": event.name},
                 "income": AnnualIncomeEntrySerializer(incomes, many=True).data,
                 "expenses": AnnualExpenseEntrySerializer(expenses, many=True).data,
+                "linked": linked_net_worth_impact(event=event),
             }
         )
+
+
+def linked_net_worth_impact(*, event: PlanEvent) -> dict[str, list[dict]]:
+    """Impacto de los activos y pasivos que la decision trajo, sin apropiarse de ellos.
+
+    Sus lineas de presupuesto las sigue generando Patrimonio (lineage `asset_<id>` /
+    `liability_<id>`); aqui solo se leen para que el evento pueda contar su impacto real
+    completo, no solo el de las partidas manuales adoptadas.
+    """
+    assets = [
+        {
+            "id": asset.id,
+            "name": asset.name,
+            "amount": str(asset.amount),
+            "generated_expense_annual": str(
+                generated_expense_total(user_id=event.plan.user_id, source_asset=asset)
+            ),
+        }
+        for asset in event.linked_assets.all()
+    ]
+    liabilities = [
+        {
+            "id": liability.id,
+            "name": liability.name,
+            "amount": str(liability.amount),
+            "generated_expense_annual": str(
+                generated_expense_total(user_id=event.plan.user_id, source_liability=liability)
+            ),
+        }
+        for liability in event.linked_liabilities.all()
+    ]
+    return {"assets": assets, "liabilities": liabilities}
+
+
+def generated_expense_total(*, user_id: int, **source) -> Decimal:
+    total = AnnualExpenseEntry.objects.filter(user_id=user_id, **source).aggregate(
+        total=Sum("amount_annual")
+    )["total"]
+    return total or Decimal("0")
 
 
 class PlanEventCloseView(APIView):

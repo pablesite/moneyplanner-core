@@ -266,6 +266,19 @@ class PlanEvent(models.Model):
     actual_date = models.DateField(null=True, blank=True)
     effective_end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PLANNED)
+    # Activos y pasivos reales que trajo la decision. El evento los *apunta*, no los
+    # gobierna: sus lineas de presupuesto las sigue generando Patrimonio. Reetiquetarlas
+    # al evento romperia la sincronizacion del activo/pasivo y duplicaria el gasto.
+    linked_assets = models.ManyToManyField(
+        "net_worth.Asset",
+        blank=True,
+        related_name="plan_events",
+    )
+    linked_liabilities = models.ManyToManyField(
+        "net_worth.Liability",
+        blank=True,
+        related_name="plan_events",
+    )
     planned_impact_json = models.JSONField(default=dict, blank=True)
     actual_impact_json = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

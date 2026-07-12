@@ -269,6 +269,13 @@ class ScenarioSerializer(serializers.ModelSerializer):
 
 
 class PlanEventSerializer(serializers.ModelSerializer):
+    linked_asset_ids = serializers.PrimaryKeyRelatedField(
+        source="linked_assets", many=True, read_only=True
+    )
+    linked_liability_ids = serializers.PrimaryKeyRelatedField(
+        source="linked_liabilities", many=True, read_only=True
+    )
+
     class Meta:
         model = PlanEvent
         fields = [
@@ -282,6 +289,8 @@ class PlanEventSerializer(serializers.ModelSerializer):
             "status",
             "planned_impact_json",
             "actual_impact_json",
+            "linked_asset_ids",
+            "linked_liability_ids",
             "created_at",
             "updated_at",
         ]
@@ -314,6 +323,13 @@ class OccurredEventRegisterSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1), required=False, default=list
     )
     income_entry_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    # Se enlazan, no se adoptan: Patrimonio sigue generando sus lineas de presupuesto.
+    asset_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    liability_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1), required=False, default=list
     )
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
