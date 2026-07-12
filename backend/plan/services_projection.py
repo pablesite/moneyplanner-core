@@ -13,6 +13,7 @@ from budget.models import AnnualExpenseEntry
 from memberships.models import FamilyMember
 from net_worth.models import InvestmentContributionInterval, Liability
 
+from .dates import date_at_age
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
@@ -144,9 +145,15 @@ def build_projection_inputs(
         (Decimal(member.other_future_income_today_eur or 0) * Decimal("12") for member in members),
         Decimal("0"),
     )
-    pension_dates = [member.pension_start_date for member in members if member.pension_start_date]
+    pension_dates = [
+        date_at_age(member.birth_date) if member.birth_date else member.pension_start_date
+        for member in members
+        if member.birth_date or member.pension_start_date
+    ]
     employment_end_dates = [
-        member.employment_income_end_date for member in members if member.employment_income_end_date
+        date_at_age(member.birth_date) if member.birth_date else member.employment_income_end_date
+        for member in members
+        if member.birth_date or member.employment_income_end_date
     ]
     liabilities = list(Liability.objects.filter(user=plan.user, is_active=True))
     liability_principal = sum(

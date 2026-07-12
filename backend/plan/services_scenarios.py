@@ -224,7 +224,26 @@ def budget_lines_for_scenario(scenario: Scenario) -> list[BudgetLine]:
 
 def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetLine]:
     lines: list[BudgetLine] = []
-    if event.initial_outflow > 0:
+    one_off_items = event.metadata_json.get("one_off_items", [])
+    if one_off_items:
+        category, subcategory, role = default_purchase_budget_mapping(scenario.template_type)
+        for item in one_off_items:
+            lines.append(
+                BudgetLine(
+                    kind="expense",
+                    name=f"{scenario.name} - {str(item['name']).strip()}",
+                    category=category,
+                    subcategory=subcategory,
+                    amount=q2(Decimal(str(item["amount"]))),
+                    fiscal_year=event.start_date.year,
+                    target_month=event.start_date.month,
+                    term_start_month=None,
+                    term_end_year=None,
+                    term_end_month=None,
+                    cashflow_role=role,
+                )
+            )
+    elif event.initial_outflow > 0:
         category, subcategory, role = default_purchase_budget_mapping(scenario.template_type)
         lines.append(
             BudgetLine(

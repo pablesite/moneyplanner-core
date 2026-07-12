@@ -75,6 +75,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 7. Planned contribution precedence for the projection is `InvestmentContributionInterval` plus active `AnnualExpenseEntry` rows with `cashflow_role in {savings, investment}`. The engine deliberately avoids using one recent month as the contribution baseline.
 8. If the target date is before pension start, the required capital is split into a bridge period plus post-pension gap capital. The engine does not apply a single withdrawal-rate rule to the full lifetime need.
 9. In Phase 1, financial cases such as car purchase, second home purchase, and sabbatical are represented as already-incorporated base data. Hypothetical non-contaminating scenarios are Phase 3 scope.
+10. For adults with `birth_date`, retirement is derived deterministically on their 67th birthday and drives both the end of labour income and the start of pension income. Persisted manual dates remain a compatibility fallback only when birth date is absent.
 
 ## Financial Plan Scenario Contract
 1. `Scenario` and `ScenarioEvent` model hypothetical decisions without mutating real net worth, budget execution, or accounting.
@@ -89,6 +90,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 10. `GET /api/plan/events/{id}/budget-lines/` is the inverse trace from a user-owned plan event to its income and expense rows. `audit_plan_budget_lineage` reports invalid/orphan lineage and can explicitly repair the legacy scenario-ID format; it never deletes rows.
 11. `PlanEvent.effective_end_date` is the first month in which a closed event no longer produces recurring effects. Closing preserves historical and one-off rows, splits/shortens the managed recurrent lineage at month precision, removes later rows, records the exact mutation in `actual_impact_json.closure`, and recalculates the official projection.
 12. Event closure stops recurring income, expense, and contribution deltas. The virtual asset residual remains in the projection because disposal proceeds are not modeled in this phase; real asset disposal remains owned by Patrimonio.
+13. `ScenarioEvent.metadata_json.one_off_items` may preserve several named one-off expenses within one decision. The serializer makes their sum the canonical `initial_outflow`; comparison applies that total once, while acceptance creates one traceable managed budget row per concept. Events without this metadata retain the legacy aggregate initial-outflow behavior.
 
 ## Financial Plan Foundations And Recommendations
 1. `Finding` and `Recommendation` live in the Core `plan` app. Findings are unique per `(plan, code, period)` and recommendations are unique per `(finding, code)`.

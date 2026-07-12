@@ -4,6 +4,7 @@ from rest_framework import serializers
 from memberships.models import FamilyMember
 from net_worth.models import Asset
 
+from .dates import date_at_age
 from .models import (
     FinancialPlan,
     Finding,
@@ -124,6 +125,7 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context["request"]
         validated_data["role"] = FamilyMember.Role.ADULT
+        self._derive_retirement_dates(validated_data)
         member = FamilyMember.objects.create(user=request.user, **validated_data)
         plan = FinancialPlan.objects.filter(user=request.user).first()
         if plan:
@@ -135,11 +137,23 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
         return member
 
     def update(self, instance, validated_data):
+        self._derive_retirement_dates(validated_data, instance=instance)
         for key, value in validated_data.items():
             setattr(instance, key, value)
         instance.full_clean()
         instance.save()
         return instance
+
+    @staticmethod
+    def _derive_retirement_dates(validated_data, instance=None):
+        birth_date = validated_data.get("birth_date", getattr(instance, "birth_date", None))
+        if birth_date:
+            retirement_date = date_at_age(birth_date)
+            validated_data["employment_income_end_date"] = retirement_date
+            validated_data["pension_start_date"] = retirement_date
+        elif "birth_date" in validated_data:
+            validated_data["employment_income_end_date"] = None
+            validated_data["pension_start_date"] = None
 
 
 class ProjectionSnapshotSerializer(serializers.ModelSerializer):
@@ -185,6 +199,31 @@ class ScenarioEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"end_date": "Must be greater than or equal to start_date."}
             )
+        metadata = attrs.get("metadata_json", getattr(self.instance, "metadata_json", {})) or {}
+        one_off_items = metadata.get("one_off_items", [])
+        if not isinstance(one_off_items, list):
+            raise serializers.ValidationError({"metadata_json": "one_off_items must be a list."})
+        if one_off_items:
+            total = 0
+            for index, item in enumerate(one_off_items):
+                if not isinstance(item, dict) or not str(item.get("name", "")).strip():
+                    raise serializers.ValidationError(
+                        {"metadata_json": f"One-off item {index + 1} requires a name."}
+                    )
+                try:
+                    amount = serializers.DecimalField(
+                        max_digits=14, decimal_places=2
+                    ).run_validation(item.get("amount"))
+                except serializers.ValidationError as exc:
+                    raise serializers.ValidationError(
+                        {"metadata_json": f"One-off item {index + 1} has an invalid amount."}
+                    ) from exc
+                if amount <= 0:
+                    raise serializers.ValidationError(
+                        {"metadata_json": f"One-off item {index + 1} must be greater than zero."}
+                    )
+                total += amount
+            attrs["initial_outflow"] = total
         return attrs
 
 

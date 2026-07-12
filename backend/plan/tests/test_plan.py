@@ -440,6 +440,22 @@ class ProjectionInputCorrectnessTests(TestCase):
                 entry = AnnualExpenseEntry(cashflow_role=role, time_profile=time_profile)
                 self.assertNotEqual(expense_bucket(entry), ExpenseBucket.UNCLASSIFIABLE)
 
+    def test_retirement_dates_are_derived_from_birth_date(self):
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto",
+            role=FamilyMember.Role.ADULT,
+            birth_date=date(1982, 2, 28),
+            employment_income_end_date=date(2040, 1, 1),
+            pension_start_date=date(2041, 1, 1),
+        )
+        self.plan.members.add(member)
+
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+
+        self.assertEqual(inputs.employment_income_end_date, date(2049, 2, 28))
+        self.assertEqual(inputs.earliest_pension_start_date, date(2049, 2, 28))
+
 
 class PlanApiTests(APITestCase):
     def setUp(self):
@@ -515,6 +531,26 @@ class PlanApiTests(APITestCase):
             PlanAssetFunction.objects.filter(user=self.user, asset=other_asset).exists()
         )
 
+    def test_member_retirement_is_saved_from_birth_date(self):
+        create_plan(self.user)
+
+        response = self.client.post(
+            reverse("financial-plan-members"),
+            {
+                "name": "Adulto",
+                "role": "adult",
+                "is_active": True,
+                "birth_date": "1980-06-15",
+                "employment_income_end_date": "2040-01-01",
+                "pension_start_date": "2041-01-01",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["employment_income_end_date"], "2047-06-15")
+        self.assertEqual(response.data["pension_start_date"], "2047-06-15")
+
 
 class ScenarioServiceTests(TestCase):
     def setUp(self):
@@ -583,18 +619,50 @@ class ScenarioServiceTests(TestCase):
             ).exists()
         )
         self.assertTrue(
-            all(
-                expense_bucket(entry) != ExpenseBucket.UNCLASSIFIABLE
-                for entry in AnnualExpenseEntry.objects.filter(user=self.user)
-            )
-        )
-        self.assertTrue(
             AnnualExpenseEntry.objects.filter(
                 user=self.user,
                 category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
                 subcategory="personal_loan_repayment",
                 term_start_month=3,
             ).exists()
+        )
+
+    def test_accept_keeps_multiple_one_off_expenses_separate(self):
+        scenario = Scenario.objects.create(
+            plan=self.plan,
+            name="Comprar casa",
+            template_type=Scenario.TemplateType.HOUSING,
+        )
+        scenario.events.create(
+            start_date=date(2028, 5, 1),
+            initial_outflow=Decimal("45000.00"),
+            metadata_json={
+                "one_off_items": [
+                    {"name": "Entrada", "amount": "30000.00"},
+                    {"name": "Impuestos", "amount": "10000.00"},
+                    {"name": "Muebles", "amount": "5000.00"},
+                ]
+            },
+        )
+
+        result = ScenarioService().accept(scenario=scenario)
+
+        expenses = AnnualExpenseEntry.objects.filter(
+            event_group=f"plan_event:{result['event'].id}"
+        ).order_by("name")
+        self.assertEqual(expenses.count(), 3)
+        self.assertEqual(
+            sum((row.amount_annual for row in expenses), Decimal("0")), Decimal("45000")
+        )
+        self.assertEqual(
+            set(expenses.values_list("name", flat=True)),
+            {"Comprar casa - Entrada", "Comprar casa - Impuestos", "Comprar casa - Muebles"},
+        )
+        self.assertTrue(
+            all(
+                expense_bucket(entry) != ExpenseBucket.UNCLASSIFIABLE
+                for entry in AnnualExpenseEntry.objects.filter(user=self.user)
+            )
         )
 
     def test_accept_clips_budget_line_terms_to_their_fiscal_year(self):
@@ -800,6 +868,21 @@ class ScenarioApiTests(APITestCase):
         self.assertIn("simulated", compare_response.data)
         self.assertEqual(accept_response.status_code, status.HTTP_200_OK)
         self.assertEqual(accept_response.data["event"]["event_type"], "vehicle")
+
+    def test_one_off_items_define_the_canonical_initial_outflow(self):
+        payload = self.scenario_payload()
+        payload["events"][0]["initial_outflow"] = "1.00"
+        payload["events"][0]["metadata_json"] = {
+            "one_off_items": [
+                {"name": "Entrada", "amount": "10000.00"},
+                {"name": "Impuestos", "amount": "2500.00"},
+            ]
+        }
+
+        response = self.client.post(reverse("financial-plan-scenarios"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["events"][0]["initial_outflow"], "12500.00")
 
     def test_scenarios_are_user_scoped(self):
         other_scenario = Scenario.objects.create(
