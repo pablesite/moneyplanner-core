@@ -126,10 +126,28 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         validated_data["role"] = FamilyMember.Role.ADULT
         self._derive_retirement_dates(validated_data)
-        member = FamilyMember.objects.create(user=request.user, **validated_data)
+        # FamilyMember es una identidad compartida con Patrimonio/titularidades:
+        # si el usuario ya tiene a esta persona registrada con el mismo nombre
+        # (uniq_member_name_per_user_memberships), reutilizamos su registro en
+        # vez de chocar con la restricción única y devolver un 500.
+        existing = FamilyMember.objects.filter(
+            user=request.user, name=validated_data["name"]
+        ).first()
+        if existing:
+            if existing.role != FamilyMember.Role.ADULT:
+                raise serializers.ValidationError(
+                    {"name": "Ya existe una persona menor con este nombre en tu cuenta."}
+                )
+            for key, value in validated_data.items():
+                setattr(existing, key, value)
+            existing.full_clean()
+            existing.save()
+            member = existing
+        else:
+            member = FamilyMember.objects.create(user=request.user, **validated_data)
         plan = FinancialPlan.objects.filter(user=request.user).first()
         if plan:
-            if plan.members.count() >= 2:
+            if plan.members.count() >= 2 and not plan.members.filter(id=member.id).exists():
                 raise serializers.ValidationError(
                     "A financial plan can include at most two adults."
                 )
