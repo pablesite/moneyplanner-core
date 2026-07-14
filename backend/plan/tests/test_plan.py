@@ -365,6 +365,29 @@ class ProjectionFinancialCasesTests(TestCase):
 
         self.assertIsNone(result["summary"]["projected_year"]["value"])
 
+    def test_preservation_target_adds_untouchable_capital_to_the_requirement(self):
+        create_investment(self.user, Decimal("900000.00"))
+        base_plan = create_plan(self.user)
+        base = self.calculate(base_plan)
+
+        preserving_user = get_user_model().objects.create_user(
+            username="plan_preserving", password="pass1234"
+        )
+        create_investment(preserving_user, Decimal("900000.00"))
+        preserving_plan = create_plan(preserving_user, preservation_target_eur=Decimal("100000.00"))
+        preserving = self.calculate(preserving_plan)
+
+        # El bloque preservado no financia la renta: se exige encima del objetivo.
+        self.assertEqual(
+            Decimal(preserving["summary"]["target_capital"]["value"]),
+            Decimal(base["summary"]["target_capital"]["value"]) + Decimal("100000.00"),
+        )
+        # Y con el mismo capital, alcanzar la fecha cuesta más (nunca menos).
+        base_year = base["summary"]["projected_year"]["value"]
+        preserving_year = preserving["summary"]["projected_year"]["value"]
+        if base_year is not None and preserving_year is not None:
+            self.assertGreaterEqual(preserving_year, base_year)
+
     def test_determinism_same_inputs_same_hash_and_result(self):
         create_investment(self.user, Decimal("100000.00"))
         plan = create_plan(self.user)

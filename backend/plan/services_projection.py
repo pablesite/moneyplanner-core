@@ -229,11 +229,19 @@ def calculate_projection(
     applied_one_off_events: set[int] = set()
     active_event_debts: list[dict[str, Decimal | int]] = []
 
-    denominator = target_capital_for_year(
-        inputs=inputs,
-        assumptions=assumptions,
-        candidate_year=target_year,
-        start_year=start_year,
+    # El patrimonio a preservar es capital que no se toca: se exige además del
+    # capital que sostiene la renta. Antes solo era una comprobación sobre el
+    # patrimonio neto total (vivienda incluida) que casi nunca cambiaba nada.
+    preservation_extra = inputs.preservation_target_eur or Decimal("0")
+
+    denominator = (
+        target_capital_for_year(
+            inputs=inputs,
+            assumptions=assumptions,
+            candidate_year=target_year,
+            start_year=start_year,
+        )
+        + preservation_extra
     )
     sustainable_income = productive * withdrawal_rate / Decimal("12")
     progress = (
@@ -327,11 +335,14 @@ def calculate_projection(
             Decimal("0"),
             base_liabilities + event_debt_balance(debts=active_event_debts, year=year),
         )
-        required = target_capital_for_year(
-            inputs=inputs,
-            assumptions=assumptions,
-            candidate_year=year,
-            start_year=start_year,
+        required = (
+            target_capital_for_year(
+                inputs=inputs,
+                assumptions=assumptions,
+                candidate_year=year,
+                start_year=start_year,
+            )
+            + preservation_extra
         )
         net_worth = productive + security + non_productive - liabilities
         preservation_ok = (
