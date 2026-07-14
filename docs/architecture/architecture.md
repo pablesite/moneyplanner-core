@@ -76,6 +76,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 8. If the target date is before pension start, the required capital is split into a bridge period plus post-pension gap capital. The engine does not apply a single withdrawal-rate rule to the full lifetime need.
 9. In Phase 1, financial cases such as car purchase, second home purchase, and sabbatical are represented as already-incorporated base data. Hypothetical non-contaminating scenarios are Phase 3 scope.
 10. For adults with `birth_date`, retirement is derived deterministically on their 67th birthday and drives both the end of labour income and the start of pension income. Persisted manual dates remain a compatibility fallback only when birth date is absent.
+11. `GET /api/plan/capital-requirements/?monthly_amounts=a,b,...` returns, for each monthly need in today's euros (1–8 values), the capital required at the target date computed with the same math as the projection's target capital (inflation, pension/other-income offsets, bridge period, withdrawal rate). Plan-event deltas are deliberately excluded: an arbitrary need already defines the expense to cover. This keeps consumer-side progress milestones on the same axis as the projection denominator.
 
 ## Financial Plan Scenario Contract
 1. `Scenario` and `ScenarioEvent` model hypothetical decisions without mutating real net worth, budget execution, or accounting.
