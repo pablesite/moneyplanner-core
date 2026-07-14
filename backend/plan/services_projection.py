@@ -376,7 +376,17 @@ def target_capital_for_year(
     assumptions: dict[str, str],
     candidate_year: int,
     start_year: int,
+    annual_need_today: Decimal | None = None,
+    include_event_deltas: bool = True,
 ) -> Decimal:
+    """Capital requerido en `candidate_year` para sostener una necesidad anual.
+
+    Por defecto la necesidad es el nivel de vida del plan con los deltas de
+    acontecimientos incorporados (el denominador de la proyección). Con
+    `annual_need_today` se calcula para otra necesidad (p. ej. un grupo de
+    gastos del presupuesto); en ese caso `include_event_deltas=False` evita
+    sumar gastos de decisiones que no pertenecen a esa necesidad.
+    """
     inflation = Decimal(assumptions["inflation_rate"])
     productive_return = Decimal(assumptions["productive_return_rate"])
     withdrawal_rate = Decimal(assumptions["withdrawal_rate"])
@@ -384,14 +394,26 @@ def target_capital_for_year(
     pension_year = (
         inputs.earliest_pension_start_date.year if inputs.earliest_pension_start_date else None
     )
-    event_delta = event_deltas_for_year(
-        events=inputs.plan_events,
-        year=target_year,
-        start_year=start_year,
+    base_annual_need = (
+        annual_need_today
+        if annual_need_today is not None
+        else inputs.target_monthly_income_today_eur * Decimal("12")
     )
+    zero_delta = {"annual_expense_delta": Decimal("0"), "annual_income_delta": Decimal("0")}
+
+    def deltas(year: int) -> dict[str, Decimal]:
+        if not include_event_deltas:
+            return zero_delta
+        return event_deltas_for_year(
+            events=inputs.plan_events,
+            year=year,
+            start_year=start_year,
+        )
+
+    event_delta = deltas(target_year)
     target_income = (
         inflate(
-            inputs.target_monthly_income_today_eur * Decimal("12"),
+            base_annual_need,
             inflation,
             max(0, target_year - start_year),
         )
@@ -412,15 +434,11 @@ def target_capital_for_year(
     for year in range(target_year, pension_year):
         nominal_need = (
             inflate(
-                inputs.target_monthly_income_today_eur * Decimal("12"),
+                base_annual_need,
                 inflation,
                 max(0, year - start_year),
             )
-            + event_deltas_for_year(
-                events=inputs.plan_events,
-                year=year,
-                start_year=start_year,
-            )["annual_expense_delta"]
+            + deltas(year)["annual_expense_delta"]
         )
         other_income = (
             inflate(
@@ -428,26 +446,18 @@ def target_capital_for_year(
                 inflation,
                 max(0, year - start_year),
             )
-            + event_deltas_for_year(
-                events=inputs.plan_events,
-                year=year,
-                start_year=start_year,
-            )["annual_income_delta"]
+            + deltas(year)["annual_income_delta"]
         )
         gap = max(Decimal("0"), nominal_need - other_income)
         discount_years = year - target_year
         bridge += gap / ((Decimal("1") + productive_return) ** discount_years)
     pension_need = (
         inflate(
-            inputs.target_monthly_income_today_eur * Decimal("12"),
+            base_annual_need,
             inflation,
             max(0, pension_year - start_year),
         )
-        + event_deltas_for_year(
-            events=inputs.plan_events,
-            year=pension_year,
-            start_year=start_year,
-        )["annual_expense_delta"]
+        + deltas(pension_year)["annual_expense_delta"]
     )
     pension_income = (
         inflate(
@@ -455,17 +465,55 @@ def target_capital_for_year(
             inflation,
             max(0, pension_year - start_year),
         )
-        + event_deltas_for_year(
-            events=inputs.plan_events,
-            year=pension_year,
-            start_year=start_year,
-        )["annual_income_delta"]
+        + deltas(pension_year)["annual_income_delta"]
     )
     post_pension_capital = max(Decimal("0"), pension_need - pension_income) / withdrawal_rate
     bridge += post_pension_capital / (
         (Decimal("1") + productive_return) ** max(0, pension_year - target_year)
     )
     return q2(bridge)
+
+
+def capital_requirements(
+    *,
+    plan: FinancialPlan,
+    assumption_name: str | None = None,
+    monthly_amounts: list[Decimal],
+) -> dict[str, Any]:
+    """Capital requerido en la fecha objetivo para sostener cada gasto mensual dado.
+
+    Misma matemática que el denominador de la proyección (inflación, pensiones
+    como offset, periodo puente y tasa de retirada), con la necesidad anual
+    sustituida por cada importe (en euros de hoy) y sin deltas de
+    acontecimientos: el importe pedido ya define el gasto a cubrir.
+    """
+    assumption_set = get_assumption_set(name=assumption_name)
+    assumptions = serialize_assumptions(assumption_set)
+    inputs, _, _ = build_projection_inputs(plan=plan)
+    start_year = date.today().year
+    target_year = inputs.target_date.year
+    requirements = [
+        {
+            "monthly_amount_today_eur": decimal_str(q2(amount)),
+            "capital_required_eur": decimal_str(
+                target_capital_for_year(
+                    inputs=inputs,
+                    assumptions=assumptions,
+                    candidate_year=target_year,
+                    start_year=start_year,
+                    annual_need_today=amount * Decimal("12"),
+                    include_event_deltas=False,
+                )
+            ),
+        }
+        for amount in monthly_amounts
+    ]
+    return {
+        "scenario": assumption_set.name,
+        "target_year": target_year,
+        "assumptions": assumptions,
+        "requirements": requirements,
+    }
 
 
 def future_income_for_year(

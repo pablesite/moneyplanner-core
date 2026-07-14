@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     AssetFunctionsView,
+    CapitalRequirementsView,
     FinancialPlanView,
     FindingsView,
     FoundationsView,
@@ -32,6 +33,11 @@ urlpatterns = [
     path("", FinancialPlanView.as_view(), name="financial-plan"),
     path("recalculate/", RecalculateProjectionView.as_view(), name="financial-plan-recalculate"),
     path("projection/", ProjectionView.as_view(), name="financial-plan-projection"),
+    path(
+        "capital-requirements/",
+        CapitalRequirementsView.as_view(),
+        name="financial-plan-capital-requirements",
+    ),
     path("history/", ProjectionHistoryView.as_view(), name="financial-plan-history"),
     path("members/", PlanMembersView.as_view(), name="financial-plan-members"),
     path("members/<int:pk>/", PlanMemberDetailView.as_view(), name="financial-plan-member-detail"),

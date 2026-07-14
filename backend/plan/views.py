@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
@@ -33,7 +33,12 @@ from .services_findings import FindingService
 from .services_foundations import FoundationService
 from .services_events import close_plan_event, register_occurred_event, release_occurred_event
 from .services_lifecycle import cancel_plan_event, materialize_plan_event
-from .services_projection import ProjectionService, get_assumption_set, serialize_classification
+from .services_projection import (
+    ProjectionService,
+    capital_requirements,
+    get_assumption_set,
+    serialize_classification,
+)
 from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
 
@@ -110,6 +115,48 @@ class ProjectionView(APIView):
         assumption_set = get_assumption_set(name=scenario)
         result = ProjectionService().calculate(plan=plan, assumption_set=assumption_set)
         return Response(attach_calculated_at(result, timezone.now().isoformat()))
+
+
+class CapitalRequirementsView(APIView):
+    """Capital requerido para sostener gastos mensuales arbitrarios (euros de hoy).
+
+    Mismo cálculo que el capital objetivo de la proyección; permite anclar
+    hitos de progreso a necesidades reales (p. ej. grupos del presupuesto).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    MAX_AMOUNTS = 8
+    MAX_MONTHLY_EUR = Decimal("10000000")
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        raw = request.query_params.get("monthly_amounts", "")
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
+        if not parts or len(parts) > self.MAX_AMOUNTS:
+            return Response(
+                {"detail": f"monthly_amounts requiere entre 1 y {self.MAX_AMOUNTS} importes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        amounts: list[Decimal] = []
+        for part in parts:
+            try:
+                value = Decimal(part)
+            except InvalidOperation:
+                return Response(
+                    {"detail": f"Importe no numérico: {part!r}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if value <= 0 or value > self.MAX_MONTHLY_EUR:
+                return Response(
+                    {"detail": f"Importe fuera de rango: {part!r}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            amounts.append(value)
+        scenario = request.query_params.get("scenario") or "expected"
+        return Response(
+            capital_requirements(plan=plan, assumption_name=scenario, monthly_amounts=amounts)
+        )
 
 
 class ProjectionHistoryView(APIView):

@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -35,8 +36,10 @@ from plan.services_lifecycle import cancel_plan_event, materialize_plan_event
 from plan.services_projection import (
     ProjectionService,
     build_projection_inputs,
+    capital_requirements,
     get_assumption_set,
     plan_event_payloads,
+    target_capital_for_year,
 )
 from plan.services_scenarios import ScenarioService
 
@@ -1483,3 +1486,122 @@ class PlanEventLifecycleTests(TestCase):
 
         with self.assertRaises(DRFValidationError):
             cancel_plan_event(event=event)
+
+
+class CapitalRequirementsTests(APITestCase):
+    """El capital por necesidad usa la misma matemática que el denominador."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="capreq", password="pass1234")
+        self.client.force_authenticate(self.user)
+        self.plan = create_plan(self.user)
+
+    def test_requirement_for_plan_income_matches_projection_denominator(self):
+        result = capital_requirements(
+            plan=self.plan,
+            assumption_name="expected",
+            monthly_amounts=[Decimal("2000.00")],
+        )
+        projection = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        self.assertEqual(
+            result["requirements"][0]["capital_required_eur"],
+            projection["summary"]["target_capital"]["value"],
+        )
+
+    def test_lower_need_requires_less_capital(self):
+        result = capital_requirements(
+            plan=self.plan,
+            assumption_name="expected",
+            monthly_amounts=[Decimal("800.00"), Decimal("2000.00")],
+        )
+        self.assertLess(
+            Decimal(result["requirements"][0]["capital_required_eur"]),
+            Decimal(result["requirements"][1]["capital_required_eur"]),
+        )
+
+    def test_pensions_reduce_required_capital_below_perpetuity(self):
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto",
+            role=FamilyMember.Role.ADULT,
+            pension_start_date=date(2039, 1, 1),
+            estimated_monthly_pension_today_eur=Decimal("1000.00"),
+        )
+        self.plan.members.add(member)
+        result = capital_requirements(
+            plan=self.plan,
+            assumption_name="expected",
+            monthly_amounts=[Decimal("2000.00")],
+        )
+        perpetuity = Decimal("2000.00") * 12 / Decimal("0.0350")
+        self.assertLess(
+            Decimal(result["requirements"][0]["capital_required_eur"]),
+            perpetuity,
+        )
+
+    def test_event_deltas_do_not_leak_into_requirements(self):
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        event_payload = {"start_year": 2030, "monthly_expense_delta": "500.00"}
+        with_events = dataclasses.replace(inputs, plan_events=(event_payload,))
+        assumptions = {
+            "inflation_rate": "0.0250",
+            "productive_return_rate": "0.0500",
+            "withdrawal_rate": "0.0350",
+        }
+        kwargs = {
+            "assumptions": assumptions,
+            "candidate_year": 2040,
+            "start_year": 2026,
+            "annual_need_today": Decimal("12000.00"),
+            "include_event_deltas": False,
+        }
+        self.assertEqual(
+            target_capital_for_year(inputs=with_events, **kwargs),
+            target_capital_for_year(inputs=inputs, **kwargs),
+        )
+        # Con deltas activos, el mismo evento sí mueve el resultado (comportamiento base).
+        self.assertNotEqual(
+            target_capital_for_year(
+                inputs=with_events,
+                assumptions=assumptions,
+                candidate_year=2040,
+                start_year=2026,
+            ),
+            target_capital_for_year(
+                inputs=inputs,
+                assumptions=assumptions,
+                candidate_year=2040,
+                start_year=2026,
+            ),
+        )
+
+    def test_api_returns_requirements_per_amount(self):
+        response = self.client.get(
+            reverse("financial-plan-capital-requirements"),
+            {"monthly_amounts": "1000,1800", "scenario": "expected"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["scenario"], "expected")
+        self.assertEqual(len(response.data["requirements"]), 2)
+        self.assertEqual(response.data["requirements"][0]["monthly_amount_today_eur"], "1000.00")
+
+    def test_api_validates_amounts(self):
+        url = reverse("financial-plan-capital-requirements")
+        self.assertEqual(
+            self.client.get(url).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.get(url, {"monthly_amounts": "abc"}).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.get(url, {"monthly_amounts": "-5"}).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.get(url, {"monthly_amounts": ",".join(["100"] * 9)}).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
