@@ -9,6 +9,7 @@ from net_worth.models import Asset, Liability
 
 from .models import FinancialPlan
 from .services_projection import planned_contribution_amount
+from .services_quality import DataQualityService
 from .services_inputs import (
     annual_expense_entries,
     expense_buckets,
@@ -24,13 +25,11 @@ ILLIQUID_INVESTMENT_SUBCATEGORIES = {
     Asset.Subcategory.CROWDLENDING,
     Asset.Subcategory.OTHER,
 }
-LIQUID_INVESTMENT_SUBCATEGORIES = {
+# Fondo de emergencia clásico: solo caja y depósitos. Las inversiones líquidas
+# (fondos, ETFs, acciones, cripto...) son vendibles pero no son el colchón: contar
+# la cartera como emergencia inflaba la cobertura (31 meses con 15.000 € de caja).
+EMERGENCY_INVESTMENT_SUBCATEGORIES = {
     Asset.Subcategory.DEPOSITS,
-    Asset.Subcategory.FUNDS,
-    Asset.Subcategory.ETFS,
-    Asset.Subcategory.ROBOADVISOR,
-    Asset.Subcategory.STOCKS,
-    Asset.Subcategory.CRYPTOCURRENCIES,
 }
 
 
@@ -150,7 +149,7 @@ def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
             immediate_liquid += amount
         elif (
             asset.category == Asset.Category.INVESTMENTS
-            and asset.subcategory in LIQUID_INVESTMENT_SUBCATEGORIES
+            and asset.subcategory in EMERGENCY_INVESTMENT_SUBCATEGORIES
         ):
             emergency_liquid += amount
 
@@ -391,14 +390,12 @@ class FoundationService:
             ]
         )
 
-        quality_flags = {
-            "has_income": annual_income > 0,
-            "has_operating_expense": operating_expense > 0,
-            "has_assets": asset_metrics["assets_value"] > 0,
-            "liability_rates_complete": all(
-                row.annual_interest_tae is not None for row in liabilities
-            ),
-        }
+        # El cimiento usa la calidad real del motor (la misma que gradúa la
+        # proyección), no un checklist propio: los 4 flags anteriores daban
+        # 100/100 a un plan sin contabilidad ni pasivos ("todas las TAE
+        # completas" se cumplía por vacío con cero deudas).
+        quality = DataQualityService().evaluate(user=plan.user)
+        quality_flags = quality.factors
         quality_score = (
             sum(1 for value in quality_flags.values() if value) / len(quality_flags) * 100
         )

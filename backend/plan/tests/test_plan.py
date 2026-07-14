@@ -26,6 +26,7 @@ from plan.models import (
 )
 from plan.services_classification import AssetClassificationService
 from plan.services_foundations import FoundationService
+from plan.services_quality import DataQualityService
 from plan.services_events import (
     close_plan_event,
     register_occurred_event,
@@ -1605,3 +1606,62 @@ class CapitalRequirementsTests(APITestCase):
             self.client.get(url, {"monthly_amounts": ",".join(["100"] * 9)}).status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+
+class FoundationCriteriaTests(TestCase):
+    """Criterios revisados en julio 2026: emergencia clásica y calidad real."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="foundations_criteria", password="pass1234"
+        )
+        self.plan = create_plan(self.user)
+        create_income(self.user)
+        create_operating_expense(self.user, Decimal("24000.00"))
+
+    def test_emergency_liquidity_counts_only_cash_and_deposits(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+        Asset.objects.create(
+            user=self.user,
+            name="Depósito",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.DEPOSITS,
+            amount=Decimal("2000.00"),
+            currency="EUR",
+        )
+        # La cartera es vendible pero no es el colchón: no cuenta como emergencia.
+        create_investment(self.user, Decimal("50000.00"))
+
+        payload = FoundationService().calculate(plan=self.plan)
+
+        self.assertEqual(payload["emergency_fund"]["eligible_liquidity"], "12000.00")
+        # 12.000 € / 2.000 €/mes de gasto estructural = 6 meses, no 31.
+        self.assertEqual(payload["emergency_fund"]["coverage_months_base"], "6.0000")
+
+    def test_data_quality_uses_engine_factors_not_shallow_checklist(self):
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("10000.00"),
+            currency="EUR",
+        )
+
+        payload = FoundationService().calculate(plan=self.plan)
+        quality = payload["data_quality"]
+
+        # El checklist antiguo daba 100 con ingresos+gastos+activos y cero
+        # pasivos; la medida real penaliza contabilidad, pensiones, etc.
+        self.assertLess(quality["score"], 100)
+        self.assertIn("accounting_history", quality["flags"])
+        self.assertFalse(quality["flags"]["accounting_history"])
+        expected = DataQualityService().evaluate(user=self.user).factors
+        self.assertEqual(quality["flags"], expected)
