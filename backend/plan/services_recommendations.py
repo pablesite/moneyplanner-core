@@ -174,7 +174,7 @@ class RecommendationService:
                 "priority": self._priority(plan=plan, code="RESTORE_CASH_FLOW", base=10),
                 "action": {
                     "title": "Recuperar margen mensual",
-                    "summary": "Cerrar el deficit comprometido antes de aumentar la inversion.",
+                    "summary": "Cerrar el déficit comprometido antes de aumentar la inversión.",
                     "reason": "Los compromisos actuales superan los ingresos estructurales.",
                     "rule": finding.code,
                     "action_type": "review_budget",

@@ -19,7 +19,7 @@ def metric_value(projection: dict[str, Any], key: str) -> Any:
 
 
 def projection_status(plan: FinancialPlan, projection: dict[str, Any]) -> str:
-    if projection["quality_level"] == "low":
+    if projection["quality_level"] in {"initial", "needs_review"}:
         return "incomplete"
     projected_year = metric_value(projection, "projected_year")
     if projected_year is None:
@@ -63,9 +63,10 @@ class PlanOverviewService:
         selected = projections.get(scenario_name, projections["expected"])
         foundations = FoundationService().calculate(plan=plan)
         recommendations = RecommendationService().refresh(plan=plan)
-        next_recommendation = next(
+        next_recommendation = min(
             (item for item in recommendations if item.status == Recommendation.Status.OPEN),
-            None,
+            key=lambda item: item.priority,
+            default=None,
         )
         return {
             "status": projection_status(plan, selected),
@@ -80,7 +81,9 @@ class PlanOverviewService:
             "quality": {
                 "level": selected["quality_level"],
                 "factors": selected["quality_factors"],
-                "confidence": ("low" if selected["quality_level"] == "low" else "medium"),
+                "confidence": (
+                    "low" if selected["quality_level"] in {"initial", "needs_review"} else "medium"
+                ),
             },
             "foundations": {
                 key: {
@@ -183,7 +186,9 @@ class RecommendationPreviewService:
             "years_gained": years_gained,
             "reaches_target": (after_year is not None and int(after_year) <= plan.target_date.year),
             "delta": comparison_delta(current=current, simulated=simulated),
-            "confidence": ("low" if simulated["quality_level"] == "low" else "medium"),
+            "confidence": (
+                "low" if simulated["quality_level"] in {"initial", "needs_review"} else "medium"
+            ),
         }
 
 

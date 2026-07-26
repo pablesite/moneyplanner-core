@@ -2,7 +2,7 @@
 
 Current feature status by area. Update this file whenever functionality status changes.
 
-**Last review:** 2026-06-23 | **Core Version:** see `VERSION`
+**Last review:** 2026-07-26 | **Core Version:** see `VERSION`
 
 ---
 
@@ -67,6 +67,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Financial Plan — projection engine | ✅ | New Core `plan` app: single financial plan, seeded assumptions, deterministic yearly projection, bridge-period capital, asset function overrides, data quality, snapshots and `/api/plan/*`. Retirement is derived at age 67 from adult birth dates, with persisted dates as fallback when birth date is absent. |
 | Financial Plan — scenario lab backend | ✅ | Phase 3 backend complete: `Scenario`/`ScenarioEvent`/`PlanEvent`, non-contaminating comparison snapshots, accept/discard API, accepted events in future projections, and automatic future budget entries without creating real assets/liabilities/accounting rows. Named one-off expense concepts sum into projection impact and remain separate in managed budget lineage. |
 | Financial Plan — findings/recommendations backend | ✅ | Phase 4 backend complete: `Finding`/`Recommendation`, backend-owned foundations, deterministic recommendation templates, recommendation-to-scenario simulation, monthly-close hook and plan-impact API. |
+| Financial Plan — guided decisions contract | ✅ | `target_date` cuts structural labour income; pension ages remain configurable. Contributions target productive/security/debt capital. Recommendations preserve lifecycle state, prioritize cash-flow recovery, link to scenarios and expose side-effect-free preview, snooze and aggregated `/overview/`. |
 | Financial Plan — engine correctness | ✅ | Phase 7 complete: current-FY inputs, structural-only income, aggregate labour cut-off, exhaustive expense buckets and explicit data-quality factors. Historical snapshots remain immutable. |
 | Financial Plan — budget/plan boundary | ✅ | Phase 8 complete: reserved `PlanEvent` lineage, read-only managed budget rows, inverse budget trace endpoint and non-destructive lineage audit/repair command. |
 | Financial Plan — event lifecycle | ✅ | Phase 6 complete: event closure date, traced budget-line retirement, recurring projection cut-off and isolated close API. Real asset disposal remains in Patrimonio. |
