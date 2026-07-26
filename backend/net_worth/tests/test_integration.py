@@ -814,9 +814,9 @@ class NetWorthApiTests(APITestCase):
         self.assertEqual(row_2026.category, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS)
         self.assertEqual(row_2026.subcategory, "index_funds")
         self.assertEqual(row_2026.time_profile, AnnualExpenseEntry.TimeProfile.TERM_RECURRENT)
-        self.assertEqual(
-            row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
-        )
+        # Las aportaciones periodicas son destino de inversion, no un compromiso
+        # temporal que consuma renta: rol INVESTMENT (fuera del superavit comprometido).
+        self.assertEqual(row_2026.cashflow_role, AnnualExpenseEntry.CashflowRole.INVESTMENT)
         self.assertEqual(row_2026.amount_annual, Decimal("3600.00"))
 
     def test_investment_asset_accepts_nested_contribution_intervals(self):
@@ -1568,6 +1568,9 @@ class NetWorthApiTests(APITestCase):
         )
         self.assertEqual(principal_row.expense_type, AnnualExpenseEntry.ExpenseType.ONE_OFF)
         self.assertEqual(principal_row.time_profile, AnnualExpenseEntry.TimeProfile.ONE_OFF)
+        # Amortizar principal es un movimiento de balance puntual, no un compromiso
+        # recurrente: rol TRANSFER (fuera del superavit comprometido).
+        self.assertEqual(principal_row.cashflow_role, AnnualExpenseEntry.CashflowRole.TRANSFER)
         self.assertEqual(principal_row.target_month, 6)
         self.assertGreater(principal_row.amount_annual, Decimal("0.00"))
 

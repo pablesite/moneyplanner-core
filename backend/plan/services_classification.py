@@ -45,6 +45,9 @@ class ClassificationSummary:
     unknown_capital: Decimal
     total_assets: Decimal
     total_liabilities: Decimal
+    # Deuda que ya se ha descontado dentro de los buckets (net_value = bruto -
+    # deuda asociada). La proyección la necesita para no restarla dos veces.
+    associated_liabilities: Decimal
     net_worth: Decimal
 
 
@@ -151,6 +154,7 @@ class AssetClassificationService:
             unknown_capital=buckets[UNKNOWN],
             total_assets=total_assets,
             total_liabilities=total_liabilities,
+            associated_liabilities=sum(liabilities_by_asset.values(), Decimal("0")),
             net_worth=total_assets - total_liabilities,
         )
 

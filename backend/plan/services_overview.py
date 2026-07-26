@@ -6,7 +6,13 @@ from typing import Any
 
 from .models import FinancialPlan, Recommendation
 from .services_foundations import FoundationService
-from .services_projection import ProjectionService, get_assumption_set
+from .services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    earliest_sustainable_retirement_year,
+    get_assumption_set,
+    serialize_assumptions,
+)
 from .services_recommendations import RecommendationService
 from .services_scenarios import comparison_delta
 
@@ -16,17 +22,6 @@ SCENARIOS = ("prudent", "expected", "favorable")
 
 def metric_value(projection: dict[str, Any], key: str) -> Any:
     return projection["summary"][key]["value"]
-
-
-def projection_status(plan: FinancialPlan, projection: dict[str, Any]) -> str:
-    if projection["quality_level"] in {"initial", "needs_review"}:
-        return "incomplete"
-    projected_year = metric_value(projection, "projected_year")
-    if projected_year is None:
-        return "unreachable"
-    if int(projected_year) <= plan.target_date.year:
-        return "on_track"
-    return "off_track"
 
 
 def guidance_action(recommendation: Recommendation | None) -> dict[str, Any] | None:
@@ -53,14 +48,34 @@ def guidance_action(recommendation: Recommendation | None) -> dict[str, Any] | N
 
 class PlanOverviewService:
     def build(self, *, plan: FinancialPlan, scenario_name: str) -> dict[str, Any]:
-        projections = {
-            name: ProjectionService().calculate(
-                plan=plan,
-                assumption_set=get_assumption_set(name=name),
+        scenario = scenario_name if scenario_name in SCENARIOS else "expected"
+
+        # La jubilación sostenible más temprana por escenario: primer año en que
+        # se puede dejar de trabajar sin que el capital productivo baje del
+        # patrimonio a preservar. Reusa unos mismos inputs (una consulta a BD).
+        inputs, _, _ = build_projection_inputs(plan=plan)
+        sustainable_by_scenario = {
+            name: earliest_sustainable_retirement_year(
+                inputs=inputs,
+                assumptions=serialize_assumptions(get_assumption_set(name=name)),
             )
             for name in SCENARIOS
         }
-        selected = projections.get(scenario_name, projections["expected"])
+        sustainable_year = sustainable_by_scenario[scenario]
+        desired_year = plan.target_date.year
+        sustainable_range = {
+            "prudent_year": sustainable_by_scenario["prudent"],
+            "central_year": sustainable_by_scenario["expected"],
+            "favorable_year": sustainable_by_scenario["favorable"],
+        }
+
+        # La proyección mostrada usa el retiro sostenible: la trayectoria refleja
+        # un plan que no se desploma, coherente con el titular.
+        selected = ProjectionService().calculate(
+            plan=plan,
+            assumption_set=get_assumption_set(name=scenario),
+            retirement_year=sustainable_year,
+        )
         foundations = FoundationService().calculate(plan=plan)
         recommendations = RecommendationService().refresh(plan=plan)
         next_recommendation = min(
@@ -68,16 +83,29 @@ class PlanOverviewService:
             key=lambda item: item.priority,
             default=None,
         )
+
+        if selected["quality_level"] in {"initial", "needs_review"}:
+            status = "incomplete"
+        elif sustainable_year is None:
+            status = "unreachable"
+        elif sustainable_year <= desired_year:
+            status = "on_track"
+        else:
+            status = "off_track"
+
         return {
-            "status": projection_status(plan, selected),
+            "status": status,
             "scenario": selected["scenario"],
             "target_date": plan.target_date.isoformat(),
+            "desired_year": desired_year,
+            "sustainable_year": sustainable_year,
+            "sustainable_range": sustainable_range,
+            "gap_years": (
+                sustainable_year - desired_year if sustainable_year is not None else None
+            ),
             "projection": selected,
-            "range": {
-                "prudent_year": metric_value(projections["prudent"], "projected_year"),
-                "central_year": metric_value(projections["expected"], "projected_year"),
-                "favorable_year": metric_value(projections["favorable"], "projected_year"),
-            },
+            # Compat: `range` pasa a llevar los años de jubilación sostenible.
+            "range": sustainable_range,
             "quality": {
                 "level": selected["quality_level"],
                 "factors": selected["quality_factors"],

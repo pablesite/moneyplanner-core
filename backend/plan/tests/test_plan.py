@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember
-from net_worth.models import Asset, Liability
+from net_worth.models import Asset, InvestmentContributionInterval, Liability
 
 from plan.models import (
     AssumptionSet,
@@ -38,8 +38,11 @@ from plan.services_projection import (
     ProjectionService,
     build_projection_inputs,
     capital_requirements,
+    earliest_sustainable_retirement_year,
     get_assumption_set,
     plan_event_payloads,
+    planned_contribution_amount,
+    serialize_assumptions,
     target_capital_for_year,
 )
 from plan.services_scenarios import ScenarioService
@@ -137,6 +140,8 @@ class AssetClassificationTests(TestCase):
         summary = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
 
         self.assertEqual(summary.productive_capital, Decimal("130000.00000000"))
+        self.assertEqual(summary.associated_liabilities, Decimal("120000.00000000"))
+        self.assertEqual(summary.net_worth, Decimal("130000.00000000"))
         home_row = next(row for row in summary.assets if row.asset_id == home.id)
         self.assertEqual(home_row.inferred_function, PlanAssetFunction.Function.FAMILY_USE)
         self.assertEqual(home_row.function, PlanAssetFunction.Function.PRODUCTIVE)
@@ -440,6 +445,61 @@ class ProjectionInputCorrectnessTests(TestCase):
 
         self.assertEqual(cash_flow["committed_surplus"], "48000.00")
 
+    def test_committed_surplus_excludes_contributions_and_one_off_movements(self):
+        """El superavit comprometido solo mide flujos recurrentes: ni las
+        aportaciones de inversion ni los movimientos de balance puntuales (una
+        cancelacion anticipada) deben restar. Ademas, la aportacion espejo no debe
+        duplicarse en la aportacion planificada de la proyeccion."""
+        year = plan_fiscal_year(self.plan)
+        income = create_income(self.user, Decimal("60000.00"))
+        income.fiscal_year = year
+        income.save(update_fields=["fiscal_year"])
+        operating = create_operating_expense(self.user, Decimal("12000.00"))
+        operating.fiscal_year = year
+        operating.save(update_fields=["fiscal_year"])
+
+        asset = create_investment(self.user, name="Fondo aportado")
+        InvestmentContributionInterval.objects.create(
+            asset=asset,
+            start_date=date(year, 1, 15),
+            end_date=None,
+            amount=Decimal("100.00"),
+            frequency=Asset.InvestmentContributionFrequency.MONTHLY,
+            currency="EUR",
+        )
+        # Espejo generado por el sistema de esa aportacion periodica (rol INVESTMENT).
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportacion inversion: Fondo aportado",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="index_funds",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            amount_annual=Decimal("1300.00"),
+            fiscal_year=year,
+            is_system_generated=True,
+            source_asset=asset,
+        )
+        # Cancelacion anticipada de principal: movimiento de balance puntual.
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cancelacion anticipada principal: Hipoteca",
+            category=AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+            subcategory="mortgage_principal",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TRANSFER,
+            time_profile=AnnualExpenseEntry.TimeProfile.ONE_OFF,
+            amount_annual=Decimal("15000.00"),
+            fiscal_year=year,
+            is_system_generated=True,
+            event_group="liability_1_cancellation_principal",
+        )
+
+        cash_flow = FoundationService().calculate(plan=self.plan)["cash_flow"]
+        self.assertEqual(cash_flow["committed_surplus"], "48000.00")
+
+        # La aportacion se cuenta una sola vez (via el interval), no tambien via el espejo.
+        self.assertEqual(planned_contribution_amount(plan=self.plan), Decimal("1200.00"))
+
     def test_foundations_expose_status_bands_for_scores(self):
         """Cada bloque puntuado publica su banda para que el frontend no invente umbrales."""
         year = plan_fiscal_year(self.plan)
@@ -519,6 +579,66 @@ class ProjectionInputCorrectnessTests(TestCase):
 
         self.assertEqual(inputs.employment_income_end_date, self.plan.target_date)
         self.assertEqual(inputs.earliest_pension_start_date, date(2041, 1, 1))
+
+    def test_projection_net_worth_reconciles_with_real_when_debt_is_asset_backed(self):
+        """La deuda asociada se netea en los buckets; la proyección no debe
+        restarla otra vez (si no, el patrimonio proyectado arranca por debajo del real)."""
+        home = Asset.objects.create(
+            user=self.user,
+            name="Segunda vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.SECOND_HOME,
+            amount=Decimal("200000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("120000.00"),
+            currency="EUR",
+            financed_asset=home,
+            is_asset_backed=True,
+        )
+        classification = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
+        self.assertEqual(classification.associated_liabilities, Decimal("120000.00000000"))
+
+        result = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        first_year = result["trajectory"][0]
+        self.assertEqual(Decimal(first_year["net_worth"]), classification.net_worth)
+
+    def test_sustainable_retirement_is_now_when_capital_is_ample(self):
+        # Mucho capital productivo y nivel de vida bajo: se puede parar ya.
+        create_investment(self.user, Decimal("5000000.00"))
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(get_assumption_set(name="expected"))
+
+        year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+
+        self.assertEqual(year, date.today().year)
+
+    def test_sustainable_retirement_is_none_when_never_feasible(self):
+        # Sin capital ni ingresos, con nivel de vida objetivo, no hay retiro sostenible.
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(get_assumption_set(name="expected"))
+
+        year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+
+        self.assertIsNone(year)
+
+    def test_retirement_year_override_drives_projection_without_mutating_plan(self):
+        create_investment(self.user, Decimal("500000.00"))
+        result = ProjectionService().calculate(
+            plan=self.plan,
+            assumption_set=get_assumption_set(name="expected"),
+            retirement_year=2050,
+        )
+
+        self.assertEqual(result["summary"]["target_year"]["value"], 2050)
+        # No se muta la aspiración del usuario.
+        self.assertEqual(self.plan.target_date, date(2040, 1, 1))
 
 
 class PlanApiTests(APITestCase):
@@ -1200,6 +1320,10 @@ class FindingsRecommendationsApiTests(APITestCase):
             },
         )
         self.assertIn("range", response.data)
+        self.assertIn("desired_year", response.data)
+        self.assertIn("sustainable_year", response.data)
+        self.assertIn("sustainable_range", response.data)
+        self.assertIn("gap_years", response.data)
         self.assertIn("foundations", response.data)
         self.assertIn("next_action", response.data)
 

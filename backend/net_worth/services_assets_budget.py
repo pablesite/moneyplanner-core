@@ -185,7 +185,11 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             "owner_name": owner_name,
             "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
             "time_profile": time_profile,
-            "cashflow_role": AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            # Las aportaciones periodicas son destino de ahorro/inversion, no un
+            # compromiso que consume ingresos: van al rol INVESTMENT (coherente con
+            # su categoria financial_investments). El motor las cuenta como
+            # aportacion via los InvestmentContributionInterval, no aqui.
+            "cashflow_role": AnnualExpenseEntry.CashflowRole.INVESTMENT,
             "event_group": event_group,
             "term_end_year": final_due_year,
             "amount_annual": annual_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
@@ -231,6 +235,7 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             "event_group",
             "is_active",
             "amount_annual",
+            "cashflow_role",
         ]
         update_fields: list[str] = []
         for field_name in system_owned_fields:

@@ -318,7 +318,11 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                 "owner_name": owner_name,
                 "expense_type": AnnualExpenseEntry.ExpenseType.ONE_OFF,
                 "time_profile": AnnualExpenseEntry.TimeProfile.ONE_OFF,
-                "cashflow_role": expense_profile["cashflow_role"],
+                # Amortizar principal de forma anticipada es un movimiento de
+                # balance puntual (caja -> menos pasivo), no un compromiso
+                # recurrente que consuma renta. TRANSFER lo mantiene visible en el
+                # presupuesto sin contaminar el superavit comprometido.
+                "cashflow_role": cast(str, AnnualExpenseEntry.CashflowRole.TRANSFER),
                 "event_group": f"liability_{liability.id}_cancellation_principal",
                 "target_month": cancellation_date.month,
                 "term_end_year": None,

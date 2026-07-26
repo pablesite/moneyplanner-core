@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -43,6 +43,7 @@ class ProjectionInputs:
     short_term_goal_capital: Decimal
     unknown_capital: Decimal
     total_liabilities: Decimal
+    associated_liabilities: Decimal
     net_worth: Decimal
     annual_income: Decimal
     annual_planned_contributions: Decimal
@@ -80,12 +81,17 @@ class ProjectionService:
         assumption_set: AssumptionSet,
         extra_events: list[dict[str, Any]] | None = None,
         include_plan_events: bool = True,
+        retirement_year: int | None = None,
     ) -> dict[str, Any]:
         inputs, classification, quality = build_projection_inputs(
             plan=plan,
             extra_events=extra_events,
             include_plan_events=include_plan_events,
         )
+        # Permite proyectar un retiro hipotetico (p. ej. la jubilacion sostenible
+        # calculada) sin mutar plan.target_date, que sigue siendo la aspiracion.
+        if retirement_year is not None:
+            inputs = with_retirement(inputs, retirement_year)
         assumptions = serialize_assumptions(assumption_set)
         input_hash = stable_hash({"inputs": serialize_inputs(inputs), "assumptions": assumptions})
         metrics = calculate_projection(inputs=inputs, assumptions=assumptions)
@@ -178,6 +184,7 @@ def build_projection_inputs(
             short_term_goal_capital=classification.short_term_goal_capital,
             unknown_capital=classification.unknown_capital,
             total_liabilities=classification.total_liabilities,
+            associated_liabilities=classification.associated_liabilities,
             net_worth=classification.net_worth,
             annual_income=annual_income,
             annual_planned_contributions=planned_contributions,
@@ -339,7 +346,12 @@ def calculate_projection(
             )
             + preservation_extra
         )
-        net_worth = productive + security + non_productive - liabilities
+        # Los buckets (productive/security/non_productive) ya vienen netos de su
+        # deuda asociada; restar `liabilities` (deuda total) la contaría dos veces.
+        # Se suma de vuelta la asociada para que el patrimonio reconcilie con el real.
+        net_worth = (
+            productive + security + non_productive - liabilities + inputs.associated_liabilities
+        )
         preservation_ok = (
             inputs.preservation_target_eur is None or net_worth >= inputs.preservation_target_eur
         )
@@ -374,6 +386,61 @@ def calculate_projection(
         "preservation_target_eur": inputs.preservation_target_eur,
     }
     return {"summary": summary, "trajectory": rows}
+
+
+def retirement_date_for_year(*, year: int, reference: date) -> date:
+    """Fecha de retiro en `year` conservando mes/dia del objetivo (con guarda 29-feb)."""
+    try:
+        return date(year, reference.month, reference.day)
+    except ValueError:
+        return date(year, reference.month, 28)
+
+
+def with_retirement(inputs: ProjectionInputs, retirement_year: int) -> ProjectionInputs:
+    """Reproyecta `inputs` con el retiro (dejar de trabajar y vivir del plan) en `retirement_year`."""
+    retirement = retirement_date_for_year(year=retirement_year, reference=inputs.target_date)
+    return replace(inputs, target_date=retirement, employment_income_end_date=retirement)
+
+
+def earliest_sustainable_retirement_year(
+    *, inputs: ProjectionInputs, assumptions: dict[str, str]
+) -> int | None:
+    """Primer año en que retirarse es sostenible: el capital productivo nunca
+    baja del patrimonio a preservar entre el retiro y el fin de proyección.
+
+    Retirarse en `R` = dejar de trabajar y vivir del plan desde `R`. La
+    factibilidad es monótona (trabajar un año más nunca empeora la foto), así que
+    se resuelve por búsqueda binaria reutilizando `calculate_projection`, sin
+    volver a consultar la BD (reusa `inputs`).
+    """
+    floor = inputs.preservation_target_eur or Decimal("0")
+    start_year = date.today().year
+    end_year = inputs.projection_end_date.year
+
+    def is_sustainable(candidate: int) -> bool:
+        candidate_inputs = with_retirement(inputs, candidate)
+        metrics = calculate_projection(inputs=candidate_inputs, assumptions=assumptions)
+        after = [
+            Decimal(row["productive_capital"])
+            for row in metrics["trajectory"]
+            if row["year"] >= candidate
+        ]
+        if not after:
+            return False
+        minimum = min(after)
+        return minimum >= floor if floor > 0 else minimum > 0
+
+    if not is_sustainable(end_year):
+        return None
+
+    low, high = min(start_year, end_year), end_year
+    while low < high:
+        mid = (low + high) // 2
+        if is_sustainable(mid):
+            high = mid
+        else:
+            low = mid + 1
+    return low
 
 
 def target_capital_for_year(
@@ -582,6 +649,11 @@ def planned_contribution_amount(*, plan: FinancialPlan) -> Decimal:
                 AnnualExpenseEntry.CashflowRole.INVESTMENT,
             ],
         )
+        # Solo las aportaciones generadas *desde un activo* son el espejo de los
+        # InvestmentContributionInterval que se suman debajo: contarlas aqui las
+        # duplicaria. Las generadas por escenarios aceptados (sin source_asset)
+        # si son aportacion real y deben contar.
+        .exclude(is_system_generated=True, source_asset__isnull=False)
     )
     intervals = Decimal("0")
     for interval in InvestmentContributionInterval.objects.filter(
