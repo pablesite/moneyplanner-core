@@ -5,16 +5,9 @@ import type { AnnualIncomeEntry } from '@/domains/budget/annual-entries';
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type IncomeResetMode = 'zero' | 'planned';
 type IncomeExecutionOrigin =
-  | 'categorized_ledger'
-  | 'user_override'
-  | 'legacy_checkin'
-  | 'ambiguous_taxonomy'
-  | 'none';
+  'categorized_ledger' | 'user_override' | 'legacy_checkin' | 'ambiguous_taxonomy' | 'none';
 type IncomeExecutionSource =
-  | 'categorized_ledger'
-  | 'legacy_fallback'
-  | 'pending_classification'
-  | 'none';
+  'categorized_ledger' | 'legacy_fallback' | 'pending_classification' | 'none';
 
 type IncomeCheckin = {
   id: number;
@@ -94,15 +87,18 @@ const props = defineProps<{
   isIncomeGroupUnlocked: (groupKey: string) => boolean;
   goToPreviousMonthlyCloseStep: () => void;
   goToNextMonthlyCloseStep: () => void;
-  resetIncomeGroupCheckinDraftValue: (
+  // Sintaxis de método (bivariante) en los callbacks que reciben Group: el tipo
+  // del composable padre y el local han divergido y vue-tsc >=3.3 rechaza la
+  // varianza estricta de la flecha. Sin cambio de runtime.
+  resetIncomeGroupCheckinDraftValue(
     group: IncomeGroup,
     mode: IncomeResetMode,
-  ) => void | Promise<void>;
-  ensureIncomeGroupAdjustAmountPrefilled: (group: IncomeGroup) => void;
-  saveIncomeGroupCheckinFromInput: (group: IncomeGroup) => void | Promise<void>;
-  onIncomeGroupReviewedToggle: (group: IncomeGroup, checked: boolean) => void | Promise<void>;
-  unlockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
-  relockIncomeGroupManualAdjustment: (group: IncomeGroup) => void | Promise<void>;
+  ): void | Promise<void>;
+  ensureIncomeGroupAdjustAmountPrefilled(group: IncomeGroup): void;
+  saveIncomeGroupCheckinFromInput(group: IncomeGroup): void | Promise<void>;
+  onIncomeGroupReviewedToggle(group: IncomeGroup, checked: boolean): void | Promise<void>;
+  unlockIncomeGroupManualAdjustment(group: IncomeGroup): void | Promise<void>;
+  relockIncomeGroupManualAdjustment(group: IncomeGroup): void | Promise<void>;
 }>();
 
 const incomeCategoryBlocks = computed<IncomeCategoryBlock[]>(() => {

@@ -303,10 +303,7 @@ export type PortableDataBundle = {
 
 export type ImportMode = 'append' | 'replace';
 export type ImportCompatibility =
-  | 'compatible'
-  | 'legacy_replace_blocked'
-  | 'newer_than_app'
-  | 'unknown';
+  'compatible' | 'legacy_replace_blocked' | 'newer_than_app' | 'unknown';
 
 export function normalizeOptionalText(raw: unknown): string | null {
   if (raw == null) return null;

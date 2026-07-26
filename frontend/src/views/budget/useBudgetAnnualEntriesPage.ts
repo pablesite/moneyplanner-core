@@ -1802,8 +1802,7 @@ export function useBudgetAnnualEntriesPage() {
       subcategory: annualIncomeForm.subcategory,
       owner: annualIncomeForm.owner,
       incomeType: (annualIncomeForm.isRecurrent ? 'recurrent' : 'one_off') as
-        | 'recurrent'
-        | 'one_off',
+        'recurrent' | 'one_off',
       timeProfile: annualIncomeForm.timeProfile,
       cashflowRole: defaultIncomeCashflowRole(annualIncomeForm.category),
       eventGroup: annualIncomeForm.eventGroup,
@@ -1863,8 +1862,7 @@ export function useBudgetAnnualEntriesPage() {
       subcategory: annualExpenseForm.subcategory,
       owner: annualExpenseForm.owner,
       expenseType: (annualExpenseForm.isRecurrent ? 'recurrent' : 'one_off') as
-        | 'recurrent'
-        | 'one_off',
+        'recurrent' | 'one_off',
       timeProfile: annualExpenseForm.timeProfile,
       cashflowRole: annualExpenseForm.cashflowRole,
       eventGroup: annualExpenseForm.eventGroup,

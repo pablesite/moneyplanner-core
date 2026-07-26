@@ -13,11 +13,7 @@ import {
 export type AnnualIncomeType = 'recurrent' | 'one_off';
 export type AnnualTimeProfile = 'structural_recurrent' | 'term_recurrent' | 'one_off';
 export type AnnualIncomeCashflowRole =
-  | 'operating'
-  | 'transfer'
-  | 'asset_sale'
-  | 'tax_adjustment'
-  | 'other';
+  'operating' | 'transfer' | 'asset_sale' | 'tax_adjustment' | 'other';
 
 export type AnnualIncomeEntry = {
   id: number;

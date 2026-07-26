@@ -4,13 +4,7 @@ export type LedgerTransactionStatus = 'draft' | 'posted';
 export type LedgerTransactionOrigin = 'manual' | 'import' | 'system';
 export type LedgerEntrySide = 'debit' | 'credit';
 export type QuickLedgerMovementType =
-  | 'income'
-  | 'expense'
-  | 'transfer'
-  | 'adjustment'
-  | 'investment'
-  | 'debt_payment'
-  | 'revaluation';
+  'income' | 'expense' | 'transfer' | 'adjustment' | 'investment' | 'debt_payment' | 'revaluation';
 
 export type InvestmentDirection = 'inflow' | 'outflow' | 'reinvestment';
 

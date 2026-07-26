@@ -5,16 +5,9 @@ import type { AnnualExpenseEntry } from '@/domains/budget/annual-entries';
 type MonthlyCloseStepId = 'liq' | 'income' | 'expense' | 'result';
 type ExpenseResetMode = 'zero' | 'planned';
 type ExpenseExecutionOrigin =
-  | 'categorized_ledger'
-  | 'user_override'
-  | 'legacy_checkin'
-  | 'ambiguous_taxonomy'
-  | 'none';
+  'categorized_ledger' | 'user_override' | 'legacy_checkin' | 'ambiguous_taxonomy' | 'none';
 type ExpenseExecutionSource =
-  | 'categorized_ledger'
-  | 'legacy_fallback'
-  | 'pending_classification'
-  | 'none';
+  'categorized_ledger' | 'legacy_fallback' | 'pending_classification' | 'none';
 
 type ExpenseCheckin = {
   id: number;
@@ -98,27 +91,30 @@ const props = defineProps<{
   formatMoney: (value: number, decimals?: number) => string;
   formatPercent: (value: number | null, decimals?: number) => string;
   executionSourceLabel: (origin: ExpenseExecutionOrigin) => string;
-  expenseCheckinRowSummary: (row: ExpenseRow) => string;
   isCloseLocked?: boolean;
   checkinStatusLabel: (status: 'confirmed' | 'adjusted' | 'skipped' | 'estimated') => string;
-  isLockedExecutionRow: (row: ExpenseRow) => boolean;
   isExpenseGroupUnlocked: (groupKey: string) => boolean;
   goToPreviousMonthlyCloseStep: () => void;
   goToNextMonthlyCloseStep: () => void;
-  resetExpenseCheckinDraftValue: (row: ExpenseRow, mode: ExpenseResetMode) => void | Promise<void>;
-  resetExpenseGroupCheckinDraftValue: (
+  // Sintaxis de método (bivariante) en los callbacks que reciben Row/Group: el
+  // tipo del composable padre y el local han divergido y vue-tsc >=3.3 rechaza la
+  // varianza estricta de la flecha. Sin cambio de runtime.
+  expenseCheckinRowSummary(row: ExpenseRow): string;
+  isLockedExecutionRow(row: ExpenseRow): boolean;
+  resetExpenseCheckinDraftValue(row: ExpenseRow, mode: ExpenseResetMode): void | Promise<void>;
+  resetExpenseGroupCheckinDraftValue(
     group: ExpenseGroup,
     mode: ExpenseResetMode,
-  ) => void | Promise<void>;
-  ensureExpenseAdjustAmountPrefilled: (row: ExpenseRow) => void;
-  ensureExpenseGroupAdjustAmountPrefilled: (group: ExpenseGroup) => void;
-  onExpenseAdjustAmountBlur: (row: ExpenseRow) => void | Promise<void>;
-  saveExpenseCheckinFromInput: (row: ExpenseRow) => void | Promise<void>;
-  saveExpenseGroupCheckinFromInput: (group: ExpenseGroup) => void | Promise<void>;
-  onExpenseCheckinCheckboxToggle: (row: ExpenseRow, checked: boolean) => void | Promise<void>;
-  onExpenseGroupReviewedToggle: (group: ExpenseGroup, checked: boolean) => void | Promise<void>;
-  unlockExpenseGroupManualAdjustment: (group: ExpenseGroup) => void | Promise<void>;
-  relockExpenseGroupManualAdjustment: (group: ExpenseGroup) => void | Promise<void>;
+  ): void | Promise<void>;
+  ensureExpenseAdjustAmountPrefilled(row: ExpenseRow): void;
+  ensureExpenseGroupAdjustAmountPrefilled(group: ExpenseGroup): void;
+  onExpenseAdjustAmountBlur(row: ExpenseRow): void | Promise<void>;
+  saveExpenseCheckinFromInput(row: ExpenseRow): void | Promise<void>;
+  saveExpenseGroupCheckinFromInput(group: ExpenseGroup): void | Promise<void>;
+  onExpenseCheckinCheckboxToggle(row: ExpenseRow, checked: boolean): void | Promise<void>;
+  onExpenseGroupReviewedToggle(group: ExpenseGroup, checked: boolean): void | Promise<void>;
+  unlockExpenseGroupManualAdjustment(group: ExpenseGroup): void | Promise<void>;
+  relockExpenseGroupManualAdjustment(group: ExpenseGroup): void | Promise<void>;
 }>();
 
 const expenseCategoryBlocks = computed<ExpenseCategoryBlock[]>(() => {

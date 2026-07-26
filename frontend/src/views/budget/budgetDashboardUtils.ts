@@ -202,16 +202,9 @@ export type BudgetSectionModel = {
 export type BudgetEntryViewMode = 'all' | 'recurrent' | 'one_off';
 export type BudgetExecutionTone = 'neutral' | 'good' | 'warn' | 'danger';
 export type BudgetExecutionSource =
-  | 'categorized_ledger'
-  | 'legacy_fallback'
-  | 'pending_classification'
-  | 'none';
+  'categorized_ledger' | 'legacy_fallback' | 'pending_classification' | 'none';
 export type BudgetExecutionOrigin =
-  | 'categorized_ledger'
-  | 'user_override'
-  | 'legacy_checkin'
-  | 'ambiguous_taxonomy'
-  | 'none';
+  'categorized_ledger' | 'user_override' | 'legacy_checkin' | 'ambiguous_taxonomy' | 'none';
 export type BudgetExecutionPreview = {
   ratio: number;
   widthPct: number;
