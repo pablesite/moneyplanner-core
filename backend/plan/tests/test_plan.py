@@ -464,7 +464,7 @@ class ProjectionInputCorrectnessTests(TestCase):
             )
             self.assertEqual(section["status"], expected, block)
 
-    def test_one_off_income_is_not_projected_and_labor_income_stops(self):
+    def test_one_off_income_is_not_projected_and_labor_income_stops_at_target(self):
         year = plan_fiscal_year(self.plan)
         recurring = create_income(self.user, Decimal("36000.00"))
         recurring.fiscal_year = year
@@ -493,8 +493,10 @@ class ProjectionInputCorrectnessTests(TestCase):
         )
 
         self.assertEqual(inputs.annual_income, Decimal("36000.00"))
-        row_after_end = next(row for row in result["trajectory"] if row["year"] == year + 2)
-        self.assertEqual(row_after_end["future_income"], "0.00")
+        row_at_target = next(
+            row for row in result["trajectory"] if row["year"] == self.plan.target_date.year
+        )
+        self.assertEqual(row_at_target["future_income"], "0.00")
 
     def test_expense_taxonomy_is_exhaustive_for_declared_roles(self):
         for role, _label in AnnualExpenseEntry.CashflowRole.choices:
@@ -502,7 +504,7 @@ class ProjectionInputCorrectnessTests(TestCase):
                 entry = AnnualExpenseEntry(cashflow_role=role, time_profile=time_profile)
                 self.assertNotEqual(expense_bucket(entry), ExpenseBucket.UNCLASSIFIABLE)
 
-    def test_retirement_dates_are_derived_from_birth_date(self):
+    def test_projection_respects_target_and_configured_pension_dates(self):
         member = FamilyMember.objects.create(
             user=self.user,
             name="Adulto",
@@ -515,8 +517,8 @@ class ProjectionInputCorrectnessTests(TestCase):
 
         inputs, _, _ = build_projection_inputs(plan=self.plan)
 
-        self.assertEqual(inputs.employment_income_end_date, date(2049, 2, 28))
-        self.assertEqual(inputs.earliest_pension_start_date, date(2049, 2, 28))
+        self.assertEqual(inputs.employment_income_end_date, self.plan.target_date)
+        self.assertEqual(inputs.earliest_pension_start_date, date(2041, 1, 1))
 
 
 class PlanApiTests(APITestCase):
@@ -603,15 +605,15 @@ class PlanApiTests(APITestCase):
                 "role": "adult",
                 "is_active": True,
                 "birth_date": "1980-06-15",
-                "employment_income_end_date": "2040-01-01",
-                "pension_start_date": "2041-01-01",
+                "employment_end_age": 60,
+                "pension_start_age": 65,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["employment_income_end_date"], "2047-06-15")
-        self.assertEqual(response.data["pension_start_date"], "2047-06-15")
+        self.assertEqual(response.data["employment_income_end_date"], "2040-06-15")
+        self.assertEqual(response.data["pension_start_date"], "2045-06-15")
 
 
 class ScenarioServiceTests(TestCase):
@@ -1057,14 +1059,16 @@ class FindingsRecommendationsApiTests(APITestCase):
         self.assertEqual(recommendations.status_code, status.HTTP_200_OK)
         self.assertTrue(
             any(
-                item["code"] == Recommendation.Code.INCREASE_CONTRIBUTION
+                item["code"] == Recommendation.Code.RESTORE_CASH_FLOW
                 for item in recommendations.data
             )
         )
 
     def test_recommendation_simulate_creates_draft_scenario_for_same_user(self):
         recommendations = self.client.get(reverse("financial-plan-recommendations"))
-        recommendation_id = recommendations.data[0]["id"]
+        recommendation_id = next(
+            item["id"] for item in recommendations.data if item["action_json"].get("scenario_event")
+        )
 
         response = self.client.post(
             reverse("financial-plan-recommendation-simulate", kwargs={"pk": recommendation_id}),
@@ -1074,7 +1078,98 @@ class FindingsRecommendationsApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], Scenario.Status.DRAFT)
-        self.assertEqual(Scenario.objects.get(id=response.data["id"]).plan, self.plan)
+        scenario = Scenario.objects.get(id=response.data["id"])
+        self.assertEqual(scenario.plan, self.plan)
+        self.assertEqual(scenario.source_recommendation_id, recommendation_id)
+
+    def test_refresh_preserves_dismissed_recommendation(self):
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+        recommendation_id = recommendations.data[0]["id"]
+        self.client.post(
+            reverse(
+                "financial-plan-recommendation-dismiss",
+                kwargs={"pk": recommendation_id},
+            )
+        )
+
+        self.client.get(reverse("financial-plan-recommendations"))
+
+        self.assertEqual(
+            Recommendation.objects.get(id=recommendation_id).status,
+            Recommendation.Status.DISMISSED,
+        )
+
+    def test_preview_has_no_side_effects(self):
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+        recommendation_id = next(
+            item["id"] for item in recommendations.data if item["action_json"].get("scenario_event")
+        )
+        before = (
+            Scenario.objects.count(),
+            ProjectionSnapshot.objects.count(),
+            AnnualExpenseEntry.objects.count(),
+        )
+
+        response = self.client.get(
+            reverse(
+                "financial-plan-recommendation-preview",
+                kwargs={"pk": recommendation_id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["actionable"])
+        self.assertIn("before", response.data)
+        self.assertIn("after", response.data)
+        self.assertEqual(
+            (
+                Scenario.objects.count(),
+                ProjectionSnapshot.objects.count(),
+                AnnualExpenseEntry.objects.count(),
+            ),
+            before,
+        )
+
+    def test_snooze_is_persistent_and_user_scoped(self):
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+        recommendation_id = recommendations.data[0]["id"]
+        until = timezone.localdate() + timedelta(days=30)
+
+        response = self.client.post(
+            reverse(
+                "financial-plan-recommendation-snooze",
+                kwargs={"pk": recommendation_id},
+            ),
+            {"snoozed_until": until.isoformat()},
+            format="json",
+        )
+        self.client.get(reverse("financial-plan-recommendations"))
+
+        recommendation = Recommendation.objects.get(id=recommendation_id)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(recommendation.status, Recommendation.Status.SNOOZED)
+        self.assertEqual(recommendation.snoozed_until, until)
+
+    def test_overview_uses_profile_default_and_returns_guidance(self):
+        self.plan.profile = FinancialPlan.Profile.SECURITY
+        self.plan.save(update_fields=["profile"])
+
+        response = self.client.get(reverse("financial-plan-overview"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["scenario"], "prudent")
+        self.assertIn(
+            response.data["status"],
+            {
+                "on_track",
+                "off_track",
+                "unreachable",
+                "incomplete",
+            },
+        )
+        self.assertIn("range", response.data)
+        self.assertIn("foundations", response.data)
+        self.assertIn("next_action", response.data)
 
 
 class OccurredEventTests(TestCase):

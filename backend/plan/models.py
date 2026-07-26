@@ -179,6 +179,13 @@ class Scenario(models.Model):
         on_delete=models.CASCADE,
         related_name="scenarios",
     )
+    source_recommendation = models.ForeignKey(
+        "Recommendation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scenarios",
+    )
     name = models.CharField(max_length=140)
     template_type = models.CharField(
         max_length=32,
@@ -201,6 +208,11 @@ class Scenario(models.Model):
 
 
 class ScenarioEvent(models.Model):
+    class ContributionDestination(models.TextChoices):
+        PRODUCTIVE = "productive", "Capital productivo"
+        SECURITY = "security", "Capital de seguridad"
+        DEBT = "debt", "Reduccion de deuda"
+
     scenario = models.ForeignKey(
         Scenario,
         on_delete=models.CASCADE,
@@ -212,6 +224,11 @@ class ScenarioEvent(models.Model):
     monthly_expense_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     monthly_income_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     monthly_contribution_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    monthly_contribution_destination = models.CharField(
+        max_length=16,
+        choices=ContributionDestination.choices,
+        default=ContributionDestination.PRODUCTIVE,
+    )
     new_asset_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     new_asset_type = models.CharField(
         max_length=32,
@@ -364,6 +381,7 @@ class Recommendation(models.Model):
         RESCHEDULE_SECONDARY_GOAL = "RESCHEDULE_SECONDARY_GOAL", "Reprogramar objetivo"
         REDUCE_EVENT_OUTFLOW = "REDUCE_EVENT_OUTFLOW", "Reducir desembolso"
         COMPLETE_DATA = "COMPLETE_DATA", "Completar datos"
+        RESTORE_CASH_FLOW = "RESTORE_CASH_FLOW", "Recuperar flujo de caja"
 
     class Status(models.TextChoices):
         OPEN = "open", "Abierta"
@@ -382,6 +400,7 @@ class Recommendation(models.Model):
     impact_json = models.JSONField(default=dict, blank=True)
     alternatives_json = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    snoozed_until = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

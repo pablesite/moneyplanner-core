@@ -6,6 +6,7 @@ from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from .models import Finding, FinancialPlan, Recommendation, Scenario, ScenarioEvent
 from .services_findings import FindingService
@@ -47,9 +48,16 @@ class RecommendationService:
                         "action_json": spec["action"],
                         "impact_json": spec["impact"],
                         "alternatives_json": spec["alternatives"],
-                        "status": Recommendation.Status.OPEN,
                     },
                 )
+                if (
+                    recommendation.status == Recommendation.Status.SNOOZED
+                    and recommendation.snoozed_until
+                    and recommendation.snoozed_until <= timezone.localdate()
+                ):
+                    recommendation.status = Recommendation.Status.OPEN
+                    recommendation.snoozed_until = None
+                    recommendation.save(update_fields=["status", "snoozed_until", "updated_at"])
                 recommendations.append(recommendation)
         return recommendations
 
@@ -65,14 +73,19 @@ class RecommendationService:
 
     def simulate(self, *, recommendation: Recommendation) -> Scenario:
         plan = recommendation.finding.plan
+        event_payload = recommendation.action_json.get("scenario_event")
+        if not event_payload:
+            raise ValidationError(
+                "This recommendation must be completed in its destination module."
+            )
         scenario = Scenario.objects.create(
             plan=plan,
+            source_recommendation=recommendation,
             name=recommendation.action_json.get("title", "Simulación recomendada"),
             template_type=recommendation.action_json.get(
                 "scenario_template", Scenario.TemplateType.GENERIC
             ),
         )
-        event_payload = recommendation.action_json.get("scenario_event", {})
         ScenarioEvent.objects.create(
             scenario=scenario,
             start_date=event_payload.get("start_date") or timezone.localdate(),
@@ -81,6 +94,10 @@ class RecommendationService:
             monthly_expense_delta=event_payload.get("monthly_expense_delta", "0.00"),
             monthly_income_delta=event_payload.get("monthly_income_delta", "0.00"),
             monthly_contribution_delta=event_payload.get("monthly_contribution_delta", "0.00"),
+            monthly_contribution_destination=event_payload.get(
+                "monthly_contribution_destination",
+                ScenarioEvent.ContributionDestination.PRODUCTIVE,
+            ),
             new_asset_value=event_payload.get("new_asset_value", "0.00"),
             new_asset_type=event_payload.get("new_asset_type"),
             new_debt_principal=event_payload.get("new_debt_principal", "0.00"),
@@ -119,6 +136,9 @@ class RecommendationService:
                     "scenario_event": {
                         "start_date": date(today.year, today.month, 1).isoformat(),
                         "monthly_contribution_delta": str(monthly_action),
+                        "monthly_contribution_destination": (
+                            ScenarioEvent.ContributionDestination.SECURITY
+                        ),
                     },
                 },
                 "impact": {"target_gap": str(gap), "monthly_action": str(monthly_action)},
@@ -144,8 +164,26 @@ class RecommendationService:
                 "impact": {"candidate_payoff": str(payoff), "high_cost_debt": str(debt)},
                 "alternatives": ["Renegociar tipo", "Priorizar la deuda con TAE más alta"],
             }
+        if finding.code == Finding.Code.NEGATIVE_CASH_FLOW:
+            deficit = abs(dec(evidence.get("committed_surplus")))
+            monthly_action = max(
+                Decimal("50.00"), (deficit / Decimal("12")).quantize(Decimal("0.01"))
+            )
+            return {
+                "code": Recommendation.Code.RESTORE_CASH_FLOW,
+                "priority": self._priority(plan=plan, code="RESTORE_CASH_FLOW", base=10),
+                "action": {
+                    "title": "Recuperar margen mensual",
+                    "summary": "Cerrar el deficit comprometido antes de aumentar la inversion.",
+                    "reason": "Los compromisos actuales superan los ingresos estructurales.",
+                    "rule": finding.code,
+                    "action_type": "review_budget",
+                    "destination": "budget",
+                },
+                "impact": {"monthly_action": str(monthly_action)},
+                "alternatives": ["Reducir compromisos", "Aumentar ingresos recurrentes"],
+            }
         if finding.code in {
-            Finding.Code.NEGATIVE_CASH_FLOW,
             Finding.Code.RETIREMENT_TARGET_OFF_TRACK,
             Finding.Code.PRODUCTIVE_CAPITAL_STAGNANT,
         }:
@@ -162,6 +200,9 @@ class RecommendationService:
                     "scenario_event": {
                         "start_date": date(today.year, today.month, 1).isoformat(),
                         "monthly_contribution_delta": str(monthly_action),
+                        "monthly_contribution_destination": (
+                            ScenarioEvent.ContributionDestination.PRODUCTIVE
+                        ),
                     },
                 },
                 "impact": {"monthly_action": str(monthly_action)},
@@ -176,10 +217,8 @@ class RecommendationService:
                     "summary": "Revisar ingresos, gastos, activos y tipos de deuda para mejorar el diagnóstico.",
                     "reason": "La calidad de datos limita la precisión del plan.",
                     "rule": "DATA_INCOMPLETE",
-                    "scenario_template": Scenario.TemplateType.GENERIC,
-                    "scenario_event": {
-                        "start_date": date(today.year, today.month, 1).isoformat(),
-                    },
+                    "action_type": "complete_data",
+                    "destination": "plan_setup",
                 },
                 "impact": {"data_quality_score": evidence.get("score")},
                 "alternatives": ["Completar solo deudas", "Completar solo presupuesto operativo"],

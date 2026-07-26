@@ -20,8 +20,11 @@ from .views import (
     RecalculateProjectionView,
     RecommendationAcceptView,
     RecommendationDismissView,
+    RecommendationPreviewView,
     RecommendationSimulateView,
+    RecommendationSnoozeView,
     RecommendationsView,
+    PlanOverviewView,
     ScenarioAcceptView,
     ScenarioComparisonView,
     ScenarioDetailView,
@@ -33,6 +36,7 @@ urlpatterns = [
     path("", FinancialPlanView.as_view(), name="financial-plan"),
     path("recalculate/", RecalculateProjectionView.as_view(), name="financial-plan-recalculate"),
     path("projection/", ProjectionView.as_view(), name="financial-plan-projection"),
+    path("overview/", PlanOverviewView.as_view(), name="financial-plan-overview"),
     path(
         "capital-requirements/",
         CapitalRequirementsView.as_view(),
@@ -59,6 +63,16 @@ urlpatterns = [
         "recommendations/<int:pk>/simulate/",
         RecommendationSimulateView.as_view(),
         name="financial-plan-recommendation-simulate",
+    ),
+    path(
+        "recommendations/<int:pk>/preview/",
+        RecommendationPreviewView.as_view(),
+        name="financial-plan-recommendation-preview",
+    ),
+    path(
+        "recommendations/<int:pk>/snooze/",
+        RecommendationSnoozeView.as_view(),
+        name="financial-plan-recommendation-snooze",
     ),
     path("scenarios/", ScenarioListView.as_view(), name="financial-plan-scenarios"),
     path(

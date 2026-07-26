@@ -13,7 +13,6 @@ from budget.models import AnnualExpenseEntry
 from memberships.models import FamilyMember
 from net_worth.models import InvestmentContributionInterval, Liability
 
-from .dates import date_at_age
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
@@ -145,16 +144,7 @@ def build_projection_inputs(
         (Decimal(member.other_future_income_today_eur or 0) * Decimal("12") for member in members),
         Decimal("0"),
     )
-    pension_dates = [
-        date_at_age(member.birth_date) if member.birth_date else member.pension_start_date
-        for member in members
-        if member.birth_date or member.pension_start_date
-    ]
-    employment_end_dates = [
-        date_at_age(member.birth_date) if member.birth_date else member.employment_income_end_date
-        for member in members
-        if member.birth_date or member.employment_income_end_date
-    ]
+    pension_dates = [member.pension_start_date for member in members if member.pension_start_date]
     liabilities = list(Liability.objects.filter(user=plan.user, is_active=True))
     liability_principal = sum(
         (Decimal(liability.amount) for liability in liabilities),
@@ -194,7 +184,8 @@ def build_projection_inputs(
             annual_pension_income_today=pension_income,
             annual_other_future_income_today=other_future_income,
             earliest_pension_start_date=min(pension_dates) if pension_dates else None,
-            employment_income_end_date=max(employment_end_dates) if employment_end_dates else None,
+            # La fecha objetivo significa que trabajar pasa a ser opcional.
+            employment_income_end_date=plan.target_date,
             liability_principal=liability_principal,
             liability_weighted_rate=weighted_rate,
             liability_max_term_years=max_term_years,
@@ -228,6 +219,7 @@ def calculate_projection(
     projected_year: int | None = None
     applied_one_off_events: set[int] = set()
     active_event_debts: list[dict[str, Decimal | int]] = []
+    debt_contributions = Decimal("0")
 
     # El patrimonio a preservar es capital que no se toca: se exige además del
     # capital que sostiene la renta. Antes solo era una comprobación sobre el
@@ -285,13 +277,14 @@ def calculate_projection(
                     contribution_growth,
                     offset,
                 )
-                + event_delta["annual_contribution_delta"]
+                + event_delta["annual_productive_contribution_delta"]
             )
             productive = max(
                 Decimal("0"),
                 productive * (Decimal("1") + productive_return) + contribution - withdrawals,
             )
-            security = security
+            security += event_delta["annual_security_contribution_delta"]
+            debt_contributions += event_delta["annual_debt_contribution_delta"]
             non_productive = non_productive * (Decimal("1") + non_productive_return)
             base_liabilities = projected_liability_balance(
                 initial=inputs.total_liabilities,
@@ -333,7 +326,9 @@ def calculate_projection(
             applied_one_off_events.add(event_index)
         liabilities = max(
             Decimal("0"),
-            base_liabilities + event_debt_balance(debts=active_event_debts, year=year),
+            base_liabilities
+            + event_debt_balance(debts=active_event_debts, year=year)
+            - debt_contributions,
         )
         required = (
             target_capital_for_year(
@@ -537,7 +532,7 @@ def future_income_for_year(
     inflation = Decimal(assumptions["inflation_rate"])
     income_growth = Decimal(assumptions["income_growth_rate"])
     labor_income = Decimal("0")
-    if inputs.employment_income_end_date is None or year <= inputs.employment_income_end_date.year:
+    if inputs.employment_income_end_date is None or year < inputs.employment_income_end_date.year:
         labor_income = inflate(inputs.annual_income, income_growth, max(0, year - start_year))
     pension_income = Decimal("0")
     if inputs.earliest_pension_start_date and year >= inputs.earliest_pension_start_date.year:
@@ -651,7 +646,9 @@ def event_deltas_for_year(
     result = {
         "annual_expense_delta": Decimal("0"),
         "annual_income_delta": Decimal("0"),
-        "annual_contribution_delta": Decimal("0"),
+        "annual_productive_contribution_delta": Decimal("0"),
+        "annual_security_contribution_delta": Decimal("0"),
+        "annual_debt_contribution_delta": Decimal("0"),
     }
     for event in events:
         event_start = int(str(event["start_year"]))
@@ -682,7 +679,12 @@ def event_deltas_for_year(
         result["annual_income_delta"] += (
             Decimal(str(event.get("monthly_income_delta") or "0")) * active_months
         )
-        result["annual_contribution_delta"] += (
+        destination = str(event.get("monthly_contribution_destination") or "productive")
+        contribution_key = {
+            "security": "annual_security_contribution_delta",
+            "debt": "annual_debt_contribution_delta",
+        }.get(destination, "annual_productive_contribution_delta")
+        result[contribution_key] += (
             Decimal(str(event.get("monthly_contribution_delta") or "0")) * active_months
         )
     return result

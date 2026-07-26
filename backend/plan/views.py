@@ -9,11 +9,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from memberships.models import FamilyMember
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
+from memberships.models import FamilyMember
 
-from .models import FinancialPlan, PlanAssetFunction, ProjectionSnapshot
+from .models import (
+    FinancialPlan,
+    PlanAssetFunction,
+    PlanEvent,
+    ProjectionSnapshot,
+    Recommendation,
+    Scenario,
+)
 from .serializers import (
     AssetFunctionUpdateSerializer,
     FinancialPlanSerializer,
@@ -25,14 +32,15 @@ from .serializers import (
     PlanEventMaterializeSerializer,
     ProjectionSnapshotSerializer,
     RecommendationSerializer,
+    RecommendationSnoozeSerializer,
     ScenarioSerializer,
 )
-from .models import PlanEvent, Recommendation, Scenario
 from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
 from .services_events import close_plan_event, register_occurred_event, release_occurred_event
 from .services_lifecycle import cancel_plan_event, materialize_plan_event
+from .services_overview import PlanOverviewService, RecommendationPreviewService
 from .services_projection import (
     ProjectionService,
     capital_requirements,
@@ -41,6 +49,21 @@ from .services_projection import (
 )
 from .services_recommendations import RecommendationService
 from .services_scenarios import ScenarioService
+
+
+PROFILE_ASSUMPTION = {
+    FinancialPlan.Profile.SECURITY: "prudent",
+    FinancialPlan.Profile.BALANCED: "expected",
+    FinancialPlan.Profile.GROWTH: "favorable",
+}
+
+
+def requested_assumption(request, plan: FinancialPlan) -> str:
+    return (
+        request.query_params.get("scenario")
+        or request.data.get("scenario")
+        or PROFILE_ASSUMPTION[plan.profile]
+    )
 
 
 def attach_calculated_at(result: dict, calculated_at: str) -> dict:
@@ -96,9 +119,7 @@ class RecalculateProjectionView(APIView):
 
     def post(self, request):
         plan = get_object_or_404(FinancialPlan, user=request.user)
-        scenario = (
-            request.query_params.get("scenario") or request.data.get("scenario") or "expected"
-        )
+        scenario = requested_assumption(request, plan)
         result = ProjectionService().recalculate(plan=plan, assumption_name=scenario)
         snapshot = plan.projection_snapshots.filter(input_hash=result["input_hash"]).first()
         if snapshot:
@@ -111,7 +132,7 @@ class ProjectionView(APIView):
 
     def get(self, request):
         plan = get_object_or_404(FinancialPlan, user=request.user)
-        scenario = request.query_params.get("scenario") or "expected"
+        scenario = requested_assumption(request, plan)
         assumption_set = get_assumption_set(name=scenario)
         result = ProjectionService().calculate(plan=plan, assumption_set=assumption_set)
         return Response(attach_calculated_at(result, timezone.now().isoformat()))
@@ -502,6 +523,19 @@ class RecommendationsView(APIView):
         return Response(RecommendationSerializer(recommendations, many=True).data)
 
 
+class PlanOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        return Response(
+            PlanOverviewService().build(
+                plan=plan,
+                scenario_name=requested_assumption(request, plan),
+            )
+        )
+
+
 class RecommendationActionView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -527,3 +561,26 @@ class RecommendationSimulateView(RecommendationActionView):
     def post(self, request, pk: int):
         scenario = RecommendationService().simulate(recommendation=self.get_object(request, pk))
         return Response(ScenarioSerializer(scenario).data, status=status.HTTP_201_CREATED)
+
+
+class RecommendationPreviewView(RecommendationActionView):
+    def get(self, request, pk: int):
+        recommendation = self.get_object(request, pk)
+        plan = recommendation.finding.plan
+        return Response(
+            RecommendationPreviewService().build(
+                recommendation=recommendation,
+                scenario_name=requested_assumption(request, plan),
+            )
+        )
+
+
+class RecommendationSnoozeView(RecommendationActionView):
+    def post(self, request, pk: int):
+        serializer = RecommendationSnoozeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        recommendation = self.get_object(request, pk)
+        recommendation.status = Recommendation.Status.SNOOZED
+        recommendation.snoozed_until = serializer.validated_data["snoozed_until"]
+        recommendation.save(update_fields=["status", "snoozed_until", "updated_at"])
+        return Response(RecommendationSerializer(recommendation).data)

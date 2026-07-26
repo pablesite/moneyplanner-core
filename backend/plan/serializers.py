@@ -102,6 +102,13 @@ class FinancialPlanSerializer(serializers.ModelSerializer):
 
 
 class PlanFamilyMemberSerializer(serializers.ModelSerializer):
+    employment_end_age = serializers.IntegerField(
+        min_value=18, max_value=100, required=False, write_only=True
+    )
+    pension_start_age = serializers.IntegerField(
+        min_value=18, max_value=100, required=False, write_only=True
+    )
+
     class Meta:
         model = FamilyMember
         fields = [
@@ -110,7 +117,9 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
             "role",
             "is_active",
             "birth_date",
+            "employment_end_age",
             "employment_income_end_date",
+            "pension_start_age",
             "pension_start_date",
             "estimated_monthly_pension_today_eur",
             "other_future_income_today_eur",
@@ -165,10 +174,19 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
     @staticmethod
     def _derive_retirement_dates(validated_data, instance=None):
         birth_date = validated_data.get("birth_date", getattr(instance, "birth_date", None))
+        employment_age = validated_data.pop("employment_end_age", None)
+        pension_age = validated_data.pop("pension_start_age", None)
         if birth_date:
-            retirement_date = date_at_age(birth_date)
-            validated_data["employment_income_end_date"] = retirement_date
-            validated_data["pension_start_date"] = retirement_date
+            if employment_age is not None:
+                validated_data["employment_income_end_date"] = date_at_age(
+                    birth_date, employment_age
+                )
+            elif instance is None or not getattr(instance, "employment_income_end_date", None):
+                validated_data["employment_income_end_date"] = date_at_age(birth_date)
+            if pension_age is not None:
+                validated_data["pension_start_date"] = date_at_age(birth_date, pension_age)
+            elif instance is None or not getattr(instance, "pension_start_date", None):
+                validated_data["pension_start_date"] = date_at_age(birth_date)
         elif "birth_date" in validated_data:
             validated_data["employment_income_end_date"] = None
             validated_data["pension_start_date"] = None
@@ -201,6 +219,7 @@ class ScenarioEventSerializer(serializers.ModelSerializer):
             "monthly_expense_delta",
             "monthly_income_delta",
             "monthly_contribution_delta",
+            "monthly_contribution_destination",
             "new_asset_value",
             "new_asset_type",
             "new_debt_principal",
@@ -253,13 +272,20 @@ class ScenarioSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "source_recommendation",
             "template_type",
             "status",
             "events",
             "created_at",
             "accepted_at",
         ]
-        read_only_fields = ["id", "status", "created_at", "accepted_at"]
+        read_only_fields = [
+            "id",
+            "source_recommendation",
+            "status",
+            "created_at",
+            "accepted_at",
+        ]
 
     @transaction.atomic
     def create(self, validated_data):
@@ -399,7 +425,19 @@ class RecommendationSerializer(serializers.ModelSerializer):
             "impact_json",
             "alternatives_json",
             "status",
+            "snoozed_until",
             "created_at",
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class RecommendationSnoozeSerializer(serializers.Serializer):
+    snoozed_until = serializers.DateField()
+
+    def validate_snoozed_until(self, value):
+        from django.utils import timezone
+
+        if value <= timezone.localdate():
+            raise serializers.ValidationError("Must be a future date.")
+        return value

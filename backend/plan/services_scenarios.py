@@ -12,7 +12,7 @@ from rest_framework.exceptions import ValidationError
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
 
-from .models import PlanEvent, ProjectionSnapshot, Scenario
+from .models import PlanEvent, ProjectionSnapshot, Recommendation, Scenario
 from .services_projection import ProjectionService, get_assumption_set
 
 MONEY = Decimal("0.01")
@@ -108,6 +108,11 @@ class ScenarioService:
         locked.status = Scenario.Status.ACCEPTED
         locked.accepted_at = timezone.now()
         locked.save(update_fields=["status", "accepted_at"])
+        if locked.source_recommendation_id:
+            Recommendation.objects.filter(id=locked.source_recommendation_id).update(
+                status=Recommendation.Status.ACCEPTED,
+                snoozed_until=None,
+            )
         official = ProjectionService().recalculate(
             plan=locked.plan, assumption_name=assumption_name
         )
@@ -175,6 +180,7 @@ def scenario_event_payload(event) -> dict[str, Any]:
         "monthly_expense_delta": str(event.monthly_expense_delta),
         "monthly_income_delta": str(event.monthly_income_delta),
         "monthly_contribution_delta": str(event.monthly_contribution_delta),
+        "monthly_contribution_destination": event.monthly_contribution_destination,
         "new_asset_value": str(event.new_asset_value),
         "new_asset_type": event.new_asset_type,
         "new_debt_principal": str(event.new_debt_principal),
@@ -297,15 +303,25 @@ def default_budget_lines_for_event(*, scenario: Scenario, event) -> list[BudgetL
             )
         )
     if event.monthly_contribution_delta > 0:
+        destination = event.monthly_contribution_destination
+        category = cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS)
+        subcategory = "other_financial_investments"
+        role = cast(str, AnnualExpenseEntry.CashflowRole.INVESTMENT)
+        if destination == event.ContributionDestination.SECURITY:
+            role = cast(str, AnnualExpenseEntry.CashflowRole.SAVINGS)
+        elif destination == event.ContributionDestination.DEBT:
+            category = cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES)
+            subcategory = "financial_commitments"
+            role = cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
         lines.extend(
             recurring_budget_lines(
                 name=f"{scenario.name} - aportación",
-                category=cast(str, AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS),
-                subcategory="other_financial_investments",
+                category=category,
+                subcategory=subcategory,
                 monthly_amount=Decimal(event.monthly_contribution_delta),
                 start=event.start_date,
                 end=event.end_date,
-                cashflow_role=cast(str, AnnualExpenseEntry.CashflowRole.INVESTMENT),
+                cashflow_role=role,
             )
         )
     if event.monthly_income_delta > 0:
