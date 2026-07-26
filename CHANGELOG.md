@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.31.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.30.0...moneyplanner-core-v0.31.0) (2026-07-26)
+
+
+### Features
+
+* **plan:** consolidar contrato de overview y preview ([7f59f03](https://github.com/pablesite/moneyplanner-core/commit/7f59f03decbd425395663f994da1f415f3a551a6))
+* **plan:** convertir recomendaciones en acciones trazables ([a1aec0d](https://github.com/pablesite/moneyplanner-core/commit/a1aec0df484e3a011a84a9d118f9ea4a644eb7ba))
+* **plan:** el patrimonio a preservar exige capital productivo adicional ([be31b89](https://github.com/pablesite/moneyplanner-core/commit/be31b89d4792d42dc6d4aecd72b2d17a83ab8d6c))
+* **plan:** endpoint de capital requerido por necesidad mensual ([b83ea67](https://github.com/pablesite/moneyplanner-core/commit/b83ea6710f12e5e18464860e96001f354e0822e0))
+* **plan:** jubilación sostenible más temprana y correcciones del motor ([620262f](https://github.com/pablesite/moneyplanner-core/commit/620262fb983e8c9d2644247e442a9ae67aef3cb9))
+
+
+### Bug Fixes
+
+* **deps:** actualizar axios y postcss para resolver vulnerabilidades altas (npm audit) ([9eee51e](https://github.com/pablesite/moneyplanner-core/commit/9eee51eca72a8d515ad7360a1750380fc607b58f))
+* **plan:** evitar 500 al crear un adulto con nombre ya existente ([40181c9](https://github.com/pablesite/moneyplanner-core/commit/40181c9eb1851cf18bed5b1de8feed47980c0ca1))
+* **plan:** fondo de emergencia clásico y calidad de datos real en cimientos ([be699a2](https://github.com/pablesite/moneyplanner-core/commit/be699a2eea1b8d0191ce0780a8a9b15660d42df4))
+* **plan:** reutilizar identidades adultas existentes ([a440167](https://github.com/pablesite/moneyplanner-core/commit/a440167a183879b26c6db71d39b952500cd3fad5))
+
 ## [0.30.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.29.1...moneyplanner-core-v0.30.0) (2026-07-12)
 
 
