@@ -615,6 +615,38 @@ class PlanApiTests(APITestCase):
         self.assertEqual(response.data["employment_income_end_date"], "2040-06-15")
         self.assertEqual(response.data["pension_start_date"], "2045-06-15")
 
+    def test_member_update_reuses_existing_adult_identity(self):
+        plan = create_plan(self.user)
+        canonical = FamilyMember.objects.create(
+            user=self.user,
+            name="Pablo",
+            role=FamilyMember.Role.ADULT,
+        )
+        draft = FamilyMember.objects.create(
+            user=self.user,
+            name="Pablo Test",
+            role=FamilyMember.Role.ADULT,
+        )
+        plan.members.add(draft)
+
+        response = self.client.patch(
+            reverse("financial-plan-member-detail", args=[draft.id]),
+            {
+                "name": "Pablo",
+                "birth_date": "1980-06-15",
+                "employment_end_age": 60,
+                "pension_start_age": 65,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], canonical.id)
+        self.assertEqual(response.data["employment_income_end_date"], "2040-06-15")
+        self.assertEqual(response.data["pension_start_date"], "2045-06-15")
+        self.assertEqual(list(plan.members.values_list("id", flat=True)), [canonical.id])
+        self.assertTrue(FamilyMember.objects.filter(id=draft.id, name="Pablo Test").exists())
+
 
 class ScenarioServiceTests(TestCase):
     def setUp(self):

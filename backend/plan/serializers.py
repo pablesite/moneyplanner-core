@@ -165,6 +165,36 @@ class PlanFamilyMemberSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         self._derive_retirement_dates(validated_data, instance=instance)
+        request = self.context.get("request")
+        existing = None
+        if request and "name" in validated_data:
+            existing = (
+                FamilyMember.objects.filter(
+                    user=request.user,
+                    name=validated_data["name"],
+                )
+                .exclude(pk=instance.pk)
+                .first()
+            )
+        if existing:
+            if existing.role != FamilyMember.Role.ADULT:
+                raise serializers.ValidationError(
+                    {"name": "Ya existe una persona menor con este nombre en tu cuenta."}
+                )
+            with transaction.atomic():
+                for key, value in validated_data.items():
+                    setattr(existing, key, value)
+                existing.full_clean()
+                existing.save()
+                plans = FinancialPlan.objects.filter(
+                    user=request.user,
+                    members=instance,
+                )
+                for plan in plans:
+                    plan.members.remove(instance)
+                    plan.members.add(existing)
+            return existing
+
         for key, value in validated_data.items():
             setattr(instance, key, value)
         instance.full_clean()

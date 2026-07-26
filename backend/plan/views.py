@@ -216,7 +216,12 @@ class PlanMemberDetailView(APIView):
             id=pk,
             role=FamilyMember.Role.ADULT,
         )
-        serializer = PlanFamilyMemberSerializer(member, data=request.data, partial=True)
+        serializer = PlanFamilyMemberSerializer(
+            member,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
         serializer.is_valid(raise_exception=True)
         return Response(PlanFamilyMemberSerializer(serializer.save()).data)
 
