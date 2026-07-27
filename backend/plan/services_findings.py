@@ -67,11 +67,23 @@ class FindingService:
                 }
             )
 
-        if dec(foundations["cash_flow"]["committed_surplus"]) < 0:
+        # Superávit comprometido negativo: crítico solo si es estructural. Un
+        # esfuerzo temporal (base operativa sana, compromisos que vencen pronto)
+        # baja a aviso; downstream lee `committed_status` del evidence.
+        committed_status = foundations["cash_flow"].get("committed_status")
+        if committed_status == "structural":
             specs.append(
                 {
                     "code": Finding.Code.NEGATIVE_CASH_FLOW,
                     "severity": Finding.Severity.CRITICAL,
+                    "evidence": foundations["cash_flow"],
+                }
+            )
+        elif committed_status == "transient":
+            specs.append(
+                {
+                    "code": Finding.Code.NEGATIVE_CASH_FLOW,
+                    "severity": Finding.Severity.WARNING,
                     "evidence": foundations["cash_flow"],
                 }
             )

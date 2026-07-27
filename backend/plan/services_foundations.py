@@ -13,11 +13,17 @@ from .services_quality import DataQualityService
 from .services_inputs import (
     annual_expense_entries,
     expense_buckets,
+    plan_fiscal_year,
     structural_income,
 )
 
 MONEY = Decimal("0.01")
 PCT = Decimal("0.0001")
+
+# Un superávit comprometido negativo es un "esfuerzo temporal" (no un déficit
+# estructural) si la base operativa permanente es positiva y los compromisos
+# temporales vencen dentro de esta ventana, devolviendo el superávit a >=0.
+TRANSIENT_SQUEEZE_MAX_YEARS = 3
 
 ILLIQUID_INVESTMENT_SUBCATEGORIES = {
     Asset.Subcategory.PENSION_PLANS,
@@ -113,6 +119,60 @@ def structural_operating_expense(plan: FinancialPlan) -> Decimal:
 
 def temporary_commitment_expense(plan: FinancialPlan) -> Decimal:
     return expense_buckets(annual_expense_entries(plan)).temporary_commitment
+
+
+def committed_recovery_year(
+    *, plan: FinancialPlan, operating_surplus: Decimal, start_year: int
+) -> int | None:
+    """Primer año fiscal (>= start_year) en que el superávit comprometido vuelve
+    a ser >= 0 según van venciendo los compromisos temporales.
+
+    En euros de hoy, sin inflación: es una clasificación del esfuerzo, no una
+    proyección. Un compromiso con `term_end_year = Y` sigue activo durante `Y` y
+    desaparece en `Y+1`; los de `term_end_year` nulo se tratan como indefinidos.
+    Devuelve `None` si la base operativa no cubre lo permanente (nunca recupera
+    estructuralmente) o si no recupera dentro del horizonte.
+    """
+    if operating_surplus < 0:
+        return None
+    commitments = list(
+        annual_expense_entries(plan)
+        .filter(cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
+        .values_list("amount_annual", "term_end_year")
+    )
+    for year in range(start_year, start_year + 21):
+        active = sum(
+            (Decimal(amount) for amount, end in commitments if end is None or end >= year),
+            Decimal("0"),
+        )
+        if operating_surplus - active >= 0:
+            return year
+    return None
+
+
+def temporary_commitment_breakdown(plan: FinancialPlan) -> list[dict[str, Any]]:
+    """Compromisos temporales con su importe y vencimiento, del más próximo al más
+    lejano. Alimenta la UI de "esfuerzo temporal" (para ver cuándo se libera cada uno)."""
+    rows = annual_expense_entries(plan).filter(
+        cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+    )
+    breakdown = [
+        {
+            "name": row.name,
+            "amount": money(Decimal(row.amount_annual)),
+            "end_year": row.term_end_year,
+            "end_month": row.term_end_month,
+        }
+        for row in rows
+    ]
+    # Sin fin conocido va al final; dentro del año, por mes.
+    breakdown.sort(
+        key=lambda item: (
+            item["end_year"] if item["end_year"] is not None else 9999,
+            item["end_month"] if item["end_month"] is not None else 12,
+        )
+    )
+    return breakdown
 
 
 def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
@@ -284,6 +344,22 @@ class FoundationService:
         committed_surplus = annual_income - committed_expense
         planned_contribution = planned_contribution_amount(plan=plan)
 
+        # Tercera capa: distinguir esfuerzo temporal de déficit estructural.
+        start_year = plan_fiscal_year(plan)
+        recovery_year = committed_recovery_year(
+            plan=plan, operating_surplus=operating_surplus, start_year=start_year
+        )
+        if committed_surplus >= 0:
+            committed_status = "healthy"
+        elif (
+            operating_surplus >= 0
+            and recovery_year is not None
+            and recovery_year <= start_year + TRANSIENT_SQUEEZE_MAX_YEARS
+        ):
+            committed_status = "transient"
+        else:
+            committed_status = "structural"
+
         emergency_months_base = (
             asset_metrics["emergency_liquid_assets_value"] / monthly_operating_expense
             if monthly_operating_expense is not None and monthly_operating_expense > 0
@@ -413,6 +489,11 @@ class FoundationService:
                 "operating_surplus_ratio": ratio(
                     operating_surplus / annual_income if annual_income > 0 else None
                 ),
+                # healthy (>=0) | transient (esfuerzo que vence pronto sobre base
+                # operativa sana) | structural (déficit real).
+                "committed_status": committed_status,
+                "committed_recovery_year": recovery_year,
+                "temporary_commitments": temporary_commitment_breakdown(plan),
             },
             "emergency_fund": {
                 "score": score(emergency_score),

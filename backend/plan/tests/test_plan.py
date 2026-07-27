@@ -25,6 +25,7 @@ from plan.models import (
     Scenario,
 )
 from plan.services_classification import AssetClassificationService
+from plan.services_findings import FindingService
 from plan.services_foundations import FoundationService
 from plan.services_quality import DataQualityService
 from plan.services_events import (
@@ -499,6 +500,61 @@ class ProjectionInputCorrectnessTests(TestCase):
 
         # La aportacion se cuenta una sola vez (via el interval), no tambien via el espejo.
         self.assertEqual(planned_contribution_amount(plan=self.plan), Decimal("1200.00"))
+
+    def test_committed_squeeze_transient_downgrades_finding_to_warning(self):
+        """Base operativa positiva + compromiso temporal que vence pronto:
+        esfuerzo temporal (recupera el año siguiente), finding a WARNING."""
+        year = plan_fiscal_year(self.plan)
+        income = create_income(self.user, Decimal("60000.00"))
+        income.fiscal_year = year
+        income.save(update_fields=["fiscal_year"])
+        operating = create_operating_expense(self.user, Decimal("12000.00"))
+        operating.fiscal_year = year
+        operating.save(update_fields=["fiscal_year"])
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuota temporal",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="financial_commitments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_year=year,
+            amount_annual=Decimal("60000.00"),
+            fiscal_year=year,
+        )
+
+        cash_flow = FoundationService().calculate(plan=self.plan)["cash_flow"]
+        self.assertEqual(cash_flow["committed_status"], "transient")
+        self.assertEqual(cash_flow["committed_recovery_year"], year + 1)
+
+        finding = next(
+            f
+            for f in FindingService().evaluate(plan=self.plan)
+            if f.code == Finding.Code.NEGATIVE_CASH_FLOW
+        )
+        self.assertEqual(finding.severity, Finding.Severity.WARNING)
+
+    def test_committed_squeeze_structural_keeps_finding_critical(self):
+        """Base operativa negativa (los gastos permanentes ya no caben): déficit
+        estructural, sin año de recuperación, finding CRITICAL."""
+        year = plan_fiscal_year(self.plan)
+        income = create_income(self.user, Decimal("30000.00"))
+        income.fiscal_year = year
+        income.save(update_fields=["fiscal_year"])
+        operating = create_operating_expense(self.user, Decimal("42000.00"))
+        operating.fiscal_year = year
+        operating.save(update_fields=["fiscal_year"])
+
+        cash_flow = FoundationService().calculate(plan=self.plan)["cash_flow"]
+        self.assertEqual(cash_flow["committed_status"], "structural")
+        self.assertIsNone(cash_flow["committed_recovery_year"])
+
+        finding = next(
+            f
+            for f in FindingService().evaluate(plan=self.plan)
+            if f.code == Finding.Code.NEGATIVE_CASH_FLOW
+        )
+        self.assertEqual(finding.severity, Finding.Severity.CRITICAL)
 
     def test_foundations_expose_status_bands_for_scores(self):
         """Cada bloque puntuado publica su banda para que el frontend no invente umbrales."""

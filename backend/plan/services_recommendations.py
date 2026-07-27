@@ -165,6 +165,34 @@ class RecommendationService:
                 "alternatives": ["Renegociar tipo", "Priorizar la deuda con TAE más alta"],
             }
         if finding.code == Finding.Code.NEGATIVE_CASH_FLOW:
+            # Esfuerzo temporal: no toca recortar compromisos finitos; el consejo
+            # es sostener liquidez hasta que venzan y el superávit vuelva a positivo.
+            if evidence.get("committed_status") == "transient":
+                recovery = evidence.get("committed_recovery_year")
+                until = f"hasta {recovery}" if recovery else "hasta que venzan los compromisos"
+                return {
+                    "code": Recommendation.Code.RESTORE_CASH_FLOW,
+                    "priority": self._priority(plan=plan, code="RESTORE_CASH_FLOW", base=25),
+                    "action": {
+                        "title": "Sostener liquidez durante el esfuerzo",
+                        "summary": (
+                            f"Es un esfuerzo temporal: mantén colchón {until}, cuando venzan "
+                            "los compromisos y el superávit comprometido vuelva a positivo."
+                        ),
+                        "reason": (
+                            "Tu base recurrente es positiva; el déficit viene solo de "
+                            "compromisos temporales que vencen."
+                        ),
+                        "rule": finding.code,
+                        "action_type": "review_budget",
+                        "destination": "budget",
+                    },
+                    "impact": {"committed_recovery_year": recovery},
+                    "alternatives": [
+                        "Mantener el fondo de emergencia",
+                        "Revisar el calendario de compromisos",
+                    ],
+                }
             deficit = abs(dec(evidence.get("committed_surplus")))
             monthly_action = max(
                 Decimal("50.00"), (deficit / Decimal("12")).quantize(Decimal("0.01"))
