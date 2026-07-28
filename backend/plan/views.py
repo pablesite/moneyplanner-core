@@ -26,6 +26,7 @@ from .serializers import (
     FinancialPlanSerializer,
     FindingSerializer,
     OccurredEventRegisterSerializer,
+    PlannedDecisionRegisterSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
     PlanEventCloseSerializer,
@@ -38,7 +39,12 @@ from .serializers import (
 from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
-from .services_events import close_plan_event, register_occurred_event, release_occurred_event
+from .services_events import (
+    close_plan_event,
+    register_occurred_event,
+    register_planned_decision,
+    release_occurred_event,
+)
 from .services_lifecycle import cancel_plan_event, materialize_plan_event
 from .services_overview import PlanOverviewService, RecommendationPreviewService
 from .services_projection import (
@@ -376,6 +382,20 @@ class OccurredEventView(APIView):
         serializer = OccurredEventRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         event = register_occurred_event(plan=plan, **serializer.validated_data)
+        return Response(PlanEventSerializer(event).data, status=status.HTTP_201_CREATED)
+
+
+class PlannedDecisionView(APIView):
+    """Agrupa partidas puntuales existentes en una Decisión planificada (compra/venta)
+    con impacto proyectado; adopta sus líneas y enlaza el activo/pasivo real."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        serializer = PlannedDecisionRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        event = register_planned_decision(plan=plan, **serializer.validated_data)
         return Response(PlanEventSerializer(event).data, status=status.HTTP_201_CREATED)
 
 

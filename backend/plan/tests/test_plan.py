@@ -31,9 +31,10 @@ from plan.services_quality import DataQualityService
 from plan.services_events import (
     close_plan_event,
     register_occurred_event,
+    register_planned_decision,
     release_occurred_event,
 )
-from plan.services_inputs import ExpenseBucket, expense_bucket, plan_fiscal_year
+from plan.services_inputs import ExpenseBucket, expense_bucket, one_off_flows, plan_fiscal_year
 from plan.services_lifecycle import cancel_plan_event, materialize_plan_event
 from plan.services_projection import (
     ProjectionService,
@@ -1995,3 +1996,378 @@ class FoundationCriteriaTests(TestCase):
         self.assertFalse(quality["flags"]["accounting_history"])
         expected = DataQualityService().evaluate(user=self.user).factors
         self.assertEqual(quality["flags"], expected)
+
+
+class OneOffFlowsInProjectionTests(TestCase):
+    """Fase 1: los movimientos puntuales del presupuesto (no gobernados por una
+    Decisión) entran en la proyección, en su año, en todo el horizonte."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("oneoff-user", password="x")
+        self.plan = create_plan(self.user)
+        create_investment(self.user, Decimal("300000.00"))
+        create_income(self.user, Decimal("40000.00"))
+        self.next_year = date.today().year + 1
+
+    def _project(self):
+        return ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+
+    def _row(self, result, year):
+        return next(row for row in result["trajectory"] if row["year"] == year)
+
+    def _prod(self, year):
+        return Decimal(self._row(self._project(), year)["productive_capital"])
+
+    def _expense(self, *, role, amount, year, month=12, **extra):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name=extra.pop("name", "Puntual gasto"),
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="misc",
+            time_profile=AnnualExpenseEntry.TimeProfile.ONE_OFF,
+            expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF,
+            cashflow_role=role,
+            amount_annual=amount,
+            fiscal_year=year,
+            target_month=month,
+            **extra,
+        )
+
+    def _income(self, *, role, amount, year, month=12, **extra):
+        return AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name=extra.pop("name", "Puntual ingreso"),
+            category=AnnualIncomeEntry.Category.OTHER_INCOME,
+            subcategory="misc",
+            time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
+            income_type=AnnualIncomeEntry.IncomeType.ONE_OFF,
+            cashflow_role=role,
+            amount_annual=amount,
+            fiscal_year=year,
+            target_month=month,
+            **extra,
+        )
+
+    def test_future_one_off_outflow_reduces_productive_capital(self):
+        baseline = self._prod(self.next_year)
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+        )
+        self.assertEqual(baseline - self._prod(self.next_year), Decimal("50000.00"))
+
+    def test_future_one_off_income_increases_productive_capital(self):
+        baseline = self._prod(self.next_year)
+        self._income(
+            role=AnnualIncomeEntry.CashflowRole.OTHER,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+        )
+        self.assertEqual(self._prod(self.next_year) - baseline, Decimal("50000.00"))
+
+    def test_asset_purchase_moves_productive_to_non_productive(self):
+        base = self._row(self._project(), self.next_year)
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+        )
+        after = self._row(self._project(), self.next_year)
+        self.assertEqual(
+            Decimal(base["productive_capital"]) - Decimal(after["productive_capital"]),
+            Decimal("50000.00"),
+        )
+        self.assertEqual(
+            Decimal(after["non_productive_assets"]) - Decimal(base["non_productive_assets"]),
+            Decimal("50000.00"),
+        )
+        # El patrimonio neto se conserva en el año de la compra (caja → activo).
+        self.assertEqual(after["net_worth"], base["net_worth"])
+
+    def test_one_off_governed_by_a_decision_is_excluded(self):
+        baseline = self._prod(self.next_year)
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+            event_group="plan_event:99",
+        )
+        self.assertEqual(self._prod(self.next_year), baseline)
+
+    def test_system_generated_asset_sale_and_past_year_are_excluded(self):
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+            is_system_generated=True,
+        )
+        self._income(
+            role=AnnualIncomeEntry.CashflowRole.ASSET_SALE,
+            amount=Decimal("50000.00"),
+            year=self.next_year,
+        )
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+            amount=Decimal("50000.00"),
+            year=date.today().year - 1,
+        )
+        self.assertEqual(one_off_flows(self.plan), [])
+
+    def test_current_year_one_off_respects_occurrence_month(self):
+        today = date.today()
+        if today.month > 1:
+            self._expense(
+                role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+                amount=Decimal("11111.00"),
+                year=today.year,
+                month=1,
+                name="ya pasado",
+            )
+        if today.month < 12:
+            self._expense(
+                role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+                amount=Decimal("22222.00"),
+                year=today.year,
+                month=12,
+                name="futuro",
+            )
+        total_outflow = sum(Decimal(flow["outflow"]) for flow in one_off_flows(self.plan))
+        expected = Decimal("22222.00") if today.month < 12 else Decimal("0.00")
+        self.assertEqual(total_outflow, expected)
+
+
+class AssetDisposalInProjectionTests(TestCase):
+    """Fase 2a: una Decisión de venta retira el activo enlazado del patrimonio
+    proyectado (sin doble conteo) y sus ingresos netos entran como capital."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("disposal-user", password="x")
+        self.plan = create_plan(self.user)
+        create_investment(self.user, Decimal("100000.00"))
+        self.sale_year = date.today().year + 3
+
+    def _home(self, amount=Decimal("200000.00")):
+        return Asset.objects.create(
+            user=self.user,
+            name="Vivienda a vender",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            amount=amount,
+            currency="EUR",
+        )
+
+    def _sale_event(self, **event):
+        return PlanEvent.objects.create(
+            plan=self.plan,
+            name="Venta vivienda",
+            event_type=Scenario.TemplateType.HOUSING,
+            planned_date=date(self.sale_year, 1, 1),
+            status=PlanEvent.Status.PLANNED,
+            planned_impact_json={"events": [{"start_year": self.sale_year, **event}]},
+        )
+
+    def _project(self):
+        return ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+
+    def _row(self, result, year):
+        return next(row for row in result["trajectory"] if row["year"] == year)
+
+    def test_future_sale_removes_asset_and_adds_proceeds(self):
+        self._home(Decimal("200000.00"))
+        before = self._row(self._project(), self.sale_year)
+        self._sale_event(
+            disposed_asset_value="200000.00",
+            disposed_asset_type="family_use",
+            proceeds="220000.00",
+        )
+        after = self._row(self._project(), self.sale_year)
+        # El activo desaparece del bucket no-productivo en el año de la venta.
+        self.assertEqual(after["non_productive_assets"], "0.00")
+        # Los ingresos netos entran como capital productivo.
+        self.assertEqual(
+            Decimal(after["productive_capital"]) - Decimal(before["productive_capital"]),
+            Decimal("220000.00"),
+        )
+        # Se vende por encima del valor en libros → el patrimonio neto sube (plusvalía).
+        self.assertGreater(Decimal(after["net_worth"]), Decimal(before["net_worth"]))
+
+    def test_sale_cancels_linked_liability(self):
+        home = self._home(Decimal("200000.00"))
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("150000.00"),
+            currency="EUR",
+            financed_asset=home,
+            term_months=300,
+        )
+        before = self._row(self._project(), self.sale_year)
+        self.assertGreater(Decimal(before["liabilities"]), Decimal("0"))
+        self._sale_event(
+            disposed_asset_value="50000.00",  # valor neto en el bucket (200k - 150k)
+            disposed_asset_type="family_use",
+            proceeds="50000.00",
+            disposed_liability_value="150000.00",
+        )
+        after = self._row(self._project(), self.sale_year)
+        self.assertEqual(after["non_productive_assets"], "0.00")
+        # La hipoteca desaparece del saldo de deuda proyectado.
+        self.assertEqual(after["liabilities"], "0.00")
+
+    def test_past_sale_decision_is_not_reapplied_in_horizon(self):
+        self._home(Decimal("200000.00"))
+        this_year = date.today().year
+        before = self._row(self._project(), this_year)
+        PlanEvent.objects.create(
+            plan=self.plan,
+            name="Venta pasada",
+            event_type=Scenario.TemplateType.HOUSING,
+            planned_date=date(this_year - 2, 1, 1),
+            status=PlanEvent.Status.PLANNED,
+            planned_impact_json={
+                "events": [
+                    {
+                        "start_year": this_year - 2,
+                        "disposed_asset_value": "200000.00",
+                        "disposed_asset_type": "family_use",
+                        "proceeds": "200000.00",
+                    }
+                ]
+            },
+        )
+        after = self._row(self._project(), this_year)
+        self.assertEqual(after["non_productive_assets"], before["non_productive_assets"])
+
+
+class PlannedDecisionMigrationTests(APITestCase):
+    """Fase 2b: agrupar partidas puntuales existentes en una Decisión planificada
+    (compra/venta) las saca de la vía de Fase 1 y les da impacto vía la Decisión."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("migration-user", password="x")
+        self.plan = create_plan(self.user)
+        create_investment(self.user, Decimal("100000.00"))
+        self.transaction_year = date.today().year + 2
+
+    def _home(self):
+        return Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            amount=Decimal("200000.00"),
+            currency="EUR",
+        )
+
+    def _sale_income(self, amount=Decimal("220000.00")):
+        return AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Venta vivienda",
+            category=AnnualIncomeEntry.Category.CAPITAL_GAINS,
+            subcategory="misc",
+            time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
+            income_type=AnnualIncomeEntry.IncomeType.ONE_OFF,
+            cashflow_role=AnnualIncomeEntry.CashflowRole.OTHER,
+            amount_annual=amount,
+            fiscal_year=self.transaction_year,
+        )
+
+    def _reform_expense(self, amount=Decimal("40000.00")):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Reforma",
+            category=AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            subcategory="misc",
+            time_profile=AnnualExpenseEntry.TimeProfile.ONE_OFF,
+            expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+            amount_annual=amount,
+            fiscal_year=self.transaction_year,
+            target_month=12,
+        )
+
+    def _row(self, year):
+        result = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        return next(row for row in result["trajectory"] if row["year"] == year)
+
+    def test_sale_decision_disposes_asset_and_adopts_income_line(self):
+        home = self._home()
+        income = self._sale_income(Decimal("220000.00"))
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Venta vivienda",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 1, 1),
+            transaction_year=self.transaction_year,
+            income_entry_ids=[income.id],
+            asset_ids=[home.id],
+            impact={
+                "disposed_asset_value": Decimal("200000.00"),
+                "disposed_asset_type": "family_use",
+                "proceeds": Decimal("220000.00"),
+            },
+        )
+        income.refresh_from_db()
+        self.assertEqual(income.event_group, f"plan_event:{event.id}")
+        self.assertIn(home, list(event.linked_assets.all()))
+        # La proyección da de baja el activo en el año de la venta.
+        self.assertEqual(self._row(self.transaction_year)["non_productive_assets"], "0.00")
+        # La línea la gobierna la Decisión: no se cuenta también por la vía de Fase 1.
+        self.assertEqual(one_off_flows(self.plan), [])
+
+    def test_purchase_decision_takes_expense_lines_out_of_phase_1(self):
+        reform = self._reform_expense(Decimal("40000.00"))
+        # Antes de agrupar, la reforma cuenta como flujo puntual de Fase 1.
+        self.assertTrue(
+            any(Decimal(flow["asset_purchase"]) > 0 for flow in one_off_flows(self.plan))
+        )
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Compra Atrio",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 1, 1),
+            transaction_year=self.transaction_year,
+            expense_entry_ids=[reform.id],
+            impact={
+                "initial_outflow": Decimal("40000.00"),
+                "new_asset_value": Decimal("250000.00"),
+                "new_asset_type": "family_use",
+            },
+        )
+        reform.refresh_from_db()
+        self.assertEqual(reform.event_group, f"plan_event:{event.id}")
+        # Ya no se cuenta por Fase 1 (la gobierna la Decisión).
+        self.assertEqual(one_off_flows(self.plan), [])
+
+    def test_endpoint_creates_planned_sale_decision(self):
+        home = self._home()
+        income = self._sale_income(Decimal("220000.00"))
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            reverse("financial-plan-event-planned-decision"),
+            {
+                "name": "Venta vivienda",
+                "event_type": Scenario.TemplateType.HOUSING,
+                "decision_date": f"{date.today().year}-01-15",
+                "transaction_year": self.transaction_year,
+                "income_entry_ids": [income.id],
+                "asset_ids": [home.id],
+                "impact": {
+                    "disposed_asset_value": "200000.00",
+                    "disposed_asset_type": "family_use",
+                    "proceeds": "220000.00",
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        income.refresh_from_db()
+        self.assertTrue(income.event_group.startswith("plan_event:"))

@@ -198,6 +198,101 @@ def register_occurred_event(
     return event
 
 
+def _decision_impact_event(
+    *, start_year: int, end_year: int | None, impact: dict[str, Any]
+) -> dict[str, Any]:
+    """Construye el payload de impacto de una Decisión planificada, con las mismas
+    claves que `scenario_event_payload` para que la proyección lo aplique en su año
+    (compra: `new_asset_*`/`new_debt_*`/`initial_outflow`; venta: `disposed_*`/`proceeds`)."""
+
+    def money(key: str) -> str:
+        value = impact.get(key)
+        return str(value) if value is not None else "0"
+
+    term = impact.get("new_debt_term_years")
+    term_years = int(term) if term else None
+    debt_end_year = start_year + max(0, term_years - 1) if term_years else None
+    return {
+        "start_year": int(start_year),
+        "start_date": date(int(start_year), 1, 1).isoformat(),
+        "end_year": int(end_year) if end_year else None,
+        "initial_outflow": money("initial_outflow"),
+        "monthly_expense_delta": "0",
+        "monthly_income_delta": "0",
+        "monthly_contribution_delta": "0",
+        "monthly_contribution_destination": "productive",
+        "new_asset_value": money("new_asset_value"),
+        "new_asset_type": impact.get("new_asset_type"),
+        "new_debt_principal": money("new_debt_principal"),
+        "new_debt_interest_rate": money("new_debt_interest_rate"),
+        "new_debt_term_years": term_years,
+        "debt_end_year": debt_end_year,
+        "disposed_asset_value": money("disposed_asset_value"),
+        "disposed_asset_type": impact.get("disposed_asset_type"),
+        "proceeds": money("proceeds"),
+        "disposed_liability_value": money("disposed_liability_value"),
+    }
+
+
+@transaction.atomic
+def register_planned_decision(
+    *,
+    plan: FinancialPlan,
+    name: str,
+    event_type: str,
+    decision_date: date,
+    transaction_year: int,
+    expense_entry_ids: list[int] | None = None,
+    income_entry_ids: list[int] | None = None,
+    asset_ids: list[int] | None = None,
+    liability_ids: list[int] | None = None,
+    impact: dict[str, Any] | None = None,
+    end_year: int | None = None,
+    note: str = "",
+) -> PlanEvent:
+    """Agrupa partidas puntuales existentes en una Decisión *planificada* con impacto
+    en la proyección (compra o venta de activo), en su ``transaction_year``.
+
+    Adopta las líneas seleccionadas (salen de la vía de flujos puntuales de Fase 1 y
+    pasan a gobernarse por la Decisión) y enlaza el activo/pasivo real. A diferencia de
+    ``register_occurred_event``, nace ``planned`` y **sí** aporta impacto proyectado.
+    """
+    event = PlanEvent.objects.create(
+        plan=plan,
+        name=name.strip(),
+        event_type=event_type,
+        planned_date=decision_date,
+        status=PlanEvent.Status.PLANNED,
+        planned_impact_json={
+            "events": [
+                _decision_impact_event(
+                    start_year=transaction_year, end_year=end_year, impact=impact or {}
+                )
+            ]
+        },
+    )
+    adopted = _adopt_budget_entries(
+        event=event,
+        expense_entry_ids=expense_entry_ids or [],
+        income_entry_ids=income_entry_ids or [],
+    )
+    linked = _link_net_worth(
+        event=event, asset_ids=asset_ids or [], liability_ids=liability_ids or []
+    )
+    event.actual_impact_json = {
+        "registration": {
+            "decision_date": decision_date.isoformat(),
+            "transaction_year": int(transaction_year),
+            "note": note.strip(),
+            "adopted_lines": adopted,
+            "linked": linked,
+        }
+    }
+    event.save(update_fields=["actual_impact_json", "updated_at"])
+    ProjectionService().recalculate(plan=plan)
+    return event
+
+
 def _link_net_worth(
     *, event: PlanEvent, asset_ids: list[int], liability_ids: list[int]
 ) -> dict[str, list[dict[str, Any]]]:

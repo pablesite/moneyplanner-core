@@ -16,7 +16,7 @@ from net_worth.models import InvestmentContributionInterval, Liability
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
-from .services_inputs import plan_fiscal_year, structural_income
+from .services_inputs import one_off_flows, plan_fiscal_year, structural_income
 
 
 MONEY = Decimal("0.01")
@@ -55,6 +55,9 @@ class ProjectionInputs:
     liability_weighted_rate: Decimal
     liability_max_term_years: int
     plan_events: tuple[dict[str, Any], ...] = ()
+    # Flujos puntuales de presupuesto (no gobernados por Decisiones) agregados por
+    # año; se aplican en su año en todo el horizonte. Ver services_inputs.one_off_flows.
+    one_off_flows: tuple[dict[str, Any], ...] = ()
 
 
 class ProjectionService:
@@ -197,6 +200,7 @@ def build_projection_inputs(
             liability_weighted_rate=weighted_rate,
             liability_max_term_years=max_term_years,
             plan_events=tuple(event_payloads),
+            one_off_flows=tuple(one_off_flows(plan=plan)),
         ),
         classification,
         quality,
@@ -227,6 +231,9 @@ def calculate_projection(
     applied_one_off_events: set[int] = set()
     active_event_debts: list[dict[str, Decimal | int]] = []
     debt_contributions = Decimal("0")
+    # Pasivos cancelados por una venta de activo (Decisión): se restan del saldo de
+    # deuda a partir del año de la venta.
+    disposed_liability_total = Decimal("0")
 
     # El patrimonio a preservar es capital que no se toca: se exige además del
     # capital que sostiene la renta. Antes solo era una comprobación sobre el
@@ -330,12 +337,46 @@ def calculate_projection(
                         "rate": rate,
                     }
                 )
+            disposed_value = Decimal(str(event.get("disposed_asset_value") or "0"))
+            if disposed_value > 0:
+                # Venta de activo: se retira su valor proyectado del bucket (deja de
+                # contar y de revalorizarse) y los ingresos netos entran como capital
+                # productivo (ya líquido e invertible). Simétrico a `new_asset_value`.
+                disposed_type = event.get("disposed_asset_type")
+                disposed_rate = {
+                    "productive": productive_return,
+                    "security": Decimal("0"),
+                }.get(disposed_type, non_productive_return)
+                grown = inflate(disposed_value, disposed_rate, max(0, year - start_year))
+                if disposed_type == "productive":
+                    productive = max(Decimal("0"), productive - grown)
+                elif disposed_type == "security":
+                    security = max(Decimal("0"), security - grown)
+                else:
+                    non_productive = max(Decimal("0"), non_productive - grown)
+            productive += Decimal(str(event.get("proceeds") or "0"))
+            disposed_liability_total += Decimal(str(event.get("disposed_liability_value") or "0"))
             applied_one_off_events.add(event_index)
+        flow = one_off_flow_for_year(inputs.one_off_flows, year)
+        if flow is not None:
+            productive += Decimal(str(flow["income"])) + Decimal(str(flow["contribution"]))
+            asset_purchase = Decimal(str(flow["asset_purchase"]))
+            if asset_purchase > 0:
+                # Compra de activo con caja: sale del capital productivo (baja la
+                # renta futura) y pasa a no-productivo (conserva patrimonio).
+                productive = max(Decimal("0"), productive - asset_purchase)
+                non_productive += asset_purchase
+            productive, security = apply_initial_outflow(
+                productive=productive,
+                security=security,
+                amount=Decimal(str(flow["outflow"])),
+            )
         liabilities = max(
             Decimal("0"),
             base_liabilities
             + event_debt_balance(debts=active_event_debts, year=year)
-            - debt_contributions,
+            - debt_contributions
+            - disposed_liability_total,
         )
         required = (
             target_capital_for_year(
@@ -349,8 +390,14 @@ def calculate_projection(
         # Los buckets (productive/security/non_productive) ya vienen netos de su
         # deuda asociada; restar `liabilities` (deuda total) la contaría dos veces.
         # Se suma de vuelta la asociada para que el patrimonio reconcilie con el real.
+        # Al vender un activo se cancela su deuda asociada: se descuenta de ambos
+        # términos a la vez para no descuadrar el patrimonio neto.
         net_worth = (
-            productive + security + non_productive - liabilities + inputs.associated_liabilities
+            productive
+            + security
+            + non_productive
+            - liabilities
+            + max(Decimal("0"), inputs.associated_liabilities - disposed_liability_total)
         )
         preservation_ok = (
             inputs.preservation_target_eur is None or net_worth >= inputs.preservation_target_eur
@@ -760,6 +807,13 @@ def event_deltas_for_year(
             Decimal(str(event.get("monthly_contribution_delta") or "0")) * active_months
         )
     return result
+
+
+def one_off_flow_for_year(flows: tuple[dict[str, Any], ...], year: int) -> dict[str, Any] | None:
+    for flow in flows:
+        if int(str(flow["year"])) == year:
+            return flow
+    return None
 
 
 def apply_initial_outflow(

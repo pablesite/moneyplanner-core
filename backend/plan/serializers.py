@@ -414,6 +414,63 @@ class OccurredEventRegisterSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class DecisionImpactSerializer(serializers.Serializer):
+    """Impacto proyectado de una Decisión (compra: `new_*`; venta: `disposed_*`/proceeds)."""
+
+    initial_outflow = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+    new_asset_value = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+    new_asset_type = serializers.ChoiceField(
+        choices=PlanAssetFunction.Function.choices, required=False, allow_null=True
+    )
+    new_debt_principal = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+    new_debt_interest_rate = serializers.DecimalField(
+        max_digits=6, decimal_places=4, required=False, min_value=0
+    )
+    new_debt_term_years = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    disposed_asset_value = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+    disposed_asset_type = serializers.ChoiceField(
+        choices=PlanAssetFunction.Function.choices, required=False, allow_null=True
+    )
+    proceeds = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+    disposed_liability_value = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
+
+
+class PlannedDecisionRegisterSerializer(serializers.Serializer):
+    """Agrupa partidas puntuales existentes en una Decisión planificada (compra/venta)."""
+
+    name = serializers.CharField(max_length=140)
+    event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    decision_date = serializers.DateField()
+    transaction_year = serializers.IntegerField(min_value=2000, max_value=2200)
+    end_year = serializers.IntegerField(required=False, allow_null=True, min_value=2000)
+    expense_entry_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    income_entry_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    asset_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    liability_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, default=list
+    )
+    impact = DecisionImpactSerializer(required=False, default=dict)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
 class AssetFunctionUpdateSerializer(serializers.Serializer):
     asset_id = serializers.IntegerField(min_value=1)
     function = serializers.ChoiceField(choices=PlanAssetFunction.Function.choices, allow_null=True)
