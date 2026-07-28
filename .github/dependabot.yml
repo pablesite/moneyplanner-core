@@ -20,6 +20,13 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+    # Temporal: TS 7.0.2 rompe el frontend actual porque typescript-eslint
+    # y vue-tsc todavia no soportan este major. Retirar cuando ambos
+    # toolings soporten TypeScript 7+ en este stack.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     groups:
       frontend-minor-patches:
         update-types: ["minor", "patch"]
