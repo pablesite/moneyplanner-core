@@ -2371,3 +2371,25 @@ class PlannedDecisionMigrationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         income.refresh_from_db()
         self.assertTrue(income.event_group.startswith("plan_event:"))
+
+    def test_cancelling_decision_releases_adopted_lines_without_deleting(self):
+        # Partida real del usuario, con su propio grupo manual.
+        reform = self._reform_expense(Decimal("40000.00"))
+        reform.event_group = "compra_atrio"
+        reform.save(update_fields=["event_group"])
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Compra Atrio",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 1, 1),
+            transaction_year=self.transaction_year,
+            expense_entry_ids=[reform.id],
+            impact={"new_asset_value": Decimal("250000.00"), "new_asset_type": "family_use"},
+        )
+        reform.refresh_from_db()
+        self.assertEqual(reform.event_group, f"plan_event:{event.id}")
+        # Cancelar NO debe borrar la partida adoptada: se libera a su grupo previo.
+        cancel_plan_event(event=event)
+        reform.refresh_from_db()  # lanzaría DoesNotExist si se hubiera borrado
+        self.assertEqual(reform.event_group, "compra_atrio")
+        self.assertTrue(reform.is_active)

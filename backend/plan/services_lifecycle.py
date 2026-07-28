@@ -221,9 +221,11 @@ def _hand_budget_back(*, event: PlanEvent, drop_financing: bool) -> dict[str, li
 def cancel_plan_event(*, event: PlanEvent) -> dict[str, Any]:
     """Cambio de opinión sobre algo que aún no ha pasado: borra la previsión, no la realidad.
 
-    Solo aplica a decisiones previstas. Sus lineas de presupuesto las creó el plan, así que
-    se borran enteras y la proyección vuelve a donde estaba. Nada de esto toca el presente:
-    una decisión ya materializada se deshace en Patrimonio, dando de baja su activo o pasivo.
+    Solo aplica a decisiones previstas. Las líneas de presupuesto que la decisión *creó*
+    (p. ej. un escenario aceptado) se borran; las que solo *adoptó* (partidas que ya tenía
+    el usuario) se liberan a su grupo previo, no se borran. La proyección vuelve a donde
+    estaba. Nada de esto toca el presente: una decisión ya materializada se deshace en
+    Patrimonio, dando de baja su activo o pasivo.
     """
     # `source_scenario` es nullable: incluirlo en select_related haria un outer join y
     # Postgres no admite FOR UPDATE sobre el lado nullable de un outer join.
@@ -241,19 +243,33 @@ def cancel_plan_event(*, event: PlanEvent) -> dict[str, Any]:
         )
 
     event_group = f"plan_event:{locked.id}"
+    # Las decisiones que *adoptan* partidas ya existentes (register_planned_decision /
+    # registro ocurrido) guardan el grupo previo de cada línea: al cancelar deben
+    # *liberarse* a ese grupo, no borrarse (son datos reales del usuario). Solo se borran
+    # las líneas que la decisión *creó* (p. ej. las de un escenario aceptado).
+    adopted_previous = {
+        (str(line.get("model")), line.get("id")): line.get("previous_event_group") or ""
+        for line in locked.actual_impact_json.get("registration", {}).get("adopted_lines", [])
+    }
     deleted: list[dict[str, Any]] = []
+    released: list[dict[str, Any]] = []
     for model in (AnnualExpenseEntry, AnnualIncomeEntry):
         for entry in model.objects.filter(user=locked.plan.user, event_group=event_group):
-            deleted.append(
-                {
-                    "model": model.__name__,
-                    "id": entry.id,
-                    "name": entry.name,
-                    "fiscal_year": entry.fiscal_year,
-                    "amount_annual": str(entry.amount_annual),
-                }
-            )
-            entry.delete()
+            record = {
+                "model": model.__name__,
+                "id": entry.id,
+                "name": entry.name,
+                "fiscal_year": entry.fiscal_year,
+                "amount_annual": str(entry.amount_annual),
+            }
+            previous_group = adopted_previous.get((model.__name__, entry.id))
+            if previous_group is not None:
+                entry.event_group = previous_group
+                entry.save(update_fields=["event_group"])
+                released.append(record)
+            else:
+                entry.delete()
+                deleted.append(record)
 
     scenario = locked.source_scenario
     plan = locked.plan
@@ -265,4 +281,8 @@ def cancel_plan_event(*, event: PlanEvent) -> dict[str, Any]:
         scenario.save(update_fields=["status", "accepted_at"])
 
     projection = ProjectionService().recalculate(plan=plan)
-    return {"budget_lines_deleted": deleted, "projection": projection}
+    return {
+        "budget_lines_deleted": deleted,
+        "budget_lines_released": released,
+        "projection": projection,
+    }
