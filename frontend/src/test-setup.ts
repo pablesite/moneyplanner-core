@@ -10,4 +10,5 @@ class MockIntersectionObserver {
   takeRecords = vi.fn(() => []);
 }
 
-globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+globalThis.IntersectionObserver =
+  MockIntersectionObserver as unknown as typeof IntersectionObserver;
