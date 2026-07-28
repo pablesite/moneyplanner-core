@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.test.utils import override_settings
 from django.utils import timezone
 from datetime import timedelta
+from unittest.mock import patch
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -193,7 +194,17 @@ class CoreAuthModeApiTests(APITestCase):
     EXTERNAL_JWT_SIGNING_KEY="external-signing-secret-32-bytes-min",
 )
 class CoreExternalTokenTests(APITestCase):
-    def _build_external_access_token(self, *, external_user_id: int) -> str:
+    def setUp(self):
+        introspection = patch(
+            "accounts.authentication.CoreJWTAuthentication._introspect_external_session",
+            return_value={"user_id": 42, "must_change_password": False},
+        )
+        self.introspect_external_session = introspection.start()
+        self.addCleanup(introspection.stop)
+
+    def _build_external_access_token(
+        self, *, external_user_id: int, core_bootstrap: bool = False
+    ) -> str:
         now = timezone.now()
         payload = {
             "token_type": "access",
@@ -204,6 +215,8 @@ class CoreExternalTokenTests(APITestCase):
             "iss": "moneyplanner-external",
             "aud": "moneyplanner-external-api",
         }
+        if core_bootstrap:
+            payload["core_bootstrap"] = True
         return jwt.encode(
             payload, "external-signing-secret-32-bytes-min", algorithm=api_settings.ALGORITHM
         )
@@ -217,6 +230,53 @@ class CoreExternalTokenTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["base_currency"], "EUR")
         self.assertEqual(response.data["inflation_region"], "ES")
+        self.introspect_external_session.assert_called_once_with(token)
+
+    def test_external_token_is_blocked_while_password_change_is_pending(self):
+        self.introspect_external_session.return_value = {
+            "user_id": 42,
+            "must_change_password": True,
+        }
+        token = self._build_external_access_token(external_user_id=42)
+
+        response = self.client.get(
+            "/api/auth/settings/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_external_pending_user_cannot_use_bootstrap_with_regular_token(self):
+        self.introspect_external_session.return_value = {
+            "user_id": 42,
+            "must_change_password": True,
+        }
+        token = self._build_external_access_token(external_user_id=42)
+
+        response = self.client.post(
+            "/api/family-members/ensure-primary/",
+            {},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_purpose_bound_bootstrap_token_skips_uncommitted_session_introspection(self):
+        token = self._build_external_access_token(
+            external_user_id=42,
+            core_bootstrap=True,
+        )
+
+        response = self.client.post(
+            "/api/family-members/ensure-primary/",
+            {},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        self.assertNotEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.introspect_external_session.assert_not_called()
 
         mapped = ExternalIdentity.objects.get(
             provider=ExternalIdentity.Provider.EXTERNAL,
