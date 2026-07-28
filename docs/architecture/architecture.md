@@ -38,6 +38,13 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
+## External SaaS Authentication Boundary
+
+1. Core standalone JWTs keep their local blacklist and rotation behavior.
+2. When `AUTH_ACCEPT_EXTERNAL_TOKENS=1`, a SaaS-issued JWT must pass signature, issuer and audience validation and then live session introspection against SaaS.
+3. Introspection makes Core respect SaaS account deactivation, password revocation and `must_change_password` immediately.
+4. The only non-introspected external token is a two-minute `core_bootstrap` token signed by SaaS and accepted exclusively by `POST /api/family-members/ensure-primary/`.
+
 ## Budget Execution Coverage Contract
 1. `GET /api/budget/annual-income/monthly-summary/?year=YYYY` and `GET /api/budget/annual-expense/monthly-summary/?year=YYYY` are the canonical contracts to explain budget coverage vs real execution.
 2. The payload distinguishes:

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue';
 
-let modalIdCounter = 0;
-
 const props = withDefaults(
   defineProps<{
     open: boolean;
@@ -19,7 +17,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const titleId = `base-modal-title-${++modalIdCounter}`;
+const titleId = `base-modal-title-${crypto.randomUUID()}`;
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close');

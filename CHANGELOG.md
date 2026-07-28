@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.33.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.32.0...moneyplanner-core-v0.33.0) (2026-07-28)
+
+
+### Features
+
+* **auth:** validate SaaS sessions before Core access ([#109](https://github.com/pablesite/moneyplanner-core/issues/109)) ([a641fdd](https://github.com/pablesite/moneyplanner-core/commit/a641fdddf20f8d9ab2651ca4081bc7d73b842d0a))
+
+## [0.32.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.31.0...moneyplanner-core-v0.32.0) (2026-07-27)
+
+
+### Features
+
+* **plan:** distinguir apretón transitorio de déficit estructural ([ac4070e](https://github.com/pablesite/moneyplanner-core/commit/ac4070e1ee9177a8f436fbac4704fa55afec4c36))
+
 ## [0.31.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.30.0...moneyplanner-core-v0.31.0) (2026-07-26)
 
 

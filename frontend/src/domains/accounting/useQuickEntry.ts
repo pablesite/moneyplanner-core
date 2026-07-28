@@ -351,7 +351,6 @@ export function useQuickEntry(ctx: QuickEntryContext) {
     return Boolean(quickEntryForm.category_key && quickEntryForm.subcategory_key);
   }
 
-  // eslint-disable-next-line complexity
   function resolveFlexibleDebtBreakdown(
     totalRaw: string,
     principalRaw: string,
