@@ -40,7 +40,9 @@ from plan.services_projection import (
     ProjectionService,
     build_projection_inputs,
     capital_requirements,
+    decision_debt_service_for_year,
     earliest_sustainable_retirement_year,
+    free_operating_surplus,
     get_assumption_set,
     plan_event_payloads,
     planned_contribution_amount,
@@ -2414,3 +2416,151 @@ class PlannedDecisionMigrationTests(APITestCase):
         reform.refresh_from_db()  # lanzaría DoesNotExist si se hubiera borrado
         self.assertEqual(reform.event_group, "compra_atrio")
         self.assertTrue(reform.is_active)
+
+
+class CashFlowReconciliationTests(TestCase):
+    """La aportación efectiva de cada año se limita al superávit libre real (caja):
+    ingreso − operativos − compromisos que vencen − servicio de deuda de Decisiones.
+    Un déficit consume capital (seguridad primero, luego productivo)."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("cashflow-user", password="x")
+        self.plan = create_plan(self.user)
+        create_investment(self.user, Decimal("100000.00"))
+        self.year = date.today().year
+        self.next_year = self.year + 1
+
+    def _income(self, amount):
+        return AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Salario",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="salary",
+            amount_annual=amount,
+            fiscal_year=self.year,
+        )
+
+    def _operating(self, amount):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Vida",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+            amount_annual=amount,
+            fiscal_year=self.year,
+        )
+
+    def _investment(self, amount):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportación ETF",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="etf",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=amount,
+            fiscal_year=self.year,
+        )
+
+    def _commitment(self, amount, end_year):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Esfuerzo temporal",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="misc",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_year=end_year,
+            amount_annual=amount,
+            fiscal_year=self.year,
+        )
+
+    def _debt_event(self, principal, *, rate="0.0250", term=30):
+        return PlanEvent.objects.create(
+            plan=self.plan,
+            name="Hipoteca nueva",
+            event_type=Scenario.TemplateType.HOUSING,
+            planned_date=date(self.year, 1, 1),
+            status=PlanEvent.Status.PLANNED,
+            planned_impact_json={
+                "events": [
+                    {
+                        "start_year": self.year,
+                        "new_debt_principal": str(principal),
+                        "new_debt_interest_rate": rate,
+                        "new_debt_term_years": term,
+                    }
+                ]
+            },
+        )
+
+    def _prod(self, year):
+        result = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        row = next(row for row in result["trajectory"] if row["year"] == year)
+        return Decimal(row["productive_capital"])
+
+    def test_decision_debt_service_amortizes_and_ends(self):
+        events = (
+            {
+                "start_year": self.year,
+                "new_debt_principal": "200000.00",
+                "new_debt_interest_rate": "0.0250",
+                "new_debt_term_years": 30,
+            },
+        )
+        service = decision_debt_service_for_year(events=events, year=self.year)
+        # 200k al 2,5% a 30 años ≈ 790 €/mes ≈ 9.485 €/año (banda amplia, no frágil).
+        self.assertGreater(service, Decimal("9000"))
+        self.assertLess(service, Decimal("10000"))
+        # Cuando el préstamo ya está amortizado, deja de pesar en la caja.
+        self.assertEqual(
+            decision_debt_service_for_year(events=events, year=self.year + 30), Decimal("0")
+        )
+
+    def test_debt_service_caps_effective_contribution(self):
+        # Superávit operativo 15k, aportación planificada 12k: sin deuda cabe entera.
+        self._income(Decimal("40000.00"))
+        self._operating(Decimal("25000.00"))
+        self._investment(Decimal("12000.00"))
+        before = self._prod(self.next_year)
+        # La cuota de la hipoteca nueva se come el superávit y capa la aportación.
+        self._debt_event(Decimal("200000.00"))
+        after = self._prod(self.next_year)
+        self.assertLess(after, before)
+
+    def test_expiring_commitment_raises_free_surplus(self):
+        self._income(Decimal("40000.00"))
+        self._operating(Decimal("20000.00"))
+        self._commitment(Decimal("15000.00"), end_year=self.next_year)
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(get_assumption_set(name="expected"))
+        active = free_operating_surplus(
+            inputs=inputs, assumptions=assumptions, year=self.next_year, start_year=self.year
+        )
+        after = free_operating_surplus(
+            inputs=inputs, assumptions=assumptions, year=self.next_year + 1, start_year=self.year
+        )
+        # Al vencer el compromiso de 15k, el superávit libre se recupera.
+        self.assertGreater(after, active + Decimal("10000"))
+
+    def test_ample_income_keeps_full_contribution(self):
+        # Ingreso holgado: el superávit libre supera a la aportación → no se capa.
+        self._income(Decimal("90000.00"))
+        self._operating(Decimal("20000.00"))
+        self._investment(Decimal("10000.00"))
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(get_assumption_set(name="expected"))
+        free_cash = free_operating_surplus(
+            inputs=inputs, assumptions=assumptions, year=self.next_year, start_year=self.year
+        )
+        self.assertGreater(free_cash, inputs.annual_planned_contributions)
+
+    def test_deficit_draws_down_capital(self):
+        # Sin holgura de caja (operativos > ingreso) el déficit consume capital cada año.
+        self._income(Decimal("20000.00"))
+        self._operating(Decimal("35000.00"))
+        first = self._prod(self.next_year)
+        second = self._prod(self.next_year + 1)
+        self.assertLess(second, first)

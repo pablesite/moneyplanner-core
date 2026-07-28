@@ -16,7 +16,13 @@ from net_worth.models import InvestmentContributionInterval, Liability
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
-from .services_inputs import one_off_flows, plan_fiscal_year, structural_income
+from .services_inputs import (
+    annual_expense_entries,
+    expense_buckets,
+    one_off_flows,
+    plan_fiscal_year,
+    structural_income,
+)
 
 
 MONEY = Decimal("0.01")
@@ -58,6 +64,10 @@ class ProjectionInputs:
     # Flujos puntuales de presupuesto (no gobernados por Decisiones) agregados por
     # año; se aplican en su año en todo el horizonte. Ver services_inputs.one_off_flows.
     one_off_flows: tuple[dict[str, Any], ...] = ()
+    # Reconciliación de caja: gasto operativo anual y compromisos temporales (con su
+    # vencimiento), para limitar la aportación efectiva al superávit libre real.
+    annual_operating_expense: Decimal = Decimal("0")
+    temporary_commitments: tuple[dict[str, Any], ...] = ()
 
 
 class ProjectionService:
@@ -141,6 +151,13 @@ def build_projection_inputs(
     )
     annual_income = structural_income(plan)
     planned_contributions = planned_contribution_amount(plan=plan)
+    operating_expense = expense_buckets(annual_expense_entries(plan)).operating
+    temporary_commitments = tuple(
+        {"amount": str(entry.amount_annual), "end_year": entry.term_end_year}
+        for entry in annual_expense_entries(plan).filter(
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+        )
+    )
     members = list(plan.members.filter(role=FamilyMember.Role.ADULT, is_active=True).order_by("id"))
     pension_income = sum(
         (
@@ -201,6 +218,8 @@ def build_projection_inputs(
             liability_max_term_years=max_term_years,
             plan_events=tuple(event_payloads),
             one_off_flows=tuple(one_off_flows(plan=plan)),
+            annual_operating_expense=operating_expense,
+            temporary_commitments=temporary_commitments,
         ),
         classification,
         quality,
@@ -285,17 +304,26 @@ def calculate_projection(
             else Decimal("0")
         )
         if offset > 0:
-            contribution = (
-                inflate(
-                    inputs.annual_planned_contributions,
-                    contribution_growth,
-                    offset,
-                )
+            planned = (
+                inflate(inputs.annual_planned_contributions, contribution_growth, offset)
                 + event_delta["annual_productive_contribution_delta"]
             )
+            # La aportación efectiva se limita al superávit libre real del año (caja): no puedes
+            # invertir más de lo que te deja tu flujo tras operativos, compromisos y cuotas de
+            # deuda. En jubilación (year >= target) no hay acumulación: gobierna `withdrawals`.
+            if year < target_year:
+                free_cash = free_operating_surplus(
+                    inputs=inputs, assumptions=assumptions, year=year, start_year=start_year
+                )
+                effective_contribution = min(planned, max(Decimal("0"), free_cash))
+            else:
+                free_cash = Decimal("0")
+                effective_contribution = Decimal("0")
             productive = max(
                 Decimal("0"),
-                productive * (Decimal("1") + productive_return) + contribution - withdrawals,
+                productive * (Decimal("1") + productive_return)
+                + effective_contribution
+                - withdrawals,
             )
             security += event_delta["annual_security_contribution_delta"]
             debt_contributions += event_delta["annual_debt_contribution_delta"]
@@ -306,6 +334,11 @@ def calculate_projection(
                 term_years=inputs.liability_max_term_years,
                 year_offset=offset,
             )
+            # Déficit de caja: se cubre consumiendo capital (seguridad primero, luego productivo).
+            if free_cash < 0:
+                productive, security = apply_initial_outflow(
+                    productive=productive, security=security, amount=-free_cash
+                )
         for event_index, event in enumerate(inputs.plan_events):
             if event_index in applied_one_off_events:
                 continue
@@ -817,6 +850,56 @@ def one_off_flow_for_year(flows: tuple[dict[str, Any], ...], year: int) -> dict[
         if int(str(flow["year"])) == year:
             return flow
     return None
+
+
+def debt_annual_payment(*, principal: Decimal, annual_rate: Decimal, term_years: int) -> Decimal:
+    """Cuota anual (principal + interés) de una amortización francesa; lineal si no hay interés.
+    Réplica local de `services_scenarios.debt_monthly_payment`×12 para evitar el import circular."""
+    months = max(1, term_years * 12)
+    monthly_rate = annual_rate / Decimal("12")
+    if monthly_rate <= 0:
+        return q2(principal / Decimal(max(1, term_years)))
+    factor = (Decimal("1") + monthly_rate) ** months
+    monthly = principal * monthly_rate * factor / (factor - Decimal("1"))
+    return q2(monthly * Decimal("12"))
+
+
+def decision_debt_service_for_year(*, events: tuple[dict[str, Any], ...], year: int) -> Decimal:
+    """Servicio anual (cuota) de las deudas nuevas de Decisiones activas ese año."""
+    total = Decimal("0")
+    for event in events:
+        principal = Decimal(str(event.get("new_debt_principal") or "0"))
+        if principal <= 0:
+            continue
+        start = int(str(event["start_year"]))
+        term = max(1, int(str(event.get("new_debt_term_years") or "30")))
+        if start <= year <= start + term - 1:
+            rate = Decimal(str(event.get("new_debt_interest_rate") or "0"))
+            total += debt_annual_payment(principal=principal, annual_rate=rate, term_years=term)
+    return total
+
+
+def free_operating_surplus(
+    *, inputs: ProjectionInputs, assumptions: dict[str, str], year: int, start_year: int
+) -> Decimal:
+    """Superávit libre nominal del año = ingreso − gastos operativos − compromisos temporales
+    vigentes (vencen por `end_year`) − servicio de deuda de Decisiones. Es el techo de la
+    aportación efectiva; si es negativo hay déficit (se consume capital)."""
+    inflation = Decimal(assumptions["inflation_rate"])
+    income_growth = Decimal(assumptions["income_growth_rate"])
+    offset = max(0, year - start_year)
+    income = inflate(inputs.annual_income, income_growth, offset)
+    operating = inflate(inputs.annual_operating_expense, inflation, offset)
+    commitments = sum(
+        (
+            Decimal(str(commitment["amount"]))
+            for commitment in inputs.temporary_commitments
+            if commitment["end_year"] is None or int(str(commitment["end_year"])) >= year
+        ),
+        Decimal("0"),
+    )
+    debt_service = decision_debt_service_for_year(events=inputs.plan_events, year=year)
+    return income - operating - commitments - debt_service
 
 
 def apply_initial_outflow(
