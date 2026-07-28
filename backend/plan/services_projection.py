@@ -327,7 +327,10 @@ def calculate_projection(
                     non_productive += asset_value
             debt_principal = Decimal(str(event.get("new_debt_principal") or "0"))
             if debt_principal > 0:
-                term_years = max(1, int(str(event.get("new_debt_term_years") or "1")))
+                # Sin plazo (dato incompleto), amortizar en 1 año evaporaría la deuda y
+                # falsearía el patrimonio; se usa un plazo largo por defecto. El alta ya
+                # exige el plazo cuando hay principal (PlannedDecisionRegisterSerializer).
+                term_years = max(1, int(str(event.get("new_debt_term_years") or "30")))
                 rate = Decimal(str(event.get("new_debt_interest_rate") or "0"))
                 active_event_debts.append(
                     {

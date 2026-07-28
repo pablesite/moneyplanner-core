@@ -2372,6 +2372,27 @@ class PlannedDecisionMigrationTests(APITestCase):
         income.refresh_from_db()
         self.assertTrue(income.event_group.startswith("plan_event:"))
 
+    def test_new_debt_without_term_is_rejected(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            reverse("financial-plan-event-planned-decision"),
+            {
+                "name": "Compra",
+                "event_type": Scenario.TemplateType.HOUSING,
+                "decision_date": f"{date.today().year}-01-15",
+                "transaction_year": self.transaction_year,
+                "impact": {
+                    "new_asset_value": "300000.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "200000.00",
+                    # sin new_debt_term_years → debe rechazarse
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("new_debt_term_years", str(response.data))
+
     def test_cancelling_decision_releases_adopted_lines_without_deleting(self):
         # Partida real del usuario, con su propio grupo manual.
         reform = self._reform_expense(Decimal("40000.00"))

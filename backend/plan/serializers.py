@@ -446,6 +446,16 @@ class DecisionImpactSerializer(serializers.Serializer):
         max_digits=14, decimal_places=2, required=False, min_value=0
     )
 
+    def validate(self, attrs):
+        # Una deuda nueva sin plazo haría que el motor la amortizara en 1 año (la deuda
+        # se evaporaría y el patrimonio pegaría un salto irreal). El plazo es obligatorio
+        # cuando hay principal.
+        if (attrs.get("new_debt_principal") or 0) > 0 and not attrs.get("new_debt_term_years"):
+            raise serializers.ValidationError(
+                {"new_debt_term_years": "Indica el plazo en años de la nueva deuda."}
+            )
+        return attrs
+
 
 class PlannedDecisionRegisterSerializer(serializers.Serializer):
     """Agrupa partidas puntuales existentes en una Decisión planificada (compra/venta)."""
