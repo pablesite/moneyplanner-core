@@ -454,7 +454,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     return map;
   });
 
-  // eslint-disable-next-line complexity
   function resolveIncomeExecutionForMonth(
     entry: (typeof incomeEntries.value)[number],
     month: number,
@@ -507,7 +506,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
     };
   }
 
-  // eslint-disable-next-line complexity
   function resolveExpenseExecutionForMonth(
     entry: (typeof expenseEntries.value)[number],
     month: number,
@@ -576,7 +574,6 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
   );
 
   const monthlyIncomeExecutionEntries = computed(() => {
-    // eslint-disable-next-line complexity
     return incomeEntries.value
       .filter((entry) => {
         if (entry.fiscalYear !== fiscalYear.value) return false;
@@ -2100,13 +2097,10 @@ export function useBudgetDashboardPage(mode: Ref<BudgetDashboardMode>) {
           const taxonomyExecuted =
             accountingExecutionBuckets.value.incomeCategorizedByMonthTaxonomy.get(taxonomyKey) ??
             null;
-          let detectedChunk = 0;
-          if (taxonomyExecuted != null) {
-            detectedChunk = taxonomyExecuted * weight;
-          } else {
-            detectedChunk = toNumberOrZero(monthRow.executed_unbudgeted) * weight;
-          }
-          detectedExecutedYtd += detectedChunk;
+          detectedExecutedYtd +=
+            (taxonomyExecuted != null
+              ? taxonomyExecuted
+              : toNumberOrZero(monthRow.executed_unbudgeted)) * weight;
         }
         if (detectedExecutedYtd <= 0) continue;
 

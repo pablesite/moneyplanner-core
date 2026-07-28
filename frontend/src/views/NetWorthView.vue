@@ -242,12 +242,9 @@ async function updateLiabilityAndShowExpenseReview(
   id: number,
   payload: NetWorthWritePayload & { ownership_id?: number | null },
 ): Promise<void> {
-  let beforeEntries: GeneratedLiabilityExpensePreview[] = [];
-  try {
-    beforeEntries = mapGeneratedExpenseEntries(await annualExpenseStore.listBySourceLiability(id));
-  } catch {
-    beforeEntries = [];
-  }
+  const beforeEntries = mapGeneratedExpenseEntries(
+    await annualExpenseStore.listBySourceLiability(id).catch(() => []),
+  );
   await store.updateLiability(id, payload);
   if (store.error) return;
   try {
