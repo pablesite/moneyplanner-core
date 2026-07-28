@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.32.0...moneyplanner-core-v0.33.0) (2026-07-28)
+
+
+### Features
+
+* **auth:** validate SaaS sessions before Core access ([#109](https://github.com/pablesite/moneyplanner-core/issues/109)) ([a641fdd](https://github.com/pablesite/moneyplanner-core/commit/a641fdddf20f8d9ab2651ca4081bc7d73b842d0a))
+
 ## [0.32.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.31.0...moneyplanner-core-v0.32.0) (2026-07-27)
 
 
