@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -14,6 +18,60 @@ from .models import ExternalIdentity
 
 class CoreJWTAuthentication(JWTAuthentication):
     _external_source = "external"
+    _password_change_bootstrap_path = "/api/family-members/ensure-primary/"
+
+    def authenticate(self, request):
+        header = self.get_header(request)
+        if header is None:
+            return None
+        raw_token = self.get_raw_token(header)
+        if raw_token is None:
+            return None
+        token = self.get_validated_token(raw_token)
+        source = (
+            token.get("_identity_source")
+            if isinstance(token, dict)
+            else getattr(token, "_identity_source", "core")
+        )
+        if source == self._external_source:
+            trusted_bootstrap = (
+                request.path == self._password_change_bootstrap_path
+                and token.get("core_bootstrap") is True
+            )
+            if trusted_bootstrap:
+                return self.get_user(token), token
+            session = self._introspect_external_session(raw_token.decode("utf-8"))
+            if session.get("must_change_password") is True:
+                raise AuthenticationFailed(
+                    "Password change required.",
+                    code="password_change_required",
+                )
+        return self.get_user(token), token
+
+    @staticmethod
+    def _introspect_external_session(raw_token: str) -> dict:
+        url = getattr(settings, "SAAS_AUTH_INTROSPECTION_URL", "").strip()
+        secret = getattr(settings, "CORE_LINKING_SHARED_SECRET", "").strip()
+        if not url or not secret:
+            raise AuthenticationFailed("External session validation is not configured.")
+        request = Request(
+            url,
+            data=json.dumps({"token": raw_token}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-SaaS-Bridge-Secret": secret,
+            },
+            method="POST",
+        )
+        timeout = float(getattr(settings, "SAAS_AUTH_INTROSPECTION_TIMEOUT_SECONDS", 2))
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+            raise AuthenticationFailed("External session validation failed.") from exc
+        if not isinstance(payload, dict):
+            raise AuthenticationFailed("External session validation returned invalid data.")
+        return payload
 
     def _external_token_backend(self) -> TokenBackend:
         return TokenBackend(
