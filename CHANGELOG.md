@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.34.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.33.0...moneyplanner-core-v0.34.0) (2026-07-29)
+
+
+### Features
+
+* **plan:** incluir movimientos puntuales en la proyección y modelar venta de activos ([0d462f2](https://github.com/pablesite/moneyplanner-core/commit/0d462f2ba3c5f7490c0af9b6e63bf170e10974dd))
+* **plan:** reconciliar la aportación con el superávit libre real de caja ([d34fe6a](https://github.com/pablesite/moneyplanner-core/commit/d34fe6a71e30bd69ddc03d04a02fc1534c5959e6))
+
+
+### Bug Fixes
+
+* **plan:** cancelar una decisión no debe borrar las partidas que solo adoptó ([2a85d45](https://github.com/pablesite/moneyplanner-core/commit/2a85d457f900af25a909f8f9520f2a8c372d4233))
+* **plan:** exigir plazo en la deuda nueva de una decisión (o la deuda se evaporaba) ([a3c1151](https://github.com/pablesite/moneyplanner-core/commit/a3c1151352d14ca200ef9a15102cba6be491e39e))
+
 ## [0.33.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.32.0...moneyplanner-core-v0.33.0) (2026-07-28)
 
 
