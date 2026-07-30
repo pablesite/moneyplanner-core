@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -299,6 +300,66 @@ def register_planned_decision(
     event.save(update_fields=["actual_impact_json", "updated_at"])
     ProjectionService().recalculate(plan=plan)
     return event
+
+
+@transaction.atomic
+def update_planned_decision(
+    *,
+    event: PlanEvent,
+    name: str,
+    event_type: str,
+    decision_date: date,
+    transaction_year: int,
+    transaction_month: int,
+    impact: dict[str, Any],
+    end_year: int | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    """Corrige una Decisión agrupada futura sin tocar su presupuesto ni sus vínculos."""
+    locked = PlanEvent.objects.select_for_update().select_related("plan").get(pk=event.pk)
+    registration = deepcopy(locked.actual_impact_json.get("registration") or {})
+    if locked.status != PlanEvent.Status.PLANNED or "adopted_lines" not in registration:
+        raise ValidationError(
+            {"event": "Solo se pueden editar las decisiones agrupadas que siguen previstas."}
+        )
+
+    locked.name = name.strip()
+    locked.event_type = event_type
+    locked.planned_date = decision_date
+    locked.planned_impact_json = {
+        "events": [
+            _decision_impact_event(
+                start_year=transaction_year,
+                start_month=transaction_month,
+                end_year=end_year,
+                impact=impact,
+            )
+        ]
+    }
+    registration.update(
+        {
+            "decision_date": decision_date.isoformat(),
+            "transaction_year": int(transaction_year),
+            "transaction_month": int(transaction_month),
+            "note": note.strip(),
+        }
+    )
+    locked.actual_impact_json = {
+        **deepcopy(locked.actual_impact_json),
+        "registration": registration,
+    }
+    locked.save(
+        update_fields=[
+            "name",
+            "event_type",
+            "planned_date",
+            "planned_impact_json",
+            "actual_impact_json",
+            "updated_at",
+        ]
+    )
+    projection = ProjectionService().recalculate(plan=locked.plan)
+    return {"event": locked, "projection": projection}
 
 
 def _link_net_worth(

@@ -121,6 +121,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. Use it to migrate a transaction already entered as budget one-offs (e.g. a planned home sale) into a decision that disposes the asset and cancels its mortgage in the sale year, instead of counting the sale proceeds as plain income.
 4. The current-year row starts after the current net-worth snapshot: structural cash flow and temporary commitments use only the remaining budget months, and new debt service is prorated from `transaction_month`. If cash and productive capital cannot fund an outflow, the remainder is exposed as negative `financing_gap`, included in projected liabilities and repaid by future free cash before new contributions.
 5. An unregistered asset sale and every one-off expense sharing its `event_group` stay outside `one_off_flows` until the sale becomes a Decision. This keeps proceeds, disposal and transaction costs atomic.
+6. `PATCH /api/plan/events/{id}/planned-decision/` edits the date, transaction month/year and projected impact only while an event is still a manually grouped `planned` decision. It preserves `registration.adopted_lines`, `registration.linked`, the budget lineage and M2M links, then recalculates the official projection transactionally. Occurred events and scenario-generated events use their own lifecycle and are rejected by this contract.
 
 ## Decision Lifecycle
 

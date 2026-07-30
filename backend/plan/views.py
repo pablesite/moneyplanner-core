@@ -27,6 +27,7 @@ from .serializers import (
     FindingSerializer,
     OccurredEventRegisterSerializer,
     PlannedDecisionRegisterSerializer,
+    PlannedDecisionUpdateSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
     PlanEventCloseSerializer,
@@ -44,6 +45,7 @@ from .services_events import (
     register_occurred_event,
     register_planned_decision,
     release_occurred_event,
+    update_planned_decision,
 )
 from .services_lifecycle import cancel_plan_event, materialize_plan_event
 from .services_overview import PlanOverviewService, RecommendationPreviewService
@@ -397,6 +399,24 @@ class PlannedDecisionView(APIView):
         serializer.is_valid(raise_exception=True)
         event = register_planned_decision(plan=plan, **serializer.validated_data)
         return Response(PlanEventSerializer(event).data, status=status.HTTP_201_CREATED)
+
+
+class PlannedDecisionDetailView(APIView):
+    """Corrige una Decisión agrupada que todavía forma parte de la previsión."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk: int):
+        event = get_object_or_404(PlanEvent, pk=pk, plan__user=request.user)
+        serializer = PlannedDecisionUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = update_planned_decision(event=event, **serializer.validated_data)
+        return Response(
+            {
+                "event": PlanEventSerializer(result["event"]).data,
+                "projection": result["projection"],
+            }
+        )
 
 
 class PlanEventBudgetLinesView(APIView):

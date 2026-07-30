@@ -2417,6 +2417,92 @@ class PlannedDecisionMigrationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("new_debt_term_years", str(response.data))
 
+    def test_endpoint_updates_planned_decision_without_releasing_its_lines(self):
+        reform = self._reform_expense(Decimal("40000.00"))
+        self.client.force_authenticate(self.user)
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Compra Atrio",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 2, 1),
+            transaction_year=self.transaction_year,
+            transaction_month=10,
+            expense_entry_ids=[reform.id],
+            impact={
+                "initial_outflow": Decimal("40000.00"),
+                "new_asset_value": Decimal("250000.00"),
+                "new_asset_type": "family_use",
+            },
+            note="Estimación inicial",
+        )
+        registration_before = event.actual_impact_json["registration"]
+        snapshot_count = ProjectionSnapshot.objects.filter(plan=self.plan, is_official=True).count()
+
+        response = self.client.patch(
+            reverse("financial-plan-event-planned-decision-detail", args=[event.id]),
+            {
+                "name": "Compra Atrio actualizada",
+                "event_type": Scenario.TemplateType.HOUSING,
+                "decision_date": f"{date.today().year}-02-15",
+                "transaction_year": self.transaction_year,
+                "transaction_month": 11,
+                "impact": {
+                    "initial_outflow": "80420.00",
+                    "new_asset_value": "322176.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "239200.00",
+                    "new_debt_interest_rate": "0.0250",
+                    "new_debt_term_years": 30,
+                },
+                "note": "Valor de mercado revisado",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["event"]["name"], "Compra Atrio actualizada")
+        updated = response.data["event"]["planned_impact_json"]["events"][0]
+        self.assertEqual(updated["start_date"], f"{self.transaction_year}-11-01")
+        self.assertEqual(updated["new_asset_value"], "322176.00")
+        self.assertIn("projection", response.data)
+        event.refresh_from_db()
+        registration_after = event.actual_impact_json["registration"]
+        self.assertEqual(registration_after["adopted_lines"], registration_before["adopted_lines"])
+        self.assertEqual(registration_after["linked"], registration_before["linked"])
+        self.assertEqual(registration_after["note"], "Valor de mercado revisado")
+        reform.refresh_from_db()
+        self.assertEqual(reform.event_group, f"plan_event:{event.id}")
+        self.assertEqual(
+            ProjectionSnapshot.objects.filter(plan=self.plan, is_official=True).count(),
+            snapshot_count + 1,
+        )
+
+    def test_endpoint_rejects_editing_an_occurred_decision_as_planned(self):
+        self.client.force_authenticate(self.user)
+        event = register_occurred_event(
+            plan=self.plan,
+            name="Compra ya realizada",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date.today(),
+        )
+
+        response = self.client.patch(
+            reverse("financial-plan-event-planned-decision-detail", args=[event.id]),
+            {
+                "name": "No debe cambiar",
+                "event_type": Scenario.TemplateType.HOUSING,
+                "decision_date": date.today().isoformat(),
+                "transaction_year": self.transaction_year,
+                "transaction_month": 11,
+                "impact": {"new_asset_value": "300000.00"},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        event.refresh_from_db()
+        self.assertEqual(event.name, "Compra ya realizada")
+
     def test_cancelling_decision_releases_adopted_lines_without_deleting(self):
         # Partida real del usuario, con su propio grupo manual.
         reform = self._reform_expense(Decimal("40000.00"))

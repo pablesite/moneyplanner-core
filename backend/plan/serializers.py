@@ -484,6 +484,19 @@ class PlannedDecisionRegisterSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class PlannedDecisionUpdateSerializer(serializers.Serializer):
+    """Edita el impacto futuro sin alterar las partidas ya adoptadas por la Decisión."""
+
+    name = serializers.CharField(max_length=140)
+    event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    decision_date = serializers.DateField()
+    transaction_year = serializers.IntegerField(min_value=2000, max_value=2200)
+    transaction_month = serializers.IntegerField(min_value=1, max_value=12)
+    end_year = serializers.IntegerField(required=False, allow_null=True, min_value=2000)
+    impact = DecisionImpactSerializer()
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
 class AssetFunctionUpdateSerializer(serializers.Serializer):
     asset_id = serializers.IntegerField(min_value=1)
     function = serializers.ChoiceField(choices=PlanAssetFunction.Function.choices, allow_null=True)
