@@ -38,6 +38,13 @@ EMERGENCY_INVESTMENT_SUBCATEGORIES = {
     Asset.Subcategory.DEPOSITS,
 }
 
+# El fondo de emergencia se puntúa contra su propio objetivo, no contra una escala
+# ajena: con la anterior (3→12 meses) alcanzar el objetivo daba 33/100 y el cimiento
+# seguía en rojo. Con este anclaje, el objetivo puntúa 100 y la mitad del objetivo
+# es el suelo, así que "casi conseguido" cae en ámbar en vez de en crítico.
+EMERGENCY_TARGET_MONTHS = Decimal("6")
+EMERGENCY_FLOOR_MONTHS = EMERGENCY_TARGET_MONTHS / Decimal("2")
+
 
 @dataclass(frozen=True)
 class FoundationMetrics:
@@ -402,11 +409,15 @@ class FoundationService:
         emergency_score = weighted_score(
             [
                 (
-                    score_increasing(emergency_months_base, Decimal("3"), Decimal("12")),
+                    score_increasing(
+                        emergency_months_base, EMERGENCY_FLOOR_MONTHS, EMERGENCY_TARGET_MONTHS
+                    ),
                     Decimal("0.55"),
                 ),
                 (
-                    score_increasing(emergency_months_committed, Decimal("3"), Decimal("12")),
+                    score_increasing(
+                        emergency_months_committed, EMERGENCY_FLOOR_MONTHS, EMERGENCY_TARGET_MONTHS
+                    ),
                     Decimal("0.25"),
                 ),
                 (
@@ -501,7 +512,7 @@ class FoundationService:
                 "eligible_liquidity": money(asset_metrics["emergency_liquid_assets_value"]),
                 "coverage_months_base": ratio(emergency_months_base),
                 "coverage_months_committed": ratio(emergency_months_committed),
-                "target_months": "6.0000",
+                "target_months": ratio(EMERGENCY_TARGET_MONTHS),
             },
             "debt": {
                 "score": score(debt_score),

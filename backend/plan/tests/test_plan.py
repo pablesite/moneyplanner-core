@@ -2016,6 +2016,41 @@ class FoundationCriteriaTests(TestCase):
         # 12.000 € / 2.000 €/mes de gasto estructural = 6 meses, no 31.
         self.assertEqual(payload["emergency_fund"]["coverage_months_base"], "6.0000")
 
+    def _cash(self, amount: Decimal) -> None:
+        Asset.objects.create(
+            user=self.user,
+            name="Cuenta",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=amount,
+            currency="EUR",
+        )
+
+    def test_emergency_fund_is_scored_against_its_own_target(self):
+        """Casi en el objetivo no es crítico, y alcanzarlo no puede quedarse corto.
+
+        Con la escala anterior (3→12 meses) tener los 6 meses objetivo puntuaba 33 y
+        el cimiento salía en rojo; 5,5 meses ("casi conseguido") también.
+        """
+        # Gasto operativo 24.000 €/año = 2.000 €/mes → 11.000 € son 5,5 meses.
+        # La banda exacta depende del resto de factores del score compuesto; lo que
+        # se fija aquí es que estar a medio mes del objetivo no puede ser crítico.
+        self._cash(Decimal("11000.00"))
+        payload = FoundationService().calculate(plan=self.plan)
+        self.assertEqual(payload["emergency_fund"]["coverage_months_base"], "5.5000")
+        self.assertNotEqual(payload["emergency_fund"]["status"], "critical")
+
+        Asset.objects.filter(user=self.user).delete()
+        self._cash(Decimal("12000.00"))  # 6 meses: el objetivo
+        payload = FoundationService().calculate(plan=self.plan)
+        self.assertEqual(payload["emergency_fund"]["target_months"], "6.0000")
+        self.assertEqual(payload["emergency_fund"]["status"], "good")
+
+        Asset.objects.filter(user=self.user).delete()
+        self._cash(Decimal("4000.00"))  # 2 meses: por debajo del suelo
+        payload = FoundationService().calculate(plan=self.plan)
+        self.assertEqual(payload["emergency_fund"]["status"], "critical")
+
     def test_data_quality_uses_engine_factors_not_shallow_checklist(self):
         Asset.objects.create(
             user=self.user,
