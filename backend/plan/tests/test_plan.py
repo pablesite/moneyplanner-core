@@ -1911,6 +1911,44 @@ class CapitalRequirementsTests(APITestCase):
             ),
         )
 
+    def test_target_year_matches_the_projection_that_uses_that_horizon(self):
+        """El Resumen proyecta el retiro sostenible, no la fecha objetivo: pedir los
+        hitos en ese año es lo que hace comparables denominador y tramos."""
+        retirement_year = self.plan.target_date.year + 6
+        result = capital_requirements(
+            plan=self.plan,
+            assumption_name="expected",
+            monthly_amounts=[Decimal("2000.00")],
+            target_year=retirement_year,
+        )
+        projection = ProjectionService().calculate(
+            plan=self.plan,
+            assumption_set=get_assumption_set(name="expected"),
+            retirement_year=retirement_year,
+        )
+        self.assertEqual(
+            result["target_year"],
+            retirement_year,
+        )
+        self.assertEqual(
+            result["requirements"][0]["capital_required_eur"],
+            projection["summary"]["target_capital"]["value"],
+        )
+
+    def test_api_accepts_and_validates_target_year(self):
+        url = reverse("financial-plan-capital-requirements")
+        response = self.client.get(url, {"monthly_amounts": "2000", "target_year": "2050"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["target_year"], 2050)
+        self.assertEqual(
+            self.client.get(url, {"monthly_amounts": "2000", "target_year": "ayer"}).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.get(url, {"monthly_amounts": "2000", "target_year": "1200"}).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
     def test_api_returns_requirements_per_amount(self):
         response = self.client.get(
             reverse("financial-plan-capital-requirements"),

@@ -742,6 +742,7 @@ def capital_requirements(
     plan: FinancialPlan,
     assumption_name: str | None = None,
     monthly_amounts: list[Decimal],
+    target_year: int | None = None,
 ) -> dict[str, Any]:
     """Capital requerido en la fecha objetivo para sostener cada gasto mensual dado.
 
@@ -749,12 +750,19 @@ def capital_requirements(
     como offset, periodo puente y tasa de retirada), con la necesidad anual
     sustituida por cada importe (en euros de hoy) y sin deltas de
     acontecimientos: el importe pedido ya define el gasto a cubrir.
+
+    `target_year` permite pedir el capital en otro horizonte. Hace falta porque el
+    denominador que muestra el Resumen no es el de la fecha objetivo, sino el del
+    retiro sostenible (`PlanOverviewService` proyecta con `retirement_year`): un
+    horizonte más tardío deja menos puente hasta la pensión y exige menos capital.
+    Sin este parámetro, hitos y denominador salían de años distintos y un tramo de
+    gasto menor podía pedir más capital que el objetivo entero.
     """
     assumption_set = get_assumption_set(name=assumption_name)
     assumptions = serialize_assumptions(assumption_set)
     inputs, _, _ = build_projection_inputs(plan=plan)
     start_year = date.today().year
-    target_year = inputs.target_date.year
+    target_year = target_year or inputs.target_date.year
     requirements = [
         {
             "monthly_amount_today_eur": decimal_str(q2(amount)),

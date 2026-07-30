@@ -183,8 +183,31 @@ class CapitalRequirementsView(APIView):
                 )
             amounts.append(value)
         scenario = request.query_params.get("scenario") or "expected"
+        # El Resumen pide los hitos en el mismo año que su denominador (el retiro
+        # sostenible, no la fecha objetivo): si no, se comparan capitales de
+        # horizontes distintos.
+        raw_year = request.query_params.get("target_year")
+        target_year: int | None = None
+        if raw_year:
+            try:
+                target_year = int(raw_year)
+            except ValueError:
+                return Response(
+                    {"detail": f"target_year no numérico: {raw_year!r}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not 2000 <= target_year <= 2200:
+                return Response(
+                    {"detail": f"target_year fuera de rango: {raw_year!r}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         return Response(
-            capital_requirements(plan=plan, assumption_name=scenario, monthly_amounts=amounts)
+            capital_requirements(
+                plan=plan,
+                assumption_name=scenario,
+                monthly_amounts=amounts,
+                target_year=target_year,
+            )
         )
 
 
