@@ -310,6 +310,101 @@ def build_projection_inputs(
     )
 
 
+def apply_plan_event_one_offs_for_year(
+    *,
+    events: tuple[dict[str, Any], ...],
+    year: int,
+    start_year: int,
+    productive: Decimal,
+    security: Decimal,
+    non_productive: Decimal,
+    financing_gap: Decimal,
+    productive_return: Decimal,
+    non_productive_return: Decimal,
+    active_event_debts: list[dict[str, Decimal | int]],
+    applied_event_indexes: set[int],
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
+    events_by_month: dict[int, list[tuple[int, dict[str, Any]]]] = {}
+    for event_index, event in enumerate(events):
+        if event_index in applied_event_indexes:
+            continue
+        if int(str(event["start_year"])) != year:
+            continue
+        events_by_month.setdefault(event_start_month(event), []).append((event_index, event))
+
+    disposed_liability = Decimal("0")
+    for month in sorted(events_by_month):
+        monthly_events = events_by_month[month]
+        monthly_outflow = sum(
+            (Decimal(str(event.get("initial_outflow") or "0")) for _, event in monthly_events),
+            Decimal("0"),
+        )
+        monthly_proceeds = sum(
+            (Decimal(str(event.get("proceeds") or "0")) for _, event in monthly_events),
+            Decimal("0"),
+        )
+        # Una venta y su compra de reemplazo se financian entre sí antes de tocar
+        # Seguridad. Su fecha de decisión no puede cambiar la clasificación final.
+        monthly_net_cash = monthly_proceeds - monthly_outflow
+        if monthly_net_cash >= 0:
+            productive, financing_gap = apply_cash_inflow(
+                productive=productive,
+                financing_gap=financing_gap,
+                amount=monthly_net_cash,
+            )
+        else:
+            productive, security, financing_gap = apply_cash_outflow(
+                productive=productive,
+                security=security,
+                financing_gap=financing_gap,
+                amount=-monthly_net_cash,
+            )
+
+        for event_index, event in monthly_events:
+            asset_value = Decimal(str(event.get("new_asset_value") or "0"))
+            asset_type = event.get("new_asset_type")
+            if asset_value > 0:
+                if asset_type == "productive":
+                    productive += asset_value
+                elif asset_type == "security":
+                    security += asset_value
+                else:
+                    non_productive += asset_value
+
+            debt_principal = Decimal(str(event.get("new_debt_principal") or "0"))
+            if debt_principal > 0:
+                term_years = max(1, int(str(event.get("new_debt_term_years") or "30")))
+                active_event_debts.append(
+                    {
+                        "start_year": year,
+                        "start_month": event_start_month(event),
+                        "principal": debt_principal,
+                        "term_years": term_years,
+                        "rate": Decimal(str(event.get("new_debt_interest_rate") or "0")),
+                    }
+                )
+
+            disposed_value = Decimal(str(event.get("disposed_asset_value") or "0"))
+            if disposed_value > 0:
+                disposed_type = event.get("disposed_asset_type")
+                disposed_rate = {
+                    "productive": productive_return,
+                    "security": Decimal("0"),
+                }.get(disposed_type, non_productive_return)
+                grown = inflate(disposed_value, disposed_rate, max(0, year - start_year))
+                if disposed_type == "productive":
+                    productive = max(Decimal("0"), productive - grown)
+                elif disposed_type == "security":
+                    security = max(Decimal("0"), security - grown)
+                else:
+                    non_productive = max(Decimal("0"), non_productive - grown)
+
+            disposed_liability += Decimal(str(event.get("disposed_liability_value") or "0"))
+            applied_event_indexes.add(event_index)
+
+    return productive, security, non_productive, financing_gap, disposed_liability
+
+
 def calculate_projection(
     *, inputs: ProjectionInputs, assumptions: dict[str, str]
 ) -> dict[str, Any]:
@@ -428,90 +523,49 @@ def calculate_projection(
                 )
         elif offset > 0:
             productive = max(Decimal("0"), productive - withdrawals)
-        for event_index, event in enumerate(inputs.plan_events):
-            if event_index in applied_one_off_events:
-                continue
-            if int(str(event["start_year"])) != year:
-                continue
-            productive, security, financing_gap = apply_cash_outflow(
-                productive=productive,
-                security=security,
-                financing_gap=financing_gap,
-                amount=Decimal(str(event.get("initial_outflow") or "0")),
-            )
-            asset_value = Decimal(str(event.get("new_asset_value") or "0"))
-            asset_type = event.get("new_asset_type")
-            if asset_value > 0:
-                if asset_type == "productive":
-                    productive += asset_value
-                elif asset_type == "security":
-                    security += asset_value
-                else:
-                    non_productive += asset_value
-            debt_principal = Decimal(str(event.get("new_debt_principal") or "0"))
-            if debt_principal > 0:
-                # Sin plazo (dato incompleto), amortizar en 1 año evaporaría la deuda y
-                # falsearía el patrimonio; se usa un plazo largo por defecto. El alta ya
-                # exige el plazo cuando hay principal (PlannedDecisionRegisterSerializer).
-                term_years = max(1, int(str(event.get("new_debt_term_years") or "30")))
-                rate = Decimal(str(event.get("new_debt_interest_rate") or "0"))
-                active_event_debts.append(
-                    {
-                        "start_year": year,
-                        "start_month": event_start_month(event),
-                        "principal": debt_principal,
-                        "term_years": term_years,
-                        "rate": rate,
-                    }
-                )
-            disposed_value = Decimal(str(event.get("disposed_asset_value") or "0"))
-            if disposed_value > 0:
-                # Venta de activo: se retira su valor proyectado del bucket (deja de
-                # contar y de revalorizarse) y los ingresos netos entran como capital
-                # productivo (ya líquido e invertible). Simétrico a `new_asset_value`.
-                disposed_type = event.get("disposed_asset_type")
-                disposed_rate = {
-                    "productive": productive_return,
-                    "security": Decimal("0"),
-                }.get(disposed_type, non_productive_return)
-                grown = inflate(disposed_value, disposed_rate, max(0, year - start_year))
-                if disposed_type == "productive":
-                    productive = max(Decimal("0"), productive - grown)
-                elif disposed_type == "security":
-                    security = max(Decimal("0"), security - grown)
-                else:
-                    non_productive = max(Decimal("0"), non_productive - grown)
-            productive, financing_gap = apply_cash_inflow(
-                productive=productive,
-                financing_gap=financing_gap,
-                amount=Decimal(str(event.get("proceeds") or "0")),
-            )
-            disposed_liability_total += Decimal(str(event.get("disposed_liability_value") or "0"))
-            applied_one_off_events.add(event_index)
+        (
+            productive,
+            security,
+            non_productive,
+            financing_gap,
+            disposed_this_year,
+        ) = apply_plan_event_one_offs_for_year(
+            events=inputs.plan_events,
+            year=year,
+            start_year=start_year,
+            productive=productive,
+            security=security,
+            non_productive=non_productive,
+            financing_gap=financing_gap,
+            productive_return=productive_return,
+            non_productive_return=non_productive_return,
+            active_event_debts=active_event_debts,
+            applied_event_indexes=applied_one_off_events,
+        )
+        disposed_liability_total += disposed_this_year
         flow = one_off_flow_for_year(inputs.one_off_flows, year)
         if flow is not None:
-            productive, financing_gap = apply_cash_inflow(
-                productive=productive,
-                financing_gap=financing_gap,
-                amount=Decimal(str(flow["income"])) + Decimal(str(flow["contribution"])),
-            )
+            flow_inflow = Decimal(str(flow["income"])) + Decimal(str(flow["contribution"]))
             asset_purchase = Decimal(str(flow["asset_purchase"]))
-            if asset_purchase > 0:
-                # Compra de activo con caja: sale del capital productivo (baja la
-                # renta futura) y pasa a no-productivo (conserva patrimonio).
+            flow_outflow = asset_purchase + Decimal(str(flow["outflow"]))
+            flow_net_cash = flow_inflow - flow_outflow
+            if flow_net_cash >= 0:
+                productive, financing_gap = apply_cash_inflow(
+                    productive=productive,
+                    financing_gap=financing_gap,
+                    amount=flow_net_cash,
+                )
+            else:
                 productive, security, financing_gap = apply_cash_outflow(
                     productive=productive,
                     security=security,
                     financing_gap=financing_gap,
-                    amount=asset_purchase,
+                    amount=-flow_net_cash,
                 )
+            if asset_purchase > 0:
+                # Compra de activo con caja: sale del capital productivo (baja la
+                # renta futura) y pasa a no-productivo (conserva patrimonio).
                 non_productive += asset_purchase
-            productive, security, financing_gap = apply_cash_outflow(
-                productive=productive,
-                security=security,
-                financing_gap=financing_gap,
-                amount=Decimal(str(flow["outflow"])),
-            )
         liabilities = max(
             Decimal("0"),
             base_liabilities
