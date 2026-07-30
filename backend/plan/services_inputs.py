@@ -121,7 +121,7 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
             return False
         if fiscal_year > current_year:
             return True
-        return target_month is None or target_month >= current_month
+        return target_month is None or target_month > current_month
 
     def bucket(year: int) -> dict[str, Decimal]:
         return per_year.setdefault(
@@ -148,6 +148,16 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
         if applies(entry.fiscal_year, entry.target_month):
             bucket(entry.fiscal_year)["income"] += Decimal(entry.amount_annual)
 
+    asset_sale_groups = set(
+        AnnualIncomeEntry.objects.filter(
+            user=plan.user,
+            is_active=True,
+            cashflow_role=AnnualIncomeEntry.CashflowRole.ASSET_SALE,
+            fiscal_year__gte=current_year,
+        )
+        .exclude(event_group="")
+        .values_list("event_group", flat=True)
+    )
     expenses = AnnualExpenseEntry.objects.filter(
         user=plan.user,
         is_active=True,
@@ -155,6 +165,8 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
         is_system_generated=False,
         fiscal_year__gte=current_year,
     ).exclude(event_group__startswith=PLAN_EVENT_GROUP_PREFIX)
+    if asset_sale_groups:
+        expenses = expenses.exclude(event_group__in=asset_sale_groups)
     contribution_roles = {
         AnnualExpenseEntry.CashflowRole.SAVINGS,
         AnnualExpenseEntry.CashflowRole.INVESTMENT,

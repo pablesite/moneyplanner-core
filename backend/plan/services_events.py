@@ -199,7 +199,7 @@ def register_occurred_event(
 
 
 def _decision_impact_event(
-    *, start_year: int, end_year: int | None, impact: dict[str, Any]
+    *, start_year: int, start_month: int, end_year: int | None, impact: dict[str, Any]
 ) -> dict[str, Any]:
     """Construye el payload de impacto de una Decisión planificada, con las mismas
     claves que `scenario_event_payload` para que la proyección lo aplique en su año
@@ -211,10 +211,13 @@ def _decision_impact_event(
 
     term = impact.get("new_debt_term_years")
     term_years = int(term) if term else None
-    debt_end_year = start_year + max(0, term_years - 1) if term_years else None
+    debt_end_year = (
+        start_year + max(0, term_years - 1) + (1 if start_month > 1 else 0) if term_years else None
+    )
     return {
         "start_year": int(start_year),
-        "start_date": date(int(start_year), 1, 1).isoformat(),
+        "start_month": int(start_month),
+        "start_date": date(int(start_year), int(start_month), 1).isoformat(),
         "end_year": int(end_year) if end_year else None,
         "initial_outflow": money("initial_outflow"),
         "monthly_expense_delta": "0",
@@ -242,6 +245,7 @@ def register_planned_decision(
     event_type: str,
     decision_date: date,
     transaction_year: int,
+    transaction_month: int = 1,
     expense_entry_ids: list[int] | None = None,
     income_entry_ids: list[int] | None = None,
     asset_ids: list[int] | None = None,
@@ -266,7 +270,10 @@ def register_planned_decision(
         planned_impact_json={
             "events": [
                 _decision_impact_event(
-                    start_year=transaction_year, end_year=end_year, impact=impact or {}
+                    start_year=transaction_year,
+                    start_month=transaction_month,
+                    end_year=end_year,
+                    impact=impact or {},
                 )
             ]
         },
@@ -283,6 +290,7 @@ def register_planned_decision(
         "registration": {
             "decision_date": decision_date.isoformat(),
             "transaction_year": int(transaction_year),
+            "transaction_month": int(transaction_month),
             "note": note.strip(),
             "adopted_lines": adopted,
             "linked": linked,

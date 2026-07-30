@@ -2118,6 +2118,23 @@ class OneOffFlowsInProjectionTests(TestCase):
         )
         self.assertEqual(one_off_flows(self.plan), [])
 
+    def test_asset_sale_group_costs_wait_for_the_sale_decision(self):
+        group = "venta_vivienda"
+        self._income(
+            role=AnnualIncomeEntry.CashflowRole.ASSET_SALE,
+            amount=Decimal("150000.00"),
+            year=self.next_year,
+            event_group=group,
+        )
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.TAX_FEE,
+            amount=Decimal("2000.00"),
+            year=self.next_year,
+            event_group=group,
+        )
+
+        self.assertEqual(one_off_flows(self.plan), [])
+
     def test_current_year_one_off_respects_occurrence_month(self):
         today = date.today()
         if today.month > 1:
@@ -2360,6 +2377,7 @@ class PlannedDecisionMigrationTests(APITestCase):
                 "event_type": Scenario.TemplateType.HOUSING,
                 "decision_date": f"{date.today().year}-01-15",
                 "transaction_year": self.transaction_year,
+                "transaction_month": 11,
                 "income_entry_ids": [income.id],
                 "asset_ids": [home.id],
                 "impact": {
@@ -2373,6 +2391,10 @@ class PlannedDecisionMigrationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         income.refresh_from_db()
         self.assertTrue(income.event_group.startswith("plan_event:"))
+        self.assertEqual(
+            response.data["planned_impact_json"]["events"][0]["start_date"],
+            f"{self.transaction_year}-11-01",
+        )
 
     def test_new_debt_without_term_is_rejected(self):
         self.client.force_authenticate(self.user)
@@ -2504,20 +2526,101 @@ class CashFlowReconciliationTests(TestCase):
     def test_decision_debt_service_amortizes_and_ends(self):
         events = (
             {
-                "start_year": self.year,
+                "start_year": self.next_year,
+                "start_month": 1,
                 "new_debt_principal": "200000.00",
                 "new_debt_interest_rate": "0.0250",
                 "new_debt_term_years": 30,
             },
         )
-        service = decision_debt_service_for_year(events=events, year=self.year)
+        service = decision_debt_service_for_year(events=events, year=self.next_year)
         # 200k al 2,5% a 30 años ≈ 790 €/mes ≈ 9.485 €/año (banda amplia, no frágil).
         self.assertGreater(service, Decimal("9000"))
         self.assertLess(service, Decimal("10000"))
         # Cuando el préstamo ya está amortizado, deja de pesar en la caja.
         self.assertEqual(
-            decision_debt_service_for_year(events=events, year=self.year + 30), Decimal("0")
+            decision_debt_service_for_year(events=events, year=self.next_year + 30), Decimal("0")
         )
+
+    def test_current_year_uses_only_months_after_the_current_snapshot(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuotas Atrio",
+            category=AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+            subcategory="property_purchase",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            amount_input_period=AnnualExpenseEntry.AmountInputPeriod.MONTHLY,
+            amount_annual=Decimal("16488.00"),
+            fiscal_year=self.year,
+            term_end_year=self.year,
+            term_end_month=9,
+        )
+
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+
+        expected_months = max(0, 9 - date.today().month)
+        self.assertEqual(
+            inputs.current_year_remaining_temporary_commitments,
+            Decimal("1374.00") * Decimal(expected_months),
+        )
+
+    def test_future_system_commitment_uses_its_explicit_fiscal_slice(self):
+        for fiscal_year, amount in (
+            (self.year, Decimal("7297.56")),
+            (self.next_year, Decimal("1216.26")),
+        ):
+            AnnualExpenseEntry.objects.create(
+                user=self.user,
+                name="Compromiso pasivo: FIV",
+                category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+                subcategory="misc",
+                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+                time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+                amount_annual=amount,
+                fiscal_year=fiscal_year,
+                term_end_year=self.next_year,
+                term_end_month=1,
+                is_system_generated=True,
+            )
+
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+
+        next_year = next(
+            item for item in inputs.temporary_commitments if item["year"] == self.next_year
+        )
+        self.assertEqual(Decimal(next_year["amount"]), Decimal("1216.26"))
+
+    def test_unfunded_outflow_stays_negative_until_future_surplus_recovers_it(self):
+        self._income(Decimal("90000.00"))
+        self._operating(Decimal("20000.00"))
+        PlanEvent.objects.create(
+            plan=self.plan,
+            name="Compra sin financiación cerrada",
+            event_type=Scenario.TemplateType.HOUSING,
+            planned_date=date(self.year, 1, 1),
+            status=PlanEvent.Status.PLANNED,
+            planned_impact_json={
+                "events": [
+                    {
+                        "start_year": self.year,
+                        "start_month": min(12, date.today().month + 1),
+                        "initial_outflow": "150000.00",
+                        "new_asset_value": "150000.00",
+                        "new_asset_type": "family_use",
+                    }
+                ]
+            },
+        )
+
+        projection = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        current = next(row for row in projection["trajectory"] if row["year"] == self.year)
+        following = next(row for row in projection["trajectory"] if row["year"] == self.next_year)
+
+        self.assertEqual(current["financing_gap"], "-50000.00")
+        self.assertEqual(following["financing_gap"], "0.00")
 
     def test_debt_service_caps_effective_contribution(self):
         # Superávit operativo 15k, aportación planificada 12k: sin deuda cabe entera.

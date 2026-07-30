@@ -464,6 +464,9 @@ class PlannedDecisionRegisterSerializer(serializers.Serializer):
     event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
     decision_date = serializers.DateField()
     transaction_year = serializers.IntegerField(min_value=2000, max_value=2200)
+    transaction_month = serializers.IntegerField(
+        required=False, default=1, min_value=1, max_value=12
+    )
     end_year = serializers.IntegerField(required=False, allow_null=True, min_value=2000)
     expense_entry_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1), required=False, default=list

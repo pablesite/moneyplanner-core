@@ -116,9 +116,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 
 ## Planned (Grouping) Decisions
 
-1. `POST /api/plan/events/planned-decision/` (`register_planned_decision`) groups **existing** `one_off` budget rows into a `planned` `PlanEvent` **with** projection impact — a purchase (`new_asset_value`/`new_debt_*`/`initial_outflow`) or a sale (`disposed_asset_value`/`proceeds`/`disposed_liability_value`) applied in `transaction_year`. It is the forward-looking sibling of the occurred flow: same `_adopt_budget_entries`/`_link_net_worth` (adopt rows via `event_group`, link real assets/liabilities), but the event is `planned` and contributes to the official projection.
+1. `POST /api/plan/events/planned-decision/` (`register_planned_decision`) groups **existing** `one_off` budget rows into a `planned` `PlanEvent` **with** projection impact — a purchase (`new_asset_value`/`new_debt_*`/`initial_outflow`) or a sale (`disposed_asset_value`/`proceeds`/`disposed_liability_value`) applied in `transaction_year` + `transaction_month`. It is the forward-looking sibling of the occurred flow: same `_adopt_budget_entries`/`_link_net_worth` (adopt rows via `event_group`, link real assets/liabilities), but the event is `planned` and contributes to the official projection.
 2. Adopting the rows removes them from the `one_off_flows` cash path (point 7b), so the decision counts them exactly once. The `impact` payload is built into `planned_impact_json.events[0]` with the same keys as `scenario_event_payload`.
 3. Use it to migrate a transaction already entered as budget one-offs (e.g. a planned home sale) into a decision that disposes the asset and cancels its mortgage in the sale year, instead of counting the sale proceeds as plain income.
+4. The current-year row starts after the current net-worth snapshot: structural cash flow and temporary commitments use only the remaining budget months, and new debt service is prorated from `transaction_month`. If cash and productive capital cannot fund an outflow, the remainder is exposed as negative `financing_gap`, included in projected liabilities and repaid by future free cash before new contributions.
+5. An unregistered asset sale and every one-off expense sharing its `event_group` stay outside `one_off_flows` until the sale becomes a Decision. This keeps proceeds, disposal and transaction costs atomic.
 
 ## Decision Lifecycle
 
