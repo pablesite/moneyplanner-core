@@ -598,6 +598,10 @@ def build_net_worth_timeline(
                 "total_assets": _serialize_money(totals.total_assets),
                 "total_liabilities": _serialize_money(totals.total_liabilities),
                 "net_worth": _serialize_money(totals.total_assets - totals.total_liabilities),
+                "assets_by_category": {
+                    category: _serialize_money(amount)
+                    for category, amount in totals.assets_by_category.items()
+                },
                 "asset_positions": len(active_assets),
                 "liability_positions": len(active_liabilities),
             }

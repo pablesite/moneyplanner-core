@@ -63,7 +63,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. Legacy flat fields in `Asset` remain available for backward compatibility, while the schedule builder prioritizes interval rows when present.
 
 ## Net Worth Timeline Contract
-1. `GET /api/net-worth/timeline/` returns monthly rows for the chart plus a `comparisons` object for summary UIs.
+1. `GET /api/net-worth/timeline/` returns monthly rows for the chart plus a `comparisons` object for summary UIs. Each row includes `assets_by_category` in the user's base currency so consumers can render the real historical composition without rebuilding valuation logic.
 2. `comparisons` exposes four baseline points calculated by Core in the user's base currency:
    - `previous_month_close`
    - `same_day_previous_month`

@@ -71,6 +71,10 @@ class NetWorthTimelineServicesTests(TestCase):
                 ("2026-03-31", 1, 1),
             ],
         )
+        self.assertEqual(
+            timeline["rows"][0]["assets_by_category"],
+            {Asset.Category.CASH: "1000.00"},
+        )
 
     def test_net_worth_timeline_exposes_comparison_points(self):
         Asset.objects.create(
