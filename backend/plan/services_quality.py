@@ -22,6 +22,15 @@ class DataQualityService:
         plan = FinancialPlan.objects.filter(user=user).first()
         active_year = plan_fiscal_year(plan)
         buckets = expense_buckets(annual_expense_entries(plan)) if plan else None
+        # Los adultos que cuentan son los del plan, no todos los de la familia: el
+        # setup deja identidades provisionales ("Ana", "Pablo") sin vincular, y esas
+        # penalizaban una y otra vez unos datos que sí estaban completos. La
+        # proyección solo mira `plan.members`, así que la calidad también.
+        plan_adults = (
+            plan.members.filter(is_active=True, role=FamilyMember.Role.ADULT)
+            if plan
+            else FamilyMember.objects.none()
+        )
         factors = {
             "assets": Asset.objects.filter(user=user, is_active=True).exists(),
             "liabilities_reviewed": Liability.objects.filter(user=user, is_active=True).exists(),
@@ -34,12 +43,7 @@ class DataQualityService:
                 ).exists()
             ),
             "accounting_history": LedgerTransaction.objects.filter(user=user).exists(),
-            "pensions": FamilyMember.objects.filter(
-                user=user,
-                is_active=True,
-                role=FamilyMember.Role.ADULT,
-                pension_start_date__isnull=False,
-            ).exists(),
+            "pensions": plan_adults.filter(pension_start_date__isnull=False).exists(),
             "contributions": (
                 InvestmentContributionInterval.objects.filter(asset__user=user).exists()
                 or AnnualExpenseEntry.objects.filter(
@@ -52,12 +56,10 @@ class DataQualityService:
                 ).exists()
             ),
             "fresh_data": Asset.objects.filter(user=user, is_active=True).exists(),
-            "employment_income_end_dates": not FamilyMember.objects.filter(
-                user=user,
-                is_active=True,
-                role=FamilyMember.Role.ADULT,
-                employment_income_end_date__isnull=True,
-            ).exists(),
+            "employment_income_end_dates": (
+                plan_adults.exists()
+                and not plan_adults.filter(employment_income_end_date__isnull=True).exists()
+            ),
             "expenses_classified": buckets is None or buckets.unclassifiable == 0,
             # Retirado `one_off_income_excluded`: penalizaba tener cualquier ingreso
             # puntual en el año, aunque estuviera bien registrado. El motor ya los

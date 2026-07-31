@@ -2027,6 +2027,29 @@ class FoundationGradeTests(TestCase):
         self.assertGreaterEqual(overall["score"], min(scores))
         self.assertLessEqual(overall["score"], max(scores))
 
+    def test_quality_only_looks_at_the_plan_adults(self):
+        """Las identidades sueltas de la familia no cuentan: el setup deja adultos
+        provisionales sin vincular y penalizaban unos datos que sí estaban completos."""
+        member = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto del plan",
+            role=FamilyMember.Role.ADULT,
+            birth_date=date(1985, 1, 1),
+            employment_income_end_date=date(2045, 1, 1),
+            pension_start_date=date(2052, 1, 1),
+        )
+        self.plan.members.add(member)
+        FamilyMember.objects.create(
+            user=self.user,
+            name="Identidad provisional",
+            role=FamilyMember.Role.ADULT,
+        )
+
+        factors = DataQualityService().evaluate(user=self.user).factors
+
+        self.assertTrue(factors["employment_income_end_dates"])
+        self.assertTrue(factors["pensions"])
+
     def test_debt_service_counts_only_liability_commitments(self):
         """El esfuerzo de deuda son cuotas de pasivos, no cualquier compromiso con
         fecha de fin: una compra a plazos o un tratamiento no son deuda."""
