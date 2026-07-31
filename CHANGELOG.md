@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.35.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.34.0...moneyplanner-core-v0.35.0) (2026-07-31)
+
+
+### Features
+
+* **net-worth:** expose historical asset composition ([e2fd260](https://github.com/pablesite/moneyplanner-core/commit/e2fd2608f19610765ae0e755f8b8aad694748d0c))
+* **plan:** allocate free cash to emergency savings ([75e5bf1](https://github.com/pablesite/moneyplanner-core/commit/75e5bf1680581e9b9f464938d7857e14492d115f))
+* **plan:** allow editing grouped planned decisions ([32c2d33](https://github.com/pablesite/moneyplanner-core/commit/32c2d338c4af15c5b7b487e045fd5fdfe9c8d1b5))
+* **plan:** grade every foundation A-E and publish an overall health note ([6a69a21](https://github.com/pablesite/moneyplanner-core/commit/6a69a21220ba26f601c649624f7d7a7d1870f773))
+* **plan:** project reconciled asset categories ([161698e](https://github.com/pablesite/moneyplanner-core/commit/161698e04c3704be8d8f1cb17ecd51a9cf2e3ef1))
+
+
+### Bug Fixes
+
+* **net-worth:** reconcile accounting mortgage cancellation ([7475a4b](https://github.com/pablesite/moneyplanner-core/commit/7475a4b37b7921c316851f3e5757669dfe23abe5))
+* **plan:** allocate positive one-offs to security ([9b7c8b6](https://github.com/pablesite/moneyplanner-core/commit/9b7c8b6e12197e7a914af83c576fcb80ad48597a))
+* **plan:** count only liability instalments as debt service, and score it ([38c1e8a](https://github.com/pablesite/moneyplanner-core/commit/38c1e8a98b260e44c83af545fd1bf12e1868d7c7))
+* **plan:** ground foundations on effective values and fix two scorings ([1c88c2d](https://github.com/pablesite/moneyplanner-core/commit/1c88c2d320b67b439013a81c2ac28331713fd726))
+* **plan:** judge data quality on the plan's adults, not the whole family ([911c40d](https://github.com/pablesite/moneyplanner-core/commit/911c40d73bdaaeb96fa6b1efc3ee417bb95dfb99))
+* **plan:** let capital requirements use the horizon of the shown denominator ([0f9576a](https://github.com/pablesite/moneyplanner-core/commit/0f9576a97c2894faffa4641f55442ec5f0daf7a1))
+* **plan:** preserve liquidity across linked cash flows ([d70eb01](https://github.com/pablesite/moneyplanner-core/commit/d70eb019babfe9f167dc7bf43e0b781121facf32))
+* **plan:** reconcile financed asset sales ([477320a](https://github.com/pablesite/moneyplanner-core/commit/477320a86e392fc88a0415083052f80d3fbfb450))
+* **plan:** reconcile monthly decision cash flow ([a830894](https://github.com/pablesite/moneyplanner-core/commit/a8308944a0feaf5f995692e90338e4e7e9a91c9e))
+* **plan:** score the emergency fund against its own target ([b355089](https://github.com/pablesite/moneyplanner-core/commit/b355089225d58cd30cdd312ecad616666d9cc35d))
+
 ## [0.34.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.33.0...moneyplanner-core-v0.34.0) (2026-07-29)
 
 
