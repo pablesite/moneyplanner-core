@@ -45,7 +45,26 @@ class ProjectionCashNettingTests(TestCase):
         )
         return next(row for row in result["trajectory"] if row["year"] == self.year)
 
+    def create_balanced_recurring_cash_flow(self):
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Ingresos recurrentes",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="salary",
+            amount_annual=Decimal("20000.00"),
+            fiscal_year=self.year,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Gastos recurrentes",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            amount_annual=Decimal("20000.00"),
+            fiscal_year=self.year,
+        )
+
     def test_same_month_decisions_net_cash_before_consuming_security(self):
+        self.create_balanced_recurring_cash_flow()
         PlanEvent.objects.create(
             plan=self.plan,
             name="Compra vivienda",
@@ -57,7 +76,7 @@ class ProjectionCashNettingTests(TestCase):
                     {
                         "start_year": self.year,
                         "start_month": 11,
-                        "initial_outflow": "40000.00",
+                        "initial_outflow": "80420.00",
                     }
                 ]
             },
@@ -73,7 +92,7 @@ class ProjectionCashNettingTests(TestCase):
                     {
                         "start_year": self.year,
                         "start_month": 11,
-                        "proceeds": "60000.00",
+                        "proceeds": "121185.19",
                     }
                 ]
             },
@@ -81,10 +100,11 @@ class ProjectionCashNettingTests(TestCase):
 
         row = self.row()
 
-        self.assertEqual(row["productive_capital"], "120000.00")
-        self.assertEqual(row["security_capital"], "20000.00")
+        self.assertEqual(row["productive_capital"], "130573.89")
+        self.assertEqual(row["security_capital"], "30191.30")
 
     def test_one_off_inflows_and_outflows_net_before_consuming_security(self):
+        self.create_balanced_recurring_cash_flow()
         AnnualIncomeEntry.objects.create(
             user=self.user,
             name="Ingreso puntual",
@@ -110,8 +130,8 @@ class ProjectionCashNettingTests(TestCase):
 
         row = self.row()
 
-        self.assertEqual(row["productive_capital"], "105000.00")
-        self.assertEqual(row["security_capital"], "20000.00")
+        self.assertEqual(row["productive_capital"], "103750.00")
+        self.assertEqual(row["security_capital"], "21250.00")
 
     def test_sale_removes_financed_asset_at_net_value(self):
         home = Asset.objects.create(

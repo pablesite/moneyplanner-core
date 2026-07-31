@@ -360,6 +360,8 @@ def apply_plan_event_one_offs_for_year(
     asset_categories: dict[str, Decimal],
     active_event_debts: list[dict[str, Decimal | int]],
     applied_event_indexes: set[int],
+    security_target: Decimal,
+    security_contribution_rate: Decimal,
 ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
     events_by_month: dict[int, list[tuple[int, dict[str, Any]]]] = {}
     for event_index, event in enumerate(events):
@@ -385,11 +387,16 @@ def apply_plan_event_one_offs_for_year(
         monthly_net_cash = monthly_proceeds - monthly_outflow
         if monthly_net_cash >= 0:
             productive_before = productive
-            productive, financing_gap = apply_cash_inflow(
+            security_before = security
+            productive, security, financing_gap = allocate_positive_cash(
                 productive=productive,
+                security=security,
                 financing_gap=financing_gap,
                 amount=monthly_net_cash,
+                security_target=security_target,
+                security_contribution_rate=security_contribution_rate,
             )
+            asset_categories["liquidity"] += security - security_before
             asset_categories["investments"] += productive - productive_before
         else:
             productive_before = productive
@@ -632,6 +639,12 @@ def calculate_projection(
                 term_years=inputs.liability_max_term_years,
                 year_offset=offset,
             )
+        security_target = security_target_for_year(
+            inputs=inputs,
+            assumptions=assumptions,
+            year=year,
+            start_year=start_year,
+        )
         if year < target_year:
             # Todo el superávit libre se asigna a capital. Las aportaciones explícitas
             # de una decisión fijan primero su destino; el resto sigue la ponderación
@@ -663,12 +676,6 @@ def calculate_projection(
                 asset_categories["investments"] += explicit_productive
                 available_cash -= explicit_productive
 
-                security_target = security_target_for_year(
-                    inputs=inputs,
-                    assumptions=assumptions,
-                    year=year,
-                    start_year=start_year,
-                )
                 security_headroom = max(Decimal("0"), security_target - security)
                 security_contribution = min(
                     security_headroom,
@@ -716,6 +723,8 @@ def calculate_projection(
             asset_categories=asset_categories,
             active_event_debts=active_event_debts,
             applied_event_indexes=applied_one_off_events,
+            security_target=security_target,
+            security_contribution_rate=security_contribution_rate,
         )
         disposed_liability_total += disposed_this_year
         flow = one_off_flow_for_year(inputs.one_off_flows, year)
@@ -726,11 +735,16 @@ def calculate_projection(
             flow_net_cash = flow_inflow - flow_outflow
             if flow_net_cash >= 0:
                 productive_before = productive
-                productive, financing_gap = apply_cash_inflow(
+                security_before = security
+                productive, security, financing_gap = allocate_positive_cash(
                     productive=productive,
+                    security=security,
                     financing_gap=financing_gap,
                     amount=flow_net_cash,
+                    security_target=security_target,
+                    security_contribution_rate=security_contribution_rate,
                 )
+                asset_categories["liquidity"] += security - security_before
                 asset_categories["investments"] += productive - productive_before
             else:
                 productive_before = productive
@@ -766,12 +780,6 @@ def calculate_projection(
                 start_year=start_year,
             )
             + preservation_extra
-        )
-        security_target = security_target_for_year(
-            inputs=inputs,
-            assumptions=assumptions,
-            year=year,
-            start_year=start_year,
         )
         reported_asset_categories = {key: q2(value) for key, value in asset_categories.items()}
         total_assets = sum(reported_asset_categories.values(), Decimal("0"))
@@ -1327,13 +1335,29 @@ def apply_cash_outflow(
     return productive, security, financing_gap + remaining
 
 
-def apply_cash_inflow(
-    *, productive: Decimal, financing_gap: Decimal, amount: Decimal
-) -> tuple[Decimal, Decimal]:
+def allocate_positive_cash(
+    *,
+    productive: Decimal,
+    security: Decimal,
+    financing_gap: Decimal,
+    amount: Decimal,
+    security_target: Decimal,
+    security_contribution_rate: Decimal,
+) -> tuple[Decimal, Decimal, Decimal]:
     if amount <= 0:
-        return productive, financing_gap
+        return productive, security, financing_gap
     recovered = min(amount, financing_gap)
-    return productive + amount - recovered, financing_gap - recovered
+    available_cash = amount - recovered
+    security_headroom = max(Decimal("0"), security_target - security)
+    security_contribution = min(
+        security_headroom,
+        available_cash * security_contribution_rate,
+    )
+    return (
+        productive + available_cash - security_contribution,
+        security + security_contribution,
+        financing_gap - recovered,
+    )
 
 
 def event_debt_balance(*, debts: list[dict[str, Decimal | int]], year: int) -> Decimal:
