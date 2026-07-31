@@ -2302,7 +2302,7 @@ class AssetDisposalInProjectionTests(TestCase):
         before = self._row(self._project(), self.sale_year)
         self.assertGreater(Decimal(before["liabilities"]), Decimal("0"))
         self._sale_event(
-            disposed_asset_value="50000.00",  # valor neto en el bucket (200k - 150k)
+            disposed_asset_value="200000.00",
             disposed_asset_type="family_use",
             proceeds="50000.00",
             disposed_liability_value="150000.00",

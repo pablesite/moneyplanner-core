@@ -361,6 +361,7 @@ def apply_plan_event_one_offs_for_year(
             )
 
         for event_index, event in monthly_events:
+            event_disposed_liability = Decimal(str(event.get("disposed_liability_value") or "0"))
             asset_value = Decimal(str(event.get("new_asset_value") or "0"))
             asset_type = event.get("new_asset_type")
             if asset_value > 0:
@@ -392,14 +393,18 @@ def apply_plan_event_one_offs_for_year(
                     "security": Decimal("0"),
                 }.get(disposed_type, non_productive_return)
                 grown = inflate(disposed_value, disposed_rate, max(0, year - start_year))
+                # Los buckets de clasificación ya contienen el activo neto de su
+                # deuda asociada. Retirar aquí el valor bruto y cancelar después el
+                # pasivo restaría la hipoteca dos veces de la trayectoria.
+                disposed_net_value = max(Decimal("0"), grown - event_disposed_liability)
                 if disposed_type == "productive":
-                    productive = max(Decimal("0"), productive - grown)
+                    productive = max(Decimal("0"), productive - disposed_net_value)
                 elif disposed_type == "security":
-                    security = max(Decimal("0"), security - grown)
+                    security = max(Decimal("0"), security - disposed_net_value)
                 else:
-                    non_productive = max(Decimal("0"), non_productive - grown)
+                    non_productive = max(Decimal("0"), non_productive - disposed_net_value)
 
-            disposed_liability += Decimal(str(event.get("disposed_liability_value") or "0"))
+            disposed_liability += event_disposed_liability
             applied_event_indexes.add(event_index)
 
     return productive, security, non_productive, financing_gap, disposed_liability

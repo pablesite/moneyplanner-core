@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
-from net_worth.models import Asset
+from net_worth.models import Asset, Liability
 from plan.models import FinancialPlan, PlanEvent, Scenario
 from plan.services_projection import ProjectionService, get_assumption_set
 
@@ -112,3 +112,46 @@ class ProjectionCashNettingTests(TestCase):
 
         self.assertEqual(row["productive_capital"], "105000.00")
         self.assertEqual(row["security_capital"], "20000.00")
+
+    def test_sale_removes_financed_asset_at_net_value(self):
+        home = Asset.objects.create(
+            user=self.user,
+            name="Vivienda",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            amount=Decimal("150000.00"),
+            currency="EUR",
+        )
+        Liability.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            category=Liability.Category.MORTGAGE,
+            amount=Decimal("20000.00"),
+            principal_amount=Decimal("20000.00"),
+            currency="EUR",
+            financed_asset=home,
+        )
+        PlanEvent.objects.create(
+            plan=self.plan,
+            name="Venta vivienda financiada",
+            event_type=Scenario.TemplateType.HOUSING,
+            planned_date=date(self.year, 1, 1),
+            status=PlanEvent.Status.PLANNED,
+            planned_impact_json={
+                "events": [
+                    {
+                        "start_year": self.year,
+                        "start_month": 11,
+                        "proceeds": "141000.00",
+                        "disposed_asset_value": "150000.00",
+                        "disposed_asset_type": "family_use",
+                        "disposed_liability_value": "20000.00",
+                    }
+                ]
+            },
+        )
+
+        row = self.row()
+
+        # 250k iniciales + 141k de cobro - 130k de vivienda neta = 261k.
+        self.assertEqual(row["net_worth"], "261000.00")
