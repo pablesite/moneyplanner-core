@@ -6,6 +6,7 @@ from typing import cast
 
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import Asset, Liability
 from .services_liabilities_core import (
@@ -14,6 +15,7 @@ from .services_liabilities_core import (
     _last_day_of_month,
     build_liability_installment_schedule_simple,
     estimate_liability_outstanding_amount_simple,
+    get_effective_liability_amount,
 )
 
 
@@ -191,6 +193,13 @@ def _cancellation_principal_reference_date(*, liability: Liability, cancellation
 
 
 def _estimate_cancellation_remaining_principal(*, liability: Liability, cancellation_date):
+    accounting_estimate = _estimate_accounting_cancellation_principal(
+        liability=liability,
+        cancellation_date=cancellation_date,
+    )
+    if accounting_estimate is not None:
+        return accounting_estimate
+
     reference_date = _cancellation_principal_reference_date(
         liability=liability,
         cancellation_date=cancellation_date,
@@ -204,6 +213,56 @@ def _estimate_cancellation_remaining_principal(*, liability: Liability, cancella
         )
     finally:
         liability.cancellation_forecast_enabled = original_flag
+
+
+def _estimate_accounting_cancellation_principal(
+    *, liability: Liability, cancellation_date
+) -> Decimal | None:
+    """Project an accounting-backed balance from today's ledger and future budget instalments."""
+    if liability.tracking_mode != Liability.TrackingMode.ACCOUNTING:
+        return None
+
+    today = timezone.localdate()
+    if cancellation_date <= today:
+        return get_effective_liability_amount(liability=liability, as_of_date=today)
+
+    from budget.models import AnnualExpenseEntry
+    from budget.services import planned_expense_monthly_distribution
+
+    entries = AnnualExpenseEntry.objects.filter(
+        user=liability.user,
+        source_liability=liability,
+        is_active=True,
+        event_group=f"liability_{liability.id}",
+        fiscal_year__range=(today.year, cancellation_date.year),
+    ).order_by("fiscal_year", "id")
+    payments: list[Decimal] = []
+    for entry in entries:
+        distribution = planned_expense_monthly_distribution(
+            entry=entry,
+            fiscal_year=entry.fiscal_year,
+        )
+        for month, payment in sorted(distribution.items()):
+            period = (entry.fiscal_year, month)
+            if period <= (today.year, today.month):
+                continue
+            cancellation_period = (cancellation_date.year, cancellation_date.month)
+            include_cancellation_month = _should_include_installment_in_cancellation_month(
+                liability=liability
+            )
+            if period > cancellation_period or (
+                period == cancellation_period and not include_cancellation_month
+            ):
+                continue
+            payments.append(Decimal(payment))
+
+    balance = get_effective_liability_amount(liability=liability, as_of_date=today)
+    monthly_rate = Decimal(liability.annual_interest_tae or 0) / Decimal("100") / Decimal("12")
+    for payment in payments:
+        interest = balance * monthly_rate
+        principal_component = max(Decimal("0"), payment - interest)
+        balance = max(Decimal("0"), balance - principal_component)
+    return balance.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
 
 
 @transaction.atomic
