@@ -59,13 +59,11 @@ class DataQualityService:
                 employment_income_end_date__isnull=True,
             ).exists(),
             "expenses_classified": buckets is None or buckets.unclassifiable == 0,
-            "one_off_income_excluded": not AnnualIncomeEntry.objects.filter(
-                user=user,
-                is_active=True,
-                fiscal_year=active_year,
-                time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
-                amount_annual__gt=0,
-            ).exists(),
+            # Retirado `one_off_income_excluded`: penalizaba tener cualquier ingreso
+            # puntual en el año, aunque estuviera bien registrado. El motor ya los
+            # separa —`structural_income` los deja fuera de la base recurrente y
+            # `one_off_flows` los proyecta en su año—, así que restaba calidad por un
+            # riesgo que ya no existe.
         }
         score = sum(1 for value in factors.values() if value)
         completeness = score / len(factors)

@@ -6,6 +6,7 @@ from typing import Any
 
 from budget.models import AnnualExpenseEntry
 from net_worth.models import Asset, Liability
+from net_worth.services import get_effective_asset_amount, get_effective_liability_amount
 
 from .models import FinancialPlan
 from .services_projection import planned_contribution_amount
@@ -228,15 +229,28 @@ def temporary_commitment_breakdown(plan: FinancialPlan) -> list[dict[str, Any]]:
     return breakdown
 
 
+def asset_amount(asset: Asset) -> Decimal:
+    """Valor efectivo del activo (contabilidad, posiciones e histórico), el mismo que
+    usa la clasificación del plan. Leer `asset.amount` en crudo dejaba a cero toda la
+    cartera de inversión de quien la lleva por posiciones: el patrimonio del
+    diagnóstico no cuadraba con el de Patrimonio y la iliquidez salía inflada."""
+    return max(get_effective_asset_amount(asset=asset), Decimal("0"))
+
+
+def liability_amount(liability: Liability) -> Decimal:
+    return max(get_effective_liability_amount(liability=liability), Decimal("0"))
+
+
 def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
-    assets_value = sum((max(Decimal(asset.amount), Decimal("0")) for asset in assets), Decimal("0"))
+    amounts = {asset.id: asset_amount(asset) for asset in assets}
+    assets_value = sum(amounts.values(), Decimal("0"))
     by_category: dict[str, Decimal] = {}
     illiquid = Decimal("0")
     emergency_liquid = Decimal("0")
     immediate_liquid = Decimal("0")
 
     for asset in assets:
-        amount = max(Decimal(asset.amount), Decimal("0"))
+        amount = amounts[asset.id]
         if amount <= 0:
             continue
         by_category[asset.category] = by_category.get(asset.category, Decimal("0")) + amount
@@ -297,26 +311,21 @@ def asset_liquidity_metrics(assets: list[Asset]) -> dict[str, Any]:
 
 
 def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str, Any]:
-    liabilities_value = sum(
-        (max(Decimal(liability.amount), Decimal("0")) for liability in liabilities), Decimal("0")
-    )
+    amounts = {liability.id: liability_amount(liability) for liability in liabilities}
+    liabilities_value = sum(amounts.values(), Decimal("0"))
     unbacked = sum(
-        (
-            max(Decimal(liability.amount), Decimal("0"))
-            for liability in liabilities
-            if not liability.is_asset_backed
-        ),
+        (amounts[liability.id] for liability in liabilities if not liability.is_asset_backed),
         Decimal("0"),
     )
     known_rate_rows = [row for row in liabilities if row.annual_interest_tae is not None]
     weighted_tae = None
     if known_rate_rows:
-        denominator = sum((Decimal(row.amount) for row in known_rate_rows), Decimal("0"))
+        denominator = sum((amounts[row.id] for row in known_rate_rows), Decimal("0"))
         if denominator > 0:
             weighted_tae = (
                 sum(
                     (
-                        Decimal(row.amount) * Decimal(row.annual_interest_tae or 0)
+                        amounts[row.id] * Decimal(row.annual_interest_tae or 0)
                         for row in known_rate_rows
                     ),
                     Decimal("0"),
@@ -331,7 +340,7 @@ def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str,
     high_cost_threshold = Decimal("8")
     high_cost_debt = sum(
         (
-            Decimal(row.amount)
+            amounts[row.id]
             for row in liabilities
             if row.annual_interest_tae is not None
             and Decimal(row.annual_interest_tae) >= high_cost_threshold
@@ -355,7 +364,7 @@ def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str,
         else None
     )
     top_liability_share = (
-        max((Decimal(row.amount) for row in liabilities), default=Decimal("0")) / liabilities_value
+        max(amounts.values(), default=Decimal("0")) / liabilities_value
         if liabilities_value > 0
         else None
     )
@@ -452,30 +461,16 @@ class FoundationService:
                 ),
             ]
         )
-        emergency_score = weighted_score(
-            [
-                (
-                    score_increasing(
-                        emergency_months_base, EMERGENCY_FLOOR_MONTHS, EMERGENCY_TARGET_MONTHS
-                    ),
-                    Decimal("0.55"),
-                ),
-                (
-                    score_increasing(
-                        emergency_months_committed, EMERGENCY_FLOOR_MONTHS, EMERGENCY_TARGET_MONTHS
-                    ),
-                    Decimal("0.25"),
-                ),
-                (
-                    score_increasing(
-                        asset_metrics["emergency_liquidity_to_assets"],
-                        Decimal("0.05"),
-                        Decimal("0.3"),
-                    ),
-                    Decimal("0.20"),
-                ),
-            ]
+        # El cimiento mide una sola cosa: cuántos meses de gasto operativo cubre tu
+        # colchón frente a su objetivo. Antes promediaba además la cobertura *con
+        # compromisos* (que ya penaliza el flujo de caja) y el peso del colchón sobre
+        # el patrimonio total (que es diversificación, y vive en salud patrimonial):
+        # con 5,5 de 6 meses objetivo la nota bajaba a D. La cobertura comprometida
+        # sigue publicándose como dato del desglose.
+        emergency_score = score_increasing(
+            emergency_months_base, EMERGENCY_FLOOR_MONTHS, EMERGENCY_TARGET_MONTHS
         )
+
         debt_score = weighted_score(
             [
                 (
