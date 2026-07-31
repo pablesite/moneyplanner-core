@@ -2750,7 +2750,7 @@ class CashFlowReconciliationTests(TestCase):
         )
         self.assertEqual(Decimal(next_year["amount"]), Decimal("1216.26"))
 
-    def test_unfunded_outflow_stays_negative_until_future_surplus_recovers_it(self):
+    def test_unfunded_outflow_uses_remaining_year_surplus_before_staying_negative(self):
         self._income(Decimal("90000.00"))
         self._operating(Decimal("20000.00"))
         PlanEvent.objects.create(
@@ -2772,13 +2772,27 @@ class CashFlowReconciliationTests(TestCase):
             },
         )
 
-        projection = ProjectionService().calculate(
-            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        assumption_set = get_assumption_set(name="expected")
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(assumption_set)
+        remaining_surplus = free_operating_surplus(
+            inputs=inputs,
+            assumptions=assumptions,
+            year=self.year,
+            start_year=self.year,
         )
+        projection = ProjectionService().calculate(plan=self.plan, assumption_set=assumption_set)
         current = next(row for row in projection["trajectory"] if row["year"] == self.year)
         following = next(row for row in projection["trajectory"] if row["year"] == self.next_year)
 
-        self.assertEqual(current["financing_gap"], "-50000.00")
+        expected_gap = (
+            inputs.productive_capital
+            + inputs.security_capital
+            + remaining_surplus
+            - Decimal("150000.00")
+        ).quantize(Decimal("0.01"))
+        self.assertEqual(Decimal(current["financing_gap"]), expected_gap)
+        self.assertLess(Decimal(current["financing_gap"]), Decimal("0"))
         self.assertEqual(following["financing_gap"], "0.00")
 
     def test_debt_service_caps_effective_contribution(self):

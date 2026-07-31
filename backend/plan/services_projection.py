@@ -416,8 +416,8 @@ def calculate_projection(
     inflation = Decimal(assumptions["inflation_rate"])
     productive_return = Decimal(assumptions["productive_return_rate"])
     non_productive_return = Decimal(assumptions["non_productive_appreciation_rate"])
-    contribution_growth = Decimal(assumptions["contribution_growth_rate"])
     withdrawal_rate = Decimal(assumptions["withdrawal_rate"])
+    security_contribution_rate = Decimal(assumptions["security_contribution_rate"])
 
     start_year = date.today().year
     target_year = inputs.target_date.year
@@ -498,15 +498,9 @@ def calculate_projection(
                 year_offset=offset,
             )
         if year < target_year:
-            planned = (
-                inputs.current_year_remaining_contributions
-                if offset == 0
-                else inflate(inputs.annual_planned_contributions, contribution_growth, offset)
-                + event_delta["annual_productive_contribution_delta"]
-            )
-            # La aportación efectiva se limita al superávit libre real del año (caja): no puedes
-            # invertir más de lo que te deja tu flujo tras operativos, compromisos y cuotas de
-            # deuda. En jubilación (year >= target) no hay acumulación: gobierna `withdrawals`.
+            # Todo el superávit libre se asigna a capital. Las aportaciones explícitas
+            # de una decisión fijan primero su destino; el resto sigue la ponderación
+            # Seguridad/Productivo del supuesto.
             free_cash = free_operating_surplus(
                 inputs=inputs, assumptions=assumptions, year=year, start_year=start_year
             )
@@ -515,10 +509,36 @@ def calculate_projection(
                 recovered = min(available_cash, financing_gap)
                 financing_gap -= recovered
                 available_cash -= recovered
-            effective_contribution = min(planned, max(Decimal("0"), available_cash))
-            productive += effective_contribution
-            security += event_delta["annual_security_contribution_delta"]
-            debt_contributions += event_delta["annual_debt_contribution_delta"]
+            if available_cash > 0:
+                explicit_debt = min(available_cash, event_delta["annual_debt_contribution_delta"])
+                debt_contributions += explicit_debt
+                available_cash -= explicit_debt
+
+                explicit_security = min(
+                    available_cash, event_delta["annual_security_contribution_delta"]
+                )
+                security += explicit_security
+                available_cash -= explicit_security
+
+                explicit_productive = min(
+                    available_cash, event_delta["annual_productive_contribution_delta"]
+                )
+                productive += explicit_productive
+                available_cash -= explicit_productive
+
+                security_target = security_target_for_year(
+                    inputs=inputs,
+                    assumptions=assumptions,
+                    year=year,
+                    start_year=start_year,
+                )
+                security_headroom = max(Decimal("0"), security_target - security)
+                security_contribution = min(
+                    security_headroom,
+                    available_cash * security_contribution_rate,
+                )
+                security += security_contribution
+                productive += available_cash - security_contribution
             if free_cash < 0:
                 productive, security, financing_gap = apply_cash_outflow(
                     productive=productive,
@@ -588,6 +608,12 @@ def calculate_projection(
             )
             + preservation_extra
         )
+        security_target = security_target_for_year(
+            inputs=inputs,
+            assumptions=assumptions,
+            year=year,
+            start_year=start_year,
+        )
         # Los buckets (productive/security/non_productive) ya vienen netos de su
         # deuda asociada; restar `liabilities` (deuda total) la contaría dos veces.
         # Se suma de vuelta la asociada para que el patrimonio reconcilie con el real.
@@ -610,6 +636,7 @@ def calculate_projection(
                 "year": year,
                 "productive_capital": decimal_str(productive),
                 "security_capital": decimal_str(security),
+                "security_target": decimal_str(security_target),
                 "non_productive_assets": decimal_str(non_productive),
                 "liabilities": decimal_str(liabilities),
                 "financing_gap": decimal_str(-financing_gap),
@@ -1106,6 +1133,20 @@ def free_operating_surplus(
     return income - operating - commitments - debt_service
 
 
+def security_target_for_year(
+    *, inputs: ProjectionInputs, assumptions: dict[str, str], year: int, start_year: int
+) -> Decimal:
+    """Target security capital as a multiple of recurring annual expenses."""
+    inflation = Decimal(assumptions["inflation_rate"])
+    expense_years = Decimal(assumptions["security_target_expense_years"])
+    annual_expense = inflate(
+        inputs.annual_operating_expense,
+        inflation,
+        max(0, year - start_year),
+    )
+    return annual_expense * expense_years
+
+
 def apply_cash_outflow(
     *,
     productive: Decimal,
@@ -1190,6 +1231,8 @@ def serialize_assumptions(assumption_set: AssumptionSet) -> dict[str, str]:
         "non_productive_appreciation_rate": str(assumption_set.non_productive_appreciation_rate),
         "income_growth_rate": str(assumption_set.income_growth_rate),
         "contribution_growth_rate": str(assumption_set.contribution_growth_rate),
+        "security_contribution_rate": str(assumption_set.security_contribution_rate),
+        "security_target_expense_years": str(assumption_set.security_target_expense_years),
         "withdrawal_rate": str(assumption_set.withdrawal_rate),
         "default_liability_rate": str(assumption_set.default_liability_rate),
     }

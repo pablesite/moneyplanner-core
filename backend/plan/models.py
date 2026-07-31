@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -134,6 +136,18 @@ class AssumptionSet(models.Model):
         max_digits=6,
         decimal_places=4,
         validators=[MinValueValidator(-1), MaxValueValidator(1)],
+    )
+    security_contribution_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("0.2500"),
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
+    security_target_expense_years = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("2.00"),
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
     )
     withdrawal_rate = models.DecimalField(
         max_digits=6,
