@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.0...moneyplanner-core-v0.35.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ci:** drop pip from the production image so Trivy can pass ([705ce1e](https://github.com/pablesite/moneyplanner-core/commit/705ce1ebad015f48e29e0af992cc9bea991ef660))
+
 ## [0.35.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.34.0...moneyplanner-core-v0.35.0) (2026-07-31)
 
 
