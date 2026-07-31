@@ -112,6 +112,52 @@ def health_status(value: int) -> str:
     return "critical"
 
 
+def health_grade(value: int) -> str:
+    """Nota A-E del score ya redondeado.
+
+    Recupera la escala de la Guía v1, pero **encajada en las bandas actuales** para
+    que letra y color no puedan contradecirse: A y B son `good`, C y D `warning`,
+    E `critical`. La letra añade granularidad dentro de la banda (una B avisa de que
+    el margen es corto sin pintarse de ámbar)."""
+    if value >= 85:
+        return "A"
+    if value >= 70:
+        return "B"
+    if value >= 55:
+        return "C"
+    if value >= 40:
+        return "D"
+    return "E"
+
+
+def graded(value: Decimal | int) -> dict[str, Any]:
+    """Trio score/status/grade a partir de un score sin redondear."""
+    rounded = score(Decimal(value))
+    return {
+        "score": rounded,
+        "status": health_status(rounded),
+        "grade": health_grade(rounded),
+    }
+
+
+# Peso de cada cimiento en la nota global del bloque. El flujo de caja manda porque
+# es lo que alimenta todo lo demás; la calidad de datos pesa poco porque mide la
+# confianza en el diagnóstico, no la salud en sí.
+FOUNDATION_WEIGHTS: tuple[tuple[str, Decimal], ...] = (
+    ("cash_flow", Decimal("0.28")),
+    ("emergency_fund", Decimal("0.22")),
+    ("debt", Decimal("0.18")),
+    ("planned_contribution", Decimal("0.14")),
+    ("net_worth_health", Decimal("0.10")),
+    ("data_quality", Decimal("0.08")),
+)
+
+# Tasa de ahorro (aportación planificada / ingresos estructurales): 5 % es el suelo
+# desde el que se empieza a puntuar y 20 % ya es una tasa sólida.
+SAVINGS_RATE_FLOOR = Decimal("0.05")
+SAVINGS_RATE_TARGET = Decimal("0.20")
+
+
 def active_assets(plan: FinancialPlan) -> list[Asset]:
     return list(Asset.objects.filter(user=plan.user, is_active=True))
 
@@ -487,11 +533,15 @@ class FoundationService:
             sum(1 for value in quality_flags.values() if value) / len(quality_flags) * 100
         )
 
-        return {
-            "period": "current",
+        # Tasa de ahorro: la aportación planificada frente a los ingresos. Es el KPI
+        # que faltaba puntuar del bloque (antes solo mostraba el importe), y el que
+        # explica si el plan avanza al ritmo que hace falta.
+        savings_rate = planned_contribution / annual_income if annual_income > 0 else None
+        contribution_score = score_increasing(savings_rate, SAVINGS_RATE_FLOOR, SAVINGS_RATE_TARGET)
+
+        blocks: dict[str, Any] = {
             "cash_flow": {
-                "score": score(cash_flow_score),
-                "status": health_status(score(cash_flow_score)),
+                **graded(cash_flow_score),
                 "structural_annual_income": money(annual_income),
                 "structural_operating_expense": money(operating_expense),
                 "temporary_commitment_expense": money(commitment_expense),
@@ -507,16 +557,14 @@ class FoundationService:
                 "temporary_commitments": temporary_commitment_breakdown(plan),
             },
             "emergency_fund": {
-                "score": score(emergency_score),
-                "status": health_status(score(emergency_score)),
+                **graded(emergency_score),
                 "eligible_liquidity": money(asset_metrics["emergency_liquid_assets_value"]),
                 "coverage_months_base": ratio(emergency_months_base),
                 "coverage_months_committed": ratio(emergency_months_committed),
                 "target_months": ratio(EMERGENCY_TARGET_MONTHS),
             },
             "debt": {
-                "score": score(debt_score),
-                "status": health_status(score(debt_score)),
+                **graded(debt_score),
                 "total_debt": money(debt["liabilities_value"]),
                 "unbacked_debt": money(debt["unbacked_debt_value"]),
                 "high_cost_debt": money(debt["high_cost_debt_value"]),
@@ -524,20 +572,34 @@ class FoundationService:
                 "debt_payment_to_income": ratio(debt["debt_payment_to_income"]),
             },
             "net_worth_health": {
-                "score": score(net_worth_health_score),
-                "status": health_status(score(net_worth_health_score)),
+                **graded(net_worth_health_score),
                 "assets_value": money(asset_metrics["assets_value"]),
                 "illiquid_assets_share": ratio(asset_metrics["illiquid_assets_share"]),
                 "top_asset_share": ratio(asset_metrics["top_asset_share"]),
                 "diversification_index": ratio(asset_metrics["diversification_index"]),
             },
             "planned_contribution": {
+                **graded(contribution_score),
                 "annual_amount": money(planned_contribution),
                 "monthly_amount": money(planned_contribution / Decimal("12")),
+                "savings_rate": ratio(savings_rate),
+                "target_savings_rate": ratio(SAVINGS_RATE_TARGET),
             },
             "data_quality": {
-                "score": int(round(quality_score)),
-                "status": health_status(int(round(quality_score))),
+                **graded(Decimal(str(quality_score))),
                 "flags": quality_flags,
             },
+        }
+
+        # Nota global del bloque: media ponderada de los seis cimientos, con la misma
+        # escala, para poder titular "Salud financiera · C" en vez de contar cuántos
+        # están en ámbar.
+        overall_score = weighted_score(
+            [(Decimal(blocks[key]["score"]), weight) for key, weight in FOUNDATION_WEIGHTS]
+        )
+
+        return {
+            "period": "current",
+            "overall": graded(overall_score),
+            **blocks,
         }

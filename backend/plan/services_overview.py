@@ -113,15 +113,20 @@ class PlanOverviewService:
                     "low" if selected["quality_level"] in {"initial", "needs_review"} else "medium"
                 ),
             },
+            # Mapa ligero para titulares: misma nota y banda que el bloque completo,
+            # sin arrastrar sus métricas.
             "foundations": {
                 key: {
                     "status": foundations[key]["status"],
                     "score": foundations[key]["score"],
+                    "grade": foundations[key]["grade"],
                 }
                 for key in (
+                    "overall",
                     "cash_flow",
                     "emergency_fund",
                     "debt",
+                    "planned_contribution",
                     "net_worth_health",
                     "data_quality",
                 )

@@ -26,7 +26,7 @@ from plan.models import (
 )
 from plan.services_classification import AssetClassificationService
 from plan.services_findings import FindingService
-from plan.services_foundations import FoundationService
+from plan.services_foundations import FoundationService, health_grade, health_status
 from plan.services_quality import DataQualityService
 from plan.services_events import (
     close_plan_event,
@@ -1977,6 +1977,74 @@ class CapitalRequirementsTests(APITestCase):
             self.client.get(url, {"monthly_amounts": ",".join(["100"] * 9)}).status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+
+class FoundationGradeTests(TestCase):
+    """Nota A-E por cimiento y nota global del bloque."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="foundations_grade", password="pass1234"
+        )
+        self.plan = create_plan(self.user)
+        create_income(self.user)
+        create_operating_expense(self.user, Decimal("24000.00"))
+
+    def test_grade_bands_never_contradict_the_status_band(self):
+        """A y B son `good`, C y D `warning`, E `critical`: la letra afina dentro de
+        la banda, no discute con el color."""
+        for value, expected in ((100, "A"), (85, "A"), (84, "B"), (70, "B"), (69, "C")):
+            self.assertEqual(health_grade(value), expected)
+        for value in (100, 85, 84, 70):
+            self.assertEqual(health_status(value), "good")
+        for value, expected in ((69, "C"), (55, "C"), (54, "D"), (40, "D")):
+            self.assertEqual(health_grade(value), expected)
+            self.assertEqual(health_status(value), "warning")
+        for value in (39, 0):
+            self.assertEqual(health_grade(value), "E")
+            self.assertEqual(health_status(value), "critical")
+
+    def test_every_block_carries_its_grade_and_the_block_has_an_overall(self):
+        payload = FoundationService().calculate(plan=self.plan)
+        keys = (
+            "cash_flow",
+            "emergency_fund",
+            "debt",
+            "planned_contribution",
+            "net_worth_health",
+            "data_quality",
+        )
+        for key in keys:
+            block = payload[key]
+            self.assertIn(block["grade"], set("ABCDE"), key)
+            self.assertEqual(block["grade"], health_grade(block["score"]), key)
+            self.assertEqual(block["status"], health_status(block["score"]), key)
+
+        overall = payload["overall"]
+        self.assertEqual(overall["grade"], health_grade(overall["score"]))
+        # La global es una media ponderada: nunca cae fuera del rango de sus partes.
+        scores = [payload[key]["score"] for key in keys]
+        self.assertGreaterEqual(overall["score"], min(scores))
+        self.assertLessEqual(overall["score"], max(scores))
+
+    def test_planned_contribution_is_scored_by_savings_rate(self):
+        """Antes era el único bloque sin nota: solo enseñaba el importe."""
+        # 36.000 € de ingresos y 7.200 € aportados = 20 % de tasa de ahorro.
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportación",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="other_financial_investments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=Decimal("7200.00"),
+            fiscal_year=2026,
+        )
+        payload = FoundationService().calculate(plan=self.plan)
+
+        block = payload["planned_contribution"]
+        self.assertEqual(block["savings_rate"], "0.2000")
+        self.assertEqual(block["target_savings_rate"], "0.2000")
+        self.assertEqual(block["grade"], "A")
 
 
 class FoundationCriteriaTests(TestCase):
