@@ -77,6 +77,11 @@ class ProjectionInputs:
     current_year_remaining_operating_expense: Decimal = Decimal("0")
     current_year_remaining_contributions: Decimal = Decimal("0")
     current_year_remaining_temporary_commitments: Decimal = Decimal("0")
+    liquidity_assets: Decimal = Decimal("0")
+    investment_assets: Decimal = Decimal("0")
+    real_estate_assets: Decimal = Decimal("0")
+    furnishings_assets: Decimal = Decimal("0")
+    other_assets: Decimal = Decimal("0")
 
 
 class ProjectionService:
@@ -228,6 +233,7 @@ def build_projection_inputs(
         start_year=today.year,
         end_year=plan.projection_end_date.year,
     )
+    category_assets = asset_category_totals(classification)
     members = list(plan.members.filter(role=FamilyMember.Role.ADULT, is_active=True).order_by("id"))
     pension_income = sum(
         (
@@ -304,10 +310,39 @@ def build_projection_inputs(
             current_year_remaining_temporary_commitments=remaining_expense_by_role.get(
                 "temporary_commitment", Decimal("0")
             ),
+            liquidity_assets=category_assets["liquidity"],
+            investment_assets=category_assets["investments"],
+            real_estate_assets=category_assets["real_estate"],
+            furnishings_assets=category_assets["furnishings"],
+            other_assets=category_assets["other"],
         ),
         classification,
         quality,
     )
+
+
+def asset_category_totals(classification: ClassificationSummary) -> dict[str, Decimal]:
+    """Gross asset composition used to reconcile projected assets against debt."""
+    totals = {
+        "liquidity": Decimal("0"),
+        "investments": Decimal("0"),
+        "real_estate": Decimal("0"),
+        "furnishings": Decimal("0"),
+        "other": Decimal("0"),
+    }
+    for asset in classification.assets:
+        if asset.category == "cash":
+            bucket = "liquidity"
+        elif asset.category == "investments":
+            bucket = "investments"
+        elif asset.category == "real_estate":
+            bucket = "real_estate"
+        elif asset.category in {"furnishings", "vehicle"}:
+            bucket = "furnishings"
+        else:
+            bucket = "other"
+        totals[bucket] += asset.gross_value
+    return totals
 
 
 def apply_plan_event_one_offs_for_year(
@@ -321,6 +356,8 @@ def apply_plan_event_one_offs_for_year(
     financing_gap: Decimal,
     productive_return: Decimal,
     non_productive_return: Decimal,
+    furnishings_depreciation: Decimal,
+    asset_categories: dict[str, Decimal],
     active_event_debts: list[dict[str, Decimal | int]],
     applied_event_indexes: set[int],
 ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
@@ -347,24 +384,31 @@ def apply_plan_event_one_offs_for_year(
         # Seguridad. Su fecha de decisión no puede cambiar la clasificación final.
         monthly_net_cash = monthly_proceeds - monthly_outflow
         if monthly_net_cash >= 0:
+            productive_before = productive
             productive, financing_gap = apply_cash_inflow(
                 productive=productive,
                 financing_gap=financing_gap,
                 amount=monthly_net_cash,
             )
+            asset_categories["investments"] += productive - productive_before
         else:
+            productive_before = productive
+            security_before = security
             productive, security, financing_gap = apply_cash_outflow(
                 productive=productive,
                 security=security,
                 financing_gap=financing_gap,
                 amount=-monthly_net_cash,
             )
+            reduce_asset_category(asset_categories, "liquidity", security_before - security)
+            reduce_asset_category(asset_categories, "investments", productive_before - productive)
 
         for event_index, event in monthly_events:
             event_disposed_liability = Decimal(str(event.get("disposed_liability_value") or "0"))
             asset_value = Decimal(str(event.get("new_asset_value") or "0"))
             asset_type = event.get("new_asset_type")
             if asset_value > 0:
+                asset_categories[event_asset_category(event)] += asset_value
                 if asset_type == "productive":
                     productive += asset_value
                 elif asset_type == "security":
@@ -388,11 +432,20 @@ def apply_plan_event_one_offs_for_year(
             disposed_value = Decimal(str(event.get("disposed_asset_value") or "0"))
             if disposed_value > 0:
                 disposed_type = event.get("disposed_asset_type")
-                disposed_rate = {
-                    "productive": productive_return,
-                    "security": Decimal("0"),
-                }.get(disposed_type, non_productive_return)
-                grown = inflate(disposed_value, disposed_rate, max(0, year - start_year))
+                disposed_category = event_asset_category(event, disposed=True)
+                grown = projected_category_value(
+                    value=disposed_value,
+                    category=disposed_category,
+                    year_offset=max(0, year - start_year),
+                    productive_return=productive_return,
+                    non_productive_return=non_productive_return,
+                    furnishings_depreciation=furnishings_depreciation,
+                )
+                reduce_asset_category(
+                    asset_categories,
+                    disposed_category,
+                    grown,
+                )
                 # Los buckets de clasificación ya contienen el activo neto de su
                 # deuda asociada. Retirar aquí el valor bruto y cancelar después el
                 # pasivo restaría la hipoteca dos veces de la trayectoria.
@@ -410,12 +463,63 @@ def apply_plan_event_one_offs_for_year(
     return productive, security, non_productive, financing_gap, disposed_liability
 
 
+def event_asset_category(event: dict[str, Any], *, disposed: bool = False) -> str:
+    explicit_key = "disposed_asset_category" if disposed else "new_asset_category"
+    explicit = event.get(explicit_key)
+    if explicit in {"liquidity", "investments", "real_estate", "furnishings", "other"}:
+        return str(explicit)
+
+    event_type = event.get("event_type")
+    if event_type in {"housing", "renovation"}:
+        return "real_estate"
+    if event_type == "vehicle":
+        return "furnishings"
+
+    function_key = "disposed_asset_type" if disposed else "new_asset_type"
+    function = event.get(function_key)
+    if function == "productive":
+        return "investments"
+    if function == "security":
+        return "liquidity"
+    return "other"
+
+
+def projected_category_value(
+    *,
+    value: Decimal,
+    category: str,
+    year_offset: int,
+    productive_return: Decimal,
+    non_productive_return: Decimal,
+    furnishings_depreciation: Decimal,
+) -> Decimal:
+    if category == "investments":
+        return inflate(value, productive_return, year_offset)
+    if category == "real_estate" or category == "other":
+        return inflate(value, non_productive_return, year_offset)
+    if category == "furnishings":
+        return value * ((Decimal("1") - furnishings_depreciation) ** year_offset)
+    return value
+
+
+def reduce_asset_category(
+    asset_categories: dict[str, Decimal], category: str, amount: Decimal
+) -> None:
+    if amount <= 0:
+        return
+    asset_categories[category] = max(
+        Decimal("0"),
+        asset_categories.get(category, Decimal("0")) - amount,
+    )
+
+
 def calculate_projection(
     *, inputs: ProjectionInputs, assumptions: dict[str, str]
 ) -> dict[str, Any]:
     inflation = Decimal(assumptions["inflation_rate"])
     productive_return = Decimal(assumptions["productive_return_rate"])
     non_productive_return = Decimal(assumptions["non_productive_appreciation_rate"])
+    furnishings_depreciation = Decimal(assumptions["furnishings_depreciation_rate"])
     withdrawal_rate = Decimal(assumptions["withdrawal_rate"])
     security_contribution_rate = Decimal(assumptions["security_contribution_rate"])
 
@@ -427,6 +531,23 @@ def calculate_projection(
     non_productive = (
         inputs.family_use_capital + inputs.short_term_goal_capital + inputs.unknown_capital
     )
+    asset_categories = {
+        "liquidity": inputs.liquidity_assets,
+        "investments": inputs.investment_assets,
+        "real_estate": inputs.real_estate_assets,
+        "furnishings": inputs.furnishings_assets,
+        "other": inputs.other_assets,
+    }
+    if sum(asset_categories.values(), Decimal("0")) == 0:
+        # Compatibility for direct callers/tests that predate category composition.
+        asset_categories["liquidity"] = inputs.security_capital
+        asset_categories["investments"] = inputs.productive_capital
+        asset_categories["other"] = (
+            inputs.family_use_capital
+            + inputs.short_term_goal_capital
+            + inputs.unknown_capital
+            + inputs.associated_liabilities
+        )
     liabilities = inputs.total_liabilities
     base_liabilities = inputs.total_liabilities
     rows: list[dict[str, Any]] = []
@@ -490,7 +611,21 @@ def calculate_projection(
         )
         if offset > 0:
             productive = productive * (Decimal("1") + productive_return)
-            non_productive = non_productive * (Decimal("1") + non_productive_return)
+            non_productive_categories_before = (
+                asset_categories["real_estate"]
+                + asset_categories["furnishings"]
+                + asset_categories["other"]
+            )
+            asset_categories["investments"] *= Decimal("1") + productive_return
+            asset_categories["real_estate"] *= Decimal("1") + non_productive_return
+            asset_categories["furnishings"] *= Decimal("1") - furnishings_depreciation
+            asset_categories["other"] *= Decimal("1") + non_productive_return
+            non_productive += (
+                asset_categories["real_estate"]
+                + asset_categories["furnishings"]
+                + asset_categories["other"]
+                - non_productive_categories_before
+            )
             base_liabilities = projected_liability_balance(
                 initial=inputs.total_liabilities,
                 current_balance=base_liabilities,
@@ -518,12 +653,14 @@ def calculate_projection(
                     available_cash, event_delta["annual_security_contribution_delta"]
                 )
                 security += explicit_security
+                asset_categories["liquidity"] += explicit_security
                 available_cash -= explicit_security
 
                 explicit_productive = min(
                     available_cash, event_delta["annual_productive_contribution_delta"]
                 )
                 productive += explicit_productive
+                asset_categories["investments"] += explicit_productive
                 available_cash -= explicit_productive
 
                 security_target = security_target_for_year(
@@ -538,16 +675,27 @@ def calculate_projection(
                     available_cash * security_contribution_rate,
                 )
                 security += security_contribution
-                productive += available_cash - security_contribution
+                productive_contribution = available_cash - security_contribution
+                productive += productive_contribution
+                asset_categories["liquidity"] += security_contribution
+                asset_categories["investments"] += productive_contribution
             if free_cash < 0:
+                productive_before = productive
+                security_before = security
                 productive, security, financing_gap = apply_cash_outflow(
                     productive=productive,
                     security=security,
                     financing_gap=financing_gap,
                     amount=-free_cash,
                 )
+                reduce_asset_category(asset_categories, "liquidity", security_before - security)
+                reduce_asset_category(
+                    asset_categories, "investments", productive_before - productive
+                )
         elif offset > 0:
+            productive_before = productive
             productive = max(Decimal("0"), productive - withdrawals)
+            reduce_asset_category(asset_categories, "investments", productive_before - productive)
         (
             productive,
             security,
@@ -564,6 +712,8 @@ def calculate_projection(
             financing_gap=financing_gap,
             productive_return=productive_return,
             non_productive_return=non_productive_return,
+            furnishings_depreciation=furnishings_depreciation,
+            asset_categories=asset_categories,
             active_event_debts=active_event_debts,
             applied_event_indexes=applied_one_off_events,
         )
@@ -575,22 +725,31 @@ def calculate_projection(
             flow_outflow = asset_purchase + Decimal(str(flow["outflow"]))
             flow_net_cash = flow_inflow - flow_outflow
             if flow_net_cash >= 0:
+                productive_before = productive
                 productive, financing_gap = apply_cash_inflow(
                     productive=productive,
                     financing_gap=financing_gap,
                     amount=flow_net_cash,
                 )
+                asset_categories["investments"] += productive - productive_before
             else:
+                productive_before = productive
+                security_before = security
                 productive, security, financing_gap = apply_cash_outflow(
                     productive=productive,
                     security=security,
                     financing_gap=financing_gap,
                     amount=-flow_net_cash,
                 )
+                reduce_asset_category(asset_categories, "liquidity", security_before - security)
+                reduce_asset_category(
+                    asset_categories, "investments", productive_before - productive
+                )
             if asset_purchase > 0:
                 # Compra de activo con caja: sale del capital productivo (baja la
                 # renta futura) y pasa a no-productivo (conserva patrimonio).
                 non_productive += asset_purchase
+                asset_categories["other"] += asset_purchase
         liabilities = max(
             Decimal("0"),
             base_liabilities
@@ -614,18 +773,13 @@ def calculate_projection(
             year=year,
             start_year=start_year,
         )
-        # Los buckets (productive/security/non_productive) ya vienen netos de su
-        # deuda asociada; restar `liabilities` (deuda total) la contaría dos veces.
-        # Se suma de vuelta la asociada para que el patrimonio reconcilie con el real.
-        # Al vender un activo se cancela su deuda asociada: se descuenta de ambos
-        # términos a la vez para no descuadrar el patrimonio neto.
-        net_worth = (
-            productive
-            + security
-            + non_productive
-            - liabilities
-            + max(Decimal("0"), inputs.associated_liabilities - disposed_liability_total)
-        )
+        reported_asset_categories = {key: q2(value) for key, value in asset_categories.items()}
+        total_assets = sum(reported_asset_categories.values(), Decimal("0"))
+        reported_liabilities = q2(liabilities)
+        # La composición se proyecta en bruto y la deuda por separado, exactamente
+        # igual que el balance de Patrimonio. Así no hay ajustes opacos por deuda
+        # asociada y cada fila concilia: activos - pasivos = patrimonio neto.
+        net_worth = total_assets - reported_liabilities
         preservation_ok = (
             inputs.preservation_target_eur is None or net_worth >= inputs.preservation_target_eur
         )
@@ -638,7 +792,13 @@ def calculate_projection(
                 "security_capital": decimal_str(security),
                 "security_target": decimal_str(security_target),
                 "non_productive_assets": decimal_str(non_productive),
-                "liabilities": decimal_str(liabilities),
+                "liquidity_assets": decimal_str(reported_asset_categories["liquidity"]),
+                "investment_assets": decimal_str(reported_asset_categories["investments"]),
+                "real_estate_assets": decimal_str(reported_asset_categories["real_estate"]),
+                "furnishings_assets": decimal_str(reported_asset_categories["furnishings"]),
+                "other_assets": decimal_str(reported_asset_categories["other"]),
+                "total_assets": decimal_str(total_assets),
+                "liabilities": decimal_str(reported_liabilities),
                 "financing_gap": decimal_str(-financing_gap),
                 "net_worth": decimal_str(net_worth),
                 "target_capital": decimal_str(required),
@@ -975,6 +1135,7 @@ def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
     return [
         payload
         | {
+            "event_type": event.event_type,
             "effective_end_year": event.effective_end_date.year
             if event.effective_end_date
             else None,
@@ -1229,6 +1390,7 @@ def serialize_assumptions(assumption_set: AssumptionSet) -> dict[str, str]:
         "inflation_rate": str(assumption_set.inflation_rate),
         "productive_return_rate": str(assumption_set.productive_return_rate),
         "non_productive_appreciation_rate": str(assumption_set.non_productive_appreciation_rate),
+        "furnishings_depreciation_rate": str(assumption_set.furnishings_depreciation_rate),
         "income_growth_rate": str(assumption_set.income_growth_rate),
         "contribution_growth_rate": str(assumption_set.contribution_growth_rate),
         "security_contribution_rate": str(assumption_set.security_contribution_rate),

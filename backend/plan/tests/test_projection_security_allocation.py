@@ -12,6 +12,7 @@ class ProjectionSecurityAllocationTests(SimpleTestCase):
             "inflation_rate": "0.0000",
             "productive_return_rate": "0.0000",
             "non_productive_appreciation_rate": "0.0000",
+            "furnishings_depreciation_rate": "0.1200",
             "income_growth_rate": "0.0000",
             "contribution_growth_rate": "0.0000",
             "security_contribution_rate": "0.2500",

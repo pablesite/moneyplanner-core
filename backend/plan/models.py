@@ -127,6 +127,12 @@ class AssumptionSet(models.Model):
         decimal_places=4,
         validators=[MinValueValidator(-1), MaxValueValidator(1)],
     )
+    furnishings_depreciation_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("0.1200"),
+        validators=[MinValueValidator(0), MaxValueValidator(1)],
+    )
     income_growth_rate = models.DecimalField(
         max_digits=6,
         decimal_places=4,

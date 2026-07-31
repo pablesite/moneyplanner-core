@@ -159,7 +159,7 @@ class ScenarioSummary:
 
 def scenario_event_payloads(*, scenario: Scenario) -> list[dict[str, Any]]:
     return [
-        scenario_event_payload(event)
+        scenario_event_payload(event) | {"event_type": scenario.template_type}
         for event in scenario.events.all().order_by("start_date", "id")
     ]
 
