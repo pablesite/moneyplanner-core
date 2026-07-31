@@ -11,8 +11,16 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# pip vendoriza sus propias dependencias (msgpack, setuptools) y deja sus METADATA en
+# site-packages, asi que Trivy las cuenta como paquetes instalados: dos avisos HIGH de
+# codigo que solo usa el instalador bloqueaban el build de produccion. En ejecucion
+# nada llama a pip (el entrypoint solo usa `python manage.py`), asi que se retira al
+# terminar la instalacion.
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && python -m pip uninstall -y pip \
+    && rm -rf /usr/local/lib/python3.12/site-packages/pip \
+       /usr/local/lib/python3.12/site-packages/pip-*.dist-info
 
 COPY . .
 
