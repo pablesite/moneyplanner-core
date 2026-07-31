@@ -158,6 +158,11 @@ FOUNDATION_WEIGHTS: tuple[tuple[str, Decimal], ...] = (
 SAVINGS_RATE_FLOOR = Decimal("0.05")
 SAVINGS_RATE_TARGET = Decimal("0.20")
 
+# Esfuerzo de deuda (servicio anual / ingresos estructurales): hasta el 15 % no
+# penaliza; del 40 % en adelante puntua 0.
+DEBT_SERVICE_FLOOR = Decimal("0.15")
+DEBT_SERVICE_CEILING = Decimal("0.40")
+
 
 def active_assets(plan: FinancialPlan) -> list[Asset]:
     return list(Asset.objects.filter(user=plan.user, is_active=True))
@@ -349,15 +354,21 @@ def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str,
     )
     recurrent_income = structural_income(plan)
     monthly_income = recurrent_income / Decimal("12") if recurrent_income > 0 else None
-    monthly_debt_payment = sum(
+    # Servicio de deuda = compromisos que genera un pasivo. Antes sumaba **todos** los
+    # compromisos temporales, así que una compra a plazos o un servicio con fecha de
+    # fin (las cuotas de una casa, un tratamiento) se contaban como cuota de deuda:
+    # con datos reales el ratio pasaba de 18,5 % a 48,9 % sin que hubiera esa deuda.
+    annual_debt_service = sum(
         (
-            Decimal(entry.amount_annual) / Decimal("12")
+            Decimal(entry.amount_annual)
             for entry in annual_expense_entries(plan).filter(
-                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+                cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+                source_liability__isnull=False,
             )
         ),
         Decimal("0"),
     )
+    monthly_debt_payment = annual_debt_service / Decimal("12")
     debt_payment_to_income = (
         monthly_debt_payment / monthly_income
         if monthly_income is not None and monthly_income > 0 and monthly_debt_payment > 0
@@ -369,6 +380,7 @@ def debt_metrics(plan: FinancialPlan, liabilities: list[Liability]) -> dict[str,
         else None
     )
     return {
+        "annual_debt_service": annual_debt_service,
         "liabilities_value": liabilities_value,
         "unbacked_debt_value": unbacked,
         "unbacked_debt_to_liabilities": unbacked / liabilities_value
@@ -477,17 +489,26 @@ class FoundationService:
                     score_decreasing(
                         debt["weighted_liability_tae_pct"], Decimal("0.5"), Decimal("10")
                     ),
-                    Decimal("0.35"),
+                    Decimal("0.30"),
                 ),
                 (
                     score_decreasing(
                         debt["unbacked_debt_to_liabilities"], Decimal("0.01"), Decimal("0.5")
                     ),
-                    Decimal("0.35"),
+                    Decimal("0.25"),
                 ),
                 (
                     score_decreasing(debt["high_cost_debt_share"], Decimal("0.05"), Decimal("0.6")),
-                    Decimal("0.30"),
+                    Decimal("0.25"),
+                ),
+                # La nota solo miraba el coste de la deuda; una deuda barata que se
+                # come el sueldo tambien aprieta. Umbrales clasicos de esfuerzo:
+                # hasta el 15 % no penaliza, a partir del 40 % puntua 0.
+                (
+                    score_decreasing(
+                        debt["debt_payment_to_income"], DEBT_SERVICE_FLOOR, DEBT_SERVICE_CEILING
+                    ),
+                    Decimal("0.20"),
                 ),
             ]
         )
@@ -564,6 +585,7 @@ class FoundationService:
                 "unbacked_debt": money(debt["unbacked_debt_value"]),
                 "high_cost_debt": money(debt["high_cost_debt_value"]),
                 "weighted_tae_pct": ratio(debt["weighted_liability_tae_pct"]),
+                "annual_debt_service": money(debt["annual_debt_service"]),
                 "debt_payment_to_income": ratio(debt["debt_payment_to_income"]),
             },
             "net_worth_health": {

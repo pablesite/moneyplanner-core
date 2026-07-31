@@ -2027,6 +2027,43 @@ class FoundationGradeTests(TestCase):
         self.assertGreaterEqual(overall["score"], min(scores))
         self.assertLessEqual(overall["score"], max(scores))
 
+    def test_debt_service_counts_only_liability_commitments(self):
+        """El esfuerzo de deuda son cuotas de pasivos, no cualquier compromiso con
+        fecha de fin: una compra a plazos o un tratamiento no son deuda."""
+        liability = Liability.objects.create(
+            user=self.user,
+            name="Préstamo coche",
+            category=Liability.Category.PERSONAL_LOAN,
+            amount=Decimal("6000.00"),
+            currency="EUR",
+            annual_interest_tae=Decimal("3.00"),
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso pasivo: Préstamo coche",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            amount_annual=Decimal("3600.00"),
+            fiscal_year=2026,
+            source_liability=liability,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuotas de la reforma",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            amount_annual=Decimal("9000.00"),
+            fiscal_year=2026,
+        )
+
+        payload = FoundationService().calculate(plan=self.plan)
+
+        # 3.600 € de cuota sobre 36.000 € de ingresos = 10 %, no 35 % con la reforma.
+        self.assertEqual(payload["debt"]["annual_debt_service"], "3600.00")
+        self.assertEqual(payload["debt"]["debt_payment_to_income"], "0.1000")
+
     def test_planned_contribution_is_scored_by_savings_rate(self):
         """Antes era el único bloque sin nota: solo enseñaba el importe."""
         # 36.000 € de ingresos y 7.200 € aportados = 20 % de tasa de ahorro.
