@@ -33,6 +33,9 @@ from .services_inputs import (
 
 MONEY = Decimal("0.01")
 
+# Lo que devuelve `build_projection_inputs`: entradas, clasificación y calidad.
+PreparedInputs = tuple["ProjectionInputs", ClassificationSummary, Any]
+
 
 def q2(value: Decimal) -> Decimal:
     return value.quantize(MONEY, rounding=ROUND_HALF_UP)
@@ -90,7 +93,15 @@ class ProjectionService:
         self, *, plan: FinancialPlan, assumption_name: str = "expected"
     ) -> dict[str, Any]:
         assumption_set = get_assumption_set(name=assumption_name)
-        result = self.calculate(plan=plan, assumption_set=assumption_set)
+        prepared = build_projection_inputs(plan=plan)
+        result = self.calculate(plan=plan, assumption_set=assumption_set, prepared=prepared)
+        # La fecha que titula el plan viaja con el snapshot. El cierre mensual compara
+        # dos snapshots oficiales y no puede recalcularla: las entradas de aquel
+        # momento ya no existen. Los snapshots anteriores a este campo no la traen y
+        # su delta se omite hasta que haya dos nuevos.
+        result["sustainable_year"] = earliest_sustainable_retirement_year(
+            inputs=prepared[0], assumptions=serialize_assumptions(assumption_set)
+        )
         ProjectionSnapshot.objects.create(
             plan=plan,
             assumption_set=assumption_set,
@@ -110,8 +121,12 @@ class ProjectionService:
         extra_events: list[dict[str, Any]] | None = None,
         include_plan_events: bool = True,
         retirement_year: int | None = None,
+        prepared: PreparedInputs | None = None,
     ) -> dict[str, Any]:
-        inputs, classification, quality = build_projection_inputs(
+        # Construir las entradas cuesta ~9x más que proyectar con ellas (consulta de
+        # patrimonio, presupuesto y decisiones). Quien ya las tiene —porque además va a
+        # buscar el retiro sostenible sobre las mismas— las pasa en vez de repetirlas.
+        inputs, classification, quality = prepared or build_projection_inputs(
             plan=plan,
             extra_events=extra_events,
             include_plan_events=include_plan_events,

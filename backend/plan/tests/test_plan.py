@@ -741,6 +741,10 @@ class PlanApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(ProjectionSnapshot.objects.filter(plan__user=self.user).count(), 1)
         self.assertIn("assumptions", response.data)
+        # La fecha que titula el plan viaja con el snapshot: el cierre mensual compara
+        # dos snapshots y no puede recalcularla sobre entradas que ya no existen.
+        snapshot = ProjectionSnapshot.objects.get(plan__user=self.user)
+        self.assertIn("sustainable_year", snapshot.result_json)
 
     def test_member_linking_is_user_scoped(self):
         other_member = FamilyMember.objects.create(

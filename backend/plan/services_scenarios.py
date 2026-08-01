@@ -12,7 +12,7 @@ from rest_framework.exceptions import ValidationError
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
 
-from .models import FinancialPlan, PlanEvent, ProjectionSnapshot, Recommendation, Scenario
+from .models import PlanEvent, ProjectionSnapshot, Recommendation, Scenario
 from .services_projection import (
     ProjectionService,
     build_projection_inputs,
@@ -49,23 +49,35 @@ class ScenarioService:
     ) -> dict[str, Any]:
         assumption_set = get_assumption_set(name=assumption_name)
         service = ProjectionService()
-        current = service.calculate(plan=scenario.plan, assumption_set=assumption_set)
         event_payloads = scenario_event_payloads(scenario=scenario)
+        # Un `build_projection_inputs` por lado, compartido entre la trayectoria y la
+        # búsqueda del retiro sostenible: construir entradas cuesta ~9x más que
+        # proyectar con ellas.
+        assumptions = serialize_assumptions(assumption_set)
+        current_prepared = build_projection_inputs(plan=scenario.plan)
+        simulated_prepared = build_projection_inputs(
+            plan=scenario.plan, extra_events=event_payloads
+        )
+        current = service.calculate(
+            plan=scenario.plan, assumption_set=assumption_set, prepared=current_prepared
+        )
         simulated = service.calculate(
             plan=scenario.plan,
             assumption_set=assumption_set,
             extra_events=event_payloads,
+            prepared=simulated_prepared,
         )
         # La fecha que compara la tabla es la misma que titula el plan: el primer año
         # en que dejar de trabajar es sostenible. `summary.projected_year` responde a
         # otra pregunta —cuándo cruza la trayectoria que se retira en la fecha deseada—
         # y en un plan que no llega no se mueve al simular, que es justo lo que hay que
         # ver aquí.
-        assumptions = serialize_assumptions(assumption_set)
         sustainable_year = {
-            "current": sustainable_retirement_year(plan=scenario.plan, assumptions=assumptions),
-            "simulated": sustainable_retirement_year(
-                plan=scenario.plan, assumptions=assumptions, extra_events=event_payloads
+            "current": earliest_sustainable_retirement_year(
+                inputs=current_prepared[0], assumptions=assumptions
+            ),
+            "simulated": earliest_sustainable_retirement_year(
+                inputs=simulated_prepared[0], assumptions=assumptions
             ),
         }
         snapshot = ProjectionSnapshot.objects.create(
@@ -210,18 +222,6 @@ def scenario_event_payload(event) -> dict[str, Any]:
         "debt_end_year": debt_end_year,
         "metadata_json": event.metadata_json,
     }
-
-
-def sustainable_retirement_year(
-    *,
-    plan: FinancialPlan,
-    assumptions: dict[str, str],
-    extra_events: list[dict[str, Any]] | None = None,
-) -> int | None:
-    """Primer año en que dejar de trabajar es sostenible, opcionalmente añadiendo los
-    eventos de un escenario todavía sin aceptar. Es la fecha que titula el plan."""
-    inputs, _, _ = build_projection_inputs(plan=plan, extra_events=extra_events)
-    return earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
 
 
 def comparison_delta(

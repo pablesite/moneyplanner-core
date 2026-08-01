@@ -440,6 +440,20 @@ class MonthlyCloseApiTests(APITestCase):
         self.assertIsNotNone(response.data["recommended_action"])
         self.assertTrue(Finding.objects.filter(plan__user=self.user).exists())
         self.assertTrue(Recommendation.objects.filter(finding__plan__user=self.user).exists())
+        # La trayectoria se juzga con la fecha que titula el plan, no con la del summary.
+        trajectory = response.data["trajectory"]
+        self.assertIn("sustainable_year", trajectory)
+        self.assertIn("sustainable_year_delta", trajectory)
+        expected_status = (
+            "off_track"
+            if trajectory["sustainable_year"] is None
+            else "on_track"
+            if trajectory["sustainable_year"] <= trajectory["target_year"]
+            else "delayed"
+        )
+        self.assertEqual(trajectory["status"], expected_status)
+        # Con un solo snapshot oficial todavía no hay contra qué comparar.
+        self.assertIsNone(trajectory["sustainable_year_delta"])
 
     def test_user_isolation(self):
         other_user = _make_user("other_mc_user")

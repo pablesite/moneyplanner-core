@@ -10,7 +10,13 @@ from budget.models import MonthlyClose
 
 from .models import Finding, FinancialPlan, ProjectionSnapshot, Recommendation
 from .services_findings import FindingService
-from .services_projection import ProjectionService, get_assumption_set
+from .services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    earliest_sustainable_retirement_year,
+    get_assumption_set,
+    serialize_assumptions,
+)
 from .services_recommendations import RecommendationService
 
 logger = logging.getLogger(__name__)
@@ -39,9 +45,12 @@ class MonthlyClosePlanService:
         if plan is None:
             return None
 
+        assumption_set = get_assumption_set(name="expected")
+        prepared = build_projection_inputs(plan=plan)
         current_projection = ProjectionService().calculate(
             plan=plan,
-            assumption_set=get_assumption_set(name="expected"),
+            assumption_set=assumption_set,
+            prepared=prepared,
         )
         snapshots = list(
             ProjectionSnapshot.objects.filter(plan=plan, is_official=True).order_by(
@@ -60,7 +69,25 @@ class MonthlyClosePlanService:
 
         productive_delta = money_delta(previous_summary, current_summary, "productive_capital")
         net_worth_delta = money_delta(previous_summary, current_summary, "net_worth")
-        projected_year_delta = year_delta(previous_summary, current_summary)
+        # El cierre mide el cambio sobre la fecha que titula el plan. `recalculate` la
+        # guarda en cada snapshot oficial porque aquí no se puede recalcular la de un
+        # snapshot pasado: sus entradas ya no existen. Los snapshots anteriores a ese
+        # campo no la traen y entonces no hay delta que enseñar.
+        current_sustainable = current_projection.get("sustainable_year")
+        if current_sustainable is None:
+            current_sustainable = earliest_sustainable_retirement_year(
+                inputs=prepared[0], assumptions=serialize_assumptions(assumption_set)
+            )
+        previous_sustainable = (
+            previous_snapshot.result_json.get("sustainable_year")
+            if previous_snapshot is not None
+            else None
+        )
+        sustainable_delta = (
+            current_sustainable - previous_sustainable
+            if current_sustainable is not None and previous_sustainable is not None
+            else None
+        )
 
         period = f"{monthly_close.fiscal_year}-{monthly_close.month:02d}"
         findings = list(
@@ -85,11 +112,15 @@ class MonthlyClosePlanService:
             },
             "calculated_at": timezone.now().isoformat(),
             "trajectory": {
-                "status": trajectory_status(current_summary),
+                "status": trajectory_status(
+                    sustainable_year=current_sustainable,
+                    target_year=current_summary["target_year"]["value"],
+                ),
+                "sustainable_year": current_sustainable,
                 "projected_year": current_summary["projected_year"]["value"],
                 "target_year": current_summary["target_year"]["value"],
-                "projected_year_delta": projected_year_delta
-                if projected_year_delta is not None and abs(projected_year_delta) >= 1
+                "sustainable_year_delta": sustainable_delta
+                if sustainable_delta is not None and abs(sustainable_delta) >= 1
                 else None,
             },
             "capital": {
@@ -123,22 +154,12 @@ def money_delta(previous_summary: dict[str, Any] | None, current_summary: dict[s
     return str((current - previous).quantize(Decimal("0.01")))
 
 
-def year_delta(previous_summary: dict[str, Any] | None, current_summary: dict[str, Any]):
-    if previous_summary is None:
-        return None
-    current = current_summary["projected_year"]["value"]
-    previous = previous_summary["projected_year"]["value"]
-    if current is None or previous is None:
-        return None
-    return int(current) - int(previous)
-
-
-def trajectory_status(summary: dict[str, Any]) -> str:
-    projected = summary["projected_year"]["value"]
-    target = summary["target_year"]["value"]
-    if projected is None:
+def trajectory_status(*, sustainable_year: int | None, target_year: Any) -> str:
+    """Mismo criterio que el titular del plan: se compara la jubilación sostenible más
+    temprana con el año objetivo."""
+    if sustainable_year is None:
         return "off_track"
-    if int(projected) <= int(target):
+    if int(sustainable_year) <= int(target_year):
         return "on_track"
     return "delayed"
 
