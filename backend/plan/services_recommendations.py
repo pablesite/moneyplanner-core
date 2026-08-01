@@ -10,6 +10,14 @@ from rest_framework.exceptions import ValidationError
 
 from .models import Finding, FinancialPlan, Recommendation, Scenario, ScenarioEvent
 from .services_findings import FindingService
+from .services_foundations import FoundationService
+from .services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    earliest_sustainable_retirement_year,
+    get_assumption_set,
+    serialize_assumptions,
+)
 
 
 PROFILE_PRIORITY_SHIFT: dict[str, dict[str, int]] = {
@@ -34,11 +42,24 @@ def dec(value: Any) -> Decimal:
 class RecommendationService:
     def refresh(self, *, plan: FinancialPlan) -> list[Recommendation]:
         findings = FindingService().evaluate(plan=plan)
+        foundations = FoundationService().calculate(plan=plan)
         recommendations: list[Recommendation] = []
         with transaction.atomic():
             for finding in findings:
-                spec = self._recommendation_spec(plan=plan, finding=finding)
+                spec = self._recommendation_spec(
+                    plan=plan,
+                    finding=finding,
+                    foundations=foundations,
+                )
                 if spec is None:
+                    continue
+                if (
+                    spec["code"] == Recommendation.Code.INCREASE_CONTRIBUTION
+                    and not scenario_event_changes_projection(
+                        plan=plan,
+                        event=spec["action"]["scenario_event"],
+                    )
+                ):
                     continue
                 recommendation, _created = Recommendation.objects.update_or_create(
                     finding=finding,
@@ -71,13 +92,25 @@ class RecommendationService:
         recommendation.save(update_fields=["status", "updated_at"])
         return recommendation
 
-    def simulate(self, *, recommendation: Recommendation) -> Scenario:
+    def simulate(
+        self,
+        *,
+        recommendation: Recommendation,
+        adjustments: dict[str, Any] | None = None,
+    ) -> Scenario:
         plan = recommendation.finding.plan
-        event_payload = recommendation.action_json.get("scenario_event")
+        event_payload = adjusted_scenario_event(
+            recommendation=recommendation,
+            adjustments=adjustments,
+        )
         if not event_payload:
             raise ValidationError(
                 "This recommendation must be completed in its destination module."
             )
+        validate_affordable_adjustment(
+            recommendation=recommendation,
+            event=event_payload,
+        )
         scenario = Scenario.objects.create(
             plan=plan,
             source_recommendation=recommendation,
@@ -111,7 +144,11 @@ class RecommendationService:
         return max(1, base + PROFILE_PRIORITY_SHIFT.get(plan.profile, {}).get(code, 0))
 
     def _recommendation_spec(
-        self, *, plan: FinancialPlan, finding: Finding
+        self,
+        *,
+        plan: FinancialPlan,
+        finding: Finding,
+        foundations: dict[str, Any],
     ) -> dict[str, Any] | None:
         evidence = finding.evidence_json
         today = timezone.localdate()
@@ -215,25 +252,81 @@ class RecommendationService:
             Finding.Code.RETIREMENT_TARGET_OFF_TRACK,
             Finding.Code.PRODUCTIVE_CAPITAL_STAGNANT,
         }:
-            monthly_action = Decimal("100.00")
+            cash_flow = foundations["cash_flow"]
+            committed_status = cash_flow["committed_status"]
+            if committed_status == "structural":
+                return None
+
+            start_date = date(today.year, today.month, 1)
+            available_annual = dec(cash_flow["committed_surplus"])
+            deferred_until = None
+            if committed_status == "transient":
+                recovery_year = cash_flow.get("committed_recovery_year")
+                if recovery_year is None:
+                    return None
+                start_date = date(int(recovery_year), 1, 1)
+                deferred_until = start_date.isoformat()
+                operating_surplus = dec(cash_flow["operating_surplus"])
+                active_commitments = sum(
+                    (
+                        dec(item["amount"])
+                        for item in cash_flow.get("temporary_commitments", [])
+                        if item.get("end_year") is None
+                        or int(item["end_year"]) >= int(recovery_year)
+                    ),
+                    Decimal("0"),
+                )
+                available_annual = operating_surplus - active_commitments
+
+            available_monthly = max(
+                Decimal("0"),
+                (available_annual / Decimal("12")).quantize(Decimal("0.01")),
+            )
+            if available_monthly <= 0:
+                return None
+            monthly_action = min(Decimal("100.00"), available_monthly)
+            if deferred_until:
+                summary = (
+                    f"Probar una aportación de hasta {monthly_action} € al mes desde "
+                    f"{start_date.strftime('%m/%Y')}, cuando se recupere el margen."
+                )
+                funding_source = (
+                    "Del margen estimado que quedará cuando finalicen los compromisos temporales; "
+                    "no se descuenta del presupuesto actual."
+                )
+            else:
+                summary = (
+                    f"Probar una aportación de hasta {monthly_action} € al mes usando "
+                    "el margen disponible."
+                )
+                funding_source = (
+                    "Del margen mensual previsto después de ingresos, gasto operativo y "
+                    "compromisos registrados."
+                )
             return {
                 "code": Recommendation.Code.INCREASE_CONTRIBUTION,
                 "priority": self._priority(plan=plan, code="INCREASE_CONTRIBUTION", base=40),
                 "action": {
                     "title": "Aumentar aportación planificada",
-                    "summary": "Probar una aportación mensual adicional antes de cambiar el objetivo.",
+                    "summary": summary,
                     "reason": "La trayectoria estimada no llega al objetivo con suficiente holgura.",
                     "rule": finding.code,
                     "scenario_template": Scenario.TemplateType.GENERIC,
                     "scenario_event": {
-                        "start_date": date(today.year, today.month, 1).isoformat(),
+                        "start_date": start_date.isoformat(),
                         "monthly_contribution_delta": str(monthly_action),
                         "monthly_contribution_destination": (
                             ScenarioEvent.ContributionDestination.PRODUCTIVE
                         ),
                     },
                 },
-                "impact": {"monthly_action": str(monthly_action)},
+                "impact": {
+                    "monthly_action": str(monthly_action),
+                    "available_monthly_margin": str(available_monthly),
+                    "current_committed_surplus": cash_flow["committed_surplus"],
+                    "deferred_until": deferred_until,
+                    "funding_source": funding_source,
+                },
                 "alternatives": ["Retrasar fecha objetivo", "Reducir nivel de vida objetivo"],
             }
         if finding.code == Finding.Code.DATA_INCOMPLETE:
@@ -252,3 +345,105 @@ class RecommendationService:
                 "alternatives": ["Completar solo deudas", "Completar solo presupuesto operativo"],
             }
         return None
+
+
+def adjusted_scenario_event(
+    *,
+    recommendation: Recommendation,
+    adjustments: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    source = recommendation.action_json.get("scenario_event")
+    if not source:
+        return None
+    event = dict(source)
+    values = adjustments or {}
+    if "monthly_contribution_delta" in values:
+        if "monthly_contribution_delta" not in event:
+            raise ValidationError("This recommendation does not support a monthly amount.")
+        event["monthly_contribution_delta"] = str(values["monthly_contribution_delta"])
+    if "start_date" in values:
+        event["start_date"] = values["start_date"].isoformat()
+    return event
+
+
+def projection_event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    start_date = event.get("start_date") or date.today().isoformat()
+    end_date = event.get("end_date")
+    return {
+        "start_date": start_date,
+        "start_year": date.fromisoformat(start_date).year,
+        "end_date": end_date,
+        "end_year": date.fromisoformat(end_date).year if end_date else None,
+        "initial_outflow": event.get("initial_outflow", "0.00"),
+        "monthly_expense_delta": event.get("monthly_expense_delta", "0.00"),
+        "monthly_income_delta": event.get("monthly_income_delta", "0.00"),
+        "monthly_contribution_delta": event.get("monthly_contribution_delta", "0.00"),
+        "monthly_contribution_destination": event.get(
+            "monthly_contribution_destination", "productive"
+        ),
+        "new_asset_value": event.get("new_asset_value", "0.00"),
+        "new_asset_type": event.get("new_asset_type"),
+        "new_debt_principal": event.get("new_debt_principal", "0.00"),
+        "new_debt_interest_rate": event.get("new_debt_interest_rate", "0"),
+        "new_debt_term_years": max(0, int(event.get("new_debt_term_months") or 0) // 12),
+        "debt_end_year": None,
+    }
+
+
+def scenario_event_changes_projection(*, plan: FinancialPlan, event: dict[str, Any]) -> bool:
+    scenario_name = {
+        FinancialPlan.Profile.SECURITY: "prudent",
+        FinancialPlan.Profile.BALANCED: "expected",
+        FinancialPlan.Profile.GROWTH: "favorable",
+    }[plan.profile]
+    assumption_set = get_assumption_set(name=scenario_name)
+    assumptions = serialize_assumptions(assumption_set)
+    current_prepared = build_projection_inputs(plan=plan)
+    current = ProjectionService().calculate(
+        plan=plan,
+        assumption_set=assumption_set,
+        prepared=current_prepared,
+    )
+    current_sustainable = earliest_sustainable_retirement_year(
+        inputs=current_prepared[0], assumptions=assumptions
+    )
+    payload = projection_event_payload(event)
+    simulated_prepared = build_projection_inputs(plan=plan, extra_events=[payload])
+    simulated = ProjectionService().calculate(
+        plan=plan,
+        assumption_set=assumption_set,
+        extra_events=[payload],
+        prepared=simulated_prepared,
+    )
+    simulated_sustainable = earliest_sustainable_retirement_year(
+        inputs=simulated_prepared[0], assumptions=assumptions
+    )
+    current_summary = current["summary"]
+    simulated_summary = simulated["summary"]
+    return current_sustainable != simulated_sustainable or any(
+        current_summary[key]["value"] != simulated_summary[key]["value"]
+        for key in ("projected_year", "productive_capital", "net_worth", "progress_percent")
+    )
+
+
+def validate_affordable_adjustment(
+    *, recommendation: Recommendation, event: dict[str, Any]
+) -> None:
+    available_margin = recommendation.impact_json.get("available_monthly_margin")
+    if available_margin is not None and dec(event.get("monthly_contribution_delta")) > dec(
+        available_margin
+    ):
+        raise ValidationError(
+            {
+                "monthly_contribution_delta": (
+                    "La aportación supera el margen mensual estimado para esa mejora."
+                )
+            }
+        )
+    minimum_start = recommendation.impact_json.get("deferred_until")
+    if minimum_start and date.fromisoformat(event["start_date"]) < date.fromisoformat(
+        minimum_start
+    ):
+        raise ValidationError(
+            {"start_date": ("La aportación no puede empezar antes de que se recupere el margen.")}
+        )

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import transaction
 from rest_framework import serializers
 
@@ -554,3 +556,13 @@ class RecommendationSnoozeSerializer(serializers.Serializer):
         if value <= timezone.localdate():
             raise serializers.ValidationError("Must be a future date.")
         return value
+
+
+class RecommendationAdjustmentSerializer(serializers.Serializer):
+    monthly_contribution_delta = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+    )
+    start_date = serializers.DateField(required=False)

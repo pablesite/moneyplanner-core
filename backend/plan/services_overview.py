@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -14,6 +13,7 @@ from .services_projection import (
     serialize_assumptions,
 )
 from .services_recommendations import RecommendationService
+from .services_recommendations import adjusted_scenario_event, projection_event_payload
 from .services_scenarios import comparison_delta
 
 
@@ -142,62 +142,60 @@ class RecommendationPreviewService:
         *,
         recommendation: Recommendation,
         scenario_name: str,
+        adjustments: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         plan = recommendation.finding.plan
         assumption_set = get_assumption_set(name=scenario_name)
-        current = ProjectionService().calculate(plan=plan, assumption_set=assumption_set)
+        assumptions = serialize_assumptions(assumption_set)
+        # Entradas compartidas entre la trayectoria y la búsqueda del retiro sostenible.
+        current_prepared = build_projection_inputs(plan=plan)
+        current = ProjectionService().calculate(
+            plan=plan, assumption_set=assumption_set, prepared=current_prepared
+        )
+        current_sustainable = earliest_sustainable_retirement_year(
+            inputs=current_prepared[0], assumptions=assumptions
+        )
         action = recommendation.action_json
-        event = action.get("scenario_event")
+        event = adjusted_scenario_event(
+            recommendation=recommendation,
+            adjustments=adjustments,
+        )
         if not event:
             return {
                 "recommendation_id": recommendation.id,
                 "actionable": False,
                 "action_type": action.get("action_type"),
                 "destination": action.get("destination"),
-                "before": projection_metrics(current),
+                "before": projection_metrics(current, sustainable_year=current_sustainable),
                 "after": None,
                 "delta": None,
             }
 
-        payload = {
-            "start_date": event.get("start_date") or date.today().isoformat(),
-            "start_year": date.fromisoformat(
-                event.get("start_date") or date.today().isoformat()
-            ).year,
-            "end_date": event.get("end_date"),
-            "end_year": (
-                date.fromisoformat(event["end_date"]).year if event.get("end_date") else None
-            ),
-            "initial_outflow": event.get("initial_outflow", "0.00"),
-            "monthly_expense_delta": event.get("monthly_expense_delta", "0.00"),
-            "monthly_income_delta": event.get("monthly_income_delta", "0.00"),
-            "monthly_contribution_delta": event.get("monthly_contribution_delta", "0.00"),
-            "monthly_contribution_destination": event.get(
-                "monthly_contribution_destination", "productive"
-            ),
-            "new_asset_value": event.get("new_asset_value", "0.00"),
-            "new_asset_type": event.get("new_asset_type"),
-            "new_debt_principal": event.get("new_debt_principal", "0.00"),
-            "new_debt_interest_rate": event.get("new_debt_interest_rate", "0"),
-            "new_debt_term_years": max(0, int(event.get("new_debt_term_months") or 0) // 12),
-            "debt_end_year": None,
-        }
+        payload = projection_event_payload(event)
+        simulated_prepared = build_projection_inputs(plan=plan, extra_events=[payload])
         simulated = ProjectionService().calculate(
             plan=plan,
             assumption_set=assumption_set,
             extra_events=[payload],
+            prepared=simulated_prepared,
         )
-        before_year = metric_value(current, "projected_year")
-        after_year = metric_value(simulated, "projected_year")
+        # Los años que gana la mejora se miden sobre la fecha que titula el plan —el
+        # primer año en que dejar de trabajar es sostenible—, no sobre
+        # `summary.projected_year`, que responde a desde cuándo cubre la pensión y no
+        # se mueve al simular capital.
+        simulated_sustainable = earliest_sustainable_retirement_year(
+            inputs=simulated_prepared[0], assumptions=assumptions
+        )
+        sustainable_year = {"current": current_sustainable, "simulated": simulated_sustainable}
         years_gained = (
-            int(before_year) - int(after_year)
-            if before_year is not None and after_year is not None
+            current_sustainable - simulated_sustainable
+            if current_sustainable is not None and simulated_sustainable is not None
             else None
         )
         monthly_commitment = Decimal(
             str(
-                recommendation.impact_json.get("monthly_action")
-                or event.get("monthly_contribution_delta")
+                event.get("monthly_contribution_delta")
+                or recommendation.impact_json.get("monthly_action")
                 or "0"
             )
         )
@@ -207,26 +205,44 @@ class RecommendationPreviewService:
             duration_months = int(
                 (target_gap / monthly_commitment).to_integral_value(rounding="ROUND_CEILING")
             )
+        available_monthly_margin = recommendation.impact_json.get("available_monthly_margin")
+        minimum_start_date = recommendation.impact_json.get("deferred_until")
+        is_affordable = (
+            available_monthly_margin is None
+            or monthly_commitment <= Decimal(str(available_monthly_margin))
+        ) and (minimum_start_date is None or payload["start_date"] >= minimum_start_date)
         return {
             "recommendation_id": recommendation.id,
             "actionable": True,
             "action_type": action.get("action_type", "preview_scenario"),
             "destination": event.get("monthly_contribution_destination", "productive"),
             "monthly_commitment": str(monthly_commitment),
+            "start_date": payload["start_date"],
+            "available_monthly_margin": available_monthly_margin,
+            "minimum_start_date": minimum_start_date,
+            "is_affordable": is_affordable,
+            "funding_source": recommendation.impact_json.get("funding_source"),
             "duration_months": duration_months,
-            "before": projection_metrics(current),
-            "after": projection_metrics(simulated),
+            "before": projection_metrics(current, sustainable_year=current_sustainable),
+            "after": projection_metrics(simulated, sustainable_year=simulated_sustainable),
             "years_gained": years_gained,
-            "reaches_target": (after_year is not None and int(after_year) <= plan.target_date.year),
-            "delta": comparison_delta(current=current, simulated=simulated),
+            "reaches_target": (
+                simulated_sustainable is not None and simulated_sustainable <= plan.target_date.year
+            ),
+            "delta": comparison_delta(
+                current=current, simulated=simulated, sustainable_year=sustainable_year
+            ),
             "confidence": (
                 "low" if simulated["quality_level"] in {"initial", "needs_review"} else "medium"
             ),
         }
 
 
-def projection_metrics(projection: dict[str, Any]) -> dict[str, Any]:
+def projection_metrics(
+    projection: dict[str, Any], *, sustainable_year: int | None = None
+) -> dict[str, Any]:
     return {
+        "sustainable_year": sustainable_year,
         "projected_year": metric_value(projection, "projected_year"),
         "monthly_sustainable_income": metric_value(projection, "monthly_sustainable_income"),
         "productive_capital": metric_value(projection, "productive_capital"),

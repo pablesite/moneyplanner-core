@@ -34,6 +34,7 @@ from .serializers import (
     PlanEventMaterializeSerializer,
     ProjectionSnapshotSerializer,
     RecommendationSerializer,
+    RecommendationAdjustmentSerializer,
     RecommendationSnoozeSerializer,
     ScenarioSerializer,
 )
@@ -627,18 +628,32 @@ class RecommendationDismissView(RecommendationActionView):
 
 class RecommendationSimulateView(RecommendationActionView):
     def post(self, request, pk: int):
-        scenario = RecommendationService().simulate(recommendation=self.get_object(request, pk))
+        serializer = RecommendationAdjustmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        scenario = RecommendationService().simulate(
+            recommendation=self.get_object(request, pk),
+            adjustments=serializer.validated_data,
+        )
         return Response(ScenarioSerializer(scenario).data, status=status.HTTP_201_CREATED)
 
 
 class RecommendationPreviewView(RecommendationActionView):
     def get(self, request, pk: int):
+        serializer = RecommendationAdjustmentSerializer(
+            data={
+                key: request.query_params[key]
+                for key in ("monthly_contribution_delta", "start_date")
+                if key in request.query_params
+            }
+        )
+        serializer.is_valid(raise_exception=True)
         recommendation = self.get_object(request, pk)
         plan = recommendation.finding.plan
         return Response(
             RecommendationPreviewService().build(
                 recommendation=recommendation,
                 scenario_name=requested_assumption(request, plan),
+                adjustments=serializer.validated_data,
             )
         )
 

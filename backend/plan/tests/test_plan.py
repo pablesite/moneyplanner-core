@@ -1363,6 +1363,35 @@ class FindingsRecommendationsApiTests(APITestCase):
             before,
         )
 
+    def test_preview_measures_years_gained_on_the_sustainable_date(self):
+        # Misma fecha que titula el plan y que compara el laboratorio de escenarios.
+        recommendations = self.client.get(reverse("financial-plan-recommendations"))
+        recommendation_id = next(
+            item["id"] for item in recommendations.data if item["action_json"].get("scenario_event")
+        )
+
+        response = self.client.get(
+            reverse(
+                "financial-plan-recommendation-preview",
+                kwargs={"pk": recommendation_id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        before = response.data["before"]["sustainable_year"]
+        after = response.data["after"]["sustainable_year"]
+        self.assertIn("sustainable_year", response.data["before"])
+        self.assertIn("sustainable_year", response.data["after"])
+        if before is not None and after is not None:
+            self.assertEqual(response.data["years_gained"], before - after)
+            self.assertEqual(
+                response.data["reaches_target"],
+                after <= self.plan.target_date.year,
+            )
+        else:
+            self.assertIsNone(response.data["years_gained"])
+            self.assertFalse(response.data["reaches_target"])
+
     def test_snooze_is_persistent_and_user_scoped(self):
         recommendations = self.client.get(reverse("financial-plan-recommendations"))
         recommendation_id = recommendations.data[0]["id"]
