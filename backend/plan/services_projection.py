@@ -21,6 +21,7 @@ from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
 from .services_quality import DataQualityService
 from .services_inputs import (
+    PLAN_EVENT_GROUP_PREFIX,
     annual_expense_entries,
     expense_buckets,
     one_off_flows,
@@ -152,8 +153,27 @@ def get_assumption_set(*, name: str | None = None) -> AssumptionSet:
     return AssumptionSet.objects.filter(is_default=True).first() or AssumptionSet.objects.first()
 
 
+def financed_decision_event_groups(*, plan: FinancialPlan) -> set[str]:
+    """`event_group` de las Decisiones planificadas cuya cuota ya sirve la proyección
+    desde su propio préstamo (`decision_debt_service_for_year`).
+
+    Sus líneas de presupuesto describen ese mismo pago, así que contarlas además como
+    compromiso temporal lo restaría dos veces del superávit. Solo aplica a decisiones
+    `planned` con financiación: una decisión ya ocurrida no entra en `plan_event_payloads`
+    y sus cuotas —normalmente partidas preexistentes que la decisión solo adoptó— siguen
+    siendo la única vía por la que el plan las conoce.
+    """
+    groups: set[str] = set()
+    for event in PlanEvent.objects.filter(plan=plan, status=PlanEvent.Status.PLANNED):
+        for payload in event.planned_impact_json.get("events", []):
+            if Decimal(str(payload.get("new_debt_principal") or "0")) > 0:
+                groups.add(f"{PLAN_EVENT_GROUP_PREFIX}{event.id}")
+                break
+    return groups
+
+
 def temporary_commitment_schedule(
-    *, plan: FinancialPlan, start_year: int, end_year: int
+    *, plan: FinancialPlan, start_year: int, end_year: int, excluded_event_groups: set[str]
 ) -> tuple[dict[str, Any], ...]:
     entries = list(
         AnnualExpenseEntry.objects.filter(
@@ -162,7 +182,9 @@ def temporary_commitment_schedule(
             cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
             fiscal_year__gte=start_year,
             fiscal_year__lte=end_year,
-        ).order_by("fiscal_year", "id")
+        )
+        .exclude(event_group__in=excluded_event_groups)
+        .order_by("fiscal_year", "id")
     )
     totals: dict[int, Decimal] = {}
     for entry in entries:
@@ -218,8 +240,16 @@ def build_projection_inputs(
         ),
         Decimal("0"),
     )
+    financed_decision_groups = financed_decision_event_groups(plan=plan)
     remaining_expense_by_role: dict[str, Decimal] = {}
     for entry in current_expenses:
+        if (
+            entry.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+            and entry.event_group in financed_decision_groups
+        ):
+            # Igual que en `temporary_commitment_schedule`, pero para el año en curso:
+            # la cuota de una Decisión financiada llega por su préstamo, no por aquí.
+            continue
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=today.year)
         remaining = sum(
             (distribution.get(month, Decimal("0")) for month in remaining_months),
@@ -232,6 +262,7 @@ def build_projection_inputs(
         plan=plan,
         start_year=today.year,
         end_year=plan.projection_end_date.year,
+        excluded_event_groups=financed_decision_groups,
     )
     category_assets = asset_category_totals(classification)
     members = list(plan.members.filter(role=FamilyMember.Role.ADULT, is_active=True).order_by("id"))
@@ -1170,6 +1201,7 @@ def event_deltas_for_year(
     del start_year
     result = {
         "annual_expense_delta": Decimal("0"),
+        "annual_operating_expense_delta": Decimal("0"),
         "annual_income_delta": Decimal("0"),
         "annual_productive_contribution_delta": Decimal("0"),
         "annual_security_contribution_delta": Decimal("0"),
@@ -1186,19 +1218,30 @@ def event_deltas_for_year(
             continue
         if event_end is not None and year > int(str(event_end)):
             continue
-        debt_end_year = event.get("debt_end_year")
+        # El gasto recurrente dura lo que dure la decisión: sin fecha de fin es
+        # indefinido (el coste de uso de un coche sigue tras amortizar el préstamo,
+        # como ya documenta la generación de sus partidas de presupuesto). El plazo
+        # de la deuda no lo acota; las plantillas con gasto temporal —reforma,
+        # estudios, excedencia— piden fecha de fin y llegan con `end_year`.
         expense_end_year = event_end
-        if expense_end_year is None and debt_end_year is not None:
-            expense_end_year = debt_end_year
         active_months = Decimal("12")
         if effective_end_year is not None and year == int(str(effective_end_year)):
             active_months = Decimal(max(0, int(str(effective_end_month or 1)) - 1))
         if expense_end_year is None or year <= int(str(expense_end_year)):
+            monthly_expense = Decimal(str(event.get("monthly_expense_delta") or "0"))
             # El gasto sube el nivel de vida objetivo, que el usuario declara y el
             # presupuesto no alimenta: nunca queda absorbido por la linea base.
-            result["annual_expense_delta"] += (
-                Decimal(str(event.get("monthly_expense_delta") or "0")) * active_months
-            )
+            result["annual_expense_delta"] += monthly_expense * active_months
+            if not event.get("baseline_absorbed"):
+                # Y ese gasto extra también recorta lo que se puede ahorrar e invertir
+                # ese año. Cuando la decisión ya vive en el presupuesto del año en curso
+                # (`baseline_absorbed`) el gasto llega por `annual_operating_expense` y
+                # volver a restarlo aquí lo contaría dos veces. En el año de arranque
+                # solo cuentan los meses desde la compra.
+                free_cash_months = active_months
+                if year == event_start:
+                    free_cash_months = min(active_months, Decimal(13 - event_start_month(event)))
+                result["annual_operating_expense_delta"] += monthly_expense * free_cash_months
         if event.get("baseline_absorbed"):
             continue
         result["annual_income_delta"] += (
@@ -1277,9 +1320,11 @@ def decision_debt_service_for_year(*, events: tuple[dict[str, Any], ...], year: 
 def free_operating_surplus(
     *, inputs: ProjectionInputs, assumptions: dict[str, str], year: int, start_year: int
 ) -> Decimal:
-    """Superávit libre nominal del año = ingreso − gastos operativos − compromisos temporales
-    vigentes (vencen por `end_year`) − servicio de deuda de Decisiones. Es el techo de la
-    aportación efectiva; si es negativo hay déficit (se consume capital)."""
+    """Superávit libre nominal del año = ingreso − gastos operativos (los del presupuesto
+    más el gasto recurrente que añaden las Decisiones aún no absorbidas por él) −
+    compromisos temporales vigentes (vencen por `end_year`) − servicio de deuda de
+    Decisiones. Es el techo de la aportación efectiva; si es negativo hay déficit
+    (se consume capital)."""
     inflation = Decimal(assumptions["inflation_rate"])
     income_growth = Decimal(assumptions["income_growth_rate"])
     offset = max(0, year - start_year)
@@ -1299,7 +1344,12 @@ def free_operating_surplus(
             Decimal("0"),
         )
     debt_service = decision_debt_service_for_year(events=inputs.plan_events, year=year)
-    return income - operating - commitments - debt_service
+    decision_expense = event_deltas_for_year(
+        events=inputs.plan_events,
+        year=year,
+        start_year=start_year,
+    )["annual_operating_expense_delta"]
+    return income - operating - decision_expense - commitments - debt_service
 
 
 def security_target_for_year(

@@ -40,6 +40,7 @@ from plan.services_projection import (
     ProjectionService,
     build_projection_inputs,
     capital_requirements,
+    debt_annual_payment,
     decision_debt_service_for_year,
     earliest_sustainable_retirement_year,
     free_operating_surplus,
@@ -2968,3 +2969,175 @@ class CashFlowReconciliationTests(TestCase):
         first = self._prod(self.next_year)
         second = self._prod(self.next_year + 1)
         self.assertLess(second, first)
+
+
+class FinancedDecisionCashFlowTests(TestCase):
+    """Una Decisión con financiación y gasto de uso toca la caja por tres vías que no
+    pueden pisarse: el desembolso inicial (una vez), la cuota del préstamo (una vez,
+    servida desde el propio préstamo) y el gasto recurrente, que recorta lo que se
+    puede ahorrar mientras dure."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("financed-decision", password="x")
+        self.plan = create_plan(self.user)
+        create_investment(self.user, Decimal("100000.00"))
+        self.year = date.today().year
+        self.next_year = self.year + 1
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Salario",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="salary",
+            amount_annual=Decimal("40000.00"),
+            fiscal_year=self.year,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Vida",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+            amount_annual=Decimal("20000.00"),
+            fiscal_year=self.year,
+        )
+
+    def _decision(
+        self,
+        *,
+        start_year,
+        start_month=1,
+        principal="0",
+        term=4,
+        rate="0.0700",
+        monthly_expense="0",
+        end_year=None,
+        status=PlanEvent.Status.PLANNED,
+    ):
+        return PlanEvent.objects.create(
+            plan=self.plan,
+            name="Coche",
+            event_type=Scenario.TemplateType.VEHICLE,
+            planned_date=date(start_year, start_month, 1),
+            status=status,
+            planned_impact_json={
+                "events": [
+                    {
+                        "start_year": start_year,
+                        "start_month": start_month,
+                        "end_year": end_year,
+                        "new_debt_principal": principal,
+                        "new_debt_interest_rate": rate,
+                        "new_debt_term_years": term,
+                        "debt_end_year": start_year + term - 1,
+                        "monthly_expense_delta": monthly_expense,
+                    }
+                ]
+            },
+        )
+
+    def _decision_commitment(self, event, amount, fiscal_year):
+        """Partida que la Decisión crea en el presupuesto para su cuota."""
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Coche - financiación",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="personal_loan_repayment",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=1,
+            term_end_year=fiscal_year,
+            term_end_month=12,
+            amount_annual=amount,
+            fiscal_year=fiscal_year,
+            event_group=f"plan_event:{event.id}",
+            is_system_generated=True,
+        )
+
+    def _surplus(self, year):
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        return free_operating_surplus(
+            inputs=inputs,
+            assumptions=serialize_assumptions(get_assumption_set(name="expected")),
+            year=year,
+            start_year=self.year,
+        )
+
+    def test_instalment_of_a_financed_decision_is_charged_once(self):
+        baseline = self._surplus(self.next_year)
+
+        event = self._decision(start_year=self.next_year, principal="20000.00")
+        with_decision = self._surplus(self.next_year)
+        instalment = debt_annual_payment(
+            principal=Decimal("20000.00"), annual_rate=Decimal("0.0700"), term_years=4
+        )
+        self.assertAlmostEqual(baseline - with_decision, instalment, delta=Decimal("1.00"))
+
+        # Las partidas que la Decisión escribe en el presupuesto describen esa misma
+        # cuota: sumarlas como compromiso temporal la cobraría dos veces.
+        self._decision_commitment(event, Decimal("5853.12"), self.next_year)
+        self.assertEqual(self._surplus(self.next_year), with_decision)
+
+    def test_commitment_adopted_by_an_occurred_decision_still_weighs(self):
+        baseline = self._surplus(self.next_year)
+        # Una Decisión ya ocurrida no aporta préstamo a la proyección: sus cuotas solo
+        # se conocen por el presupuesto y tienen que seguir restando.
+        event = self._decision(start_year=self.year, status=PlanEvent.Status.OCCURRED)
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Cuota en curso",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="misc",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_year=self.next_year,
+            amount_annual=Decimal("6000.00"),
+            fiscal_year=self.year,
+            event_group=f"plan_event:{event.id}",
+        )
+
+        self.assertAlmostEqual(
+            baseline - self._surplus(self.next_year), Decimal("6000.00"), delta=Decimal("1.00")
+        )
+
+    def test_recurring_expense_reduces_saving_capacity(self):
+        baseline = self._surplus(self.next_year)
+
+        self._decision(start_year=self.next_year, monthly_expense="400.00")
+
+        self.assertEqual(baseline - self._surplus(self.next_year), Decimal("4800.00"))
+
+    def test_recurring_expense_outlives_its_loan(self):
+        after_loan = self.next_year + 3  # el préstamo a 2 años ya está amortizado
+        baseline = self._surplus(after_loan)
+
+        self._decision(
+            start_year=self.next_year, principal="20000.00", term=2, monthly_expense="400.00"
+        )
+
+        # Solo pesa el gasto de uso: la cuota ya no existe, pero el coche sigue costando.
+        self.assertEqual(baseline - self._surplus(after_loan), Decimal("4800.00"))
+
+    def test_recurring_expense_ends_with_a_dated_decision(self):
+        baseline = self._surplus(self.next_year + 2)
+
+        self._decision(
+            start_year=self.next_year, monthly_expense="400.00", end_year=self.next_year + 1
+        )
+
+        self.assertEqual(self._surplus(self.next_year + 2), baseline)
+
+    def test_recurring_expense_already_in_the_budget_is_not_charged_twice(self):
+        baseline = self._surplus(self.next_year)
+
+        # Decisión del año en curso: sus partidas ya viven en el presupuesto vigente,
+        # que es de donde sale `annual_operating_expense`.
+        self._decision(start_year=self.year, monthly_expense="400.00")
+
+        self.assertEqual(self._surplus(self.next_year), baseline)
+
+    def test_start_year_only_counts_the_months_after_the_purchase(self):
+        baseline = self._surplus(self.next_year)
+
+        self._decision(start_year=self.next_year, start_month=7, monthly_expense="400.00")
+
+        self.assertEqual(baseline - self._surplus(self.next_year), Decimal("2400.00"))
