@@ -12,8 +12,14 @@ from rest_framework.exceptions import ValidationError
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.services import validate_annual_expense_taxonomy, validate_annual_income_taxonomy
 
-from .models import PlanEvent, ProjectionSnapshot, Recommendation, Scenario
-from .services_projection import ProjectionService, get_assumption_set
+from .models import FinancialPlan, PlanEvent, ProjectionSnapshot, Recommendation, Scenario
+from .services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    earliest_sustainable_retirement_year,
+    get_assumption_set,
+    serialize_assumptions,
+)
 
 MONEY = Decimal("0.01")
 
@@ -50,6 +56,18 @@ class ScenarioService:
             assumption_set=assumption_set,
             extra_events=event_payloads,
         )
+        # La fecha que compara la tabla es la misma que titula el plan: el primer año
+        # en que dejar de trabajar es sostenible. `summary.projected_year` responde a
+        # otra pregunta —cuándo cruza la trayectoria que se retira en la fecha deseada—
+        # y en un plan que no llega no se mueve al simular, que es justo lo que hay que
+        # ver aquí.
+        assumptions = serialize_assumptions(assumption_set)
+        sustainable_year = {
+            "current": sustainable_retirement_year(plan=scenario.plan, assumptions=assumptions),
+            "simulated": sustainable_retirement_year(
+                plan=scenario.plan, assumptions=assumptions, extra_events=event_payloads
+            ),
+        }
         snapshot = ProjectionSnapshot.objects.create(
             plan=scenario.plan,
             scenario=scenario,
@@ -65,7 +83,10 @@ class ScenarioService:
             "assumption_set": assumption_set.name,
             "current": current,
             "simulated": simulated,
-            "delta": comparison_delta(current=current, simulated=simulated),
+            "sustainable_year": sustainable_year,
+            "delta": comparison_delta(
+                current=current, simulated=simulated, sustainable_year=sustainable_year
+            ),
             "snapshot_id": snapshot.id,
         }
 
@@ -191,10 +212,29 @@ def scenario_event_payload(event) -> dict[str, Any]:
     }
 
 
-def comparison_delta(*, current: dict[str, Any], simulated: dict[str, Any]) -> dict[str, Any]:
+def sustainable_retirement_year(
+    *,
+    plan: FinancialPlan,
+    assumptions: dict[str, str],
+    extra_events: list[dict[str, Any]] | None = None,
+) -> int | None:
+    """Primer año en que dejar de trabajar es sostenible, opcionalmente añadiendo los
+    eventos de un escenario todavía sin aceptar. Es la fecha que titula el plan."""
+    inputs, _, _ = build_projection_inputs(plan=plan, extra_events=extra_events)
+    return earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+
+
+def comparison_delta(
+    *,
+    current: dict[str, Any],
+    simulated: dict[str, Any],
+    sustainable_year: dict[str, int | None] | None = None,
+) -> dict[str, Any]:
     current_summary = current["summary"]
     simulated_summary = simulated["summary"]
+    sustainable = sustainable_year or {}
     return {
+        "sustainable_year": numeric_delta(sustainable.get("current"), sustainable.get("simulated")),
         "projected_year": numeric_delta(
             current_summary["projected_year"]["value"],
             simulated_summary["projected_year"]["value"],

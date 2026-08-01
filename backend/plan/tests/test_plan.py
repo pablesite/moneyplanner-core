@@ -873,6 +873,23 @@ class ScenarioServiceTests(TestCase):
         snapshot = ProjectionSnapshot.objects.get(scenario=scenario)
         self.assertFalse(snapshot.is_official)
 
+    def test_comparison_reports_the_sustainable_retirement_year(self):
+        # La tabla compara la misma fecha que titula el plan. `projected_year` responde
+        # a otra pregunta y en un plan que aún no llega se queda clavada, así que la
+        # comparación decía "sin variación" mientras el resto de métricas se movían.
+        scenario = self.create_vehicle_scenario()
+
+        result = ScenarioService().compare(scenario=scenario)
+
+        self.assertIn("sustainable_year", result)
+        self.assertEqual(set(result["sustainable_year"]), {"current", "simulated"})
+        current = result["sustainable_year"]["current"]
+        simulated = result["sustainable_year"]["simulated"]
+        if current is not None and simulated is not None:
+            self.assertEqual(result["delta"]["sustainable_year"], simulated - current)
+        else:
+            self.assertIsNone(result["delta"]["sustainable_year"])
+
     def test_accept_creates_plan_event_official_snapshot_and_budget_entries(self):
         scenario = self.create_vehicle_scenario()
 

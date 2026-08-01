@@ -822,6 +822,11 @@ def calculate_projection(
         preservation_ok = (
             inputs.preservation_target_eur is None or net_worth >= inputs.preservation_target_eur
         )
+        # `required` puede llegar a 0 cuando las pensiones cubren por sí solas el nivel
+        # de vida objetivo: ahí el cruce se cumple sin capital y es correcto —no hace
+        # falta capital para dejar de trabajar—, pero responde a "desde cuándo me cubre
+        # la pensión", no a "cuándo puedo dejar de trabajar sin quedarme sin capital",
+        # que es lo que titula el plan (`earliest_sustainable_retirement_year`).
         if projected_year is None and productive >= required and preservation_ok:
             projected_year = year
         rows.append(
