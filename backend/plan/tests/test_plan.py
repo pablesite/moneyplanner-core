@@ -2327,8 +2327,8 @@ class OneOffFlowsInProjectionTests(TestCase):
         return AnnualIncomeEntry.objects.create(
             user=self.user,
             name=extra.pop("name", "Puntual ingreso"),
-            category=AnnualIncomeEntry.Category.OTHER_INCOME,
-            subcategory="misc",
+            category=extra.pop("category", AnnualIncomeEntry.Category.OTHER_INCOME),
+            subcategory=extra.pop("subcategory", "misc"),
             time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
             income_type=AnnualIncomeEntry.IncomeType.ONE_OFF,
             cashflow_role=role,
@@ -2355,6 +2355,37 @@ class OneOffFlowsInProjectionTests(TestCase):
             year=self.next_year,
         )
         self.assertEqual(self._prod(self.next_year) - baseline, Decimal("50000.00"))
+
+    def test_future_one_off_family_transfer_increases_net_worth_once(self):
+        """Una donación es dinero nuevo; invertirla después no debe duplicar su efecto."""
+        baseline = self._row(self._project(), self.next_year)
+        self._income(
+            role=AnnualIncomeEntry.CashflowRole.TRANSFER,
+            amount=Decimal("5000.00"),
+            year=self.next_year,
+            name="Donación familiar",
+            category=AnnualIncomeEntry.Category.TRANSFERS_SUPPORT,
+            subcategory="family_support",
+        )
+
+        after_income = self._row(self._project(), self.next_year)
+        self.assertEqual(
+            Decimal(after_income["net_worth"]) - Decimal(baseline["net_worth"]),
+            Decimal("5000.00"),
+        )
+
+        self._expense(
+            role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount=Decimal("5000.00"),
+            year=self.next_year,
+            name="Inversión de la donación",
+        )
+
+        after_investment = self._row(self._project(), self.next_year)
+        self.assertEqual(
+            Decimal(after_investment["net_worth"]) - Decimal(baseline["net_worth"]),
+            Decimal("5000.00"),
+        )
 
     def test_asset_purchase_moves_productive_to_non_productive(self):
         base = self._row(self._project(), self.next_year)
