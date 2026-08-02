@@ -40,9 +40,16 @@ def dec(value: Any) -> Decimal:
 
 
 class RecommendationService:
-    def refresh(self, *, plan: FinancialPlan) -> list[Recommendation]:
-        findings = FindingService().evaluate(plan=plan)
-        foundations = FoundationService().calculate(plan=plan)
+    def refresh(
+        self,
+        *,
+        plan: FinancialPlan,
+        findings: list[Finding] | None = None,
+        foundations: dict[str, Any] | None = None,
+    ) -> list[Recommendation]:
+        """Actualiza recomendaciones sin repetir el diagnóstico del llamador."""
+        foundations = foundations or FoundationService().calculate(plan=plan)
+        findings = findings or FindingService().evaluate(plan=plan, foundations=foundations)
         recommendations: list[Recommendation] = []
         with transaction.atomic():
             for finding in findings:

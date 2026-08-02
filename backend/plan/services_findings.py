@@ -17,9 +17,17 @@ def dec(value: Any) -> Decimal:
 
 
 class FindingService:
-    def evaluate(self, *, plan: FinancialPlan, period: str = "current") -> list[Finding]:
-        foundations = FoundationService().calculate(plan=plan)
-        projection = ProjectionService().calculate(
+    def evaluate(
+        self,
+        *,
+        plan: FinancialPlan,
+        period: str = "current",
+        foundations: dict[str, Any] | None = None,
+        projection: dict[str, Any] | None = None,
+    ) -> list[Finding]:
+        """Persiste hallazgos reutilizando resultados ya calculados cuando existen."""
+        foundations = foundations or FoundationService().calculate(plan=plan)
+        projection = projection or ProjectionService().calculate(
             plan=plan,
             assumption_set=get_assumption_set(name="expected"),
         )

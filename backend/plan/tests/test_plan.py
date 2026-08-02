@@ -1508,6 +1508,7 @@ class FindingsRecommendationsApiTests(APITestCase):
         self.assertIn("sustainable_range", response.data)
         self.assertIn("gap_years", response.data)
         self.assertIn("foundations", response.data)
+        self.assertIn("committed_status", response.data["foundations"]["cash_flow"])
         self.assertIn("next_action", response.data)
 
 

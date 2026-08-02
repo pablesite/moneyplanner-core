@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from .models import FinancialPlan, Recommendation
+from .services_findings import FindingService
 from .services_foundations import FoundationService
 from .services_projection import (
     ProjectionService,
@@ -77,7 +78,15 @@ class PlanOverviewService:
             retirement_year=sustainable_year,
         )
         foundations = FoundationService().calculate(plan=plan)
-        recommendations = RecommendationService().refresh(plan=plan)
+        # El resumen ya necesita los cimientos detallados. Se comparten con los
+        # hallazgos y recomendaciones para no repetir varias veces el diagnóstico
+        # completo durante la carga inicial de Mi Plan.
+        findings = FindingService().evaluate(plan=plan, foundations=foundations)
+        recommendations = RecommendationService().refresh(
+            plan=plan,
+            findings=findings,
+            foundations=foundations,
+        )
         next_recommendation = min(
             (item for item in recommendations if item.status == Recommendation.Status.OPEN),
             key=lambda item: item.priority,
@@ -113,24 +122,9 @@ class PlanOverviewService:
                     "low" if selected["quality_level"] in {"initial", "needs_review"} else "medium"
                 ),
             },
-            # Mapa ligero para titulares: misma nota y banda que el bloque completo,
-            # sin arrastrar sus métricas.
-            "foundations": {
-                key: {
-                    "status": foundations[key]["status"],
-                    "score": foundations[key]["score"],
-                    "grade": foundations[key]["grade"],
-                }
-                for key in (
-                    "overall",
-                    "cash_flow",
-                    "emergency_fund",
-                    "debt",
-                    "planned_contribution",
-                    "net_worth_health",
-                    "data_quality",
-                )
-            },
+            # El Resumen pinta los cimientos completos. Entregarlos aquí evita una
+            # segunda petición y un segundo cálculo idéntico al cargar la pantalla.
+            "foundations": foundations,
             "next_action": guidance_action(next_recommendation),
             "input_hash": selected["input_hash"],
         }
