@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.35.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.1...moneyplanner-core-v0.35.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* **plan:** compare scenarios on the date the plan headline shows ([efcf0ba](https://github.com/pablesite/moneyplanner-core/commit/efcf0bacd0a25c4282e18d9ba1e725e055e9bab4))
+* **plan:** count a decision's instalment and running cost once each ([9f8cf2a](https://github.com/pablesite/moneyplanner-core/commit/9f8cf2a14c73194a473d2aa2a2bfc9541a54ce95))
+* **plan:** judge the monthly close on the plan's own date ([36d9e05](https://github.com/pablesite/moneyplanner-core/commit/36d9e05b3595234efb4e450e2758a23df86d199f))
+* **plan:** make contribution improvements actionable ([46aa5fc](https://github.com/pablesite/moneyplanner-core/commit/46aa5fccdd1829502f2641381992c1c769ab2d0e))
+
 ## [0.35.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.0...moneyplanner-core-v0.35.1) (2026-07-31)
 
 
