@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.36.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.3...moneyplanner-core-v0.36.0) (2026-08-02)
+
+
+### Features
+
+* **plan:** preview planned decision impact ([56020c9](https://github.com/pablesite/moneyplanner-core/commit/56020c9bcde00ac93c7114385196f0b261593e7f))
+
+
+### Bug Fixes
+
+* **plan:** allow editing accepted scenario events ([db83ed4](https://github.com/pablesite/moneyplanner-core/commit/db83ed404d9fbe4fcf53a5a0de9057330b703885))
+
+
+### Performance Improvements
+
+* **plan:** reuse dashboard diagnostics ([6dc826e](https://github.com/pablesite/moneyplanner-core/commit/6dc826e68a000f66cc297120746ff8c2beeb6406))
+
 ## [0.35.3](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.2...moneyplanner-core-v0.35.3) (2026-08-02)
 
 
