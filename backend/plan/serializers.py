@@ -447,6 +447,9 @@ class DecisionImpactSerializer(serializers.Serializer):
     disposed_liability_value = serializers.DecimalField(
         max_digits=14, decimal_places=2, required=False, min_value=0
     )
+    monthly_expense_delta = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0
+    )
 
     def validate(self, attrs):
         # Una deuda nueva sin plazo haría que el motor la amortizara en 1 año (la deuda

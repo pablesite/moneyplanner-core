@@ -1181,6 +1181,64 @@ class ScenarioApiTests(APITestCase):
         self.assertEqual(accept_response.status_code, status.HTTP_200_OK)
         self.assertEqual(accept_response.data["event"]["event_type"], "vehicle")
 
+    def test_accepted_scenario_event_can_be_edited_and_resyncs_budget_lines(self):
+        create_response = self.client.post(
+            reverse("financial-plan-scenarios"), self.scenario_payload(), format="json"
+        )
+        scenario_id = create_response.data["id"]
+        accept_response = self.client.post(
+            reverse("financial-plan-scenario-accept", kwargs={"pk": scenario_id}),
+            {},
+            format="json",
+        )
+        event_id = accept_response.data["event"]["id"]
+
+        response = self.client.patch(
+            reverse("financial-plan-event-planned-decision-detail", args=[event_id]),
+            {
+                "name": "Coche actualizado",
+                "event_type": "vehicle",
+                "decision_date": "2028-04-01",
+                "transaction_year": 2028,
+                "transaction_month": 4,
+                "impact": {
+                    "initial_outflow": "12000.00",
+                    "new_asset_value": "27000.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "15000.00",
+                    "new_debt_interest_rate": "0.0700",
+                    "new_debt_term_years": 4,
+                    "monthly_expense_delta": "350.00",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event = PlanEvent.objects.get(pk=event_id)
+        source_event = event.source_scenario.events.get()
+        self.assertEqual(event.name, "Coche actualizado")
+        self.assertEqual(source_event.start_date, date(2028, 4, 1))
+        self.assertEqual(source_event.monthly_expense_delta, Decimal("350.00"))
+        self.assertEqual(source_event.new_debt_term_months, 48)
+        self.assertEqual(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                event_group=f"plan_event:{event_id}",
+                name="Coche actualizado - entrada",
+                target_month=4,
+                amount_annual=Decimal("12000.00"),
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                event_group=f"plan_event:{event_id}",
+                target_month=3,
+            ).exists()
+        )
+
     def test_one_off_items_define_the_canonical_initial_outflow(self):
         payload = self.scenario_payload()
         payload["events"][0]["initial_outflow"] = "1.00"

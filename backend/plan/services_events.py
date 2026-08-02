@@ -12,7 +12,7 @@ from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from budget.plan_lineage import parse_plan_event_id
 from net_worth.models import Asset, Liability
 
-from .models import FinancialPlan, PlanEvent
+from .models import FinancialPlan, PlanEvent, Scenario
 from .services_projection import ProjectionService
 
 MONEY = Decimal("0.01")
@@ -221,7 +221,7 @@ def _decision_impact_event(
         "start_date": date(int(start_year), int(start_month), 1).isoformat(),
         "end_year": int(end_year) if end_year else None,
         "initial_outflow": money("initial_outflow"),
-        "monthly_expense_delta": "0",
+        "monthly_expense_delta": money("monthly_expense_delta"),
         "monthly_income_delta": "0",
         "monthly_contribution_delta": "0",
         "monthly_contribution_destination": "productive",
@@ -315,12 +315,30 @@ def update_planned_decision(
     end_year: int | None = None,
     note: str = "",
 ) -> dict[str, Any]:
-    """Corrige una Decisión agrupada futura sin tocar su presupuesto ni sus vínculos."""
+    """Corrige una Decisión futura y mantiene sincronizado su único origen de presupuesto."""
     locked = PlanEvent.objects.select_for_update().select_related("plan").get(pk=event.pk)
     registration = deepcopy(locked.actual_impact_json.get("registration") or {})
-    if locked.status != PlanEvent.Status.PLANNED or "adopted_lines" not in registration:
+    if locked.status != PlanEvent.Status.PLANNED:
         raise ValidationError(
-            {"event": "Solo se pueden editar las decisiones agrupadas que siguen previstas."}
+            {"event": "Solo se pueden editar las decisiones que siguen previstas."}
+        )
+
+    if locked.source_scenario_id:
+        scenario = Scenario.objects.select_for_update().get(pk=locked.source_scenario_id)
+        return _update_scenario_backed_decision(
+            event=locked,
+            scenario=scenario,
+            name=name,
+            event_type=event_type,
+            decision_date=decision_date,
+            transaction_year=transaction_year,
+            transaction_month=transaction_month,
+            impact=impact,
+        )
+
+    if "adopted_lines" not in registration:
+        raise ValidationError(
+            {"event": "La decisión no tiene partidas agrupadas que se puedan editar."}
         )
 
     locked.name = name.strip()
@@ -360,6 +378,91 @@ def update_planned_decision(
     )
     projection = ProjectionService().recalculate(plan=locked.plan)
     return {"event": locked, "projection": projection}
+
+
+def _update_scenario_backed_decision(
+    *,
+    event: PlanEvent,
+    scenario: Scenario,
+    name: str,
+    event_type: str,
+    decision_date: date,
+    transaction_year: int,
+    transaction_month: int,
+    impact: dict[str, Any],
+) -> dict[str, Any]:
+    """Edita una simulación ya incorporada y reconstruye solo sus líneas gestionadas."""
+    from .services_scenarios import (
+        budget_lines_for_scenario,
+        create_budget_entries_for_scenario,
+        scenario_event_payloads,
+    )
+
+    scenario_events = list(scenario.events.select_for_update().order_by("start_date", "id"))
+    if len(scenario_events) != 1:
+        raise ValidationError(
+            {"event": "Solo se pueden editar simulaciones con un único acontecimiento."}
+        )
+
+    scenario_event = scenario_events[0]
+    original_outflow = Decimal(scenario_event.initial_outflow)
+    one_off_items = list(scenario_event.metadata_json.get("one_off_items", []))
+    new_outflow = Decimal(impact.get("initial_outflow", original_outflow))
+    if len(one_off_items) > 1 and new_outflow != original_outflow:
+        raise ValidationError(
+            {"impact": "Edita los desembolsos con detalle antes de cambiar su total."}
+        )
+
+    scenario.name = name.strip()
+    scenario.template_type = event_type
+    scenario.save(update_fields=["name", "template_type"])
+
+    scenario_event.start_date = date(transaction_year, transaction_month, 1)
+    scenario_event.initial_outflow = new_outflow
+    scenario_event.monthly_expense_delta = Decimal(
+        impact.get("monthly_expense_delta", scenario_event.monthly_expense_delta)
+    )
+    scenario_event.new_asset_value = Decimal(
+        impact.get("new_asset_value", scenario_event.new_asset_value)
+    )
+    scenario_event.new_asset_type = impact.get("new_asset_type", scenario_event.new_asset_type)
+    scenario_event.new_debt_principal = Decimal(
+        impact.get("new_debt_principal", scenario_event.new_debt_principal)
+    )
+    scenario_event.new_debt_interest_rate = impact.get(
+        "new_debt_interest_rate", scenario_event.new_debt_interest_rate
+    )
+    term_years = impact.get("new_debt_term_years")
+    if term_years:
+        scenario_event.new_debt_term_months = int(term_years) * 12
+    elif "new_debt_principal" in impact and not impact["new_debt_principal"]:
+        scenario_event.new_debt_term_months = None
+    if len(one_off_items) == 1:
+        metadata = deepcopy(scenario_event.metadata_json)
+        metadata["one_off_items"][0]["amount"] = str(new_outflow)
+        scenario_event.metadata_json = metadata
+    scenario_event.save()
+
+    event.name = scenario.name
+    event.event_type = scenario.template_type
+    event.planned_date = decision_date
+    event.planned_impact_json = {
+        "events": scenario_event_payloads(scenario=scenario),
+        "budget_lines": [
+            line.__dict__ | {"amount": str(line.amount)}
+            for line in budget_lines_for_scenario(scenario)
+        ],
+    }
+    event.save(
+        update_fields=["name", "event_type", "planned_date", "planned_impact_json", "updated_at"]
+    )
+
+    event_group = f"plan_event:{event.id}"
+    AnnualIncomeEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
+    AnnualExpenseEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
+    create_budget_entries_for_scenario(scenario=scenario, plan_event=event)
+    projection = ProjectionService().recalculate(plan=event.plan)
+    return {"event": event, "projection": projection}
 
 
 def _link_net_worth(
