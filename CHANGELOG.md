@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.3](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.2...moneyplanner-core-v0.35.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* **plan:** reconcile budget contributions with free cash ([266e26f](https://github.com/pablesite/moneyplanner-core/commit/266e26fc8c8fa050b2f48cc6b125f24793a50fa0))
+
 ## [0.35.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.1...moneyplanner-core-v0.35.2) (2026-08-02)
 
 
