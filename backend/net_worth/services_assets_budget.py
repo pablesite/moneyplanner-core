@@ -75,7 +75,7 @@ def _get_generated_asset_expense_profile(*, asset: Asset) -> tuple[str, str]:
     return (cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS), "property_purchase")
 
 
-def _build_investment_contribution_schedule(
+def build_investment_contribution_schedule(
     *,
     asset: Asset,
     as_of_date: date | None = None,
@@ -139,7 +139,7 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
     schedule = []
     if asset.is_active:
         horizon_year = timezone.localdate().year + 1
-        schedule = _build_investment_contribution_schedule(
+        schedule = build_investment_contribution_schedule(
             asset=asset,
             horizon_end_date=date(horizon_year, 12, 31),
         )

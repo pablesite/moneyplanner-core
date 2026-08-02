@@ -177,7 +177,7 @@ class BudgetServicesTests(TestCase):
         )
         self.assertTrue(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2026))
         self.assertFalse(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2028))
-        self.assertFalse(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
+        self.assertTrue(expense_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
 
     def test_income_entry_applies_to_fiscal_year_for_one_off_and_term(self):
         one_off = AnnualIncomeEntry.objects.create(
@@ -207,7 +207,7 @@ class BudgetServicesTests(TestCase):
         )
         self.assertTrue(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2026))
         self.assertFalse(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2028))
-        self.assertFalse(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
+        self.assertTrue(income_entry_applies_to_fiscal_year(entry=term, fiscal_year=2027))
 
     def test_planned_expense_distribution_handles_one_off_and_term_end(self):
         one_off = AnnualExpenseEntry.objects.create(
@@ -335,7 +335,7 @@ class BudgetServicesTests(TestCase):
             time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
             amount_annual=Decimal("964.46"),
             fiscal_year=2025,
-            term_end_year=2026,
+            term_end_year=2025,
             term_end_month=11,
             currency="EUR",
         )

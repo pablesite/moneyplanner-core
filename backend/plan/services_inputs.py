@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Any, Iterable
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.services import effective_annual_expense_entries, effective_annual_income_entries
 
 from .models import FinancialPlan
 
@@ -42,19 +43,15 @@ def plan_fiscal_year(plan: FinancialPlan | None = None) -> int:
 
 
 def annual_income_entries(plan: FinancialPlan):
-    return AnnualIncomeEntry.objects.filter(
-        user=plan.user,
-        is_active=True,
-        fiscal_year=plan_fiscal_year(plan),
-    )
+    return effective_annual_income_entries(
+        user=plan.user, fiscal_year=plan_fiscal_year(plan)
+    ).filter(is_active=True)
 
 
 def annual_expense_entries(plan: FinancialPlan):
-    return AnnualExpenseEntry.objects.filter(
-        user=plan.user,
-        is_active=True,
-        fiscal_year=plan_fiscal_year(plan),
-    )
+    return effective_annual_expense_entries(
+        user=plan.user, fiscal_year=plan_fiscal_year(plan)
+    ).filter(is_active=True)
 
 
 def structural_income_entries(plan: FinancialPlan):
@@ -128,7 +125,6 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
             year,
             {
                 "income": Decimal("0"),
-                "contribution": Decimal("0"),
                 "asset_purchase": Decimal("0"),
                 "outflow": Decimal("0"),
             },
@@ -167,18 +163,19 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
     ).exclude(event_group__startswith=PLAN_EVENT_GROUP_PREFIX)
     if asset_sale_groups:
         expenses = expenses.exclude(event_group__in=asset_sale_groups)
-    contribution_roles = {
-        AnnualExpenseEntry.CashflowRole.SAVINGS,
-        AnnualExpenseEntry.CashflowRole.INVESTMENT,
-    }
     for entry in expenses:
         if not applies(entry.fiscal_year, entry.target_month):
             continue
-        slot = bucket(entry.fiscal_year)
         amount = Decimal(entry.amount_annual)
-        if entry.cashflow_role in contribution_roles:
-            slot["contribution"] += amount
-        elif entry.cashflow_role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE:
+        if entry.cashflow_role in {
+            AnnualExpenseEntry.CashflowRole.SAVINGS,
+            AnnualExpenseEntry.CashflowRole.INVESTMENT,
+        }:
+            # A contribution is an allocation of existing free cash. It is handled
+            # by the contribution schedule, never as a cash inflow.
+            continue
+        slot = bucket(entry.fiscal_year)
+        if entry.cashflow_role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE:
             slot["asset_purchase"] += amount
         else:
             slot["outflow"] += amount

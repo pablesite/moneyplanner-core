@@ -95,7 +95,7 @@ def _build_investment_contribution_schedule(
 ) -> list[tuple[date, Decimal]]:
     # Deferred import to avoid circular dependency with budget sync module.
     from .services_assets_budget import (
-        _build_investment_contribution_schedule as budget_schedule_builder,
+        build_investment_contribution_schedule as budget_schedule_builder,
     )
 
     return budget_schedule_builder(

@@ -53,12 +53,13 @@ Los objetivos de gasto e ingresos se expresarán por defecto en euros actuales. 
 
 ### Decisiones vinculantes de inputs del motor (Fase 7)
 
-1. El FY activo del plan es el año natural actual (`date.today().year`) y se resuelve en un único helper. Cimientos, renta estructural y aportaciones presupuestadas solo leen partidas activas de ese FY.
+1. El FY activo del plan es el año natural actual (`date.today().year`) y se resuelve en un único helper. Cimientos, renta estructural y aportaciones leen las partidas efectivas en ese FY: puntual solo en su año; estructural desde su año inicial; temporal hasta `term_end_year`; los espejos anuales generados por Patrimonio solo en su corte explícito.
 2. La renta estructural excluye `time_profile=one_off`. En el MVP los ingresos puntuales no se capitalizan automáticamente: se ignoran en la renta recurrente; un efecto patrimonial futuro debe modelarse explícitamente como `PlanEvent`.
 3. La renta laboral agregada se corta tras `employment_income_end_date`. Como las partidas de ingreso actuales no están atribuidas de forma fiable a cada miembro, en hogares con varios adultos se usa la fecha más tardía y se expone la falta de fechas en calidad de datos. Esta aproximación debe sustituirse por renta por adulto cuando exista atribución canónica.
 4. La taxonomía de gasto del plan es exhaustiva y se resuelve por `cashflow_role` en un único clasificador: operativo, compromiso temporal, aportación, compra de activo, impuesto/otros o no clasificable. Cimientos y proyección consumen esa misma clasificación.
 5. Los snapshots anteriores se conservan como histórico de los cálculos efectuados con inputs antiguos. Todo recálculo posterior genera un snapshot y un hash nuevos.
 6. El presupuesto tiene dos niveles: las partidas recurrentes manuales se crean y editan en Presupuesto; las partidas originadas al incorporar decisiones se gobiernan desde Mi Plan. Estas últimas conservan linaje `plan_event:<PlanEvent.id>`, son de solo lectura en la API general de presupuesto y se consultan de forma inversa desde el acontecimiento.
+7. Ahorro e inversión son destinos del flujo de caja libre, no ingresos adicionales. La proyección financia esas asignaciones hasta el superávit disponible, las recorta proporcionalmente si no caben y expone la parte no financiada.
 
 > **[Validación]** El histórico usa IPC real (`InflationIndex`, INE nacional + CCAA, ya sincronizado por `market_data_sync`); las hipótesis de inflación solo se aplican hacia futuro.
 

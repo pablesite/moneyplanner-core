@@ -15,7 +15,8 @@ from budget.services import (
     planned_income_monthly_distribution,
 )
 from memberships.models import FamilyMember
-from net_worth.models import InvestmentContributionInterval, Liability
+from net_worth.models import Asset, Liability
+from net_worth.services_assets_budget import build_investment_contribution_schedule
 
 from .models import AssumptionSet, FinancialPlan, PlanEvent, ProjectionSnapshot
 from .services_classification import AssetClassificationService, ClassificationSummary
@@ -73,6 +74,9 @@ class ProjectionInputs:
     # Flujos puntuales de presupuesto (no gobernados por Decisiones) agregados por
     # año; se aplican en su año en todo el horizonte. Ver services_inputs.one_off_flows.
     one_off_flows: tuple[dict[str, Any], ...] = ()
+    # Planned uses of free cash by year. They direct cash to Security/Productive,
+    # but never add cash and are always capped by the operating surplus.
+    planned_contribution_schedule: tuple[dict[str, Any], ...] = ()
     # Reconciliación de caja: gasto operativo anual y compromisos temporales (con su
     # vencimiento), para limitar la aportación efectiva al superávit libre real.
     annual_operating_expense: Decimal = Decimal("0")
@@ -238,6 +242,11 @@ def build_projection_inputs(
     remaining_months = range(today.month + 1, 13)
     annual_income = structural_income(plan)
     planned_contributions = planned_contribution_amount(plan=plan)
+    contribution_schedule = planned_contribution_schedule(
+        plan=plan,
+        start_year=today.year,
+        end_year=plan.projection_end_date.year,
+    )
     current_expenses = list(annual_expense_entries(plan))
     operating_expense = expense_buckets(current_expenses).operating
     current_year_remaining_income = sum(
@@ -340,6 +349,7 @@ def build_projection_inputs(
             liability_max_term_years=max_term_years,
             plan_events=tuple(event_payloads),
             one_off_flows=tuple(one_off_flows(plan=plan)),
+            planned_contribution_schedule=contribution_schedule,
             annual_operating_expense=operating_expense,
             temporary_commitments=temporary_commitments,
             current_year_remaining_income=current_year_remaining_income,
@@ -348,8 +358,10 @@ def build_projection_inputs(
             ),
             current_year_remaining_contributions=sum(
                 (
-                    remaining_expense_by_role.get(role, Decimal("0"))
-                    for role in ("savings", "investment")
+                    Decimal(str(slot.get("security") or "0"))
+                    + Decimal(str(slot.get("productive") or "0"))
+                    for slot in contribution_schedule
+                    if int(str(slot["year"])) == today.year
                 ),
                 Decimal("0"),
             ),
@@ -691,6 +703,15 @@ def calculate_projection(
             year=year,
             start_year=start_year,
         )
+        annual_free_cash = Decimal("0")
+        planned_security, planned_productive = contribution_allocation_for_year(
+            inputs.planned_contribution_schedule, year
+        )
+        planned_security += event_delta["annual_security_contribution_delta"]
+        planned_productive += event_delta["annual_productive_contribution_delta"]
+        funded_security = Decimal("0")
+        funded_productive = Decimal("0")
+        automatic_contribution = Decimal("0")
         if year < target_year:
             # Todo el superávit libre se asigna a capital. Las aportaciones explícitas
             # de una decisión fijan primero su destino; el resto sigue la ponderación
@@ -698,6 +719,7 @@ def calculate_projection(
             free_cash = free_operating_surplus(
                 inputs=inputs, assumptions=assumptions, year=year, start_year=start_year
             )
+            annual_free_cash = free_cash
             available_cash = free_cash
             if available_cash > 0 and financing_gap > 0:
                 recovered = min(available_cash, financing_gap)
@@ -708,19 +730,16 @@ def calculate_projection(
                 debt_contributions += explicit_debt
                 available_cash -= explicit_debt
 
-                explicit_security = min(
-                    available_cash, event_delta["annual_security_contribution_delta"]
-                )
-                security += explicit_security
-                asset_categories["liquidity"] += explicit_security
-                available_cash -= explicit_security
-
-                explicit_productive = min(
-                    available_cash, event_delta["annual_productive_contribution_delta"]
-                )
-                productive += explicit_productive
-                asset_categories["investments"] += explicit_productive
-                available_cash -= explicit_productive
+                planned_total = planned_security + planned_productive
+                if planned_total > 0:
+                    funded_total = min(available_cash, planned_total)
+                    funded_security = funded_total * planned_security / planned_total
+                    funded_productive = funded_total - funded_security
+                    security += funded_security
+                    productive += funded_productive
+                    asset_categories["liquidity"] += funded_security
+                    asset_categories["investments"] += funded_productive
+                    available_cash -= funded_total
 
                 security_headroom = max(Decimal("0"), security_target - security)
                 security_contribution = min(
@@ -729,6 +748,7 @@ def calculate_projection(
                 )
                 security += security_contribution
                 productive_contribution = available_cash - security_contribution
+                automatic_contribution = available_cash
                 productive += productive_contribution
                 asset_categories["liquidity"] += security_contribution
                 asset_categories["investments"] += productive_contribution
@@ -775,7 +795,7 @@ def calculate_projection(
         disposed_liability_total += disposed_this_year
         flow = one_off_flow_for_year(inputs.one_off_flows, year)
         if flow is not None:
-            flow_inflow = Decimal(str(flow["income"])) + Decimal(str(flow["contribution"]))
+            flow_inflow = Decimal(str(flow["income"]))
             asset_purchase = Decimal(str(flow["asset_purchase"]))
             flow_outflow = asset_purchase + Decimal(str(flow["outflow"]))
             flow_net_cash = flow_inflow - flow_outflow
@@ -864,6 +884,18 @@ def calculate_projection(
                 "annual_target_income": decimal_str(nominal_target_income),
                 "future_income": decimal_str(future_income),
                 "annual_withdrawals": decimal_str(withdrawals),
+                "annual_free_cash": decimal_str(annual_free_cash),
+                "planned_contribution": decimal_str(planned_security + planned_productive),
+                "effective_planned_contribution": decimal_str(funded_security + funded_productive),
+                "effective_security_contribution": decimal_str(funded_security),
+                "effective_productive_contribution": decimal_str(funded_productive),
+                "unfunded_planned_contribution": decimal_str(
+                    max(
+                        Decimal("0"),
+                        planned_security + planned_productive - funded_security - funded_productive,
+                    )
+                ),
+                "automatic_contribution": decimal_str(automatic_contribution),
                 "preservation_ok": preservation_ok,
             }
         )
@@ -1140,17 +1172,123 @@ def sum_active_amounts(queryset) -> Decimal:
     return sum((Decimal(row.amount_annual) for row in queryset), Decimal("0"))
 
 
+def absorbed_plan_event_groups(*, plan: FinancialPlan, current_year: int) -> set[str]:
+    groups: set[str] = set()
+    for event in PlanEvent.objects.filter(plan=plan, status=PlanEvent.Status.PLANNED):
+        payloads = event.planned_impact_json.get("events", [])
+        if any(int(str(payload["start_year"])) <= current_year for payload in payloads):
+            groups.add(f"{PLAN_EVENT_GROUP_PREFIX}{event.id}")
+    return groups
+
+
+def planned_contribution_schedule(
+    *, plan: FinancialPlan, start_year: int, end_year: int
+) -> tuple[dict[str, Any], ...]:
+    """Return intended savings/investment allocations for every projection year.
+
+    Budget rows direct existing free cash: SAVINGS goes to Security and INVESTMENT
+    to Productive. Asset-generated mirrors are excluded because their contribution
+    intervals are the source of truth. Future plan-managed rows are also excluded
+    until their event reaches the baseline; before then the event delta owns them.
+    """
+    today = date.today()
+    totals: dict[int, dict[str, Decimal]] = {
+        year: {"security": Decimal("0"), "productive": Decimal("0")}
+        for year in range(start_year, end_year + 1)
+    }
+    absorbed_groups = absorbed_plan_event_groups(plan=plan, current_year=start_year)
+    contribution_roles = {
+        AnnualExpenseEntry.CashflowRole.SAVINGS,
+        AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    }
+
+    entries = list(
+        AnnualExpenseEntry.objects.filter(
+            user=plan.user,
+            is_active=True,
+            cashflow_role__in=contribution_roles,
+            fiscal_year__lte=end_year,
+        )
+        .exclude(is_system_generated=True, source_asset__isnull=False)
+        .order_by("fiscal_year", "id")
+    )
+    for year in range(start_year, end_year + 1):
+        for entry in entries:
+            if entry.event_group.startswith(PLAN_EVENT_GROUP_PREFIX) and (
+                entry.event_group not in absorbed_groups
+            ):
+                continue
+            distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=year)
+            if not distribution and (
+                entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
+                and entry.fiscal_year == year
+                and entry.target_month is None
+            ):
+                # A one-off without a month is still pending by budget convention.
+                distribution = {12: Decimal(entry.amount_annual)}
+            if year == start_year:
+                amount = sum(
+                    (monthly for month, monthly in distribution.items() if month > today.month),
+                    Decimal("0"),
+                )
+            else:
+                amount = sum(distribution.values(), Decimal("0"))
+            destination = (
+                "security"
+                if entry.cashflow_role == AnnualExpenseEntry.CashflowRole.SAVINGS
+                else "productive"
+            )
+            totals[year][destination] += amount
+
+    horizon = date(end_year, 12, 31)
+    assets = Asset.objects.filter(
+        user=plan.user,
+        is_active=True,
+        category=Asset.Category.INVESTMENTS,
+    ).prefetch_related("contribution_intervals")
+    for asset in assets:
+        for due_date, amount in build_investment_contribution_schedule(
+            asset=asset, horizon_end_date=horizon
+        ):
+            if due_date.year < start_year or due_date > horizon:
+                continue
+            if due_date.year == start_year and due_date <= today:
+                continue
+            totals[due_date.year]["productive"] += Decimal(amount)
+
+    return tuple(
+        {
+            "year": year,
+            "security": str(q2(amounts["security"])),
+            "productive": str(q2(amounts["productive"])),
+        }
+        for year, amounts in totals.items()
+        if amounts["security"] > 0 or amounts["productive"] > 0
+    )
+
+
+def contribution_allocation_for_year(
+    schedule: tuple[dict[str, Any], ...], year: int
+) -> tuple[Decimal, Decimal]:
+    for allocation in schedule:
+        if int(str(allocation["year"])) == year:
+            return (
+                Decimal(str(allocation.get("security") or "0")),
+                Decimal(str(allocation.get("productive") or "0")),
+            )
+    return Decimal("0"), Decimal("0")
+
+
 def planned_contribution_amount(*, plan: FinancialPlan) -> Decimal:
     user = plan.user
+    fiscal_year = plan_fiscal_year(plan)
     budgeted = sum_active_amounts(
-        AnnualExpenseEntry.objects.filter(
-            user=user,
-            is_active=True,
-            fiscal_year=plan_fiscal_year(plan),
+        annual_expense_entries(plan)
+        .filter(
             cashflow_role__in=[
                 AnnualExpenseEntry.CashflowRole.SAVINGS,
                 AnnualExpenseEntry.CashflowRole.INVESTMENT,
-            ],
+            ]
         )
         # Solo las aportaciones generadas *desde un activo* son el espejo de los
         # InvestmentContributionInterval que se suman debajo: contarlas aqui las
@@ -1159,14 +1297,21 @@ def planned_contribution_amount(*, plan: FinancialPlan) -> Decimal:
         .exclude(is_system_generated=True, source_asset__isnull=False)
     )
     intervals = Decimal("0")
-    for interval in InvestmentContributionInterval.objects.filter(
-        asset__user=user,
-        asset__is_active=True,
-    ):
-        if interval.frequency == "weekly":
-            intervals += Decimal(interval.amount) * Decimal("52")
-        else:
-            intervals += Decimal(interval.amount) * Decimal("12")
+    for asset in Asset.objects.filter(
+        user=user,
+        is_active=True,
+        category=Asset.Category.INVESTMENTS,
+    ).prefetch_related("contribution_intervals"):
+        intervals += sum(
+            (
+                Decimal(amount)
+                for due_date, amount in build_investment_contribution_schedule(
+                    asset=asset, horizon_end_date=date(fiscal_year, 12, 31)
+                )
+                if due_date.year == fiscal_year
+            ),
+            Decimal("0"),
+        )
     return budgeted + intervals
 
 

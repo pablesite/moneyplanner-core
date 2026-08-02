@@ -417,6 +417,9 @@ class FoundationService:
         operating_surplus = annual_income - operating_expense
         committed_surplus = annual_income - committed_expense
         planned_contribution = planned_contribution_amount(plan=plan)
+        contribution_capacity = max(Decimal("0"), committed_surplus)
+        funded_contribution = min(planned_contribution, contribution_capacity)
+        contribution_funding_gap = max(Decimal("0"), planned_contribution - funded_contribution)
 
         # Tercera capa: distinguir esfuerzo temporal de déficit estructural.
         start_year = plan_fiscal_year(plan)
@@ -552,7 +555,7 @@ class FoundationService:
         # Tasa de ahorro: la aportación planificada frente a los ingresos. Es el KPI
         # que faltaba puntuar del bloque (antes solo mostraba el importe), y el que
         # explica si el plan avanza al ritmo que hace falta.
-        savings_rate = planned_contribution / annual_income if annual_income > 0 else None
+        savings_rate = funded_contribution / annual_income if annual_income > 0 else None
         contribution_score = score_increasing(savings_rate, SAVINGS_RATE_FLOOR, SAVINGS_RATE_TARGET)
 
         blocks: dict[str, Any] = {
@@ -599,6 +602,10 @@ class FoundationService:
                 **graded(contribution_score),
                 "annual_amount": money(planned_contribution),
                 "monthly_amount": money(planned_contribution / Decimal("12")),
+                "funded_annual_amount": money(funded_contribution),
+                "funded_monthly_amount": money(funded_contribution / Decimal("12")),
+                "funding_gap": money(contribution_funding_gap),
+                "is_fully_funded": contribution_funding_gap == 0,
                 "savings_rate": ratio(savings_rate),
                 "target_savings_rate": ratio(SAVINGS_RATE_TARGET),
             },

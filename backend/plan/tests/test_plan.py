@@ -442,6 +442,7 @@ class ProjectionInputCorrectnessTests(TestCase):
             subcategory="loans",
             cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
             time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_end_year=year - 1,
             amount_annual=Decimal("90000.00"),
             fiscal_year=year - 1,
         )
@@ -449,6 +450,20 @@ class ProjectionInputCorrectnessTests(TestCase):
         cash_flow = FoundationService().calculate(plan=self.plan)["cash_flow"]
 
         self.assertEqual(cash_flow["committed_surplus"], "48000.00")
+
+    def test_recurrent_rows_remain_effective_after_their_start_year(self):
+        year = plan_fiscal_year(self.plan)
+        income = create_income(self.user, Decimal("60000.00"))
+        income.fiscal_year = year - 1
+        income.save(update_fields=["fiscal_year"])
+        expense = create_operating_expense(self.user, Decimal("12000.00"))
+        expense.fiscal_year = year - 1
+        expense.save(update_fields=["fiscal_year"])
+
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+
+        self.assertEqual(inputs.annual_income, Decimal("60000.00"))
+        self.assertEqual(inputs.annual_operating_expense, Decimal("12000.00"))
 
     def test_committed_surplus_excludes_contributions_and_one_off_movements(self):
         """El superavit comprometido solo mide flujos recurrentes: ni las
@@ -2157,6 +2172,25 @@ class FoundationGradeTests(TestCase):
         self.assertEqual(block["target_savings_rate"], "0.2000")
         self.assertEqual(block["grade"], "A")
 
+    def test_planned_contribution_reports_the_part_not_funded_by_cash_flow(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportación sobredimensionada",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="other_financial_investments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=Decimal("18000.00"),
+            fiscal_year=plan_fiscal_year(self.plan),
+        )
+
+        block = FoundationService().calculate(plan=self.plan)["planned_contribution"]
+
+        # Ingresos 36k - gasto operativo 24k = solo 12k financiables.
+        self.assertEqual(block["annual_amount"], "18000.00")
+        self.assertEqual(block["funded_annual_amount"], "12000.00")
+        self.assertEqual(block["funding_gap"], "6000.00")
+        self.assertFalse(block["is_fully_funded"])
+
 
 class FoundationCriteriaTests(TestCase):
     """Criterios revisados en julio 2026: emergencia clásica y calidad real."""
@@ -2822,6 +2856,17 @@ class CashFlowReconciliationTests(TestCase):
             fiscal_year=self.year,
         )
 
+    def _savings(self, amount):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Fondo de emergencia",
+            category=AnnualExpenseEntry.Category.SAVINGS_ALLOCATION,
+            subcategory="emergency_fund",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.SAVINGS,
+            amount_annual=amount,
+            fiscal_year=self.year,
+        )
+
     def _commitment(self, amount, end_year):
         return AnnualExpenseEntry.objects.create(
             user=self.user,
@@ -3011,6 +3056,74 @@ class CashFlowReconciliationTests(TestCase):
             inputs=inputs, assumptions=assumptions, year=self.next_year, start_year=self.year
         )
         self.assertGreater(free_cash, inputs.annual_planned_contributions)
+
+    def test_budget_edit_is_reflected_live_in_projection_inputs_and_trajectory(self):
+        self._income(Decimal("40000.00"))
+        self._operating(Decimal("20000.00"))
+        investment = self._investment(Decimal("6000.00"))
+        assumption_set = get_assumption_set(name="expected")
+
+        before = ProjectionService().calculate(plan=self.plan, assumption_set=assumption_set)
+        investment.amount_annual = Decimal("12000.00")
+        investment.save(update_fields=["amount_annual"])
+        after = ProjectionService().calculate(plan=self.plan, assumption_set=assumption_set)
+        row = next(item for item in after["trajectory"] if item["year"] == self.next_year)
+
+        self.assertNotEqual(before["input_hash"], after["input_hash"])
+        self.assertEqual(row["planned_contribution"], "12000.00")
+        self.assertEqual(row["effective_productive_contribution"], "12000.00")
+        self.assertEqual(row["unfunded_planned_contribution"], "0.00")
+
+    def test_overallocated_savings_and_investment_are_capped_proportionally(self):
+        self._income(Decimal("40000.00"))
+        self._operating(Decimal("30000.00"))
+        self._investment(Decimal("12000.00"))
+        self._savings(Decimal("12000.00"))
+
+        result = ProjectionService().calculate(
+            plan=self.plan, assumption_set=get_assumption_set(name="expected")
+        )
+        row = next(item for item in result["trajectory"] if item["year"] == self.next_year)
+        free_cash = Decimal(row["annual_free_cash"])
+        funded = Decimal(row["effective_planned_contribution"])
+
+        self.assertEqual(row["planned_contribution"], "24000.00")
+        self.assertEqual(funded, free_cash)
+        self.assertEqual(
+            Decimal(row["effective_security_contribution"]),
+            Decimal(row["effective_productive_contribution"]),
+        )
+        self.assertEqual(
+            Decimal(row["unfunded_planned_contribution"]),
+            Decimal("24000.00") - free_cash,
+        )
+
+    def test_one_off_investment_directs_cash_but_does_not_create_it(self):
+        self._income(Decimal("40000.00"))
+        self._operating(Decimal("20000.00"))
+        assumption_set = get_assumption_set(name="expected")
+        before = ProjectionService().calculate(plan=self.plan, assumption_set=assumption_set)
+        before_row = next(item for item in before["trajectory"] if item["year"] == self.next_year)
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportación extraordinaria",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="etf_indexed",
+            expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF,
+            time_profile=AnnualExpenseEntry.TimeProfile.ONE_OFF,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=Decimal("50000.00"),
+            fiscal_year=self.next_year,
+            target_month=12,
+        )
+
+        after = ProjectionService().calculate(plan=self.plan, assumption_set=assumption_set)
+        after_row = next(item for item in after["trajectory"] if item["year"] == self.next_year)
+
+        self.assertEqual(one_off_flows(self.plan), [])
+        self.assertEqual(after_row["total_assets"], before_row["total_assets"])
+        self.assertEqual(after_row["planned_contribution"], "50000.00")
+        self.assertGreater(Decimal(after_row["unfunded_planned_contribution"]), Decimal("0"))
 
     def test_deficit_draws_down_capital(self):
         # Sin holgura de caja (operativos > ingreso) el déficit consume capital cada año.
