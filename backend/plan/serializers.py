@@ -502,6 +502,12 @@ class PlannedDecisionUpdateSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
 
+class PlannedDecisionPreviewSerializer(PlannedDecisionRegisterSerializer):
+    """Entrada efímera para ver el efecto de una Decisión antes de guardarla."""
+
+    replaced_event_id = serializers.IntegerField(required=False, min_value=1)
+
+
 class AssetFunctionUpdateSerializer(serializers.Serializer):
     asset_id = serializers.IntegerField(min_value=1)
     function = serializers.ChoiceField(choices=PlanAssetFunction.Function.choices, allow_null=True)

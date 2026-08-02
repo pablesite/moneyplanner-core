@@ -232,6 +232,9 @@ def build_projection_inputs(
     plan: FinancialPlan,
     extra_events: list[dict[str, Any]] | None = None,
     include_plan_events: bool = True,
+    excluded_plan_event_ids: set[int] | None = None,
+    excluded_one_off_expense_ids: set[int] | None = None,
+    excluded_one_off_income_ids: set[int] | None = None,
 ) -> tuple[ProjectionInputs, ClassificationSummary, Any]:
     settings, _ = UserSettings.objects.get_or_create(user=plan.user)
     base_currency = (settings.base_currency or "EUR").upper()
@@ -315,7 +318,9 @@ def build_projection_inputs(
     quality = DataQualityService().evaluate(user=plan.user)
     event_payloads: list[dict[str, Any]] = []
     if include_plan_events:
-        event_payloads.extend(plan_event_payloads(plan=plan))
+        event_payloads.extend(
+            plan_event_payloads(plan=plan, excluded_event_ids=excluded_plan_event_ids)
+        )
     if extra_events:
         event_payloads.extend(extra_events)
     return (
@@ -348,7 +353,13 @@ def build_projection_inputs(
             liability_weighted_rate=weighted_rate,
             liability_max_term_years=max_term_years,
             plan_events=tuple(event_payloads),
-            one_off_flows=tuple(one_off_flows(plan=plan)),
+            one_off_flows=tuple(
+                one_off_flows(
+                    plan=plan,
+                    excluded_expense_ids=excluded_one_off_expense_ids,
+                    excluded_income_ids=excluded_one_off_income_ids,
+                )
+            ),
             planned_contribution_schedule=contribution_schedule,
             annual_operating_expense=operating_expense,
             temporary_commitments=temporary_commitments,
@@ -1334,8 +1345,11 @@ def liability_term_years(liability: Liability) -> int:
     return 0
 
 
-def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
+def plan_event_payloads(
+    *, plan: FinancialPlan, excluded_event_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
     current_year = plan_fiscal_year(plan)
+    excluded_event_ids = excluded_event_ids or set()
     return [
         payload
         | {
@@ -1355,7 +1369,9 @@ def plan_event_payloads(*, plan: FinancialPlan) -> list[dict[str, Any]]:
         for event in PlanEvent.objects.filter(
             plan=plan,
             status=PlanEvent.Status.PLANNED,
-        ).order_by("planned_date", "id")
+        )
+        .exclude(id__in=excluded_event_ids)
+        .order_by("planned_date", "id")
         for payload in event.planned_impact_json.get("events", [])
     ]
 

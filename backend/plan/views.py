@@ -27,6 +27,7 @@ from .serializers import (
     FindingSerializer,
     OccurredEventRegisterSerializer,
     PlannedDecisionRegisterSerializer,
+    PlannedDecisionPreviewSerializer,
     PlannedDecisionUpdateSerializer,
     PlanFamilyMemberSerializer,
     PlanEventSerializer,
@@ -45,6 +46,7 @@ from .services_events import (
     close_plan_event,
     register_occurred_event,
     register_planned_decision,
+    preview_planned_decision,
     release_occurred_event,
     update_planned_decision,
 )
@@ -423,6 +425,39 @@ class PlannedDecisionView(APIView):
         serializer.is_valid(raise_exception=True)
         event = register_planned_decision(plan=plan, **serializer.validated_data)
         return Response(PlanEventSerializer(event).data, status=status.HTTP_201_CREATED)
+
+
+class PlannedDecisionPreviewView(APIView):
+    """Devuelve el impacto de una decisión candidata, sin guardar nada."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        plan = get_object_or_404(FinancialPlan, user=request.user)
+        serializer = PlannedDecisionPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        replaced_event = None
+        if event_id := data.pop("replaced_event_id", None):
+            replaced_event = get_object_or_404(
+                PlanEvent,
+                pk=event_id,
+                plan=plan,
+                status=PlanEvent.Status.PLANNED,
+            )
+        return Response(
+            preview_planned_decision(
+                plan=plan,
+                event_type=data["event_type"],
+                transaction_year=data["transaction_year"],
+                transaction_month=data["transaction_month"],
+                impact=data["impact"],
+                assumption_name=requested_assumption(request, plan),
+                replaced_event=replaced_event,
+                expense_entry_ids=data.get("expense_entry_ids"),
+                income_entry_ids=data.get("income_entry_ids"),
+            )
+        )
 
 
 class PlannedDecisionDetailView(APIView):

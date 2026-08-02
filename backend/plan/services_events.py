@@ -13,7 +13,14 @@ from budget.plan_lineage import parse_plan_event_id
 from net_worth.models import Asset, Liability
 
 from .models import FinancialPlan, PlanEvent, Scenario
-from .services_projection import ProjectionService
+from .services_projection import (
+    ProjectionService,
+    build_projection_inputs,
+    earliest_sustainable_retirement_year,
+    get_assumption_set,
+    serialize_assumptions,
+)
+from .services_scenarios import comparison_delta
 
 MONEY = Decimal("0.01")
 
@@ -23,6 +30,66 @@ BUDGET_MODELS: dict[str, BudgetEntryModel] = {
     "AnnualExpenseEntry": AnnualExpenseEntry,
     "AnnualIncomeEntry": AnnualIncomeEntry,
 }
+
+
+def preview_planned_decision(
+    *,
+    plan: FinancialPlan,
+    event_type: str,
+    transaction_year: int,
+    transaction_month: int,
+    impact: dict[str, Any],
+    assumption_name: str,
+    replaced_event: PlanEvent | None = None,
+    expense_entry_ids: list[int] | None = None,
+    income_entry_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Compara una decisión candidata sin persistir ningún efecto en el plan."""
+    assumption_set = get_assumption_set(name=assumption_name)
+    assumptions = serialize_assumptions(assumption_set)
+    current_prepared = build_projection_inputs(plan=plan)
+    payload = _decision_impact_event(
+        start_year=transaction_year,
+        start_month=transaction_month,
+        end_year=None,
+        impact=impact,
+    ) | {
+        "event_type": event_type,
+        "baseline_absorbed": transaction_year <= date.today().year,
+    }
+    simulated_prepared = build_projection_inputs(
+        plan=plan,
+        extra_events=[payload],
+        excluded_plan_event_ids={replaced_event.id} if replaced_event else None,
+        excluded_one_off_expense_ids=set(expense_entry_ids or []),
+        excluded_one_off_income_ids=set(income_entry_ids or []),
+    )
+    service = ProjectionService()
+    current = service.calculate(plan=plan, assumption_set=assumption_set, prepared=current_prepared)
+    simulated = service.calculate(
+        plan=plan,
+        assumption_set=assumption_set,
+        extra_events=[payload],
+        prepared=simulated_prepared,
+    )
+    sustainable_year = {
+        "current": earliest_sustainable_retirement_year(
+            inputs=current_prepared[0], assumptions=assumptions
+        ),
+        "simulated": earliest_sustainable_retirement_year(
+            inputs=simulated_prepared[0], assumptions=assumptions
+        ),
+    }
+    return {
+        "current": current,
+        "simulated": simulated,
+        "sustainable_year": sustainable_year,
+        "delta": comparison_delta(
+            current=current,
+            simulated=simulated,
+            sustainable_year=sustainable_year,
+        ),
+    }
 
 
 def _q2(value: Decimal) -> Decimal:

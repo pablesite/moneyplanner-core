@@ -1181,6 +1181,32 @@ class ScenarioApiTests(APITestCase):
         self.assertEqual(accept_response.status_code, status.HTTP_200_OK)
         self.assertEqual(accept_response.data["event"]["event_type"], "vehicle")
 
+    def test_planned_decision_preview_is_ephemeral(self):
+        response = self.client.post(
+            reverse("financial-plan-event-planned-decision-preview"),
+            {
+                "name": "Coche de prueba",
+                "event_type": "vehicle",
+                "decision_date": "2028-03-01",
+                "transaction_year": 2028,
+                "transaction_month": 3,
+                "impact": {
+                    "initial_outflow": "10000.00",
+                    "new_asset_value": "25000.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "15000.00",
+                    "new_debt_interest_rate": "0.0700",
+                    "new_debt_term_years": 5,
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("sustainable_year", response.data)
+        self.assertIn("delta", response.data)
+        self.assertEqual(PlanEvent.objects.count(), 0)
+
     def test_accepted_scenario_event_can_be_edited_and_resyncs_budget_lines(self):
         create_response = self.client.post(
             reverse("financial-plan-scenarios"), self.scenario_payload(), format="json"

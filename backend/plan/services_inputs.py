@@ -95,7 +95,12 @@ def expense_buckets(entries: Iterable[AnnualExpenseEntry]) -> ExpenseBuckets:
     return ExpenseBuckets(**{bucket.value: totals[bucket] for bucket in ExpenseBucket})
 
 
-def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
+def one_off_flows(
+    plan: FinancialPlan,
+    *,
+    excluded_expense_ids: set[int] | None = None,
+    excluded_income_ids: set[int] | None = None,
+) -> list[dict[str, Any]]:
     """Flujos puntuales (`one_off`) del presupuesto agregados por año fiscal para
     aplicarlos en la proyección en su año, en todo el horizonte.
 
@@ -106,6 +111,8 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
     cadenas para que `serialize_inputs`/`stable_hash` sean deterministas.
     """
     today = date.today()
+    excluded_expense_ids = excluded_expense_ids or set()
+    excluded_income_ids = excluded_income_ids or set()
     current_year = today.year
     current_month = today.month
     per_year: dict[int, dict[str, Decimal]] = {}
@@ -141,6 +148,8 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
         .exclude(cashflow_role=AnnualIncomeEntry.CashflowRole.ASSET_SALE)
     )
     for entry in incomes:
+        if entry.id in excluded_income_ids:
+            continue
         if applies(entry.fiscal_year, entry.target_month):
             bucket(entry.fiscal_year)["income"] += Decimal(entry.amount_annual)
 
@@ -164,6 +173,8 @@ def one_off_flows(plan: FinancialPlan) -> list[dict[str, Any]]:
     if asset_sale_groups:
         expenses = expenses.exclude(event_group__in=asset_sale_groups)
     for entry in expenses:
+        if entry.id in excluded_expense_ids:
+            continue
         if not applies(entry.fiscal_year, entry.target_month):
             continue
         amount = Decimal(entry.amount_annual)
