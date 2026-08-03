@@ -2,7 +2,7 @@
 
 Current feature status by area. Update this file whenever functionality status changes.
 
-**Last review:** 2026-07-26 | **Core Version:** see `VERSION`
+**Last review:** 2026-08-03 | **Core Version:** see `VERSION`
 
 ---
 
@@ -24,8 +24,14 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
+| Monthly Close Settlement - Phase 1 | Agent | Dynamic ownership from the previous 12 complete months of recurring income, with immutable monthly snapshots. | `tasks/monthly-close-settlement/phase-1-dynamic-ownership/backend.md` |
+| Monthly Close Settlement - Phase 2 | Agent | Opt-in profile, budget ownership, account routes, activation baseline and wallet cash/compensation boundary. | `tasks/monthly-close-settlement/phase-2-settlement-inputs/backend.md` |
+| Monthly Close Settlement - Phase 3 | Agent | Per-member economic engine, next-month reserves, compensations and transfer preview. | `tasks/monthly-close-settlement/phase-3-settlement-preview/backend.md` + `qa.md` |
+| Monthly Close Settlement - Phase 6 | Agent | Idempotent materialization and reconciliation of settlement transfers after SaaS v1 validation. | `tasks/monthly-close-settlement/phase-6-settlement-execution/backend.md` |
 
 > Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5, 8, 9) live in the SaaS repo root (`docs/tasks/financial-plan/`).
+
+> Monthly-close settlement overview and binding contract: `tasks/monthly-close-settlement/README.md` + `tasks/monthly-close-settlement/spec.md`. SaaS frontend phases 4-6 live in the root repo under `docs/tasks/monthly-close-settlement/`.
 
 ### Pre-production roadmap snapshot (by area)
 

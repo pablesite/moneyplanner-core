@@ -85,7 +85,14 @@ Conventions:
 - ⛔ Discarded — monthly close is sufficient for v1.
 
 ### Ownership transfers on close
-- `(Private - Future)` Add logic to calculate per-member transfer amounts at month close based on asset ownership. Option enabled only in settings and only for multi-member households.
+- 🔄 **Spec-driven implementation planned.** Canonical plan:
+  `core/docs/tasks/monthly-close-settlement/README.md` + `spec.md`.
+- Version 1 resolves fixed 50/50 and dynamic income-weighted ownership, reserves the next month's
+  recurring obligations in compatible accounts, separates physical wallets from member
+  compensations, and recommends transfers without creating ledger movements.
+- Version 2 materializes accepted recommendations as idempotent, auditable ledger transfers.
+- The feature is opt-in and disabled by default; individual users, common-pool households and
+  existing close flows remain unchanged until explicitly configured.
 
 ---
 
