@@ -68,10 +68,10 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/architecture/architecture.md` - estrategias y snapshots de ownership.
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - fuente de ingresos ejecutados.
-- [ ] `core/docs/project-status.md` - cerrar fase y habilitar la siguiente.
-- [ ] `docs/architecture/api-registry.md` - preview de reparto dinamico.
+- [x] `core/docs/architecture/architecture.md` - estrategias y snapshots de ownership.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - fuente de ingresos ejecutados.
+- [x] `core/docs/project-status.md` - cerrar fase y habilitar la siguiente.
+- [x] `docs/architecture/api-registry.md` - preview de reparto dinamico.
 
 ## Risks
 
@@ -86,13 +86,13 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Completion Criteria
 
-- [ ] Migraciones aplicadas y verificadas.
-- [ ] Existing ownerships retain `explicit_split` without behavioral changes.
-- [ ] Dynamic preview uses the immediately preceding 12 complete months.
-- [ ] Snapshot percentages reconcile to exactly 100.00%.
-- [ ] Frozen snapshots remain unchanged after source edits.
-- [ ] Cross-user references and reads are rejected.
-- [ ] All validation commands pass.
-- [ ] All required documentation updates done.
-- [ ] Spec moved to `terminados/`.
-- [ ] Commit created (Conventional Commits).
+- [x] Migraciones aplicadas y verificadas.
+- [x] Existing ownerships retain `explicit_split` without behavioral changes.
+- [x] Dynamic preview uses the immediately preceding 12 complete months.
+- [x] Snapshot percentages reconcile to exactly 100.00%.
+- [x] Frozen snapshots remain unchanged after source edits.
+- [x] Cross-user references and reads are rejected.
+- [x] All validation commands pass.
+- [x] All required documentation updates done.
+- [x] Spec moved to `terminados/`.
+- [x] Commit created (Conventional Commits).

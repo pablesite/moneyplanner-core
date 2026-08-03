@@ -19,6 +19,7 @@ from .services import (
     list_ownership_links_for_user,
     sync_ownership_link_from_payload,
 )
+from .services_allocations import resolve_ownership_allocation
 
 
 class FamilyMemberViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
@@ -42,7 +43,9 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        return qs.select_related("member").prefetch_related("splits", "splits__member")
+        return qs.select_related("member").prefetch_related(
+            "splits", "splits__member", "income_rules"
+        )
 
     def get_serializer_class(self):
         if self.action in ("list", "retrieve"):
@@ -51,6 +54,28 @@ class OwnershipViewSet(UserScopedQuerySetMixin, viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         delete_ownership(ownership=instance)
+
+    @action(detail=True, methods=["get"], url_path="allocation-preview")
+    def allocation_preview(self, request, pk=None):
+        ownership = self.get_object()
+        try:
+            fiscal_year = int(request.query_params["year"])
+            month = int(request.query_params["month"])
+            if fiscal_year < 1 or month < 1 or month > 12:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            return Response(
+                {"detail": "year y month son obligatorios y deben formar un periodo valido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            resolve_ownership_allocation(
+                ownership=ownership,
+                fiscal_year=fiscal_year,
+                month=month,
+                persist=True,
+            )
+        )
 
 
 class OwnershipLinkViewSet(UserScopedQuerySetMixin, viewsets.GenericViewSet):

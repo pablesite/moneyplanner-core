@@ -7,6 +7,18 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
 1. The specific implementation handoff for separating accounting account, category/subcategory, and annual budget line lives in `../roadmap/terminados/accounting-category-budget-separation-roadmap.md` (completed).
 2. That roadmap refines the execution-vs-plan boundary without changing Core ownership: `accounting` owns execution and movement classification, while `budget` remains the annual planning layer.
 
+## Recurring-income ownership source
+
+1. Monthly ownership allocation reads executed income from `LedgerEntry`, not annual budget values.
+2. An eligible row belongs to a `posted` `LedgerTransaction`, has `flow_family=income`, matches an
+   explicit category/subcategory rule and has an individual transaction `ownership` for a member of
+   the shared ownership being resolved.
+3. The transaction ownership is the economic owner of the income. The ownership of the receiving
+   cash account does not reclassify it, so an individual salary paid into a shared account remains
+   individual income.
+4. The resolver signs classified entries and transaction update timestamps into a source hash, uses
+   booking-date FX, and freezes the resulting allocation separately from the ledger.
+
 ## Problem to solve
 Core already has useful but separate execution layers:
 1. annual budget entries and monthly check-ins

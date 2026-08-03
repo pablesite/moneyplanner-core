@@ -5,7 +5,15 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from .models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
+from .models import (
+    FamilyMember,
+    Ownership,
+    OwnershipIncomeRule,
+    OwnershipLink,
+    OwnershipSplit,
+)
+
+DEFAULT_DYNAMIC_INCOME_RULES = [{"category_key": "salary", "subcategory_key": ""}]
 
 
 # Member services
@@ -140,12 +148,42 @@ def validate_split_percent(*, percent) -> None:
         raise DRFValidationError({"percent": "El porcentaje no puede ser > 100."})
 
 
-def validate_ownership_payload(*, user, kind, member, splits) -> None:
+def validate_income_rules(*, income_rules) -> None:
+    seen: set[tuple[str, str]] = set()
+    for rule in income_rules or []:
+        category_key = str(rule.get("category_key", "")).strip()
+        subcategory_key = str(rule.get("subcategory_key", "")).strip()
+        if not category_key:
+            raise DRFValidationError({"income_rules": "La categoria no puede estar vacia."})
+        key = (category_key, subcategory_key)
+        if key in seen:
+            raise DRFValidationError({"income_rules": "No puede haber reglas duplicadas."})
+        seen.add(key)
+
+
+def validate_ownership_payload(
+    *,
+    user,
+    kind,
+    member,
+    splits,
+    allocation_basis=Ownership.AllocationBasis.EXPLICIT_SPLIT,
+    income_rules=None,
+) -> None:
+    validate_income_rules(income_rules=income_rules)
     if kind == Ownership.Kind.INDIVIDUAL:
         if member is None:
             raise DRFValidationError({"member": "Obligatorio para titularidad individual."})
         if splits:
             raise DRFValidationError({"splits": "No se permiten splits en titularidad individual."})
+        if allocation_basis != Ownership.AllocationBasis.EXPLICIT_SPLIT:
+            raise DRFValidationError(
+                {"allocation_basis": "La titularidad individual siempre usa reparto explicito."}
+            )
+        if income_rules:
+            raise DRFValidationError(
+                {"income_rules": "No se permiten reglas de ingreso en titularidad individual."}
+            )
         return
 
     if kind != Ownership.Kind.SHARED:
@@ -188,11 +226,35 @@ def validate_ownership_write_payload(*, user, instance: Ownership | None, attrs:
     if splits is None and instance is not None:
         splits = [{"member_id": s.member_id, "percent": s.percent} for s in instance.splits.all()]
 
-    validate_ownership_payload(user=user, kind=kind, member=member, splits=splits)
+    allocation_basis = attrs.get(
+        "allocation_basis",
+        getattr(instance, "allocation_basis", Ownership.AllocationBasis.EXPLICIT_SPLIT),
+    )
+    income_rules = attrs.get("income_rules", None)
+    if income_rules is None and instance is not None:
+        income_rules = list(instance.income_rules.values("category_key", "subcategory_key"))
+    if allocation_basis == Ownership.AllocationBasis.RECURRING_INCOME_12M and not income_rules:
+        income_rules = DEFAULT_DYNAMIC_INCOME_RULES
+
+    validate_ownership_payload(
+        user=user,
+        kind=kind,
+        member=member,
+        splits=splits,
+        allocation_basis=allocation_basis,
+        income_rules=income_rules,
+    )
 
 
 def save_ownership(*, user, instance: Ownership | None, validated_data: dict) -> Ownership:
     splits = validated_data.pop("splits", None)
+    income_rules = validated_data.pop("income_rules", None)
+    allocation_basis = validated_data.get(
+        "allocation_basis",
+        getattr(instance, "allocation_basis", Ownership.AllocationBasis.EXPLICIT_SPLIT),
+    )
+    if allocation_basis == Ownership.AllocationBasis.RECURRING_INCOME_12M and not income_rules:
+        income_rules = DEFAULT_DYNAMIC_INCOME_RULES
 
     if instance is None:
         create_splits = splits or []
@@ -207,6 +269,10 @@ def save_ownership(*, user, instance: Ownership | None, validated_data: dict) ->
                     )
                     for split in create_splits
                 ]
+            )
+        if income_rules:
+            OwnershipIncomeRule.objects.bulk_create(
+                [OwnershipIncomeRule(ownership=ownership, **rule) for rule in income_rules]
             )
         return ownership
 
@@ -228,18 +294,28 @@ def save_ownership(*, user, instance: Ownership | None, validated_data: dict) ->
                 ]
             )
 
+    if income_rules is not None:
+        instance.income_rules.all().delete()
+        OwnershipIncomeRule.objects.bulk_create(
+            [OwnershipIncomeRule(ownership=instance, **rule) for rule in income_rules]
+        )
+
     return instance
 
 
 def ownership_is_in_use(ownership: Ownership) -> bool:
-    return OwnershipLink.objects.filter(ownership=ownership).exists()
+    return (
+        OwnershipLink.objects.filter(ownership=ownership).exists()
+        or ownership.ledger_transactions.exists()
+    )
 
 
-def assert_ownership_can_be_updated(ownership: Ownership) -> None:
+def assert_ownership_can_be_updated(ownership: Ownership, *, changed_fields: set[str]) -> None:
     if ownership.kind == Ownership.Kind.INDIVIDUAL:
         raise DRFValidationError({"detail": "La titularidad individual no se puede editar."})
 
-    if ownership_is_in_use(ownership):
+    allocation_fields = {"allocation_basis", "income_rules"}
+    if ownership_is_in_use(ownership) and not changed_fields.issubset(allocation_fields):
         raise DRFValidationError(
             {"detail": "Esta titularidad ya esta en uso. Crea una nueva en lugar de editarla."}
         )
@@ -264,7 +340,7 @@ def create_ownership(*, user, validated_data: dict) -> Ownership:
 @transaction.atomic
 def update_ownership(*, ownership: Ownership, user, validated_data: dict) -> Ownership:
     assert_member_belongs_to_user(user=user, member=ownership.member)
-    assert_ownership_can_be_updated(ownership)
+    assert_ownership_can_be_updated(ownership, changed_fields=set(validated_data))
     return save_ownership(user=user, instance=ownership, validated_data=validated_data)
 
 

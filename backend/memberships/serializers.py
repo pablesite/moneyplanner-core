@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
+from .models import FamilyMember, Ownership, OwnershipIncomeRule, OwnershipLink, OwnershipSplit
 from .services import (
     create_member_with_default_ownership,
     create_ownership,
@@ -36,14 +36,29 @@ class OwnershipSplitReadSerializer(serializers.ModelSerializer):
         fields = ["member", "percent"]
 
 
+class OwnershipIncomeRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OwnershipIncomeRule
+        fields = ["category_key", "subcategory_key"]
+
+
 class OwnershipReadSerializer(serializers.ModelSerializer):
     member = FamilyMemberMiniSerializer(read_only=True)
     splits = OwnershipSplitReadSerializer(many=True, read_only=True)
     is_in_use = serializers.SerializerMethodField()
+    income_rules = OwnershipIncomeRuleSerializer(many=True, read_only=True)
 
     class Meta:
         model = Ownership
-        fields = ["id", "kind", "member", "splits", "is_in_use"]
+        fields = [
+            "id",
+            "kind",
+            "member",
+            "splits",
+            "allocation_basis",
+            "income_rules",
+            "is_in_use",
+        ]
 
     def get_is_in_use(self, obj):
         return ownership_is_in_use(obj)
@@ -60,10 +75,11 @@ class OwnershipSplitInputSerializer(serializers.Serializer):
 
 class OwnershipWriteSerializer(serializers.ModelSerializer):
     splits = OwnershipSplitInputSerializer(many=True, required=False)
+    income_rules = OwnershipIncomeRuleSerializer(many=True, required=False)
 
     class Meta:
         model = Ownership
-        fields = ["id", "kind", "member", "splits"]
+        fields = ["id", "kind", "member", "splits", "allocation_basis", "income_rules"]
 
     def _get_user(self):
         req = self.context.get("request")

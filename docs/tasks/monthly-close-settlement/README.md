@@ -47,7 +47,7 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 
 | Fase | Objetivo | Specs |
 |------|----------|-------|
-| 1 | Ownership dinamico y snapshots mensuales | `phase-1-dynamic-ownership/backend.md` |
+| 1 | Ownership dinamico y snapshots mensuales | `phase-1-dynamic-ownership/terminados/backend.md` (completada) |
 | 2 | Configuracion, ownership presupuestario, destinos y apertura | `phase-2-settlement-inputs/backend.md` |
 | 3 | Motor de preview, reservas, compensaciones y recomendaciones | `phase-3-settlement-preview/backend.md` + `phase-3-settlement-preview/qa.md` |
 | 4 | UX de configuracion y readiness en SaaS | `../../../../docs/tasks/monthly-close-settlement/phase-4-configuration-ux/frontend.md` |

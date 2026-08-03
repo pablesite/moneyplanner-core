@@ -24,7 +24,6 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| Monthly Close Settlement - Phase 1 | Agent | Dynamic ownership from the previous 12 complete months of recurring income, with immutable monthly snapshots. | `tasks/monthly-close-settlement/phase-1-dynamic-ownership/backend.md` |
 | Monthly Close Settlement - Phase 2 | Agent | Opt-in profile, budget ownership, account routes, activation baseline and wallet cash/compensation boundary. | `tasks/monthly-close-settlement/phase-2-settlement-inputs/backend.md` |
 | Monthly Close Settlement - Phase 3 | Agent | Per-member economic engine, next-month reserves, compensations and transfer preview. | `tasks/monthly-close-settlement/phase-3-settlement-preview/backend.md` + `qa.md` |
 | Monthly Close Settlement - Phase 6 | Agent | Idempotent materialization and reconciliation of settlement transfers after SaaS v1 validation. | `tasks/monthly-close-settlement/phase-6-settlement-execution/backend.md` |
@@ -64,7 +63,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Monthly Close | ✅ | Integrated with budget and accounting. Automatic dual mode, DRAFT/FINALIZED/LOCKED lifecycle, and manual review completed on 2026-05-14. Bug fixes on 2026-05-20: bridge alignment and per-account liquidity reference. |
 | Data Input (annual entries) | ✅ | Module/route removed. Responsibilities moved to Budget (income/expense), Net Worth (assets/liabilities), and Account (portable data). |
 | Financial Guide / Coach v1 | ✅ | Phases 1-4 scoring implemented. Phase 5 removed until portfolio module exists. Guide at `/guia`; `/` redirects to `/patrimonio`. |
-| Family & Ownership (`FamilyMember`, `OwnershipLink`) | ✅ | Complete. |
+| Family & Ownership (`FamilyMember`, `OwnershipLink`) | ✅ | Explicit ownership remains the default. Shared ownership can opt into a previous-12-complete-month recurring-income allocation, with explicit income taxonomy, booking-date FX, quality/readiness output and immutable frozen monthly snapshots. Preview: `GET /api/ownerships/{id}/allocation-preview/?year=YYYY&month=M`; read-only audit: `audit_ownership_allocation`. Phase 1 spec archived under `tasks/monthly-close-settlement/phase-1-dynamic-ownership/terminados/`. |
 | Accounting Movements (`LedgerAccount` / `LedgerTransaction` / `LedgerEntry`) | ✅ | Cursor-paginated transaction API includes server filters, `activity_kind`, calculated `needs_review`, review counts and safe daily series scoped by accounts. Bidirectional and multi-currency investment flows, manual realized metadata, invested-capital aggregates and import traceability remain supported. |
 | Market data sync (FX, national + regional CPI) | ✅ | Phases 1-6 complete, `market_data_sync` worker live. Tables use server pagination (`page_size=50`) and frontend infinite scroll. |
 | DB Backup/Restore (pg_dump) | ✅ | Admin-only backup/restore endpoints based on pg_dump/pg_restore. Portable JSON flow removed from UI and replaced with this flow. |

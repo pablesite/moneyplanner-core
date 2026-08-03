@@ -57,6 +57,24 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    - `expense_execution_breakdown` for expense summary
    so Core frontends can render unbudgeted execution visibility without duplicating backend rules.
 
+## Ownership Allocation Contract
+
+1. `Ownership.allocation_basis` is backward compatible: existing and newly created ownerships use
+   `explicit_split` unless a shared ownership explicitly enables `recurring_income_12m`.
+2. Individual ownership is always 100% of its member. Dynamic allocation is valid only for shared
+   ownership and never mutates its persisted `OwnershipSplit` rows.
+3. Dynamic shares for a close month use the twelve complete natural months immediately before it.
+   The source is posted ledger income with individual transaction ownership and an explicit
+   `OwnershipIncomeRule`; `salary` is the default rule when dynamic allocation is first enabled.
+4. Every eligible entry is converted to the user's base currency with FX effective on its booking
+   date. Drafts, shared/unassigned transaction ownership and unmatched taxonomies do not contribute.
+5. `OwnershipAllocationSnapshot` stores the source window, source hash, quality status and member
+   shares. Draft snapshots can be recomputed; frozen snapshots are immutable inputs for finalized
+   monthly closes.
+6. Quality is `ready` with 12 observed months, `provisional` with 3-11 and `blocked` below 3, without
+   positive income, with negative member income or with missing FX. Blocked results expose no
+   effective percentages and never fall back silently to the old explicit split.
+
 ## Net Worth Investment Contribution Intervals
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
