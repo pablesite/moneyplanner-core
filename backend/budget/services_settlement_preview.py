@@ -1,0 +1,988 @@
+from __future__ import annotations
+
+import calendar
+import hashlib
+import json
+from collections import defaultdict
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+from typing import cast
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from django.db.models import Prefetch
+from django.utils import timezone
+
+from accounting.models import LedgerEntry, LedgerTransaction
+from core.services import build_fx_cache, convert_currency_cached
+from memberships.models import Ownership, OwnershipAllocationSnapshot, OwnershipLink
+from memberships.services_allocations import resolve_ownership_allocation
+from net_worth.services_assets_core import get_effective_asset_amount
+
+from .models import (
+    AnnualExpenseEntry,
+    MonthlyClose,
+    SettlementAccount,
+    SettlementProfile,
+    SettlementSnapshot,
+    SettlementTransferRecommendation,
+)
+from .services import effective_annual_expense_entries, planned_expense_monthly_distribution
+from .services_settlement import build_settlement_readiness
+
+ZERO = Decimal("0")
+HUNDRED = Decimal("100")
+MONEY_STEP = Decimal("0.01")
+
+
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(MONEY_STEP, rounding=ROUND_HALF_UP)
+
+
+def _money_string(value: Decimal) -> str:
+    return str(_money(value))
+
+
+def _next_period(year: int, month: int) -> tuple[int, int]:
+    return (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+def _month_end(year: int, month: int) -> date:
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _allocation(
+    *,
+    ownership: Ownership,
+    year: int,
+    month: int,
+    cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]],
+) -> tuple[dict[int, Decimal] | None, dict]:
+    key = (ownership.id, year, month)
+    if key not in cache:
+        result = resolve_ownership_allocation(
+            ownership=ownership,
+            fiscal_year=year,
+            month=month,
+            persist=False,
+        )
+        vector = None
+        if result["status"] != "blocked":
+            vector = {
+                int(row["member_id"]): Decimal(str(row["percent"])) for row in result["shares"]
+            }
+        cache[key] = vector, result
+    return cache[key]
+
+
+def _allocate(
+    amount: Decimal,
+    vector: dict[int, Decimal],
+) -> dict[int, Decimal]:
+    rows = sorted(vector.items())
+    allocated = ZERO
+    result: dict[int, Decimal] = {}
+    for index, (member_id, percent) in enumerate(rows):
+        share = amount - allocated if index == len(rows) - 1 else _money(amount * percent / HUNDRED)
+        result[member_id] = share
+        allocated += share
+    return result
+
+
+def _serialized_allocations(
+    cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]],
+) -> list[dict]:
+    rows = []
+    for (_ownership_id, _year, _month), (_vector, result) in sorted(cache.items()):
+        rows.append(result)
+    return rows
+
+
+def _opening_position(
+    *,
+    profile: SettlementProfile,
+    close_start: date,
+) -> tuple[
+    str, date, dict[tuple[int, int], Decimal], dict[int, Decimal], SettlementSnapshot | None
+]:
+    previous = (
+        SettlementSnapshot.objects.filter(
+            profile=profile,
+            status=SettlementSnapshot.Status.READY,
+            monthly_close__status__in=[MonthlyClose.Status.FINALIZED, MonthlyClose.Status.LOCKED],
+            period_end__lt=close_start,
+        )
+        .select_related("monthly_close")
+        .order_by("-period_end", "-id")
+        .first()
+    )
+    account_members: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
+    member_totals: dict[int, Decimal] = defaultdict(Decimal)
+    if previous is not None:
+        for row in previous.account_balances:
+            for share in row.get("closing_by_member", []):
+                amount = Decimal(str(share["amount"]))
+                key = (int(row["account_id"]), int(share["member_id"]))
+                account_members[key] += amount
+                member_totals[key[1]] += amount
+        return (
+            "previous_close",
+            previous.period_end + timedelta(days=1),
+            account_members,
+            member_totals,
+            previous,
+        )
+
+    if profile.activation_date is None:
+        return "activation", close_start, account_members, member_totals, None
+    for row in profile.opening_balances.all():
+        amount = Decimal(row.amount)
+        key = (row.account_id, row.member_id)
+        account_members[key] += amount
+        member_totals[row.member_id] += amount
+    for adjustment in profile.opening_adjustments.all():
+        amount = Decimal(adjustment.amount)
+        key = (adjustment.account_id, adjustment.member_id)
+        account_members[key] += amount
+        member_totals[adjustment.member_id] += amount
+    return (
+        "activation",
+        profile.activation_date + timedelta(days=1),
+        account_members,
+        member_totals,
+        None,
+    )
+
+
+def _account_ownerships(*, user, accounts: list[SettlementAccount]) -> dict[int, Ownership]:
+    links = (
+        OwnershipLink.objects.filter(
+            user=user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id__in=[row.asset_id for row in accounts],
+        )
+        .select_related("ownership", "ownership__member")
+        .prefetch_related("ownership__splits", "ownership__splits__member")
+    )
+    by_asset = {row.target_id: row.ownership for row in links}
+    return {row.id: by_asset[row.asset_id] for row in accounts if row.asset_id in by_asset}
+
+
+def _convert(
+    amount: Decimal,
+    currency: str,
+    base_currency: str,
+    rate_date: date,
+    fx_cache,
+) -> Decimal:
+    return Decimal(
+        convert_currency_cached(
+            amount,
+            currency,
+            base_currency,
+            rate_date=rate_date,
+            fx_cache=fx_cache,
+        )
+    )
+
+
+def _load_transactions(
+    *, user, ledger_account_ids: list[int], period_start: date, period_end: date
+) -> list[LedgerTransaction]:
+    if not ledger_account_ids or period_start > period_end:
+        return []
+    entries = LedgerEntry.objects.select_related("account").order_by("id")
+    return list(
+        LedgerTransaction.objects.filter(
+            user=user,
+            status=LedgerTransaction.Status.POSTED,
+            booking_date__gte=period_start,
+            booking_date__lte=period_end,
+            entries__account_id__in=ledger_account_ids,
+        )
+        .select_related("ownership", "ownership__member")
+        .prefetch_related(Prefetch("entries", queryset=entries))
+        .distinct()
+        .order_by("booking_date", "id")
+    )
+
+
+def _append_unique(rows: list[dict], row: dict) -> None:
+    if row not in rows:
+        rows.append(row)
+
+
+def _compute_movements(
+    *,
+    transactions: list[LedgerTransaction],
+    settlement_by_ledger: dict[int, SettlementAccount],
+    account_ownerships: dict[int, Ownership],
+    base_currency: str,
+    allocation_cache,
+    account_members: dict[tuple[int, int], Decimal],
+    member_totals: dict[int, Decimal],
+    physical_delta: dict[int, Decimal],
+    blockers: list[dict],
+) -> list[dict]:
+    compensations: list[dict] = []
+    currencies = {
+        base_currency,
+        "USD",
+        *(entry.currency.upper() for tx in transactions for entry in tx.entries.all()),
+    }
+    fx_cache = build_fx_cache(currencies)
+    for tx in transactions:
+        physical_by_member: dict[int, Decimal] = defaultdict(Decimal)
+        participant_entries = [
+            entry for entry in tx.entries.all() if entry.account_id in settlement_by_ledger
+        ]
+        participant_total = ZERO
+        for entry in participant_entries:
+            settlement_account = settlement_by_ledger[entry.account_id]
+            signed = (
+                Decimal(entry.amount)
+                if entry.side == LedgerEntry.Side.DEBIT
+                else -Decimal(entry.amount)
+            )
+            try:
+                converted = _convert(
+                    signed, entry.currency, base_currency, tx.booking_date, fx_cache
+                )
+            except DjangoValidationError:
+                _append_unique(
+                    blockers,
+                    {"code": "missing_fx_rate", "transaction_id": tx.id},
+                )
+                continue
+            physical_delta[settlement_account.id] += converted
+            participant_total += converted
+            ownership = account_ownerships.get(settlement_account.id)
+            if ownership is None:
+                continue
+            vector, allocation_result = _allocation(
+                ownership=ownership,
+                year=tx.booking_date.year,
+                month=tx.booking_date.month,
+                cache=allocation_cache,
+            )
+            if vector is None:
+                _append_unique(
+                    blockers,
+                    {
+                        "code": "allocation_blocked",
+                        "ownership_id": ownership.id,
+                        "quality_reasons": allocation_result["quality_reasons"],
+                    },
+                )
+                continue
+            for member_id, amount in _allocate(converted, vector).items():
+                account_members[(settlement_account.id, member_id)] += amount
+                physical_by_member[member_id] += amount
+
+        classified = [entry for entry in tx.entries.all() if entry.flow_family]
+        internal = (
+            tx.quick_entry_kind
+            in {
+                LedgerTransaction.QuickEntryKind.TRANSFER,
+                LedgerTransaction.QuickEntryKind.INVESTMENT,
+            }
+            and _money(participant_total) == ZERO
+        )
+        if internal:
+            continue
+        if (
+            tx.quick_entry_kind
+            in {
+                LedgerTransaction.QuickEntryKind.TRANSFER,
+                LedgerTransaction.QuickEntryKind.INVESTMENT,
+            }
+            and _money(participant_total) != ZERO
+        ):
+            _append_unique(
+                blockers,
+                {"code": "transaction_outside_perimeter", "transaction_id": tx.id},
+            )
+            continue
+
+        economic_delta = ZERO
+        for entry in classified:
+            amount = Decimal(entry.amount)
+            if entry.flow_family == LedgerEntry.FlowFamily.INCOME:
+                signed = amount if entry.side == LedgerEntry.Side.CREDIT else -amount
+            else:
+                signed = -amount if entry.side == LedgerEntry.Side.DEBIT else amount
+            try:
+                economic_delta += _convert(
+                    signed, entry.currency, base_currency, tx.booking_date, fx_cache
+                )
+            except DjangoValidationError:
+                _append_unique(
+                    blockers,
+                    {"code": "missing_fx_rate", "transaction_id": tx.id},
+                )
+        if _money(economic_delta) == ZERO:
+            continue
+        if tx.ownership is None:
+            _append_unique(
+                blockers,
+                {"code": "transaction_missing_ownership", "transaction_id": tx.id},
+            )
+            continue
+        vector, allocation_result = _allocation(
+            ownership=tx.ownership,
+            year=tx.booking_date.year,
+            month=tx.booking_date.month,
+            cache=allocation_cache,
+        )
+        if vector is None:
+            _append_unique(
+                blockers,
+                {
+                    "code": "allocation_blocked",
+                    "ownership_id": tx.ownership_id,
+                    "quality_reasons": allocation_result["quality_reasons"],
+                },
+            )
+            continue
+        economic_by_member = _allocate(economic_delta, vector)
+        all_members = sorted(set(economic_by_member) | set(physical_by_member))
+        compensation_rows = []
+        for member_id in all_members:
+            economic = economic_by_member.get(member_id, ZERO)
+            member_totals[member_id] += economic
+            difference = _money(economic - physical_by_member.get(member_id, ZERO))
+            if difference:
+                compensation_rows.append(
+                    {"member_id": member_id, "amount": _money_string(difference)}
+                )
+        if compensation_rows:
+            compensations.append(
+                {
+                    "transaction_id": tx.id,
+                    "booking_date": tx.booking_date.isoformat(),
+                    "description": tx.description,
+                    "ownership_id": tx.ownership_id,
+                    "members": compensation_rows,
+                }
+            )
+    return compensations
+
+
+def _compute_reserves(
+    *,
+    user,
+    target_year: int,
+    target_month: int,
+    account_by_id: dict[int, SettlementAccount],
+    account_ownerships: dict[int, Ownership],
+    base_currency: str,
+    allocation_cache,
+    blockers: list[dict],
+    warnings: list[dict],
+) -> tuple[list[dict], dict[tuple[int, int], Decimal]]:
+    entries = list(
+        effective_annual_expense_entries(user=user, fiscal_year=target_year)
+        .filter(is_active=True)
+        .select_related("ownership", "ownership__member", "settlement_account")
+        .prefetch_related("ownership__splits", "ownership__splits__member")
+        .order_by("id")
+    )
+    requirements: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
+    rows: list[dict] = []
+    fx_cache = build_fx_cache({base_currency, "USD", *(entry.currency for entry in entries)})
+    supported = {
+        AnnualExpenseEntry.CashflowRole.OPERATING,
+        AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        AnnualExpenseEntry.CashflowRole.SAVINGS,
+        AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    }
+    for entry in entries:
+        distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=target_year)
+        amount = distribution.get(target_month)
+        if not amount or amount <= ZERO:
+            continue
+        if (
+            entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
+            or entry.expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
+            or entry.cashflow_role == AnnualExpenseEntry.CashflowRole.TRANSFER
+        ):
+            continue
+        if entry.cashflow_role not in supported:
+            warnings.append(
+                {"code": "unsupported_budget_role", "entry_id": entry.id, "name": entry.name}
+            )
+            continue
+        destination = account_by_id.get(entry.settlement_account_id)
+        if destination is None or entry.ownership is None:
+            _append_unique(
+                blockers,
+                {"code": "reserve_missing_inputs", "entry_id": entry.id, "name": entry.name},
+            )
+            continue
+        expected_role = (
+            SettlementAccount.Role.ALLOCATION_DESTINATION
+            if entry.cashflow_role
+            in {AnnualExpenseEntry.CashflowRole.SAVINGS, AnnualExpenseEntry.CashflowRole.INVESTMENT}
+            else SettlementAccount.Role.OPERATING
+        )
+        if destination.role != expected_role:
+            _append_unique(
+                blockers,
+                {
+                    "code": "invalid_reserve_destination_role",
+                    "entry_id": entry.id,
+                    "settlement_account_id": destination.id,
+                },
+            )
+            continue
+        entry_vector, entry_result = _allocation(
+            ownership=entry.ownership,
+            year=target_year,
+            month=target_month,
+            cache=allocation_cache,
+        )
+        destination_ownership = account_ownerships.get(destination.id)
+        if destination_ownership is None:
+            continue
+        destination_vector, destination_result = _allocation(
+            ownership=destination_ownership,
+            year=target_year,
+            month=target_month,
+            cache=allocation_cache,
+        )
+        if entry_vector is None or destination_vector is None:
+            failed = entry_result if entry_vector is None else destination_result
+            _append_unique(
+                blockers,
+                {
+                    "code": "allocation_blocked",
+                    "ownership_id": failed["ownership_id"],
+                    "quality_reasons": failed["quality_reasons"],
+                },
+            )
+            continue
+        if entry_vector != destination_vector:
+            _append_unique(
+                blockers,
+                {
+                    "code": "settlement_ownership_mismatch",
+                    "entry_id": entry.id,
+                    "settlement_account_id": destination.id,
+                },
+            )
+            continue
+        try:
+            converted = _convert(
+                Decimal(amount),
+                entry.currency,
+                base_currency,
+                date(target_year, target_month, 1),
+                fx_cache,
+            )
+        except DjangoValidationError:
+            _append_unique(blockers, {"code": "missing_budget_fx_rate", "entry_id": entry.id})
+            continue
+        member_rows = []
+        for member_id, member_amount in _allocate(converted, entry_vector).items():
+            requirements[(destination.id, member_id)] += member_amount
+            member_rows.append({"member_id": member_id, "amount": _money_string(member_amount)})
+        rows.append(
+            {
+                "entry_id": entry.id,
+                "name": entry.name,
+                "kind": (
+                    "allocation"
+                    if expected_role == SettlementAccount.Role.ALLOCATION_DESTINATION
+                    else "reserve"
+                ),
+                "cashflow_role": entry.cashflow_role,
+                "ownership_id": entry.ownership_id,
+                "settlement_account_id": destination.id,
+                "amount": _money_string(converted),
+                "currency": base_currency,
+                "members": member_rows,
+            }
+        )
+    return rows, requirements
+
+
+def _route_transfers(
+    *,
+    accounts: list[SettlementAccount],
+    current: dict[tuple[int, int], Decimal],
+    targets: dict[tuple[int, int], Decimal],
+    account_ownerships: dict[int, Ownership],
+    base_currency: str,
+) -> list[dict]:
+    current_total = {
+        account.id: sum(
+            (
+                amount
+                for (account_id, _member_id), amount in current.items()
+                if account_id == account.id
+            ),
+            ZERO,
+        )
+        for account in accounts
+    }
+    target_total = {
+        account.id: sum(
+            (
+                amount
+                for (account_id, _member_id), amount in targets.items()
+                if account_id == account.id
+            ),
+            ZERO,
+        )
+        for account in accounts
+    }
+    surplus = [
+        [account.id, _money(current_total[account.id] - target_total[account.id])]
+        for account in accounts
+        if _money(current_total[account.id] - target_total[account.id]) > ZERO
+    ]
+    deficit = [
+        [account.id, _money(target_total[account.id] - current_total[account.id])]
+        for account in accounts
+        if _money(target_total[account.id] - current_total[account.id]) > ZERO
+    ]
+    account_by_id = {account.id: account for account in accounts}
+    member_deficits: dict[int, dict[int, Decimal]] = {
+        account.id: {
+            member_id: _money(target - current.get((account.id, member_id), ZERO))
+            for (target_account, member_id), target in sorted(targets.items())
+            if target_account == account.id
+            and _money(target - current.get((account.id, member_id), ZERO)) > ZERO
+        }
+        for account in accounts
+    }
+    rows: list[dict] = []
+    source_index = 0
+    destination_index = 0
+    while source_index < len(surplus) and destination_index < len(deficit):
+        source_id, source_amount = surplus[source_index]
+        destination_id, destination_amount = deficit[destination_index]
+        amount = min(source_amount, destination_amount)
+        destination = account_by_id[destination_id]
+        remaining = amount
+        for member_id in sorted(member_deficits[destination_id]):
+            if remaining <= ZERO:
+                break
+            member_amount = member_deficits[destination_id][member_id]
+            if member_amount <= ZERO:
+                continue
+            routed = min(remaining, member_amount)
+            rows.append(
+                {
+                    "from_account_id": source_id,
+                    "to_account_id": destination_id,
+                    "member_id": member_id,
+                    "ownership_id": account_ownerships[destination_id].id,
+                    "amount": _money_string(routed),
+                    "currency": base_currency,
+                    "reason": {
+                        SettlementAccount.Role.OPERATING: "next_month_reserve",
+                        SettlementAccount.Role.ALLOCATION_DESTINATION: "planned_allocation",
+                        SettlementAccount.Role.PERSONAL_DESTINATION: "member_residual",
+                        SettlementAccount.Role.PHYSICAL_CASH: "physical_cash",
+                    }[destination.role],
+                }
+            )
+            member_deficits[destination_id][member_id] = _money(member_amount - routed)
+            remaining = _money(remaining - routed)
+        if remaining > ZERO:
+            rows.append(
+                {
+                    "from_account_id": source_id,
+                    "to_account_id": destination_id,
+                    "member_id": destination.member_id,
+                    "ownership_id": account_ownerships[destination_id].id,
+                    "amount": _money_string(remaining),
+                    "currency": base_currency,
+                    "reason": "settlement",
+                }
+            )
+        surplus[source_index][1] = _money(source_amount - amount)
+        deficit[destination_index][1] = _money(destination_amount - amount)
+        if surplus[source_index][1] == ZERO:
+            source_index += 1
+        if deficit[destination_index][1] == ZERO:
+            destination_index += 1
+    return rows
+
+
+def _serialize_snapshot(snapshot: SettlementSnapshot) -> dict:
+    recommendations = [
+        {
+            "id": row.id,
+            "from_account_id": row.from_account_id,
+            "to_account_id": row.to_account_id,
+            "member_id": row.member_id,
+            "ownership_id": row.ownership_id,
+            "amount": _money_string(Decimal(row.amount)),
+            "currency": row.currency,
+            "reason": row.reason,
+        }
+        for row in snapshot.recommendations.all()
+    ]
+    return {
+        "status": "finalized",
+        "calculation_status": snapshot.status,
+        "is_frozen": snapshot.is_frozen,
+        "computed_at": snapshot.computed_at.isoformat(),
+        "period": {
+            "start": snapshot.period_start.isoformat(),
+            "end": snapshot.period_end.isoformat(),
+        },
+        "target_period": {"year": snapshot.target_year, "month": snapshot.target_month},
+        "base_currency": snapshot.base_currency,
+        "opening_source": snapshot.opening_source,
+        "allocations": snapshot.allocations,
+        "economic_balances": snapshot.economic_balances,
+        "accounts": snapshot.account_balances,
+        "reserves": snapshot.reserves,
+        "compensations": snapshot.compensations,
+        "recommendations": recommendations,
+        "reconciliation": snapshot.reconciliation,
+        "quality": {"blockers": snapshot.blockers, "warnings": snapshot.warnings},
+        "source_hash": snapshot.source_hash,
+    }
+
+
+def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> dict:
+    close = MonthlyClose.objects.filter(user=user, fiscal_year=fiscal_year, month=month).first()
+    if close is not None and close.status in {
+        MonthlyClose.Status.FINALIZED,
+        MonthlyClose.Status.LOCKED,
+    }:
+        snapshot = getattr(close, "settlement_snapshot", None)
+        if snapshot is not None:
+            return _serialize_snapshot(snapshot)
+
+    profile = SettlementProfile.objects.filter(user=user).first()
+    if profile is None or not profile.is_enabled:
+        return {
+            "status": "disabled",
+            "is_frozen": False,
+            "quality": {"blockers": [], "warnings": []},
+        }
+
+    close_start = date(fiscal_year, month, 1)
+    close_end = _month_end(fiscal_year, month)
+    target_year, target_month = _next_period(fiscal_year, month)
+    readiness = build_settlement_readiness(
+        user=user,
+        fiscal_year=target_year,
+        month=target_month,
+        persist_status=False,
+        balance_date=close_end,
+    )
+    blockers = list(cast(list[dict], readiness["blockers"]))
+    warnings = list(cast(list[dict], readiness["warnings"]))
+    accounts = list(profile.accounts.select_related("asset", "member").order_by("id"))
+    account_by_id = {row.id: row for row in accounts}
+    account_ownerships = _account_ownerships(user=user, accounts=accounts)
+    for account in accounts:
+        if account.currency != profile.base_currency:
+            _append_unique(
+                blockers,
+                {
+                    "code": "unsupported_settlement_currency",
+                    "account_id": account.id,
+                    "currency": account.currency,
+                },
+            )
+
+    opening_source, movement_start, account_members, member_totals, previous = _opening_position(
+        profile=profile, close_start=close_start
+    )
+    if previous is None and profile.activation_date and profile.activation_date > close_end:
+        _append_unique(blockers, {"code": "settlement_not_active_for_period"})
+    settlement_by_ledger = {
+        int(account.asset.accounting_account_id): account
+        for account in accounts
+        if account.asset.accounting_account_id is not None
+    }
+    transactions = _load_transactions(
+        user=user,
+        ledger_account_ids=list(settlement_by_ledger),
+        period_start=movement_start,
+        period_end=close_end,
+    )
+    allocation_cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]] = {}
+    physical_delta: dict[int, Decimal] = defaultdict(Decimal)
+    compensations = _compute_movements(
+        transactions=transactions,
+        settlement_by_ledger=settlement_by_ledger,
+        account_ownerships=account_ownerships,
+        base_currency=profile.base_currency,
+        allocation_cache=allocation_cache,
+        account_members=account_members,
+        member_totals=member_totals,
+        physical_delta=physical_delta,
+        blockers=blockers,
+    )
+
+    reserves, requirements = _compute_reserves(
+        user=user,
+        target_year=target_year,
+        target_month=target_month,
+        account_by_id=account_by_id,
+        account_ownerships=account_ownerships,
+        base_currency=profile.base_currency,
+        allocation_cache=allocation_cache,
+        blockers=blockers,
+        warnings=warnings,
+    )
+
+    current = dict(account_members)
+    account_rows = []
+    for account in accounts:
+        opening_total = (
+            sum(
+                (
+                    amount
+                    for (account_id, _member_id), amount in account_members.items()
+                    if account_id == account.id
+                ),
+                ZERO,
+            )
+            - physical_delta[account.id]
+        )
+        expected = opening_total + physical_delta[account.id]
+        if account.role == SettlementAccount.Role.PHYSICAL_CASH:
+            modeled = get_effective_asset_amount(asset=account.asset, as_of_date=close_end)
+            activation_gap = Decimal(account.modeled_balance_at_activation or ZERO) - Decimal(
+                account.accepted_physical_balance or ZERO
+            )
+            observed = modeled - activation_gap
+        else:
+            observed = get_effective_asset_amount(asset=account.asset, as_of_date=close_end)
+        difference = _money(Decimal(observed) - expected)
+        if difference:
+            _append_unique(
+                blockers,
+                {
+                    "code": "unreconciled_account_balance",
+                    "account_id": account.id,
+                    "expected": _money_string(expected),
+                    "observed": _money_string(Decimal(observed)),
+                    "difference": _money_string(difference),
+                },
+            )
+        closing_members = [
+            {"member_id": member_id, "amount": _money_string(amount)}
+            for (account_id, member_id), amount in sorted(current.items())
+            if account_id == account.id
+        ]
+        account_rows.append(
+            {
+                "account_id": account.id,
+                "asset_id": account.asset_id,
+                "name": account.asset.name,
+                "role": account.role,
+                "ownership_id": account_ownerships.get(account.id).id
+                if account.id in account_ownerships
+                else None,
+                "opening": _money_string(opening_total),
+                "physical_delta": _money_string(physical_delta[account.id]),
+                "observed_close": _money_string(Decimal(observed)),
+                "closing_by_member": closing_members,
+            }
+        )
+
+    targets: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
+    for account in accounts:
+        if account.role in {
+            SettlementAccount.Role.PHYSICAL_CASH,
+            SettlementAccount.Role.ALLOCATION_DESTINATION,
+        }:
+            for (account_id, member_id), amount in current.items():
+                if account_id == account.id:
+                    targets[(account.id, member_id)] += amount
+    for key, amount in requirements.items():
+        targets[key] += amount
+
+    primary_personal = {
+        account.member_id: account
+        for account in accounts
+        if account.role == SettlementAccount.Role.PERSONAL_DESTINATION
+        and account.is_primary
+        and account.currency == profile.base_currency
+    }
+    for member_id, economic_total in member_totals.items():
+        allocated_target = sum(
+            (
+                amount
+                for (account_id, target_member), amount in targets.items()
+                if target_member == member_id
+            ),
+            ZERO,
+        )
+        destination = primary_personal.get(member_id)
+        if destination is not None:
+            targets[(destination.id, member_id)] += economic_total - allocated_target
+
+    recommendations = (
+        []
+        if blockers
+        else _route_transfers(
+            accounts=accounts,
+            current=current,
+            targets=targets,
+            account_ownerships=account_ownerships,
+            base_currency=profile.base_currency,
+        )
+    )
+    for row in account_rows:
+        account_id = int(row["account_id"])
+        row["target_close"] = _money_string(
+            sum(
+                (
+                    amount
+                    for (target_account, _member), amount in targets.items()
+                    if target_account == account_id
+                ),
+                ZERO,
+            )
+        )
+        row["target_by_member"] = [
+            {"member_id": member_id, "amount": _money_string(amount)}
+            for (target_account, member_id), amount in sorted(targets.items())
+            if target_account == account_id
+        ]
+
+    physical_total = sum((Decimal(str(row["observed_close"])) for row in account_rows), ZERO)
+    economic_total = sum(member_totals.values(), ZERO)
+    target_total = sum(targets.values(), ZERO)
+    reconciliation = {
+        "physical_total": _money_string(physical_total),
+        "economic_total": _money_string(economic_total),
+        "target_total": _money_string(target_total),
+        "physical_vs_economic": _money_string(physical_total - economic_total),
+        "economic_vs_target": _money_string(economic_total - target_total),
+    }
+    if _money(physical_total - economic_total):
+        _append_unique(blockers, {"code": "household_total_mismatch", **reconciliation})
+
+    economic_rows = [
+        {"member_id": member_id, "closing": _money_string(amount)}
+        for member_id, amount in sorted(member_totals.items())
+    ]
+    result = {
+        "status": "not_ready" if blockers else "ready",
+        "calculation_status": "not_ready" if blockers else "ready",
+        "is_frozen": False,
+        "computed_at": timezone.now().isoformat(),
+        "period": {"start": movement_start.isoformat(), "end": close_end.isoformat()},
+        "target_period": {"year": target_year, "month": target_month},
+        "base_currency": profile.base_currency,
+        "opening_source": opening_source,
+        "allocations": _serialized_allocations(allocation_cache),
+        "economic_balances": economic_rows,
+        "accounts": account_rows,
+        "reserves": reserves,
+        "compensations": compensations,
+        "recommendations": recommendations if not blockers else [],
+        "reconciliation": reconciliation,
+        "quality": {"blockers": blockers, "warnings": warnings},
+    }
+    result["source_hash"] = hashlib.sha256(
+        json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return result
+
+
+@transaction.atomic
+def freeze_monthly_close_settlement(
+    *, monthly_close: MonthlyClose, user
+) -> SettlementSnapshot | None:
+    profile = SettlementProfile.objects.filter(user=user, is_enabled=True).first()
+    if profile is None:
+        return None
+    preview = compute_monthly_close_settlement(
+        user=user,
+        fiscal_year=monthly_close.fiscal_year,
+        month=monthly_close.month,
+    )
+    frozen_allocations: list[OwnershipAllocationSnapshot] = []
+    if preview["status"] == "ready":
+        for row in preview["allocations"]:
+            ownership = Ownership.objects.get(id=row["ownership_id"], user=user)
+            if ownership.allocation_basis != Ownership.AllocationBasis.RECURRING_INCOME_12M:
+                continue
+            resolve_ownership_allocation(
+                ownership=ownership,
+                fiscal_year=int(row["fiscal_year"]),
+                month=int(row["month"]),
+                persist=True,
+                freeze=True,
+            )
+            frozen_allocations.append(
+                OwnershipAllocationSnapshot.objects.get(
+                    ownership=ownership,
+                    fiscal_year=int(row["fiscal_year"]),
+                    month=int(row["month"]),
+                )
+            )
+        preview = compute_monthly_close_settlement(
+            user=user,
+            fiscal_year=monthly_close.fiscal_year,
+            month=monthly_close.month,
+        )
+    snapshot = SettlementSnapshot.objects.create(
+        monthly_close=monthly_close,
+        profile=profile,
+        status=(
+            SettlementSnapshot.Status.READY
+            if preview["calculation_status"] == "ready"
+            else SettlementSnapshot.Status.NOT_READY
+        ),
+        base_currency=preview["base_currency"],
+        period_start=date.fromisoformat(preview["period"]["start"]),
+        period_end=date.fromisoformat(preview["period"]["end"]),
+        target_year=int(preview["target_period"]["year"]),
+        target_month=int(preview["target_period"]["month"]),
+        opening_source=preview["opening_source"],
+        source_hash=preview["source_hash"],
+        allocations=preview["allocations"],
+        economic_balances=preview["economic_balances"],
+        account_balances=preview["accounts"],
+        reserves=preview["reserves"],
+        compensations=preview["compensations"],
+        blockers=preview["quality"]["blockers"],
+        warnings=preview["quality"]["warnings"],
+        reconciliation=preview["reconciliation"],
+    )
+    snapshot.allocation_snapshots.set(frozen_allocations)
+    SettlementTransferRecommendation.objects.bulk_create(
+        [
+            SettlementTransferRecommendation(
+                snapshot=snapshot,
+                from_account_id=row["from_account_id"],
+                to_account_id=row["to_account_id"],
+                member_id=row["member_id"],
+                ownership_id=row["ownership_id"],
+                amount=Decimal(row["amount"]),
+                currency=row["currency"],
+                reason=row["reason"],
+                sort_order=index,
+            )
+            for index, row in enumerate(preview["recommendations"])
+        ]
+    )
+    return snapshot
+
+
+@transaction.atomic
+def clear_monthly_close_settlement(*, monthly_close: MonthlyClose) -> None:
+    snapshot = getattr(monthly_close, "settlement_snapshot", None)
+    if snapshot is None:
+        return
+    allocations = list(snapshot.allocation_snapshots.all())
+    snapshot.delete()
+    for allocation in allocations:
+        if not allocation.settlement_snapshots.exists():
+            allocation.is_frozen = False
+            allocation.frozen_at = None
+            allocation.save(update_fields=["is_frozen", "frozen_at", "updated_at"])

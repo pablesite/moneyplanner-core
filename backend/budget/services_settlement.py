@@ -245,6 +245,7 @@ def _check_account_readiness(
         blockers.append({"code": "missing_operating_account"})
 
     account_ownerships: dict[int, Ownership] = {}
+    has_opening_baseline = profile.opening_balances.exists()
     for account in accounts:
         ownership = _ownership_for_asset(user=user, asset_id=account.asset_id)
         if ownership is None:
@@ -258,7 +259,7 @@ def _check_account_readiness(
             )
             continue
         account_ownerships[account.id] = ownership
-        if account.role == SettlementAccount.Role.PHYSICAL_CASH:
+        if account.role == SettlementAccount.Role.PHYSICAL_CASH and not has_opening_baseline:
             modeled_balance = get_effective_asset_amount(asset=account.asset, as_of_date=as_of_date)
             accepted_balance = Decimal(account.accepted_physical_balance or 0)
             has_wallet_adjustment = profile.opening_adjustments.filter(

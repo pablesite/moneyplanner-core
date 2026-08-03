@@ -62,8 +62,8 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/tasks/monthly-close-settlement/spec.md` - registrar excepciones descubiertas.
-- [ ] `core/docs/project-status.md` - resultado del gate backend.
+- [x] `core/docs/tasks/monthly-close-settlement/spec.md` - registrar excepciones descubiertas.
+- [x] `core/docs/project-status.md` - resultado del gate backend.
 
 ## Risks
 
@@ -74,10 +74,10 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Completion Criteria
 
-- [ ] All matrix scenarios pass with per-member and household invariants.
-- [ ] The disabled-mode regression suite is green.
-- [ ] Query count does not grow linearly with transactions or budget rows.
-- [ ] All validation commands pass.
-- [ ] All required documentation updates done.
-- [ ] Spec moved to `terminados/`.
-- [ ] Commit created (Conventional Commits).
+- [x] All matrix scenarios pass with per-member and household invariants.
+- [x] The disabled-mode regression suite is green.
+- [x] Query count does not grow linearly with transactions or budget rows.
+- [x] All validation commands pass.
+- [x] All required documentation updates done.
+- [x] Spec moved to `terminados/`.
+- [x] Commit created (Conventional Commits).

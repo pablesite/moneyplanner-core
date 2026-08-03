@@ -354,6 +354,8 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         suggestions_income = {str(k): str(v) for k, v in income_dist.items()}
         suggestions_expense = {str(k): str(v) for k, v in expense_dist.items()}
 
+    from .services_settlement_preview import compute_monthly_close_settlement
+
     return {
         "monthly_close": {
             "id": monthly_close.id,
@@ -415,6 +417,11 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
             "income": suggestions_income,
             "expense": suggestions_expense,
         },
+        "ownership_settlement": compute_monthly_close_settlement(
+            user=user,
+            fiscal_year=fiscal_year,
+            month=month,
+        ),
     }
 
 
@@ -437,6 +444,9 @@ def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose
         mc.expense_total_snapshot = Decimal(state["expense"]["executed"])
         liq = state["liquidity"].get("current_total")
         mc.liquidity_total_snapshot = Decimal(liq) if liq is not None else None
+        from .services_settlement_preview import freeze_monthly_close_settlement
+
+        freeze_monthly_close_settlement(monthly_close=mc, user=user)
         mc.save()
         try:
             from plan.services_monthly_close import MonthlyClosePlanService
@@ -461,6 +471,9 @@ def reopen_monthly_close(*, monthly_close: MonthlyClose) -> MonthlyClose:
         mc.income_total_snapshot = None
         mc.expense_total_snapshot = None
         mc.liquidity_total_snapshot = None
+        from .services_settlement_preview import clear_monthly_close_settlement
+
+        clear_monthly_close_settlement(monthly_close=mc)
         mc.save()
         return mc
 

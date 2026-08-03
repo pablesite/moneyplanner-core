@@ -96,6 +96,30 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 7. Opening adjustments are signed member/account entries that must sum exactly zero. They carry
    prior fictitious wallet compensations into the economic baseline without representing liquidity.
 
+## Monthly-close Settlement Engine
+
+1. `compute_monthly_close_settlement` advances the previous finalized settlement position, or the
+   activation baseline for the first close, through posted ledger movements inside the configured
+   account perimeter. It never writes ledger movements.
+2. External income and expense change each member's economic balance using transaction ownership.
+   Internal transfers are economically neutral and only relocate the member/account position.
+3. The next complete month supplies recurrent operating reserves and active temporary commitments.
+   Savings and investment rows increase their explicit allocation destination; one-off and transfer
+   rows are excluded, and unsupported roles are returned as warnings.
+4. Every obligation and destination uses the same effective ownership resolver for its target month.
+   Missing ownership, incompatible vectors, FX gaps, perimeter escapes and unexplained physical
+   balance deltas make the result `not_ready`; the existing close can still be finalized.
+5. The solver retains reserves in operating accounts, preserves existing physical cash and allocation
+   positions, adds planned allocations, and routes the remaining member balance to primary personal
+   destinations. Negative personal targets remain signed and therefore expose inverse contributions.
+6. `SettlementSnapshot` freezes allocations, economic/account balances, reserves, compensations,
+   reconciliation and quality when `MonthlyClose` is finalized. Recommendations are stored as
+   `SettlementTransferRecommendation` route rows. Reopening deletes only that close's settlement
+   snapshot and releases dynamic allocation snapshots not referenced by another finalized close.
+7. `compute_monthly_close_state` exposes the additive `ownership_settlement` object with status
+   `disabled`, `not_ready`, `ready` or `finalized`. Disabled profiles retain the previous lifecycle
+   and have no additional readiness requirements.
+
 ## Net Worth Investment Contribution Intervals
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
@@ -235,6 +259,7 @@ Key services in `budget/services_monthly_close.py`:
 - `compute_smart_distribution` — proportional distribution of residual net cashflow across uncovered entries
 - `apply_distribution_to_checkins` — persists suggestions as checkins with `status=estimated`
 - `finalize_monthly_close / reopen_monthly_close / lock_monthly_close` — lifecycle transitions with `select_for_update`
+- `compute_monthly_close_settlement` — per-member economic position, next-month targets and transfer preview
 
 Checkin writes (create + update) in `budget/views.py` and `net_worth/views.py` are blocked with `403` if a `MonthlyClose` with status `finalized` or `locked` exists for that period.
 

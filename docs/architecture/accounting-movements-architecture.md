@@ -30,6 +30,13 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
    adjustments preserve prior member compensation separately.
 4. Account ownership continues to come from `OwnershipLink`. A budget route is ready only when its
    destination vector equals the expense ownership vector for the target month.
+5. A posted external income/expense changes the economic position with the transaction ownership,
+   regardless of the ownership of the physical account entry. The difference is exposed as a
+   transaction-traced member compensation.
+6. Transfers whose asset entries remain inside the configured perimeter never create household or
+   member income/expense. They only change physical location and therefore the transfer routes still
+   required at close. Transfers that cross the perimeter block an exact preview instead of being
+   guessed from the liquidity delta.
 
 ## Problem to solve
 Core already has useful but separate execution layers:

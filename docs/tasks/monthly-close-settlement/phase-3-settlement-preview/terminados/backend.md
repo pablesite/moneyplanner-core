@@ -74,12 +74,12 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/architecture/architecture.md` - algoritmo, lifecycle y snapshots.
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - neutralidad de transferencias.
-- [ ] `core/docs/roadmap/product-roadmap.md` - ownership settlement pasa a implementacion.
-- [ ] `docs/architecture/api-registry.md` - payload `ownership_settlement`.
-- [ ] `docs/project-status.md` - resolver pendiente de residual/perimetro por titular.
-- [ ] `core/docs/project-status.md` - cerrar version backend de preview.
+- [x] `core/docs/architecture/architecture.md` - algoritmo, lifecycle y snapshots.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - neutralidad de transferencias.
+- [x] `core/docs/roadmap/product-roadmap.md` - ownership settlement pasa a implementacion.
+- [x] `docs/architecture/api-registry.md` - payload `ownership_settlement`.
+- [x] `docs/project-status.md` - resolver pendiente de residual/perimetro por titular.
+- [x] `core/docs/project-status.md` - cerrar version backend de preview.
 
 ## Risks
 
@@ -93,15 +93,15 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Completion Criteria
 
-- [ ] The combined dynamic-share plus 50/50 example reconciles to the cent.
-- [ ] Personal-account payment of a shared expense produces the expected compensation.
-- [ ] Shared-account payment of an individual expense charges only that member economically.
-- [ ] Internal transfers do not change household or member economic totals.
-- [ ] Every target account has compatible effective ownership.
-- [ ] Disabled and not-ready profiles do not regress normal close finalization.
-- [ ] Finalized snapshots remain immutable and reopen behavior is explicit.
-- [ ] Performance/query assertions pass for a 12-month realistic fixture.
-- [ ] All validation commands pass.
-- [ ] All required documentation updates done.
-- [ ] Spec moved to `terminados/`.
-- [ ] Commit created (Conventional Commits).
+- [x] The combined dynamic-share plus 50/50 example reconciles to the cent.
+- [x] Personal-account payment of a shared expense produces the expected compensation.
+- [x] Shared-account payment of an individual expense charges only that member economically.
+- [x] Internal transfers do not change household or member economic totals.
+- [x] Every target account has compatible effective ownership.
+- [x] Disabled and not-ready profiles do not regress normal close finalization.
+- [x] Finalized snapshots remain immutable and reopen behavior is explicit.
+- [x] Performance/query assertions pass for a 12-month realistic fixture.
+- [x] All validation commands pass.
+- [x] All required documentation updates done.
+- [x] Spec moved to `terminados/`.
+- [x] Commit created (Conventional Commits).

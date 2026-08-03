@@ -85,7 +85,7 @@ Conventions:
 - ⛔ Discarded — monthly close is sufficient for v1.
 
 ### Ownership transfers on close
-- 🔄 **Spec-driven implementation planned.** Canonical plan:
+- ✅ **Core v1 engine implemented.** Canonical plan:
   `core/docs/tasks/monthly-close-settlement/README.md` + `spec.md`.
 - Version 1 resolves fixed 50/50 and dynamic income-weighted ownership, reserves the next month's
   recurring obligations in compatible accounts, separates physical wallets from member
@@ -93,6 +93,8 @@ Conventions:
 - Version 2 materializes accepted recommendations as idempotent, auditable ledger transfers.
 - The feature is opt-in and disabled by default; individual users, common-pool households and
   existing close flows remain unchanged until explicitly configured.
+- SaaS configuration and result presentation remain in phases 4-5; automatic ledger materialization
+  remains version 2.
 
 ---
 

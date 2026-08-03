@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -502,3 +502,91 @@ class SettlementOpeningAdjustment(models.Model):
     class Meta:
         db_table = "budget_settlement_opening_adjustment"
         ordering = ["account_id", "member_id", "id"]
+
+
+class SettlementSnapshot(models.Model):
+    class Status(models.TextChoices):
+        READY = "ready", "Listo"
+        NOT_READY = "not_ready", "No listo"
+
+    monthly_close = models.OneToOneField(
+        MonthlyClose,
+        on_delete=models.CASCADE,
+        related_name="settlement_snapshot",
+    )
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.PROTECT,
+        related_name="snapshots",
+    )
+    allocation_snapshots = models.ManyToManyField(
+        "memberships.OwnershipAllocationSnapshot",
+        blank=True,
+        related_name="settlement_snapshots",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices)
+    base_currency = models.CharField(max_length=3)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    target_year = models.PositiveSmallIntegerField()
+    target_month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+    opening_source = models.CharField(max_length=24)
+    source_hash = models.CharField(max_length=64)
+    allocations = models.JSONField(default=list)
+    economic_balances = models.JSONField(default=list)
+    account_balances = models.JSONField(default=list)
+    reserves = models.JSONField(default=list)
+    compensations = models.JSONField(default=list)
+    blockers = models.JSONField(default=list)
+    warnings = models.JSONField(default=list)
+    reconciliation = models.JSONField(default=dict)
+    is_frozen = models.BooleanField(default=True)
+    computed_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_snapshot"
+        ordering = ["-monthly_close__fiscal_year", "-monthly_close__month"]
+
+
+class SettlementTransferRecommendation(models.Model):
+    snapshot = models.ForeignKey(
+        SettlementSnapshot,
+        on_delete=models.CASCADE,
+        related_name="recommendations",
+    )
+    from_account = models.ForeignKey(
+        SettlementAccount,
+        on_delete=models.PROTECT,
+        related_name="outgoing_recommendations",
+    )
+    to_account = models.ForeignKey(
+        SettlementAccount,
+        on_delete=models.PROTECT,
+        related_name="incoming_recommendations",
+    )
+    member = models.ForeignKey(
+        "memberships.FamilyMember",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="settlement_recommendations",
+    )
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="settlement_recommendations",
+    )
+    amount = models.DecimalField(max_digits=20, decimal_places=8)
+    currency = models.CharField(max_length=3)
+    reason = models.CharField(max_length=32, default="settlement")
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_transfer_recommendation"
+        ordering = ["sort_order", "id"]

@@ -135,3 +135,15 @@ Movimientos.
 4. Conversion automatica entre divisas para ejecutar una recomendacion.
 5. Inferir ingresos recurrentes con ML o heuristicas no explicables.
 6. Reservar automaticamente gastos puntuales futuros.
+
+## Notas de implementacion v1
+
+1. Las recomendaciones se emiten solo en la moneda base. Una cuenta participante en otra moneda o
+   una tasa historica ausente produce `not_ready`; el motor no inventa una ruta FX.
+2. El saldo observado debe reconciliar con el baseline o snapshot anterior mas los asientos del
+   perimetro. Una edicion manual no explicada produce `unreconciled_account_balance` en lugar de
+   atribuir el delta con el ownership de la cuenta.
+3. En monederos, la diferencia aceptada al activar se mantiene como puente constante entre saldo
+   modelado y efectivo fisico; los cambios posteriores siguen necesitando movimientos trazables.
+4. Un saldo personal objetivo negativo se conserva con signo. Representa una aportacion inversa o
+   financiacion necesaria y no se recorta silenciosamente a cero.
