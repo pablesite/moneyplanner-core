@@ -14,6 +14,12 @@ from .views_monthly_close import (
     MonthlyCloseReopenView,
     MonthlyCloseView,
 )
+from .views_settlement import (
+    SettlementActivateView,
+    SettlementConfigurationView,
+    SettlementDisableView,
+    SettlementReadinessView,
+)
 
 router = DefaultRouter()
 router.register(r"annual-income", AnnualIncomeEntryViewSet, basename="annual-income")
@@ -31,6 +37,26 @@ router.register(
 
 urlpatterns = [
     path("", include(router.urls)),
+    path(
+        "settlement/configuration/",
+        SettlementConfigurationView.as_view(),
+        name="settlement-configuration",
+    ),
+    path(
+        "settlement/readiness/",
+        SettlementReadinessView.as_view(),
+        name="settlement-readiness",
+    ),
+    path(
+        "settlement/activate/",
+        SettlementActivateView.as_view(),
+        name="settlement-activate",
+    ),
+    path(
+        "settlement/disable/",
+        SettlementDisableView.as_view(),
+        name="settlement-disable",
+    ),
     path(
         "monthly-close/<int:year>/<int:month>/",
         MonthlyCloseView.as_view(),

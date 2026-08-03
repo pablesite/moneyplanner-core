@@ -135,8 +135,8 @@ def _format_ownership_percent(value: Decimal) -> str:
     return text or "0"
 
 
-def _get_generated_liability_owner_name(*, liability: Liability) -> str:
-    from memberships.models import Ownership, OwnershipLink
+def _get_generated_liability_ownership(*, liability: Liability):
+    from memberships.models import OwnershipLink
 
     link = (
         OwnershipLink.objects.filter(
@@ -148,9 +148,17 @@ def _get_generated_liability_owner_name(*, liability: Liability) -> str:
         .first()
     )
     if link is None:
-        return ""
+        return None
 
-    ownership = link.ownership
+    return link.ownership
+
+
+def _get_generated_liability_owner_name(*, liability: Liability) -> str:
+    from memberships.models import Ownership
+
+    ownership = _get_generated_liability_ownership(liability=liability)
+    if ownership is None:
+        return ""
     if ownership.kind == Ownership.Kind.INDIVIDUAL:
         member_name = getattr(ownership.member, "name", "") or ""
         return str(member_name).strip()
@@ -302,6 +310,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
 
     expense_profile = get_generated_liability_expense_profile(liability=liability)
     owner_name = _get_generated_liability_owner_name(liability=liability)
+    ownership = _get_generated_liability_ownership(liability=liability)
 
     for year, annual_total in totals_by_year.items():
         generated_defaults = {
@@ -309,6 +318,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             "category": expense_profile["category"],
             "subcategory": expense_profile["subcategory"],
             "owner_name": owner_name,
+            "ownership": ownership,
             "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
             "time_profile": AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
             "cashflow_role": expense_profile["cashflow_role"],
@@ -347,6 +357,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
 
         system_owned_fields = [
             "owner_name",
+            "ownership",
             "term_end_year",
             "term_end_month",
             "currency",
@@ -375,6 +386,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                 "category": expense_profile["category"],
                 "subcategory": expense_profile["subcategory"],
                 "owner_name": owner_name,
+                "ownership": ownership,
                 "expense_type": AnnualExpenseEntry.ExpenseType.ONE_OFF,
                 "time_profile": AnnualExpenseEntry.TimeProfile.ONE_OFF,
                 # Amortizar principal de forma anticipada es un movimiento de
@@ -404,6 +416,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
             keep_ids.add(principal_row.id)
             if not principal_created:
                 principal_row.owner_name = principal_defaults["owner_name"]
+                principal_row.ownership = principal_defaults["ownership"]
                 principal_row.target_month = principal_defaults["target_month"]
                 principal_row.term_end_year = None
                 principal_row.term_end_month = None
@@ -413,6 +426,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                 principal_row.save(
                     update_fields=[
                         "owner_name",
+                        "ownership",
                         "target_month",
                         "term_end_year",
                         "term_end_month",
@@ -440,6 +454,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                     "category": cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
                     "subcategory": "real_estate_fees_taxes",
                     "owner_name": owner_name,
+                    "ownership": ownership,
                     "expense_type": AnnualExpenseEntry.ExpenseType.ONE_OFF,
                     "time_profile": AnnualExpenseEntry.TimeProfile.ONE_OFF,
                     "cashflow_role": cast(str, AnnualExpenseEntry.CashflowRole.TAX_FEE),
@@ -465,6 +480,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                 keep_ids.add(fee_row.id)
                 if not fee_created:
                     fee_row.owner_name = fee_defaults["owner_name"]
+                    fee_row.ownership = fee_defaults["ownership"]
                     fee_row.target_month = fee_defaults["target_month"]
                     fee_row.term_end_year = None
                     fee_row.term_end_month = None
@@ -474,6 +490,7 @@ def sync_generated_budget_commitments_for_liability(*, liability: Liability) -> 
                     fee_row.save(
                         update_fields=[
                             "owner_name",
+                            "ownership",
                             "target_month",
                             "term_end_year",
                             "term_end_month",

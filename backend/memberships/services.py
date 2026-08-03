@@ -307,6 +307,8 @@ def ownership_is_in_use(ownership: Ownership) -> bool:
     return (
         OwnershipLink.objects.filter(ownership=ownership).exists()
         or ownership.ledger_transactions.exists()
+        or ownership.annual_income_entries.exists()
+        or ownership.annual_expense_entries.exists()
     )
 
 

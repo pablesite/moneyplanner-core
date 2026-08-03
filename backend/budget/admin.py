@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import AnnualExpenseEntry, AnnualIncomeEntry
+from .models import (
+    AnnualExpenseEntry,
+    AnnualIncomeEntry,
+    SettlementAccount,
+    SettlementOpeningAdjustment,
+    SettlementOpeningBalance,
+    SettlementProfile,
+)
 
 
 @admin.register(AnnualIncomeEntry)
@@ -65,3 +72,9 @@ class AnnualExpenseEntryAdmin(admin.ModelAdmin):
         "user__username",
     )
     ordering = ("-created_at",)
+
+
+admin.site.register(SettlementProfile)
+admin.site.register(SettlementAccount)
+admin.site.register(SettlementOpeningBalance)
+admin.site.register(SettlementOpeningAdjustment)

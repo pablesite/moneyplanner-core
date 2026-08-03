@@ -2,11 +2,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from typing import cast
 
+from memberships.models import Ownership
+
 from .models import (
     AnnualExpenseEntry,
     AnnualExpenseMonthlyCheckin,
     AnnualIncomeEntry,
     AnnualIncomeMonthlyCheckin,
+    SettlementAccount,
 )
 from .plan_lineage import is_reserved_plan_event_group, plan_lineage_for_entry
 from .services import (
@@ -18,6 +21,14 @@ from .services import (
 
 
 class AnnualEntryValidationMixin:
+    def validate_ownership_for_user(self, ownership):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if ownership is not None and (user is None or ownership.user_id != user.id):
+            raise serializers.ValidationError(
+                {"ownership_id": "El ownership no pertenece a este usuario."}
+            )
+
     def validate_currency(self, value: str):
         normalized = normalize_currency_code(value)
         if len(normalized) != 3:
@@ -156,10 +167,44 @@ def normalize_expense_cashflow_role_for_time_profile(
     )
 
 
+def validate_expense_settlement_relations(*, serializer, attrs: dict) -> None:
+    ownership = attrs.get("ownership", getattr(serializer.instance, "ownership", None))
+    serializer.validate_ownership_for_user(ownership)
+    if "ownership" in attrs and ownership is not None:
+        attrs["owner_name"] = ownership_compatibility_name(ownership)
+    settlement_account = attrs.get(
+        "settlement_account", getattr(serializer.instance, "settlement_account", None)
+    )
+    request = serializer.context.get("request")
+    user = getattr(request, "user", None)
+    if settlement_account is not None and (
+        user is None or settlement_account.profile.user_id != user.id
+    ):
+        raise serializers.ValidationError(
+            {"settlement_account_id": "La cuenta no pertenece a este usuario."}
+        )
+
+
+def ownership_compatibility_name(ownership: Ownership) -> str:
+    if ownership.kind == Ownership.Kind.INDIVIDUAL:
+        return ownership.member.name if ownership.member else ""
+    parts = [
+        f"{split.member.name} {split.percent}%"
+        for split in ownership.splits.select_related("member").order_by("member_id")
+    ]
+    return f"Compartido ({' / '.join(parts)})" if parts else "Compartido"
+
+
 class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelSerializer):
     is_plan_managed = serializers.SerializerMethodField()
     plan_event_id = serializers.SerializerMethodField()
     plan_event_name = serializers.SerializerMethodField()
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = AnnualIncomeEntry
@@ -169,6 +214,7 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
             "category",
             "subcategory",
             "owner_name",
+            "ownership_id",
             "income_type",
             "time_profile",
             "cashflow_role",
@@ -205,6 +251,10 @@ class AnnualIncomeEntrySerializer(AnnualEntryValidationMixin, serializers.ModelS
             raise serializers.ValidationError(
                 {"event_group": "El prefijo plan_event: está reservado para Mi Plan."}
             )
+        ownership = attrs.get("ownership", getattr(self.instance, "ownership", None))
+        self.validate_ownership_for_user(ownership)
+        if "ownership" in attrs and ownership is not None:
+            attrs["owner_name"] = ownership_compatibility_name(ownership)
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
         income_type = attrs.get("income_type") or getattr(
@@ -280,6 +330,18 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
     is_plan_managed = serializers.SerializerMethodField()
     plan_event_id = serializers.SerializerMethodField()
     plan_event_name = serializers.SerializerMethodField()
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership",
+        queryset=Ownership.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    settlement_account_id = serializers.PrimaryKeyRelatedField(
+        source="settlement_account",
+        queryset=SettlementAccount.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = AnnualExpenseEntry
@@ -292,6 +354,8 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             "category",
             "subcategory",
             "owner_name",
+            "ownership_id",
+            "settlement_account_id",
             "expense_type",
             "time_profile",
             "cashflow_role",
@@ -335,6 +399,7 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             raise serializers.ValidationError(
                 {"event_group": "El prefijo plan_event: está reservado para Mi Plan."}
             )
+        validate_expense_settlement_relations(serializer=self, attrs=attrs)
         category = attrs.get("category") or getattr(self.instance, "category", "")
         subcategory = attrs.get("subcategory") or getattr(self.instance, "subcategory", "")
         category, subcategory = normalize_annual_expense_taxonomy_keys(
@@ -375,6 +440,8 @@ class AnnualExpenseEntrySerializer(AnnualEntryValidationMixin, serializers.Model
             attrs["term_start_month"] = self.instance.term_start_month
             attrs["term_end_month"] = self.instance.term_end_month
             attrs["term_end_year"] = self.instance.term_end_year
+            attrs["ownership"] = self.instance.ownership
+            attrs["settlement_account"] = self.instance.settlement_account
 
         fiscal_year = attrs.get("fiscal_year") or getattr(self.instance, "fiscal_year", None)
         target_month = attrs.get("target_month")

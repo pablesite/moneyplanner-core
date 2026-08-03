@@ -24,8 +24,8 @@ def _format_ownership_percent(value: Decimal) -> str:
     return text or "0"
 
 
-def _get_generated_asset_owner_name(*, asset: Asset) -> str:
-    from memberships.models import Ownership, OwnershipLink
+def _get_generated_asset_ownership(*, asset: Asset):
+    from memberships.models import OwnershipLink
 
     link = (
         OwnershipLink.objects.filter(
@@ -37,9 +37,17 @@ def _get_generated_asset_owner_name(*, asset: Asset) -> str:
         .first()
     )
     if link is None:
-        return ""
+        return None
 
-    ownership = link.ownership
+    return link.ownership
+
+
+def _get_generated_asset_owner_name(*, asset: Asset) -> str:
+    from memberships.models import Ownership
+
+    ownership = _get_generated_asset_ownership(asset=asset)
+    if ownership is None:
+        return ""
     if ownership.kind == Ownership.Kind.INDIVIDUAL:
         member_name = getattr(ownership.member, "name", "") or ""
         return str(member_name).strip()
@@ -158,6 +166,10 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
         totals_by_year[due_date.year] += installment
 
     owner_name = _get_generated_asset_owner_name(asset=asset)
+    ownership = _get_generated_asset_ownership(asset=asset)
+    settlement_account = (
+        asset.settlement_accounts.filter(role="allocation_destination").order_by("id").first()
+    )
     expense_category, expense_subcategory = _get_generated_asset_expense_profile(asset=asset)
     intervals = list(asset.contribution_intervals.all())
     has_open_interval = any(interval.end_date is None for interval in intervals)
@@ -183,6 +195,8 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
             "category": expense_category,
             "subcategory": expense_subcategory,
             "owner_name": owner_name,
+            "ownership": ownership,
+            "settlement_account": settlement_account,
             "expense_type": AnnualExpenseEntry.ExpenseType.RECURRENT,
             "time_profile": time_profile,
             # Las aportaciones periodicas son destino de ahorro/inversion, no un
@@ -230,6 +244,8 @@ def sync_generated_budget_commitments_for_asset(*, asset: Asset) -> None:
 
         system_owned_fields = [
             "owner_name",
+            "ownership",
+            "settlement_account",
             "term_end_year",
             "currency",
             "event_group",

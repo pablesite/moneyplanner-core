@@ -19,6 +19,18 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
 4. The resolver signs classified entries and transaction update timestamps into a source hash, uses
    booking-date FX, and freezes the resulting allocation separately from the ledger.
 
+## Settlement participating accounts
+
+1. Settlement account configuration references Net Worth assets; it does not create a second ledger
+   account catalogue or alter `LedgerAccount` balances.
+2. Operating and personal destinations represent liquidity. Allocation destinations may reference
+   an investment asset whose ownership matches the planned obligation.
+3. `Asset.Subcategory.WALLET` is physical cash only after activation. Its accepted physical balance
+   overrides the settlement opening baseline, not the asset or past ledger; signed zero-sum opening
+   adjustments preserve prior member compensation separately.
+4. Account ownership continues to come from `OwnershipLink`. A budget route is ready only when its
+   destination vector equals the expense ownership vector for the target month.
+
 ## Problem to solve
 Core already has useful but separate execution layers:
 1. annual budget entries and monthly check-ins

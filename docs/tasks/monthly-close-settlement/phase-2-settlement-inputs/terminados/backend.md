@@ -74,10 +74,10 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/architecture/architecture.md` - perfil, rutas y baseline de settlement.
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - cuentas participantes.
-- [ ] `docs/architecture/api-registry.md` - configuracion y readiness.
-- [ ] `core/docs/project-status.md` - cerrar fase y habilitar motor.
+- [x] `core/docs/architecture/architecture.md` - perfil, rutas y baseline de settlement.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - cuentas participantes.
+- [x] `docs/architecture/api-registry.md` - configuracion y readiness.
+- [x] `core/docs/project-status.md` - cerrar fase y habilitar motor.
 
 ## Risks
 
@@ -90,13 +90,13 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Completion Criteria
 
-- [ ] Existing users remain disabled and all existing APIs remain compatible.
-- [ ] Readiness explains every missing or incompatible input.
-- [ ] Budget ownership and destination reject cross-user data.
-- [ ] Managed Plan rows preserve their ownership/destination lifecycle boundary.
-- [ ] Wallet activation records physical cash and zero-sum opening adjustments without rewriting history.
-- [ ] Migrations applied and verified.
-- [ ] All validation commands pass.
-- [ ] All required documentation updates done.
-- [ ] Spec moved to `terminados/`.
-- [ ] Commit created (Conventional Commits).
+- [x] Existing users remain disabled and all existing APIs remain compatible.
+- [x] Readiness explains every missing or incompatible input.
+- [x] Budget ownership and destination reject cross-user data.
+- [x] Managed Plan rows preserve their ownership/destination lifecycle boundary.
+- [x] Wallet activation records physical cash and zero-sum opening adjustments without rewriting history.
+- [x] Migrations applied and verified.
+- [x] All validation commands pass.
+- [x] All required documentation updates done.
+- [x] Spec moved to `terminados/`.
+- [x] Commit created (Conventional Commits).

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -40,6 +41,13 @@ class AnnualIncomeEntry(models.Model):
     category = models.CharField(max_length=32, choices=Category.choices)
     subcategory = models.CharField(max_length=64)
     owner_name = models.CharField(max_length=120, blank=True, default="")
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="annual_income_entries",
+    )
     income_type = models.CharField(
         max_length=16, choices=IncomeType.choices, default=IncomeType.RECURRENT
     )
@@ -137,6 +145,20 @@ class AnnualExpenseEntry(models.Model):
     category = models.CharField(max_length=32, choices=Category.choices)
     subcategory = models.CharField(max_length=64)
     owner_name = models.CharField(max_length=120, blank=True, default="")
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="annual_expense_entries",
+    )
+    settlement_account = models.ForeignKey(
+        "SettlementAccount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="annual_expense_entries",
+    )
     expense_type = models.CharField(
         max_length=16, choices=ExpenseType.choices, default=ExpenseType.RECURRENT
     )
@@ -326,3 +348,157 @@ class MonthlyClose(models.Model):
             f"MonthlyClose(user={self.user_id}, "
             f"{self.fiscal_year}-{self.month:02d}, status={self.status})"
         )
+
+
+class SettlementProfile(models.Model):
+    class ReadinessStatus(models.TextChoices):
+        NOT_CHECKED = "not_checked", "No comprobado"
+        READY = "ready", "Listo"
+        BLOCKED = "blocked", "Bloqueado"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="settlement_profile",
+    )
+    is_enabled = models.BooleanField(default=False)
+    activation_date = models.DateField(null=True, blank=True)
+    base_currency = models.CharField(max_length=3, default="EUR")
+    readiness_status = models.CharField(
+        max_length=16,
+        choices=ReadinessStatus.choices,
+        default=ReadinessStatus.NOT_CHECKED,
+    )
+    readiness_checked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "budget_settlement_profile"
+
+
+class SettlementAccount(models.Model):
+    class Role(models.TextChoices):
+        OPERATING = "operating", "Operativa"
+        PERSONAL_DESTINATION = "personal_destination", "Destino personal"
+        ALLOCATION_DESTINATION = "allocation_destination", "Destino de asignacion"
+        PHYSICAL_CASH = "physical_cash", "Efectivo fisico"
+
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.CASCADE,
+        related_name="accounts",
+    )
+    asset = models.ForeignKey(
+        "net_worth.Asset",
+        on_delete=models.PROTECT,
+        related_name="settlement_accounts",
+    )
+    role = models.CharField(max_length=32, choices=Role.choices)
+    member = models.ForeignKey(
+        "memberships.FamilyMember",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="settlement_accounts",
+    )
+    currency = models.CharField(max_length=3)
+    is_primary = models.BooleanField(default=False)
+    accepted_physical_balance = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    modeled_balance_at_activation = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "budget_settlement_account"
+        ordering = ["role", "asset_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "asset"],
+                name="budget_settle_account_asset_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["profile", "member", "currency"],
+                condition=models.Q(role="personal_destination", is_primary=True),
+                name="budget_settle_primary_member_currency_unique",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(role="personal_destination", member__isnull=False)
+                    | ~models.Q(role="personal_destination") & models.Q(member__isnull=True)
+                ),
+                name="budget_settle_personal_requires_member",
+            ),
+        ]
+
+
+class SettlementOpeningBalance(models.Model):
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.CASCADE,
+        related_name="opening_balances",
+    )
+    account = models.ForeignKey(
+        SettlementAccount,
+        on_delete=models.CASCADE,
+        related_name="opening_balances",
+    )
+    member = models.ForeignKey(
+        "memberships.FamilyMember",
+        on_delete=models.PROTECT,
+        related_name="settlement_opening_balances",
+    )
+    amount = models.DecimalField(max_digits=20, decimal_places=8)
+    currency = models.CharField(max_length=3)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_opening_balance"
+        ordering = ["account_id", "member_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "account", "member"],
+                name="budget_settle_opening_account_member_unique",
+            ),
+        ]
+
+
+class SettlementOpeningAdjustment(models.Model):
+    class Kind(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        WALLET_NORMALIZATION = "wallet_normalization", "Normalizacion de monedero"
+
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.CASCADE,
+        related_name="opening_adjustments",
+    )
+    account = models.ForeignKey(
+        SettlementAccount,
+        on_delete=models.CASCADE,
+        related_name="opening_adjustments",
+    )
+    member = models.ForeignKey(
+        "memberships.FamilyMember",
+        on_delete=models.PROTECT,
+        related_name="settlement_opening_adjustments",
+    )
+    amount = models.DecimalField(max_digits=20, decimal_places=8)
+    kind = models.CharField(max_length=24, choices=Kind.choices, default=Kind.MANUAL)
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_opening_adjustment"
+        ordering = ["account_id", "member_id", "id"]

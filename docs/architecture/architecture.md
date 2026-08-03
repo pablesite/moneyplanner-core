@@ -75,6 +75,27 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    positive income, with negative member income or with missing FX. Blocked results expose no
    effective percentages and never fall back silently to the old explicit split.
 
+## Monthly-close Settlement Inputs
+
+1. `SettlementProfile` is one-to-one with the user and defaults to disabled. Existing close flows do
+   not require settlement configuration and retain their previous behavior.
+2. A participating `SettlementAccount` references one user-owned asset and gives it one explicit
+   role: operating, primary personal destination, allocation destination or physical cash. Operating
+   and personal accounts are liquidity; allocation destinations may also be investment assets.
+3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are the structured canonical
+   ownership when present. Nullable fields and legacy `owner_name` keep existing clients compatible.
+4. Recurrent expenses route through nullable `settlement_account`. Asset-generated investment rows
+   inherit both ownership and an allocation destination only from unambiguous structural links;
+   liability-generated rows inherit ownership. Plan-managed rows remain writable only by Mi Plan.
+5. Readiness is period-specific and reports missing operating/personal accounts, account ownership,
+   budget ownership, expense routes, incompatible effective vectors, dynamic-allocation coverage,
+   non-zero opening adjustments and unnormalized wallets.
+6. Activation is explicit and idempotent. It captures one member/account opening baseline using the
+   effective account ownership for the activation month. A wallet baseline uses accepted physical
+   cash while preserving its modeled balance and historical movements for audit.
+7. Opening adjustments are signed member/account entries that must sum exactly zero. They carry
+   prior fictitious wallet compensations into the economic baseline without representing liquidity.
+
 ## Net Worth Investment Contribution Intervals
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
