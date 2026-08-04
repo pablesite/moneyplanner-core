@@ -227,8 +227,12 @@ class PlanMembersView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        plan = get_object_or_404(FinancialPlan, user=request.user)
-        return Response(PlanFamilyMemberSerializer(plan.members.all(), many=True).data)
+        members = FamilyMember.objects.filter(
+            user=request.user,
+            role=FamilyMember.Role.ADULT,
+            is_active=True,
+        )
+        return Response(PlanFamilyMemberSerializer(members, many=True).data)
 
     def post(self, request):
         serializer = PlanFamilyMemberSerializer(data=request.data, context={"request": request})

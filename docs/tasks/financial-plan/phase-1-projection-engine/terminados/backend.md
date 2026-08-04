@@ -42,7 +42,7 @@ Primera fase ejecutable del módulo `financial-plan` (ver `../README.md` y `../s
    - `POST /api/plan/recalculate/` — recalcula y persiste snapshot oficial.
    - `GET /api/plan/projection/?scenario=prudent|expected|favorable` (default `expected`).
    - `GET /api/plan/history/` — histórico básico de snapshots oficiales.
-   - `GET /api/plan/members/`, `POST`, `PATCH /api/plan/members/{id}/` — sobre `FamilyMember` extendido (solo adultos vinculables al plan).
+   - `GET /api/plan/members/`, `POST`, `PATCH /api/plan/members/{id}/` — sobre `FamilyMember` extendido. `GET` devuelve los adultos activos vinculables aunque el plan todavía no exista, para que el alta del plan reutilice identidades existentes.
    - `GET/PUT /api/plan/asset-functions/` — clasificación efectiva (inferida + override) y edición de overrides.
    - Contrato de respuesta (spec §16.7): cada cifra con valor, unidad, hipótesis aplicadas, `calculated_at` y `quality_level`.
 8. Tests en `plan/tests/`: los 10 casos financieros mínimos de spec §13, determinismo (doble ejecución → mismo `input_hash` y `result_json`), clasificación con overrides y deuda asociada, idempotencia de creación, aislamiento entre usuarios.

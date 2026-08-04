@@ -814,6 +814,36 @@ class PlanApiTests(APITestCase):
         self.assertEqual(response.data["employment_income_end_date"], "2040-06-15")
         self.assertEqual(response.data["pension_start_date"], "2045-06-15")
 
+    def test_member_list_returns_active_adult_candidates_without_plan(self):
+        adult = FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto disponible",
+            role=FamilyMember.Role.ADULT,
+            birth_date=date(1980, 6, 15),
+        )
+        FamilyMember.objects.create(
+            user=self.user,
+            name="Adulto inactivo",
+            role=FamilyMember.Role.ADULT,
+            is_active=False,
+        )
+        FamilyMember.objects.create(
+            user=self.user,
+            name="Menor",
+            role=FamilyMember.Role.CHILD,
+        )
+        FamilyMember.objects.create(
+            user=self.other,
+            name="Otro usuario",
+            role=FamilyMember.Role.ADULT,
+        )
+
+        response = self.client.get(reverse("financial-plan-members"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([row["id"] for row in response.data], [adult.id])
+        self.assertEqual(response.data[0]["birth_date"], "1980-06-15")
+
     def test_member_update_reuses_existing_adult_identity(self):
         plan = create_plan(self.user)
         canonical = FamilyMember.objects.create(
