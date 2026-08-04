@@ -23,6 +23,6 @@ gunicorn>=26.0.0
 whitenoise>=6.12.0
 
 # Dev / quality (opcional pero recomendable)
-ruff>=0.16.0
+ruff>=0.16.1
 mypy>=2.3.0
 coverage>=7.15.2
