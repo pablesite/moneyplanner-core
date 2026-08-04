@@ -68,11 +68,11 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Required Documentation Updates
 
-- [ ] `core/docs/architecture/architecture.md` - lifecycle y materializacion.
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - transferencias settlement.
-- [ ] `docs/architecture/api-registry.md` - endpoints apply/reconcile.
-- [ ] `core/docs/roadmap/product-roadmap.md` - marcar version 2 completada.
-- [ ] `core/docs/project-status.md` - cerrar modulo backend.
+- [x] `core/docs/architecture/architecture.md` - lifecycle y materializacion.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - transferencias settlement.
+- [x] `docs/architecture/api-registry.md` - endpoints apply/reconcile.
+- [x] `core/docs/roadmap/product-roadmap.md` - marcar version 2 completada.
+- [x] `core/docs/project-status.md` - cerrar modulo backend.
 
 ## Risks
 
@@ -85,13 +85,13 @@ docker compose -f core/docker-compose.yml exec backend mypy .
 
 ## Completion Criteria
 
-- [ ] Applying the same recommendation twice creates one ledger transaction.
-- [ ] Applied transfers preserve household and member economic totals.
-- [ ] Partial execution exposes the exact remaining amount.
-- [ ] Existing compatible transfers can be linked without duplication.
-- [ ] Reopen and lock policies are enforced and documented.
-- [ ] Migrations applied and verified.
-- [ ] All validation commands pass.
-- [ ] All required documentation updates done.
-- [ ] Spec moved to `terminados/`.
-- [ ] Commit created (Conventional Commits).
+- [x] Applying the same recommendation twice creates one ledger transaction.
+- [x] Applied transfers preserve household and member economic totals.
+- [x] Partial execution exposes the exact remaining amount.
+- [x] Existing compatible transfers can be linked without duplication.
+- [x] Reopen and lock policies are enforced and documented.
+- [x] Migrations applied and verified.
+- [x] All validation commands pass.
+- [x] All required documentation updates done.
+- [x] Spec moved to `terminados/`.
+- [x] Commit created (Conventional Commits).

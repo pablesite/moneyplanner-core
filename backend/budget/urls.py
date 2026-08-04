@@ -12,6 +12,9 @@ from .views_monthly_close import (
     MonthlyCloseLockView,
     MonthlyClosePlanImpactView,
     MonthlyCloseReopenView,
+    MonthlyCloseSettlementApplyAllView,
+    MonthlyCloseSettlementCandidatesView,
+    MonthlyCloseSettlementRecommendationActionView,
     MonthlyCloseView,
 )
 from .views_settlement import (
@@ -81,5 +84,20 @@ urlpatterns = [
         "monthly-closes/<int:pk>/plan-impact/",
         MonthlyClosePlanImpactView.as_view(),
         name="monthly-close-plan-impact",
+    ),
+    path(
+        "monthly-closes/<int:pk>/settlement/apply/",
+        MonthlyCloseSettlementApplyAllView.as_view(),
+        name="monthly-close-settlement-apply-all",
+    ),
+    path(
+        "monthly-closes/<int:pk>/settlement/recommendations/<int:recommendation_id>/candidates/",
+        MonthlyCloseSettlementCandidatesView.as_view(),
+        name="monthly-close-settlement-candidates",
+    ),
+    path(
+        "monthly-closes/<int:pk>/settlement/recommendations/<int:recommendation_id>/<str:action>/",
+        MonthlyCloseSettlementRecommendationActionView.as_view(),
+        name="monthly-close-settlement-recommendation-action",
     ),
 ]

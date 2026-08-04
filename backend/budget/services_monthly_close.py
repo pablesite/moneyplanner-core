@@ -465,6 +465,15 @@ def reopen_monthly_close(*, monthly_close: MonthlyClose) -> MonthlyClose:
             raise ValueError(
                 f"Solo se puede reabrir un cierre finalizado (estado actual: '{mc.status}')."
             )
+        snapshot = getattr(mc, "settlement_snapshot", None)
+        if (
+            snapshot is not None
+            and snapshot.recommendations.filter(ledger_transactions__isnull=False).exists()
+        ):
+            raise ValueError(
+                "No se puede reabrir un cierre con movimientos de liquidación: "
+                "se conserva como histórico auditable."
+            )
 
         mc.status = MonthlyClose.Status.DRAFT
         mc.finalized_at = None

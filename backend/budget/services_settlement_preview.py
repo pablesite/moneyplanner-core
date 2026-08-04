@@ -625,19 +625,9 @@ def _route_transfers(
 
 
 def _serialize_snapshot(snapshot: SettlementSnapshot) -> dict:
-    recommendations = [
-        {
-            "id": row.id,
-            "from_account_id": row.from_account_id,
-            "to_account_id": row.to_account_id,
-            "member_id": row.member_id,
-            "ownership_id": row.ownership_id,
-            "amount": _money_string(Decimal(row.amount)),
-            "currency": row.currency,
-            "reason": row.reason,
-        }
-        for row in snapshot.recommendations.all()
-    ]
+    from .services_settlement_execution import serialize_recommendation
+
+    recommendations = [serialize_recommendation(row) for row in snapshot.recommendations.all()]
     return {
         "status": "finalized",
         "calculation_status": snapshot.status,

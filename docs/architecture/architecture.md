@@ -114,11 +114,18 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    destinations. Negative personal targets remain signed and therefore expose inverse contributions.
 6. `SettlementSnapshot` freezes allocations, economic/account balances, reserves, compensations,
    reconciliation and quality when `MonthlyClose` is finalized. Recommendations are stored as
-   `SettlementTransferRecommendation` route rows. Reopening deletes only that close's settlement
-   snapshot and releases dynamic allocation snapshots not referenced by another finalized close.
+   `SettlementTransferRecommendation` route rows with an auditable lifecycle: recommended,
+   accepted, partially applied, applied or cancelled.
 7. `compute_monthly_close_state` exposes the additive `ownership_settlement` object with status
    `disabled`, `not_ready`, `ready` or `finalized`. Disabled profiles retain the previous lifecycle
    and have no additional readiness requirements.
+8. A finalized recommendation can create a posted system transfer through the quick-entry service.
+   The recommendation row is locked, `(user, settlement_idempotency_key)` is unique in the database,
+   and partial applications expose the exact remaining amount. Apply-all is one atomic transaction.
+9. Compatible manual/imported transfers may be linked only after matching accounts, currency,
+   ownership, amount and date window. Reversal creates an opposite auditable transfer. Once any
+   linked movement exists, the close remains historical and cannot be reopened or have its frozen
+   snapshot deleted; locked closes reject all settlement actions.
 
 ## Net Worth Investment Contribution Intervals
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
@@ -260,6 +267,7 @@ Key services in `budget/services_monthly_close.py`:
 - `apply_distribution_to_checkins` — persists suggestions as checkins with `status=estimated`
 - `finalize_monthly_close / reopen_monthly_close / lock_monthly_close` — lifecycle transitions with `select_for_update`
 - `compute_monthly_close_settlement` — per-member economic position, next-month targets and transfer preview
+- `apply_settlement_recommendation / reconcile_settlement_recommendation` — idempotent transfer materialization and conservative linking
 
 Checkin writes (create + update) in `budget/views.py` and `net_worth/views.py` are blocked with `403` if a `MonthlyClose` with status `finalized` or `locked` exists for that period.
 

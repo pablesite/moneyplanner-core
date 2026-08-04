@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import SettlementAccount, SettlementOpeningAdjustment
@@ -36,3 +39,21 @@ class SettlementConfigurationWriteSerializer(serializers.Serializer):
 
 class SettlementActivationSerializer(serializers.Serializer):
     activation_date = serializers.DateField(required=False)
+
+
+class SettlementExecutionSerializer(serializers.Serializer):
+    execution_date = serializers.DateField(default=timezone.localdate)
+    amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        required=False,
+        allow_null=True,
+        min_value=Decimal("0.01"),
+    )
+    idempotency_key = serializers.CharField(
+        max_length=128, required=False, allow_blank=True, default=""
+    )
+
+
+class SettlementReconciliationSerializer(serializers.Serializer):
+    transaction_id = serializers.IntegerField(min_value=1)

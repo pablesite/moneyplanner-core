@@ -40,6 +40,12 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
 7. The close payload exposes each member's opening, classified income, classified expense,
    compensation, next-period requirement, closing position and excess. Compensation is explanatory
    location evidence and is not added again to the economic closing equation.
+8. Applied settlement routes are ordinary posted double-entry transfers with `origin=system`,
+   `quick_entry_kind=transfer`, route ownership and an explicit recommendation FK. Their entries have
+   no income/expense flow family, so household and member economic totals remain unchanged.
+9. `settlement_idempotency_key` is unique per user when present. `settlement_action` distinguishes
+   application, reconciliation and reversal, while `settlement_amount` preserves the amount applied
+   by each linked movement. A reversal adds the opposite transfer and never deletes history.
 
 ## Problem to solve
 Core already has useful but separate execution layers:

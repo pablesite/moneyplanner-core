@@ -33,7 +33,7 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 9. La liquidacion esta desactivada por defecto. Un usuario individual, sin ownership, 50/50 para
    todo o con bolsa comun conserva exactamente el cierre actual mientras no la active.
 10. La primera version calcula porcentajes dinamicos desde el historico disponible y recomienda
-    transferencias; la segunda puede crearlas en el ledger de forma idempotente.
+    transferencias; la segunda las crea o concilia en el ledger de forma idempotente y auditable.
 
 ## Boundaries
 
@@ -57,7 +57,7 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 
 | Fase | Objetivo | Specs |
 |------|----------|-------|
-| 6 | Crear, enlazar y conciliar transferencias | `phase-6-settlement-execution/backend.md` + specs SaaS de la misma fase |
+| 6 | Crear, enlazar y conciliar transferencias | `phase-6-settlement-execution/terminados/backend.md` + specs SaaS de la misma fase (completada) |
 
 ## Orden de ejecucion
 
@@ -73,3 +73,5 @@ backend este estable, pero no se cierran hasta validar contra Core real en Docke
 4. Los pagos cruzados generan compensaciones explicables sin crear liquidez ficticia.
 5. La suma de reservas, asignaciones y transferencias reconcilia al centimo con los saldos observados.
 6. Con liquidacion desactivada, payload, lifecycle y UX actuales no sufren regresiones funcionales.
+7. Aplicar o reintentar una ruta crea exactamente una transferencia neutral; las aplicaciones
+   parciales, conciliaciones y reversos conservan remanente y trazabilidad.

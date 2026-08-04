@@ -4,6 +4,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import MonthlyClose
+from .serializers_settlement import (
+    SettlementExecutionSerializer,
+    SettlementReconciliationSerializer,
+)
 from .services_monthly_close import (
     _get_uncovered_expense_entries_for_month,
     _get_uncovered_income_entries_for_month,
@@ -13,6 +17,15 @@ from .services_monthly_close import (
     finalize_monthly_close,
     lock_monthly_close,
     reopen_monthly_close,
+)
+from .services_settlement_execution import (
+    accept_settlement_recommendation,
+    apply_all_settlement_recommendations,
+    apply_settlement_recommendation,
+    cancel_settlement_recommendation,
+    reconcile_settlement_recommendation,
+    reverse_settlement_recommendation,
+    settlement_reconciliation_candidates,
 )
 
 
@@ -154,3 +167,67 @@ class MonthlyClosePlanImpactView(APIView):
         if impact is None:
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(impact)
+
+
+class MonthlyCloseSettlementApplyAllView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int) -> Response:
+        serializer = SettlementExecutionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        rows = apply_all_settlement_recommendations(
+            user=request.user,
+            close_id=pk,
+            execution_date=serializer.validated_data["execution_date"],
+        )
+        return Response({"recommendations": rows}, status=status.HTTP_200_OK)
+
+
+class MonthlyCloseSettlementRecommendationActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int, recommendation_id: int, action: str) -> Response:
+        common = {
+            "user": request.user,
+            "close_id": pk,
+            "recommendation_id": recommendation_id,
+        }
+        if action == "accept":
+            result = accept_settlement_recommendation(**common)
+        elif action == "cancel":
+            result = cancel_settlement_recommendation(**common)
+        elif action == "reconcile":
+            serializer = SettlementReconciliationSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            result = reconcile_settlement_recommendation(
+                **common, transaction_id=serializer.validated_data["transaction_id"]
+            )
+        elif action in {"apply", "reverse"}:
+            serializer = SettlementExecutionSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            service = (
+                apply_settlement_recommendation
+                if action == "apply"
+                else reverse_settlement_recommendation
+            )
+            result = service(
+                **common,
+                execution_date=serializer.validated_data["execution_date"],
+                amount=serializer.validated_data.get("amount"),
+                idempotency_key=serializer.validated_data["idempotency_key"],
+            )
+        else:
+            return Response({"detail": "Acción no soportada."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class MonthlyCloseSettlementCandidatesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int, recommendation_id: int) -> Response:
+        rows = settlement_reconciliation_candidates(
+            user=request.user,
+            close_id=pk,
+            recommendation_id=recommendation_id,
+        )
+        return Response({"candidates": rows}, status=status.HTTP_200_OK)

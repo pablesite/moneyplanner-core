@@ -78,6 +78,11 @@ class LedgerTransaction(models.Model):
         OUTFLOW = "outflow", "Desinversión"
         REINVESTMENT = "reinvestment", "Reinversión"
 
+    class SettlementAction(models.TextChoices):
+        APPLICATION = "application", "Aplicación"
+        RECONCILIATION = "reconciliation", "Conciliación"
+        REVERSAL = "reversal", "Reverso"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ledger_transactions"
     )
@@ -96,6 +101,26 @@ class LedgerTransaction(models.Model):
         null=True,
         blank=True,
         related_name="ledger_transactions",
+    )
+    settlement_recommendation = models.ForeignKey(
+        "budget.SettlementTransferRecommendation",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ledger_transactions",
+    )
+    settlement_idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    settlement_action = models.CharField(
+        max_length=20,
+        choices=SettlementAction.choices,
+        blank=True,
+        default="",
+    )
+    settlement_amount = models.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        null=True,
+        blank=True,
     )
     quick_entry_kind = models.CharField(max_length=24, blank=True, default="")
     investment_direction = models.CharField(max_length=16, blank=True, default="")
@@ -121,7 +146,12 @@ class LedgerTransaction(models.Model):
                 fields=["user", "import_source", "import_fingerprint"],
                 condition=~Q(import_fingerprint=""),
                 name="acct_tx_user_import_fp_unique",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["user", "settlement_idempotency_key"],
+                condition=~Q(settlement_idempotency_key=""),
+                name="acct_tx_user_settle_key_unique",
+            ),
         ]
         indexes = [
             models.Index(fields=["user", "booking_date"], name="acct_tx_user_book_idx"),

@@ -552,6 +552,13 @@ class SettlementSnapshot(models.Model):
 
 
 class SettlementTransferRecommendation(models.Model):
+    class Status(models.TextChoices):
+        RECOMMENDED = "recommended", "Recomendada"
+        ACCEPTED = "accepted", "Aceptada"
+        APPLIED = "applied", "Aplicada"
+        PARTIALLY_APPLIED = "partially_applied", "Aplicada parcialmente"
+        CANCELLED = "cancelled", "Cancelada"
+
     snapshot = models.ForeignKey(
         SettlementSnapshot,
         on_delete=models.CASCADE,
@@ -584,6 +591,14 @@ class SettlementTransferRecommendation(models.Model):
     amount = models.DecimalField(max_digits=20, decimal_places=8)
     currency = models.CharField(max_length=3)
     reason = models.CharField(max_length=32, default="settlement")
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.RECOMMENDED,
+    )
+    applied_amount = models.DecimalField(max_digits=20, decimal_places=8, default=0)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
