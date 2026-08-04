@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.37.1...moneyplanner-core-v0.38.0) (2026-08-04)
+
+
+### Features
+
+* **ownership:** expose effective dynamic splits ([07240b5](https://github.com/pablesite/moneyplanner-core/commit/07240b50a824eddb05c040164d6dee149c77e466))
+
 ## [0.37.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.37.0...moneyplanner-core-v0.37.1) (2026-08-04)
 
 
