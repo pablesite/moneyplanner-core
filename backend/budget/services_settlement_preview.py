@@ -28,7 +28,11 @@ from .models import (
     SettlementTransferRecommendation,
 )
 from .services import effective_annual_expense_entries, planned_expense_monthly_distribution
-from .services_settlement import build_settlement_readiness
+from .services_settlement import (
+    build_settlement_readiness,
+    expected_expense_settlement_role,
+    resolve_expense_settlement_destination,
+)
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -425,19 +429,30 @@ def _compute_reserves(
                 {"code": "unsupported_budget_role", "entry_id": entry.id, "name": entry.name}
             )
             continue
-        destination = account_by_id.get(entry.settlement_account_id)
-        if destination is None or entry.ownership is None:
+        destination = resolve_expense_settlement_destination(
+            expense=entry, accounts=list(account_by_id.values())
+        )
+        if destination is None:
+            quality_target = (
+                warnings
+                if expected_expense_settlement_role(expense=entry)
+                == SettlementAccount.Role.ALLOCATION_DESTINATION
+                else blockers
+            )
             _append_unique(
-                blockers,
-                {"code": "reserve_missing_inputs", "entry_id": entry.id, "name": entry.name},
+                quality_target,
+                {
+                    "code": (
+                        "allocation_missing_destination"
+                        if quality_target is warnings
+                        else "reserve_missing_inputs"
+                    ),
+                    "entry_id": entry.id,
+                    "name": entry.name,
+                },
             )
             continue
-        expected_role = (
-            SettlementAccount.Role.ALLOCATION_DESTINATION
-            if entry.cashflow_role
-            in {AnnualExpenseEntry.CashflowRole.SAVINGS, AnnualExpenseEntry.CashflowRole.INVESTMENT}
-            else SettlementAccount.Role.OPERATING
-        )
+        expected_role = expected_expense_settlement_role(expense=entry)
         if destination.role != expected_role:
             _append_unique(
                 blockers,
@@ -448,12 +463,6 @@ def _compute_reserves(
                 },
             )
             continue
-        entry_vector, entry_result = _allocation(
-            ownership=entry.ownership,
-            year=target_year,
-            month=target_month,
-            cache=allocation_cache,
-        )
         destination_ownership = account_ownerships.get(destination.id)
         if destination_ownership is None:
             continue
@@ -463,24 +472,13 @@ def _compute_reserves(
             month=target_month,
             cache=allocation_cache,
         )
-        if entry_vector is None or destination_vector is None:
-            failed = entry_result if entry_vector is None else destination_result
+        if destination_vector is None:
             _append_unique(
                 blockers,
                 {
                     "code": "allocation_blocked",
-                    "ownership_id": failed["ownership_id"],
-                    "quality_reasons": failed["quality_reasons"],
-                },
-            )
-            continue
-        if entry_vector != destination_vector:
-            _append_unique(
-                blockers,
-                {
-                    "code": "settlement_ownership_mismatch",
-                    "entry_id": entry.id,
-                    "settlement_account_id": destination.id,
+                    "ownership_id": destination_result["ownership_id"],
+                    "quality_reasons": destination_result["quality_reasons"],
                 },
             )
             continue
@@ -496,7 +494,7 @@ def _compute_reserves(
             _append_unique(blockers, {"code": "missing_budget_fx_rate", "entry_id": entry.id})
             continue
         member_rows = []
-        for member_id, member_amount in _allocate(converted, entry_vector).items():
+        for member_id, member_amount in _allocate(converted, destination_vector).items():
             requirements[(destination.id, member_id)] += member_amount
             member_rows.append({"member_id": member_id, "amount": _money_string(member_amount)})
         rows.append(
@@ -509,7 +507,7 @@ def _compute_reserves(
                     else "reserve"
                 ),
                 "cashflow_role": entry.cashflow_role,
-                "ownership_id": entry.ownership_id,
+                "ownership_id": destination_ownership.id,
                 "settlement_account_id": destination.id,
                 "amount": _money_string(converted),
                 "currency": base_currency,

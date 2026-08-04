@@ -218,6 +218,28 @@ class SettlementPreviewTests(APITestCase):
             settlement_account=self.operating_config,
         )
 
+    def test_aggregate_ordinary_budget_uses_the_only_operating_account(self):
+        entry = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Mantenimiento agregado",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="living_expenses",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.OPERATING,
+            amount_annual=Decimal("1200"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        reserve = next(row for row in result["reserves"] if row["entry_id"] == entry.id)
+        self.assertEqual(reserve["settlement_account_id"], self.operating_config.id)
+        self.assertEqual(reserve["ownership_id"], self.shared.id)
+        self.assertEqual([row["amount"] for row in reserve["members"]], ["50.00", "50.00"])
+
     def test_cross_payments_and_internal_transfer_reconcile(self):
         self._ordinary_reserve()
         salary = self._flow(

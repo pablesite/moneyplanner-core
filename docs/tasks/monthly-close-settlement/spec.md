@@ -68,17 +68,24 @@ como `Dividendos`, puede por tanto agrupar movimientos de titulares distintos.
 
 ## Reserva y routing
 
-Cada partida recurrente efectiva del siguiente mes aporta:
+Cada partida recurrente efectiva del siguiente mes aporta una reserva agregada. La titularidad de la
+partida presupuestaria no interviene: la reserva se atribuye con la titularidad de la cuenta que la
+conserva o recibe.
 
 ```text
 member_requirement = planned_amount * share(entry.ownership, member, target_month)
 ```
 
-Se incluyen gastos operativos y compromisos temporales activos. Ahorro e inversion se tratan como
-asignaciones a su cuenta destino. Transferencias y partidas puntuales se excluyen por defecto.
+Se incluyen gastos operativos y compromisos temporales activos. Si hay una sola cuenta operativa, se
+usa automaticamente para las reservas ordinarias; con varias, la partida debe indicar la ruta.
+Ahorro e inversion se tratan como asignaciones a su cuenta destino. Transferencias y partidas
+puntuales se excluyen por defecto.
 
-La cuenta destino debe tener el mismo vector efectivo de ownership que la obligacion para el mes
-objetivo. Una incompatibilidad genera un bloqueo explicito; no se corrige promediando porcentajes.
+Una asignacion sin cuenta destino concreta se omite con un aviso explicito; no bloquea la activacion
+ni el calculo del saldo economico basado en movimientos reales.
+
+La titularidad efectiva de la cuenta destino determina el reparto economico de la reserva. El
+presupuesto puede seguir siendo un agregado y no necesita duplicar la titularidad contable.
 
 El solver construye saldos objetivo:
 

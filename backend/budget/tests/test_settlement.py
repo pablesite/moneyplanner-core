@@ -271,25 +271,51 @@ class SettlementApiTests(APITestCase):
         )
         self.assertEqual(blocker["difference"], "80.00000000")
 
-    def test_readiness_explains_missing_and_incompatible_inputs(self):
-        self._configure()
+    def test_readiness_requires_a_route_only_when_operating_accounts_are_ambiguous(self):
+        second_operating = self._asset("Segunda compartida", Decimal("50.00"), self.shared)
+        self._configure(
+            extra_accounts=[
+                {
+                    "asset_id": second_operating.id,
+                    "role": SettlementAccount.Role.OPERATING,
+                }
+            ]
+        )
         profile = SettlementProfile.objects.get(user=self.user)
-        personal_destination = SettlementAccount.objects.get(profile=profile, asset=self.personal_a)
         AnnualExpenseEntry.objects.create(
             user=self.user,
-            name="Sin ownership",
+            name="Reserva agregada",
             category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
             subcategory="living_expenses",
             amount_annual=Decimal("1200.00"),
             fiscal_year=2026,
         )
-        self._shared_expense(destination_asset=self.personal_a)
 
         response = self.client.get("/api/budget/settlement/readiness/?year=2026&month=3")
         codes = {blocker["code"] for blocker in response.data["blockers"]}
-        self.assertIn("expense_missing_ownership", codes)
-        self.assertIn("settlement_ownership_mismatch", codes)
-        self.assertEqual(personal_destination.member_id, self.member_a.id)
+        self.assertIn("expense_missing_settlement_account", codes)
+        self.assertEqual(SettlementAccount.objects.filter(profile=profile).count(), 4)
+
+    def test_readiness_warns_but_does_not_block_an_unrouted_allocation(self):
+        self._configure()
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Ahorro e inversión agregado",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="other_financial_investments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+        )
+
+        response = self.client.get("/api/budget/settlement/readiness/?year=2026&month=3")
+
+        self.assertEqual(response.data["status"], SettlementProfile.ReadinessStatus.READY)
+        self.assertEqual(response.data["blockers"], [])
+        self.assertIn(
+            "allocation_missing_destination",
+            {warning["code"] for warning in response.data["warnings"]},
+        )
 
     def test_configuration_and_budget_reject_cross_user_references(self):
         other = get_user_model().objects.create_user(username="other_settlement", password="pass")

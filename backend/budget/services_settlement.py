@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+from typing import cast
 
 from django.db import transaction
 from django.utils import timezone
@@ -71,6 +72,35 @@ def derive_expense_settlement_fields(*, expense: AnnualExpenseEntry) -> dict[str
     if account is not None:
         result["settlement_account"] = account
     return result
+
+
+def expected_expense_settlement_role(*, expense: AnnualExpenseEntry) -> str:
+    if expense.cashflow_role in {
+        AnnualExpenseEntry.CashflowRole.SAVINGS,
+        AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    }:
+        return cast(str, SettlementAccount.Role.ALLOCATION_DESTINATION)
+    return cast(str, SettlementAccount.Role.OPERATING)
+
+
+def resolve_expense_settlement_destination(
+    *, expense: AnnualExpenseEntry, accounts: list[SettlementAccount]
+) -> SettlementAccount | None:
+    account_by_id = {account.id: account for account in accounts}
+    if expense.settlement_account_id is not None:
+        return account_by_id.get(expense.settlement_account_id)
+
+    derived = derive_expense_settlement_fields(expense=expense).get("settlement_account")
+    if isinstance(derived, SettlementAccount):
+        return account_by_id.get(derived.id)
+
+    if expected_expense_settlement_role(expense=expense) == SettlementAccount.Role.OPERATING:
+        operating_accounts = [
+            account for account in accounts if account.role == SettlementAccount.Role.OPERATING
+        ]
+        if len(operating_accounts) == 1:
+            return operating_accounts[0]
+    return None
 
 
 def _validate_configuration_payload(*, user, payload: dict) -> tuple[list[dict], list[dict]]:
@@ -271,6 +301,7 @@ def _check_account_readiness(
                         "code": "wallet_adjustment_required",
                         "account_id": account.id,
                         "asset_id": account.asset_id,
+                        "asset_name": account.asset.name,
                         "modeled_balance": str(modeled_balance),
                         "accepted_physical_balance": str(accepted_balance),
                         "difference": str(modeled_balance - accepted_balance),
@@ -368,20 +399,35 @@ def build_settlement_readiness(
     for entry in expense_entries:
         if month not in planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year):
             continue
-        if entry.ownership_id is None:
-            blockers.append(
-                {"code": "expense_missing_ownership", "entry_id": entry.id, "name": entry.name}
-            )
-            continue
         if entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF:
             continue
-        destination = entry.settlement_account
+        destination = resolve_expense_settlement_destination(expense=entry, accounts=accounts)
         if destination is None:
-            blockers.append(
+            quality_target = (
+                warnings
+                if expected_expense_settlement_role(expense=entry)
+                == SettlementAccount.Role.ALLOCATION_DESTINATION
+                else blockers
+            )
+            quality_target.append(
                 {
-                    "code": "expense_missing_settlement_account",
+                    "code": (
+                        "allocation_missing_destination"
+                        if quality_target is warnings
+                        else "expense_missing_settlement_account"
+                    ),
                     "entry_id": entry.id,
                     "name": entry.name,
+                }
+            )
+            continue
+        expected_role = expected_expense_settlement_role(expense=entry)
+        if destination.role != expected_role:
+            blockers.append(
+                {
+                    "code": "expense_invalid_settlement_account",
+                    "entry_id": entry.id,
+                    "settlement_account_id": destination.id,
                 }
             )
             continue
@@ -395,29 +441,14 @@ def build_settlement_readiness(
                 }
             )
             continue
-        for ownership in (entry.ownership, destination_ownership):
-            if ownership.id not in allocation_cache:
-                allocation_cache[ownership.id] = _allocation_vector(
-                    ownership=ownership, fiscal_year=fiscal_year, month=month
-                )
-                _record_allocation_quality(
-                    result=allocation_cache[ownership.id][1],
-                    blockers=blockers,
-                    warnings=warnings,
-                )
-        expense_vector = allocation_cache[entry.ownership_id][0]
-        destination_vector = allocation_cache[destination_ownership.id][0]
-        if (
-            expense_vector is not None
-            and destination_vector is not None
-            and expense_vector != destination_vector
-        ):
-            blockers.append(
-                {
-                    "code": "settlement_ownership_mismatch",
-                    "entry_id": entry.id,
-                    "settlement_account_id": destination.id,
-                }
+        if destination_ownership.id not in allocation_cache:
+            allocation_cache[destination_ownership.id] = _allocation_vector(
+                ownership=destination_ownership, fiscal_year=fiscal_year, month=month
+            )
+            _record_allocation_quality(
+                result=allocation_cache[destination_ownership.id][1],
+                blockers=blockers,
+                warnings=warnings,
             )
 
     adjustment_total = sum(
