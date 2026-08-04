@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.37.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.37.0...moneyplanner-core-v0.37.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **plan:** backfill forecast financing rows ([ef57be2](https://github.com/pablesite/moneyplanner-core/commit/ef57be270b8e8e8fb1bfef7f69e4e424b551553e))
+* **plan:** expose existing member candidates ([c2df3c6](https://github.com/pablesite/moneyplanner-core/commit/c2df3c6d0c003fc7d022602bc522b8a44380342a))
+* **plan:** sync forecast loan payments to budget ([e06321f](https://github.com/pablesite/moneyplanner-core/commit/e06321f3f3e3c49f68477b92e5494f044dad589e))
+
 ## [0.37.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.36.0...moneyplanner-core-v0.37.0) (2026-08-04)
 
 
