@@ -253,9 +253,33 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(result["status"], "ready", result["quality"])
         self.assertEqual(result["reconciliation"]["physical_total"], "2200.00")
         self.assertEqual(result["reconciliation"]["economic_total"], "2200.00")
-        balances = {row["member_id"]: row["closing"] for row in result["economic_balances"]}
-        self.assertEqual(balances[self.member_a.id], "1550.00")
-        self.assertEqual(balances[self.member_b.id], "650.00")
+        balances = {row["member_id"]: row for row in result["economic_balances"]}
+        self.assertEqual(
+            balances[self.member_a.id],
+            {
+                "member_id": self.member_a.id,
+                "opening": "600.00",
+                "income": "1000.00",
+                "expense": "50.00",
+                "compensation": "550.00",
+                "requirement": "50.00",
+                "closing": "1550.00",
+                "excess": "1500.00",
+            },
+        )
+        self.assertEqual(
+            balances[self.member_b.id],
+            {
+                "member_id": self.member_b.id,
+                "opening": "700.00",
+                "income": "0.00",
+                "expense": "50.00",
+                "compensation": "-550.00",
+                "requirement": "50.00",
+                "closing": "650.00",
+                "excess": "600.00",
+            },
+        )
         by_tx = {row["transaction_id"]: row for row in result["compensations"]}
         self.assertEqual(
             by_tx[salary.id]["members"],

@@ -147,3 +147,11 @@ Movimientos.
    modelado y efectivo fisico; los cambios posteriores siguen necesitando movimientos trazables.
 4. Un saldo personal objetivo negativo se conserva con signo. Representa una aportacion inversa o
    financiacion necesaria y no se recorta silenciosamente a cero.
+
+## Resultado validado de v1
+
+La versión manual quedó validada el 2026-08-04. Core expone el desglose económico por miembro,
+reservas, allocations, compensaciones y rutas reconciliadas; SaaS lo presenta dentro de Resultado y
+abre transferencias pre-rellenadas sin persistirlas. Los perfiles `disabled` conservan el cierre de
+cuatro pasos sin superficie adicional. El caso canónico y los estados degradados están cubiertos por
+tests Core/SaaS y el fixture visual 61/39 fue revisado a 1440, 820, 560 y 360 px sin overflow.

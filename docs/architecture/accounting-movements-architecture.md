@@ -37,6 +37,9 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
    member income/expense. They only change physical location and therefore the transfer routes still
    required at close. Transfers that cross the perimeter block an exact preview instead of being
    guessed from the liquidity delta.
+7. The close payload exposes each member's opening, classified income, classified expense,
+   compensation, next-period requirement, closing position and excess. Compensation is explanatory
+   location evidence and is not added again to the economic closing equation.
 
 ## Problem to solve
 Core already has useful but separate execution layers:

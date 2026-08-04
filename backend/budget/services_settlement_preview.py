@@ -221,6 +221,8 @@ def _compute_movements(
     allocation_cache,
     account_members: dict[tuple[int, int], Decimal],
     member_totals: dict[int, Decimal],
+    member_income: dict[int, Decimal],
+    member_expense: dict[int, Decimal],
     physical_delta: dict[int, Decimal],
     blockers: list[dict],
 ) -> list[dict]:
@@ -305,6 +307,8 @@ def _compute_movements(
             continue
 
         economic_delta = ZERO
+        income_delta = ZERO
+        expense_delta = ZERO
         for entry in classified:
             amount = Decimal(entry.amount)
             if entry.flow_family == LedgerEntry.FlowFamily.INCOME:
@@ -312,9 +316,14 @@ def _compute_movements(
             else:
                 signed = -amount if entry.side == LedgerEntry.Side.DEBIT else amount
             try:
-                economic_delta += _convert(
+                converted = _convert(
                     signed, entry.currency, base_currency, tx.booking_date, fx_cache
                 )
+                economic_delta += converted
+                if entry.flow_family == LedgerEntry.FlowFamily.INCOME:
+                    income_delta += converted
+                else:
+                    expense_delta -= converted
             except DjangoValidationError:
                 _append_unique(
                     blockers,
@@ -345,11 +354,15 @@ def _compute_movements(
             )
             continue
         economic_by_member = _allocate(economic_delta, vector)
+        income_by_member = _allocate(income_delta, vector)
+        expense_by_member = _allocate(expense_delta, vector)
         all_members = sorted(set(economic_by_member) | set(physical_by_member))
         compensation_rows = []
         for member_id in all_members:
             economic = economic_by_member.get(member_id, ZERO)
             member_totals[member_id] += economic
+            member_income[member_id] += income_by_member.get(member_id, ZERO)
+            member_expense[member_id] += expense_by_member.get(member_id, ZERO)
             difference = _money(economic - physical_by_member.get(member_id, ZERO))
             if difference:
                 compensation_rows.append(
@@ -649,6 +662,48 @@ def _serialize_snapshot(snapshot: SettlementSnapshot) -> dict:
     }
 
 
+def _economic_balance_rows(
+    *,
+    opening_totals: dict[int, Decimal],
+    member_totals: dict[int, Decimal],
+    member_income: dict[int, Decimal],
+    member_expense: dict[int, Decimal],
+    compensations: list[dict],
+    requirements: dict[tuple[int, int], Decimal],
+) -> list[dict]:
+    compensation_totals: dict[int, Decimal] = defaultdict(Decimal)
+    for compensation in compensations:
+        for member in compensation["members"]:
+            compensation_totals[int(member["member_id"])] += Decimal(str(member["amount"]))
+    requirement_totals: dict[int, Decimal] = defaultdict(Decimal)
+    for (_account_id, member_id), amount in requirements.items():
+        requirement_totals[member_id] += amount
+    member_ids = sorted(
+        set(opening_totals)
+        | set(member_totals)
+        | set(member_income)
+        | set(member_expense)
+        | set(requirement_totals)
+    )
+    rows = []
+    for member_id in member_ids:
+        closing = member_totals.get(member_id, ZERO)
+        requirement = requirement_totals.get(member_id, ZERO)
+        rows.append(
+            {
+                "member_id": member_id,
+                "opening": _money_string(opening_totals.get(member_id, ZERO)),
+                "income": _money_string(member_income.get(member_id, ZERO)),
+                "expense": _money_string(member_expense.get(member_id, ZERO)),
+                "compensation": _money_string(compensation_totals.get(member_id, ZERO)),
+                "requirement": _money_string(requirement),
+                "closing": _money_string(closing),
+                "excess": _money_string(closing - requirement),
+            }
+        )
+    return rows
+
+
 def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> dict:
     close = MonthlyClose.objects.filter(user=user, fiscal_year=fiscal_year, month=month).first()
     if close is not None and close.status in {
@@ -696,6 +751,7 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     opening_source, movement_start, account_members, member_totals, previous = _opening_position(
         profile=profile, close_start=close_start
     )
+    opening_totals = dict(member_totals)
     if previous is None and profile.activation_date and profile.activation_date > close_end:
         _append_unique(blockers, {"code": "settlement_not_active_for_period"})
     settlement_by_ledger = {
@@ -711,6 +767,8 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     )
     allocation_cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]] = {}
     physical_delta: dict[int, Decimal] = defaultdict(Decimal)
+    member_income: dict[int, Decimal] = defaultdict(Decimal)
+    member_expense: dict[int, Decimal] = defaultdict(Decimal)
     compensations = _compute_movements(
         transactions=transactions,
         settlement_by_ledger=settlement_by_ledger,
@@ -719,6 +777,8 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         allocation_cache=allocation_cache,
         account_members=account_members,
         member_totals=member_totals,
+        member_income=member_income,
+        member_expense=member_expense,
         physical_delta=physical_delta,
         blockers=blockers,
     )
@@ -865,10 +925,14 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     if _money(physical_total - economic_total):
         _append_unique(blockers, {"code": "household_total_mismatch", **reconciliation})
 
-    economic_rows = [
-        {"member_id": member_id, "closing": _money_string(amount)}
-        for member_id, amount in sorted(member_totals.items())
-    ]
+    economic_rows = _economic_balance_rows(
+        opening_totals=opening_totals,
+        member_totals=member_totals,
+        member_income=member_income,
+        member_expense=member_expense,
+        compensations=compensations,
+        requirements=requirements,
+    )
     result = {
         "status": "not_ready" if blockers else "ready",
         "calculation_status": "not_ready" if blockers else "ready",

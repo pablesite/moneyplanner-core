@@ -50,8 +50,8 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 | 1 | Ownership dinamico y snapshots mensuales | `phase-1-dynamic-ownership/terminados/backend.md` (completada) |
 | 2 | Configuracion, ownership presupuestario, destinos y apertura | `phase-2-settlement-inputs/terminados/backend.md` (completada) |
 | 3 | Motor de preview, reservas, compensaciones y recomendaciones | `phase-3-settlement-preview/terminados/backend.md` + `phase-3-settlement-preview/terminados/qa.md` (completada) |
-| 4 | UX de configuracion y readiness en SaaS | `../../../../docs/tasks/monthly-close-settlement/phase-4-configuration-ux/frontend.md` |
-| 5 | Resultado de liquidacion dentro del paso Resultado | `../../../../docs/tasks/monthly-close-settlement/phase-5-close-result-ux/frontend.md` + `qa.md` |
+| 4 | UX de configuracion y readiness en SaaS | `../../../../docs/tasks/monthly-close-settlement/phase-4-configuration-ux/terminados/frontend.md` (completada) |
+| 5 | Resultado de liquidacion dentro del paso Resultado | `../../../../docs/tasks/monthly-close-settlement/phase-5-close-result-ux/terminados/frontend.md` + `qa.md` (completada) |
 
 ## Version 2 - ejecucion automatizada
 
