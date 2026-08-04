@@ -84,14 +84,16 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. A participating `SettlementAccount` references one user-owned asset and gives it one explicit
    role: operating, primary personal destination, allocation destination or physical cash. Operating
    and personal accounts are liquidity; allocation destinations may also be investment assets.
-3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are the structured canonical
-   ownership when present. Nullable fields and legacy `owner_name` keep existing clients compatible.
+3. `AnnualIncomeEntry.ownership` is optional planning metadata because one aggregate forecast may
+   cover realized movements from several owners. Realized settlement income uses posted transaction
+   ownership exclusively. `AnnualExpenseEntry.ownership` remains the structured input for routing
+   future recurring reserves; nullable fields and legacy `owner_name` keep existing clients compatible.
 4. Recurrent expenses route through nullable `settlement_account`. Asset-generated investment rows
    inherit both ownership and an allocation destination only from unambiguous structural links;
    liability-generated rows inherit ownership. Plan-managed rows remain writable only by Mi Plan.
 5. Readiness is period-specific and reports missing operating/personal accounts, account ownership,
-   budget ownership, expense routes, incompatible effective vectors, dynamic-allocation coverage,
-   non-zero opening adjustments and unnormalized wallets.
+   recurring expense ownership and routes, movement ownership, incompatible effective vectors,
+   dynamic-allocation coverage, non-zero opening adjustments and unnormalized wallets.
 6. Activation is explicit and idempotent. It captures one member/account opening baseline using the
    effective account ownership for the activation month. A wallet baseline uses accepted physical
    cash while preserving its modeled balance and historical movements for audit.

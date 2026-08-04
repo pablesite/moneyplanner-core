@@ -61,6 +61,11 @@ Las transferencias internas no crean ingreso ni gasto. Cambian la localizacion f
 comparar saldos observados con saldos objetivo. Las diferencias por pagos cruzados se presentan con
 la transaccion origen siempre que pueda identificarse.
 
+Las partidas anuales de ingresos son previsiones agregadas: no se exige titularidad en ellas para
+activar la liquidacion ni se usan para repartir ingresos realizados. La atribucion economica procede
+exclusivamente de la titularidad de cada movimiento contabilizado. Una misma partida de presupuesto,
+como `Dividendos`, puede por tanto agrupar movimientos de titulares distintos.
+
 ## Reserva y routing
 
 Cada partida recurrente efectiva del siguiente mes aporta:

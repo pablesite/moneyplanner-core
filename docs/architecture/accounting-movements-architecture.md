@@ -155,6 +155,7 @@ This leaves a gap:
    - manual check-ins remain fallback when coverage is partial or absent
    - historical closes must respect `as_of_date` instead of reading current live balances
    - precedence is explicit: use ledger first when the account link is valid and covered; fallback only when ledger coverage is unsafe or absent
+   - settlement attributes realized income and expense from each posted transaction's ownership; annual income budget rows remain aggregate forecasts and are not readiness inputs
 
 ## Transactions list API contract
 1. `GET /api/accounting/transactions/` uses server-side cursor pagination with ordering `-booking_date, -id`.

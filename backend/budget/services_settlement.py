@@ -24,7 +24,6 @@ from .services import (
     effective_annual_expense_entries,
     effective_annual_income_entries,
     planned_expense_monthly_distribution,
-    planned_income_monthly_distribution,
 )
 
 ZERO = Decimal("0")
@@ -362,22 +361,9 @@ def build_settlement_readiness(
     expense_entries = list(
         effective_annual_expense_entries(user=user, fiscal_year=fiscal_year).filter(is_active=True)
     )
-    for entry in income_entries:
-        if month not in planned_income_monthly_distribution(entry=entry, fiscal_year=fiscal_year):
-            continue
-        if entry.ownership_id is None:
-            blockers.append(
-                {"code": "income_missing_ownership", "entry_id": entry.id, "name": entry.name}
-            )
-        elif entry.ownership_id not in allocation_cache:
-            allocation_cache[entry.ownership_id] = _allocation_vector(
-                ownership=entry.ownership, fiscal_year=fiscal_year, month=month
-            )
-            _record_allocation_quality(
-                result=allocation_cache[entry.ownership_id][1],
-                blockers=blockers,
-                warnings=warnings,
-            )
+
+    # Income budget rows are forecasts and may aggregate several owners. Realized
+    # settlement income is attributed from each posted transaction's ownership.
 
     for entry in expense_entries:
         if month not in planned_expense_monthly_distribution(entry=entry, fiscal_year=fiscal_year):

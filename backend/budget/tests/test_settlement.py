@@ -7,6 +7,7 @@ from rest_framework.test import APITestCase
 
 from budget.models import (
     AnnualExpenseEntry,
+    AnnualIncomeEntry,
     SettlementAccount,
     SettlementOpeningAdjustment,
     SettlementOpeningBalance,
@@ -168,6 +169,25 @@ class SettlementApiTests(APITestCase):
             list(shared_balances.values_list("amount", flat=True)),
             [Decimal("500.00000000"), Decimal("500.00000000")],
         )
+
+    def test_readiness_does_not_require_ownership_on_aggregate_income_budget(self):
+        self._configure()
+        self._shared_expense()
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Dividendos agregados",
+            category=AnnualIncomeEntry.Category.PASSIVE_INCOME,
+            subcategory="dividends",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        response = self.client.get("/api/budget/settlement/readiness/?year=2026&month=3")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["status"], SettlementProfile.ReadinessStatus.READY)
+        self.assertEqual(response.data["blockers"], [])
 
     def test_wallet_records_physical_cash_and_zero_sum_compensation_without_history_edit(self):
         wallet = self._asset(
