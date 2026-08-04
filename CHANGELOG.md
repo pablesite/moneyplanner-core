@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.0...moneyplanner-core-v0.38.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **settlement:** attribute income from movements ([2b15df5](https://github.com/pablesite/moneyplanner-core/commit/2b15df5d7fabcf1a9d41701b5acc7e2088d09106))
+
 ## [0.38.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.37.1...moneyplanner-core-v0.38.0) (2026-08-04)
 
 
