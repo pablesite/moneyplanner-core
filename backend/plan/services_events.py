@@ -16,13 +16,20 @@ from .models import FinancialPlan, PlanEvent, Scenario
 from .services_projection import (
     ProjectionService,
     build_projection_inputs,
+    debt_annual_payment,
     earliest_sustainable_retirement_year,
     get_assumption_set,
     serialize_assumptions,
 )
+from .services_scenarios import (
+    default_debt_budget_mapping,
+    end_date_from_term,
+    recurring_year_slots,
+)
 from .services_scenarios import comparison_delta
 
 MONEY = Decimal("0.01")
+PLANNED_DECISION_FINANCING_NOTE = "Generado automaticamente desde Mi Plan: financiacion prevista."
 
 BudgetEntryModel = type[AnnualExpenseEntry] | type[AnnualIncomeEntry]
 
@@ -305,6 +312,59 @@ def _decision_impact_event(
     }
 
 
+def _replace_planned_decision_financing_entries(
+    *, event: PlanEvent, payload: dict[str, Any]
+) -> int:
+    """Mantiene en Presupuesto la cuota que el motor ya proyecta para la decisión."""
+    event_group = f"plan_event:{event.id}"
+    AnnualExpenseEntry.objects.filter(
+        user=event.plan.user,
+        event_group=event_group,
+        is_system_generated=True,
+        notes=PLANNED_DECISION_FINANCING_NOTE,
+    ).delete()
+
+    principal = Decimal(str(payload.get("new_debt_principal") or "0"))
+    term_years = int(str(payload.get("new_debt_term_years") or "0"))
+    if principal <= 0 or term_years <= 0:
+        return 0
+
+    start = date(int(payload["start_year"]), int(payload.get("start_month") or 1), 1)
+    term_months = term_years * 12
+    annual_payment = debt_annual_payment(
+        principal=principal,
+        annual_rate=Decimal(str(payload.get("new_debt_interest_rate") or "0")),
+        term_years=term_years,
+    )
+    monthly_payment = annual_payment / Decimal("12")
+    category, subcategory, cashflow_role = default_debt_budget_mapping(event.event_type)
+    created = 0
+    for slot in recurring_year_slots(
+        start=start,
+        end=end_date_from_term(start, term_months),
+    ):
+        AnnualExpenseEntry.objects.create(
+            user=event.plan.user,
+            is_system_generated=True,
+            name=f"{event.name} - financiacion",
+            category=category,
+            subcategory=subcategory,
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=slot.time_profile,
+            cashflow_role=cashflow_role,
+            event_group=event_group,
+            term_start_month=slot.term_start_month,
+            term_end_year=slot.term_end_year,
+            term_end_month=slot.term_end_month,
+            amount_annual=slot.amount(monthly_payment),
+            fiscal_year=slot.fiscal_year,
+            currency="EUR",
+            notes=PLANNED_DECISION_FINANCING_NOTE,
+        )
+        created += 1
+    return created
+
+
 @transaction.atomic
 def register_planned_decision(
     *,
@@ -329,22 +389,19 @@ def register_planned_decision(
     pasan a gobernarse por la Decisión) y enlaza el activo/pasivo real. A diferencia de
     ``register_occurred_event``, nace ``planned`` y **sí** aporta impacto proyectado.
     """
+    payload = _decision_impact_event(
+        start_year=transaction_year,
+        start_month=transaction_month,
+        end_year=end_year,
+        impact=impact or {},
+    )
     event = PlanEvent.objects.create(
         plan=plan,
         name=name.strip(),
         event_type=event_type,
         planned_date=decision_date,
         status=PlanEvent.Status.PLANNED,
-        planned_impact_json={
-            "events": [
-                _decision_impact_event(
-                    start_year=transaction_year,
-                    start_month=transaction_month,
-                    end_year=end_year,
-                    impact=impact or {},
-                )
-            ]
-        },
+        planned_impact_json={"events": [payload]},
     )
     adopted = _adopt_budget_entries(
         event=event,
@@ -354,6 +411,7 @@ def register_planned_decision(
     linked = _link_net_worth(
         event=event, asset_ids=asset_ids or [], liability_ids=liability_ids or []
     )
+    _replace_planned_decision_financing_entries(event=event, payload=payload)
     event.actual_impact_json = {
         "registration": {
             "decision_date": decision_date.isoformat(),
@@ -411,16 +469,13 @@ def update_planned_decision(
     locked.name = name.strip()
     locked.event_type = event_type
     locked.planned_date = decision_date
-    locked.planned_impact_json = {
-        "events": [
-            _decision_impact_event(
-                start_year=transaction_year,
-                start_month=transaction_month,
-                end_year=end_year,
-                impact=impact,
-            )
-        ]
-    }
+    payload = _decision_impact_event(
+        start_year=transaction_year,
+        start_month=transaction_month,
+        end_year=end_year,
+        impact=impact,
+    )
+    locked.planned_impact_json = {"events": [payload]}
     registration.update(
         {
             "decision_date": decision_date.isoformat(),
@@ -443,6 +498,7 @@ def update_planned_decision(
             "updated_at",
         ]
     )
+    _replace_planned_decision_financing_entries(event=locked, payload=payload)
     projection = ProjectionService().recalculate(plan=locked.plan)
     return {"event": locked, "projection": projection}
 

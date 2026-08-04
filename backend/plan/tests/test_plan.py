@@ -2849,6 +2849,42 @@ class PlannedDecisionMigrationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("new_debt_term_years", str(response.data))
 
+    def test_purchase_decision_creates_forecast_financing_budget_rows(self):
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Compra Atrio",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 1, 1),
+            transaction_year=self.transaction_year,
+            transaction_month=11,
+            impact={
+                "new_asset_value": Decimal("322420.00"),
+                "new_asset_type": "family_use",
+                "new_debt_principal": Decimal("242000.00"),
+                "new_debt_interest_rate": Decimal("0.0250"),
+                "new_debt_term_years": 30,
+            },
+        )
+
+        rows = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            event_group=f"plan_event:{event.id}",
+            is_system_generated=True,
+        ).order_by("fiscal_year")
+        self.assertEqual(rows.count(), 31)
+        first = rows.get(fiscal_year=self.transaction_year)
+        following = rows.get(fiscal_year=self.transaction_year + 1)
+        last = rows.get(fiscal_year=self.transaction_year + 30)
+        self.assertEqual(first.amount_annual, Decimal("1912.39"))
+        self.assertEqual(first.term_start_month, 11)
+        self.assertEqual(following.amount_annual, Decimal("11474.31"))
+        self.assertEqual(last.amount_annual, Decimal("9561.93"))
+        self.assertEqual(first.subcategory, "mortgage_principal")
+        self.assertEqual(
+            first.cashflow_role,
+            AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        )
+
     def test_endpoint_updates_planned_decision_without_releasing_its_lines(self):
         reform = self._reform_expense(Decimal("40000.00"))
         self.client.force_authenticate(self.user)
@@ -2904,9 +2940,63 @@ class PlannedDecisionMigrationTests(APITestCase):
         self.assertEqual(registration_after["note"], "Valor de mercado revisado")
         reform.refresh_from_db()
         self.assertEqual(reform.event_group, f"plan_event:{event.id}")
+        financing_rows = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            event_group=f"plan_event:{event.id}",
+            is_system_generated=True,
+        )
+        self.assertEqual(financing_rows.count(), 31)
+        self.assertEqual(
+            financing_rows.get(fiscal_year=self.transaction_year + 1).amount_annual,
+            Decimal("11341.55"),
+        )
         self.assertEqual(
             ProjectionSnapshot.objects.filter(plan=self.plan, is_official=True).count(),
             snapshot_count + 1,
+        )
+
+    def test_editing_purchase_decision_without_debt_removes_forecast_financing_rows(self):
+        self.client.force_authenticate(self.user)
+        event = register_planned_decision(
+            plan=self.plan,
+            name="Compra Atrio",
+            event_type=Scenario.TemplateType.HOUSING,
+            decision_date=date(date.today().year, 2, 1),
+            transaction_year=self.transaction_year,
+            transaction_month=11,
+            impact={
+                "new_asset_value": Decimal("250000.00"),
+                "new_asset_type": "family_use",
+                "new_debt_principal": Decimal("200000.00"),
+                "new_debt_interest_rate": Decimal("0.0250"),
+                "new_debt_term_years": 30,
+            },
+        )
+
+        response = self.client.patch(
+            reverse("financial-plan-event-planned-decision-detail", args=[event.id]),
+            {
+                "name": "Compra Atrio sin financiación",
+                "event_type": Scenario.TemplateType.HOUSING,
+                "decision_date": f"{date.today().year}-02-15",
+                "transaction_year": self.transaction_year,
+                "transaction_month": 11,
+                "impact": {
+                    "new_asset_value": "250000.00",
+                    "new_asset_type": "family_use",
+                    "new_debt_principal": "0.00",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                event_group=f"plan_event:{event.id}",
+                is_system_generated=True,
+            ).exists()
         )
 
     def test_endpoint_rejects_editing_an_occurred_decision_as_planned(self):
@@ -2947,7 +3037,13 @@ class PlannedDecisionMigrationTests(APITestCase):
             decision_date=date(date.today().year, 1, 1),
             transaction_year=self.transaction_year,
             expense_entry_ids=[reform.id],
-            impact={"new_asset_value": Decimal("250000.00"), "new_asset_type": "family_use"},
+            impact={
+                "new_asset_value": Decimal("250000.00"),
+                "new_asset_type": "family_use",
+                "new_debt_principal": Decimal("200000.00"),
+                "new_debt_interest_rate": Decimal("0.0250"),
+                "new_debt_term_years": 30,
+            },
         )
         reform.refresh_from_db()
         self.assertEqual(reform.event_group, f"plan_event:{event.id}")
@@ -2956,6 +3052,9 @@ class PlannedDecisionMigrationTests(APITestCase):
         reform.refresh_from_db()  # lanzaría DoesNotExist si se hubiera borrado
         self.assertEqual(reform.event_group, "compra_atrio")
         self.assertTrue(reform.is_active)
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(event_group=f"plan_event:{event.id}").exists()
+        )
 
 
 class CashFlowReconciliationTests(TestCase):

@@ -479,7 +479,7 @@ def default_debt_budget_mapping(template_type: str) -> tuple[str, str, str]:
         return (
             cast(str, AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS),
             "mortgage_principal",
-            cast(str, AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE),
+            cast(str, AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT),
         )
     return (
         cast(str, AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES),
