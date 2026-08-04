@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import FamilyMember, Ownership, OwnershipIncomeRule, OwnershipLink, OwnershipSplit
@@ -9,6 +10,7 @@ from .services import (
     validate_split_percent,
     validate_ownership_write_payload,
 )
+from .services_allocations import resolve_ownership_allocation
 
 
 class FamilyMemberSerializer(serializers.ModelSerializer):
@@ -47,6 +49,7 @@ class OwnershipReadSerializer(serializers.ModelSerializer):
     splits = OwnershipSplitReadSerializer(many=True, read_only=True)
     is_in_use = serializers.SerializerMethodField()
     income_rules = OwnershipIncomeRuleSerializer(many=True, read_only=True)
+    effective_splits = serializers.SerializerMethodField()
 
     class Meta:
         model = Ownership
@@ -57,11 +60,32 @@ class OwnershipReadSerializer(serializers.ModelSerializer):
             "splits",
             "allocation_basis",
             "income_rules",
+            "effective_splits",
             "is_in_use",
         ]
 
     def get_is_in_use(self, obj):
         return ownership_is_in_use(obj)
+
+    def get_effective_splits(self, obj):
+        if obj.allocation_basis != Ownership.AllocationBasis.RECURRING_INCOME_12M:
+            return None
+
+        today = timezone.localdate()
+        allocation = resolve_ownership_allocation(
+            ownership=obj,
+            fiscal_year=today.year,
+            month=today.month,
+            persist=False,
+        )
+        return [
+            {
+                "member_id": share["member_id"],
+                "member_name": share["member_name"],
+                "percent": share["percent"],
+            }
+            for share in allocation["shares"]
+        ]
 
 
 class OwnershipSplitInputSerializer(serializers.Serializer):

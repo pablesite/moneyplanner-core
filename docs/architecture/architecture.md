@@ -63,6 +63,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    `explicit_split` unless a shared ownership explicitly enables `recurring_income_12m`.
 2. Individual ownership is always 100% of its member. Dynamic allocation is valid only for shared
    ownership and never mutates its persisted `OwnershipSplit` rows.
+   Read responses for a dynamic ownership expose the current resolved shares as `effective_splits`;
+   their persisted `splits` remain the participant set and must not be presented as the allocation.
 3. Dynamic shares for a close month use the twelve complete natural months immediately before it.
    The source is posted ledger income with individual transaction ownership and an explicit
    `OwnershipIncomeRule`; `salary` is the default rule when dynamic allocation is first enabled.

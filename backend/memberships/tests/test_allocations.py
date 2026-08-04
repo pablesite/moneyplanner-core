@@ -283,3 +283,15 @@ class OwnershipAllocationApiTests(AllocationFixtureMixin, APITestCase):
             f"/api/ownerships/{other_shared.id}/allocation-preview/?year=2026&month=1"
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_exposes_effective_splits_for_dynamic_ownership(self):
+        response = self.client.get("/api/ownerships/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        ownership = next(row for row in response.data if row["id"] == self.shared.id)
+        self.assertEqual(ownership["allocation_basis"], "recurring_income_12m")
+        self.assertEqual(
+            {share["member_name"] for share in ownership["effective_splits"]},
+            {"Pablo", "Ana"},
+        )
+        self.assertTrue(all(share["percent"] is None for share in ownership["effective_splits"]))
