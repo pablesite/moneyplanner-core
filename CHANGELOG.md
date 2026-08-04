@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.37.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.36.0...moneyplanner-core-v0.37.0) (2026-08-04)
+
+
+### Features
+
+* **monthly-close:** add dynamic ownership allocation ([8b9fba2](https://github.com/pablesite/moneyplanner-core/commit/8b9fba21b5eac15af76cc4a089926ee2b5512d2d))
+* **monthly-close:** add ownership settlement preview ([7d402bd](https://github.com/pablesite/moneyplanner-core/commit/7d402bd6e0c8189275ff01857ebfd91ee8f4466c))
+* **monthly-close:** add settlement configuration ([c759bb7](https://github.com/pablesite/moneyplanner-core/commit/c759bb7c7cc44f5f9a66571f95a0d9436f44c87e))
+* **monthly-close:** execute settlement transfers ([abb1fd6](https://github.com/pablesite/moneyplanner-core/commit/abb1fd6b19de202ad7f126efbf5b42ca8a21e256))
+* **monthly-close:** expose member settlement breakdown ([07ec672](https://github.com/pablesite/moneyplanner-core/commit/07ec672628a93e2a5b309653124e1417092c3d09))
+
 ## [0.36.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.35.3...moneyplanner-core-v0.36.0) (2026-08-02)
 
 
