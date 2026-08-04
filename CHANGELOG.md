@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.1...moneyplanner-core-v0.38.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* **settlement:** decouple reserves from budget ownership ([0f9c5c8](https://github.com/pablesite/moneyplanner-core/commit/0f9c5c8b7578db129f646d41267e1219f495d49a))
+
 ## [0.38.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.0...moneyplanner-core-v0.38.1) (2026-08-04)
 
 
