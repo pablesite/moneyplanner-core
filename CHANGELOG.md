@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.39.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.2...moneyplanner-core-v0.39.0) (2026-08-14)
+
+
+### Features
+
+* **core:** refresh current FX quotes ([1b4b167](https://github.com/pablesite/moneyplanner-core/commit/1b4b1670167c72fd470d15b593dc1800a70b9112))
+
+
+### Bug Fixes
+
+* **frontend:** update nanoid security patch ([72c31ed](https://github.com/pablesite/moneyplanner-core/commit/72c31edf34fbfe761e6b3d0eee7d6cd762c8ee79))
+* **plan:** assign ownership to generated budget lines ([f270879](https://github.com/pablesite/moneyplanner-core/commit/f270879da50ddf5b29f9b10912acccdf690a6461))
+
 ## [0.38.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.1...moneyplanner-core-v0.38.2) (2026-08-04)
 
 
