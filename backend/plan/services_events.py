@@ -476,6 +476,7 @@ def update_planned_decision(
             scenario=scenario,
             name=name,
             event_type=event_type,
+            ownership=ownership,
             decision_date=decision_date,
             transaction_year=transaction_year,
             transaction_month=transaction_month,
@@ -534,6 +535,7 @@ def _update_scenario_backed_decision(
     scenario: Scenario,
     name: str,
     event_type: str,
+    ownership: Ownership | None,
     decision_date: date,
     transaction_year: int,
     transaction_month: int,
@@ -593,6 +595,8 @@ def _update_scenario_backed_decision(
 
     event.name = scenario.name
     event.event_type = scenario.template_type
+    if ownership is not None:
+        event.ownership = ownership
     event.planned_date = decision_date
     event.planned_impact_json = {
         "events": scenario_event_payloads(scenario=scenario),
@@ -602,13 +606,21 @@ def _update_scenario_backed_decision(
         ],
     }
     event.save(
-        update_fields=["name", "event_type", "planned_date", "planned_impact_json", "updated_at"]
+        update_fields=[
+            "name",
+            "event_type",
+            "ownership",
+            "planned_date",
+            "planned_impact_json",
+            "updated_at",
+        ]
     )
 
     event_group = f"plan_event:{event.id}"
     AnnualIncomeEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
     AnnualExpenseEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
     create_budget_entries_for_scenario(scenario=scenario, plan_event=event)
+    assign_event_budget_ownership(event=event, ownership=event.ownership)
     projection = ProjectionService().recalculate(plan=event.plan)
     return {"event": event, "projection": projection}
 

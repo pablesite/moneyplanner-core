@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APITestCase
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
-from memberships.models import FamilyMember
+from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentContributionInterval, Liability
 
 from plan.models import (
@@ -1238,6 +1238,7 @@ class ScenarioApiTests(APITestCase):
         self.assertEqual(PlanEvent.objects.count(), 0)
 
     def test_accepted_scenario_event_can_be_edited_and_resyncs_budget_lines(self):
+        ownership = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
         create_response = self.client.post(
             reverse("financial-plan-scenarios"), self.scenario_payload(), format="json"
         )
@@ -1254,6 +1255,7 @@ class ScenarioApiTests(APITestCase):
             {
                 "name": "Coche actualizado",
                 "event_type": "vehicle",
+                "ownership_id": ownership.id,
                 "decision_date": "2028-04-01",
                 "transaction_year": 2028,
                 "transaction_month": 4,
@@ -1272,6 +1274,7 @@ class ScenarioApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         event = PlanEvent.objects.get(pk=event_id)
+        self.assertEqual(event.ownership, ownership)
         source_event = event.source_scenario.events.get()
         self.assertEqual(event.name, "Coche actualizado")
         self.assertEqual(source_event.start_date, date(2028, 4, 1))
@@ -1292,6 +1295,13 @@ class ScenarioApiTests(APITestCase):
                 user=self.user,
                 event_group=f"plan_event:{event_id}",
                 target_month=3,
+            ).exists()
+        )
+        self.assertTrue(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                event_group=f"plan_event:{event_id}",
+                ownership=ownership,
             ).exists()
         )
 
