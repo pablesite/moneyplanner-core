@@ -9,6 +9,8 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.serializers import ownership_compatibility_name
+from memberships.models import Ownership
 from budget.plan_lineage import parse_plan_event_id
 from net_worth.models import Asset, Liability
 
@@ -37,6 +39,16 @@ BUDGET_MODELS: dict[str, BudgetEntryModel] = {
     "AnnualExpenseEntry": AnnualExpenseEntry,
     "AnnualIncomeEntry": AnnualIncomeEntry,
 }
+
+
+def assign_event_budget_ownership(*, event: PlanEvent, ownership: Ownership | None) -> None:
+    """Keep the event and every plan-managed budget line on the same ownership."""
+    owner_name = ownership_compatibility_name(ownership) if ownership else ""
+    event_group = f"plan_event:{event.id}"
+    for model in (AnnualIncomeEntry, AnnualExpenseEntry):
+        model.objects.filter(user=event.plan.user, event_group=event_group).update(
+            ownership=ownership, owner_name=owner_name
+        )
 
 
 def preview_planned_decision(
@@ -221,6 +233,7 @@ def register_occurred_event(
     name: str,
     event_type: str,
     decision_date: date,
+    ownership: Ownership | None = None,
     expense_entry_ids: list[int] | None = None,
     income_entry_ids: list[int] | None = None,
     asset_ids: list[int] | None = None,
@@ -248,6 +261,7 @@ def register_occurred_event(
         plan=plan,
         name=name.strip(),
         event_type=event_type,
+        ownership=ownership,
         planned_date=decision_date,
         actual_date=decision_date,
         status=PlanEvent.Status.OCCURRED,
@@ -258,6 +272,7 @@ def register_occurred_event(
         expense_entry_ids=expense_entry_ids or [],
         income_entry_ids=income_entry_ids or [],
     )
+    assign_event_budget_ownership(event=event, ownership=ownership)
     linked = _link_net_worth(
         event=event, asset_ids=asset_ids or [], liability_ids=liability_ids or []
     )
@@ -353,6 +368,8 @@ def _replace_planned_decision_financing_entries(
             time_profile=slot.time_profile,
             cashflow_role=cashflow_role,
             event_group=event_group,
+            ownership=event.ownership,
+            owner_name=ownership_compatibility_name(event.ownership) if event.ownership else "",
             term_start_month=slot.term_start_month,
             term_end_year=slot.term_end_year,
             term_end_month=slot.term_end_month,
@@ -372,6 +389,7 @@ def register_planned_decision(
     name: str,
     event_type: str,
     decision_date: date,
+    ownership: Ownership | None = None,
     transaction_year: int,
     transaction_month: int = 1,
     expense_entry_ids: list[int] | None = None,
@@ -399,6 +417,7 @@ def register_planned_decision(
         plan=plan,
         name=name.strip(),
         event_type=event_type,
+        ownership=ownership,
         planned_date=decision_date,
         status=PlanEvent.Status.PLANNED,
         planned_impact_json={"events": [payload]},
@@ -408,6 +427,7 @@ def register_planned_decision(
         expense_entry_ids=expense_entry_ids or [],
         income_entry_ids=income_entry_ids or [],
     )
+    assign_event_budget_ownership(event=event, ownership=ownership)
     linked = _link_net_worth(
         event=event, asset_ids=asset_ids or [], liability_ids=liability_ids or []
     )
@@ -434,6 +454,7 @@ def update_planned_decision(
     name: str,
     event_type: str,
     decision_date: date,
+    ownership: Ownership | None = None,
     transaction_year: int,
     transaction_month: int,
     impact: dict[str, Any],
@@ -468,6 +489,8 @@ def update_planned_decision(
 
     locked.name = name.strip()
     locked.event_type = event_type
+    if ownership is not None:
+        locked.ownership = ownership
     locked.planned_date = decision_date
     payload = _decision_impact_event(
         start_year=transaction_year,
@@ -492,6 +515,7 @@ def update_planned_decision(
         update_fields=[
             "name",
             "event_type",
+            "ownership",
             "planned_date",
             "planned_impact_json",
             "actual_impact_json",
@@ -499,6 +523,7 @@ def update_planned_decision(
         ]
     )
     _replace_planned_decision_financing_entries(event=locked, payload=payload)
+    assign_event_budget_ownership(event=locked, ownership=locked.ownership)
     projection = ProjectionService().recalculate(plan=locked.plan)
     return {"event": locked, "projection": projection}
 

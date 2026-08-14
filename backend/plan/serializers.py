@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework import serializers
 
-from memberships.models import FamilyMember
+from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset
 
 from .dates import date_at_age
@@ -345,6 +345,9 @@ class ScenarioSerializer(serializers.ModelSerializer):
 
 
 class PlanEventSerializer(serializers.ModelSerializer):
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership", queryset=Ownership.objects.all(), allow_null=True, required=False
+    )
     linked_asset_ids = serializers.PrimaryKeyRelatedField(
         source="linked_assets", many=True, read_only=True
     )
@@ -357,6 +360,7 @@ class PlanEventSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "source_scenario",
+            "ownership_id",
             "name",
             "event_type",
             "planned_date",
@@ -379,9 +383,26 @@ class PlanEventSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
+        ownership = attrs.get("ownership")
+        request = self.context.get("request")
+        if ownership is not None and (request is None or ownership.user_id != request.user.id):
+            raise serializers.ValidationError(
+                {"ownership_id": "La titularidad no pertenece al usuario."}
+            )
         if "actual_impact_json" in attrs and attrs.get("status") != PlanEvent.Status.OCCURRED:
             attrs["status"] = PlanEvent.Status.OCCURRED
         return attrs
+
+    def update(self, instance, validated_data):
+        ownership_changed = (
+            "ownership" in validated_data and validated_data["ownership"] != instance.ownership
+        )
+        event = super().update(instance, validated_data)
+        if ownership_changed:
+            from .services_events import assign_event_budget_ownership
+
+            assign_event_budget_ownership(event=event, ownership=event.ownership)
+        return event
 
 
 class PlanEventCloseSerializer(serializers.Serializer):
@@ -399,6 +420,9 @@ class OccurredEventRegisterSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=140)
     event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership", queryset=Ownership.objects.all(), allow_null=True, required=False
+    )
     decision_date = serializers.DateField()
     expense_entry_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1), required=False, default=list
@@ -414,6 +438,11 @@ class OccurredEventRegisterSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1), required=False, default=list
     )
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate_ownership(self, ownership):
+        if ownership is not None and ownership.user_id != self.context["request"].user.id:
+            raise serializers.ValidationError("La titularidad no pertenece al usuario.")
+        return ownership
 
 
 class DecisionImpactSerializer(serializers.Serializer):
@@ -467,6 +496,9 @@ class PlannedDecisionRegisterSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=140)
     event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership", queryset=Ownership.objects.all(), allow_null=True, required=False
+    )
     decision_date = serializers.DateField()
     transaction_year = serializers.IntegerField(min_value=2000, max_value=2200)
     transaction_month = serializers.IntegerField(
@@ -488,18 +520,31 @@ class PlannedDecisionRegisterSerializer(serializers.Serializer):
     impact = DecisionImpactSerializer(required=False, default=dict)
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
 
+    def validate_ownership(self, ownership):
+        if ownership is not None and ownership.user_id != self.context["request"].user.id:
+            raise serializers.ValidationError("La titularidad no pertenece al usuario.")
+        return ownership
+
 
 class PlannedDecisionUpdateSerializer(serializers.Serializer):
     """Edita el impacto futuro sin alterar las partidas ya adoptadas por la Decisión."""
 
     name = serializers.CharField(max_length=140)
     event_type = serializers.ChoiceField(choices=Scenario.TemplateType.choices)
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership", queryset=Ownership.objects.all(), allow_null=True, required=False
+    )
     decision_date = serializers.DateField()
     transaction_year = serializers.IntegerField(min_value=2000, max_value=2200)
     transaction_month = serializers.IntegerField(min_value=1, max_value=12)
     end_year = serializers.IntegerField(required=False, allow_null=True, min_value=2000)
     impact = DecisionImpactSerializer()
     note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate_ownership(self, ownership):
+        if ownership is not None and ownership.user_id != self.context["request"].user.id:
+            raise serializers.ValidationError("La titularidad no pertenece al usuario.")
+        return ownership
 
 
 class PlannedDecisionPreviewSerializer(PlannedDecisionRegisterSerializer):

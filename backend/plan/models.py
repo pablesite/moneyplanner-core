@@ -297,6 +297,13 @@ class PlanEvent(models.Model):
         blank=True,
         related_name="plan_events",
     )
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="plan_events",
+    )
     name = models.CharField(max_length=140)
     event_type = models.CharField(max_length=32, choices=Scenario.TemplateType.choices)
     planned_date = models.DateField()
