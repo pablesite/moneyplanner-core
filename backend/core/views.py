@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import StreamingHttpResponse
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -22,7 +23,7 @@ from .portable_data import (
     import_portable_bundle_from_request,
 )
 from .serializers import FxRateSerializer, InflationIndexSerializer
-from .services import convert_currency_detailed
+from .services import convert_currency_detailed, refresh_currency_rate
 
 
 class _MarketDataPagination(PageNumberPagination):
@@ -153,6 +154,32 @@ class FxConvertAPIView(APIView):
                 "rate_date": result.rate_date.isoformat() if result.rate_date else None,
                 "resolution": result.resolution,
                 "requested_date": (on_date or date.today()).isoformat(),
+            }
+        )
+
+
+class FxRefreshAPIView(APIView):
+    """Refresh one current FX pair for an authenticated portfolio owner."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from_currency = request.data.get("from")
+        to_currency = request.data.get("to")
+        if not from_currency or not to_currency:
+            raise ValidationError("from y to son obligatorios.")
+        try:
+            result = refresh_currency_rate(from_currency, to_currency)
+        except DjangoValidationError as exc:
+            raise ValidationError(getattr(exc, "message", None) or str(exc))
+        return Response(
+            {
+                "from_currency": result.from_currency,
+                "to_currency": result.to_currency,
+                "rate": str(result.rate),
+                "rate_date": result.rate_date.isoformat() if result.rate_date else None,
+                "resolution": result.resolution,
+                "requested_date": timezone.localdate().isoformat(),
             }
         )
 

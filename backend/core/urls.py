@@ -5,6 +5,7 @@ from .views import (
     DbBackupView,
     DbRestoreView,
     FxConvertAPIView,
+    FxRefreshAPIView,
     FxRateViewSet,
     InflationIndexViewSet,
     MarketDataSyncAPIView,
@@ -20,6 +21,7 @@ router.register(r"inflation", InflationIndexViewSet, basename="inflation")
 urlpatterns = [
     path("", include(router.urls)),
     path("fx/convert/", FxConvertAPIView.as_view(), name="fx-convert"),
+    path("fx/refresh/", FxRefreshAPIView.as_view(), name="fx-refresh"),
     path("market-data/status/", MarketDataStatusAPIView.as_view(), name="market-data-status"),
     path("market-data/sync/", MarketDataSyncAPIView.as_view(), name="market-data-sync"),
     path("portable-data/meta/", PortableDataMetaAPIView.as_view(), name="portable-data-meta"),

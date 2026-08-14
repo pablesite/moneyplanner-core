@@ -253,7 +253,7 @@ An accepted event contributes deltas to the projection, but the budget rows it c
    - `InflationIndex` (monthly IPC national + CCAA)
 5. Sync coverage and operational status are tracked in `MarketDataSyncState`.
 6. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
-7. Core exposes an authenticated conversion endpoint `GET /api/core/fx/convert/?amount=&from=&to=&date=` (service `convert_currency_detailed`). It preserves crypto precision (up to 8 decimals, unlike `convert_currency` which quantizes to 2), resolves the rate for the requested date (direct/inverse/triangulation), and on a miss triggers a targeted on-demand sync via `market_data` before falling back to the nearest earlier quote. The response reports `{ converted, rate, rate_date, resolution: same|exact|synced|fallback }`.
+7. Core exposes an authenticated conversion endpoint `GET /api/core/fx/convert/?amount=&from=&to=&date=` (service `convert_currency_detailed`). It preserves crypto precision (up to 8 decimals, unlike `convert_currency` which quantizes to 2), resolves the rate for the requested date (direct/inverse/triangulation), and on a miss triggers a targeted on-demand sync via `market_data` before falling back to the nearest earlier quote. The response reports `{ converted, rate, rate_date, resolution: same|exact|synced|fallback }`. `POST /api/core/fx/refresh/` accepts `{ from, to }` for any authenticated user and forces a provider refresh of that pair for today; it never exposes the broad admin market-data trigger.
 
 ## Monthly Close Data Model
 

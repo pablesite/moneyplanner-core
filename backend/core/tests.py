@@ -25,6 +25,7 @@ from net_worth.models import (
     LiquidityMonthlyCheckin,
 )
 from .services import (
+    FxConversion,
     _get_inflation_index,
     _normalize_month_start,
     adjust_for_inflation,
@@ -1608,6 +1609,35 @@ class CoreApiTests(APITestCase):
         self.assertEqual(response.data["error"]["code"], "unauthorized")
         self.assertIn("message", response.data["error"])
         self.assertIn("details", response.data["error"])
+
+    def test_fx_refresh_requires_auth_with_canonical_error_shape(self):
+        response = self.client.post(
+            "/api/core/fx/refresh/", {"from": "USD", "to": "EUR"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"]["code"], "unauthorized")
+
+    @patch("core.views.refresh_currency_rate")
+    def test_fx_refresh_updates_one_current_pair(self, refresh_mock):
+        self.client.force_authenticate(user=self.user)
+        refresh_mock.return_value = FxConversion(
+            amount=Decimal("1"),
+            from_currency="USD",
+            to_currency="EUR",
+            converted=Decimal("0.91000000"),
+            rate=Decimal("0.91"),
+            rate_date=date(2026, 8, 14),
+            resolution="exact",
+        )
+
+        response = self.client.post(
+            "/api/core/fx/refresh/", {"from": "usd", "to": "eur"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        refresh_mock.assert_called_once_with("usd", "eur")
+        self.assertEqual(response.data["rate"], "0.91")
+        self.assertEqual(response.data["rate_date"], "2026-08-14")
 
     def test_inflation_requires_auth_with_canonical_error_shape(self):
         response = self.client.get("/api/core/inflation/")

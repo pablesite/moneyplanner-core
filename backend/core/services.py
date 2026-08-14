@@ -310,6 +310,30 @@ def convert_currency_detailed(
     )
 
 
+def refresh_currency_rate(
+    from_currency: str,
+    to_currency: str,
+    *,
+    on_date: date | None = None,
+) -> FxConversion:
+    """Force a provider refresh for one FX pair and return its effective quote."""
+    from_c = (from_currency or "").upper().strip()
+    to_c = (to_currency or "").upper().strip()
+    if len(from_c) != 3 or len(to_c) != 3:
+        raise ValidationError("Invalid currency code.")
+
+    target_date = on_date or timezone.localdate()
+    if from_c != to_c and not _ensure_fx_for_date(from_c, to_c, target_date):
+        raise ValidationError(f"Could not refresh FX rate for {from_c}->{to_c}.")
+
+    conversion = convert_currency_detailed(
+        Decimal("1"), from_c, to_c, on_date=target_date, allow_sync=False
+    )
+    if conversion.rate_date not in (None, target_date):
+        raise ValidationError(f"No current FX rate available for {from_c}->{to_c}.")
+    return conversion
+
+
 # ---------------------------------------------------------------------------
 # Bulk FX cache for timeline-style loops
 # ---------------------------------------------------------------------------
