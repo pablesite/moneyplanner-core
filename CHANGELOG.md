@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.40.0...moneyplanner-core-v0.40.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **monthly-close:** classify debt principal as savings ([372668a](https://github.com/pablesite/moneyplanner-core/commit/372668a707679963b9b1caf9afa5d4e4bd3c44b4))
+
 ## [0.40.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.39.1...moneyplanner-core-v0.40.0) (2026-08-15)
 
 
