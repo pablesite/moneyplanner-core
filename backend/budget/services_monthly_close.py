@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from django.db import transaction
 from django.db.models import Q
@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 from accounting.models import LedgerEntry, LedgerTransaction
 
 logger = logging.getLogger(__name__)
+
+MonthlyExecutionSlot = tuple[str, str, Decimal]
+MonthlyExecutionSegment = tuple[str, str, str, Decimal]
 
 
 def _prev_year_month(fiscal_year: int, month: int) -> tuple[int, int]:
@@ -161,6 +164,195 @@ def _get_liquidity_adjustments_for_month(
         )
 
     return _round_money(total), details
+
+
+def _monthly_execution_slots(
+    *, summary: dict, breakdown_key: str, month: int
+) -> list[MonthlyExecutionSlot]:
+    slots: list[MonthlyExecutionSlot] = []
+    breakdown = summary.get(breakdown_key) or {}
+    for category in breakdown.get("categories", []):
+        category_key = str(category.get("category") or "")
+        for subcategory in category.get("subcategories", []):
+            subcategory_key = str(subcategory.get("subcategory") or "")
+            month_row = next(
+                (row for row in subcategory.get("months", []) if row.get("month") == month),
+                None,
+            )
+            amount = (
+                Decimal(str(month_row.get("executed_total") or "0")) if month_row else Decimal("0")
+            )
+            if amount:
+                slots.append((category_key, subcategory_key, amount))
+    return slots
+
+
+def _role_weights_for_month(
+    *, summary: dict, month: int
+) -> dict[tuple[str, str], dict[str, Decimal]]:
+    weights: dict[tuple[str, str], dict[str, Decimal]] = {}
+    for slot, slot_weights in (summary.get("_cashflow_role_weights") or {}).items():
+        category, subcategory, slot_month = slot
+        if slot_month == month:
+            weights[(category, subcategory)] = slot_weights
+    return weights
+
+
+def _default_expense_role(category: str, subcategory: str) -> str:
+    if category == AnnualExpenseEntry.Category.SAVINGS_ALLOCATION:
+        return str(AnnualExpenseEntry.CashflowRole.SAVINGS)
+    if category == AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS:
+        return str(AnnualExpenseEntry.CashflowRole.INVESTMENT)
+    if category in {
+        AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+        AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+    }:
+        if subcategory == "real_estate_fees_taxes":
+            return str(AnnualExpenseEntry.CashflowRole.TAX_FEE)
+        return str(AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE)
+    return str(AnnualExpenseEntry.CashflowRole.OPERATING)
+
+
+def _default_income_role(category: str, _subcategory: str) -> str:
+    if category == AnnualIncomeEntry.Category.CAPITAL_GAINS:
+        return str(AnnualIncomeEntry.CashflowRole.ASSET_SALE)
+    if category in {
+        AnnualIncomeEntry.Category.TRANSFERS_SUPPORT,
+        AnnualIncomeEntry.Category.PUBLIC_BENEFITS,
+    }:
+        return str(AnnualIncomeEntry.CashflowRole.TRANSFER)
+    if category == AnnualIncomeEntry.Category.OTHER_INCOME:
+        return str(AnnualIncomeEntry.CashflowRole.OTHER)
+    return str(AnnualIncomeEntry.CashflowRole.OPERATING)
+
+
+def _split_execution_slots_by_role(
+    *,
+    slots: list[MonthlyExecutionSlot],
+    role_weights: dict[tuple[str, str], dict[str, Decimal]],
+    default_role: Callable[[str, str], str],
+) -> list[MonthlyExecutionSegment]:
+    segments: list[MonthlyExecutionSegment] = []
+    for category, subcategory, amount in slots:
+        weights = role_weights.get((category, subcategory)) or {}
+        weight_total = sum(weights.values(), Decimal("0"))
+        if weight_total <= 0:
+            segments.append((category, subcategory, default_role(category, subcategory), amount))
+            continue
+        for role, weight in weights.items():
+            segments.append((category, subcategory, role, amount * weight / weight_total))
+    return segments
+
+
+def _build_monthly_financial_result(
+    *,
+    month: int,
+    income_summary: dict,
+    expense_summary: dict,
+    income_executed: Decimal,
+    expense_executed: Decimal,
+) -> dict[str, str | None]:
+    income_segments = _split_execution_slots_by_role(
+        slots=_monthly_execution_slots(
+            summary=income_summary,
+            breakdown_key="income_execution_breakdown",
+            month=month,
+        ),
+        role_weights=_role_weights_for_month(summary=income_summary, month=month),
+        default_role=_default_income_role,
+    )
+    expense_segments = _split_execution_slots_by_role(
+        slots=_monthly_execution_slots(
+            summary=expense_summary,
+            breakdown_key="expense_execution_breakdown",
+            month=month,
+        ),
+        role_weights=_role_weights_for_month(summary=expense_summary, month=month),
+        default_role=_default_expense_role,
+    )
+
+    classified_income = sum((segment[3] for segment in income_segments), Decimal("0"))
+    eligible_income = sum(
+        (
+            amount
+            for _category, _subcategory, role, amount in income_segments
+            if role != AnnualIncomeEntry.CashflowRole.ASSET_SALE
+        ),
+        Decimal("0"),
+    )
+    if not income_segments:
+        eligible_income = income_executed
+    elif classified_income != income_executed:
+        eligible_income += income_executed - classified_income
+
+    contribution_roles = {
+        AnnualExpenseEntry.CashflowRole.SAVINGS,
+        AnnualExpenseEntry.CashflowRole.INVESTMENT,
+    }
+    living_roles = {
+        AnnualExpenseEntry.CashflowRole.OPERATING,
+        AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        AnnualExpenseEntry.CashflowRole.TAX_FEE,
+        AnnualExpenseEntry.CashflowRole.OTHER,
+    }
+    financial_contributions = sum(
+        (
+            amount
+            for _category, _subcategory, role, amount in expense_segments
+            if role in contribution_roles
+        ),
+        Decimal("0"),
+    )
+    living_expense = sum(
+        (
+            amount
+            for _category, _subcategory, role, amount in expense_segments
+            if role in living_roles
+        ),
+        Decimal("0"),
+    )
+    real_estate_formation = sum(
+        (
+            amount
+            for category, _subcategory, role, amount in expense_segments
+            if category == AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS
+            and role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
+        ),
+        Decimal("0"),
+    )
+    tangible_asset_purchases = sum(
+        (
+            amount
+            for category, _subcategory, role, amount in expense_segments
+            if category == AnnualExpenseEntry.Category.TANGIBLE_ASSETS
+            and role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
+        ),
+        Decimal("0"),
+    )
+    financial_savings = eligible_income - (expense_executed - financial_contributions)
+    savings_rate = financial_savings / eligible_income if eligible_income > Decimal("0") else None
+    other_outflows = max(
+        Decimal("0"),
+        expense_executed
+        - financial_contributions
+        - living_expense
+        - real_estate_formation
+        - tangible_asset_purchases,
+    )
+
+    return {
+        "eligible_income": str(_round_money(eligible_income)),
+        "total_outflows": str(_round_money(expense_executed)),
+        "living_expense": str(_round_money(living_expense)),
+        "financial_contributions": str(_round_money(financial_contributions)),
+        "financial_savings": str(_round_money(financial_savings)),
+        "savings_rate": (
+            str(savings_rate.quantize(Decimal("0.0001"))) if savings_rate is not None else None
+        ),
+        "real_estate_formation": str(_round_money(real_estate_formation)),
+        "tangible_asset_purchases": str(_round_money(tangible_asset_purchases)),
+        "other_outflows": str(_round_money(other_outflows)),
+    }
 
 
 def _get_uncovered_income_entries_for_month(
@@ -364,17 +556,22 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         defaults={"status": MonthlyClose.Status.DRAFT},
     )
 
+    base_currency = _get_base_currency(user)
     income_summary = build_income_monthly_plan_vs_executed_summary(
-        user=user, fiscal_year=fiscal_year
+        user=user,
+        fiscal_year=fiscal_year,
+        include_role_weights=True,
+        base_currency=base_currency,
     )
     expense_summary = build_expense_monthly_plan_vs_executed_summary(
-        user=user, fiscal_year=fiscal_year
+        user=user,
+        fiscal_year=fiscal_year,
+        include_role_weights=True,
+        base_currency=base_currency,
     )
     liquidity_summary = build_liquidity_monthly_summary(
         user=user, fiscal_year=fiscal_year, month=month
     )
-    base_currency = _get_base_currency(user)
-
     income_month_data = next(
         (m for m in income_summary.get("months", []) if m["month"] == month), None
     )
@@ -416,6 +613,13 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         fiscal_year=fiscal_year,
         month=month,
         base_currency=base_currency,
+    )
+    financial_result = _build_monthly_financial_result(
+        month=month,
+        income_summary=income_summary,
+        expense_summary=expense_summary,
+        income_executed=income_executed,
+        expense_executed=expense_executed,
     )
 
     uncovered_income = _get_uncovered_income_entries_for_month(
@@ -521,6 +725,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
             "count": len(liquidity_adjustments),
             "entries": liquidity_adjustments,
         },
+        "financial_result": financial_result,
         "has_gaps": has_gaps,
         "suggestions": {
             "income": suggestions_income,

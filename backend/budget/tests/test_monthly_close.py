@@ -12,6 +12,7 @@ from budget.models import (
     MonthlyClose,
 )
 from budget.services_monthly_close import (
+    _build_monthly_financial_result,
     _get_liquidity_adjustments_for_month,
     _get_uncovered_expense_entries_for_month,
     apply_distribution_to_checkins,
@@ -285,6 +286,7 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         state = compute_monthly_close_state(user=self.user, fiscal_year=2026, month=3)
         self.assertEqual(Decimal(state["income"]["executed"]), Decimal("0"))
         self.assertEqual(Decimal(state["expense"]["executed"]), Decimal("0"))
+        self.assertIsNone(state["financial_result"]["savings_rate"])
         self.assertFalse(state["has_gaps"])
 
     def test_state_with_uncovered_income_entry(self):
@@ -307,6 +309,129 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         state = compute_monthly_close_state(user=self.user, fiscal_year=2026, month=3)
         # Entry is covered by checkin
         self.assertNotIn(str(entry.id), state["suggestions"]["income"])
+
+    def test_financial_result_counts_investments_as_savings_and_separates_asset_purchases(self):
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Nomina",
+            category=AnnualIncomeEntry.Category.SALARY,
+            subcategory="employee_salary",
+            cashflow_role=AnnualIncomeEntry.CashflowRole.OPERATING,
+            amount_annual=Decimal("60000.00"),
+            fiscal_year=2026,
+        )
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Venta de acciones",
+            category=AnnualIncomeEntry.Category.CAPITAL_GAINS,
+            subcategory="sale_financial_assets",
+            income_type=AnnualIncomeEntry.IncomeType.ONE_OFF,
+            time_profile=AnnualIncomeEntry.TimeProfile.ONE_OFF,
+            cashflow_role=AnnualIncomeEntry.CashflowRole.ASSET_SALE,
+            target_month=3,
+            amount_annual=Decimal("1000.00"),
+            fiscal_year=2026,
+        )
+        expense_rows = [
+            (
+                "Gasto de vida",
+                AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+                "housing_home",
+                AnnualExpenseEntry.CashflowRole.OPERATING,
+                Decimal("36000.00"),
+            ),
+            (
+                "ETF",
+                AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+                "etf_indexed",
+                AnnualExpenseEntry.CashflowRole.INVESTMENT,
+                Decimal("12000.00"),
+            ),
+            (
+                "Entrada vivienda",
+                AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+                "primary_home_purchase",
+                AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+                Decimal("500.00"),
+            ),
+            (
+                "Muebles",
+                AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+                "home_furnishings",
+                AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE,
+                Decimal("200.00"),
+            ),
+        ]
+        for name, category, subcategory, role, amount in expense_rows:
+            one_off = role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
+            AnnualExpenseEntry.objects.create(
+                user=self.user,
+                name=name,
+                category=category,
+                subcategory=subcategory,
+                expense_type=(
+                    AnnualExpenseEntry.ExpenseType.ONE_OFF
+                    if one_off
+                    else AnnualExpenseEntry.ExpenseType.RECURRENT
+                ),
+                time_profile=(
+                    AnnualExpenseEntry.TimeProfile.ONE_OFF
+                    if one_off
+                    else AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT
+                ),
+                cashflow_role=role,
+                target_month=3 if one_off else None,
+                amount_annual=amount,
+                fiscal_year=2026,
+            )
+
+        def summary(key, rows):
+            return {
+                key: {
+                    "categories": [
+                        {
+                            "category": category,
+                            "subcategories": [
+                                {
+                                    "subcategory": subcategory,
+                                    "months": [{"month": 3, "executed_total": str(amount)}],
+                                }
+                            ],
+                        }
+                        for category, subcategory, amount in rows
+                    ]
+                }
+            }
+
+        result = _build_monthly_financial_result(
+            month=3,
+            income_summary=summary(
+                "income_execution_breakdown",
+                [
+                    ("salary", "employee_salary", Decimal("5000.00")),
+                    ("capital_gains", "sale_financial_assets", Decimal("1000.00")),
+                ],
+            ),
+            expense_summary=summary(
+                "expense_execution_breakdown",
+                [
+                    ("consumption_expenses", "housing_home", Decimal("3000.00")),
+                    ("financial_investments", "etf_indexed", Decimal("1000.00")),
+                    ("real_estate_assets", "primary_home_purchase", Decimal("500.00")),
+                    ("tangible_assets", "home_furnishings", Decimal("200.00")),
+                ],
+            ),
+            income_executed=Decimal("6000.00"),
+            expense_executed=Decimal("4700.00"),
+        )
+
+        self.assertEqual(result["eligible_income"], "5000.00")
+        self.assertEqual(result["financial_contributions"], "1000.00")
+        self.assertEqual(result["financial_savings"], "1300.00")
+        self.assertEqual(result["savings_rate"], "0.2600")
+        self.assertEqual(result["living_expense"], "3000.00")
+        self.assertEqual(result["real_estate_formation"], "500.00")
+        self.assertEqual(result["tangible_asset_purchases"], "200.00")
 
     def test_liquidity_adjustments_include_only_accounts_in_close_perimeter(self):
         liquid_asset = Asset.objects.create(

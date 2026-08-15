@@ -620,7 +620,13 @@ def _is_user_override_checkin(checkin) -> bool:
     )
 
 
-def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
+def build_expense_monthly_plan_vs_executed_summary(
+    *,
+    user,
+    fiscal_year: int,
+    include_role_weights: bool = False,
+    base_currency: str | None = None,
+) -> dict:
     entries = list(
         effective_annual_expense_entries(user=user, fiscal_year=fiscal_year)
         .filter(is_active=True)
@@ -629,6 +635,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
             "fiscal_year",
             "category",
             "subcategory",
+            "cashflow_role",
             "expense_type",
             "time_profile",
             "amount_input_period",
@@ -655,7 +662,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         for item in checkins
         if 1 <= item.month <= 12
     }
-    base_currency = _get_base_currency(user)
+    base_currency = base_currency or _get_base_currency(user)
     categorized_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
@@ -675,6 +682,9 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
     planned_slots: dict[tuple[str, str, int], dict[str, object]] = {}
     planned_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
         lambda: Decimal("0.00")
+    )
+    role_weights_by_slot_month: dict[tuple[str, str, int], dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: Decimal("0.00"))
     )
     executed_budgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
         lambda: Decimal("0.00")
@@ -697,6 +707,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
                 planned_slots[slot_key] = slot
             cast(list[int], slot["entry_ids"]).append(entry.id)
             planned_by_slot_month[slot_key] += planned_amount
+            role_weights_by_slot_month[slot_key][entry.cashflow_role] += planned_amount
 
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
@@ -826,7 +837,7 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         executed_unbudgeted_by_slot_month=executed_unbudgeted_by_slot_month,
     )
 
-    return {
+    payload = {
         "fiscal_year": fiscal_year,
         "planned_total": str(_round_money(planned_total)),
         "executed_total": str(_round_money(executed_total)),
@@ -848,6 +859,9 @@ def build_expense_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) ->
         ),
         "expense_execution_breakdown": expense_execution_breakdown,
     }
+    if include_role_weights:
+        payload["_cashflow_role_weights"] = role_weights_by_slot_month
+    return payload
 
 
 def income_entry_applies_to_fiscal_year(*, entry: AnnualIncomeEntry, fiscal_year: int) -> bool:
@@ -924,7 +938,13 @@ def planned_income_monthly_distribution(
     return distribution
 
 
-def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> dict:
+def build_income_monthly_plan_vs_executed_summary(
+    *,
+    user,
+    fiscal_year: int,
+    include_role_weights: bool = False,
+    base_currency: str | None = None,
+) -> dict:
     entries = list(
         effective_annual_income_entries(user=user, fiscal_year=fiscal_year)
         .filter(is_active=True)
@@ -933,6 +953,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
             "fiscal_year",
             "category",
             "subcategory",
+            "cashflow_role",
             "time_profile",
             "amount_input_period",
             "target_month",
@@ -954,7 +975,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         for item in checkins
         if 1 <= item.month <= 12
     }
-    base_currency = _get_base_currency(user)
+    base_currency = base_currency or _get_base_currency(user)
     categorized_ledger_by_key = _build_ledger_monthly_execution_maps(
         user=user,
         fiscal_year=fiscal_year,
@@ -975,6 +996,9 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
     planned_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
         lambda: Decimal("0.00")
     )
+    role_weights_by_slot_month: dict[tuple[str, str, int], dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: Decimal("0.00"))
+    )
     executed_budgeted_by_slot_month: dict[tuple[str, str, int], Decimal] = defaultdict(
         lambda: Decimal("0.00")
     )
@@ -992,6 +1016,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
                 planned_slots[slot_key] = slot
             cast(list[int], slot["entry_ids"]).append(entry.id)
             planned_by_slot_month[slot_key] += planned_amount
+            role_weights_by_slot_month[slot_key][entry.cashflow_role] += planned_amount
 
     for slot_key, slot in planned_slots.items():
         month = cast(int, slot["month"])
@@ -1117,7 +1142,7 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         executed_budgeted_by_slot_month=executed_budgeted_by_slot_month,
         executed_unbudgeted_by_slot_month=executed_unbudgeted_by_slot_month,
     )
-    return {
+    payload = {
         "fiscal_year": fiscal_year,
         "planned_total": str(_round_money(planned_total)),
         "executed_total": str(_round_money(executed_total)),
@@ -1139,3 +1164,6 @@ def build_income_monthly_plan_vs_executed_summary(*, user, fiscal_year: int) -> 
         ),
         "income_execution_breakdown": income_execution_breakdown,
     }
+    if include_role_weights:
+        payload["_cashflow_role_weights"] = role_weights_by_slot_month
+    return payload
