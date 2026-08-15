@@ -29,7 +29,7 @@ from .services import (
 if TYPE_CHECKING:
     pass
 
-from accounting.models import LedgerEntry
+from accounting.models import LedgerEntry, LedgerTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,86 @@ def _get_previous_month_liquidity_total(*, user, fiscal_year: int, month: int) -
         )
 
     return None
+
+
+def _get_liquidity_adjustments_for_month(
+    *, user, fiscal_year: int, month: int, base_currency: str
+) -> tuple[Decimal, list[dict[str, str | int]]]:
+    """Return explicit balance adjustments that explain the monthly liquidity delta."""
+    from net_worth.services import (
+        get_liquid_liability_queryset_for_user,
+        get_liquidity_asset_queryset_for_user,
+    )
+
+    liquid_asset_ids = set(
+        get_liquidity_asset_queryset_for_user(user=user).values_list("id", flat=True)
+    )
+    liquid_liability_ids = set(
+        get_liquid_liability_queryset_for_user(user=user).values_list("id", flat=True)
+    )
+    if not liquid_asset_ids and not liquid_liability_ids:
+        return Decimal("0"), []
+
+    entries = list(
+        LedgerEntry.objects.filter(
+            transaction__user=user,
+            transaction__status=LedgerTransaction.Status.POSTED,
+            transaction__quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT,
+            transaction__booking_date__year=fiscal_year,
+            transaction__booking_date__month=month,
+        )
+        .select_related("transaction", "account")
+        .only(
+            "id",
+            "side",
+            "amount",
+            "currency",
+            "account__name",
+            "account__asset_id",
+            "account__liability_id",
+            "transaction__id",
+            "transaction__booking_date",
+            "transaction__description",
+        )
+    )
+    relevant_entries = [
+        entry
+        for entry in entries
+        if entry.account.asset_id in liquid_asset_ids
+        or entry.account.liability_id in liquid_liability_ids
+    ]
+    if not relevant_entries:
+        return Decimal("0"), []
+
+    from .services import _convert_to_base, build_fx_cache
+
+    fx_cache = build_fx_cache(
+        {(entry.currency or base_currency).upper().strip() for entry in relevant_entries}
+        | {base_currency}
+    )
+    total = Decimal("0")
+    details: list[dict[str, str | int]] = []
+    for entry in relevant_entries:
+        amount = _convert_to_base(
+            Decimal(entry.amount),
+            entry.currency,
+            base_currency,
+            entry.transaction.booking_date,
+            fx_cache,
+        )
+        signed_amount = amount if entry.side == LedgerEntry.Side.DEBIT else -amount
+        total += signed_amount
+        details.append(
+            {
+                "transaction_id": entry.transaction_id,
+                "booking_date": entry.transaction.booking_date.isoformat(),
+                "description": entry.transaction.description,
+                "account_name": entry.account.name,
+                "amount": str(_round_money(signed_amount)),
+            }
+        )
+
+    return _round_money(total), details
 
 
 def _get_uncovered_income_entries_for_month(
@@ -293,6 +373,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
     liquidity_summary = build_liquidity_monthly_summary(
         user=user, fiscal_year=fiscal_year, month=month
     )
+    base_currency = _get_base_currency(user)
 
     income_month_data = next(
         (m for m in income_summary.get("months", []) if m["month"] == month), None
@@ -330,6 +411,13 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
     if liquidity_executed is not None and prev_liquidity is not None:
         delta_liquidity = liquidity_executed - prev_liquidity
 
+    liquidity_adjustments_total, liquidity_adjustments = _get_liquidity_adjustments_for_month(
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        base_currency=base_currency,
+    )
+
     uncovered_income = _get_uncovered_income_entries_for_month(
         user=user, fiscal_year=fiscal_year, month=month
     )
@@ -345,7 +433,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         residual_net: Decimal | None = None
         if delta_liquidity is not None:
             known_net = income_executed - external_expense_executed
-            residual_net = delta_liquidity - known_net
+            residual_net = delta_liquidity - known_net - liquidity_adjustments_total
 
         income_dist, expense_dist = compute_smart_distribution(
             uncovered_income=[(e.id, amt) for e, amt in uncovered_income],
@@ -428,6 +516,11 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
             "completion_ratio": liquidity_completion_ratio,
             "has_checkins": liquidity_completion_ratio > 0,
         },
+        "liquidity_adjustments": {
+            "total": str(liquidity_adjustments_total),
+            "count": len(liquidity_adjustments),
+            "entries": liquidity_adjustments,
+        },
         "has_gaps": has_gaps,
         "suggestions": {
             "income": suggestions_income,
@@ -462,10 +555,13 @@ def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose
         liq = state["liquidity"].get("current_total")
         external_expense = Decimal(state["expense"]["external_executed"])
         income = Decimal(state["income"]["executed"])
+        liquidity_adjustments = Decimal(state.get("liquidity_adjustments", {}).get("total", "0"))
         mc.opening_liquidity_snapshot = Decimal(opening) if opening is not None else None
         mc.liquidity_total_snapshot = Decimal(liq) if liq is not None else None
         mc.expected_liquidity_total_snapshot = (
-            _round_money(mc.opening_liquidity_snapshot + income - external_expense)
+            _round_money(
+                mc.opening_liquidity_snapshot + income - external_expense + liquidity_adjustments
+            )
             if mc.opening_liquidity_snapshot is not None
             else None
         )

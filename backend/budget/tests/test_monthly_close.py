@@ -12,6 +12,7 @@ from budget.models import (
     MonthlyClose,
 )
 from budget.services_monthly_close import (
+    _get_liquidity_adjustments_for_month,
     _get_uncovered_expense_entries_for_month,
     apply_distribution_to_checkins,
     compute_monthly_close_state,
@@ -167,6 +168,20 @@ class MonthlyCloseLifecycleTests(APITestCase):
         self.assertEqual(mc.liquidity_total_snapshot, Decimal("130.00"))
         self.assertEqual(mc.residual_snapshot, Decimal("5.00"))
 
+    @patch("budget.services_monthly_close.compute_monthly_close_state")
+    def test_finalize_includes_liquidity_adjustments_in_expected_close(self, state_mock):
+        state_mock.return_value = {
+            "income": {"executed": "40.00"},
+            "expense": {"executed": "15.00", "external_executed": "15.00"},
+            "liquidity": {"previous_total": "100.00", "current_total": "130.00"},
+            "liquidity_adjustments": {"total": "5.00"},
+        }
+
+        mc = finalize_monthly_close(monthly_close=self._create_draft(), user=self.user)
+
+        self.assertEqual(mc.expected_liquidity_total_snapshot, Decimal("130.00"))
+        self.assertEqual(mc.residual_snapshot, Decimal("0.00"))
+
     def test_finalize_already_finalized_raises(self):
         mc = self._create_draft()
         mc = finalize_monthly_close(monthly_close=mc, user=self.user)
@@ -292,6 +307,99 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         state = compute_monthly_close_state(user=self.user, fiscal_year=2026, month=3)
         # Entry is covered by checkin
         self.assertNotIn(str(entry.id), state["suggestions"]["income"])
+
+    def test_liquidity_adjustments_include_only_accounts_in_close_perimeter(self):
+        liquid_asset = Asset.objects.create(
+            user=self.user,
+            name="Cuenta corriente",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            amount=Decimal("100.00"),
+            currency="EUR",
+            start_date="2026-01-01",
+        )
+        liquid_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta corriente",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=liquid_asset,
+        )
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="ETF global",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            amount=Decimal("500.00"),
+            currency="EUR",
+            start_date="2026-01-01",
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="ETF global",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ajustes técnicos",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        liquid_adjustment = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-10",
+            value_date="2026-03-10",
+            description="Ajuste banco",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=liquid_adjustment,
+            account=liquid_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=liquid_adjustment,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("10.00"),
+            currency="EUR",
+        )
+        investment_adjustment = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-11",
+            value_date="2026-03-11",
+            description="Ajuste ETF",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.ADJUSTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_adjustment,
+            account=investment_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("25.00"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=investment_adjustment,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("25.00"),
+            currency="EUR",
+        )
+
+        total, entries = _get_liquidity_adjustments_for_month(
+            user=self.user,
+            fiscal_year=2026,
+            month=3,
+            base_currency="EUR",
+        )
+
+        self.assertEqual(total, Decimal("10.00"))
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["description"], "Ajuste banco")
 
     def test_uncovered_expenses_normalize_legacy_investment_subcategory_aliases(self):
         entry = AnnualExpenseEntry.objects.create(
