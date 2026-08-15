@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
@@ -293,6 +294,57 @@ class SettlementApiTests(APITestCase):
         self.assertFalse(
             any(row["code"] == "wallet_adjustment_required" for row in response.data["blockers"])
         )
+
+    @patch("budget.services_settlement.get_effective_asset_amount")
+    def test_readiness_reconciles_wallets_on_the_requested_balance_date(self, effective_amount):
+        wallet = self._asset(
+            "Monedero fechado",
+            Decimal("100.00"),
+            self.shared,
+            subcategory=Asset.Subcategory.WALLET,
+        )
+        self._configure(
+            extra_accounts=[
+                {
+                    "asset_id": wallet.id,
+                    "role": SettlementAccount.Role.PHYSICAL_CASH,
+                    "accepted_physical_balance": "20.00",
+                }
+            ]
+        )
+        self._shared_expense()
+        effective_amount.side_effect = lambda *, asset, as_of_date: (
+            Decimal("100.00") if as_of_date == date(2026, 3, 1) else Decimal("20.00")
+        )
+
+        monthly = self.client.get("/api/budget/settlement/readiness/?year=2026&month=3")
+        exact = self.client.get(
+            "/api/budget/settlement/readiness/?year=2026&month=3&balance_date=2026-03-15"
+        )
+
+        self.assertEqual(monthly.data["status"], SettlementProfile.ReadinessStatus.BLOCKED)
+        self.assertEqual(exact.data["status"], SettlementProfile.ReadinessStatus.READY)
+        self.assertEqual(
+            exact.data["wallet_reconciliations"],
+            [
+                {
+                    "account_id": SettlementAccount.objects.get(asset=wallet).id,
+                    "asset_id": wallet.id,
+                    "asset_name": "Monedero fechado",
+                    "currency": "EUR",
+                    "balance_date": "2026-03-15",
+                    "modeled_balance": "20.00",
+                    "accepted_physical_balance": "20.00000000",
+                    "difference": "0.00",
+                    "normalization_recorded": False,
+                }
+            ],
+        )
+
+    def test_readiness_rejects_an_invalid_balance_date(self):
+        response = self.client.get("/api/budget/settlement/readiness/?balance_date=15-03-2026")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_readiness_requires_a_route_only_when_operating_accounts_are_ambiguous(self):
         second_operating = self._asset("Segunda compartida", Decimal("50.00"), self.shared)

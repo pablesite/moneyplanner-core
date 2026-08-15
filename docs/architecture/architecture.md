@@ -100,6 +100,10 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    cash while preserving its modeled balance and historical movements for audit.
 7. Opening adjustments are signed member/account entries that must sum exactly zero. They carry
    prior fictitious wallet compensations into the economic baseline without representing liquidity.
+8. Readiness accepts an exact `balance_date` for activation previews and returns one
+   `wallet_reconciliations` row per physical-cash account. Each row exposes the modeled balance,
+   accepted cash and monetary difference for that same date; clients must not mix it with a current
+   balance or with the first day of the selected close month.
 
 ## Monthly-close Settlement Engine
 

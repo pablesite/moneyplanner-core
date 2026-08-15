@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -99,9 +100,24 @@ class SettlementReadinessView(APIView):
 
     def get(self, request):
         today = timezone.localdate()
+        balance_date_raw = request.query_params.get("balance_date")
+        balance_date = parse_date(balance_date_raw) if balance_date_raw else None
+        if balance_date_raw and balance_date is None:
+            return Response(
+                {"detail": "balance_date debe ser una fecha valida en formato YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            fiscal_year = int(request.query_params.get("year", today.year))
-            month = int(request.query_params.get("month", today.month))
+            fiscal_year = int(
+                request.query_params.get(
+                    "year", balance_date.year if balance_date is not None else today.year
+                )
+            )
+            month = int(
+                request.query_params.get(
+                    "month", balance_date.month if balance_date is not None else today.month
+                )
+            )
             if fiscal_year < 1 or month < 1 or month > 12:
                 raise ValueError
         except (TypeError, ValueError):
@@ -114,6 +130,7 @@ class SettlementReadinessView(APIView):
                 user=request.user,
                 fiscal_year=fiscal_year,
                 month=month,
+                balance_date=balance_date,
             )
         )
 

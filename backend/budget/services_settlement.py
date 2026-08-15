@@ -269,6 +269,7 @@ def _check_account_readiness(
     profile: SettlementProfile,
     accounts: list[SettlementAccount],
     blockers: list[dict[str, object]],
+    wallet_reconciliations: list[dict[str, object]],
     as_of_date: date,
 ) -> dict[int, Ownership]:
     if not any(account.role == SettlementAccount.Role.OPERATING for account in accounts):
@@ -300,6 +301,19 @@ def _check_account_readiness(
             # activation for an internal precision residue that displays as 0.00.
             wallet_difference = (modeled_balance - accepted_balance).quantize(
                 MONEY_STEP, rounding=ROUND_HALF_UP
+            )
+            wallet_reconciliations.append(
+                {
+                    "account_id": account.id,
+                    "asset_id": account.asset_id,
+                    "asset_name": account.asset.name,
+                    "currency": account.currency,
+                    "balance_date": as_of_date.isoformat(),
+                    "modeled_balance": str(modeled_balance),
+                    "accepted_physical_balance": str(accepted_balance),
+                    "difference": str(wallet_difference),
+                    "normalization_recorded": has_wallet_adjustment,
+                }
             )
             if wallet_difference != ZERO and not has_wallet_adjustment:
                 blockers.append(
@@ -373,12 +387,14 @@ def build_settlement_readiness(
     accounts = list(profile.accounts.select_related("asset", "member").order_by("id"))
     blockers: list[dict[str, object]] = []
     warnings: list[dict[str, object]] = []
+    wallet_reconciliations: list[dict[str, object]] = []
     allocation_cache: dict[int, tuple[dict[int, Decimal] | None, dict[str, object]]] = {}
     account_ownerships = _check_account_readiness(
         user=user,
         profile=profile,
         accounts=accounts,
         blockers=blockers,
+        wallet_reconciliations=wallet_reconciliations,
         as_of_date=balance_date or date(fiscal_year, month, 1),
     )
     for ownership in account_ownerships.values():
@@ -481,6 +497,7 @@ def build_settlement_readiness(
         "target_period": {"year": fiscal_year, "month": month},
         "blockers": blockers,
         "warnings": warnings,
+        "wallet_reconciliations": wallet_reconciliations,
         "allocation_coverage": [
             {
                 "ownership_id": result["ownership_id"],
