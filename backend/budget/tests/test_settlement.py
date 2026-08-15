@@ -269,7 +269,30 @@ class SettlementApiTests(APITestCase):
         blocker = next(
             row for row in response.data["blockers"] if row["code"] == "wallet_adjustment_required"
         )
-        self.assertEqual(blocker["difference"], "80.00000000")
+        self.assertEqual(blocker["difference"], "80.00")
+
+    def test_readiness_ignores_subcent_wallet_difference(self):
+        wallet = self._asset(
+            "Monedero sin residuo monetario",
+            Decimal("100.00"),
+            self.shared,
+            subcategory=Asset.Subcategory.WALLET,
+        )
+        self._configure(
+            extra_accounts=[
+                {
+                    "asset_id": wallet.id,
+                    "role": SettlementAccount.Role.PHYSICAL_CASH,
+                    "accepted_physical_balance": "100.004",
+                }
+            ]
+        )
+        self._shared_expense()
+
+        response = self.client.get("/api/budget/settlement/readiness/?year=2026&month=3")
+        self.assertFalse(
+            any(row["code"] == "wallet_adjustment_required" for row in response.data["blockers"])
+        )
 
     def test_readiness_requires_a_route_only_when_operating_accounts_are_ambiguous(self):
         second_operating = self._asset("Segunda compartida", Decimal("50.00"), self.shared)

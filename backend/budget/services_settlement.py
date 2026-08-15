@@ -29,6 +29,7 @@ from .services import (
 
 ZERO = Decimal("0")
 AMOUNT_STEP = Decimal("0.00000001")
+MONEY_STEP = Decimal("0.01")
 
 
 def get_or_create_settlement_profile(*, user) -> SettlementProfile:
@@ -295,7 +296,12 @@ def _check_account_readiness(
                 account=account,
                 kind=SettlementOpeningAdjustment.Kind.WALLET_NORMALIZATION,
             ).exists()
-            if modeled_balance != accepted_balance and not has_wallet_adjustment:
+            # The UI and settlement are expressed in currency cents. Do not block
+            # activation for an internal precision residue that displays as 0.00.
+            wallet_difference = (modeled_balance - accepted_balance).quantize(
+                MONEY_STEP, rounding=ROUND_HALF_UP
+            )
+            if wallet_difference != ZERO and not has_wallet_adjustment:
                 blockers.append(
                     {
                         "code": "wallet_adjustment_required",
@@ -304,7 +310,7 @@ def _check_account_readiness(
                         "asset_name": account.asset.name,
                         "modeled_balance": str(modeled_balance),
                         "accepted_physical_balance": str(accepted_balance),
-                        "difference": str(modeled_balance - accepted_balance),
+                        "difference": str(wallet_difference),
                     }
                 )
 
