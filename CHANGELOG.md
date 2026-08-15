@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.40.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.39.1...moneyplanner-core-v0.40.0) (2026-08-15)
+
+
+### Features
+
+* **monthly-close:** expose role-aware financial result ([559ac5e](https://github.com/pablesite/moneyplanner-core/commit/559ac5ea80f9102501580530181381feedd0d9ba))
+
+
+### Bug Fixes
+
+* **monthly-close:** exclude explained liquidity adjustments from residual ([1a11375](https://github.com/pablesite/moneyplanner-core/commit/1a113758688c8be35d366ae22d995502172e6549))
+* **settlement:** check wallets on activation date ([264a732](https://github.com/pablesite/moneyplanner-core/commit/264a7324c107c33da0019c5aff6d79129f124dcb))
+* **settlement:** ignore subcent wallet residuals ([4b5d2c4](https://github.com/pablesite/moneyplanner-core/commit/4b5d2c4583ca0a4445a30561421570d53684fada))
+
 ## [0.39.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.39.0...moneyplanner-core-v0.39.1) (2026-08-15)
 
 
