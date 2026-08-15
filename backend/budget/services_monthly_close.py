@@ -17,8 +17,11 @@ from .models import (
 )
 from .services import (
     _build_ledger_monthly_execution_maps,
+    _convert_to_base,
     _get_base_currency,
     _round_money,
+    _resolve_ledger_budget_classification,
+    build_fx_cache,
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
     normalize_annual_expense_taxonomy_keys,
@@ -244,6 +247,93 @@ def _split_execution_slots_by_role(
     return segments
 
 
+def _build_ledger_wealth_formation(
+    *, user, fiscal_year: int, month: int, base_currency: str
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Classify wealth formation from the account actually debited in the ledger.
+
+    A debt-payment transaction can contain both principal (a debit on the liability
+    account) and interest (a debit on an expense account). The monthly budget
+    taxonomy intentionally groups that transaction under one category, so it cannot
+    make this distinction on its own.
+    """
+    rows = list(
+        LedgerEntry.objects.filter(
+            transaction__user=user,
+            transaction__status=LedgerTransaction.Status.POSTED,
+            transaction__booking_date__year=fiscal_year,
+            transaction__booking_date__month=month,
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            side=LedgerEntry.Side.DEBIT,
+        )
+        .select_related("transaction", "account", "asset", "liability")
+        .only(
+            "transaction_id",
+            "side",
+            "amount",
+            "currency",
+            "flow_family",
+            "category_key",
+            "subcategory_key",
+            "asset_id",
+            "asset__subcategory",
+            "liability_id",
+            "liability__category",
+            "account__account_type",
+            "transaction__booking_date",
+        )
+    )
+    if not rows:
+        return Decimal("0"), Decimal("0"), Decimal("0")
+
+    fx_cache = build_fx_cache(
+        {(row.currency or base_currency).upper().strip() for row in rows} | {base_currency}
+    )
+    mortgage_payment_transaction_ids = {
+        row.transaction_id
+        for row in rows
+        if row.liability_id is not None
+        and row.liability is not None
+        and row.liability.category == "mortgage"
+    }
+    real_estate_formation = Decimal("0")
+    tangible_asset_purchases = Decimal("0")
+    debt_principal_repayment = Decimal("0")
+
+    for row in rows:
+        _flow, category, subcategory, is_primary = _resolve_ledger_budget_classification(
+            row,
+            mortgage_payment_transaction_ids=mortgage_payment_transaction_ids,
+        )
+        if not is_primary:
+            continue
+
+        account_type = row.account.account_type
+        is_principal = account_type == "liability"
+        is_asset_purchase = account_type == "asset" and category in {
+            AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS,
+            AnnualExpenseEntry.Category.TANGIBLE_ASSETS,
+        }
+        if not is_principal and not is_asset_purchase:
+            continue
+
+        amount = _convert_to_base(
+            Decimal(row.amount),
+            row.currency,
+            base_currency,
+            row.transaction.booking_date,
+            fx_cache,
+        )
+        if category == AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS:
+            real_estate_formation += amount
+        elif category == AnnualExpenseEntry.Category.TANGIBLE_ASSETS:
+            tangible_asset_purchases += amount
+        elif is_principal:
+            debt_principal_repayment += amount
+
+    return real_estate_formation, tangible_asset_purchases, debt_principal_repayment
+
+
 def _build_monthly_financial_result(
     *,
     month: int,
@@ -251,6 +341,9 @@ def _build_monthly_financial_result(
     expense_summary: dict,
     income_executed: Decimal,
     expense_executed: Decimal,
+    user=None,
+    fiscal_year: int | None = None,
+    base_currency: str = "EUR",
 ) -> dict[str, str | None]:
     income_segments = _split_execution_slots_by_role(
         slots=_monthly_execution_slots(
@@ -289,12 +382,6 @@ def _build_monthly_financial_result(
         AnnualExpenseEntry.CashflowRole.SAVINGS,
         AnnualExpenseEntry.CashflowRole.INVESTMENT,
     }
-    living_roles = {
-        AnnualExpenseEntry.CashflowRole.OPERATING,
-        AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
-        AnnualExpenseEntry.CashflowRole.TAX_FEE,
-        AnnualExpenseEntry.CashflowRole.OTHER,
-    }
     financial_contributions = sum(
         (
             amount
@@ -303,42 +390,56 @@ def _build_monthly_financial_result(
         ),
         Decimal("0"),
     )
-    living_expense = sum(
-        (
-            amount
-            for _category, _subcategory, role, amount in expense_segments
-            if role in living_roles
-        ),
-        Decimal("0"),
-    )
-    real_estate_formation = sum(
-        (
-            amount
-            for category, _subcategory, role, amount in expense_segments
-            if category == AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS
-            and role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
-        ),
-        Decimal("0"),
-    )
-    tangible_asset_purchases = sum(
-        (
-            amount
-            for category, _subcategory, role, amount in expense_segments
-            if category == AnnualExpenseEntry.Category.TANGIBLE_ASSETS
-            and role == AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE
-        ),
-        Decimal("0"),
-    )
+    real_estate_formation = Decimal("0")
+    tangible_asset_purchases = Decimal("0")
+    debt_principal_repayment = Decimal("0")
+    ledger_execution_by_slot: dict[tuple[str, str, int], Decimal] = {}
+    if user is not None and fiscal_year is not None:
+        real_estate_formation, tangible_asset_purchases, debt_principal_repayment = (
+            _build_ledger_wealth_formation(
+                user=user,
+                fiscal_year=fiscal_year,
+                month=month,
+                base_currency=base_currency,
+            )
+        )
+        ledger_execution_by_slot = _build_ledger_monthly_execution_maps(
+            user=user,
+            fiscal_year=fiscal_year,
+            flow_family=str(LedgerEntry.FlowFamily.EXPENSE),
+            positive_side=str(LedgerEntry.Side.DEBIT),
+            base_currency=base_currency,
+        )
+
+    # Check-ins have no ledger account to inspect. Retain their explicit
+    # asset-purchase classification, while ledger-backed values use the account
+    # classification above so principal is never confused with interest.
+    for category, subcategory, role, amount in expense_segments:
+        if role != AnnualExpenseEntry.CashflowRole.ASSET_PURCHASE:
+            continue
+        ledger_amount = ledger_execution_by_slot.get((category, subcategory, month), Decimal("0"))
+        fallback_amount = max(Decimal("0"), amount - ledger_amount)
+        if category == AnnualExpenseEntry.Category.REAL_ESTATE_ASSETS:
+            real_estate_formation += fallback_amount
+        elif category == AnnualExpenseEntry.Category.TANGIBLE_ASSETS:
+            tangible_asset_purchases += fallback_amount
+
     financial_savings = eligible_income - (expense_executed - financial_contributions)
-    savings_rate = financial_savings / eligible_income if eligible_income > Decimal("0") else None
-    other_outflows = max(
-        Decimal("0"),
+    net_savings = (
+        financial_savings
+        + real_estate_formation
+        + tangible_asset_purchases
+        + debt_principal_repayment
+    )
+    savings_rate = net_savings / eligible_income if eligible_income > Decimal("0") else None
+    living_expense = (
         expense_executed
         - financial_contributions
-        - living_expense
         - real_estate_formation
-        - tangible_asset_purchases,
+        - tangible_asset_purchases
+        - debt_principal_repayment
     )
+    other_outflows = Decimal("0")
 
     return {
         "eligible_income": str(_round_money(eligible_income)),
@@ -346,11 +447,13 @@ def _build_monthly_financial_result(
         "living_expense": str(_round_money(living_expense)),
         "financial_contributions": str(_round_money(financial_contributions)),
         "financial_savings": str(_round_money(financial_savings)),
+        "net_savings": str(_round_money(net_savings)),
         "savings_rate": (
             str(savings_rate.quantize(Decimal("0.0001"))) if savings_rate is not None else None
         ),
         "real_estate_formation": str(_round_money(real_estate_formation)),
         "tangible_asset_purchases": str(_round_money(tangible_asset_purchases)),
+        "debt_principal_repayment": str(_round_money(debt_principal_repayment)),
         "other_outflows": str(_round_money(other_outflows)),
     }
 
@@ -620,6 +723,9 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
         expense_summary=expense_summary,
         income_executed=income_executed,
         expense_executed=expense_executed,
+        user=user,
+        fiscal_year=fiscal_year,
+        base_currency=base_currency,
     )
 
     uncovered_income = _get_uncovered_income_entries_for_month(

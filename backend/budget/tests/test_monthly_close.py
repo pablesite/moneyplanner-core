@@ -428,10 +428,133 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         self.assertEqual(result["eligible_income"], "5000.00")
         self.assertEqual(result["financial_contributions"], "1000.00")
         self.assertEqual(result["financial_savings"], "1300.00")
-        self.assertEqual(result["savings_rate"], "0.2600")
+        self.assertEqual(result["net_savings"], "2000.00")
+        self.assertEqual(result["savings_rate"], "0.4000")
         self.assertEqual(result["living_expense"], "3000.00")
         self.assertEqual(result["real_estate_formation"], "500.00")
         self.assertEqual(result["tangible_asset_purchases"], "200.00")
+
+    def test_financial_result_uses_ledger_accounts_to_separate_principal_from_interest(self):
+        income_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Ingresos",
+            account_type=LedgerAccount.AccountType.INCOME,
+            currency="EUR",
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Intereses",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        liability_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Hipoteca",
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+        )
+        cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cuenta",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        income_transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-01",
+            value_date="2026-03-01",
+            description="Nomina",
+        )
+        LedgerEntry.objects.create(
+            transaction=income_transaction,
+            account=cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
+        )
+        LedgerEntry.objects.create(
+            transaction=income_transaction,
+            account=income_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000.00"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="salary",
+            subcategory_key="employee_salary",
+        )
+        mortgage_transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-15",
+            value_date="2026-03-15",
+            description="Cuota hipoteca",
+        )
+        for account, side, amount in (
+            (liability_account, LedgerEntry.Side.DEBIT, Decimal("200.00")),
+            (expense_account, LedgerEntry.Side.DEBIT, Decimal("50.00")),
+            (cash_account, LedgerEntry.Side.CREDIT, Decimal("250.00")),
+        ):
+            LedgerEntry.objects.create(
+                transaction=mortgage_transaction,
+                account=account,
+                side=side,
+                amount=amount,
+                currency="EUR",
+                flow_family=LedgerEntry.FlowFamily.EXPENSE,
+                category_key="real_estate_assets",
+                subcategory_key="mortgage_principal",
+            )
+
+        summary = {
+            "income_execution_breakdown": {
+                "categories": [
+                    {
+                        "category": "salary",
+                        "subcategories": [
+                            {
+                                "subcategory": "employee_salary",
+                                "months": [{"month": 3, "executed_total": "1000.00"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            "expense_execution_breakdown": {
+                "categories": [
+                    {
+                        "category": "real_estate_assets",
+                        "subcategories": [
+                            {
+                                "subcategory": "mortgage_principal",
+                                "months": [{"month": 3, "executed_total": "250.00"}],
+                            }
+                        ],
+                    }
+                ]
+            },
+            "_cashflow_role_weights": {
+                ("real_estate_assets", "mortgage_principal", 3): {
+                    AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT: Decimal("250.00")
+                }
+            },
+        }
+        result = _build_monthly_financial_result(
+            month=3,
+            income_summary=summary,
+            expense_summary=summary,
+            income_executed=Decimal("1000.00"),
+            expense_executed=Decimal("250.00"),
+            user=self.user,
+            fiscal_year=2026,
+        )
+
+        self.assertEqual(result["financial_savings"], "750.00")
+        self.assertEqual(result["net_savings"], "950.00")
+        self.assertEqual(result["savings_rate"], "0.9500")
+        self.assertEqual(result["real_estate_formation"], "200.00")
+        self.assertEqual(result["living_expense"], "50.00")
 
     def test_liquidity_adjustments_include_only_accounts_in_close_perimeter(self):
         liquid_asset = Asset.objects.create(
