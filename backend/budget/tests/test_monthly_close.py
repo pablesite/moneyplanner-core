@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
@@ -152,6 +153,20 @@ class MonthlyCloseLifecycleTests(APITestCase):
         self.assertEqual(mc.status, MonthlyClose.Status.FINALIZED)
         self.assertIsNotNone(mc.finalized_at)
 
+    @patch("budget.services_monthly_close.compute_monthly_close_state")
+    def test_finalize_freezes_accepted_residual_boundary(self, state_mock):
+        state_mock.return_value = {
+            "income": {"executed": "40.00"},
+            "expense": {"executed": "15.00", "external_executed": "15.00"},
+            "liquidity": {"previous_total": "100.00", "current_total": "130.00"},
+        }
+        mc = finalize_monthly_close(monthly_close=self._create_draft(), user=self.user)
+
+        self.assertEqual(mc.opening_liquidity_snapshot, Decimal("100.00"))
+        self.assertEqual(mc.expected_liquidity_total_snapshot, Decimal("125.00"))
+        self.assertEqual(mc.liquidity_total_snapshot, Decimal("130.00"))
+        self.assertEqual(mc.residual_snapshot, Decimal("5.00"))
+
     def test_finalize_already_finalized_raises(self):
         mc = self._create_draft()
         mc = finalize_monthly_close(monthly_close=mc, user=self.user)
@@ -165,6 +180,52 @@ class MonthlyCloseLifecycleTests(APITestCase):
         self.assertEqual(mc.status, MonthlyClose.Status.DRAFT)
         self.assertIsNone(mc.finalized_at)
         self.assertIsNone(mc.income_total_snapshot)
+
+    def test_reopen_invalidates_later_finalized_closes(self):
+        march = MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=3,
+            status=MonthlyClose.Status.FINALIZED,
+            liquidity_total_snapshot=Decimal("100.00"),
+            residual_snapshot=Decimal("2.00"),
+        )
+        april = MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=4,
+            status=MonthlyClose.Status.FINALIZED,
+            liquidity_total_snapshot=Decimal("125.00"),
+            residual_snapshot=Decimal("1.00"),
+        )
+
+        reopen_monthly_close(monthly_close=march)
+        march.refresh_from_db()
+        april.refresh_from_db()
+
+        self.assertEqual(march.status, MonthlyClose.Status.DRAFT)
+        self.assertEqual(april.status, MonthlyClose.Status.DRAFT)
+        self.assertIsNone(march.liquidity_total_snapshot)
+        self.assertIsNone(april.residual_snapshot)
+
+    def test_reopen_rejects_chain_with_later_locked_close(self):
+        march = MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=3,
+            status=MonthlyClose.Status.FINALIZED,
+        )
+        MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=4,
+            status=MonthlyClose.Status.LOCKED,
+        )
+
+        with self.assertRaisesMessage(ValueError, "cierre posterior bloqueado"):
+            reopen_monthly_close(monthly_close=march)
+        march.refresh_from_db()
+        self.assertEqual(march.status, MonthlyClose.Status.FINALIZED)
 
     def test_reopen_draft_raises(self):
         mc = self._create_draft()

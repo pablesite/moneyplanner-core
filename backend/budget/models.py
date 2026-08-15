@@ -325,6 +325,13 @@ class MonthlyClose(models.Model):
     liquidity_total_snapshot = models.DecimalField(
         max_digits=14, decimal_places=2, null=True, blank=True
     )
+    opening_liquidity_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    expected_liquidity_total_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    residual_snapshot = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

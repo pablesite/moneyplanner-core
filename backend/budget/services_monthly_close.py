@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
@@ -381,6 +382,21 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
                 if monthly_close.liquidity_total_snapshot is not None
                 else None
             ),
+            "opening_liquidity_snapshot": (
+                str(monthly_close.opening_liquidity_snapshot)
+                if monthly_close.opening_liquidity_snapshot is not None
+                else None
+            ),
+            "expected_liquidity_total_snapshot": (
+                str(monthly_close.expected_liquidity_total_snapshot)
+                if monthly_close.expected_liquidity_total_snapshot is not None
+                else None
+            ),
+            "residual_snapshot": (
+                str(monthly_close.residual_snapshot)
+                if monthly_close.residual_snapshot is not None
+                else None
+            ),
             "notes": monthly_close.notes,
         },
         "income": {
@@ -426,7 +442,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
 
 
 def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose:
-    """DRAFT → FINALIZED. Takes snapshot of current totals."""
+    """DRAFT → FINALIZED. Freezes the reconciliation boundary for the next month."""
     with transaction.atomic():
         mc = MonthlyClose.objects.select_for_update().get(pk=monthly_close.pk)
         if mc.status != MonthlyClose.Status.DRAFT:
@@ -442,8 +458,23 @@ def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose
         mc.finalized_at = timezone.now()
         mc.income_total_snapshot = Decimal(state["income"]["executed"])
         mc.expense_total_snapshot = Decimal(state["expense"]["executed"])
+        opening = state["liquidity"].get("previous_total")
         liq = state["liquidity"].get("current_total")
+        external_expense = Decimal(state["expense"]["external_executed"])
+        income = Decimal(state["income"]["executed"])
+        mc.opening_liquidity_snapshot = Decimal(opening) if opening is not None else None
         mc.liquidity_total_snapshot = Decimal(liq) if liq is not None else None
+        mc.expected_liquidity_total_snapshot = (
+            _round_money(mc.opening_liquidity_snapshot + income - external_expense)
+            if mc.opening_liquidity_snapshot is not None
+            else None
+        )
+        mc.residual_snapshot = (
+            _round_money(mc.liquidity_total_snapshot - mc.expected_liquidity_total_snapshot)
+            if mc.liquidity_total_snapshot is not None
+            and mc.expected_liquidity_total_snapshot is not None
+            else None
+        )
         from .services_settlement_preview import freeze_monthly_close_settlement
 
         freeze_monthly_close_settlement(monthly_close=mc, user=user)
@@ -458,32 +489,53 @@ def finalize_monthly_close(*, monthly_close: MonthlyClose, user) -> MonthlyClose
 
 
 def reopen_monthly_close(*, monthly_close: MonthlyClose) -> MonthlyClose:
-    """FINALIZED → DRAFT. Clears snapshot fields."""
+    """FINALIZED → DRAFT and invalidates every later finalized close."""
     with transaction.atomic():
         mc = MonthlyClose.objects.select_for_update().get(pk=monthly_close.pk)
         if mc.status != MonthlyClose.Status.FINALIZED:
             raise ValueError(
                 f"Solo se puede reabrir un cierre finalizado (estado actual: '{mc.status}')."
             )
-        snapshot = getattr(mc, "settlement_snapshot", None)
-        if (
-            snapshot is not None
-            and snapshot.recommendations.filter(ledger_transactions__isnull=False).exists()
-        ):
-            raise ValueError(
-                "No se puede reabrir un cierre con movimientos de liquidación: "
-                "se conserva como histórico auditable."
+        later_closes = list(
+            MonthlyClose.objects.select_for_update()
+            .filter(user=mc.user)
+            .filter(
+                Q(fiscal_year__gt=mc.fiscal_year)
+                | Q(fiscal_year=mc.fiscal_year, month__gt=mc.month)
             )
+            .filter(status__in=[MonthlyClose.Status.FINALIZED, MonthlyClose.Status.LOCKED])
+            .order_by("fiscal_year", "month")
+        )
+        closes_to_reopen = [mc, *later_closes]
+        for close in closes_to_reopen:
+            if close.status == MonthlyClose.Status.LOCKED:
+                raise ValueError(
+                    "No se puede reabrir porque existe un cierre posterior bloqueado. "
+                    "Desbloquea la cadena desde el mes más reciente."
+                )
+            snapshot = getattr(close, "settlement_snapshot", None)
+            if (
+                snapshot is not None
+                and snapshot.recommendations.filter(ledger_transactions__isnull=False).exists()
+            ):
+                raise ValueError(
+                    "No se puede reabrir un cierre con movimientos de liquidación: "
+                    "se conserva como histórico auditable."
+                )
 
-        mc.status = MonthlyClose.Status.DRAFT
-        mc.finalized_at = None
-        mc.income_total_snapshot = None
-        mc.expense_total_snapshot = None
-        mc.liquidity_total_snapshot = None
         from .services_settlement_preview import clear_monthly_close_settlement
 
-        clear_monthly_close_settlement(monthly_close=mc)
-        mc.save()
+        for close in closes_to_reopen:
+            clear_monthly_close_settlement(monthly_close=close)
+            close.status = MonthlyClose.Status.DRAFT
+            close.finalized_at = None
+            close.income_total_snapshot = None
+            close.expense_total_snapshot = None
+            close.opening_liquidity_snapshot = None
+            close.liquidity_total_snapshot = None
+            close.expected_liquidity_total_snapshot = None
+            close.residual_snapshot = None
+            close.save()
         return mc
 
 
