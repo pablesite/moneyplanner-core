@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.39.0...moneyplanner-core-v0.39.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **budget:** isolate accepted monthly close residuals ([8703900](https://github.com/pablesite/moneyplanner-core/commit/870390090db7286f3d791f9b318e9ececa1367f3))
+* **plan:** preserve ownership when editing scenarios ([b52a711](https://github.com/pablesite/moneyplanner-core/commit/b52a711d7fedcc582be2aacb0c4a7b2953370cd7))
+
 ## [0.39.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.38.2...moneyplanner-core-v0.39.0) (2026-08-14)
 
 
