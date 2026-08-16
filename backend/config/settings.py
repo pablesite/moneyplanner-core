@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "memberships.apps.MembershipsConfig",
     "net_worth",
     "plan.apps.PlanConfig",
+    "portfolio.apps.PortfolioConfig",
 ]
 
 MIDDLEWARE = [

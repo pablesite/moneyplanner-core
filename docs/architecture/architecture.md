@@ -26,7 +26,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 5. Financial guide v1
 6. Family and ownership
 7. Financial Plan (`plan`): deterministic projection engine and `/api/plan/*`
-8. Supporting product capabilities that belong to the Core domain baseline
+8. Investment portfolio (`portfolio`): containers, instruments, positions, historical ownership and migration readiness
+9. Supporting product capabilities that belong to the Core domain baseline
 
 ## Architectural Rule
 1. Shared product behavior belongs in Core.
@@ -34,7 +35,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. Core documentation must remain self-contained and understandable without Core documentation.
 
 ## Internal Structure
-1. Backend apps organize domain areas such as accounts, budget, net worth, accounting, memberships, and shared core services.
+1. Backend apps organize domain areas such as accounts, budget, net worth, accounting, memberships, portfolio, and shared core services.
 2. Frontend code is organized by product domains under `frontend/src/domains/*`, including domain-specific UI such as `accounting`.
 3. Operational and functional documentation for the OSS product lives under `core/docs/`.
 
@@ -140,6 +141,16 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 1. Assets in category `investments` can be configured with multiple periodic contribution intervals through `contribution_intervals` in the asset serializer payload.
 2. Each interval stores `start_date`, optional `end_date`, `amount`, `frequency` (`monthly` or `weekly`), and optional `currency`.
 3. Legacy flat fields in `Asset` remain available for backward compatibility, while the schedule builder prioritizes interval rows when present.
+
+## Investment Portfolio Domain Foundation
+
+1. `Portfolio` is one-to-one with the user and owns the base currency used by the portfolio domain. `InvestmentContainer` groups positions operationally; `ContainerCashAccount` references one existing asset-type `LedgerAccount` per container and currency instead of creating another cash catalogue.
+2. `Instrument` separates product identity from the user's patrimonial position. Canonical instruments have no user owner and require confirmed identifiers; custom instruments belong to one user. Legacy bootstrap creates custom instruments and does not infer an asset class for aggregated funds, ETFs, roboadvisors or pension plans.
+3. `PortfolioPosition` references exactly one existing investment `Asset`, its container and instrument, and optionally its unique compatible `LedgerAccount`. It never stores a second balance. Active and archived assets are both migrated; archived positions remain queryable for historical calculations.
+4. `PositionOwnershipPeriod` and `PositionOwnershipShare` freeze dated ownership evidence. Rows are immutable after creation. Explicit individual/shared ownership is copied only when it sums to 100%; missing, dynamic or invalid ownership remains an explicit `PortfolioMigrationIssue` instead of being guessed.
+5. The idempotent bootstrap (`POST /api/portfolio/bootstrap/`) creates the single portfolio, a neutral legacy container and one position per investment asset. It classifies `units_based` only for an unambiguous cryptocurrency asset whose currency itself is the crypto unit; all other legacy rows remain `value_based`.
+6. `GET /api/portfolio/readiness/` audits every investment asset and reports either a position or an explicit issue. `performance_coverage` derives independently from legacy/ledger investment flows and valuations; `position_detail_coverage` derives from confirmed unit tracking and investment ledger activity.
+7. CRUD for portfolios, containers, cash-account links, custom instruments and positions lives under `/api/portfolio/`. Ownership periods support create/list/retrieve only, and migration issues are read-only. Every queryset and related-object field is scoped to the authenticated user; canonical instruments are the only shared rows.
 
 ## Net Worth Timeline Contract
 1. `GET /api/net-worth/timeline/` returns monthly rows for the chart plus a `comparisons` object for summary UIs. Each row includes `assets_by_category` in the user's base currency so consumers can render the real historical composition without rebuilding valuation logic.

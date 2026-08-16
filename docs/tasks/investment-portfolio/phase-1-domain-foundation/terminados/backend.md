@@ -32,16 +32,15 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` - dominio y fuentes de verdad.
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - enlace no duplicado con portfolio.
-- [ ] `core/docs/project-status.md` y `docs/project-status.md` - estado de fase.
+- [x] `core/docs/architecture/architecture.md` - dominio y fuentes de verdad.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - enlace no duplicado con portfolio.
+- [x] `core/docs/project-status.md` y `docs/project-status.md` - estado de fase.
 
 ## Risks
 La inferencia de contenedor o unidades puede ser falsa. Solo automatizar enlaces inequívocos y emitir `needs_review` para el resto; no reescribir ledger ni ownership historico.
 
 ## Completion Criteria
-- [ ] Migracion aplicada, verificada e idempotente.
-- [ ] Todos los activos de inversion tienen posicion o incidencia explicita.
-- [ ] Tests de aislamiento y constraints pasan.
-- [ ] Documentacion y commit `feat(portfolio): add portfolio domain foundation` completados.
-
+- [x] Migracion aplicada, verificada e idempotente.
+- [x] Todos los activos de inversion tienen posicion o incidencia explicita.
+- [x] Tests de aislamiento y constraints pasan.
+- [x] Documentacion y commit `feat(portfolio): add portfolio domain foundation` completados.

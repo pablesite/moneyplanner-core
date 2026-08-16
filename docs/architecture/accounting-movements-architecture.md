@@ -97,6 +97,14 @@ This leaves a gap:
    - remains planning data in v1
    - receives executed figures from ledger rows with matching `flow_family/category_key/subcategory_key` and month
 
+## Portfolio boundary
+
+1. `portfolio` references `LedgerAccount` and `LedgerTransaction`; it never duplicates accounts, entries, balances or monetary movements.
+2. A `PortfolioPosition` may retain the unique asset-type `LedgerAccount` already linked through `LedgerAccount.asset`. If no compatible account exists, or several candidates exist, bootstrap leaves the link empty and emits a migration issue instead of creating or choosing one.
+3. `Asset` remains the patrimonial identity and current net-worth boundary. Portfolio adds container, instrument, tracking style and dated ownership semantics around that same asset.
+4. Phase 1 performance coverage reads posted transactions with `quick_entry_kind=investment` plus legacy `InvestmentAssetEvent` and `AssetValuation`. It does not rewrite historical purchases or treat revaluation transactions as external flows.
+5. Future `PortfolioTrade` rows will be execution metadata linked to `LedgerTransaction`; the ledger remains the sole monetary source of truth.
+
 ## Behavioral rules
 1. `tracking_mode=manual`
    - current manual valuations, events, and check-ins remain valid

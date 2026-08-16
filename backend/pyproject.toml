@@ -18,6 +18,6 @@ warn_redundant_casts = true
 warn_return_any = false
 strict_optional = false
 pretty = true
-files = ["accounts", "accounting", "core", "net_worth", "config"]
+files = ["accounts", "accounting", "core", "net_worth", "portfolio", "config"]
 exclude = "(^|/)(migrations)/"
 disable_error_code = ["no-any-return", "var-annotated", "union-attr", "assignment"]
