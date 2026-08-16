@@ -2,7 +2,7 @@
 
 Current feature status by area. Update this file whenever functionality status changes.
 
-**Last review:** 2026-08-03 | **Core Version:** see `VERSION`
+**Last review:** 2026-08-16 | **Core Version:** see `VERSION`
 
 ---
 
@@ -24,8 +24,17 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
+| Investment portfolio - Phase 1 | Agent | Create the Core portfolio domain, safe bootstrap and independent performance/detail coverage. | `tasks/investment-portfolio/phase-1-domain-foundation/backend.md` |
+| Investment portfolio - Phase 2 | Agent | Add confirmed automatic prices, manual valuations, freshness and provider health. Requires Phase 1. | `tasks/investment-portfolio/phase-2-hybrid-valuations/backend.md` |
+| Investment portfolio - Phase 3 | Agent | Deliver TWR/MWR/P&L/FX engine, read APIs and independent mathematical QA. Requires Phase 2. | `tasks/investment-portfolio/phase-3-performance-engine/backend.md` + `qa.md` |
+| Investment portfolio - Phase 5 | Agent | Add complete operations, corporate actions, generic CSV import and reconciliation. Requires SaaS Phase 4. | `tasks/investment-portfolio/phase-5-operations-import/backend.md` + `qa.md` |
+| Investment portfolio - Phase 6 | Agent | Add versioned allocation and contribution-only rebalancing baskets. Requires Phase 5. | `tasks/investment-portfolio/phase-6-allocation-rebalancing/backend.md` |
+| Investment portfolio - Phase 7 | Agent | Add strategic benchmark and progressive risk engine. Requires Phase 6. | `tasks/investment-portfolio/phase-7-benchmark-risk/backend.md` + `qa.md` |
+| Investment portfolio - Phase 8 | Agent | Add alerts, Mi Plan integration and functional closeout. Requires Phase 7. | `tasks/investment-portfolio/phase-8-product-integration/backend.md` |
 
 > Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5, 8, 9) live in the SaaS repo root (`docs/tasks/financial-plan/`).
+
+> Investment portfolio overview and binding decisions: `tasks/investment-portfolio/README.md`. The SaaS workspace and frontend phases live in the root repo under `docs/tasks/investment-portfolio/`.
 
 > Monthly-close settlement overview and binding contract: `tasks/monthly-close-settlement/README.md` + `tasks/monthly-close-settlement/spec.md`. SaaS frontend phases 4-6 live in the root repo under `docs/tasks/monthly-close-settlement/`.
 
@@ -36,6 +45,7 @@ Consolidated view of what remains in Core before production launch. See `roadmap
 | Area | Priority | Status | Description |
 |------|----------|--------|-------------|
 | Accounting — v1 | High | ✅ | Core contract supports the SaaS daily-operations workspace: calculated classification review queue and validated account-scoped daily balance series. Imported movement traceability remains preserved. |
+| Investment portfolio | High | ⚪ | Planned as eight sequential Core/SaaS phases: safe domain bootstrap, hybrid valuation, professional performance, mobile-first workspace, complete operations/import, allocation/rebalancing, benchmark/risk and product integration. Canonical plan: `tasks/investment-portfolio/README.md`. |
 | Budget — v1 | High | ✅ | Functional closeout applied and manually reviewed: canonical monthly summaries for execution/coverage, ledger precedence over manual check-ins, backend errors shown inside line modals, and header aligned with Net Worth. |
 | Net Worth — asset/liability modals | Medium | ✅ | Full review of asset and liability create/edit modals completed. Accounting-backed mortgage cancellation forecasts reconcile the current ledger balance with remaining budget installments instead of rebuilding a stale historical schedule. Module v1 functionally closed. |
 | Monthly Close — dual mode | High | ✅ | Automatic implementation completed (backend + frontend) and operational manual review completed. The state exposes a role-aware financial result that separates financial savings, property formation and tangible purchases from the reconciliation residual. v1 bugs fixed on 2026-05-20: reconciliation bridge column alignment (CSS subgrid) and per-account liquidity reference (previous month effective balance instead of `asset.amount`). |
