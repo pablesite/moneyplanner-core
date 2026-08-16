@@ -861,6 +861,7 @@ def build_expense_monthly_plan_vs_executed_summary(
     }
     if include_role_weights:
         payload["_cashflow_role_weights"] = role_weights_by_slot_month
+        payload["_categorized_ledger_by_key"] = categorized_ledger_by_key
     return payload
 
 
@@ -1166,4 +1167,5 @@ def build_income_monthly_plan_vs_executed_summary(
     }
     if include_role_weights:
         payload["_cashflow_role_weights"] = role_weights_by_slot_month
+        payload["_categorized_ledger_by_key"] = categorized_ledger_by_key
     return payload

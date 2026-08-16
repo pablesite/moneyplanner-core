@@ -459,18 +459,24 @@ def _build_monthly_financial_result(
 
 
 def _get_uncovered_income_entries_for_month(
-    *, user, fiscal_year: int, month: int
+    *,
+    user,
+    fiscal_year: int,
+    month: int,
+    categorized_ledger: dict[tuple[str, str, int], Decimal] | None = None,
+    base_currency: str | None = None,
 ) -> list[tuple[AnnualIncomeEntry, Decimal]]:
     """Returns (entry, planned_amount) pairs not covered by ledger or checkin."""
     entries = list(AnnualIncomeEntry.objects.filter(user=user, is_active=True))
 
-    categorized_ledger = _build_ledger_monthly_execution_maps(
-        user=user,
-        fiscal_year=fiscal_year,
-        flow_family=str(LedgerEntry.FlowFamily.INCOME),
-        positive_side=str(LedgerEntry.Side.CREDIT),
-        base_currency=_get_base_currency(user),
-    )
+    if categorized_ledger is None:
+        categorized_ledger = _build_ledger_monthly_execution_maps(
+            user=user,
+            fiscal_year=fiscal_year,
+            flow_family=str(LedgerEntry.FlowFamily.INCOME),
+            positive_side=str(LedgerEntry.Side.CREDIT),
+            base_currency=base_currency or _get_base_currency(user),
+        )
 
     existing_checkins = set(
         AnnualIncomeMonthlyCheckin.objects.filter(
@@ -494,18 +500,24 @@ def _get_uncovered_income_entries_for_month(
 
 
 def _get_uncovered_expense_entries_for_month(
-    *, user, fiscal_year: int, month: int
+    *,
+    user,
+    fiscal_year: int,
+    month: int,
+    categorized_ledger: dict[tuple[str, str, int], Decimal] | None = None,
+    base_currency: str | None = None,
 ) -> list[tuple[AnnualExpenseEntry, Decimal]]:
     """Returns (entry, planned_amount) pairs not covered by ledger or checkin."""
     entries = list(AnnualExpenseEntry.objects.filter(user=user, is_active=True))
 
-    categorized_ledger = _build_ledger_monthly_execution_maps(
-        user=user,
-        fiscal_year=fiscal_year,
-        flow_family=str(LedgerEntry.FlowFamily.EXPENSE),
-        positive_side=str(LedgerEntry.Side.DEBIT),
-        base_currency=_get_base_currency(user),
-    )
+    if categorized_ledger is None:
+        categorized_ledger = _build_ledger_monthly_execution_maps(
+            user=user,
+            fiscal_year=fiscal_year,
+            flow_family=str(LedgerEntry.FlowFamily.EXPENSE),
+            positive_side=str(LedgerEntry.Side.DEBIT),
+            base_currency=base_currency or _get_base_currency(user),
+        )
 
     existing_checkins = set(
         AnnualExpenseMonthlyCheckin.objects.filter(
@@ -729,10 +741,18 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
     )
 
     uncovered_income = _get_uncovered_income_entries_for_month(
-        user=user, fiscal_year=fiscal_year, month=month
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        categorized_ledger=income_summary["_categorized_ledger_by_key"],
+        base_currency=base_currency,
     )
     uncovered_expense = _get_uncovered_expense_entries_for_month(
-        user=user, fiscal_year=fiscal_year, month=month
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        categorized_ledger=expense_summary["_categorized_ledger_by_key"],
+        base_currency=base_currency,
     )
 
     has_gaps = bool(uncovered_income or uncovered_expense)
