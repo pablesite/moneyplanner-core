@@ -24,14 +24,14 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` - evidencia y tolerancias de calculo.
-- [ ] `core/docs/project-status.md` y `docs/project-status.md` - cierre del gate.
+- [x] `core/docs/architecture/architecture.md` - evidencia y tolerancias de calculo.
+- [x] `core/docs/project-status.md` y `docs/project-status.md` - cierre del gate.
 
 ## Risks
 TWR y XIRR pueden parecer plausibles aun siendo incorrectos. No cerrar con tests que se calculen mediante el mismo codigo productivo.
 
 ## Completion Criteria
-- [ ] Casos dorados y propiedades pasan.
-- [ ] Diferencias Modified Dietz/TWR exacta estan declaradas.
-- [ ] Evidencia de validacion real y commit completados.
-- [ ] Spec movida a `terminados/`.
+- [x] Casos dorados y propiedades pasan.
+- [x] Diferencias Modified Dietz/TWR exacta estan declaradas.
+- [x] Evidencia de validacion real y commit completados.
+- [x] Spec movida a `terminados/`.

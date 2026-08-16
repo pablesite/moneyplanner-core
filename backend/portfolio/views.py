@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
+from django.utils.dateparse import parse_date
 
 from core.market_data import MarketDataSyncError
 
@@ -33,6 +34,15 @@ from .serializers import (
     PositionValuationSerializer,
 )
 from .market_data import refresh_confirmed_mapping
+from .performance import (
+    build_portfolio_overview,
+    build_portfolio_performance,
+    build_portfolio_positions,
+    build_portfolio_quality,
+    build_portfolio_timeline,
+    default_performance_period,
+    timeline_dates,
+)
 from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
 from .valuations import build_valuation_health, resolve_position_valuation
 
@@ -139,6 +149,22 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
     def valuation(self, request, pk=None):
         return Response(resolve_position_valuation(position=self.get_object()))
 
+    @action(detail=False, methods=["get"], url_path="performance")
+    def performance(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        return Response(
+            {
+                "period": {"from": start_date.isoformat(), "to": end_date.isoformat()},
+                "member_id": member_id,
+                "results": build_portfolio_positions(
+                    portfolio=portfolio,
+                    start_date=start_date,
+                    end_date=end_date,
+                    member_id=member_id,
+                ),
+            }
+        )
+
 
 class PositionValuationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -208,3 +234,93 @@ class PortfolioValuationHealthView(APIView):
 
     def get(self, request):
         return Response(build_valuation_health(user=request.user))
+
+
+def _performance_request(request):
+    try:
+        portfolio = Portfolio.objects.get(user=request.user)
+    except Portfolio.DoesNotExist as exc:
+        raise ValidationError({"detail": "La cartera todavía no existe."}) from exc
+    default_from, default_to = default_performance_period(portfolio)
+    raw_from = request.query_params.get("date_from")
+    raw_to = request.query_params.get("date_to")
+    start_date = parse_date(raw_from) if raw_from else default_from
+    end_date = parse_date(raw_to) if raw_to else default_to
+    if start_date is None or end_date is None:
+        raise ValidationError({"detail": "Usa date_from/date_to con formato YYYY-MM-DD."})
+    timeline_dates(start_date, end_date)
+    raw_member_id = request.query_params.get("member_id")
+    try:
+        member_id = int(raw_member_id) if raw_member_id else None
+    except ValueError as exc:
+        raise ValidationError({"member_id": "Debe ser un entero positivo."}) from exc
+    if member_id is not None and member_id < 1:
+        raise ValidationError({"member_id": "Debe ser un entero positivo."})
+    if member_id is not None and not request.user.family_members.filter(id=member_id).exists():
+        raise ValidationError({"member_id": "El miembro no pertenece al usuario."})
+    return portfolio, start_date, end_date, member_id
+
+
+class PortfolioOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        return Response(
+            build_portfolio_overview(
+                portfolio=portfolio,
+                start_date=start_date,
+                end_date=end_date,
+                member_id=member_id,
+            )
+        )
+
+
+class PortfolioTimelineView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        return Response(
+            {
+                "period": {"from": start_date.isoformat(), "to": end_date.isoformat()},
+                "member_id": member_id,
+                "currency": portfolio.base_currency,
+                "results": build_portfolio_timeline(
+                    portfolio=portfolio,
+                    start_date=start_date,
+                    end_date=end_date,
+                    member_id=member_id,
+                ),
+            }
+        )
+
+
+class PortfolioPerformanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        return Response(
+            build_portfolio_performance(
+                portfolio=portfolio,
+                start_date=start_date,
+                end_date=end_date,
+                member_id=member_id,
+            )
+        )
+
+
+class PortfolioQualityView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        return Response(
+            build_portfolio_quality(
+                portfolio=portfolio,
+                start_date=start_date,
+                end_date=end_date,
+                member_id=member_id,
+            )
+        )

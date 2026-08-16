@@ -33,15 +33,14 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend m
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` - formulas, cash-flow perimeter y cache.
-- [ ] `docs/architecture/api-registry.md` - contratos de lectura.
-- [ ] Project status de Core y SaaS.
+- [x] `core/docs/architecture/architecture.md` - formulas, cash-flow perimeter y cache.
+- [x] `docs/architecture/api-registry.md` - contratos de lectura.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Un signo o flujo interno mal clasificado invalida toda la serie. Los invariantes de reconciliacion y el QA de esta fase son gate obligatorio.
 
 ## Completion Criteria
-- [ ] Resultados reconciliados y cobertura explicita por metrica.
-- [ ] No hay N+1 ni consultas sin limite en timeline.
-- [ ] Quality, tests, docs y commit completados.
-
+- [x] Resultados reconciliados y cobertura explicita por metrica.
+- [x] No hay N+1 ni consultas sin limite en timeline.
+- [x] Quality, tests, docs y commit completados.
