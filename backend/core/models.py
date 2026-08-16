@@ -115,6 +115,7 @@ class MarketDataSyncState(models.Model):
     class Dataset(models.TextChoices):
         FX = "fx", "FX"
         INFLATION = "inflation", "Inflation"
+        INSTRUMENT_PRICES = "instrument_prices", "Instrument prices"
 
     dataset = models.CharField(max_length=32, choices=Dataset.choices)
     scope = models.CharField(max_length=64)

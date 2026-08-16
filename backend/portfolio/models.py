@@ -172,6 +172,161 @@ class Instrument(models.Model):
         return f"Instrument(name={self.name}, kind={self.identity_kind})"
 
 
+class InstrumentProviderMapping(models.Model):
+    class Provider(models.TextChoices):
+        TWELVE_DATA = "twelve_data", "Twelve Data"
+        COINGECKO = "coingecko", "CoinGecko"
+
+    instrument = models.ForeignKey(
+        Instrument,
+        on_delete=models.CASCADE,
+        related_name="provider_mappings",
+    )
+    provider = models.CharField(max_length=24, choices=Provider.choices)
+    provider_symbol = models.CharField(max_length=96)
+    provider_market = models.CharField(max_length=32, blank=True, default="")
+    quote_currency = models.CharField(max_length=3)
+    is_confirmed = models.BooleanField(default=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["instrument_id", "provider"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instrument", "provider", "quote_currency"],
+                name="portfolio_instrument_provider_quote_unique",
+            ),
+            models.CheckConstraint(
+                condition=Q(is_confirmed=False) | Q(confirmed_at__isnull=False),
+                name="portfolio_confirmed_mapping_has_timestamp",
+            ),
+        ]
+
+    def clean(self) -> None:
+        if self.provider == self.Provider.TWELVE_DATA and not self.provider_market:
+            raise ValidationError("Twelve Data requiere mercado confirmado.")
+        if self.is_confirmed and not self.confirmed_at:
+            raise ValidationError("Un mapeo confirmado requiere confirmed_at.")
+
+    def __str__(self) -> str:
+        return f"{self.provider}:{self.provider_symbol}@{self.provider_market or '-'}"
+
+
+class InstrumentPrice(models.Model):
+    instrument = models.ForeignKey(
+        Instrument,
+        on_delete=models.CASCADE,
+        related_name="prices",
+    )
+    provider_mapping = models.ForeignKey(
+        InstrumentProviderMapping,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="prices",
+    )
+    price_date = models.DateField()
+    close = models.DecimalField(
+        max_digits=28,
+        decimal_places=12,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    currency = models.CharField(max_length=3)
+    source = models.CharField(max_length=32)
+    source_key = models.CharField(max_length=128)
+    source_market = models.CharField(max_length=32, blank=True, default="")
+    fetched_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-price_date", "-id"]
+        indexes = [
+            models.Index(fields=["instrument", "price_date"], name="portfolio_price_date_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instrument", "price_date", "source", "source_key"],
+                name="portfolio_instrument_price_source_unique",
+            )
+        ]
+
+
+class PositionValuation(models.Model):
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        LEGACY_ASSET = "legacy_asset", "Derivada de AssetValuation"
+        LEGACY_LEDGER = "legacy_ledger", "Derivada de revalorización contable"
+
+    position = models.ForeignKey(
+        "PortfolioPosition",
+        on_delete=models.CASCADE,
+        related_name="manual_valuations",
+    )
+    valuation_date = models.DateField()
+    value = models.DecimalField(
+        max_digits=28,
+        decimal_places=8,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    currency = models.CharField(max_length=3)
+    source = models.CharField(max_length=24, choices=Source.choices, default=Source.MANUAL)
+    legacy_asset_valuation = models.OneToOneField(
+        "net_worth.AssetValuation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="portfolio_derived_valuation",
+    )
+    legacy_ledger_transaction = models.ForeignKey(
+        "accounting.LedgerTransaction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="portfolio_derived_valuations",
+    )
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-valuation_date", "-id"]
+        indexes = [
+            models.Index(
+                fields=["position", "valuation_date"],
+                name="portfolio_valuation_date_idx",
+            )
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "valuation_date", "source"],
+                name="portfolio_position_valuation_source_unique",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        source="legacy_asset",
+                        legacy_asset_valuation__isnull=False,
+                        legacy_ledger_transaction__isnull=True,
+                    )
+                    | Q(
+                        source="legacy_ledger",
+                        legacy_asset_valuation__isnull=True,
+                        legacy_ledger_transaction__isnull=False,
+                    )
+                    | Q(
+                        source="manual",
+                        legacy_asset_valuation__isnull=True,
+                        legacy_ledger_transaction__isnull=True,
+                    )
+                ),
+                name="portfolio_position_valuation_source_valid",
+            ),
+        ]
+
+
 class PortfolioPosition(models.Model):
     class TrackingStyle(models.TextChoices):
         VALUE_BASED = "value_based", "Por valor"

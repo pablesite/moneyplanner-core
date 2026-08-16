@@ -25,7 +25,15 @@ Use `demo` / `demo1234demo` to explore the app with sample data. Set `SEED_CREAT
 in `backend/.env` to skip demo data in a new local database.
 
 `market_data_sync` is part of the standard Core startup. It reconciles and refreshes persisted
-market datasets (`FX` and `IPC`) used by net worth calculations and the `/data` observability view.
+market datasets (`FX`, `IPC` and confirmed portfolio instrument prices) used by net worth and
+portfolio calculations. Instrument-price providers are optional: set `TWELVE_DATA_API_KEY` for
+confirmed securities mappings, and `COINGECKO_API_KEY` plus its API base/header or
+`CRYPTOCOMPARE_API_KEY` for production crypto access. Without credentials, persisted FX crypto
+history is still reused and provider failures remain visible without deleting prior prices.
+
+```bash
+docker compose exec backend python manage.py sync_market_data --datasets instrument_prices --mode reconcile
+```
 
 ## Standard Diagnostics
 1. `docker compose ps`

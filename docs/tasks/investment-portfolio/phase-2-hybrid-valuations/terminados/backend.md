@@ -30,17 +30,16 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/architecture.md` - capa de precios y precedencia.
-- [ ] `core/docs/operations/dev-setup.md` - configuracion del proveedor.
-- [ ] `docs/architecture/api-registry.md` - endpoints consumidos por SaaS.
-- [ ] Project status de Core y SaaS.
+- [x] `core/docs/architecture/architecture.md` - capa de precios y precedencia.
+- [x] `core/docs/operations/dev-setup.md` - configuracion del proveedor.
+- [x] `docs/architecture/api-registry.md` - endpoints consumidos por SaaS.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Licencias o simbolos ambiguos pueden invalidar un proveedor. Ninguna coincidencia entra en produccion sin confirmacion de mercado, divisa e instrumento.
 
 ## Completion Criteria
-- [ ] Cotizados de la muestra reciben cierres diarios o incidencia explicita.
-- [ ] Productos custom aceptan valor manual fechado.
-- [ ] Fallos externos no borran el ultimo valor valido.
-- [ ] Calidad, tests, docs y commit completados.
-
+- [x] Cotizados de la muestra reciben cierres diarios o incidencia explicita.
+- [x] Productos custom aceptan valor manual fechado.
+- [x] Fallos externos no borran el ultimo valor valido.
+- [x] Calidad, tests, docs y commit completados.

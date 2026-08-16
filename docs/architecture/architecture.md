@@ -152,6 +152,25 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 6. `GET /api/portfolio/readiness/` audits every investment asset and reports either a position or an explicit issue. `performance_coverage` derives independently from legacy/ledger investment flows and valuations; `position_detail_coverage` derives from confirmed unit tracking and investment ledger activity.
 7. CRUD for portfolios, containers, cash-account links, custom instruments and positions lives under `/api/portfolio/`. Ownership periods support create/list/retrieve only, and migration issues are read-only. Every queryset and related-object field is scoped to the authenticated user; canonical instruments are the only shared rows.
 
+## Investment Portfolio Valuation Layer
+
+1. `InstrumentProviderMapping` is the explicit boundary between an instrument and a market-data provider. Automatic prices are accepted only from confirmed mappings with an exact symbol, quote currency and, for Twelve Data securities, market. Names and unverified ISIN/ticker guesses never create mappings.
+2. `InstrumentPrice` stores immutable-at-source daily closes with provider, source key, market and fetch timestamp. `PositionValuation` stores dated total values from manual input or legacy derivation; importing legacy `AssetValuation` and posted ledger revaluations is idempotent and never edits accounting entries.
+3. A units-based position uses its posted ledger-unit balance multiplied by the latest eligible close. A manual total value dated after the price takes precedence; value-based positions use their latest manual or legacy total value. Every resolved value reports date, freshness and provenance.
+4. Freshness thresholds are instrument-specific: 3 days for stocks, ETFs, crypto and cash; 10 for funds; 35 for deposits; 45 for pension plans; 90 for crowdfunding; and 30 for other instruments. Missing, stale and mapping/price issues remain explicit in `/api/portfolio/valuation-health/`.
+5. `instrument_prices` is a registered `market_data_sync` dataset. Reconciliation writes only persisted prices, refresh can run on demand per confirmed instrument, and a provider failure records sync health without deleting the last valid close.
+
+### Initial provider decision (2026-08-16)
+
+| Provider | Coverage and history | Limits / licence | Decision |
+|----------|----------------------|------------------|----------|
+| [Twelve Data](https://twelvedata.com/docs/advanced) | Daily `time_series` plus exchange/currency metadata for global equities, ETFs and mutual funds. | Personal Basic is rate-limited; external commercial display requires an eligible [business plan](https://twelvedata.com/pricing-business) and may require exchange approval under its [commercial-use policy](https://support.twelvedata.com/en/articles/5332349-commercial-and-personal-usage). | First securities adapter, optional and inactive without `TWELVE_DATA_API_KEY`; production activation requires confirmed licensing and mappings. |
+| [Alpha Vantage](https://www.alphavantage.co/documentation/) | Global equity, ETF and mutual-fund daily series. | API-key plans and provider-specific throttling; the evaluated contract gives less explicit exchange/currency validation for this workflow. | Technically viable fallback, not selected for the initial adapter. |
+| [CoinGecko](https://docs.coingecko.com/docs/setting-up-your-api-key) | Crypto market history with explicit coin identifiers and quote currencies. | Keyless access is not a production contract; paid plans carry their own [usage and attribution terms](https://www.coingecko.com/en/api/pricing). | Primary crypto adapter; API base and header are configurable for Demo/Pro. |
+| CryptoCompare | Crypto daily history. | API key and applicable commercial terms required for production. | Existing fallback when CoinGecko fails. |
+
+The migrated local sample has no trustworthy securities identifiers, so those positions expose `mapping_missing` instead of guessed quotes. BTC/EUR and ETH/EUR reuse persisted `FxRate` history before any network request. The phase-2 reconciliation persisted 2,543 daily closes from two confirmed crypto mappings through 2026-08-16 and imported 831 daily legacy ledger valuations. Portfolio health reports 4 fresh, 17 stale and 2 missing positions plus 10 explicit mapping/price issues.
+
 ## Net Worth Timeline Contract
 1. `GET /api/net-worth/timeline/` returns monthly rows for the chart plus a `comparisons` object for summary UIs. Each row includes `assets_by_category` in the user's base currency so consumers can render the real historical composition without rebuilding valuation logic.
 2. `comparisons` exposes four baseline points calculated by Core in the user's base currency:
@@ -261,11 +280,12 @@ An accepted event contributes deltas to the projection, but the budget rows it c
 
 ## Market Data Layer
 1. External market datasets are synchronized by a dedicated worker service: `market_data_sync`.
-2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation --mode reconcile|refresh`.
+2. The canonical sync command is `python manage.py sync_market_data --datasets fx inflation instrument_prices --mode reconcile|refresh`.
 3. Core exposes a manual admin trigger endpoint for sync retries from UI: `POST /api/core/market-data/sync/` (defaults to `inflation` in `reconcile` mode).
 4. Persisted datasets in Core are:
    - `FxRate` (daily FX and supported crypto crosses)
    - `InflationIndex` (monthly IPC national + CCAA)
+   - `InstrumentPrice` (daily closes for confirmed portfolio mappings)
 5. Sync coverage and operational status are tracked in `MarketDataSyncState`.
 6. Domain consumers (for example `net_worth`) read only persisted data from Core; they do not call external providers.
 7. Core exposes an authenticated conversion endpoint `GET /api/core/fx/convert/?amount=&from=&to=&date=` (service `convert_currency_detailed`). It preserves crypto precision (up to 8 decimals, unlike `convert_currency` which quantizes to 2), resolves the rate for the requested date (direct/inverse/triangulation), and on a miss triggers a targeted on-demand sync via `market_data` before falling back to the nearest earlier quote. The response reports `{ converted, rate, rate_date, resolution: same|exact|synced|fallback }`. `POST /api/core/fx/refresh/` accepts `{ from, to }` for any authenticated user and forces a provider refresh of that pair for today; it never exposes the broad admin market-data trigger.

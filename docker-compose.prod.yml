@@ -30,6 +30,11 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
+      COINGECKO_API_KEY_HEADER: ${COINGECKO_API_KEY_HEADER:-x-cg-demo-api-key}
+      CRYPTOCOMPARE_API_KEY: ${CRYPTOCOMPARE_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +54,11 @@ services:
       DB_PORT: "5432"
       FX_SYNC_ENABLED: ${FX_SYNC_ENABLED:-1}
       FX_SYNC_INTERVAL_SECONDS: ${FX_SYNC_INTERVAL_SECONDS:-86400}
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
+      COINGECKO_API_KEY_HEADER: ${COINGECKO_API_KEY_HEADER:-x-cg-demo-api-key}
+      CRYPTOCOMPARE_API_KEY: ${CRYPTOCOMPARE_API_KEY:-}
     depends_on:
       backend:
         condition: service_started
@@ -60,7 +70,7 @@ services:
       done;
       while true; do
         if [ \"$${FX_SYNC_ENABLED:-1}\" = \"1\" ]; then
-          python manage.py sync_market_data --datasets fx inflation --mode reconcile || true;
+          python manage.py sync_market_data --datasets fx inflation instrument_prices --mode reconcile || true;
         fi;
         sleep $${FX_SYNC_INTERVAL_SECONDS:-86400};
       done

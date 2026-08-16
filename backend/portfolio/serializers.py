@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounting.models import LedgerAccount
@@ -14,10 +15,13 @@ from net_worth.models import Asset
 from .models import (
     ContainerCashAccount,
     Instrument,
+    InstrumentPrice,
+    InstrumentProviderMapping,
     InvestmentContainer,
     Portfolio,
     PortfolioMigrationIssue,
     PortfolioPosition,
+    PositionValuation,
     PositionOwnershipPeriod,
     PositionOwnershipShare,
 )
@@ -138,6 +142,163 @@ class InstrumentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: dict) -> Instrument:
         return Instrument.objects.create(user=_request_user(self.context), **validated_data)
+
+
+class InstrumentProviderMappingSerializer(serializers.ModelSerializer):
+    instrument_id = serializers.PrimaryKeyRelatedField(
+        source="instrument", queryset=Instrument.objects.all()
+    )
+
+    class Meta:
+        model = InstrumentProviderMapping
+        fields = [
+            "id",
+            "instrument_id",
+            "provider",
+            "provider_symbol",
+            "provider_market",
+            "quote_currency",
+            "is_confirmed",
+            "confirmed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "confirmed_at", "created_at", "updated_at"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["instrument_id"].queryset = Instrument.objects.filter(
+            user=_request_user(self.context)
+        )
+        return fields
+
+    def validate_provider_symbol(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("El símbolo del proveedor es obligatorio.")
+        return value
+
+    def validate_quote_currency(self, value: str) -> str:
+        value = value.strip().upper()
+        if len(value) != 3:
+            raise serializers.ValidationError("Usa una moneda de tres letras.")
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        provider = attrs.get("provider", getattr(self.instance, "provider", ""))
+        instrument = attrs.get("instrument", getattr(self.instance, "instrument", None))
+        provider_symbol = attrs.get(
+            "provider_symbol", getattr(self.instance, "provider_symbol", "")
+        )
+        provider_market = (
+            attrs.get("provider_market", getattr(self.instance, "provider_market", ""))
+            .strip()
+            .upper()
+        )
+        attrs["provider_market"] = provider_market
+        if provider == InstrumentProviderMapping.Provider.TWELVE_DATA and not provider_market:
+            raise serializers.ValidationError(
+                {"provider_market": "Confirma el mercado para Twelve Data."}
+            )
+        if provider == InstrumentProviderMapping.Provider.COINGECKO:
+            if instrument.instrument_type != Instrument.InstrumentType.CRYPTO:
+                raise serializers.ValidationError(
+                    {"provider": "CoinGecko solo admite instrumentos crypto."}
+                )
+            if provider_symbol.lower() not in {"bitcoin", "ethereum"}:
+                raise serializers.ValidationError(
+                    {"provider_symbol": "Solo bitcoin y ethereum tienen fallback confirmado."}
+                )
+            attrs["provider_market"] = ""
+        return attrs
+
+    def create(self, validated_data: dict) -> InstrumentProviderMapping:
+        if validated_data.get("is_confirmed"):
+            validated_data["confirmed_at"] = timezone.now()
+        return InstrumentProviderMapping.objects.create(**validated_data)
+
+    def update(
+        self, instance: InstrumentProviderMapping, validated_data: dict
+    ) -> InstrumentProviderMapping:
+        if validated_data.get("is_confirmed") and not instance.is_confirmed:
+            validated_data["confirmed_at"] = timezone.now()
+        if validated_data.get("is_confirmed") is False:
+            validated_data["confirmed_at"] = None
+        return super().update(instance, validated_data)
+
+
+class InstrumentPriceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InstrumentPrice
+        fields = [
+            "id",
+            "instrument_id",
+            "provider_mapping_id",
+            "price_date",
+            "close",
+            "currency",
+            "source",
+            "source_key",
+            "source_market",
+            "fetched_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class PositionValuationSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position", queryset=PortfolioPosition.objects.all()
+    )
+
+    class Meta:
+        model = PositionValuation
+        fields = [
+            "id",
+            "position_id",
+            "valuation_date",
+            "value",
+            "currency",
+            "source",
+            "legacy_asset_valuation_id",
+            "legacy_ledger_transaction_id",
+            "note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "source",
+            "legacy_asset_valuation_id",
+            "legacy_ledger_transaction_id",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(
+            portfolio__user=_request_user(self.context)
+        )
+        return fields
+
+    def validate_currency(self, value: str) -> str:
+        value = value.strip().upper()
+        if len(value) != 3:
+            raise serializers.ValidationError("Usa una moneda de tres letras.")
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is not None and self.instance.source != PositionValuation.Source.MANUAL:
+            raise serializers.ValidationError("Las valoraciones legacy son de solo lectura.")
+        return attrs
+
+    def create(self, validated_data: dict) -> PositionValuation:
+        return PositionValuation.objects.create(
+            source=PositionValuation.Source.MANUAL,
+            **validated_data,
+        )
 
 
 class PositionOwnershipShareSerializer(serializers.ModelSerializer):

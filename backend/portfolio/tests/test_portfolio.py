@@ -1,24 +1,36 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+from core.market_data import sync_market_data
+from core.models import MarketDataSyncState
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset, AssetValuation, InvestmentAssetEvent
 from portfolio.models import (
     Instrument,
+    InstrumentPrice,
+    InstrumentProviderMapping,
     Portfolio,
     PortfolioMigrationIssue,
     PortfolioPosition,
+    PositionValuation,
     PositionOwnershipPeriod,
     PositionOwnershipShare,
 )
 from portfolio.services import bootstrap_portfolio_for_user, build_portfolio_readiness
+from portfolio.valuations import (
+    build_valuation_health,
+    import_legacy_position_valuations,
+    resolve_position_valuation,
+)
 
 
 class PortfolioBootstrapTests(TestCase):
@@ -113,6 +125,31 @@ class PortfolioBootstrapTests(TestCase):
             PortfolioPosition.objects.get(asset=crypto_valued).tracking_style,
             PortfolioPosition.TrackingStyle.VALUE_BASED,
         )
+        units_position = PortfolioPosition.objects.get(asset=crypto_units)
+        self.assertEqual(units_position.instrument.identity_kind, Instrument.IdentityKind.CANONICAL)
+        mapping = units_position.instrument.provider_mappings.get()
+        self.assertTrue(mapping.is_confirmed)
+        self.assertEqual(mapping.provider_symbol, "bitcoin")
+        self.assertEqual(mapping.quote_currency, "EUR")
+
+    def test_bootstrap_imports_legacy_valuations_without_modifying_source(self):
+        asset = self.create_asset(name="Fondo histórico")
+        legacy = AssetValuation.objects.create(
+            user=self.user,
+            asset=asset,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("1234.56"),
+        )
+
+        bootstrap_portfolio_for_user(user=self.user)
+        bootstrap_portfolio_for_user(user=self.user)
+
+        derived = PositionValuation.objects.get(legacy_asset_valuation=legacy)
+        self.assertEqual(derived.source, PositionValuation.Source.LEGACY_ASSET)
+        self.assertEqual(derived.value, Decimal("1234.56"))
+        self.assertEqual(PositionValuation.objects.filter(legacy_asset_valuation=legacy).count(), 1)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.value, Decimal("1234.56"))
 
     def test_ambiguous_ledger_is_not_linked_and_is_reported(self):
         asset = self.create_asset(name="Broker duplicado")
@@ -291,3 +328,198 @@ class PortfolioApiTests(APITestCase):
         self.assertEqual(instruments.status_code, status.HTTP_200_OK, instruments.data)
         self.assertEqual(len(positions.data), 1)
         self.assertEqual(len(instruments.data), 1)
+
+    def test_manual_valuation_create_and_health_are_user_scoped(self):
+        asset = self.create_investment(user=self.user, name="Fondo manual")
+        other_asset = self.create_investment(user=self.other_user, name="Fondo ajeno")
+        bootstrap_portfolio_for_user(user=self.user)
+        bootstrap_portfolio_for_user(user=self.other_user)
+        position = PortfolioPosition.objects.get(asset=asset)
+        other_position = PortfolioPosition.objects.get(asset=other_asset)
+
+        response = self.client.post(
+            "/api/portfolio/valuations/",
+            {
+                "position_id": position.id,
+                "valuation_date": timezone.localdate().isoformat(),
+                "value": "250.00",
+                "currency": "EUR",
+                "note": "Cierre manual",
+            },
+            format="json",
+        )
+        cross_user = self.client.post(
+            "/api/portfolio/valuations/",
+            {
+                "position_id": other_position.id,
+                "valuation_date": timezone.localdate().isoformat(),
+                "value": "999.00",
+                "currency": "EUR",
+            },
+            format="json",
+        )
+        health = self.client.get("/api/portfolio/valuation-health/")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["source"], PositionValuation.Source.MANUAL)
+        self.assertEqual(cross_user.status_code, status.HTTP_400_BAD_REQUEST, cross_user.data)
+        self.assertEqual(health.status_code, status.HTTP_200_OK, health.data)
+        self.assertEqual(health.data["position_count"], 1)
+        self.assertEqual(health.data["counts"]["fresh"], 1)
+
+
+class PortfolioValuationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="portfolio_valuation", password="pass1234"
+        )
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("2"),
+            start_date=date(2025, 1, 1),
+        )
+        self.account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=asset,
+        )
+        tx = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 1, 1),
+            value_date=date(2025, 1, 1),
+            description="Compra BTC",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+        )
+        LedgerEntry.objects.create(
+            transaction=tx,
+            account=self.account,
+            asset=asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("2"),
+            currency="BTC",
+        )
+        bootstrap_portfolio_for_user(user=self.user)
+        self.position = PortfolioPosition.objects.select_related(
+            "portfolio", "asset", "instrument", "ledger_account"
+        ).get(asset=asset)
+        self.mapping = InstrumentProviderMapping.objects.get(instrument=self.position.instrument)
+
+    def create_price(self, *, on_date: date, close: str = "50000") -> InstrumentPrice:
+        return InstrumentPrice.objects.create(
+            instrument=self.position.instrument,
+            provider_mapping=self.mapping,
+            price_date=on_date,
+            close=Decimal(close),
+            currency="EUR",
+            source="coingecko",
+            source_key="bitcoin",
+            fetched_at=timezone.now(),
+        )
+
+    def test_units_position_uses_ledger_units_times_confirmed_close(self):
+        self.create_price(on_date=date(2025, 1, 3))
+
+        result = resolve_position_valuation(
+            position=self.position,
+            as_of_date=date(2025, 1, 3),
+        )
+
+        self.assertEqual(result["value"], "100000.00000000000000000000")
+        self.assertEqual(result["provenance"]["calculation"], "ledger_units_x_close")
+        self.assertEqual(result["provenance"]["source"], "coingecko")
+
+    def test_newer_manual_total_is_safe_fallback(self):
+        self.create_price(on_date=date(2025, 1, 2))
+        PositionValuation.objects.create(
+            position=self.position,
+            valuation_date=date(2025, 1, 4),
+            value=Decimal("110000"),
+            currency="EUR",
+            source=PositionValuation.Source.MANUAL,
+        )
+
+        result = resolve_position_valuation(
+            position=self.position,
+            as_of_date=date(2025, 1, 4),
+        )
+
+        self.assertEqual(result["value"], "110000.00000000")
+        self.assertEqual(result["provenance"]["kind"], "total_valuation")
+        self.assertEqual(result["provenance"]["source"], "manual")
+
+    def test_ledger_revaluation_is_imported_from_transaction_order_without_mutation(self):
+        revaluation = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 1, 2),
+            value_date=date(2025, 1, 2),
+            description="Revalorización BTC",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION,
+        )
+        entry = LedgerEntry.objects.create(
+            transaction=revaluation,
+            account=self.account,
+            asset=self.position.asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1"),
+            currency="BTC",
+        )
+
+        import_legacy_position_valuations(position=self.position)
+        derived = PositionValuation.objects.get(
+            position=self.position,
+            source=PositionValuation.Source.LEGACY_LEDGER,
+        )
+
+        self.assertEqual(derived.value, Decimal("3"))
+        self.assertEqual(derived.legacy_ledger_transaction, revaluation)
+        entry.refresh_from_db()
+        self.assertEqual(entry.amount, Decimal("1"))
+
+    def test_health_marks_old_values_stale_and_missing_prices_explicitly(self):
+        self.create_price(on_date=date(2025, 1, 1))
+
+        with patch("portfolio.valuations.timezone.localdate", return_value=date(2025, 1, 10)):
+            health = build_valuation_health(user=self.user)
+
+        self.assertEqual(health["counts"]["stale"], 1)
+        self.assertEqual(health["positions"][0]["valuation"]["stale_after_days"], 3)
+
+    @patch("portfolio.market_data.fetch_crypto_daily_closes")
+    def test_provider_failure_does_not_delete_last_valid_price(self, fetch_mock):
+        from core.market_data import MarketDataSyncError
+        from portfolio.market_data import sync_instrument_mapping
+
+        existing = self.create_price(on_date=date(2025, 1, 2))
+        fetch_mock.side_effect = MarketDataSyncError("provider down")
+
+        with self.assertRaises(MarketDataSyncError):
+            sync_instrument_mapping(
+                mapping=self.mapping,
+                start_date=date(2025, 1, 3),
+                end_date=date(2025, 1, 4),
+            )
+
+        self.assertTrue(InstrumentPrice.objects.filter(id=existing.id).exists())
+
+    @patch("portfolio.market_data.fetch_crypto_daily_closes")
+    def test_market_data_registry_syncs_confirmed_instrument_mapping(self, fetch_mock):
+        today = timezone.localdate()
+        fetch_mock.return_value = ("coingecko", [(today, Decimal("60000"))])
+
+        summary = sync_market_data(datasets=["instrument_prices"], mode="reconcile")
+
+        self.assertEqual(summary["instrument_prices"], 1)
+        price = InstrumentPrice.objects.get(instrument=self.position.instrument)
+        self.assertEqual(price.close, Decimal("60000"))
+        state = MarketDataSyncState.objects.get(
+            dataset=MarketDataSyncState.Dataset.INSTRUMENT_PRICES,
+            scope=f"mapping:{self.mapping.id}",
+        )
+        self.assertEqual(state.covered_until, today)
+        self.assertEqual(state.last_error, "")

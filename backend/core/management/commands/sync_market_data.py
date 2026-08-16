@@ -12,8 +12,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--datasets",
             nargs="+",
-            default=["fx", "inflation"],
-            help="Datasets to sync. Supported: fx inflation.",
+            default=["fx", "inflation", "instrument_prices"],
+            help="Datasets to sync. Supported: fx inflation instrument_prices.",
         )
         parser.add_argument(
             "--mode",

@@ -58,7 +58,7 @@ services:
       done;
       while true; do
         if [ \"$${FX_SYNC_ENABLED:-1}\" = \"1\" ]; then
-          python manage.py sync_market_data --datasets fx inflation --mode reconcile || true;
+          python manage.py sync_market_data --datasets fx inflation instrument_prices --mode reconcile || true;
         fi;
         sleep $${FX_SYNC_INTERVAL_SECONDS:-86400};
       done

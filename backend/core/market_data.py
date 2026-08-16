@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
@@ -75,13 +76,14 @@ class SyncScopeRequest:
     required_start_date: date | None
 
 
-def _fetch_json(*, url: str, timeout: int = 30) -> Any:
+def _fetch_json(*, url: str, timeout: int = 30, headers: dict[str, str] | None = None) -> Any:
     try:
         request = Request(
             url,
             headers={
                 "Accept": "application/json",
                 "User-Agent": "moneyplanner-core/1.0",
+                **(headers or {}),
             },
         )
         with urlopen(request, timeout=timeout) as response:
@@ -212,6 +214,32 @@ def sync_crypto_history(
     if not coin_id:
         return 0
 
+    source, rows = fetch_crypto_daily_closes(
+        from_currency=from_currency,
+        coin_id=coin_id,
+        to_currency=to_currency,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return _upsert_fx_rows(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        rows=rows,
+        source=source,
+        source_key=f"{from_currency}->{to_currency}",
+    )
+
+
+def fetch_crypto_daily_closes(
+    *,
+    from_currency: str,
+    coin_id: str,
+    to_currency: str,
+    start_date: date,
+    end_date: date,
+) -> tuple[str, list[tuple[date, Decimal]]]:
+
     try:
         rows = _fetch_crypto_rows_coingecko(
             coin_id=coin_id,
@@ -237,13 +265,7 @@ def sync_crypto_history(
         )
         source = "cryptocompare"
 
-    return _upsert_fx_rows(
-        from_currency=from_currency,
-        to_currency=to_currency,
-        rows=rows,
-        source=source,
-        source_key=f"{from_currency}->{to_currency}",
-    )
+    return source, rows
 
 
 def _fetch_crypto_rows_coingecko(
@@ -269,8 +291,14 @@ def _fetch_crypto_rows_coingecko(
                 "to": to_ts,
             }
         )
-        url = f"{COINGECKO_API_URL}/coins/{coin_id}/market_chart/range?{query}"
-        payload = _fetch_json(url=url)
+        api_base_url = os.getenv("COINGECKO_API_BASE_URL", COINGECKO_API_URL).rstrip("/")
+        api_key = os.getenv("COINGECKO_API_KEY", "").strip()
+        api_key_header = os.getenv("COINGECKO_API_KEY_HEADER", "x-cg-demo-api-key").strip()
+        url = f"{api_base_url}/coins/{coin_id}/market_chart/range?{query}"
+        payload = _fetch_json(
+            url=url,
+            headers={api_key_header: api_key} if api_key and api_key_header else None,
+        )
         prices = payload.get("prices") or []
         grouped: dict[date, list[tuple[int, Decimal]]] = defaultdict(list)
         for timestamp_ms, raw_price in prices:
@@ -312,7 +340,11 @@ def _fetch_crypto_rows_cryptocompare(
             }
         )
         url = f"{CRYPTOCOMPARE_API_URL}/histoday?{query}"
-        payload = _fetch_json(url=url)
+        api_key = os.getenv("CRYPTOCOMPARE_API_KEY", "").strip()
+        payload = _fetch_json(
+            url=url,
+            headers={"Authorization": f"Apikey {api_key}"} if api_key else None,
+        )
         data_payload = payload.get("Data") if isinstance(payload, dict) else None
         points = data_payload.get("Data") if isinstance(data_payload, dict) else None
         if not isinstance(points, list):
@@ -736,11 +768,16 @@ class InflationMarketDataProvider(MarketDataProvider):
 def _get_provider_registry(
     *, fx_history_floor_years: int | None = _FX_DEFAULT_HISTORY_YEARS
 ) -> dict[str, MarketDataProvider]:
+    from portfolio.market_data import InstrumentPriceMarketDataProvider
+
     return {
         cast(str, MarketDataSyncState.Dataset.FX): FxMarketDataProvider(
             history_floor_years=fx_history_floor_years
         ),
         cast(str, MarketDataSyncState.Dataset.INFLATION): InflationMarketDataProvider(),
+        cast(
+            str, MarketDataSyncState.Dataset.INSTRUMENT_PRICES
+        ): InstrumentPriceMarketDataProvider(),
     }
 
 
@@ -908,6 +945,31 @@ def get_market_data_status() -> dict[str, Any]:
                         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                     }
                     for row in InflationIndex.objects.order_by("-period", "region")[:50]
+                ],
+            },
+            "instrument_prices": {
+                "states": [
+                    {
+                        "scope": state.scope,
+                        "required_start_date": (
+                            state.required_start_date.isoformat()
+                            if state.required_start_date
+                            else None
+                        ),
+                        "covered_until": (
+                            state.covered_until.isoformat() if state.covered_until else None
+                        ),
+                        "last_attempt_at": (
+                            state.last_attempt_at.isoformat() if state.last_attempt_at else None
+                        ),
+                        "last_success_at": (
+                            state.last_success_at.isoformat() if state.last_success_at else None
+                        ),
+                        "last_error": state.last_error or None,
+                        "source": state.source or None,
+                    }
+                    for state in states
+                    if state.dataset == MarketDataSyncState.Dataset.INSTRUMENT_PRICES
                 ],
             },
         },

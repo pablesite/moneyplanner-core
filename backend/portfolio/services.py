@@ -290,6 +290,11 @@ def bootstrap_portfolio_for_user(*, user) -> BootstrapResult:
                 update_fields.append("updated_at")
                 position.save(update_fields=update_fields)
         _bootstrap_ownership(portfolio=portfolio, position=position)
+        from .market_data import ensure_confirmed_crypto_mapping
+        from .valuations import import_legacy_position_valuations
+
+        ensure_confirmed_crypto_mapping(position=position)
+        import_legacy_position_valuations(position=position)
 
     return BootstrapResult(
         portfolio_id=portfolio.id,
