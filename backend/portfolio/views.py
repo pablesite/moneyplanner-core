@@ -46,7 +46,11 @@ from .performance import (
     timeline_dates,
 )
 from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
-from .valuations import build_valuation_health, resolve_position_valuation
+from .valuations import (
+    build_valuation_health,
+    resolve_position_valuation,
+    sync_ledger_valuations,
+)
 from .imports import confirm_import, preview_import, serialize_batch, upload_csv
 from .operations import confirm_operation, operation_options, preview_operation
 
@@ -191,6 +195,23 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="valuation")
     def valuation(self, request, pk=None):
         return Response(resolve_position_valuation(position=self.get_object()))
+
+    @action(detail=False, methods=["post"], url_path="resync-valuations")
+    def resync_valuations(self, request):
+        """Pull into the portfolio any revaluation the ledger already has.
+
+        Revaluations booked through the app sync themselves on commit, but data that
+        reaches the database underneath the ORM (a restore, a bulk load) fires no signal
+        and leaves positions frozen. This is the explicit way out of that drift.
+        """
+        positions = list(self.get_queryset())
+        created = sum(sync_ledger_valuations(position=position) for position in positions)
+        return Response(
+            {
+                "positions_checked": len(positions),
+                "valuations_created": created,
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="performance")
     def performance(self, request):

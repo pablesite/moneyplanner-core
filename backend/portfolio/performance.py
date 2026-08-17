@@ -542,7 +542,38 @@ def resolve_preloaded_value(
             total.valuation_date == target,
             f"valuation:{total.source}",
         )
-    return None
+    return _carrying_value_at(context=context, position=position, target=target)
+
+
+def _carrying_value_at(
+    *, context: PerformanceContext, position: PortfolioPosition, target: date
+) -> ResolvedValue | None:
+    """Ledger balance as carrying value of a value-based position with no valuation.
+
+    Mirrors `valuations.resolve_position_valuation` so both read paths agree: a position
+    funded only through accounting reports its posted balance instead of dropping out of
+    the portfolio total. `observed_on` is the last date the balance moved, so freshness
+    stays honest. Units-based positions are excluded, their account holds units.
+    """
+    if (
+        position.tracking_style != PortfolioPosition.TrackingStyle.VALUE_BASED
+        or not position.ledger_account_id
+        or position.ledger_account is None
+    ):
+        return None
+    account_id = int(position.ledger_account_id)
+    dates = context.balance_dates.get(account_id, [])
+    index = bisect_right(dates, target) - 1
+    if index < 0:
+        return None
+    observed_on = dates[index]
+    return ResolvedValue(
+        context.balance_values[account_id][index],
+        position.ledger_account.currency,
+        observed_on,
+        observed_on == target,
+        "ledger:balance",
+    )
 
 
 def _ownership_factor(

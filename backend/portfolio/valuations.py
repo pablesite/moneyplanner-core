@@ -164,6 +164,42 @@ def _latest_instrument_price(
     )
 
 
+def _ledger_carrying_value(
+    *, position: PortfolioPosition, as_of_date: date
+) -> tuple[Decimal, date] | None:
+    """Carrying value of a value-based position taken from its own ledger account.
+
+    Contributions and income are flows, not valuations, so a position funded only through
+    accounting ends up with no declared value at all. For a value-tracked position the
+    posted balance is still its carrying value, which beats reporting nothing and dropping
+    the position out of the portfolio total. Units-based positions are excluded: their
+    account holds units, not money.
+    """
+    if (
+        position.tracking_style != PortfolioPosition.TrackingStyle.VALUE_BASED
+        or position.ledger_account is None
+    ):
+        return None
+    last_movement = (
+        LedgerEntry.objects.filter(
+            account_id=position.ledger_account_id,
+            transaction__status=cast(str, LedgerTransaction.Status.POSTED),
+            transaction__booking_date__lte=as_of_date,
+        )
+        .order_by("-transaction__booking_date")
+        .values_list("transaction__booking_date", flat=True)
+        .first()
+    )
+    if last_movement is None:
+        return None
+    balance = get_account_balance(
+        account=position.ledger_account,
+        as_of_date=as_of_date,
+        status=cast(str, LedgerTransaction.Status.POSTED),
+    )
+    return balance, last_movement
+
+
 def resolve_position_valuation(
     *, position: PortfolioPosition, as_of_date: date | None = None
 ) -> dict:
@@ -219,6 +255,24 @@ def resolve_position_valuation(
                 "legacy_asset_valuation_id": total_valuation.legacy_asset_valuation_id,
                 "legacy_ledger_transaction_id": total_valuation.legacy_ledger_transaction_id,
                 "note": total_valuation.note or None,
+            },
+        }
+    carrying = _ledger_carrying_value(position=position, as_of_date=resolved_date)
+    if carrying is not None and position.ledger_account is not None:
+        balance, observed_on = carrying
+        age_days = (resolved_date - observed_on).days
+        return {
+            "status": "fresh" if age_days <= threshold_days else "stale",
+            "value": str(balance),
+            "currency": position.ledger_account.currency,
+            "observed_on": observed_on.isoformat(),
+            "age_days": age_days,
+            "stale_after_days": threshold_days,
+            "provenance": {
+                "kind": "ledger_balance",
+                "source": "accounting",
+                "calculation": "posted_account_balance",
+                "note": "Saldo contable de la posición; todavía no hay valoración declarada.",
             },
         }
     return {

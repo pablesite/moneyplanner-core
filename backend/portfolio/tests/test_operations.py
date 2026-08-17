@@ -336,6 +336,65 @@ class PortfolioOperationApiTests(APITestCase):
         )
         self.assertEqual(get_account_balance(account=self.position_account), Decimal("0"))
 
+    def test_position_funded_only_by_accounting_reports_its_ledger_balance(self):
+        payload = self.operation_payload(amount="300.00", fee="0")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertFalse(PositionValuation.objects.filter(position=self.position).exists())
+
+        resolved = self.client.get(f"/api/portfolio/positions/{self.position.id}/valuation/")
+
+        self.assertEqual(resolved.status_code, status.HTTP_200_OK, resolved.data)
+        self.assertEqual(Decimal(resolved.data["value"]), Decimal("300"))
+        self.assertEqual(resolved.data["currency"], "EUR")
+        self.assertEqual(resolved.data["provenance"]["kind"], "ledger_balance")
+        self.assertNotEqual(resolved.data["status"], "missing")
+
+    def test_position_funded_only_by_accounting_appears_in_performance_reads(self):
+        payload = self.operation_payload(amount="300.00", fee="0")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        response = self.client.get(
+            "/api/portfolio/positions/performance/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        row = next(r for r in response.data["results"] if r["position_id"] == self.position.id)
+        self.assertEqual(Decimal(row["native_value"]), Decimal("300"))
+        self.assertNotEqual(row["value_status"], "missing")
+
+    def test_units_based_position_never_reports_units_as_value(self):
+        self.position.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED
+        self.position.save(update_fields=["tracking_style", "updated_at"])
+        payload = self.operation_payload(amount="300.00", fee="0", units="12")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        resolved = self.client.get(f"/api/portfolio/positions/{self.position.id}/valuation/")
+
+        self.assertEqual(resolved.data["status"], "missing")
+        self.assertIsNone(resolved.data["value"])
+
+    def test_resync_endpoint_recovers_valuations_written_under_the_orm(self):
+        transaction_id = self.post_accounting_revaluation("250.00")
+        # Simulate data that reached the database without firing signals, as a restore does.
+        PositionValuation.objects.filter(legacy_ledger_transaction_id=transaction_id).delete()
+
+        response = self.client.post("/api/portfolio/positions/resync-valuations/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["positions_checked"], 1)
+        self.assertEqual(response.data["valuations_created"], 1)
+        derived = PositionValuation.objects.get(
+            position=self.position, source=PositionValuation.Source.LEGACY_LEDGER
+        )
+        self.assertEqual(derived.value, Decimal("250"))
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)
