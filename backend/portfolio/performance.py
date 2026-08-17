@@ -542,7 +542,16 @@ def resolve_preloaded_value(
             total.valuation_date == target,
             f"valuation:{total.source}",
         )
-    return _carrying_value_at(context=context, position=position, target=target)
+    carrying = _carrying_value_at(context=context, position=position, target=target)
+    if carrying is not None:
+        return carrying
+    if target <= position.opened_on:
+        # Nothing recorded yet and the position had not started: it contributed exactly
+        # zero, not an unknown amount. Read as unknown, a single position opened
+        # mid-period withheld the total and the TWR of the whole portfolio. Real data is
+        # resolved first above, so this never masks a value.
+        return ResolvedValue(ZERO, context.portfolio.base_currency, target, True, "not_open")
+    return None
 
 
 def _carrying_value_at(

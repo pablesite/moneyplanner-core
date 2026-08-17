@@ -367,6 +367,21 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(Decimal(row["native_value"]), Decimal("300"))
         self.assertNotEqual(row["value_status"], "missing")
 
+    def test_period_starting_before_a_position_opened_counts_zero_not_unknown(self):
+        payload = self.operation_payload(amount="100.00", fee="0")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        response = self.client.get(
+            "/api/portfolio/overview/",
+            {"date_from": "2024-01-01", "date_to": "2025-12-31"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["coverage"]["value"], "complete")
+        self.assertIsNotNone(response.data["value"])
+
     def test_units_based_position_never_reports_units_as_value(self):
         self.position.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED
         self.position.save(update_fields=["tracking_style", "updated_at"])
