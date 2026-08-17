@@ -485,6 +485,48 @@ class PortfolioOperationApiTests(APITestCase):
         )
         self.assertEqual(derived.value, Decimal("250"))
 
+    def test_setup_reassigns_container_and_asset_class(self):
+        other = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Banco",
+            container_type=InvestmentContainer.ContainerType.BANK,
+        )
+
+        response = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {
+                "tracking_style": "value_based",
+                "history_mode": "reconstructed",
+                "container_id": other.id,
+                "asset_class": Instrument.AssetClass.FIXED_INCOME,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.position.refresh_from_db()
+        self.assertEqual(self.position.container_id, other.id)
+        self.assertEqual(
+            self.position.instrument.asset_class, Instrument.AssetClass.FIXED_INCOME
+        )
+
+    def test_setup_refuses_to_reclassify_a_shared_canonical_instrument(self):
+        instrument = self.position.instrument
+        instrument.identity_kind = Instrument.IdentityKind.CANONICAL
+        instrument.user = None
+        instrument.isin = "IE00B4L5Y983"
+        instrument.save()
+
+        response = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {"asset_class": Instrument.AssetClass.CRYPTO},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        instrument.refresh_from_db()
+        self.assertEqual(instrument.asset_class, Instrument.AssetClass.EQUITY)
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)

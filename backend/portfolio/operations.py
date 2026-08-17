@@ -17,6 +17,7 @@ from accounting.services_quick_entry import create_quick_transaction
 
 from .models import (
     ContainerCashAccount,
+    Instrument,
     Portfolio,
     PortfolioCorporateAction,
     PortfolioPosition,
@@ -584,9 +585,20 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
                     row.history_start_date.isoformat() if row.history_start_date else None
                 ),
                 "setup_confirmed": row.setup_confirmed_at is not None,
+                "asset_class": row.instrument.asset_class,
+                "instrument_is_custom": (
+                    row.instrument.identity_kind == Instrument.IdentityKind.CUSTOM
+                ),
                 **position_coverage(row),
             }
             for row in positions
+        ],
+        "containers": [
+            {"id": row.id, "name": row.name, "container_type": row.container_type}
+            for row in portfolio.containers.order_by("name")
+        ],
+        "asset_classes": [
+            {"value": value, "label": label} for value, label in Instrument.AssetClass.choices
         ],
         "cash_accounts": [
             {

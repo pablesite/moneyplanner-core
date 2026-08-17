@@ -179,18 +179,41 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
         from django.utils import timezone
 
         position = self.get_object()
-        serializer = self.get_serializer(
-            position,
-            data={
-                "tracking_style": request.data.get("tracking_style", position.tracking_style),
-                "history_mode": request.data.get("history_mode", position.history_mode),
-                "history_start_date": request.data.get("history_start_date"),
-            },
-            partial=True,
-        )
+        data = {
+            "tracking_style": request.data.get("tracking_style", position.tracking_style),
+            "history_mode": request.data.get("history_mode", position.history_mode),
+            "history_start_date": request.data.get("history_start_date"),
+        }
+        # Container and asset class describe what the position *is*, and until now the
+        # bootstrap's guess could not be corrected from the UI at all: every migrated
+        # position stayed in "Inversiones legacy" and most in the "Otros" class, which
+        # left the composition chart saying nothing.
+        if request.data.get("container_id"):
+            data["container_id"] = request.data["container_id"]
+        serializer = self.get_serializer(position, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save(setup_confirmed_at=timezone.now())
+        asset_class = str(request.data.get("asset_class") or "").strip()
+        if asset_class:
+            self._reclassify_instrument(position=position, asset_class=asset_class)
+            serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
+
+    @staticmethod
+    def _reclassify_instrument(*, position: PortfolioPosition, asset_class: str) -> None:
+        instrument = position.instrument
+        if asset_class not in Instrument.AssetClass.values:
+            raise ValidationError({"asset_class": "Clase de activo no válida."})
+        if instrument.identity_kind != Instrument.IdentityKind.CUSTOM:
+            # A canonical instrument is shared across users; reclassifying it here would
+            # silently change someone else's portfolio.
+            raise ValidationError(
+                {"asset_class": "Un instrumento canónico no se reclasifica desde la posición."}
+            )
+        if instrument.asset_class == asset_class:
+            return
+        instrument.asset_class = asset_class
+        instrument.save(update_fields=["asset_class", "updated_at"])
 
     @action(detail=True, methods=["get"], url_path="valuation")
     def valuation(self, request, pk=None):
