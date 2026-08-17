@@ -184,6 +184,104 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(PositionValuation.objects.count(), 1)
         self.assertEqual(PositionValuation.objects.get().value, Decimal("1300"))
 
+    def valuation_payload(self, **overrides):
+        payload = self.operation_payload(
+            operation_type="valuation", amount="1234.56", currency="EUR", fee=""
+        )
+        payload.pop("cash_account_id")
+        payload.update(overrides)
+        return payload
+
+    def confirm_valuation(self, payload):
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        payload = {**payload, "preview_token": preview.data["preview_token"]}
+        confirmed = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(confirmed.status_code, status.HTTP_201_CREATED, confirmed.data)
+        return preview.data["preview"], confirmed.data
+
+    def test_manual_valuation_syncs_accounting_with_revaluation_entry(self):
+        preview, confirmed = self.confirm_valuation(self.valuation_payload())
+
+        self.assertTrue(preview["ledger_effect"]["syncs_accounting"])
+        self.assertEqual(Decimal(preview["ledger_effect"]["balance_before"]), Decimal("0"))
+        self.assertEqual(Decimal(preview["ledger_effect"]["delta"]), Decimal("1234.56"))
+        self.assertIsNotNone(confirmed["ledger_transaction_id"])
+
+        revaluation = LedgerTransaction.objects.get(id=confirmed["ledger_transaction_id"])
+        self.assertEqual(revaluation.quick_entry_kind, LedgerTransaction.QuickEntryKind.REVALUATION)
+        self.assertEqual(revaluation.booking_date, date(2025, 2, 1))
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("1234.56"))
+        self.assertTrue(
+            LedgerAccount.objects.filter(
+                user=self.user,
+                name="Revalorizaciones",
+                account_type=LedgerAccount.AccountType.EXPENSE,
+                currency="EUR",
+            ).exists()
+        )
+
+    def test_manual_valuation_posts_only_the_delta_and_is_idempotent(self):
+        self.confirm_valuation(self.valuation_payload())
+
+        _, corrected = self.confirm_valuation(self.valuation_payload(amount="1300"))
+        self.assertIsNotNone(corrected["ledger_transaction_id"])
+        delta_entry = LedgerEntry.objects.get(
+            transaction_id=corrected["ledger_transaction_id"], account=self.position_account
+        )
+        self.assertEqual(delta_entry.amount, Decimal("65.44"))
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("1300"))
+
+        preview, repeated = self.confirm_valuation(self.valuation_payload(amount="1300"))
+        self.assertNotIn("E", preview["ledger_effect"]["delta"])
+        self.assertEqual(Decimal(preview["ledger_effect"]["delta"]), Decimal("0"))
+        self.assertIsNone(repeated["ledger_transaction_id"])
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("1300"))
+        self.assertEqual(
+            LedgerTransaction.objects.filter(
+                quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION
+            ).count(),
+            2,
+        )
+
+    def test_manual_valuation_without_ledger_account_stays_analytic(self):
+        asset = Asset.objects.create(
+            user=self.user,
+            name="Plan de pensiones",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0"),
+            start_date=date(2025, 1, 1),
+        )
+        instrument = Instrument.objects.create(
+            user=self.user,
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            name="Plan de pensiones",
+            asset_class=Instrument.AssetClass.MIXED,
+            instrument_type=Instrument.InstrumentType.PENSION_PLAN,
+            quote_currency="EUR",
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=self.container,
+            instrument=instrument,
+            asset=asset,
+            ledger_account=None,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2025, 1, 1),
+        )
+        before = LedgerTransaction.objects.count()
+
+        preview, confirmed = self.confirm_valuation(self.valuation_payload(position_id=position.id))
+
+        self.assertFalse(preview["ledger_effect"]["syncs_accounting"])
+        self.assertIn("cuenta contable", preview["ledger_effect"]["reason"])
+        self.assertIsNone(confirmed["ledger_transaction_id"])
+        self.assertEqual(LedgerTransaction.objects.count(), before)
+        self.assertEqual(PositionValuation.objects.get(position=position).value, Decimal("1234.56"))
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)

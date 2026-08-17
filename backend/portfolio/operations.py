@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from django.core import signing
 from django.db import transaction
@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounting.models import LedgerAccount, LedgerTransaction
-from accounting.services_ledger import get_account_balance
+from accounting.services_ledger import get_account_balance, get_or_create_system_account
 from accounting.services_quick_entry import create_quick_transaction
 
 from .models import (
@@ -25,6 +25,8 @@ from .models import (
 )
 
 PREVIEW_SALT = "portfolio.operation.preview.v1"
+REVALUATION_COUNTERPARTY_NAME = "Revalorizaciones"
+VALUATION_LEDGER_DESCRIPTION = "Revalorización de cartera"
 OPERATION_TYPES = {
     "transfer",
     "buy",
@@ -97,6 +99,82 @@ def _system_account(*, portfolio: Portfolio, account_type: str, currency: str, n
         defaults={"is_active": True},
     )
     return account
+
+
+def _valuation_ledger_effect(
+    *,
+    position: PortfolioPosition,
+    valuation_date: date,
+    value: Decimal,
+    currency: str,
+) -> dict[str, Any]:
+    """Describe the revaluation needed so accounting matches a manual valuation.
+
+    A manual valuation states what the position is worth, so it must reach the ledger
+    as a revaluation delta; otherwise portfolio, net worth and movements diverge,
+    because net worth anchors investment assets on the ledger balance.
+    Automatic prices stay analytic and never pass through here.
+    """
+    account = position.ledger_account
+    if account is None:
+        return {
+            "syncs_accounting": False,
+            "reason": "La posición no tiene cuenta contable enlazada.",
+        }
+    if account.currency != currency:
+        return {
+            "syncs_accounting": False,
+            "reason": "La valoración usa una moneda distinta de la cuenta contable.",
+        }
+    balance = get_account_balance(account=account, as_of_date=valuation_date, status="posted")
+    return {
+        "syncs_accounting": True,
+        "account": account,
+        "account_name": account.name,
+        "currency": account.currency,
+        "balance_before": balance,
+        "delta": value - balance,
+    }
+
+
+def _sync_valuation_to_ledger(
+    *,
+    portfolio: Portfolio,
+    position: PortfolioPosition,
+    valuation_date: date,
+    value: Decimal,
+    currency: str,
+    description: str,
+    note: str,
+    origin: str,
+) -> LedgerTransaction | None:
+    effect = _valuation_ledger_effect(
+        position=position,
+        valuation_date=valuation_date,
+        value=value,
+        currency=currency,
+    )
+    if not effect["syncs_accounting"] or effect["delta"] == 0:
+        return None
+    counterparty = get_or_create_system_account(
+        user_id=portfolio.user_id,
+        account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+        currency=effect["account"].currency,
+        name=REVALUATION_COUNTERPARTY_NAME,
+    )
+    return create_quick_transaction(
+        user=portfolio.user,
+        movement_type="revaluation",
+        booking_date=valuation_date,
+        value_date=valuation_date,
+        description=description,
+        amount=effect["delta"],
+        account=effect["account"],
+        counterparty_account=counterparty,
+        status=cast(str, LedgerTransaction.Status.POSTED),
+        origin=origin,
+        notes=note,
+    )
 
 
 def _validate_payload(  # noqa: C901
@@ -210,6 +288,25 @@ def preview_operation(*, portfolio: Portfolio, payload: dict[str, Any]) -> dict[
             "currency": cash.currency,
             "available_before": str(balance),
         }
+    if normalized["operation_type"] == "valuation":
+        effect = _valuation_ledger_effect(
+            position=normalized["position"],
+            valuation_date=normalized["booking_date"],
+            value=normalized["amount"],
+            currency=normalized["currency"],
+        )
+        preview["ledger_effect"] = (
+            {
+                "syncs_accounting": True,
+                "account_name": effect["account_name"],
+                "currency": effect["currency"],
+                # Plain notation: str(Decimal) would expose "0E-8" for a zero delta.
+                "balance_before": f"{effect['balance_before']:f}",
+                "delta": f"{effect['delta']:f}",
+            }
+            if effect["syncs_accounting"]
+            else {"syncs_accounting": False, "reason": effect["reason"]}
+        )
     return {"preview": preview, "preview_token": signing.dumps(canonical, salt=PREVIEW_SALT)}
 
 
@@ -252,7 +349,22 @@ def confirm_operation(
             source=PositionValuation.Source.MANUAL,
             defaults={"value": data["amount"], "currency": data["currency"], "note": note},
         )
-        return {"kind": kind, "valuation_id": valuation.id, "created": created}
+        ledger_transaction = _sync_valuation_to_ledger(
+            portfolio=portfolio,
+            position=data["position"],
+            valuation_date=data["booking_date"],
+            value=data["amount"],
+            currency=data["currency"],
+            description=str(payload.get("description") or VALUATION_LEDGER_DESCRIPTION),
+            note=note,
+            origin=cast(str, origin),
+        )
+        return {
+            "kind": kind,
+            "valuation_id": valuation.id,
+            "created": created,
+            "ledger_transaction_id": ledger_transaction.id if ledger_transaction else None,
+        }
     if kind == "identifier_change":
         instrument = data["position"].instrument
         previous = instrument.isin or instrument.ticker

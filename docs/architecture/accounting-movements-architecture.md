@@ -106,6 +106,8 @@ This leaves a gap:
 5. `PortfolioTrade` stores execution metadata linked to `LedgerTransaction`; the ledger remains the sole monetary source of truth. A purchase moves posted cash from the position's own container to its linked asset account, and an optional fee is a separate expense transaction.
 6. Direct operation confirmation requires a signed preview of the unchanged payload. CSV imports stage and validate rows first, use the same atomic operation service, preserve import origin/fingerprint, reject duplicate external identifiers and never edit pre-existing ledger rows.
 7. `PortfolioCorporateAction` retains split, identifier-change, position-transfer and audited-adjustment evidence. Archive/reopen changes position and asset availability only; all ledger, trade and action history remains intact.
+8. A **manual** valuation states what the position is worth, so it also posts a `quick_entry_kind=revaluation` transaction for the delta between the declared value and the position account balance at that date, against the system `Revalorizaciones` account. This keeps Cartera, Patrimonio and Movimientos on the same number; without it the three diverge, because net worth anchors investment assets on the ledger balance. The delta is idempotent: re-confirming the same value posts nothing. Valuation stays analytic (no entry) when the position has no linked ledger account or the valuation currency differs from the account currency, and `operations/preview/` reports that as `ledger_effect.syncs_accounting=false` with a reason.
+9. **Automatic** prices (`InstrumentPrice`, units × close) never post entries. They are analytic valuation only; posting them would add a revaluation per position per trading day.
 
 ## Behavioral rules
 1. `tracking_mode=manual`
