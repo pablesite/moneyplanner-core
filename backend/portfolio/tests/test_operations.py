@@ -1,0 +1,330 @@
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+from accounting.services_ledger import get_account_balance
+from net_worth.models import Asset
+from portfolio.models import (
+    ContainerCashAccount,
+    Instrument,
+    InvestmentContainer,
+    Portfolio,
+    PortfolioImportBatch,
+    PortfolioPosition,
+    PortfolioTrade,
+    PositionValuation,
+)
+
+
+class PortfolioOperationApiTests(APITestCase):
+    fixtures_path = Path(__file__).parent / "fixtures"
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="portfolio_operations", password="pass1234"
+        )
+        self.client.force_authenticate(self.user)
+        self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        self.container = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Broker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        cash_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000"),
+        )
+        self.cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=cash_asset,
+        )
+        self.cash_link = ContainerCashAccount.objects.create(
+            container=self.container,
+            ledger_account=self.cash_account,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.create(
+            user=self.user,
+            name="Apertura",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 1, 1),
+            value_date=date(2025, 1, 1),
+            description="Saldo inicial",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=self.cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo Global",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0"),
+            start_date=date(2025, 1, 1),
+        )
+        self.position_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Fondo Global",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        instrument = Instrument.objects.create(
+            user=self.user,
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            name="Fondo Global",
+            asset_class=Instrument.AssetClass.EQUITY,
+            instrument_type=Instrument.InstrumentType.FUND,
+            quote_currency="EUR",
+        )
+        self.position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=self.container,
+            instrument=instrument,
+            asset=investment_asset,
+            ledger_account=self.position_account,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2025, 1, 1),
+        )
+
+    def operation_payload(self, **overrides):
+        payload = {
+            "operation_type": "buy",
+            "position_id": self.position.id,
+            "cash_account_id": self.cash_link.id,
+            "booking_date": "2025-02-01",
+            "amount": "100.00",
+            "fee": "2.00",
+            "description": "Compra Fondo Global",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_buy_requires_preview_and_reconciles_cash_position_and_metadata(self):
+        payload = self.operation_payload()
+        rejected = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        payload["preview_token"] = preview.data["preview_token"]
+        confirmed = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        self.assertEqual(confirmed.status_code, status.HTTP_201_CREATED, confirmed.data)
+        trade = PortfolioTrade.objects.get(id=confirmed.data["trade_id"])
+        self.assertEqual(trade.gross_amount, Decimal("100"))
+        self.assertEqual(trade.fee, Decimal("2"))
+        self.assertIsNotNone(trade.fee_transaction_id)
+        self.assertEqual(get_account_balance(account=self.cash_account), Decimal("898"))
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("100"))
+
+        duplicate = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(PortfolioTrade.objects.count(), 1)
+
+    def test_changed_payload_after_preview_does_not_create_ledger_entries(self):
+        payload = self.operation_payload()
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        before = LedgerEntry.objects.count()
+        payload["amount"] = "200.00"
+        payload["preview_token"] = preview.data["preview_token"]
+
+        rejected = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(LedgerEntry.objects.count(), before)
+        self.assertFalse(PortfolioTrade.objects.exists())
+
+    def test_manual_valuation_updates_same_day_without_duplicate_history(self):
+        payload = self.operation_payload(
+            operation_type="valuation", amount="1234.56", currency="EUR", fee=""
+        )
+        payload.pop("cash_account_id")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        first = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED, first.data)
+
+        payload["amount"] = "1300"
+        payload.pop("preview_token")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        second = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED, second.data)
+        self.assertEqual(PositionValuation.objects.count(), 1)
+        self.assertEqual(PositionValuation.objects.get().value, Decimal("1300"))
+
+    def test_position_archive_and_reopen_preserve_history(self):
+        archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
+        self.assertEqual(archived.status_code, status.HTTP_200_OK)
+        self.position.refresh_from_db()
+        self.assertEqual(self.position.status, PortfolioPosition.Status.ARCHIVED)
+        self.assertFalse(self.position.asset.is_active)
+
+        reopened = self.client.post(f"/api/portfolio/positions/{self.position.id}/reopen/")
+        self.assertEqual(reopened.status_code, status.HTTP_200_OK)
+        self.position.refresh_from_db()
+        self.assertEqual(self.position.status, PortfolioPosition.Status.ACTIVE)
+        self.assertTrue(self.position.asset.is_active)
+
+    def test_position_setup_declares_cutoff_without_mutating_ledger(self):
+        before = list(
+            LedgerEntry.objects.order_by("id").values_list(
+                "id", "transaction_id", "account_id", "side", "amount"
+            )
+        )
+
+        invalid = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {"tracking_style": "units_based", "history_mode": "cutoff"},
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        confirmed = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {
+                "tracking_style": "units_based",
+                "history_mode": "cutoff",
+                "history_start_date": "2025-01-15",
+            },
+            format="json",
+        )
+        self.assertEqual(confirmed.status_code, status.HTTP_200_OK, confirmed.data)
+        self.position.refresh_from_db()
+        self.assertEqual(self.position.history_start_date, date(2025, 1, 15))
+        self.assertIsNotNone(self.position.setup_confirmed_at)
+        self.assertEqual(
+            list(
+                LedgerEntry.objects.order_by("id").values_list(
+                    "id", "transaction_id", "account_id", "side", "amount"
+                )
+            ),
+            before,
+        )
+
+        options = self.client.get("/api/portfolio/operations/options/")
+        self.assertEqual(options.status_code, status.HTTP_200_OK)
+        row = options.data["positions"][0]
+        self.assertTrue(row["setup_confirmed"])
+        self.assertEqual(row["history_mode"], "cutoff")
+        self.assertIn("performance_coverage", row)
+        self.assertIn("position_detail_coverage", row)
+
+    def test_csv_requires_preview_and_reimport_is_idempotent(self):
+        csv_content = self.fixture("broker_standard.csv")
+        upload = self.client.post(
+            "/api/portfolio/imports/upload/",
+            {"file": SimpleUploadedFile("broker.csv", csv_content, content_type="text/csv")},
+            format="multipart",
+        )
+        self.assertEqual(upload.status_code, status.HTTP_201_CREATED, upload.data)
+        batch_id = upload.data["id"]
+        premature = self.client.post(
+            f"/api/portfolio/imports/{batch_id}/confirm/", {}, format="json"
+        )
+        self.assertEqual(premature.status_code, status.HTTP_400_BAD_REQUEST)
+
+        mapping = {
+            key: key
+            for key in [
+                "operation_type",
+                "booking_date",
+                "position_id",
+                "cash_account_id",
+                "amount",
+            ]
+        }
+        mapping["external_id"] = "external_id"
+        preview = self.client.post(
+            f"/api/portfolio/imports/{batch_id}/preview/", {"mapping": mapping}, format="json"
+        )
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        self.assertEqual(preview.data["rows"][0]["status"], "valid")
+        self.assertEqual(preview.data["rows"][1]["status"], "error")
+        confirmed = self.client.post(
+            f"/api/portfolio/imports/{batch_id}/confirm/", {}, format="json"
+        )
+        self.assertEqual(confirmed.status_code, status.HTTP_200_OK, confirmed.data)
+        self.assertEqual(confirmed.data["status"], "partial")
+        self.assertEqual(PortfolioTrade.objects.filter(source="csv").count(), 1)
+
+        duplicate_upload = self.client.post(
+            "/api/portfolio/imports/upload/",
+            {"file": SimpleUploadedFile("again.csv", csv_content, content_type="text/csv")},
+            format="multipart",
+        )
+        self.assertEqual(duplicate_upload.status_code, status.HTTP_200_OK)
+        self.assertTrue(duplicate_upload.data["duplicate_file"])
+        self.assertEqual(PortfolioImportBatch.objects.count(), 1)
+
+    def test_second_anonymized_csv_format_maps_spanish_bank_columns(self):
+        csv_content = self.fixture("bank_spanish.csv")
+        upload = self.client.post(
+            "/api/portfolio/imports/upload/",
+            {"file": SimpleUploadedFile("banco.csv", csv_content, content_type="text/csv")},
+            format="multipart",
+        )
+        mapping = {
+            "operation_type": "tipo",
+            "booking_date": "fecha",
+            "position_id": "posicion",
+            "cash_account_id": "efectivo",
+            "amount": "importe",
+            "external_id": "referencia",
+            "description": "concepto",
+        }
+
+        preview = self.client.post(
+            f"/api/portfolio/imports/{upload.data['id']}/preview/",
+            {"mapping": mapping},
+            format="json",
+        )
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        self.assertEqual(preview.data["rows"][0]["status"], "valid")
+        self.assertEqual(preview.data["rows"][0]["normalized_data"]["amount"], "12.75")
+        confirmed = self.client.post(
+            f"/api/portfolio/imports/{upload.data['id']}/confirm/", {}, format="json"
+        )
+        self.assertEqual(confirmed.status_code, status.HTTP_200_OK, confirmed.data)
+        trade = PortfolioTrade.objects.get(source="csv")
+        self.assertEqual(trade.operation_type, "dividend")
+        self.assertEqual(trade.gross_amount, Decimal("12.75"))
+
+    def fixture(self, filename: str) -> bytes:
+        content = (self.fixtures_path / filename).read_text(encoding="utf-8")
+        return (
+            content.replace("POSITION_ID", str(self.position.id))
+            .replace("CASH_ACCOUNT_ID", str(self.cash_link.id))
+            .encode()
+        )

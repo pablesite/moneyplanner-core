@@ -7,8 +7,12 @@ from .models import (
     InstrumentProviderMapping,
     InvestmentContainer,
     Portfolio,
+    PortfolioCorporateAction,
+    PortfolioImportBatch,
+    PortfolioImportRow,
     PortfolioMigrationIssue,
     PortfolioPosition,
+    PortfolioTrade,
     PositionValuation,
     PositionOwnershipPeriod,
     PositionOwnershipShare,
@@ -25,3 +29,7 @@ admin.site.register(PositionValuation)
 admin.site.register(PositionOwnershipPeriod)
 admin.site.register(PositionOwnershipShare)
 admin.site.register(PortfolioMigrationIssue)
+admin.site.register(PortfolioTrade)
+admin.site.register(PortfolioCorporateAction)
+admin.site.register(PortfolioImportBatch)
+admin.site.register(PortfolioImportRow)

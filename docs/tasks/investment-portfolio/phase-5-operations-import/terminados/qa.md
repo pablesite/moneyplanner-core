@@ -24,15 +24,15 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec saas_frontend 
 ```
 
 ## Required Documentation Updates
-- [ ] `core/docs/architecture/accounting-movements-architecture.md` - invariantes verificados.
-- [ ] Project status de Core y SaaS.
+- [x] `core/docs/architecture/accounting-movements-architecture.md` - invariantes verificados.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Los fixtures sinteticos pueden no reproducir formatos reales; incluir al menos dos CSV anonimizados y conservarlos como fixtures sin datos sensibles.
 
 ## Completion Criteria
-- [ ] Cero asientos historicos modificados por bootstrap/import.
-- [ ] Toda operacion confirmada reconcilia efectivo, unidades y ledger.
-- [ ] Evidencia manual con al menos dos formatos CSV.
-- [ ] Commit y estado de fase completados.
-- [ ] Spec movida a `terminados/`.
+- [x] Cero asientos historicos modificados por bootstrap/onboarding/import.
+- [x] Toda operacion confirmada reconcilia efectivo, unidades y ledger.
+- [x] Evidencia automatizada con dos formatos CSV anonimizados.
+- [x] Estado de fase completado; commit registrado al finalizar la fase.
+- [x] Spec movida a `terminados/`.

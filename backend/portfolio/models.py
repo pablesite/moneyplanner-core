@@ -336,6 +336,10 @@ class PortfolioPosition(models.Model):
         ACTIVE = "active", "Activa"
         ARCHIVED = "archived", "Archivada"
 
+    class HistoryMode(models.TextChoices):
+        RECONSTRUCTED = "reconstructed", "Histórico reconstruido"
+        CUTOFF = "cutoff", "Inicio desde fecha de corte"
+
     portfolio = models.ForeignKey(
         Portfolio,
         on_delete=models.CASCADE,
@@ -367,6 +371,11 @@ class PortfolioPosition(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices)
     opened_on = models.DateField()
     closed_on = models.DateField(null=True, blank=True)
+    history_mode = models.CharField(
+        max_length=16, choices=HistoryMode.choices, default=HistoryMode.RECONSTRUCTED
+    )
+    history_start_date = models.DateField(null=True, blank=True)
+    setup_confirmed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -380,7 +389,14 @@ class PortfolioPosition(models.Model):
             models.CheckConstraint(
                 condition=Q(closed_on__isnull=True) | Q(closed_on__gte=models.F("opened_on")),
                 name="portfolio_position_dates_valid",
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(history_mode="reconstructed", history_start_date__isnull=True)
+                    | Q(history_mode="cutoff", history_start_date__isnull=False)
+                ),
+                name="portfolio_position_history_mode_valid",
+            ),
         ]
 
     def clean(self) -> None:
@@ -529,5 +545,153 @@ class PortfolioMigrationIssue(models.Model):
             models.UniqueConstraint(
                 fields=["portfolio", "asset", "code"],
                 name="portfolio_migration_issue_unique",
+            )
+        ]
+
+
+class PortfolioTrade(models.Model):
+    class OperationType(models.TextChoices):
+        BUY = "buy", "Compra"
+        SELL = "sell", "Venta"
+        DIVIDEND = "dividend", "Dividendo"
+        INTEREST = "interest", "Interés"
+        FEE = "fee", "Comisión"
+        FUNDED_PURCHASE = "funded_purchase", "Compra histórica financiada"
+
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        CSV = "csv", "CSV"
+        LEGACY = "legacy", "Histórico"
+
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name="trades")
+    position = models.ForeignKey(PortfolioPosition, on_delete=models.PROTECT, related_name="trades")
+    ledger_transaction = models.OneToOneField(
+        "accounting.LedgerTransaction",
+        on_delete=models.PROTECT,
+        related_name="portfolio_trade",
+    )
+    fee_transaction = models.OneToOneField(
+        "accounting.LedgerTransaction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="portfolio_trade_fee",
+    )
+    operation_type = models.CharField(max_length=24, choices=OperationType.choices)
+    units = models.DecimalField(max_digits=28, decimal_places=12, null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=28, decimal_places=12, null=True, blank=True)
+    trade_currency = models.CharField(max_length=3)
+    gross_amount = models.DecimalField(max_digits=28, decimal_places=8)
+    fee = models.DecimalField(max_digits=28, decimal_places=8, default=Decimal("0"))
+    external_id = models.CharField(max_length=160, blank=True, default="")
+    source = models.CharField(max_length=16, choices=Source.choices, default=Source.MANUAL)
+    fingerprint = models.CharField(max_length=64)
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-ledger_transaction__booking_date", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["portfolio", "source", "external_id"],
+                condition=~Q(external_id=""),
+                name="portfolio_trade_external_source_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["portfolio", "fingerprint"],
+                name="portfolio_trade_fingerprint_unique",
+            ),
+        ]
+
+
+class PortfolioCorporateAction(models.Model):
+    class ActionType(models.TextChoices):
+        SPLIT = "split", "Split / contrasplit"
+        IDENTIFIER_CHANGE = "identifier_change", "Cambio de identificador"
+        POSITION_TRANSFER = "position_transfer", "Traspaso entre posiciones"
+        ADJUSTMENT = "adjustment", "Ajuste manual"
+
+    portfolio = models.ForeignKey(
+        Portfolio, on_delete=models.CASCADE, related_name="corporate_actions"
+    )
+    position = models.ForeignKey(
+        PortfolioPosition, on_delete=models.PROTECT, related_name="corporate_actions"
+    )
+    ledger_transaction = models.OneToOneField(
+        "accounting.LedgerTransaction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="portfolio_corporate_action",
+    )
+    action_type = models.CharField(max_length=32, choices=ActionType.choices)
+    effective_date = models.DateField()
+    payload = models.JSONField(default=dict)
+    note = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-effective_date", "-id"]
+
+
+class PortfolioImportBatch(models.Model):
+    class Status(models.TextChoices):
+        UPLOADED = "uploaded", "Subido"
+        PREVIEWED = "previewed", "Previsualizado"
+        PARTIAL = "partial", "Confirmado parcialmente"
+        CONFIRMED = "confirmed", "Confirmado"
+        FAILED = "failed", "Fallido"
+
+    portfolio = models.ForeignKey(
+        Portfolio, on_delete=models.CASCADE, related_name="import_batches"
+    )
+    filename = models.CharField(max_length=240)
+    file_fingerprint = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPLOADED)
+    headers = models.JSONField(default=list)
+    mapping = models.JSONField(default=dict)
+    row_count = models.PositiveIntegerField(default=0)
+    confirmed_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["portfolio", "file_fingerprint"],
+                name="portfolio_import_file_unique",
+            )
+        ]
+
+
+class PortfolioImportRow(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pendiente"
+        VALID = "valid", "Válida"
+        ERROR = "error", "Con errores"
+        DUPLICATE = "duplicate", "Duplicada"
+        CONFIRMED = "confirmed", "Confirmada"
+
+    batch = models.ForeignKey(PortfolioImportBatch, on_delete=models.CASCADE, related_name="rows")
+    row_number = models.PositiveIntegerField()
+    raw_data = models.JSONField(default=dict)
+    normalized_data = models.JSONField(default=dict)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    errors = models.JSONField(default=dict)
+    fingerprint = models.CharField(max_length=64, blank=True, default="")
+    trade = models.OneToOneField(
+        PortfolioTrade,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="import_row",
+    )
+
+    class Meta:
+        ordering = ["row_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "row_number"], name="portfolio_import_row_number_unique"
             )
         ]

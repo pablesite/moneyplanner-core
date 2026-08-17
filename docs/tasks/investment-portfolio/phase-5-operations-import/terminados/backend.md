@@ -28,16 +28,15 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend m
 ```
 
 ## Required Documentation Updates
-- [ ] Arquitectura Core de portfolio y accounting.
-- [ ] `docs/architecture/api-registry.md`.
-- [ ] Project status de Core y SaaS.
+- [x] Arquitectura Core de portfolio y accounting.
+- [x] `docs/architecture/api-registry.md`.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Duplicar una operacion altera efectivo, unidades y rendimiento. Toda importacion confirma en una transaccion y conserva fingerprint/procedencia.
 
 ## Completion Criteria
-- [ ] Operaciones nuevas reconcilian ledger, efectivo y posicion.
-- [ ] Reimportar el mismo fichero es idempotente.
-- [ ] Historico existente no se modifica.
-- [ ] Tests, docs y commit completados.
-
+- [x] Operaciones nuevas reconcilian ledger, efectivo y posicion.
+- [x] Reimportar el mismo fichero es idempotente.
+- [x] Historico existente no se modifica.
+- [x] Tests y docs completados; commit de cierre registrado al finalizar la fase.

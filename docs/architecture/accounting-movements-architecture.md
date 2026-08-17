@@ -102,8 +102,10 @@ This leaves a gap:
 1. `portfolio` references `LedgerAccount` and `LedgerTransaction`; it never duplicates accounts, entries, balances or monetary movements.
 2. A `PortfolioPosition` may retain the unique asset-type `LedgerAccount` already linked through `LedgerAccount.asset`. If no compatible account exists, or several candidates exist, bootstrap leaves the link empty and emits a migration issue instead of creating or choosing one.
 3. `Asset` remains the patrimonial identity and current net-worth boundary. Portfolio adds container, instrument, tracking style and dated ownership semantics around that same asset.
-4. Phase 1 performance coverage reads posted transactions with `quick_entry_kind=investment` plus legacy `InvestmentAssetEvent` and `AssetValuation`. It does not rewrite historical purchases or treat revaluation transactions as external flows.
-5. Future `PortfolioTrade` rows will be execution metadata linked to `LedgerTransaction`; the ledger remains the sole monetary source of truth.
+4. Performance coverage reads posted transactions with `quick_entry_kind=investment` plus legacy `InvestmentAssetEvent` and `AssetValuation`. It interprets a legacy bank-to-asset transfer as a funded purchase without rewriting the transaction, and never treats revaluation rows as external flows.
+5. `PortfolioTrade` stores execution metadata linked to `LedgerTransaction`; the ledger remains the sole monetary source of truth. A purchase moves posted cash from the position's own container to its linked asset account, and an optional fee is a separate expense transaction.
+6. Direct operation confirmation requires a signed preview of the unchanged payload. CSV imports stage and validate rows first, use the same atomic operation service, preserve import origin/fingerprint, reject duplicate external identifiers and never edit pre-existing ledger rows.
+7. `PortfolioCorporateAction` retains split, identifier-change, position-transfer and audited-adjustment evidence. Archive/reopen changes position and asset availability only; all ledger, trade and action history remains intact.
 
 ## Behavioral rules
 1. `tracking_mode=manual`

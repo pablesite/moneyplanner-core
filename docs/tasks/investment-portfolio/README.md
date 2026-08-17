@@ -79,7 +79,7 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 | 2 | Valoracion hibrida y precios diarios | `phase-2-hybrid-valuations/backend.md` |
 | 3 | Motor TWR/MWR/P&L/FX y APIs de lectura | `phase-3-performance-engine/backend.md` + `qa.md` |
 | 4 | `/cartera` de lectura mobile-first | raiz `docs/tasks/investment-portfolio/phase-4-portfolio-workspace/frontend.md` |
-| 5 | Operaciones completas, historico e importador | `phase-5-operations-import/backend.md` + raiz `frontend.md` + `qa.md` |
+| 5 | Operaciones completas, historico e importador | ✅ `phase-5-operations-import/terminados/backend.md` + raiz `terminados/frontend.md` + `terminados/qa.md` |
 | 6 | Estrategia y rebalanceo con aportaciones | `phase-6-allocation-rebalancing/backend.md` + raiz `frontend.md` |
 | 7 | Benchmark compuesto y riesgo progresivo | `phase-7-benchmark-risk/backend.md` + raiz `frontend.md` + `qa.md` |
 | 8 | Alertas, Mi Plan y cierre funcional | `phase-8-product-integration/backend.md` + raiz `frontend.md` |
@@ -87,4 +87,3 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 ## Orden y gate
 
 Las fases se ejecutan en orden. Cada una debe migrar, validar y documentar su contrato antes de empezar la siguiente. La fase 4 es el primer release visible; las fases 1-3 deben probarse antes con fixtures representativos del historico real.
-

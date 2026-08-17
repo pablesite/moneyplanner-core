@@ -2,6 +2,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
@@ -17,6 +18,7 @@ from .models import (
     InvestmentContainer,
     Portfolio,
     PortfolioMigrationIssue,
+    PortfolioImportBatch,
     PortfolioPosition,
     PositionValuation,
     PositionOwnershipPeriod,
@@ -45,6 +47,8 @@ from .performance import (
 )
 from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
 from .valuations import build_valuation_health, resolve_position_valuation
+from .imports import confirm_import, preview_import, serialize_batch, upload_csv
+from .operations import confirm_operation, operation_options, preview_operation
 
 
 class PortfolioViewSet(viewsets.ModelViewSet):
@@ -143,7 +147,46 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: PortfolioPosition) -> None:
         instance.status = PortfolioPosition.Status.ARCHIVED
-        instance.save(update_fields=["status", "updated_at"])
+        from django.utils import timezone
+
+        instance.closed_on = timezone.localdate()
+        instance.asset.is_active = False
+        instance.asset.save(update_fields=["is_active", "updated_at"])
+        instance.save(update_fields=["status", "closed_on", "updated_at"])
+
+    @action(detail=True, methods=["post"], url_path="archive")
+    def archive(self, request, pk=None):
+        position = self.get_object()
+        self.perform_destroy(position)
+        return Response(self.get_serializer(position).data)
+
+    @action(detail=True, methods=["post"], url_path="reopen")
+    def reopen(self, request, pk=None):
+        position = self.get_object()
+        position.status = PortfolioPosition.Status.ACTIVE
+        position.closed_on = None
+        position.asset.is_active = True
+        position.asset.save(update_fields=["is_active", "updated_at"])
+        position.save(update_fields=["status", "closed_on", "updated_at"])
+        return Response(self.get_serializer(position).data)
+
+    @action(detail=True, methods=["post"], url_path="confirm-setup")
+    def confirm_setup(self, request, pk=None):
+        from django.utils import timezone
+
+        position = self.get_object()
+        serializer = self.get_serializer(
+            position,
+            data={
+                "tracking_style": request.data.get("tracking_style", position.tracking_style),
+                "history_mode": request.data.get("history_mode", position.history_mode),
+                "history_start_date": request.data.get("history_start_date"),
+            },
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(setup_confirmed_at=timezone.now())
+        return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="valuation")
     def valuation(self, request, pk=None):
@@ -324,3 +367,81 @@ class PortfolioQualityView(APIView):
                 member_id=member_id,
             )
         )
+
+
+class PortfolioOperationOptionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio = Portfolio.objects.get(user=request.user)
+        return Response(operation_options(portfolio=portfolio))
+
+
+class PortfolioOperationPreviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        portfolio = Portfolio.objects.get(user=request.user)
+        return Response(preview_operation(portfolio=portfolio, payload=dict(request.data)))
+
+
+class PortfolioOperationConfirmView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        portfolio = Portfolio.objects.get(user=request.user)
+        result = confirm_operation(portfolio=portfolio, payload=dict(request.data))
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class PortfolioImportUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            raise ValidationError({"file": "Selecciona un fichero CSV."})
+        portfolio = Portfolio.objects.get(user=request.user)
+        batch, duplicate = upload_csv(portfolio=portfolio, uploaded_file=uploaded_file)
+        payload = serialize_batch(batch)
+        payload["duplicate_file"] = duplicate
+        return Response(
+            payload, status=status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED
+        )
+
+
+class PortfolioImportDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _batch(self, request, batch_id: int) -> PortfolioImportBatch:
+        try:
+            return PortfolioImportBatch.objects.prefetch_related("rows").get(
+                id=batch_id, portfolio__user=request.user
+            )
+        except PortfolioImportBatch.DoesNotExist as exc:
+            raise ValidationError({"detail": "La importación no existe."}) from exc
+
+    def get(self, request, batch_id: int):
+        return Response(serialize_batch(self._batch(request, batch_id)))
+
+
+class PortfolioImportPreviewView(PortfolioImportDetailView):
+    def post(self, request, batch_id: int):
+        batch = self._batch(request, batch_id)
+        mapping = request.data.get("mapping")
+        if not isinstance(mapping, dict):
+            raise ValidationError({"mapping": "Indica el mapeo de columnas."})
+        preview_import(portfolio=batch.portfolio, batch=batch, mapping=mapping)
+        batch.refresh_from_db()
+        return Response(serialize_batch(self._batch(request, batch_id)))
+
+
+class PortfolioImportConfirmView(PortfolioImportDetailView):
+    def post(self, request, batch_id: int):
+        batch = self._batch(request, batch_id)
+        row_ids = request.data.get("row_ids")
+        if row_ids is not None and not isinstance(row_ids, list):
+            raise ValidationError({"row_ids": "Debe ser una lista."})
+        confirm_import(portfolio=batch.portfolio, batch=batch, row_ids=row_ids)
+        return Response(serialize_batch(self._batch(request, batch_id)))

@@ -405,12 +405,22 @@ class PortfolioPositionSerializer(serializers.ModelSerializer):
             "status",
             "opened_on",
             "closed_on",
+            "history_mode",
+            "history_start_date",
+            "setup_confirmed_at",
             "coverage",
             "ownership_periods",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "coverage", "ownership_periods", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "coverage",
+            "ownership_periods",
+            "setup_confirmed_at",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_fields(self):
         fields = super().get_fields()
@@ -444,10 +454,17 @@ class PortfolioPositionSerializer(serializers.ModelSerializer):
             "status": attrs.get("status", getattr(self.instance, "status", "")),
             "opened_on": attrs.get("opened_on", getattr(self.instance, "opened_on", None)),
             "closed_on": attrs.get("closed_on", getattr(self.instance, "closed_on", None)),
+            "history_mode": attrs.get(
+                "history_mode", getattr(self.instance, "history_mode", "reconstructed")
+            ),
+            "history_start_date": attrs.get(
+                "history_start_date", getattr(self.instance, "history_start_date", None)
+            ),
         }
         candidate = PortfolioPosition(**values)
         if self.instance is not None:
             candidate.pk = self.instance.pk
+            candidate._state.adding = False
         _raise_model_validation(candidate)
         return attrs
 
