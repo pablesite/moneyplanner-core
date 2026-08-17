@@ -87,3 +87,9 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 ## Orden y gate
 
 Las fases se ejecutan en orden. Cada una debe migrar, validar y documentar su contrato antes de empezar la siguiente. La fase 4 es el primer release visible; las fases 1-3 deben probarse antes con fixtures representativos del historico real.
+
+## Backlog no planificado
+
+Ideas capturadas para valorar en su fase natural, sin comprometerse a alcance ni diseño todavia.
+
+1. **Rentabilidad historica comparable entre periodos.** Hoy el usuario ve la TWR/MWR del periodo seleccionado, pero no si la cartera esta mejorando o empeorando frente a periodos anteriores equivalentes (p.ej. este trimestre vs el anterior, este año vs el año pasado a la misma fecha). Encaja con la fase 7 (benchmark y riesgo), que ya calcula "mejor/peor periodo"; una serie de TWR movil (rolling) por ventana fija seria la extension natural, y es distinta de un unico mejor/peor periodo puntual. Candidata a dibujarse en el propio grafico de evolucion como una segunda capa (linea o banda) junto a valor/aportado, no como grafico aparte — a validar cuando se disene la fase 7 si compite visualmente con las dos series ya presentes. Anotado 2026-08-17, antes de empezar la fase 6.

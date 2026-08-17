@@ -35,6 +35,9 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ## Risks
 Series manuales o asincronas pueden falsear riesgo. Aplicar cobertura minima, calendario comun y disclosure por metrica.
 
+## Backlog relacionado
+Rentabilidad historica movil (rolling TWR) para comparar si la cartera mejora o empeora entre periodos equivalentes, con posible capa visual en el grafico de evolucion. Ver `../README.md#backlog-no-planificado`.
+
 ## Completion Criteria
 - [ ] Benchmark respeta cambios historicos de estrategia.
 - [ ] Metricas coinciden con fixtures independientes.
