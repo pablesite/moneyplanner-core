@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.41.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.40.1...moneyplanner-core-v0.41.0) (2026-08-17)
+
+
+### Features
+
+* **portfolio:** add hybrid valuation layer ([377731c](https://github.com/pablesite/moneyplanner-core/commit/377731c366505ff12976b1e13fdf218b36a9e0a9))
+* **portfolio:** add operations and CSV import ([b6c99ff](https://github.com/pablesite/moneyplanner-core/commit/b6c99ff9ff2ce3724ae677d4f2d0638e64fe224d))
+* **portfolio:** add performance engine ([c3ca555](https://github.com/pablesite/moneyplanner-core/commit/c3ca555a5476d82e7085ab17cd3174387e50b243))
+* **portfolio:** add portfolio domain foundation ([67159c8](https://github.com/pablesite/moneyplanner-core/commit/67159c81184c0b3ce9d5cdc34d0ff63d082ad8d5))
+
+
+### Bug Fixes
+
+* **budget:** reuse monthly close ledger maps ([dd1d67e](https://github.com/pablesite/moneyplanner-core/commit/dd1d67e3579f4b6b67bc3727a1acbe3383b85669))
+
 ## [0.40.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.40.0...moneyplanner-core-v0.40.1) (2026-08-15)
 
 
