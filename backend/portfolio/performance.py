@@ -535,6 +535,14 @@ def resolve_preloaded_value(
             f"price:{price.source}",
         )
     if total is not None:
+        divested = _divested_at(
+            context=context,
+            position=position,
+            target=target,
+            valuation_date=total.valuation_date,
+        )
+        if divested is not None:
+            return divested
         return ResolvedValue(
             total.value,
             total.currency,
@@ -552,6 +560,43 @@ def resolve_preloaded_value(
         # resolved first above, so this never masks a value.
         return ResolvedValue(ZERO, context.portfolio.base_currency, target, True, "not_open")
     return None
+
+
+def _divested_at(
+    *,
+    context: PerformanceContext,
+    position: PortfolioPosition,
+    target: date,
+    valuation_date: date,
+) -> ResolvedValue | None:
+    """Zero for a value-based position the ledger reports as fully divested.
+
+    A valuation describes a holding, so once the holding is gone the number stops being
+    a stale estimate and becomes plain wrong: funds sold in 2022 kept reporting their
+    last value years later and inflated every period long enough to include them. The
+    ledger is the monetary source of truth, and it is only trusted over the valuation
+    when the balance reached zero after that valuation was taken.
+    """
+    if (
+        position.tracking_style != PortfolioPosition.TrackingStyle.VALUE_BASED
+        or not position.ledger_account_id
+    ):
+        return None
+    account_id = int(position.ledger_account_id)
+    dates = context.balance_dates.get(account_id, [])
+    index = bisect_right(dates, target) - 1
+    if index < 0 or context.balance_values[account_id][index] != ZERO:
+        return None
+    divested_on = dates[index]
+    if divested_on < valuation_date:
+        return None
+    return ResolvedValue(
+        ZERO,
+        context.portfolio.base_currency,
+        divested_on,
+        divested_on == target,
+        "divested",
+    )
 
 
 def _carrying_value_at(
@@ -1261,6 +1306,11 @@ def build_portfolio_quality(
     )
     fresh = stale = missing = ownership_missing = scoped_total = 0
     for position in context.positions:
+        if position.status == PortfolioPosition.Status.ARCHIVED:
+            # An archived position is out of the portfolio: its freshness and its missing
+            # ownership are not work the user can act on, and counting them turned the
+            # review banner into noise.
+            continue
         if not context.ownership_periods.get(position.id):
             ownership_missing += 1
         if (

@@ -382,6 +382,44 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(response.data["coverage"]["value"], "complete")
         self.assertIsNotNone(response.data["value"])
 
+    def test_divested_position_reports_zero_instead_of_its_last_valuation(self):
+        buy = self.operation_payload(amount="300.00", fee="0")
+        preview = self.client.post("/api/portfolio/operations/preview/", buy, format="json")
+        buy["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", buy, format="json")
+        self.confirm_valuation(self.valuation_payload(amount="300.00", booking_date="2025-02-02"))
+
+        sell = self.operation_payload(
+            operation_type="sell", amount="300.00", fee="0", booking_date="2025-03-01"
+        )
+        preview = self.client.post("/api/portfolio/operations/preview/", sell, format="json")
+        sell["preview_token"] = preview.data["preview_token"]
+        sold = self.client.post("/api/portfolio/operations/confirm/", sell, format="json")
+        self.assertEqual(sold.status_code, status.HTTP_201_CREATED, sold.data)
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("0"))
+
+        resolved = self.client.get(f"/api/portfolio/positions/{self.position.id}/valuation/")
+        self.assertEqual(Decimal(resolved.data["value"]), Decimal("0"))
+        self.assertEqual(resolved.data["provenance"]["kind"], "divested")
+
+        reads = self.client.get(
+            "/api/portfolio/positions/performance/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
+        )
+        row = next(r for r in reads.data["results"] if r["position_id"] == self.position.id)
+        self.assertEqual(Decimal(row["native_value"]), Decimal("0"))
+
+    def test_archived_positions_are_left_out_of_the_review_counters(self):
+        self.post_accounting_revaluation("250.00")
+        before = self.client.get("/api/portfolio/quality/")
+        self.assertEqual(before.data["positions"]["total"], 1)
+
+        self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
+
+        after = self.client.get("/api/portfolio/quality/")
+        self.assertEqual(after.data["positions"]["total"], 0)
+        self.assertEqual(after.data["ownership_missing"], 0)
+
     def test_units_based_position_never_reports_units_as_value(self):
         self.position.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED
         self.position.save(update_fields=["tracking_style", "updated_at"])

@@ -240,6 +240,31 @@ def resolve_position_valuation(
             },
         }
     if total_valuation is not None:
+        carrying = _ledger_carrying_value(position=position, as_of_date=resolved_date)
+        if (
+            carrying is not None
+            and carrying[0] == 0
+            and carrying[1] >= total_valuation.valuation_date
+        ):
+            # Fully divested after that valuation was taken: the holding is gone, so the
+            # old number no longer describes anything. Mirrors `performance._divested_at`.
+            divested_on = carrying[1]
+            return {
+                "status": "fresh",
+                "value": "0",
+                "currency": position.ledger_account.currency
+                if position.ledger_account is not None
+                else total_valuation.currency,
+                "observed_on": divested_on.isoformat(),
+                "age_days": (resolved_date - divested_on).days,
+                "stale_after_days": threshold_days,
+                "provenance": {
+                    "kind": "divested",
+                    "source": "accounting",
+                    "calculation": "posted_account_balance",
+                    "note": "Posición desinvertida; el saldo contable quedó a cero.",
+                },
+            }
         observed_on = total_valuation.valuation_date
         age_days = (resolved_date - observed_on).days
         return {
