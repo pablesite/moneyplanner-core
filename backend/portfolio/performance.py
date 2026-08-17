@@ -600,6 +600,28 @@ def _anchored_value_at(
     )
 
 
+CARRYING_VALUE_SOURCE = "ledger:balance"
+
+
+def _value_status(
+    *, position: PortfolioPosition, native: ResolvedValue | None, target: date
+) -> str:
+    """Freshness of a position's value, or `at_cost` when nobody has ever valued it.
+
+    A carrying value is the posted balance: an accounting fact that is current by
+    definition and cannot go stale. What the position lacks is a valuation, not a fresh
+    one. Ageing it turned two crowdfunding positions into permanent review noise, while an
+    identical one read fresh only because it books interest every month.
+    """
+    if native is None:
+        return "missing"
+    if native.source == CARRYING_VALUE_SOURCE:
+        return "at_cost"
+    if (target - native.observed_on).days <= stale_days_for_position(position):
+        return "fresh"
+    return "stale"
+
+
 def _observation_dates(
     *,
     context: PerformanceContext,
@@ -1327,14 +1349,7 @@ def _build_positions_from_context(
                 ),
                 "native_currency": native.currency if native else None,
                 "observed_on": native.observed_on.isoformat() if native else None,
-                "value_status": (
-                    "fresh"
-                    if native
-                    and (end_date - native.observed_on).days <= stale_days_for_position(position)
-                    else "stale"
-                    if native
-                    else "missing"
-                ),
+                "value_status": _value_status(position=position, native=native, target=end_date),
                 "performance": metrics,
                 "attribution": {
                     "asset": _quantize(asset_result),
@@ -1416,7 +1431,7 @@ def build_portfolio_quality(
         or _balance_at(context, link.ledger_account_id, start_date) != 0
         for link in context.cash_accounts
     )
-    fresh = stale = missing = ownership_missing = scoped_total = 0
+    fresh = stale = missing = at_cost = ownership_missing = scoped_total = 0
     for position in context.positions:
         if position.status == PortfolioPosition.Status.ARCHIVED:
             # An archived position is out of the portfolio: its freshness and its missing
@@ -1438,10 +1453,13 @@ def build_portfolio_quality(
             continue
         scoped_total += 1
         native = resolve_preloaded_value(context=context, position=position, target=end_date)
-        if native is None:
+        status = _value_status(position=position, native=native, target=end_date)
+        if status == "missing":
             missing += 1
-        elif (end_date - native.observed_on).days > stale_days_for_position(position):
+        elif status == "stale":
             stale += 1
+        elif status == "at_cost":
+            at_cost += 1
         else:
             fresh += 1
     return {
@@ -1458,6 +1476,7 @@ def build_portfolio_quality(
             "fresh": fresh,
             "stale": stale,
             "missing": missing,
+            "at_cost": at_cost,
         },
         "ownership_missing": ownership_missing,
         "cash_ownership_missing": cash_ownership_missing,

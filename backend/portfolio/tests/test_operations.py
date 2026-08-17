@@ -349,7 +349,14 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(Decimal(resolved.data["value"]), Decimal("300"))
         self.assertEqual(resolved.data["currency"], "EUR")
         self.assertEqual(resolved.data["provenance"]["kind"], "ledger_balance")
-        self.assertNotEqual(resolved.data["status"], "missing")
+        # A balance is current by definition, so it is never stale and never pending
+        # review; what the position lacks is a valuation.
+        self.assertEqual(resolved.data["status"], "at_cost")
+
+        quality = self.client.get("/api/portfolio/quality/")
+        self.assertEqual(quality.data["positions"]["at_cost"], 1)
+        self.assertEqual(quality.data["positions"]["stale"], 0)
+        self.assertEqual(quality.data["positions"]["missing"], 0)
 
     def test_position_funded_only_by_accounting_appears_in_performance_reads(self):
         payload = self.operation_payload(amount="300.00", fee="0")

@@ -287,7 +287,9 @@ def resolve_position_valuation(
         balance, observed_on = carrying
         age_days = (resolved_date - observed_on).days
         return {
-            "status": "fresh" if age_days <= threshold_days else "stale",
+            # A balance is current by definition, so it is never stale; what is missing
+            # is a valuation. Mirrors `performance._value_status`.
+            "status": "at_cost",
             "value": str(balance),
             "currency": position.ledger_account.currency,
             "observed_on": observed_on.isoformat(),
@@ -318,7 +320,7 @@ def build_valuation_health(*, user) -> dict:
         .order_by("id")
     )
     rows = []
-    counts = {"fresh": 0, "stale": 0, "missing": 0}
+    counts = {"fresh": 0, "stale": 0, "missing": 0, "at_cost": 0}
     for position in positions:
         valuation = resolve_position_valuation(position=position)
         counts[valuation["status"]] += 1
