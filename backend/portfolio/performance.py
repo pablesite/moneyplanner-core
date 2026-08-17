@@ -1380,13 +1380,25 @@ def build_portfolio_timeline(
     *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
 ) -> list[dict[str, Any]]:
     dates = timeline_dates(start_date, end_date)
+    # The chart puts capital contributed next to value, so the contributed series has to
+    # run from inception: over a one-year window it otherwise restarts at zero and the
+    # comparison is meaningless, since the value line carries every year of history.
+    inception, _ = default_performance_period(portfolio)
     context = load_performance_context(
-        portfolio=portfolio, start_date=start_date, end_date=end_date
+        portfolio=portfolio, start_date=min(inception, start_date), end_date=end_date
     )
     rows = []
     external = [flow for flow in context.flows if flow.external]
     opening_value, opening_complete, _ = _aggregate_value(
         context=context, target=start_date, member_id=member_id
+    )
+    contributed_before = sum(
+        (
+            _flow_base(context=context, flow=flow, member_id=member_id) or ZERO
+            for flow in external
+            if flow.on_date <= start_date
+        ),
+        ZERO,
     )
     for target in dates:
         value, complete, _ = _aggregate_value(context=context, target=target, member_id=member_id)
@@ -1403,6 +1415,7 @@ def build_portfolio_timeline(
                 "date": target.isoformat(),
                 "value": _quantize(value),
                 "net_contributed": _quantize(cumulative),
+                "contributed_to_date": _quantize(contributed_before + cumulative),
                 "monetary_result": (
                     _quantize(value - (opening_value or ZERO) - cumulative)
                     if complete and opening_complete and value is not None

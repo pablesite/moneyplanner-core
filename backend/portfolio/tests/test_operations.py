@@ -506,9 +506,7 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.position.refresh_from_db()
         self.assertEqual(self.position.container_id, other.id)
-        self.assertEqual(
-            self.position.instrument.asset_class, Instrument.AssetClass.FIXED_INCOME
-        )
+        self.assertEqual(self.position.instrument.asset_class, Instrument.AssetClass.FIXED_INCOME)
 
     def test_setup_refuses_to_reclassify_a_shared_canonical_instrument(self):
         instrument = self.position.instrument
