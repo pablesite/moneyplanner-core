@@ -282,6 +282,60 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(LedgerTransaction.objects.count(), before)
         self.assertEqual(PositionValuation.objects.get(position=position).value, Decimal("1234.56"))
 
+    def post_accounting_revaluation(self, amount, booking_date="2025-03-01"):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/accounting/transactions/quick-entry/",
+                {
+                    "movement_type": "revaluation",
+                    "booking_date": booking_date,
+                    "value_date": booking_date,
+                    "description": "Revalorización desde Movimientos",
+                    "amount": amount,
+                    "account_id": self.position_account.id,
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return response.data["id"]
+
+    def test_accounting_revaluation_syncs_portfolio_without_bootstrap(self):
+        self.post_accounting_revaluation("250.00")
+
+        derived = PositionValuation.objects.get(
+            position=self.position, source=PositionValuation.Source.LEGACY_LEDGER
+        )
+        self.assertEqual(derived.valuation_date, date(2025, 3, 1))
+        self.assertEqual(derived.value, Decimal("250"))
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("250"))
+
+    def test_further_accounting_revaluations_keep_portfolio_aligned(self):
+        self.post_accounting_revaluation("250.00")
+        self.post_accounting_revaluation("100.00", booking_date="2025-04-01")
+
+        latest = PositionValuation.objects.filter(
+            position=self.position, source=PositionValuation.Source.LEGACY_LEDGER
+        ).order_by("-valuation_date")[0]
+        self.assertEqual(latest.valuation_date, date(2025, 4, 1))
+        self.assertEqual(latest.value, Decimal("350"))
+
+    def test_deleting_accounting_revaluation_drops_its_derived_valuation(self):
+        transaction_id = self.post_accounting_revaluation("250.00")
+        self.assertTrue(
+            PositionValuation.objects.filter(legacy_ledger_transaction_id=transaction_id).exists()
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            deleted = self.client.delete(f"/api/accounting/transactions/{transaction_id}/")
+
+        self.assertIn(
+            deleted.status_code, {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT}, deleted.data
+        )
+        self.assertFalse(
+            PositionValuation.objects.filter(legacy_ledger_transaction_id=transaction_id).exists()
+        )
+        self.assertEqual(get_account_balance(account=self.position_account), Decimal("0"))
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)

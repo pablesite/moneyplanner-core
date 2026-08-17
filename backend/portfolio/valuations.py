@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, F, IntegerField, Value, When
 from django.utils import timezone
 
 from accounting.models import LedgerEntry, LedgerTransaction
@@ -101,6 +101,25 @@ def import_legacy_position_valuations(*, position: PortfolioPosition) -> int:
             else:
                 balance -= entry.amount
         persist_revaluation(current_transaction)
+    return created
+
+
+def sync_ledger_valuations(*, position: PortfolioPosition) -> int:
+    """Rebuild the derived valuations of a position from its current ledger revaluations.
+
+    Accounting is the monetary source of truth, so a derived valuation must not survive
+    the revaluation that produced it: rows are re-imported and any that no longer match a
+    posted revaluation on the same date are dropped. Manual valuations are never touched.
+    """
+    created = import_legacy_position_valuations(position=position)
+    PositionValuation.objects.filter(
+        position=position,
+        source=PositionValuation.Source.LEGACY_LEDGER,
+    ).exclude(
+        legacy_ledger_transaction__quick_entry_kind=LedgerTransaction.QuickEntryKind.REVALUATION,
+        legacy_ledger_transaction__status=LedgerTransaction.Status.POSTED,
+        legacy_ledger_transaction__booking_date=F("valuation_date"),
+    ).delete()
     return created
 
 

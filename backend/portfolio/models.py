@@ -282,7 +282,9 @@ class PositionValuation(models.Model):
     )
     legacy_ledger_transaction = models.ForeignKey(
         "accounting.LedgerTransaction",
-        on_delete=models.PROTECT,
+        # A derived valuation is a projection of the ledger, so it must not block the
+        # deletion of the revaluation it came from; it disappears with its source.
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="portfolio_derived_valuations",
