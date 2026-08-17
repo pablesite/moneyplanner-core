@@ -78,6 +78,71 @@ def chained_twr(
     return factor - ONE
 
 
+def linked_dietz(
+    *, valuations: list[DatedValue], external_flows: list[DatedAmount]
+) -> Decimal | None:
+    """Link Modified Dietz subperiods delimited by the valuations actually available.
+
+    A whole-period Modified Dietz is money-weighted: it answers how the investor's money
+    did, so it is a poor stand-in for a time-weighted return once flows dominate the
+    period. Chaining subperiods between valuations and weighting flows only inside each
+    subperiod neutralizes flow timing, which is what a TWR is for. With short subperiods
+    the remaining convention error is small: on the reference position the flows-at-start,
+    Dietz and flows-at-end variants land within one point of each other.
+
+    A subperiod opening at zero takes its funding flow as the base instead of weighting
+    it. Weighting it would divide by a fraction of the capital that was actually at work
+    and inflate that subperiod, which is what makes the naive chain unstable.
+    """
+    if len(valuations) < 2:
+        return None
+    values = sorted(valuations, key=lambda row: row.on_date)
+    factor = ONE
+    linked_any = False
+    for previous, current in zip(values, values[1:], strict=False):
+        window = [
+            flow for flow in external_flows if previous.on_date < flow.on_date <= current.on_date
+        ]
+        flow_total = sum((flow.amount for flow in window), ZERO)
+        if previous.value == 0:
+            if flow_total == 0:
+                # No capital at work yet: the subperiod cannot have a return.
+                continue
+            base = flow_total
+        else:
+            span = Decimal((current.on_date - previous.on_date).days) or ONE
+            base = previous.value + sum(
+                (
+                    flow.amount * Decimal((current.on_date - flow.on_date).days) / span
+                    for flow in window
+                ),
+                ZERO,
+            )
+        if base <= 0:
+            return None
+        factor *= ONE + (current.value - previous.value - flow_total) / base
+        linked_any = True
+    return factor - ONE if linked_any else None
+
+
+def annualized(*, total_return: Decimal | None, days: int) -> Decimal | None:
+    """Convert a cumulative period return into an annual rate.
+
+    Needed because MWR/XIRR is annualized by construction while TWR is cumulative:
+    presenting them side by side without this is comparing a month's 2.7% against an
+    annual 37%. A total loss (growth <= 0) has no real annual rate.
+    """
+    if total_return is None or days <= 0:
+        return None
+    growth = ONE + total_return
+    if growth <= 0:
+        return None
+    try:
+        return Decimal(str(float(growth) ** (365.0 / float(days)))) - ONE
+    except (InvalidOperation, OverflowError, ValueError, ZeroDivisionError):
+        return None
+
+
 def xirr(cash_flows: list[DatedAmount]) -> Decimal | None:
     """Solve annualized IRR with bounded bisection; investor outflows are negative."""
     if len(cash_flows) < 2:

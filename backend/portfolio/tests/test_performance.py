@@ -26,7 +26,9 @@ from portfolio.performance import build_portfolio_timeline
 from portfolio.performance_math import (
     DatedAmount,
     DatedValue,
+    annualized,
     chained_twr,
+    linked_dietz,
     modified_dietz,
     monetary_result,
     real_return,
@@ -106,6 +108,61 @@ class PerformanceGoldenMathTests(TestCase):
             withdrawal,
             Decimal("20") / (Decimal("100") - Decimal("20") * contribution_weight),
         )
+
+    def test_linked_dietz_neutralizes_flow_timing_unlike_whole_period_dietz(self):
+        start, mid, end = date(2024, 1, 1), date(2024, 7, 1), date(2024, 12, 31)
+        # Asset doubles in the first half and stays flat in the second, while the money
+        # only arrives for the flat half: the time-weighted and money-weighted answers
+        # must diverge, and the whole-period Dietz must not be read as time-weighted.
+        # A valuation dated D reflects the balance after that day's movements, which is
+        # the convention the derived valuations follow, so the 1000 is already inside it.
+        valuations = [
+            DatedValue(start, Decimal("100")),
+            DatedValue(mid, Decimal("1200")),
+            DatedValue(end, Decimal("1200")),
+        ]
+        flows = [DatedAmount(mid, Decimal("1000"))]
+
+        linked = linked_dietz(valuations=valuations, external_flows=flows)
+        whole_period = modified_dietz(
+            opening_value=Decimal("100"),
+            closing_value=Decimal("1200"),
+            external_flows=flows,
+            start_date=start,
+            end_date=end,
+        )
+
+        # Chained: the asset doubled in the first half, then stayed flat.
+        self.assertEqual(linked, Decimal("1"))
+        self.assertNotEqual(whole_period, linked)
+        self.assertLess(whole_period, linked)
+
+    def test_linked_dietz_takes_the_funding_flow_as_base_when_opening_is_zero(self):
+        start, mid, end = date(2024, 1, 1), date(2024, 7, 1), date(2024, 12, 31)
+        valuations = [
+            DatedValue(start, Decimal("0")),
+            DatedValue(mid, Decimal("100")),
+            DatedValue(end, Decimal("150")),
+        ]
+
+        linked = linked_dietz(
+            valuations=valuations, external_flows=[DatedAmount(mid, Decimal("100"))]
+        )
+
+        # First subperiod has no return (funded exactly at its close), then 150/100.
+        self.assertEqual(linked, Decimal("0.5"))
+
+    def test_annualized_converts_a_cumulative_return_to_an_annual_rate(self):
+        # Doubling over two years is sqrt(2) - 1 per year.
+        two_years = annualized(total_return=Decimal("1"), days=730)
+
+        self.assertIsNotNone(two_years)
+        self.assertAlmostEqual(float(two_years), 2**0.5 - 1, places=6)
+        self.assertEqual(annualized(total_return=Decimal("0.1"), days=365), Decimal("0.1"))
+        # A total loss has no real annual rate, and neither has an empty period.
+        self.assertIsNone(annualized(total_return=Decimal("-1"), days=365))
+        self.assertIsNone(annualized(total_return=Decimal("0.1"), days=0))
+        self.assertIsNone(annualized(total_return=None, days=365))
 
     def test_xirr_and_real_return_match_independent_closed_forms(self):
         result = xirr(
@@ -240,7 +297,10 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(performance.data["closing_value"], "170.00000000")
         self.assertEqual(performance.data["net_contributed"], "50.00000000")
         self.assertEqual(performance.data["monetary_result"], "20.00000000")
-        self.assertEqual(performance.data["return"]["method"], "modified_dietz")
+        # Without a valuation on the flow date the exact chain is impossible, but the
+        # subperiods the valuations do delimit are still chained; the estimate stays
+        # declared instead of collapsing into a whole-period money-weighted number.
+        self.assertEqual(performance.data["return"]["method"], "linked_dietz")
         self.assertTrue(performance.data["return"]["estimated"])
         self.assertEqual(timeline.data["results"][-1]["monetary_result"], "20.00000000")
         self.assertEqual(len(positions.data["results"]), 1)

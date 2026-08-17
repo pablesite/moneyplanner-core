@@ -25,8 +25,10 @@ from .models import (
 from .performance_math import (
     DatedAmount,
     DatedValue,
+    annualized,
     chained_twr,
     decompose_result,
+    linked_dietz,
     modified_dietz,
     monetary_result,
     real_return,
@@ -544,7 +546,7 @@ def resolve_preloaded_value(
         if divested is not None:
             return divested
         return ResolvedValue(
-            total.value,
+            _anchored_value_at(context=context, position=position, target=target, valuation=total),
             total.currency,
             total.valuation_date,
             total.valuation_date == target,
@@ -560,6 +562,89 @@ def resolve_preloaded_value(
         # resolved first above, so this never masks a value.
         return ResolvedValue(ZERO, context.portfolio.base_currency, target, True, "not_open")
     return None
+
+
+def _anchored_value_at(
+    *,
+    context: PerformanceContext,
+    position: PortfolioPosition,
+    target: date,
+    valuation: PositionValuation,
+) -> Decimal:
+    """A valuation carried forward by the ledger movement booked since it was taken.
+
+    A flat carry-forward is not flow-consistent: money added after the valuation does not
+    lift it, so any subperiod that receives a contribution without a fresh valuation reads
+    as a loss. Chained over a long history those false negatives compound — they took the
+    full-history portfolio TWR to -87%. Anchoring on the valuation and adding the balance
+    delta keeps value and flows in step, and mirrors what net worth already does for
+    investment assets (`_get_effective_investment_asset_amount`).
+    """
+    if (
+        position.tracking_style != PortfolioPosition.TrackingStyle.VALUE_BASED
+        or not position.ledger_account_id
+        or position.ledger_account is None
+        or position.ledger_account.currency != valuation.currency
+    ):
+        return valuation.value
+    account_id = int(position.ledger_account_id)
+    if valuation.source == PositionValuation.Source.LEGACY_LEDGER:
+        # A derived valuation *is* the balance, so read the balance and skip the anchor.
+        # The stored figure is a mid-day snapshot taken right after its revaluation, while
+        # the balance series is end-of-day: anchoring on it loses anything booked later the
+        # same day, such as an internal transfer into the position.
+        return _balance_at(context, account_id, target)
+    return valuation.value + (
+        _balance_at(context, account_id, target)
+        - _balance_at(context, account_id, valuation.valuation_date)
+    )
+
+
+def _observation_dates(
+    *,
+    context: PerformanceContext,
+    positions: list[PortfolioPosition],
+    start_date: date,
+    end_date: date,
+) -> list[date]:
+    """Dates strictly inside the period where the scope actually observed a value.
+
+    These are the only defensible subperiod boundaries for a linked return: a boundary
+    without a fresh observation just carries the previous value forward and manufactures a
+    flat subperiod, which distorts the chain instead of refining it.
+    """
+    dates: set[date] = set()
+    for position in positions:
+        for row in context.valuations[position.id]:
+            if start_date < row.valuation_date < end_date:
+                dates.add(row.valuation_date)
+        if position.tracking_style == PortfolioPosition.TrackingStyle.UNITS_BASED:
+            for price in context.prices[position.instrument_id]:
+                if start_date < price.price_date < end_date:
+                    dates.add(price.price_date)
+    return sorted(dates)
+
+
+def _value_series(
+    *,
+    context: PerformanceContext,
+    position: PortfolioPosition | None,
+    dates: list[date],
+    member_id: int | None,
+) -> list[DatedValue]:
+    series: list[DatedValue] = []
+    for target in sorted(set(dates)):
+        if position is not None:
+            base_value, _ = _position_value_base(
+                context=context, position=position, target=target, member_id=member_id
+            )
+        else:
+            base_value, _, _ = _aggregate_value(context=context, target=target, member_id=member_id)
+        # An unresolvable boundary is skipped rather than fatal: merging two subperiods
+        # keeps the chain valid, while dropping the whole return would not.
+        if base_value is not None:
+            series.append(DatedValue(target, base_value))
+    return series
 
 
 def _divested_at(
@@ -1017,6 +1102,28 @@ def _metric_block(
     twr = chained_twr(valuations=twr_values, external_flows=external) if twr_exact else None
     method = "twr" if twr is not None else "modified_dietz"
     if twr is None and value_complete:
+        # Chain the subperiods the valuations do delimit before giving up on time
+        # weighting. Requiring an observation on every flow date means a position funded
+        # weekly never gets a TWR, and the whole-period Dietz that replaced it is
+        # money-weighted: on the reference position it reported 11.07% against 21.57%.
+        linked_series = _value_series(
+            context=context,
+            position=selected_positions[0] if position_id and selected_positions else None,
+            dates=[
+                start_date,
+                *_observation_dates(
+                    context=context,
+                    positions=selected_positions,
+                    start_date=start_date,
+                    end_date=end_date,
+                ),
+                end_date,
+            ],
+            member_id=member_id,
+        )
+        twr = linked_dietz(valuations=linked_series, external_flows=external)
+        method = "linked_dietz" if twr is not None else "modified_dietz"
+    if twr is None and value_complete:
         twr = modified_dietz(
             opening_value=opening,
             closing_value=closing,
@@ -1056,8 +1163,13 @@ def _metric_block(
             "real": _quantize(real),
             "twr": _quantize(twr),
             "mwr_xirr": _quantize(mwr),
+            # MWR/XIRR is already an annual rate; TWR is cumulative, so it needs its own
+            # annualized companion before the two can sit next to each other.
+            "twr_annualized": _quantize(
+                annualized(total_return=twr, days=(end_date - start_date).days)
+            ),
             "method": method if twr is not None else "unavailable",
-            "estimated": method == "modified_dietz" and twr is not None,
+            "estimated": method in {"linked_dietz", "modified_dietz"} and twr is not None,
         },
         "coverage": {
             "value": "complete" if value_complete else "partial",

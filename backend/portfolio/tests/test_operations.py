@@ -420,6 +420,36 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(after.data["positions"]["total"], 0)
         self.assertEqual(after.data["ownership_missing"], 0)
 
+    def test_contribution_after_the_last_valuation_is_not_read_as_a_loss(self):
+        """Regression: a flat carry-forward made added money look like a loss.
+
+        The value stayed at the last valuation while the contribution counted as a flow,
+        so the subperiod read as negative. Chained over a full history those false
+        negatives took the portfolio TWR to -87%, and no test covered it.
+        """
+        funding = self.operation_payload(amount="600.00", fee="0", booking_date="2025-02-01")
+        preview = self.client.post("/api/portfolio/operations/preview/", funding, format="json")
+        funding["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", funding, format="json")
+        self.confirm_valuation(self.valuation_payload(amount="600.00", booking_date="2025-02-01"))
+
+        # Contribute again and never revalue: the only boundary left is the period end.
+        more = self.operation_payload(amount="300.00", fee="0", booking_date="2025-03-01")
+        preview = self.client.post("/api/portfolio/operations/preview/", more, format="json")
+        more["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", more, format="json")
+
+        reads = self.client.get(
+            "/api/portfolio/positions/performance/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
+        )
+
+        row = next(r for r in reads.data["results"] if r["position_id"] == self.position.id)
+        self.assertEqual(Decimal(row["native_value"]), Decimal("900"))
+        # 900 contributed and worth 900: neither gain nor loss.
+        self.assertEqual(Decimal(row["performance"]["monetary_result"]), Decimal("0"))
+        self.assertEqual(Decimal(row["performance"]["return"]["twr"]), Decimal("0"))
+
     def test_units_based_position_never_reports_units_as_value(self):
         self.position.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED
         self.position.save(update_fields=["tracking_style", "updated_at"])
