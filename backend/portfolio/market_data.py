@@ -37,9 +37,7 @@ def ensure_confirmed_crypto_mapping(*, position: PortfolioPosition) -> None:
         market="CRYPTO",
         defaults={
             "name": name,
-            # The taxonomy no longer carries a crypto class; canonical crypto instruments
-            # follow the same destination the retired class was migrated to.
-            "asset_class": Instrument.AssetClass.SAFE_HAVEN,
+            "asset_class": Instrument.AssetClass.CRYPTO,
             "instrument_type": Instrument.InstrumentType.CRYPTO,
             "quote_currency": "USD",
         },

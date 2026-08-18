@@ -6,6 +6,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction as db_transaction
 from django.db.models import Q
@@ -21,6 +22,7 @@ from .models import (
     InvestmentContainer,
     Portfolio,
     PortfolioMigrationIssue,
+    PositionClassBreakdown,
     PortfolioImportBatch,
     PortfolioPosition,
     PositionValuation,
@@ -202,7 +204,47 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
         if asset_class:
             self._reclassify(position=position, asset_class=asset_class)
             serializer = self.get_serializer(self.get_object())
+        if "class_breakdown" in request.data:
+            self._set_class_breakdown(position=position, rows=request.data["class_breakdown"])
+            serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
+
+    @staticmethod
+    def _set_class_breakdown(*, position: PortfolioPosition, rows) -> None:
+        """Reemplaza el reparto interno de la posición, o lo borra si llega vacío.
+
+        Una cartera de roboadvisor no es de una sola clase: contarla entera en la
+        dominante desplaza la composición tanto como pese. Se valida que sume 100 porque
+        un reparto parcial haría desaparecer valor del gráfico sin avisar.
+        """
+        if not isinstance(rows, list):
+            raise ValidationError({"class_breakdown": "Debe ser una lista."})
+        parsed: list[tuple[str, Decimal]] = []
+        for row in rows:
+            asset_class = str((row or {}).get("asset_class") or "").strip()
+            if asset_class not in Instrument.AssetClass.values:
+                raise ValidationError({"class_breakdown": "Clase de activo no válida."})
+            try:
+                percent = Decimal(str((row or {}).get("percent")))
+            except (InvalidOperation, TypeError):
+                raise ValidationError({"class_breakdown": "Porcentaje no válido."}) from None
+            if percent <= 0 or percent > 100:
+                raise ValidationError({"class_breakdown": "Cada porcentaje va entre 0 y 100."})
+            parsed.append((asset_class, percent))
+        if len({asset_class for asset_class, _ in parsed}) != len(parsed):
+            raise ValidationError({"class_breakdown": "No se puede repetir una clase."})
+        if parsed and sum(percent for _, percent in parsed) != Decimal("100"):
+            raise ValidationError({"class_breakdown": "El reparto debe sumar 100%."})
+        with db_transaction.atomic():
+            position.class_breakdown.all().delete()
+            PositionClassBreakdown.objects.bulk_create(
+                [
+                    PositionClassBreakdown(
+                        position=position, asset_class=asset_class, percent=percent
+                    )
+                    for asset_class, percent in parsed
+                ]
+            )
 
     @staticmethod
     def _reclassify(*, position: PortfolioPosition, asset_class: str) -> None:

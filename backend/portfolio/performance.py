@@ -433,7 +433,7 @@ def load_performance_context(
         PortfolioPosition.objects.filter(portfolio=portfolio, opened_on__lte=end_date)
         .filter(Q(closed_on__isnull=True) | Q(closed_on__gte=start_date))
         .select_related("asset", "instrument", "container", "ledger_account")
-        .prefetch_related("ownership_periods__shares__member")
+        .prefetch_related("ownership_periods__shares__member", "class_breakdown")
         .order_by("id")
     )
     cash_accounts = list(
@@ -1387,6 +1387,12 @@ def _build_positions_from_context(
                 # made the same holding read differently in the two views.
                 "instrument_name": position.asset.name,
                 "asset_class": position.effective_asset_class,
+                # Reparto interno cuando la posición no es de una sola clase (una cartera
+                # de roboadvisor, un fondo mixto). Solo lo usa la composición.
+                "class_breakdown": [
+                    {"asset_class": row.asset_class, "percent": str(row.percent)}
+                    for row in position.class_breakdown.all()
+                ],
                 "container_id": position.container_id,
                 "container_name": position.container.name,
                 "status": position.status,

@@ -258,7 +258,7 @@ class PortfolioOperationApiTests(APITestCase):
             user=self.user,
             identity_kind=Instrument.IdentityKind.CUSTOM,
             name="Plan de pensiones",
-            asset_class=Instrument.AssetClass.ALTERNATIVES,
+            asset_class=Instrument.AssetClass.PRIVATE_EQUITY,
             instrument_type=Instrument.InstrumentType.PENSION_PLAN,
             quote_currency="EUR",
         )
@@ -526,14 +526,14 @@ class PortfolioOperationApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
-            {"asset_class": Instrument.AssetClass.TRADING},
+            {"asset_class": Instrument.AssetClass.COMMODITIES},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.position.refresh_from_db()
         instrument.refresh_from_db()
-        self.assertEqual(self.position.effective_asset_class, Instrument.AssetClass.TRADING)
+        self.assertEqual(self.position.effective_asset_class, Instrument.AssetClass.COMMODITIES)
         self.assertEqual(instrument.asset_class, Instrument.AssetClass.EQUITY)
 
     def test_position_archive_and_reopen_preserve_history(self):
@@ -672,6 +672,51 @@ class PortfolioOperationApiTests(APITestCase):
         trade = PortfolioTrade.objects.get(source="csv")
         self.assertEqual(trade.operation_type, "dividend")
         self.assertEqual(trade.gross_amount, Decimal("12.75"))
+
+    def test_class_breakdown_splits_a_mixed_position_and_must_add_up(self):
+        # Una cartera de roboadvisor no es de una sola clase: contarla entera en la
+        # dominante hace desaparecer del gráfico toda su renta fija.
+        response = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {
+                "tracking_style": "value_based",
+                "history_mode": "reconstructed",
+                "class_breakdown": [
+                    {"asset_class": "equity", "percent": "60"},
+                    {"asset_class": "fixed_income", "percent": "40"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(self.position.class_breakdown.count(), 2)
+
+        partial = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {
+                "tracking_style": "value_based",
+                "history_mode": "reconstructed",
+                "class_breakdown": [{"asset_class": "equity", "percent": "60"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(partial.status_code, status.HTTP_400_BAD_REQUEST, partial.data)
+        self.assertEqual(self.position.class_breakdown.count(), 2)
+
+        cleared = self.client.post(
+            f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+            {
+                "tracking_style": "value_based",
+                "history_mode": "reconstructed",
+                "class_breakdown": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(cleared.status_code, status.HTTP_200_OK, cleared.data)
+        self.assertEqual(self.position.class_breakdown.count(), 0)
 
     def book_investment(self, **overrides):
         payload = {

@@ -96,17 +96,28 @@ class Instrument(models.Model):
         CANONICAL = "canonical", "Canónico"
 
     class AssetClass(models.TextChoices):
-        # Ordered as the user reads them: the two core classes first, then the
-        # specialisations, and "Otros" last as the catch-all.
-        FIXED_INCOME = "fixed_income", "Renta fija"
+        """De qué depende que la posición suba o baje.
+
+        Una sola dimensión: el riesgo que se asume. El rol en la cartera (refugio,
+        crecimiento), la estrategia (trading) y el propósito (liquidez para
+        oportunidades) son ejes distintos, y mezclarlos aquí sacaba a cada activo de su
+        clase real: "activos refugio" juntaba el oro con las criptomonedas, que se
+        comportan al revés. El envoltorio tampoco es la clase: un plan de pensiones es
+        fiscalidad y un ETF es un vehículo.
+
+        El orden es el que recorre la paleta del gráfico, así que clases contiguas llevan
+        tonos separados: primero las dos troncales, luego las especializaciones y "Otros"
+        al final como cajón de sastre.
+        """
+
         EQUITY = "equity", "Renta variable"
+        FIXED_INCOME = "fixed_income", "Renta fija"
         REAL_ESTATE = "real_estate", "Inmobiliario"
-        PRIVATE_EQUITY = "private_equity", "Capital privado"
-        SAFE_HAVEN = "safe_haven", "Activos refugio"
+        PRIVATE_DEBT = "private_debt", "Deuda privada"
         COMMODITIES = "commodities", "Materias primas"
-        ALTERNATIVES = "alternatives", "Inversiones alternativas"
-        TRADING = "trading", "Trading"
-        OPPORTUNITY_CASH = "opportunity_cash", "Liquidez para oportunidades"
+        PRIVATE_EQUITY = "private_equity", "Capital privado"
+        CRYPTO = "crypto", "Criptoactivos"
+        CASH = "cash", "Liquidez"
         OTHER = "other", "Otros"
 
     class InstrumentType(models.TextChoices):
@@ -443,6 +454,41 @@ class PortfolioPosition(models.Model):
                 errors["ledger_account"] = "La moneda de la cuenta debe coincidir con el activo."
         if errors:
             raise ValidationError(errors)
+
+
+class PositionClassBreakdown(models.Model):
+    """Reparto interno de una posición entre varias clases de activo.
+
+    Una cartera de roboadvisor o un fondo mixto no son de una sola clase, y meterlos
+    entera en la dominante desplaza el gráfico de composición tanto como pese la
+    posición: una cartera 60/40 que cuenta como renta variable hace desaparecer toda su
+    renta fija. Solo afecta a la composición; el resto de cálculos siguen leyendo la
+    clase efectiva, que no cambia.
+    """
+
+    position = models.ForeignKey(
+        PortfolioPosition,
+        on_delete=models.CASCADE,
+        related_name="class_breakdown",
+    )
+    asset_class = models.CharField(max_length=24, choices=Instrument.AssetClass.choices)
+    percent = models.DecimalField(max_digits=6, decimal_places=3)
+
+    class Meta:
+        ordering = ["-percent", "asset_class"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "asset_class"],
+                name="portfolio_class_breakdown_unique",
+            ),
+            models.CheckConstraint(
+                condition=Q(percent__gt=0) & Q(percent__lte=100),
+                name="portfolio_class_breakdown_percent_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.position_id}:{self.asset_class}={self.percent}"
 
 
 class PositionOwnershipPeriod(models.Model):

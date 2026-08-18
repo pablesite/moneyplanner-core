@@ -305,7 +305,7 @@ class PortfolioApiTests(APITestCase):
             user=self.user,
             identity_kind=Instrument.IdentityKind.CUSTOM,
             name="Manual",
-            asset_class=Instrument.AssetClass.ALTERNATIVES,
+            asset_class=Instrument.AssetClass.PRIVATE_EQUITY,
             instrument_type=Instrument.InstrumentType.FUND,
             quote_currency="EUR",
         )

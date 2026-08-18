@@ -562,9 +562,9 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
     from .services import position_coverage
 
     positions = list(
-        portfolio.positions.select_related("instrument", "container", "ledger_account").order_by(
-            "instrument__name"
-        )
+        portfolio.positions.select_related("instrument", "container", "ledger_account")
+        .prefetch_related("class_breakdown")
+        .order_by("instrument__name")
     )
     cash_links = list(
         ContainerCashAccount.objects.filter(container__portfolio=portfolio).select_related(
@@ -590,6 +590,10 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
                 ),
                 "setup_confirmed": row.setup_confirmed_at is not None,
                 "asset_class": row.effective_asset_class,
+                "class_breakdown": [
+                    {"asset_class": item.asset_class, "percent": str(item.percent)}
+                    for item in row.class_breakdown.all()
+                ],
                 **position_coverage(row),
             }
             for row in positions

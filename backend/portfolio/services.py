@@ -56,9 +56,10 @@ INSTRUMENT_TYPE_BY_SUBCATEGORY = {
 ASSET_CLASS_BY_SUBCATEGORY = {
     Asset.Subcategory.DEPOSITS: Instrument.AssetClass.FIXED_INCOME,
     Asset.Subcategory.STOCKS: Instrument.AssetClass.EQUITY,
-    Asset.Subcategory.CRYPTOCURRENCIES: Instrument.AssetClass.SAFE_HAVEN,
+    Asset.Subcategory.CRYPTOCURRENCIES: Instrument.AssetClass.CRYPTO,
     Asset.Subcategory.REAL_ESTATE_CROWD: Instrument.AssetClass.REAL_ESTATE,
-    Asset.Subcategory.CROWDLENDING: Instrument.AssetClass.FIXED_INCOME,
+    # El crowdlending es crédito con riesgo de impago, no renta fija cotizada.
+    Asset.Subcategory.CROWDLENDING: Instrument.AssetClass.PRIVATE_DEBT,
 }
 
 
