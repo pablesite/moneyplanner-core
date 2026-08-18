@@ -1220,9 +1220,14 @@ def _metric_block(
 
 
 def build_portfolio_performance(
-    *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
 ) -> dict[str, Any]:
-    context = load_performance_context(
+    context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
     result = _metric_block(
@@ -1363,9 +1368,14 @@ def _build_positions_from_context(
 
 
 def build_portfolio_positions(
-    *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
 ) -> list[dict[str, Any]]:
-    context = load_performance_context(
+    context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
     return _build_positions_from_context(
@@ -1428,9 +1438,14 @@ def build_portfolio_timeline(
 
 
 def build_portfolio_quality(
-    *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
 ) -> dict[str, Any]:
-    context = load_performance_context(
+    context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
     metrics = _metric_block(
@@ -1500,9 +1515,14 @@ def build_portfolio_quality(
 
 
 def build_portfolio_overview(
-    *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
 ) -> dict[str, Any]:
-    context = load_performance_context(
+    context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
     performance = _metric_block(

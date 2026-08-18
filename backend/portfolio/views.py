@@ -43,6 +43,7 @@ from .performance import (
     build_portfolio_quality,
     build_portfolio_timeline,
     default_performance_period,
+    load_performance_context,
     timeline_dates,
 )
 from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
@@ -410,6 +411,49 @@ class PortfolioQualityView(APIView):
                 end_date=end_date,
                 member_id=member_id,
             )
+        )
+
+
+class PortfolioWorkspaceView(APIView):
+    """Everything `/cartera` needs for one period, off a single context load.
+
+    The five read endpoints each rebuilt the whole context — 0.6s of queries apiece on a
+    real portfolio — so changing a filter paid for it five times over. Loading it once
+    here cuts that to two: the timeline needs its own, because its contributed series
+    runs from inception while the rest is scoped to the selected window.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, member_id = _performance_request(request)
+        context = load_performance_context(
+            portfolio=portfolio, start_date=start_date, end_date=end_date
+        )
+        shared = {
+            "portfolio": portfolio,
+            "start_date": start_date,
+            "end_date": end_date,
+            "member_id": member_id,
+        }
+        period = {"from": start_date.isoformat(), "to": end_date.isoformat()}
+        return Response(
+            {
+                "overview": build_portfolio_overview(**shared, context=context),
+                "performance": build_portfolio_performance(**shared, context=context),
+                "positions": {
+                    "period": period,
+                    "member_id": member_id,
+                    "results": build_portfolio_positions(**shared, context=context),
+                },
+                "timeline": {
+                    "period": period,
+                    "member_id": member_id,
+                    "currency": portfolio.base_currency,
+                    "results": build_portfolio_timeline(**shared),
+                },
+                "quality": build_portfolio_quality(**shared, context=context),
+            }
         )
 
 
