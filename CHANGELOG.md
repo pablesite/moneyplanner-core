@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.42.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.41.0...moneyplanner-core-v0.42.0) (2026-08-17)
+
+
+### Features
+
+* **portfolio:** carrying value and manual resync from accounting ([e7e012a](https://github.com/pablesite/moneyplanner-core/commit/e7e012ab779895db37fc0cdf20f459895fded7e5))
+* **portfolio:** let a position reassign its container and asset class ([c1891c5](https://github.com/pablesite/moneyplanner-core/commit/c1891c526866e0c0eb2165eded5abd7c4b1e60a8))
+
+
+### Bug Fixes
+
+* **portfolio:** count pre-opening dates as zero, not unknown ([f56677f](https://github.com/pablesite/moneyplanner-core/commit/f56677fbb7157d35eff53b4ac5c8e7b41c31c554))
+* **portfolio:** follow accounting revaluations live ([8d6207e](https://github.com/pablesite/moneyplanner-core/commit/8d6207e634f3cf7b3b16c5c3e6d48e22dcdc38b3))
+* **portfolio:** make the contributed series cumulative since inception ([d15e63c](https://github.com/pablesite/moneyplanner-core/commit/d15e63ccb3cf328031aa24db3e5ebe8d9f537b91))
+* **portfolio:** make the time-weighted return actually time-weighted ([d85e4ad](https://github.com/pablesite/moneyplanner-core/commit/d85e4ad7f983306f7790b94b64e10f39aa95a0e7))
+* **portfolio:** post manual valuations to accounting ([e058c53](https://github.com/pablesite/moneyplanner-core/commit/e058c53e36b28d7c9c3bd306921ae8cc14676ccc))
+* **portfolio:** read divested positions as zero ([042063f](https://github.com/pablesite/moneyplanner-core/commit/042063f9aa67526d8d6148e83b4a826c83c145b7))
+* **portfolio:** report carrying values as at_cost instead of ageing them ([dd350ed](https://github.com/pablesite/moneyplanner-core/commit/dd350eddfcb69a285c92707f5d15051c6b2cc8d4))
+
 ## [0.41.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.40.1...moneyplanner-core-v0.41.0) (2026-08-17)
 
 
