@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import get_account_balance
+from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset
 from portfolio.models import (
     ContainerCashAccount,
@@ -524,6 +525,37 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         instrument.refresh_from_db()
         self.assertEqual(instrument.asset_class, Instrument.AssetClass.EQUITY)
+
+    def test_ownership_assigned_after_bootstrap_reaches_the_position(self):
+        """Regression: a titularidad set in Patrimonio never arrived at Cartera.
+
+        Ownership periods were only created during bootstrap, so a link created later left
+        the position flagged "sin titularidad" for good, with no way to fix it from the UI.
+        """
+        member = FamilyMember.objects.create(
+            user=self.user, name="Titular", role=FamilyMember.Role.ADULT
+        )
+        ownership = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=member
+        )
+        self.assertEqual(self.position.ownership_periods.count(), 0)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            OwnershipLink.objects.create(
+                user=self.user,
+                target_type=OwnershipLink.TargetType.ASSET,
+                target_id=self.position.asset_id,
+                ownership=ownership,
+            )
+
+        period = self.position.ownership_periods.get()
+        self.assertEqual(period.start_date, self.position.opened_on)
+        self.assertEqual(
+            [(s.member_id, s.percent) for s in period.shares.all()],
+            [(member.id, Decimal("100"))],
+        )
+        quality = self.client.get("/api/portfolio/quality/")
+        self.assertEqual(quality.data["ownership_missing"], 0)
 
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")

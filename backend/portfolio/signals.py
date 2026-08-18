@@ -8,10 +8,11 @@ position stays frozen at its last known value until someone re-runs the bootstra
 from __future__ import annotations
 
 from django.db import transaction as db_transaction
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
 
 from accounting.models import LedgerEntry, LedgerTransaction
+from memberships.models import OwnershipLink
 
 
 def _positions_for_transaction(transaction_id: int) -> list[int]:
@@ -45,6 +46,32 @@ def _resync(position_ids: list[int]) -> None:
 def _schedule_resync(position_ids: list[int]) -> None:
     if position_ids:
         db_transaction.on_commit(lambda: _resync(position_ids))
+
+
+def _sync_ownership(user_id: int, asset_id: int) -> None:
+    from django.contrib.auth import get_user_model
+
+    from .services import sync_position_ownership_for_asset
+
+    user = get_user_model().objects.filter(id=user_id).first()
+    if user is not None:
+        sync_position_ownership_for_asset(user=user, asset_id=asset_id)
+
+
+@receiver(post_save, sender=OwnershipLink, dispatch_uid="portfolio_ownership_link_saved")
+@receiver(post_delete, sender=OwnershipLink, dispatch_uid="portfolio_ownership_link_deleted")
+def ownership_link_changed(sender, instance: OwnershipLink, **kwargs) -> None:
+    """Carry a titularidad assigned in Patrimonio into the position that holds the asset.
+
+    Ownership periods were created only by the bootstrap, so anything assigned later never
+    arrived and the position sat in the review banner for good. Deletions run through the
+    same path on purpose: the period stays, since ownership history is not rewritten, but
+    the migration issue is reopened.
+    """
+    if instance.target_type != OwnershipLink.TargetType.ASSET:
+        return
+    user_id, asset_id = instance.user_id, instance.target_id
+    db_transaction.on_commit(lambda: _sync_ownership(user_id, asset_id))
 
 
 @receiver(post_save, sender=LedgerTransaction, dispatch_uid="portfolio_revaluation_saved")

@@ -231,6 +231,26 @@ def _bootstrap_ownership(*, portfolio: Portfolio, position: PortfolioPosition) -
             )
 
 
+def sync_position_ownership_for_asset(*, user, asset_id: int) -> bool:
+    """Give the position of this asset the ownership period its link implies.
+
+    Ownership periods were only ever created during bootstrap, so a titularidad assigned
+    in Patrimonio afterwards never reached Cartera: the position stayed in the review
+    banner as "sin titularidad" with nothing the user could do about it from the UI.
+    Reuses the bootstrap routine, which is idempotent and also opens or closes the
+    migration issue, so an unlinked asset is reported again rather than left stale.
+    """
+    position = (
+        PortfolioPosition.objects.filter(portfolio__user=user, asset_id=asset_id)
+        .select_related("portfolio", "asset")
+        .first()
+    )
+    if position is None:
+        return False
+    _bootstrap_ownership(portfolio=position.portfolio, position=position)
+    return True
+
+
 @transaction.atomic
 def bootstrap_portfolio_for_user(*, user) -> BootstrapResult:
     portfolio, _ = Portfolio.objects.get_or_create(
