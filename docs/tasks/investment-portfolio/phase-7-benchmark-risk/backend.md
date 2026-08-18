@@ -16,6 +16,17 @@ Benchmark y riesgo requieren series comparables, convenciones estables y cobertu
 4. Resolver tasa libre de riesgo y frecuencia en un servicio configurable y documentado.
 5. Emitir `insufficient` en vez de cifras con cobertura/precios inadecuados.
 6. Definir interfaces futuras para beta, correlacion, VaR y contribucion al riesgo sin implementarlas.
+7. Registro de decisiones: que recomendo el sistema, que hizo el usuario y que paso despues.
+   Es la unica forma honesta de saber si el sistema ayuda, y es mucho mas barata que
+   simular la alternativa.
+
+## Nota sobre la comparacion contra DCA y buy & hold
+Es el entregable mas debil de todo el modulo y conviene decirlo antes de construirlo. Con
+una cartera de pocas apuestas reales y pocos anos de historia, la diferencia medida contra
+DCA puro o buy & hold esta dominada por el ruido: se mediria suerte, no sistema. Y la parte
+iliquida no tiene serie de precios, asi que para ella no es ni calculable. El patron
+correcto es el que ya fija el punto 5 de este scope —emitir `insufficient` en vez de una
+cifra sin cobertura— y apoyarse en el registro de decisiones para juzgar el sistema.
 
 ## Plan
 1. Definir calendario, frecuencia, tasa libre de riesgo y reglas de cobertura.

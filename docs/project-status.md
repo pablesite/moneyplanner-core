@@ -24,9 +24,10 @@ Pick based on capacity: execute **(Agent)** tasks when delegation bandwidth exis
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| Investment portfolio - Phase 6 | Agent | Add versioned allocation and contribution-only rebalancing baskets. Requires Phase 5. | `tasks/investment-portfolio/phase-6-allocation-rebalancing/backend.md` |
-| Investment portfolio - Phase 7 | Agent | Add strategic benchmark and progressive risk engine. Requires Phase 6. | `tasks/investment-portfolio/phase-7-benchmark-risk/backend.md` + `qa.md` |
+| Investment portfolio - Phase 6 | Agent | Add versioned allocation, tolerance bands, a tactical-cash policy line, a per-position transferable-without-tax flag and contribution-only rebalancing baskets. **This is the phase that turns tracking into a decision system**; the rest measure and integrate it. Requires Phase 5. | `tasks/investment-portfolio/phase-6-allocation-rebalancing/backend.md` |
+| Investment portfolio - Phase 7 | Agent | Add strategic benchmark, progressive risk engine and a decision log. Measures whether the system helps; the comparison against DCA/buy & hold is noise-dominated on a short history and says so. Requires Phase 6. | `tasks/investment-portfolio/phase-7-benchmark-risk/backend.md` + `qa.md` |
 | Investment portfolio - Phase 8 | Agent | Add alerts, Mi Plan integration and functional closeout. Requires Phase 7. | `tasks/investment-portfolio/phase-8-product-integration/backend.md` |
+| Investment portfolio - Phase 9 | Agent | Look-through: holdings per position, exposure by geography/sector/vehicle, concentration and overlap. Does **not** block Phase 6: class weights do not change when every aggregate is single-class, which is the case on real data. | `tasks/investment-portfolio/phase-9-look-through/backend.md` |
 
 > Module overview, binding design decisions, and validated spec: `tasks/financial-plan/README.md` + `tasks/financial-plan/spec.md`. Frontend phases (2, 3, 4, 5, 8, 9) live in the SaaS repo root (`docs/tasks/financial-plan/`).
 

@@ -58,6 +58,12 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 3. Desktop usa tablas; movil usa listas compactas y sheets sin scroll horizontal a 360 px.
 4. Alertas iniciales viven dentro de Cartera y cubren calidad, concentracion, desviacion, exceso de efectivo y cestas pendientes.
 5. Fuera de alcance: trading, recomendaciones de productos, ventas de rebalanceo, fiscalidad/FIFO, conectores de broker y riesgo avanzado.
+6. Matiz sobre fiscalidad: el motor fiscal sigue fuera, pero desde la fase 6 cada posicion
+   declara si admite traspaso sin peaje. Sin ese dato una recomendacion de reduccion puede
+   costar dinero, porque los traspasos entre fondos y planes son neutros y el resto no.
+7. Matiz sobre ventas: se mantienen fuera mientras dirigir la aportacion baste para
+   sostener las bandas. Cuando entren, seran disparadas por banda y conscientes del peaje,
+   nunca por calendario.
 
 ## Modelo conceptual objetivo
 
