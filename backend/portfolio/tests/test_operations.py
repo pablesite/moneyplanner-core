@@ -9,7 +9,6 @@ from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import get_account_balance
-from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset
 from portfolio.models import (
     ContainerCashAccount,

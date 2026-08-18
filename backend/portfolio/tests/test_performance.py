@@ -551,6 +551,28 @@ class PortfolioPerformanceApiTests(APITestCase):
             Decimal(usd_row["attribution"]["total"]),
         )
 
+    def test_holding_currency_is_the_denomination_not_the_valuation_currency(self):
+        # Bitcoin se tiene en BTC y se valora en euros: filtrar por divisa necesita saber
+        # en qué está denominada la posición, no en qué se expresa su valor. Con
+        # `native_currency` el selector de la cartera nunca llegaba a ofrecer BTC.
+        crypto = self.create_position("Bitcoin", Decimal("1000"), Decimal("1200"))
+        crypto.ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+        )
+        crypto.save(update_fields=["ledger_account"])
+
+        response = self.client.get(
+            "/api/portfolio/positions/performance/?date_from=2024-01-01&date_to=2024-12-31"
+        )
+        row = next(row for row in response.data["results"] if row["position_id"] == crypto.id)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(row["holding_currency"], "BTC")
+        self.assertEqual(row["native_currency"], "EUR")
+
     def test_quality_keeps_stale_values_and_partial_unit_detail_explicit(self):
         missing = self.create_position("Crypto sin precio", Decimal("1"), Decimal("1"))
         missing.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED

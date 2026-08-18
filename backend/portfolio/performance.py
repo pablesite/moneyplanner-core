@@ -1375,6 +1375,14 @@ def _build_positions_from_context(
                     else None
                 ),
                 "native_currency": native.currency if native else None,
+                # What the holding is denominated in, which for crypto is the coin
+                # itself. The valuation currency above is what it is *worth in*, so
+                # filtering by "BTC" needs this one, not that one.
+                "holding_currency": (
+                    position.ledger_account.currency
+                    if position.ledger_account_id and position.ledger_account
+                    else position.asset.currency
+                ),
                 "observed_on": native.observed_on.isoformat() if native else None,
                 "value_status": _value_status(position=position, native=native, target=end_date),
                 "performance": metrics,
