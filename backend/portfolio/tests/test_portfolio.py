@@ -227,13 +227,23 @@ class PortfolioBootstrapTests(TestCase):
         self.assertEqual(row["position_detail_coverage"]["status"], "complete")
         self.assertEqual(row["position_detail_coverage"]["start_date"], "2021-02-01")
 
-    def test_historical_ownership_rows_are_immutable(self):
+    def test_historical_ownership_rows_only_admit_closing_the_stretch(self):
+        # Cerrar un tramo abierto no es reescribir la historia sino terminar de
+        # registrarla, y es lo que ocurre cuando algo deja de ser compartido. Cambiar el
+        # resto sigue prohibido, porque de la titularidad pasada dependen las cifras.
         asset = self.create_asset(name="Fondo")
         bootstrap_portfolio_for_user(user=self.user)
         period = PositionOwnershipPeriod.objects.get(position__asset=asset)
         share = PositionOwnershipShare.objects.get(period=period)
 
         period.end_date = date(2024, 1, 1)
+        period.full_clean()
+        period.save(update_fields=["end_date"])
+
+        period.refresh_from_db()
+        self.assertEqual(period.end_date, date(2024, 1, 1))
+
+        period.start_date = date(2019, 6, 1)
         with self.assertRaises(ValidationError):
             period.full_clean()
         with self.assertRaises(ValidationError):

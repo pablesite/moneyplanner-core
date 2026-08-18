@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import cast
 
@@ -447,5 +447,28 @@ def validate_ownership_period(
     )
     if end_date is not None:
         periods = periods.filter(start_date__lte=end_date)
+    # Un periodo abierto que empezó antes no es un solapamiento sino el tramo anterior:
+    # al registrar el cambio de titularidad se cierra la víspera. Sin esto no había forma
+    # de contar "esto fue compartido hasta tal día y desde entonces es individual", que es
+    # el caso normal, porque la titularidad no se puede editar una vez escrita.
+    periods = periods.exclude(end_date__isnull=True, start_date__lt=start_date)
     if periods.exists():
         raise ValueError("Ya existe un periodo de titularidad que cubre esa fecha.")
+
+
+def close_open_ownership_period_before(
+    *, position: PortfolioPosition, start_date: date
+) -> PositionOwnershipPeriod | None:
+    """Cierra el tramo abierto anterior la víspera del nuevo, y lo devuelve."""
+    previous = (
+        PositionOwnershipPeriod.objects.filter(
+            position=position, end_date__isnull=True, start_date__lt=start_date
+        )
+        .order_by("-start_date")
+        .first()
+    )
+    if previous is None:
+        return None
+    previous.end_date = start_date - timedelta(days=1)
+    previous.save(update_fields=["end_date"])
+    return previous

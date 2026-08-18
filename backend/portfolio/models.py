@@ -473,20 +473,49 @@ class PositionOwnershipPeriod(models.Model):
             ),
         ]
 
+    def _only_closure_changed(self) -> bool:
+        """El único cambio admitido: abrir o cerrar el final del tramo.
+
+        La titularidad pasada no se reescribe, porque de ella dependen las cifras ya
+        calculadas. Pero poner fin a un tramo abierto no es reescribirlo: es terminar de
+        registrarlo, y es lo que ocurre cuando algo deja de ser compartido. Lo inverso
+        —reabrirlo— es lo que hace falta para deshacer el tramo siguiente.
+        """
+        stored = (
+            type(self)
+            .objects.filter(pk=self.pk)
+            .values("position_id", "ownership_id", "start_date")
+            .first()
+        )
+        return stored is not None and (
+            stored["position_id"] == self.position_id
+            and stored["ownership_id"] == self.ownership_id
+            and stored["start_date"] == self.start_date
+        )
+
     def clean(self) -> None:
         if self.position_id and self.ownership_id:
             if self.position.portfolio.user_id != self.ownership.user_id:
                 raise ValidationError("La titularidad pertenece a otro usuario.")
-        if self.pk:
+        if self.pk and not self._only_closure_changed():
             raise ValidationError("Los periodos de titularidad son inmutables.")
 
     def save(self, *args, **kwargs):
-        if self.pk:
+        if self.pk and not self._only_closure_changed():
             raise ValidationError("Los periodos de titularidad son inmutables.")
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        raise ValidationError("Los periodos de titularidad son inmutables.")
+        # Solo el último tramo se puede deshacer: corregir una fecha mal puesta exige
+        # borrar y volver a escribir, pero borrar uno intermedio dejaría un hueco sin
+        # titularidad en medio de la historia.
+        if (
+            type(self)
+            .objects.filter(position_id=self.position_id, start_date__gt=self.start_date)
+            .exists()
+        ):
+            raise ValidationError("Solo se puede deshacer el último tramo de titularidad.")
+        return super().delete(*args, **kwargs)
 
 
 class PositionOwnershipShare(models.Model):

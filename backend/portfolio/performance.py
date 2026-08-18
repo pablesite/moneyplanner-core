@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -71,6 +71,11 @@ class PerformanceContext:
     cash_accounts: list[ContainerCashAccount]
     valuations: dict[int, list[PositionValuation]]
     prices: dict[int, list[InstrumentPrice]]
+    # Claves paralelas a las dos listas de arriba, ya ordenadas, para resolver "la última
+    # antes de esta fecha" por búsqueda binaria. Escanear la lista entera costaba la mitad
+    # del tiempo de la petición: se llama decenas de miles de veces por carga.
+    valuation_dates: dict[int, list[date]]
+    price_dates: dict[int, list[date]]
     balance_dates: dict[int, list[date]]
     balance_values: dict[int, list[Decimal]]
     flows: list[FlowRecord]
@@ -142,19 +147,22 @@ def _load_balances(
     return dates, values
 
 
-def _transaction_position_entry(transaction, account_id: int):
-    return next(
-        (entry for entry in transaction.entries.all() if entry.account_id == account_id), None
-    )
+def _first_entry_by_account(entries: list) -> dict[int, Any]:
+    """Primera anotación de cada cuenta del asiento.
+
+    Antes se recorrían todas las anotaciones una vez por posición de la cartera, así que
+    el coste crecía con el producto de ambas. Recorriéndolas una sola vez el emparejamiento
+    sale de un diccionario.
+    """
+    by_account: dict[int, Any] = {}
+    for entry in entries:
+        by_account.setdefault(entry.account_id, entry)
+    return by_account
 
 
-def _counterpart_entry(transaction, account_id: int, side: str):
+def _counterpart_entry(entries: list, account_id: int, side: str):
     return next(
-        (
-            entry
-            for entry in transaction.entries.all()
-            if entry.account_id != account_id and entry.side == side
-        ),
+        (entry for entry in entries if entry.account_id != account_id and entry.side == side),
         None,
     )
 
@@ -184,9 +192,12 @@ def _load_ledger_flows(
     )
     rows: list[FlowRecord] = []
     covered_dates: set[tuple[int, date]] = set()
+    portfolio_account_ids = set(account_to_position) | cash_account_ids
     for transaction in transactions:
+        entries = list(transaction.entries.all())
+        by_account = _first_entry_by_account(entries)
         for account_id, position in account_to_position.items():
-            position_entry = _transaction_position_entry(transaction, account_id)
+            position_entry = by_account.get(account_id)
             if position_entry is None:
                 continue
             if transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.INVESTMENT:
@@ -222,7 +233,7 @@ def _load_ledger_flows(
                     )
                 )
                 counterpart = _counterpart_entry(
-                    transaction,
+                    entries,
                     account_id,
                     cast(
                         str,
@@ -239,9 +250,7 @@ def _load_ledger_flows(
                     not is_inflow
                     and counterpart.account.account_type == LedgerAccount.AccountType.EXPENSE
                 )
-                is_inside_portfolio = counterpart.account_id in (
-                    set(account_to_position) | cash_account_ids
-                )
+                is_inside_portfolio = counterpart.account_id in portfolio_account_ids
                 rows.append(
                     FlowRecord(
                         position.id,
@@ -267,7 +276,7 @@ def _load_ledger_flows(
                 expense = next(
                     (
                         entry
-                        for entry in transaction.entries.all()
+                        for entry in entries
                         if entry.flow_family == LedgerEntry.FlowFamily.EXPENSE
                     ),
                     None,
@@ -290,7 +299,7 @@ def _load_ledger_flows(
                 income = next(
                     (
                         entry
-                        for entry in transaction.entries.all()
+                        for entry in entries
                         if entry.flow_family == LedgerEntry.FlowFamily.INCOME
                     ),
                     None,
@@ -312,16 +321,12 @@ def _load_ledger_flows(
         if transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.INVESTMENT:
             continue
         for cash_account_id in cash_account_ids:
-            cash_entry = _transaction_position_entry(transaction, cash_account_id)
+            cash_entry = by_account.get(cash_account_id)
             if cash_entry is None:
                 continue
             if transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.TRANSFER:
                 counterpart = next(
-                    (
-                        entry
-                        for entry in transaction.entries.all()
-                        if entry.account_id != cash_account_id
-                    ),
+                    (entry for entry in entries if entry.account_id != cash_account_id),
                     None,
                 )
                 if counterpart is None or counterpart.account_id in cash_account_ids:
@@ -487,6 +492,10 @@ def load_performance_context(
         cash_accounts=cash_accounts,
         valuations=valuation_rows,
         prices=price_rows,
+        valuation_dates={
+            pk: [row.valuation_date for row in rows] for pk, rows in valuation_rows.items()
+        },
+        price_dates={pk: [row.price_date for row in rows] for pk, rows in price_rows.items()},
         balance_dates=balance_dates,
         balance_values=balance_values,
         flows=flows,
@@ -496,9 +505,9 @@ def load_performance_context(
     )
 
 
-def _latest_before(rows, target: date, date_attr: str):
-    candidates = [row for row in rows if getattr(row, date_attr) <= target]
-    return candidates[-1] if candidates else None
+def _latest_before(rows: list, keys: list[date], target: date):
+    index = bisect_right(keys, target) - 1
+    return rows[index] if index >= 0 else None
 
 
 def _balance_at(context: PerformanceContext, account_id: int, target: date) -> Decimal:
@@ -510,18 +519,24 @@ def _balance_at(context: PerformanceContext, account_id: int, target: date) -> D
 def resolve_preloaded_value(
     *, context: PerformanceContext, position: PortfolioPosition, target: date
 ) -> ResolvedValue | None:
-    eligible_totals = [
-        row for row in context.valuations[position.id] if row.valuation_date <= target
-    ]
+    rows = context.valuations[position.id]
+    keys = context.valuation_dates[position.id]
+    end = bisect_right(keys, target)
     total = None
-    if eligible_totals:
-        latest_date = eligible_totals[-1].valuation_date
-        same_day = [row for row in eligible_totals if row.valuation_date == latest_date]
+    if end:
+        # Varias valoraciones del mismo día conviven (manual y derivada): manda la manual,
+        # así que solo hace falta mirar la cola de esa fecha, no toda la historia.
+        latest_date = keys[end - 1]
+        same_day = rows[bisect_left(keys, latest_date, 0, end) : end]
         total = next(
             (row for row in reversed(same_day) if row.source == PositionValuation.Source.MANUAL),
             same_day[-1],
         )
-    price = _latest_before(context.prices[position.instrument_id], target, "price_date")
+    price = _latest_before(
+        context.prices[position.instrument_id],
+        context.price_dates[position.instrument_id],
+        target,
+    )
     if (
         position.tracking_style == PortfolioPosition.TrackingStyle.UNITS_BASED
         and position.ledger_account_id
@@ -857,13 +872,22 @@ def _cash_value_base(
 
 
 def _aggregate_value(
-    *, context: PerformanceContext, target: date, member_id: int | None
+    *,
+    context: PerformanceContext,
+    target: date,
+    member_id: int | None,
+    scope_ids: set[int] | None = None,
 ) -> tuple[Decimal | None, bool, bool]:
     total = ZERO
     complete = True
     exact = True
     included = 0
-    for position in context.positions:
+    selected = (
+        [position for position in context.positions if position.id in scope_ids]
+        if scope_ids is not None
+        else context.positions
+    )
+    for position in selected:
         factor = _ownership_factor(
             context=context,
             position_id=position.id,
@@ -884,8 +908,12 @@ def _aggregate_value(
             continue
         total += value
         exact = exact and native.exact
-    cash_value, cash_complete = _cash_value_base(
-        context=context, target=target, member_id=member_id
+    # El efectivo del contenedor no es de ninguna clase ni de ninguna posición concreta,
+    # así que solo cuenta cuando se mira la cartera entera.
+    cash_value, cash_complete = (
+        _cash_value_base(context=context, target=target, member_id=member_id)
+        if scope_ids is None
+        else (ZERO, True)
     )
     complete = complete and cash_complete
     if cash_value is not None:
@@ -1244,6 +1272,7 @@ def build_portfolio_performance(
     end_date: date,
     member_id: int | None = None,
     context: PerformanceContext | None = None,
+    scope_ids: set[int] | None = None,
 ) -> dict[str, Any]:
     context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
@@ -1253,6 +1282,7 @@ def build_portfolio_performance(
         start_date=start_date,
         end_date=end_date,
         member_id=member_id,
+        scope_ids=scope_ids,
     )
     result["member_id"] = member_id
     result["fx_issues"] = sorted(context.fx_issues)
@@ -1397,33 +1427,6 @@ def _build_positions_from_context(
     return rows
 
 
-def build_scoped_performance(
-    *,
-    portfolio: Portfolio,
-    start_date: date,
-    end_date: date,
-    member_id: int | None = None,
-    scope_ids: set[int],
-    context: PerformanceContext | None = None,
-) -> dict[str, Any]:
-    """Metrics for a subset of positions, such as an inventory filter by class.
-
-    A return is not additive, so the value of a filtered class cannot be derived from the
-    per-position figures the table already shows: it has to be computed over the subset,
-    with flows read as external to that subset so a transfer inside it nets out.
-    """
-    context = context or load_performance_context(
-        portfolio=portfolio, start_date=start_date, end_date=end_date
-    )
-    return _metric_block(
-        context=context,
-        start_date=start_date,
-        end_date=end_date,
-        member_id=member_id,
-        scope_ids=scope_ids,
-    )
-
-
 def build_portfolio_positions(
     *,
     portfolio: Portfolio,
@@ -1443,21 +1446,45 @@ def build_portfolio_positions(
     )
 
 
+def timeline_context_start(*, portfolio: Portfolio, start_date: date) -> date:
+    """Desde dónde tiene que cargarse el contexto para que el timeline sea correcto.
+
+    Todos los consumidores de `context.flows` acotan por ventana en el punto de uso, así
+    que un contexto más ancho es seguro y permite que el workspace cargue uno solo en vez
+    de dos: era el mayor coste fijo de cada cambio de filtro.
+    """
+    inception, _ = default_performance_period(portfolio)
+    return min(inception, start_date)
+
+
 def build_portfolio_timeline(
-    *, portfolio: Portfolio, start_date: date, end_date: date, member_id: int | None = None
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
+    scope_ids: set[int] | None = None,
 ) -> list[dict[str, Any]]:
     dates = timeline_dates(start_date, end_date)
     # The chart puts capital contributed next to value, so the contributed series has to
     # run from inception: over a one-year window it otherwise restarts at zero and the
     # comparison is meaningless, since the value line carries every year of history.
-    inception, _ = default_performance_period(portfolio)
-    context = load_performance_context(
-        portfolio=portfolio, start_date=min(inception, start_date), end_date=end_date
+    context = context or load_performance_context(
+        portfolio=portfolio,
+        start_date=timeline_context_start(portfolio=portfolio, start_date=start_date),
+        end_date=end_date,
     )
     rows = []
-    external = [flow for flow in context.flows if flow.external]
+    # Con un filtro de inventario activo la serie describe ese subconjunto, así que los
+    # flujos del efectivo del contenedor —que no es de ninguna clase— quedan fuera.
+    external = [
+        flow
+        for flow in context.flows
+        if flow.external and (scope_ids is None or flow.position_id in scope_ids)
+    ]
     opening_value, opening_complete, _ = _aggregate_value(
-        context=context, target=start_date, member_id=member_id
+        context=context, target=start_date, member_id=member_id, scope_ids=scope_ids
     )
     contributed_before = sum(
         (
@@ -1468,7 +1495,9 @@ def build_portfolio_timeline(
         ZERO,
     )
     for target in dates:
-        value, complete, _ = _aggregate_value(context=context, target=target, member_id=member_id)
+        value, complete, _ = _aggregate_value(
+            context=context, target=target, member_id=member_id, scope_ids=scope_ids
+        )
         cumulative = sum(
             (
                 _flow_base(context=context, flow=flow, member_id=member_id) or ZERO
@@ -1501,15 +1530,20 @@ def build_portfolio_quality(
     end_date: date,
     member_id: int | None = None,
     context: PerformanceContext | None = None,
+    scope_ids: set[int] | None = None,
+    performance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
-    metrics = _metric_block(
+    # De todo el bloque de métricas aquí solo se leen el periodo y la cobertura, así que
+    # recalcularlo entero para eso costaba tanto como el hero.
+    metrics = performance or _metric_block(
         context=context,
         start_date=start_date,
         end_date=end_date,
         member_id=member_id,
+        scope_ids=scope_ids,
     )
     cash_ownership_missing = member_id is not None and any(
         _balance_at(context, link.ledger_account_id, end_date) != 0
@@ -1518,6 +1552,8 @@ def build_portfolio_quality(
     )
     fresh = stale = missing = at_cost = ownership_missing = scoped_total = 0
     for position in context.positions:
+        if scope_ids is not None and position.id not in scope_ids:
+            continue
         if position.status == PortfolioPosition.Status.ARCHIVED:
             # An archived position is out of the portfolio: its freshness and its missing
             # ownership are not work the user can act on, and counting them turned the
@@ -1578,22 +1614,33 @@ def build_portfolio_overview(
     end_date: date,
     member_id: int | None = None,
     context: PerformanceContext | None = None,
+    scope_ids: set[int] | None = None,
+    performance: dict[str, Any] | None = None,
+    position_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
     )
-    performance = _metric_block(
+    # El hero es una proyección de las mismas dos cosas que ya calcula el workspace, así
+    # que se aceptan hechas: recalcularlas costaba tanto como todo lo demás junto.
+    performance = performance or _metric_block(
         context=context,
         start_date=start_date,
         end_date=end_date,
         member_id=member_id,
+        scope_ids=scope_ids,
     )
-    positions = _build_positions_from_context(
-        context=context,
-        start_date=start_date,
-        end_date=end_date,
-        member_id=member_id,
+    rows = (
+        position_rows
+        if position_rows is not None
+        else _build_positions_from_context(
+            context=context,
+            start_date=start_date,
+            end_date=end_date,
+            member_id=member_id,
+        )
     )
+    positions = [row for row in rows if scope_ids is None or row["position_id"] in scope_ids]
     return {
         "period": performance["period"],
         "member_id": member_id,

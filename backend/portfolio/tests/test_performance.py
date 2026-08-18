@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework import status
@@ -278,6 +279,118 @@ class PortfolioPerformanceApiTests(APITestCase):
             percent=Decimal("100"),
         )
         return position
+
+    def ownership_period_payload(self, position, start_date):
+        return {
+            "position_id": position.id,
+            "ownership_id": self.ownership.id,
+            "start_date": start_date,
+            "shares": [{"member_id": self.member.id, "percent": "100"}],
+        }
+
+    def test_registering_a_change_of_ownership_closes_the_previous_stretch(self):
+        # El caso real: un activo que se llevó compartido y en algún momento dejó de
+        # serlo. Los tramos son inmutables, así que sin cerrar el anterior no había forma
+        # de contarlo: el solapamiento lo rechazaba.
+        response = self.client.post(
+            "/api/portfolio/ownership-periods/",
+            self.ownership_period_payload(self.position, "2024-07-01"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        periods = list(
+            PositionOwnershipPeriod.objects.filter(position=self.position).order_by("start_date")
+        )
+        self.assertEqual(len(periods), 2)
+        self.assertEqual(periods[0].end_date, date(2024, 6, 30))
+        self.assertIsNone(periods[1].end_date)
+
+    def test_undoing_a_stretch_hands_the_position_back_to_the_previous_one(self):
+        created = self.client.post(
+            "/api/portfolio/ownership-periods/",
+            self.ownership_period_payload(self.position, "2024-07-01"),
+            format="json",
+        )
+
+        deleted = self.client.delete(f"/api/portfolio/ownership-periods/{created.data['id']}/")
+
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+        periods = list(PositionOwnershipPeriod.objects.filter(position=self.position))
+        self.assertEqual(len(periods), 1)
+        # Sin reabrirlo la posición se quedaría sin titularidad desde esa fecha.
+        self.assertIsNone(periods[0].end_date)
+
+    def test_rewriting_a_closed_stretch_is_still_refused(self):
+        # Lo que se abre es cerrar el tramo, no reescribirlo: de la titularidad pasada
+        # dependen las cifras ya calculadas.
+        period = PositionOwnershipPeriod.objects.filter(position=self.position).first()
+
+        period.start_date = date(2023, 1, 1)
+
+        with self.assertRaises(DjangoValidationError):
+            period.save(update_fields=["start_date"])
+
+    def test_only_the_last_stretch_can_be_undone(self):
+        self.client.post(
+            "/api/portfolio/ownership-periods/",
+            self.ownership_period_payload(self.position, "2024-07-01"),
+            format="json",
+        )
+        first = (
+            PositionOwnershipPeriod.objects.filter(position=self.position)
+            .order_by("start_date")
+            .first()
+        )
+
+        with self.assertRaises(DjangoValidationError):
+            first.delete()
+
+    def test_periods_are_listed_per_position(self):
+        other = self.create_position("Otro", Decimal("10"), Decimal("20"))
+
+        response = self.client.get(f"/api/portfolio/ownership-periods/?position_id={other.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual([row["position_id"] for row in response.data], [other.id])
+
+    def test_inventory_filter_scopes_the_whole_workspace_not_just_the_table(self):
+        # Un filtro de inventario reduce de qué habla la pantalla entera. Antes el hero
+        # seguía describiendo la cartera completa mientras la tabla mostraba una clase, y
+        # las dos cifras no se parecían en nada.
+        equity = self.create_position("Acciones", Decimal("200"), Decimal("300"))
+        equity.instrument.asset_class = Instrument.AssetClass.EQUITY
+        equity.instrument.save(update_fields=["asset_class"])
+        query = "?date_from=2024-01-01&date_to=2024-12-31"
+
+        whole = self.client.get(f"/api/portfolio/workspace/{query}")
+        scoped = self.client.get(f"/api/portfolio/workspace/{query}&asset_class=equity")
+
+        self.assertEqual(whole.status_code, status.HTTP_200_OK, whole.data)
+        self.assertEqual(scoped.status_code, status.HTTP_200_OK, scoped.data)
+        self.assertIsNone(whole.data["scope"])
+        self.assertEqual(scoped.data["scope"], [equity.id])
+        # 170 del fondo + 300 de las acciones frente a las 300 de la clase filtrada.
+        self.assertEqual(Decimal(whole.data["overview"]["value"]), Decimal("470"))
+        self.assertEqual(Decimal(scoped.data["overview"]["value"]), Decimal("300"))
+        self.assertEqual(Decimal(scoped.data["timeline"]["results"][-1]["value"]), Decimal("300"))
+        self.assertEqual(scoped.data["quality"]["positions"]["total"], 1)
+
+    def test_currency_filter_scopes_by_denomination(self):
+        self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")
+        FxRate.objects.create(
+            rate_date=date(2024, 12, 31),
+            from_currency="USD",
+            to_currency="EUR",
+            rate=Decimal("1.00"),
+        )
+        query = "?date_from=2024-01-01&date_to=2024-12-31&currency=USD"
+
+        response = self.client.get(f"/api/portfolio/workspace/{query}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(len(response.data["scope"]), 1)
+        self.assertEqual(Decimal(response.data["overview"]["value"]), Decimal("110"))
 
     def test_read_endpoints_expose_reconciled_metrics_and_declared_fallback(self):
         query = "?date_from=2024-01-01&date_to=2024-12-31"

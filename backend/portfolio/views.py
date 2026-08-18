@@ -5,6 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from datetime import timedelta
+
+from django.db import transaction as db_transaction
 from django.db.models import Q
 from django.utils.dateparse import parse_date
 
@@ -42,9 +45,9 @@ from .performance import (
     build_portfolio_positions,
     build_portfolio_quality,
     build_portfolio_timeline,
-    build_scoped_performance,
     default_performance_period,
     load_performance_context,
+    timeline_context_start,
     timeline_dates,
 )
 from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
@@ -272,6 +275,7 @@ class PositionValuationViewSet(viewsets.ModelViewSet):
 
 class PositionOwnershipPeriodViewSet(
     mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
@@ -280,11 +284,41 @@ class PositionOwnershipPeriodViewSet(
     serializer_class = PositionOwnershipPeriodSerializer
 
     def get_queryset(self):
-        return (
+        queryset = (
             PositionOwnershipPeriod.objects.filter(position__portfolio__user=self.request.user)
             .select_related("position", "position__portfolio", "ownership")
             .prefetch_related("shares__member")
         )
+        position_id = str(self.request.query_params.get("position_id") or "").strip()
+        if position_id:
+            if not position_id.isdigit():
+                raise ValidationError({"position_id": "Debe ser un entero."})
+            queryset = queryset.filter(position_id=int(position_id))
+        return queryset
+
+    def perform_destroy(self, instance: PositionOwnershipPeriod) -> None:
+        """Deshacer un tramo devuelve la titularidad al anterior.
+
+        Los periodos son inmutables, así que corregir una fecha mal puesta pasa por
+        borrar y volver a escribir. Si al crearlo se cerró el tramo previo, borrarlo sin
+        reabrirlo dejaría la posición sin titularidad desde esa fecha.
+        """
+        with db_transaction.atomic():
+            previous = (
+                PositionOwnershipPeriod.objects.filter(
+                    position_id=instance.position_id,
+                    end_date=instance.start_date - timedelta(days=1),
+                )
+                .order_by("-start_date")
+                .first()
+            )
+            later_exists = PositionOwnershipPeriod.objects.filter(
+                position_id=instance.position_id, start_date__gt=instance.start_date
+            ).exists()
+            instance.delete()
+            if previous is not None and not later_exists:
+                previous.end_date = None
+                previous.save(update_fields=["end_date"])
 
 
 class PortfolioMigrationIssueViewSet(viewsets.ReadOnlyModelViewSet):
@@ -415,6 +449,12 @@ class PortfolioQualityView(APIView):
         )
 
 
+def _holding_currency(position) -> str:
+    """En qué está denominada la posición, que es por lo que filtra la cartera."""
+    account = position.ledger_account if position.ledger_account_id else None
+    return (account.currency if account else position.asset.currency).strip().upper()
+
+
 class PortfolioWorkspaceView(APIView):
     """Everything `/cartera` needs for one period, off a single context load.
 
@@ -428,8 +468,13 @@ class PortfolioWorkspaceView(APIView):
 
     def get(self, request):
         portfolio, start_date, end_date, member_id = _performance_request(request)
+        # Un solo contexto, ancho hasta el origen: el timeline lo necesita así y el resto
+        # de constructores acota por ventana al usar los flujos, de modo que cargarlo dos
+        # veces solo servía para pagar el doble.
         context = load_performance_context(
-            portfolio=portfolio, start_date=start_date, end_date=end_date
+            portfolio=portfolio,
+            start_date=timeline_context_start(portfolio=portfolio, start_date=start_date),
+            end_date=end_date,
         )
         shared = {
             "portfolio": portfolio,
@@ -438,38 +483,50 @@ class PortfolioWorkspaceView(APIView):
             "member_id": member_id,
         }
         period = {"from": start_date.isoformat(), "to": end_date.isoformat()}
-        scoped = self._scoped_performance(request, context=context, shared=shared)
+        # Un filtro de inventario reduce de qué habla la pantalla entera: hero, evolución
+        # y calidad incluidos. Antes solo afectaba a la tabla y a un bloque aparte, y el
+        # hero seguía describiendo la cartera completa, que es justo lo que confundía.
+        scope_ids = self._scope_ids(request, context=context)
+        scoped = {"scope_ids": scope_ids} if scope_ids is not None else {}
+        # El bloque de métricas y la lista de posiciones los consumen dos salidas cada uno:
+        # se calculan una vez y se reparten.
+        performance = build_portfolio_performance(**shared, context=context, **scoped)
+        position_rows = build_portfolio_positions(**shared, context=context)
         return Response(
             {
-                "scoped_performance": scoped,
-                "overview": build_portfolio_overview(**shared, context=context),
-                "performance": build_portfolio_performance(**shared, context=context),
+                "scope": None if scope_ids is None else sorted(scope_ids),
+                "overview": build_portfolio_overview(
+                    **shared,
+                    context=context,
+                    **scoped,
+                    performance=performance,
+                    position_rows=position_rows,
+                ),
+                "performance": performance,
                 "positions": {
                     "period": period,
                     "member_id": member_id,
-                    "results": build_portfolio_positions(**shared, context=context),
+                    "results": position_rows,
                 },
                 "timeline": {
                     "period": period,
                     "member_id": member_id,
                     "currency": portfolio.base_currency,
-                    "results": build_portfolio_timeline(**shared),
+                    "results": build_portfolio_timeline(**shared, context=context, **scoped),
                 },
-                "quality": build_portfolio_quality(**shared, context=context),
+                "quality": build_portfolio_quality(
+                    **shared, context=context, **scoped, performance=performance
+                ),
             }
         )
 
     @staticmethod
-    def _scoped_performance(request, *, context, shared) -> dict | None:
-        """Metrics for the inventory filter, when there is one.
-
-        Kept apart from `performance` on purpose: the hero stays family-wide, as the
-        filter note in the view promises, while the positions table can still state what
-        the filtered class or container actually returned.
-        """
+    def _scope_ids(request, *, context) -> set[int] | None:
+        """Las posiciones que el filtro de inventario deja dentro, o None si no hay filtro."""
         container_id = str(request.query_params.get("container_id") or "").strip()
         asset_class = str(request.query_params.get("asset_class") or "").strip()
-        if not container_id and not asset_class:
+        currency = str(request.query_params.get("currency") or "").strip().upper()
+        if not container_id and not asset_class and not currency:
             return None
         selected = context.positions
         if container_id:
@@ -480,11 +537,9 @@ class PortfolioWorkspaceView(APIView):
             if asset_class not in Instrument.AssetClass.values:
                 raise ValidationError({"asset_class": "Clase de activo no válida."})
             selected = [row for row in selected if row.effective_asset_class == asset_class]
-        if not selected:
-            return None
-        return build_scoped_performance(
-            **shared, scope_ids={row.id for row in selected}, context=context
-        )
+        if currency:
+            selected = [row for row in selected if _holding_currency(row) == currency]
+        return {row.id for row in selected}
 
 
 class PortfolioOperationOptionsView(APIView):

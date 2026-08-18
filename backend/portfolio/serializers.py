@@ -25,7 +25,11 @@ from .models import (
     PositionOwnershipPeriod,
     PositionOwnershipShare,
 )
-from .services import position_coverage, validate_ownership_period
+from .services import (
+    close_open_ownership_period_before,
+    position_coverage,
+    validate_ownership_period,
+)
 
 
 def _request_user(context: dict):
@@ -369,6 +373,11 @@ class PositionOwnershipPeriodSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data: dict) -> PositionOwnershipPeriod:
         shares = validated_data.pop("shares")
+        # El tramo anterior se cierra la víspera: registrar un cambio de titularidad es
+        # decir "desde esta fecha manda esto", no abrir un periodo suelto.
+        close_open_ownership_period_before(
+            position=validated_data["position"], start_date=validated_data["start_date"]
+        )
         period = PositionOwnershipPeriod.objects.create(**validated_data)
         PositionOwnershipShare.objects.bulk_create(
             [PositionOwnershipShare(period=period, **share) for share in shares]
