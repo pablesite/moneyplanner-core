@@ -650,16 +650,28 @@ def _observation_dates(
 def _value_series(
     *,
     context: PerformanceContext,
-    position: PortfolioPosition | None,
+    positions: list[PortfolioPosition] | None,
     dates: list[date],
     member_id: int | None,
 ) -> list[DatedValue]:
+    """Value of a scope at each date. `positions=None` means the whole portfolio.
+
+    The scope has to match the flows the chain is fed, or the two describe different
+    things: summing the portfolio while netting a single class's flows reported +37% for
+    a class that had in fact lost money.
+    """
     series: list[DatedValue] = []
     for target in sorted(set(dates)):
-        if position is not None:
-            base_value, _ = _position_value_base(
-                context=context, position=position, target=target, member_id=member_id
-            )
+        if positions is not None:
+            base_value: Decimal | None = ZERO
+            for position in positions:
+                part, _ = _position_value_base(
+                    context=context, position=position, target=target, member_id=member_id
+                )
+                if part is None:
+                    base_value = None
+                    break
+                base_value += part
         else:
             base_value, _, _ = _aggregate_value(context=context, target=target, member_id=member_id)
         # An unresolvable boundary is skipped rather than fatal: merging two subperiods
@@ -947,10 +959,15 @@ def _metric_block(
     end_date: date,
     member_id: int | None,
     position_id: int | None = None,
+    scope_ids: set[int] | None = None,
 ) -> dict[str, Any]:
+    # A scope can be one position or a set of them (a class, a container). Both read
+    # flows as external to the scope rather than to the portfolio, which is what makes a
+    # transfer between two members of the same scope net out instead of counting twice.
+    scope = {position_id} if position_id else scope_ids
     selected_positions = (
-        [position for position in context.positions if position.id == position_id]
-        if position_id
+        [position for position in context.positions if position.id in scope]
+        if scope is not None
         else context.positions
     )
     position_ids = {position.id for position in selected_positions}
@@ -988,7 +1005,9 @@ def _metric_block(
     ]
     cash_opening = cash_closing = None
     cash_opening_complete = cash_closing_complete = True
-    if position_id is None:
+    # Container cash belongs to the portfolio, not to any scope inside it: a class holds
+    # no cash of its own, so a scoped read must leave it out or it reports the portfolio.
+    if scope is None:
         cash_opening, cash_opening_complete = _cash_value_base(
             context=context, target=start_date, member_id=member_id
         )
@@ -1008,9 +1027,7 @@ def _metric_block(
     selected_flows = [
         flow
         for flow in context.flows
-        if (
-            (flow.position_id in position_ids) or (position_id is None and flow.position_id is None)
-        )
+        if ((flow.position_id in position_ids) or (scope is None and flow.position_id is None))
         and start_date < flow.on_date <= end_date
     ]
     external: list[DatedAmount] = []
@@ -1045,7 +1062,7 @@ def _metric_block(
             currency=flow.currency,
             target=flow.on_date,
         )
-        is_external = flow.position_external if position_id else flow.external
+        is_external = flow.position_external if scope is not None else flow.external
         if is_external and base_amount is not None:
             external.append(DatedAmount(flow.on_date, base_amount))
         if cost_base is not None:
@@ -1097,19 +1114,20 @@ def _metric_block(
     twr_exact = value_complete
     twr_dates = sorted({start_date, *flow_dates, end_date})
     for target in twr_dates:
-        if position_id:
-            position = selected_positions[0] if selected_positions else None
-            base_value, native = (
-                _position_value_base(
-                    context=context,
-                    position=position,
-                    target=target,
-                    member_id=member_id,
+        if scope is not None:
+            # Sum only the scope: a class or container holds no cash of its own, so the
+            # portfolio-wide aggregate would fold in balances that are not part of it.
+            base_value = ZERO
+            exact = True
+            for position in selected_positions:
+                part, native = _position_value_base(
+                    context=context, position=position, target=target, member_id=member_id
                 )
-                if position
-                else (None, None)
-            )
-            exact = bool(native and native.exact)
+                if part is None:
+                    base_value = None
+                    break
+                base_value += part
+                exact = exact and bool(native and native.exact)
         else:
             base_value, complete, exact = _aggregate_value(
                 context=context, target=target, member_id=member_id
@@ -1130,7 +1148,7 @@ def _metric_block(
         # money-weighted: on the reference position it reported 11.07% against 21.57%.
         linked_series = _value_series(
             context=context,
-            position=selected_positions[0] if position_id and selected_positions else None,
+            positions=selected_positions if scope is not None else None,
             dates=[
                 start_date,
                 *_observation_dates(
@@ -1365,6 +1383,33 @@ def _build_positions_from_context(
             }
         )
     return rows
+
+
+def build_scoped_performance(
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    scope_ids: set[int],
+    context: PerformanceContext | None = None,
+) -> dict[str, Any]:
+    """Metrics for a subset of positions, such as an inventory filter by class.
+
+    A return is not additive, so the value of a filtered class cannot be derived from the
+    per-position figures the table already shows: it has to be computed over the subset,
+    with flows read as external to that subset so a transfer inside it nets out.
+    """
+    context = context or load_performance_context(
+        portfolio=portfolio, start_date=start_date, end_date=end_date
+    )
+    return _metric_block(
+        context=context,
+        start_date=start_date,
+        end_date=end_date,
+        member_id=member_id,
+        scope_ids=scope_ids,
+    )
 
 
 def build_portfolio_positions(

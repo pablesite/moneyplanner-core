@@ -578,6 +578,39 @@ class PortfolioOperationApiTests(APITestCase):
             self.position.instrument.refresh_from_db()
             self.assertEqual(self.position.instrument.asset_class, value)
 
+    def test_scoped_metrics_cover_only_the_filtered_positions(self):
+        """Regression: the scoped chain was fed the whole portfolio's value series.
+
+        Netting one class's flows against the portfolio's values reported +37% for a class
+        that had lost money. The scope of the values and of the flows has to be the same
+        set, so a scoped read must exclude the cash the portfolio-wide read includes.
+        """
+        payload = self.operation_payload(amount="300.00", fee="0")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        response = self.client.get(
+            "/api/portfolio/workspace/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31", "asset_class": "equity"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        scoped = response.data["scoped_performance"]
+        self.assertIsNotNone(scoped)
+        # Just the position; the portfolio-wide read also carries the container's cash.
+        self.assertEqual(Decimal(scoped["closing_value"]), Decimal("300"))
+        self.assertNotEqual(
+            Decimal(scoped["closing_value"]),
+            Decimal(response.data["performance"]["closing_value"]),
+        )
+
+        unfiltered = self.client.get(
+            "/api/portfolio/workspace/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
+        )
+        self.assertIsNone(unfiltered.data["scoped_performance"])
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)

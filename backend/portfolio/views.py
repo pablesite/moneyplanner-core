@@ -42,6 +42,7 @@ from .performance import (
     build_portfolio_positions,
     build_portfolio_quality,
     build_portfolio_timeline,
+    build_scoped_performance,
     default_performance_period,
     load_performance_context,
     timeline_dates,
@@ -437,8 +438,10 @@ class PortfolioWorkspaceView(APIView):
             "member_id": member_id,
         }
         period = {"from": start_date.isoformat(), "to": end_date.isoformat()}
+        scoped = self._scoped_performance(request, context=context, shared=shared)
         return Response(
             {
+                "scoped_performance": scoped,
                 "overview": build_portfolio_overview(**shared, context=context),
                 "performance": build_portfolio_performance(**shared, context=context),
                 "positions": {
@@ -454,6 +457,33 @@ class PortfolioWorkspaceView(APIView):
                 },
                 "quality": build_portfolio_quality(**shared, context=context),
             }
+        )
+
+    @staticmethod
+    def _scoped_performance(request, *, context, shared) -> dict | None:
+        """Metrics for the inventory filter, when there is one.
+
+        Kept apart from `performance` on purpose: the hero stays family-wide, as the
+        filter note in the view promises, while the positions table can still state what
+        the filtered class or container actually returned.
+        """
+        container_id = str(request.query_params.get("container_id") or "").strip()
+        asset_class = str(request.query_params.get("asset_class") or "").strip()
+        if not container_id and not asset_class:
+            return None
+        selected = context.positions
+        if container_id:
+            if not container_id.isdigit():
+                raise ValidationError({"container_id": "Debe ser un entero."})
+            selected = [row for row in selected if row.container_id == int(container_id)]
+        if asset_class:
+            if asset_class not in Instrument.AssetClass.values:
+                raise ValidationError({"asset_class": "Clase de activo no válida."})
+            selected = [row for row in selected if row.instrument.asset_class == asset_class]
+        if not selected:
+            return None
+        return build_scoped_performance(
+            **shared, scope_ids={row.id for row in selected}, context=context
         )
 
 
