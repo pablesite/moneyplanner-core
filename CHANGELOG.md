@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.43.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.42.0...moneyplanner-core-v0.43.0) (2026-08-18)
+
+
+### Features
+
+* **portfolio:** expose container types and usage in operation options ([ad23ea0](https://github.com/pablesite/moneyplanner-core/commit/ad23ea0b7d50e19eeaf1d617db3d2391dd03ce45))
+* **portfolio:** expose the holding denomination on position reads ([30d5f37](https://github.com/pablesite/moneyplanner-core/commit/30d5f371f1bb79aae06b99ad3f3e82696ebedfb2))
+* **portfolio:** keep the operation record when investments are booked in Movimientos ([61103ca](https://github.com/pablesite/moneyplanner-core/commit/61103ca7c544bd9a50f4b20ec7f4477c4712bb8f))
+* **portfolio:** rebuild the asset class taxonomy on a single axis ([17de31c](https://github.com/pablesite/moneyplanner-core/commit/17de31c71c6f40b77c43a45091eae05ca24c7cfc))
+* **portfolio:** report the return of a filtered class or container ([112fc16](https://github.com/pablesite/moneyplanner-core/commit/112fc169bb3ea54c94fc0727cbc92acc2b04537e))
+* **portfolio:** rework the asset class taxonomy ([f709ed5](https://github.com/pablesite/moneyplanner-core/commit/f709ed586ed25e05b05c4c1328b2971fd286314c))
+* **portfolio:** scope the whole workspace by the inventory filter, and cut its cost ([9678548](https://github.com/pablesite/moneyplanner-core/commit/967854864a5cdeda16e1d72f862fe8372ebfe001))
+
+
+### Bug Fixes
+
+* **portfolio:** carry ownership assigned in Patrimonio into the position ([9b59a44](https://github.com/pablesite/moneyplanner-core/commit/9b59a447248611ab4068c6dba3fa7ab126b70f66))
+* **portfolio:** classify per position and show the user's own asset name ([fa92eba](https://github.com/pablesite/moneyplanner-core/commit/fa92eba18501f62b980d7af13596f7eb799f8b70))
+* **portfolio:** rescue commodities from the real-assets drawer on migration ([45d5319](https://github.com/pablesite/moneyplanner-core/commit/45d53196b16bc18af942dc3c78c25435783fe47a))
+
+
+### Performance Improvements
+
+* **portfolio:** serve the whole workspace from one context load ([d56da05](https://github.com/pablesite/moneyplanner-core/commit/d56da0531cfd6e6e3843e653f5a4a9f09d6565ea))
+
 ## [0.42.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.41.0...moneyplanner-core-v0.42.0) (2026-08-17)
 
 
