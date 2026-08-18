@@ -249,6 +249,45 @@ class PortfolioBootstrapTests(TestCase):
         with self.assertRaises(ValidationError):
             share.delete()
 
+    def test_commodities_are_rescued_from_the_real_assets_drawer_by_name(self):
+        # `real_assets` metía inmobiliario y materias primas en el mismo cajón, y al
+        # deshacerlo todo fue a inmobiliario: por tipo de instrumento un ETF de oro y uno
+        # de REITs son iguales. El nombre sí los separa, pero el patrón tiene que ser
+        # estrecho o se lleva por delante cualquier "Goldman".
+        from importlib import import_module
+
+        from django.apps import apps as live_apps
+
+        cases = {
+            "ETF - Physical Gold USD (Acc)": Instrument.AssetClass.OTHER,
+            "Fondo - ING PIMCO GIS Commodity": Instrument.AssetClass.REAL_ESTATE,
+            "Fondo Oro Físico": Instrument.AssetClass.OTHER,
+            "Goldman Sachs Real Estate": Instrument.AssetClass.REAL_ESTATE,
+            "ETF - REIT Real Global Real State": Instrument.AssetClass.REAL_ESTATE,
+            "ETF - Water": Instrument.AssetClass.EQUITY,
+        }
+        for name, asset_class in cases.items():
+            Instrument.objects.create(
+                user=self.user,
+                name=name,
+                identity_kind=Instrument.IdentityKind.CUSTOM,
+                asset_class=asset_class,
+                instrument_type=Instrument.InstrumentType.ETF,
+                quote_currency="EUR",
+            )
+
+        migration = import_module("portfolio.migrations.0015_reclassify_commodities_from_name")
+        migration.forwards(live_apps, None)
+
+        moved = {name: Instrument.objects.get(name=name).asset_class for name in cases}
+        self.assertEqual(moved["ETF - Physical Gold USD (Acc)"], "commodities")
+        self.assertEqual(moved["Fondo - ING PIMCO GIS Commodity"], "commodities")
+        self.assertEqual(moved["Fondo Oro Físico"], "commodities")
+        # "Goldman" no es oro, y un REIT sigue siendo inmobiliario.
+        self.assertEqual(moved["Goldman Sachs Real Estate"], "real_estate")
+        self.assertEqual(moved["ETF - REIT Real Global Real State"], "real_estate")
+        self.assertEqual(moved["ETF - Water"], "equity")
+
     def test_canonical_instrument_requires_confirmed_identity(self):
         instrument = Instrument(
             identity_kind=Instrument.IdentityKind.CANONICAL,
