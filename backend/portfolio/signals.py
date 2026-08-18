@@ -1,8 +1,13 @@
-"""Keep portfolio valuations in step with the accounting revaluations they derive from.
+"""Keep the portfolio in step with what gets booked in Movimientos.
 
 Cartera reads `PositionValuation`, while net worth and movements read the ledger balance.
 A revaluation booked in Movimientos therefore has to reach the portfolio, otherwise the
 position stays frozen at its last known value until someone re-runs the bootstrap.
+
+Investment movements need the same bridge for a different reason: registering money is
+now Contabilidad's job, so an aporte or a retirada booked there has to leave the same
+operation record the portfolio's own form used to leave, or a position followed by units
+loses the trail of how many units each operation moved.
 """
 
 from __future__ import annotations
@@ -90,3 +95,74 @@ def revaluation_deleted(sender, instance: LedgerTransaction, **kwargs) -> None:
     # Entries disappear with the transaction, and every later derived valuation shifts by
     # this delta, so the affected positions are captured before the cascade runs.
     _schedule_resync(_positions_for_transaction(instance.pk))
+
+
+def _record_trade_from_investment(transaction_id: int) -> None:
+    """Leave a `PortfolioTrade` for an investment movement booked in Movimientos.
+
+    The ledger is the monetary source of truth, so value, flows and returns already work
+    without this. What would be lost is the operation detail —units and unit price— that
+    only exists at the moment of booking, plus the audit row that ties the movement to a
+    position. The pairing is deliberately strict: one leg has to be a position's account
+    and the other the cash of that position's own container, which is the same rule the
+    portfolio form enforced when it funded a purchase.
+    """
+    from accounting.models import LedgerTransaction
+
+    from .models import ContainerCashAccount, PortfolioPosition, PortfolioTrade
+
+    transaction_row = LedgerTransaction.objects.filter(pk=transaction_id).first()
+    if transaction_row is None or hasattr(transaction_row, "portfolio_trade"):
+        return
+    entries = list(LedgerEntry.objects.filter(transaction_id=transaction_id))
+    account_ids = {entry.account_id for entry in entries}
+    position = (
+        PortfolioPosition.objects.filter(ledger_account_id__in=account_ids)
+        .select_related("portfolio", "container", "ledger_account")
+        .first()
+    )
+    if position is None:
+        return
+    cash = (
+        ContainerCashAccount.objects.filter(
+            container_id=position.container_id,
+            ledger_account_id__in=account_ids - {position.ledger_account_id},
+        )
+        .select_related("ledger_account")
+        .first()
+    )
+    if cash is None:
+        return
+
+    outflow = transaction_row.investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+    gross = next(
+        (abs(entry.amount) for entry in entries if entry.account_id == position.ledger_account_id),
+        None,
+    )
+    if gross is None:
+        return
+    PortfolioTrade.objects.create(
+        portfolio=position.portfolio,
+        position=position,
+        ledger_transaction=transaction_row,
+        operation_type=(
+            PortfolioTrade.OperationType.SELL if outflow else PortfolioTrade.OperationType.BUY
+        ),
+        units=transaction_row.investment_units,
+        unit_price=transaction_row.investment_unit_price,
+        trade_currency=position.ledger_account.currency,
+        gross_amount=gross,
+        source=PortfolioTrade.Source.MANUAL,
+        fingerprint=f"accounting:{transaction_row.pk}",
+        note=transaction_row.description[:240],
+    )
+
+
+@receiver(post_save, sender=LedgerTransaction, dispatch_uid="portfolio_investment_saved")
+def investment_saved(sender, instance: LedgerTransaction, created: bool, **kwargs) -> None:
+    if not created or instance.quick_entry_kind != LedgerTransaction.QuickEntryKind.INVESTMENT:
+        return
+    # Entries land after the transaction row, so the legs can only be paired once the
+    # surrounding block commits.
+    transaction_id = instance.pk
+    db_transaction.on_commit(lambda: _record_trade_from_investment(transaction_id))

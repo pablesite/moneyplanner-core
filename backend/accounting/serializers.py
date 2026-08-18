@@ -346,6 +346,8 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "ownership_id",
             "quick_entry_kind",
             "investment_direction",
+            "investment_units",
+            "investment_unit_price",
             "realized_cost_basis",
             "realized_gain_loss",
             "activity_kind",
@@ -662,6 +664,20 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
     realized_gain_loss = serializers.DecimalField(
         max_digits=20,
         decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
+    # Detalle de la operación para posiciones seguidas por unidades: sin esto, registrar
+    # una compra desde Contabilidad perdía el rastro de cuántas unidades movió.
+    investment_units = serializers.DecimalField(
+        max_digits=28,
+        decimal_places=12,
+        allow_null=True,
+        required=False,
+    )
+    investment_unit_price = serializers.DecimalField(
+        max_digits=28,
+        decimal_places=12,
         allow_null=True,
         required=False,
     )

@@ -44,6 +44,8 @@ def create_quick_transaction(
     destination_amount: Decimal | None = None,
     realized_cost_basis: Decimal | None = None,
     realized_gain_loss: Decimal | None = None,
+    investment_units: Decimal | None = None,
+    investment_unit_price: Decimal | None = None,
 ) -> LedgerTransaction:
     normalized_movement_type = _normalize_quick_movement_type(movement_type)
     normalized_direction = _normalize_investment_direction(
@@ -94,6 +96,10 @@ def create_quick_transaction(
             realized_cost_basis if normalized_movement_type == "investment" else None
         ),
         realized_gain_loss=realized_gain_loss if normalized_movement_type == "investment" else None,
+        investment_units=investment_units if normalized_movement_type == "investment" else None,
+        investment_unit_price=(
+            investment_unit_price if normalized_movement_type == "investment" else None
+        ),
     )
     for entry_data in payload:
         LedgerEntry.objects.create(transaction=transaction_row, **entry_data)

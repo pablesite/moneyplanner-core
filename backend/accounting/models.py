@@ -136,6 +136,21 @@ class LedgerTransaction(models.Model):
         null=True,
         blank=True,
     )
+    # Detalle de la operación cuando el movimiento de inversión toca una posición seguida
+    # por unidades. Vive aquí, junto a `realized_*`, porque es lo que se conoce en el
+    # momento de registrar el movimiento; la cartera lo copia a su propio registro.
+    investment_units = models.DecimalField(
+        max_digits=28,
+        decimal_places=12,
+        null=True,
+        blank=True,
+    )
+    investment_unit_price = models.DecimalField(
+        max_digits=28,
+        decimal_places=12,
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

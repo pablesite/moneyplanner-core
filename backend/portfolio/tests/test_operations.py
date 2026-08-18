@@ -673,6 +673,72 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(trade.operation_type, "dividend")
         self.assertEqual(trade.gross_amount, Decimal("12.75"))
 
+    def book_investment(self, **overrides):
+        payload = {
+            "movement_type": "investment",
+            "investment_direction": "inflow",
+            "booking_date": "2025-02-01",
+            "value_date": "2025-02-01",
+            "description": "Compra Fondo Global",
+            "amount": "100.00",
+            "account_id": self.cash_account.id,
+            "counterparty_account_id": self.position_account.id,
+        }
+        payload.update(overrides)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/accounting/transactions/quick-entry/", payload, format="json"
+            )
+        return response
+
+    def test_investment_booked_in_accounting_leaves_the_portfolio_operation_record(self):
+        # Registrar dinero es cosa de Contabilidad, así que un aporte hecho allí tiene que
+        # dejar el mismo rastro de operación que dejaba el formulario de la cartera: sin
+        # esto, una posición seguida por unidades pierde cuántas movió cada compra.
+        response = self.book_investment(
+            investment_units="1.250000000000",
+            investment_unit_price="80.000000000000",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
+        self.assertEqual(trade.position_id, self.position.id)
+        self.assertEqual(trade.operation_type, PortfolioTrade.OperationType.BUY)
+        self.assertEqual(trade.units, Decimal("1.250000000000"))
+        self.assertEqual(trade.unit_price, Decimal("80.000000000000"))
+        self.assertEqual(trade.gross_amount, Decimal("100.00"))
+
+    def test_withdrawal_booked_in_accounting_is_recorded_as_a_sale(self):
+        response = self.book_investment(
+            investment_direction="outflow",
+            booking_date="2025-03-01",
+            value_date="2025-03-01",
+            description="Venta parcial",
+            amount="40.00",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
+        self.assertEqual(trade.operation_type, PortfolioTrade.OperationType.SELL)
+        self.assertIsNone(trade.units)
+
+    def test_investment_between_accounts_outside_the_portfolio_records_nothing(self):
+        outside = LedgerAccount.objects.create(
+            user=self.user,
+            name="Otro broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+
+        response = self.book_investment(
+            counterparty_account_id=outside.id, description="Aporte fuera de cartera"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertFalse(
+            PortfolioTrade.objects.filter(ledger_transaction_id=response.data["id"]).exists()
+        )
+
     def fixture(self, filename: str) -> bytes:
         content = (self.fixtures_path / filename).read_text(encoding="utf-8")
         return (

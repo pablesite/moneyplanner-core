@@ -576,6 +576,9 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
             {
                 "id": row.id,
                 "name": row.asset.name,
+                # La cuenta contable es la que permite reconocer, desde Contabilidad, que
+                # un movimiento de inversión cae sobre esta posición.
+                "ledger_account_id": row.ledger_account_id,
                 "container_id": row.container_id,
                 "container_name": row.container.name,
                 "tracking_style": row.tracking_style,
@@ -612,6 +615,7 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
             {
                 "id": row.id,
                 "container_id": row.container_id,
+                "ledger_account_id": row.ledger_account_id,
                 "name": row.ledger_account.name,
                 "currency": row.currency,
                 "available": str(get_account_balance(account=row.ledger_account, status="posted")),
