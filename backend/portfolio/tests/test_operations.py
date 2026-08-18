@@ -611,6 +611,32 @@ class PortfolioOperationApiTests(APITestCase):
         )
         self.assertIsNone(unfiltered.data["scoped_performance"])
 
+    def test_containers_can_be_created_and_renamed_from_the_api(self):
+        options = self.client.get("/api/portfolio/operations/options/")
+        offered = {row["value"] for row in options.data["container_types"]}
+        self.assertEqual(offered, set(InvestmentContainer.ContainerType.values))
+        self.assertEqual(options.data["containers"][0]["position_count"], 1)
+
+        created = self.client.post(
+            "/api/portfolio/containers/",
+            {"name": "Exchange", "container_type": InvestmentContainer.ContainerType.EXCHANGE},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+
+        renamed = self.client.patch(
+            f"/api/portfolio/containers/{created.data['id']}/",
+            {"name": "Exchange principal", "is_active": False},
+            format="json",
+        )
+
+        self.assertEqual(renamed.status_code, status.HTTP_200_OK, renamed.data)
+        container = InvestmentContainer.objects.get(id=created.data["id"])
+        self.assertEqual(container.name, "Exchange principal")
+        self.assertFalse(container.is_active)
+        # Created against the caller's own portfolio, never left dangling.
+        self.assertEqual(container.portfolio, self.portfolio)
+
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")
         self.assertEqual(archived.status_code, status.HTTP_200_OK)
