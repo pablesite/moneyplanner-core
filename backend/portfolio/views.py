@@ -197,25 +197,25 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
         serializer.save(setup_confirmed_at=timezone.now())
         asset_class = str(request.data.get("asset_class") or "").strip()
         if asset_class:
-            self._reclassify_instrument(position=position, asset_class=asset_class)
+            self._reclassify(position=position, asset_class=asset_class)
             serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
 
     @staticmethod
-    def _reclassify_instrument(*, position: PortfolioPosition, asset_class: str) -> None:
-        instrument = position.instrument
+    def _reclassify(*, position: PortfolioPosition, asset_class: str) -> None:
+        """Record the class on the position, not on the instrument.
+
+        Canonical instruments are shared across portfolios, so writing the class there
+        would reclassify someone else's positions — which is why crypto could not be
+        classified at all. Storing the choice on the position lets every position be
+        classified and leaves the instrument's own class as the default.
+        """
         if asset_class not in Instrument.AssetClass.values:
             raise ValidationError({"asset_class": "Clase de activo no válida."})
-        if instrument.identity_kind != Instrument.IdentityKind.CUSTOM:
-            # A canonical instrument is shared across users; reclassifying it here would
-            # silently change someone else's portfolio.
-            raise ValidationError(
-                {"asset_class": "Un instrumento canónico no se reclasifica desde la posición."}
-            )
-        if instrument.asset_class == asset_class:
+        if position.asset_class_override == asset_class:
             return
-        instrument.asset_class = asset_class
-        instrument.save(update_fields=["asset_class", "updated_at"])
+        position.asset_class_override = asset_class
+        position.save(update_fields=["asset_class_override", "updated_at"])
 
     @action(detail=True, methods=["get"], url_path="valuation")
     def valuation(self, request, pk=None):
@@ -479,7 +479,7 @@ class PortfolioWorkspaceView(APIView):
         if asset_class:
             if asset_class not in Instrument.AssetClass.values:
                 raise ValidationError({"asset_class": "Clase de activo no válida."})
-            selected = [row for row in selected if row.instrument.asset_class == asset_class]
+            selected = [row for row in selected if row.effective_asset_class == asset_class]
         if not selected:
             return None
         return build_scoped_performance(

@@ -375,6 +375,16 @@ class PortfolioPosition(models.Model):
         related_name="portfolio_positions",
     )
     tracking_style = models.CharField(max_length=16, choices=TrackingStyle.choices)
+    # How *this* portfolio classifies the position. Canonical instruments are shared
+    # across portfolios so their class cannot be edited from one of them; keeping the
+    # choice here lets every position be classified while the instrument's own class
+    # stays the default for anyone who has not chosen.
+    asset_class_override = models.CharField(
+        max_length=24,
+        choices=Instrument.AssetClass.choices,
+        blank=True,
+        default="",
+    )
     status = models.CharField(max_length=16, choices=Status.choices)
     opened_on = models.DateField()
     closed_on = models.DateField(null=True, blank=True)
@@ -405,6 +415,11 @@ class PortfolioPosition(models.Model):
                 name="portfolio_position_history_mode_valid",
             ),
         ]
+
+    @property
+    def effective_asset_class(self) -> str:
+        """The class this portfolio uses, falling back to the instrument's own."""
+        return self.asset_class_override or self.instrument.asset_class
 
     def clean(self) -> None:
         errors: dict[str, str] = {}

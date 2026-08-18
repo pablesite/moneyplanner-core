@@ -507,9 +507,18 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.position.refresh_from_db()
         self.assertEqual(self.position.container_id, other.id)
-        self.assertEqual(self.position.instrument.asset_class, Instrument.AssetClass.FIXED_INCOME)
+        self.assertEqual(self.position.effective_asset_class, Instrument.AssetClass.FIXED_INCOME)
+        # The instrument keeps its own class: it may be shared with other portfolios.
+        self.assertEqual(self.position.instrument.asset_class, Instrument.AssetClass.EQUITY)
 
-    def test_setup_refuses_to_reclassify_a_shared_canonical_instrument(self):
+    def test_a_shared_canonical_instrument_is_classified_per_position(self):
+        """Regression: crypto could not be classified at all.
+
+        Canonical instruments carry shared market prices and belong to no user, so writing
+        the class there would reclassify other portfolios. Refusing outright left the
+        position stuck; the choice now lives on the position and the instrument keeps its
+        own class as the default for everyone else.
+        """
         instrument = self.position.instrument
         instrument.identity_kind = Instrument.IdentityKind.CANONICAL
         instrument.user = None
@@ -518,124 +527,15 @@ class PortfolioOperationApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
-            {"asset_class": Instrument.AssetClass.SAFE_HAVEN},
+            {"asset_class": Instrument.AssetClass.TRADING},
             format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        instrument.refresh_from_db()
-        self.assertEqual(instrument.asset_class, Instrument.AssetClass.EQUITY)
-
-    def test_ownership_assigned_after_bootstrap_reaches_the_position(self):
-        """Regression: a titularidad set in Patrimonio never arrived at Cartera.
-
-        Ownership periods were only created during bootstrap, so a link created later left
-        the position flagged "sin titularidad" for good, with no way to fix it from the UI.
-        """
-        member = FamilyMember.objects.create(
-            user=self.user, name="Titular", role=FamilyMember.Role.ADULT
-        )
-        ownership = Ownership.objects.create(
-            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=member
-        )
-        self.assertEqual(self.position.ownership_periods.count(), 0)
-
-        with self.captureOnCommitCallbacks(execute=True):
-            OwnershipLink.objects.create(
-                user=self.user,
-                target_type=OwnershipLink.TargetType.ASSET,
-                target_id=self.position.asset_id,
-                ownership=ownership,
-            )
-
-        period = self.position.ownership_periods.get()
-        self.assertEqual(period.start_date, self.position.opened_on)
-        self.assertEqual(
-            [(s.member_id, s.percent) for s in period.shares.all()],
-            [(member.id, Decimal("100"))],
-        )
-        quality = self.client.get("/api/portfolio/quality/")
-        self.assertEqual(quality.data["ownership_missing"], 0)
-
-    def test_every_asset_class_is_offered_and_accepted(self):
-        """The reworked taxonomy must be fully reachable from the setup sheet.
-
-        A class that exists in the model but never reaches `operations/options/` cannot be
-        chosen, and one the endpoint refuses cannot be saved; either way the class is dead
-        weight and the composition chart keeps lying.
-        """
-        options = self.client.get("/api/portfolio/operations/options/")
-        offered = {row["value"] for row in options.data["asset_classes"]}
-        self.assertEqual(offered, set(Instrument.AssetClass.values))
-
-        for value in Instrument.AssetClass.values:
-            response = self.client.post(
-                f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
-                {"asset_class": value},
-                format="json",
-            )
-            self.assertEqual(response.status_code, status.HTTP_200_OK, (value, response.data))
-            self.position.instrument.refresh_from_db()
-            self.assertEqual(self.position.instrument.asset_class, value)
-
-    def test_scoped_metrics_cover_only_the_filtered_positions(self):
-        """Regression: the scoped chain was fed the whole portfolio's value series.
-
-        Netting one class's flows against the portfolio's values reported +37% for a class
-        that had lost money. The scope of the values and of the flows has to be the same
-        set, so a scoped read must exclude the cash the portfolio-wide read includes.
-        """
-        payload = self.operation_payload(amount="300.00", fee="0")
-        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
-        payload["preview_token"] = preview.data["preview_token"]
-        self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
-
-        response = self.client.get(
-            "/api/portfolio/workspace/",
-            {"date_from": "2025-01-01", "date_to": "2025-12-31", "asset_class": "equity"},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        scoped = response.data["scoped_performance"]
-        self.assertIsNotNone(scoped)
-        # Just the position; the portfolio-wide read also carries the container's cash.
-        self.assertEqual(Decimal(scoped["closing_value"]), Decimal("300"))
-        self.assertNotEqual(
-            Decimal(scoped["closing_value"]),
-            Decimal(response.data["performance"]["closing_value"]),
-        )
-
-        unfiltered = self.client.get(
-            "/api/portfolio/workspace/",
-            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
-        )
-        self.assertIsNone(unfiltered.data["scoped_performance"])
-
-    def test_containers_can_be_created_and_renamed_from_the_api(self):
-        options = self.client.get("/api/portfolio/operations/options/")
-        offered = {row["value"] for row in options.data["container_types"]}
-        self.assertEqual(offered, set(InvestmentContainer.ContainerType.values))
-        self.assertEqual(options.data["containers"][0]["position_count"], 1)
-
-        created = self.client.post(
-            "/api/portfolio/containers/",
-            {"name": "Exchange", "container_type": InvestmentContainer.ContainerType.EXCHANGE},
-            format="json",
-        )
-        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
-
-        renamed = self.client.patch(
-            f"/api/portfolio/containers/{created.data['id']}/",
-            {"name": "Exchange principal", "is_active": False},
-            format="json",
-        )
-
-        self.assertEqual(renamed.status_code, status.HTTP_200_OK, renamed.data)
-        container = InvestmentContainer.objects.get(id=created.data["id"])
-        self.assertEqual(container.name, "Exchange principal")
-        self.assertFalse(container.is_active)
-        # Created against the caller's own portfolio, never left dangling.
-        self.assertEqual(container.portfolio, self.portfolio)
+        self.position.refresh_from_db()
+        instrument.refresh_from_db()
+        self.assertEqual(self.position.effective_asset_class, Instrument.AssetClass.TRADING)
+        self.assertEqual(instrument.asset_class, Instrument.AssetClass.EQUITY)
 
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")

@@ -575,7 +575,7 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
         "positions": [
             {
                 "id": row.id,
-                "name": row.instrument.name,
+                "name": row.asset.name,
                 "container_id": row.container_id,
                 "container_name": row.container.name,
                 "tracking_style": row.tracking_style,
@@ -586,10 +586,7 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
                     row.history_start_date.isoformat() if row.history_start_date else None
                 ),
                 "setup_confirmed": row.setup_confirmed_at is not None,
-                "asset_class": row.instrument.asset_class,
-                "instrument_is_custom": (
-                    row.instrument.identity_kind == Instrument.IdentityKind.CUSTOM
-                ),
+                "asset_class": row.effective_asset_class,
                 **position_coverage(row),
             }
             for row in positions

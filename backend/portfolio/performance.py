@@ -1352,7 +1352,11 @@ def _build_positions_from_context(
             {
                 "position_id": position.id,
                 "instrument_id": position.instrument_id,
-                "instrument_name": position.instrument.name,
+                # The asset name is the one the user gave it in Patrimonio; the
+                # instrument may be a shared canonical record with a generic name, which
+                # made the same holding read differently in the two views.
+                "instrument_name": position.asset.name,
+                "asset_class": position.effective_asset_class,
                 "container_id": position.container_id,
                 "container_name": position.container.name,
                 "status": position.status,
