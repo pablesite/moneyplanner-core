@@ -96,12 +96,17 @@ class Instrument(models.Model):
         CANONICAL = "canonical", "Canónico"
 
     class AssetClass(models.TextChoices):
-        CASH = "cash", "Efectivo"
+        # Ordered as the user reads them: the two core classes first, then the
+        # specialisations, and "Otros" last as the catch-all.
         FIXED_INCOME = "fixed_income", "Renta fija"
         EQUITY = "equity", "Renta variable"
-        MIXED = "mixed", "Mixto"
-        REAL_ASSETS = "real_assets", "Activos reales"
-        CRYPTO = "crypto", "Cripto"
+        REAL_ESTATE = "real_estate", "Inmobiliario"
+        PRIVATE_EQUITY = "private_equity", "Capital privado"
+        SAFE_HAVEN = "safe_haven", "Activos refugio"
+        COMMODITIES = "commodities", "Materias primas"
+        ALTERNATIVES = "alternatives", "Inversiones alternativas"
+        TRADING = "trading", "Trading"
+        OPPORTUNITY_CASH = "opportunity_cash", "Liquidez para oportunidades"
         OTHER = "other", "Otros"
 
     class InstrumentType(models.TextChoices):

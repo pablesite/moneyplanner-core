@@ -259,7 +259,7 @@ class PortfolioOperationApiTests(APITestCase):
             user=self.user,
             identity_kind=Instrument.IdentityKind.CUSTOM,
             name="Plan de pensiones",
-            asset_class=Instrument.AssetClass.MIXED,
+            asset_class=Instrument.AssetClass.ALTERNATIVES,
             instrument_type=Instrument.InstrumentType.PENSION_PLAN,
             quote_currency="EUR",
         )
@@ -518,7 +518,7 @@ class PortfolioOperationApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
-            {"asset_class": Instrument.AssetClass.CRYPTO},
+            {"asset_class": Instrument.AssetClass.SAFE_HAVEN},
             format="json",
         )
 
@@ -556,6 +556,27 @@ class PortfolioOperationApiTests(APITestCase):
         )
         quality = self.client.get("/api/portfolio/quality/")
         self.assertEqual(quality.data["ownership_missing"], 0)
+
+    def test_every_asset_class_is_offered_and_accepted(self):
+        """The reworked taxonomy must be fully reachable from the setup sheet.
+
+        A class that exists in the model but never reaches `operations/options/` cannot be
+        chosen, and one the endpoint refuses cannot be saved; either way the class is dead
+        weight and the composition chart keeps lying.
+        """
+        options = self.client.get("/api/portfolio/operations/options/")
+        offered = {row["value"] for row in options.data["asset_classes"]}
+        self.assertEqual(offered, set(Instrument.AssetClass.values))
+
+        for value in Instrument.AssetClass.values:
+            response = self.client.post(
+                f"/api/portfolio/positions/{self.position.id}/confirm-setup/",
+                {"asset_class": value},
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK, (value, response.data))
+            self.position.instrument.refresh_from_db()
+            self.assertEqual(self.position.instrument.asset_class, value)
 
     def test_position_archive_and_reopen_preserve_history(self):
         archived = self.client.post(f"/api/portfolio/positions/{self.position.id}/archive/")

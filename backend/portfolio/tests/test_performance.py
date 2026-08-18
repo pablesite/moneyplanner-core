@@ -242,7 +242,7 @@ class PortfolioPerformanceApiTests(APITestCase):
             user=self.user,
             name=name,
             identity_kind=Instrument.IdentityKind.CUSTOM,
-            asset_class=Instrument.AssetClass.MIXED,
+            asset_class=Instrument.AssetClass.ALTERNATIVES,
             instrument_type=Instrument.InstrumentType.FUND,
             quote_currency=currency,
         )
