@@ -838,6 +838,10 @@ class AllocationStrategy(models.Model):
         default=Decimal("0.005"),
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
     )
+    # Importe minimo de una linea para las posiciones que no fijan el suyo. Sin esto el
+    # reparto proponia compras de nueve centimos, que ningun broker ejecuta y nadie
+    # querria hacer. Cero deja el comportamiento anterior.
+    min_line_amount = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -927,6 +931,119 @@ class AllocationTarget(models.Model):
     @property
     def key(self) -> str:
         return self.asset_class or f"position:{self.position_id}"
+
+
+class ContributionBasket(models.Model):
+    """Una propuesta de aportacion guardada, todavia sin efecto contable.
+
+    El reparto no toca nada: se guarda, se revisa y solo la confirmacion crea operaciones
+    reales. Es la misma disciplina de la importacion CSV, y por el mismo motivo: una
+    propuesta que se ejecuta sola no se puede revisar.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Pendiente"
+        CONFIRMED = "confirmed", "Confirmada"
+        DISCARDED = "discarded", "Descartada"
+
+    portfolio = models.ForeignKey(
+        Portfolio, on_delete=models.CASCADE, related_name="contribution_baskets"
+    )
+    ownership = models.ForeignKey(
+        "memberships.Ownership", on_delete=models.PROTECT, related_name="contribution_baskets"
+    )
+    strategy = models.ForeignKey(
+        AllocationStrategy, on_delete=models.PROTECT, related_name="baskets"
+    )
+    booking_date = models.DateField()
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    reserved_cash = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    leftover = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    # De donde sale el dinero nuevo. Una compra se financia desde el efectivo del
+    # contenedor, asi que la aportacion entra primero ahi desde la cuenta del banco.
+    source_account = models.ForeignKey(
+        "accounting.LedgerAccount",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="portfolio_baskets",
+    )
+    explanation = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-booking_date", "-id"]
+        indexes = [models.Index(fields=["portfolio", "status"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0), name="portfolio_basket_amount_positive"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"basket:{self.id}:{self.status}"
+
+
+class ContributionBasketLine(models.Model):
+    """Un destino de la cesta: una posicion, o el efectivo de un contenedor.
+
+    El efectivo es un destino de pleno derecho y no un apano: una plataforma con minimo
+    de entrada alto no puede recibir la parte que le toca cada mes, asi que esa parte se
+    acumula en su cuenta de efectivo —que es dinero real, en un sitio real— hasta que
+    alcanza el minimo. Repartirla entre las demas la condenaria a no financiarse nunca.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pendiente"
+        CONFIRMED = "confirmed", "Confirmada"
+        SKIPPED = "skipped", "Descartada"
+
+    basket = models.ForeignKey(ContributionBasket, on_delete=models.CASCADE, related_name="lines")
+    position = models.ForeignKey(
+        PortfolioPosition,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="basket_lines",
+    )
+    cash_account = models.ForeignKey(
+        ContainerCashAccount,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="basket_lines",
+    )
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    reason = models.CharField(max_length=32, blank=True, default="")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    ledger_transaction = models.ForeignKey(
+        "accounting.LedgerTransaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="portfolio_basket_lines",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-amount", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(position__isnull=False, cash_account__isnull=True)
+                    | Q(position__isnull=True, cash_account__isnull=False)
+                ),
+                name="portfolio_basket_line_one_target",
+            ),
+            models.CheckConstraint(
+                condition=Q(amount__gt=0), name="portfolio_basket_line_amount_positive"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"line:{self.id}:{self.amount}"
 
 
 class ContributionCommitment(models.Model):

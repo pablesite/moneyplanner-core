@@ -2,13 +2,24 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentAssetEvent
-from portfolio.allocation import build_allocation, build_contribution, resolve_strategy
+from accounting.models import LedgerAccount, LedgerTransaction
+from portfolio.allocation import (
+    build_allocation,
+    build_contribution,
+    create_basket,
+    discard_basket,
+    resolve_strategy,
+)
 from portfolio.models import (
     AllocationStrategy,
+    ContainerCashAccount,
+    ContributionBasket,
+    ContributionBasketLine,
     ContributionCommitment,
     AllocationTarget,
     Instrument,
@@ -749,3 +760,147 @@ class ContributionCommitmentTests(AllocationFixture, TestCase):
         result = self.solve("20")
 
         self.assertIn(self.pension.id, self.amounts(result))
+
+
+class ContributionBasketTests(AllocationFixture, TestCase):
+    """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""
+
+    def setUp(self):
+        super().setUp()
+        self.equity = self.create_position("Fondo global", Decimal("9900"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+    def create(self, amount: str = "1000") -> ContributionBasket:
+        return create_basket(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal(amount),
+            on_date=TODAY,
+        )
+
+    def test_a_basket_is_a_proposal_and_touches_no_accounting(self):
+        before = LedgerTransaction.objects.count()
+
+        basket = self.create()
+
+        self.assertEqual(basket.status, ContributionBasket.Status.DRAFT)
+        self.assertEqual(basket.lines.count(), 1)
+        self.assertEqual(LedgerTransaction.objects.count(), before)
+        self.assertTrue(
+            all(line.status == ContributionBasketLine.Status.PENDING for line in basket.lines.all())
+        )
+
+    def test_the_basket_records_the_version_it_was_solved_against(self):
+        # La propuesta se juzga contra la politica que estaba escrita cuando se hizo, no
+        # contra la de hoy.
+        basket = self.create()
+
+        self.assertEqual(basket.strategy.effective_from, date(2024, 1, 1))
+
+    def test_discarding_keeps_the_proposal_you_did_not_follow(self):
+        basket = self.create()
+
+        discard_basket(basket=basket)
+
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, ContributionBasket.Status.DISCARDED)
+        self.assertEqual(basket.lines.count(), 1)
+        self.assertEqual(basket.lines.first().status, ContributionBasketLine.Status.SKIPPED)
+
+    def test_a_basket_cannot_be_discarded_twice(self):
+        basket = self.create()
+        discard_basket(basket=basket)
+
+        with self.assertRaises(DjangoValidationError):
+            discard_basket(basket=basket)
+
+    def test_without_a_policy_there_is_no_basket_to_save(self):
+        other = self.create_position(
+            "Cripto del niño",
+            Decimal("100"),
+            asset_class=Instrument.AssetClass.CRYPTO,
+            ownership=self.his,
+        )
+        del other
+
+        with self.assertRaises(DjangoValidationError):
+            create_basket(
+                portfolio=self.portfolio,
+                ownership=self.his,
+                amount=Decimal("500"),
+                on_date=TODAY,
+            )
+
+    def test_what_cannot_meet_its_minimum_waits_in_the_platform_cash(self):
+        # Urbanitae pide 500 de entrada y le tocan cien y pico al mes: repartir su parte
+        # entre las demas la condenaria a no financiarse nunca. Se acumula en el efectivo
+        # de su propio contenedor, que es dinero real esperando en la plataforma.
+        platform = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Urbanitae",
+            container_type=InvestmentContainer.ContainerType.PLATFORM,
+        )
+        cash = LedgerAccount.objects.create(
+            user=self.user,
+            name="Urbanitae efectivo",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        ContainerCashAccount.objects.create(container=platform, ledger_account=cash, currency="EUR")
+        crowd = self.create_position(
+            "Crowdfunding", Decimal("1000"), asset_class=Instrument.AssetClass.REAL_ESTATE
+        )
+        crowd.container = platform
+        crowd.save(update_fields=["container"])
+        PositionAllocationRule.objects.create(position=crowd, min_contribution=Decimal("500"))
+        AllocationTarget.objects.filter(strategy__ownership=self.mine).update(
+            target_percent=Decimal("70")
+        )
+        AllocationTarget.objects.create(
+            strategy=AllocationStrategy.objects.get(ownership=self.mine),
+            asset_class=Instrument.AssetClass.REAL_ESTATE,
+            target_percent=Decimal("30"),
+        )
+
+        basket = create_basket(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal("200"),
+            on_date=TODAY,
+        )
+
+        accumulated = basket.lines.filter(cash_account__isnull=False).first()
+        self.assertIsNotNone(accumulated)
+        self.assertEqual(accumulated.reason, "below_minimum")
+        self.assertIsNone(accumulated.position_id)
+
+    def test_a_minimum_line_keeps_the_basket_free_of_pointless_tickets(self):
+        # Sin esto el reparto proponia compras de nueve centimos: ningun broker las
+        # ejecuta y nadie querria hacerlas.
+        # La cartera esta casi en su sitio, asi que los huecos son minusculos y al de la
+        # clase pequena le tocarian centimos.
+        self.equity.class_breakdown.all().delete()
+        crumb = self.create_position(
+            "Cripto", Decimal("100"), asset_class=Instrument.AssetClass.CRYPTO
+        )
+        strategy = AllocationStrategy.objects.get(ownership=self.mine)
+        strategy.min_line_amount = Decimal("25")
+        strategy.save(update_fields=["min_line_amount"])
+        AllocationTarget.objects.filter(strategy=strategy).update(target_percent=Decimal("99"))
+        AllocationTarget.objects.create(
+            strategy=strategy,
+            asset_class=Instrument.AssetClass.CRYPTO,
+            target_percent=Decimal("1"),
+        )
+
+        basket = self.create("100")
+
+        placed = {line.position_id: line.amount for line in basket.lines.all()}
+        self.assertNotIn(crumb.id, placed)
+        self.assertTrue(all(amount >= Decimal("25") for amount in placed.values()))
+
+    def test_the_basket_always_adds_up_to_the_contribution(self):
+        basket = self.create("1000")
+
+        placed = sum((line.amount for line in basket.lines.all()), Decimal("0"))
+        self.assertEqual(placed + basket.reserved_cash + basket.leftover, Decimal("1000"))

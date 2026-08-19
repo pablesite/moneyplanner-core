@@ -16,11 +16,16 @@ from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
+from django.core.exceptions import ValidationError
+from django.db import transaction as db_transaction
+
 from memberships.models import Ownership
 
 from .models import (
     AllocationStrategy,
     AllocationTarget,
+    ContributionBasket,
+    ContributionBasketLine,
     ContributionCommitment,
     Portfolio,
     PortfolioPosition,
@@ -284,6 +289,8 @@ class Candidate:
     minimum: Decimal
     step: Decimal
     operation_cost: Decimal = ZERO
+    # Si su contenedor tiene cuenta de efectivo donde esperar a alcanzar el minimo.
+    accumulates: bool = False
 
 
 def _effective_targets(
@@ -339,45 +346,64 @@ def _effective_targets(
     return resolved, cash_target
 
 
-def _distribute(amount: Decimal, candidates: list[Candidate]) -> dict[int, Decimal]:
+def _distribute(
+    amount: Decimal, candidates: list[Candidate]
+) -> tuple[dict[int | None, Decimal], dict[int | None, Decimal]]:
     """Reparte la aportacion: primero cierra huecos, luego mantiene el rumbo.
 
-    Dos pasadas, que es como se rebalancea con aportaciones. La primera lleva dinero a lo
-    que va corto, proporcional al hueco y sin pasarse de largo. Si aun sobra —porque los
-    huecos eran pequenos o porque alguna quedo fuera— la segunda lo reparte a peso de la
-    politica, que deja la cartera justo en el objetivo en vez de dejar el dinero parado
-    en efectivo sin que nadie lo haya decidido.
+    Devuelve lo repartido y, aparte, lo reservado para acumular. Son tres fases:
 
-    Los minimos obligan a iterar en la primera pasada: al descartar una posicion su parte
-    vuelve al bote y puede hacer que otra cruce su propio minimo. El bucle esta acotado y
-    termina porque cada vuelta descarta al menos una candidata o se estabiliza.
+    1. Quien no llega a su minimo se aparta. Si su contenedor tiene efectivo, su parte se
+       reserva ahi en vez de volver al bote: repartirla entre las demas condenaria a una
+       plataforma con minimo de entrada alto a no financiarse nunca.
+    2. El resto se reparte proporcional al hueco, sin pasarse de largo.
+    3. Si aun sobra, se coloca a peso de politica, que deja la cartera en el objetivo en
+       vez de dejar dinero parado en efectivo sin que nadie lo haya decidido.
+
+    Los minimos obligan a iterar la primera fase: al apartar una candidata el bote cambia
+    y puede hacer que otra deje de alcanzar el suyo. El bucle esta acotado y termina
+    porque cada vuelta aparta al menos una o se estabiliza.
     """
     eligible = [row for row in candidates if row.gap > 0]
+    reserved: dict[int | None, Decimal] = {}
+    budget = amount
     raw: dict[int | None, Decimal] = {}
     for _ in range(MAX_REDISTRIBUTIONS):
-        if not eligible:
+        if not eligible or budget <= 0:
             break
         total_gap = sum((row.gap for row in eligible), ZERO)
         if total_gap <= 0:
             eligible = []
             break
-        raw = {row.key: min(amount * row.gap / total_gap, row.gap) for row in eligible}
+        raw = {row.key: min(budget * row.gap / total_gap, row.gap) for row in eligible}
         dropped = [row for row in eligible if raw[row.key] < row.minimum]
         if not dropped:
             break
+        for row in dropped:
+            if not row.accumulates:
+                continue
+            # Va a una cuenta de efectivo, asi que el escalon de la posicion no aplica.
+            take = min(raw[row.key], budget).quantize(CENT, rounding=ROUND_DOWN)
+            if take <= 0:
+                continue
+            reserved[row.key] = reserved.get(row.key, ZERO) + take
+            budget -= take
         eligible = [row for row in eligible if row not in dropped]
 
     assigned: dict[int | None, Decimal] = {}
-    for row in eligible:
-        assigned[row.key] = _step_down(raw[row.key], row)
+    if budget > 0 and eligible:
+        total_gap = sum((row.gap for row in eligible), ZERO)
+        if total_gap > 0:
+            for row in eligible:
+                value = min(budget * row.gap / total_gap, row.gap)
+                placed = _step_down(value, row)
+                if placed >= row.minimum and placed > 0:
+                    assigned[row.key] = placed
 
-    # Segunda pasada: lo que no cupo en los huecos se reparte a peso de politica entre
-    # las que pueden recibirlo. Las descartadas por minimo o exclusion no vuelven a
-    # entrar: su dinero se reparte, que es lo que significa quedarse fuera.
     open_slots = [row for row in candidates if row.key in assigned] or [
-        row for row in candidates if row.minimum <= 0
+        row for row in candidates if row.minimum <= 0 and row.key not in reserved
     ]
-    remaining = amount - sum(assigned.values(), ZERO)
+    remaining = budget - sum(assigned.values(), ZERO)
     if remaining > 0 and open_slots:
         total_target = sum((row.target_percent for row in open_slots), ZERO)
         if total_target > 0:
@@ -388,7 +414,7 @@ def _distribute(amount: Decimal, candidates: list[Candidate]) -> dict[int, Decim
 
     # El residuo de cuantizar se coloca de a poco. Se prefiere lo traspasable, porque
     # construir donde luego se puede rebalancear sin peaje deja gratis el rebalanceo.
-    residual = amount - sum(assigned.values(), ZERO)
+    residual = budget - sum(assigned.values(), ZERO)
     if residual >= CENT and open_slots:
         for row in sorted(
             open_slots,
@@ -399,7 +425,7 @@ def _distribute(amount: Decimal, candidates: list[Candidate]) -> dict[int, Decim
             assigned[row.key] = assigned.get(row.key, ZERO) + residual
             residual = ZERO
             break
-    return {key: value for key, value in assigned.items() if value > 0}
+    return {key: value for key, value in assigned.items() if value > 0}, reserved
 
 
 def _step_down(value: Decimal, row: Candidate) -> Decimal:
@@ -479,11 +505,16 @@ def build_contribution(
                 target_percent=target_percent,
                 gap=max(ideal - current, ZERO),
                 tax_transferable=position.tax_transferable,
-                minimum=rule.min_contribution if rule else ZERO,
+                minimum=(
+                    rule.min_contribution
+                    if rule and rule.min_contribution > 0
+                    else strategy.min_line_amount
+                ),
                 step=rule.rounding_step if rule else ZERO,
                 operation_cost=(
                     ZERO if rule is None or rule.fee_free_plan else rule.operation_cost
                 ),
+                accumulates=position.container.cash_accounts.exists(),
             )
         )
 
@@ -553,12 +584,13 @@ def build_contribution(
     )
     open_candidates = [row for row in candidates if row.key not in capped]
 
-    assigned = _distribute(budget, open_candidates) if budget > 0 else {}
+    assigned, short = _distribute(budget, open_candidates) if budget > 0 else ({}, {})
     for key, value in committed.items():
         assigned[key] = assigned.get(key, ZERO) + value
 
     # Una linea cuya comision se lleva mas de lo tolerable no se propone: la operacion se
-    # come a si misma y es mejor acumular para la siguiente.
+    # come a si misma y es mejor acumular para la siguiente. Un compromiso se atiende
+    # igual, porque la deduccion vale mucho mas que la comision.
     uneconomic = [
         candidate
         for candidate in candidates
@@ -579,9 +611,32 @@ def build_contribution(
         )
         assigned.pop(candidate.key, None)
 
+    # Lo reservado por no alcanzar el minimo se acumula en el efectivo de su contenedor:
+    # dinero real esperando en la propia plataforma hasta que alcance el minimo de
+    # entrada. Sin cuenta de efectivo no hay donde esperar y su parte vuelve al reparto.
+    accumulate: list[dict[str, Any]] = []
+    by_key = {row.key: row for row in candidates if row.position is not None}
+    for key, value in short.items():
+        candidate = by_key.get(key)
+        if candidate is None or candidate.position is None or value <= 0:
+            continue
+        cash = candidate.position.container.cash_accounts.first()
+        if cash is None:
+            continue
+        accumulate.append(
+            {
+                "cash_account_id": cash.id,
+                "container": candidate.position.container.name,
+                "position_id": key,
+                "amount": str(value),
+                "reason": "below_minimum",
+            }
+        )
+
     reserved_cash = assigned.pop(None, ZERO)
     placed = sum(assigned.values(), ZERO)
-    leftover = (amount - reserved_cash - placed).quantize(CENT)
+    accumulated = sum((Decimal(row["amount"]) for row in accumulate), ZERO)
+    leftover = (amount - reserved_cash - placed - accumulated).quantize(CENT)
 
     by_position = {row.key: row for row in candidates if row.position is not None}
     return {
@@ -608,5 +663,79 @@ def build_contribution(
             for position_id, value in sorted(assigned.items(), key=lambda item: -item[1])
         ],
         "commitments": honoured,
+        "accumulate": accumulate,
         "skipped": skipped,
     }
+
+
+@db_transaction.atomic
+def create_basket(
+    *,
+    portfolio: Portfolio,
+    ownership: Ownership,
+    amount: Decimal,
+    on_date: date,
+    source_account_id: int | None = None,
+    context: PerformanceContext | None = None,
+) -> ContributionBasket:
+    """Guarda un reparto como propuesta pendiente, sin efecto contable.
+
+    Nada de esto toca el ledger: la cesta se revisa y solo la confirmacion crea
+    operaciones reales. Una propuesta que se ejecuta sola no se puede revisar.
+    """
+    solved = build_contribution(
+        portfolio=portfolio,
+        ownership=ownership,
+        amount=amount,
+        on_date=on_date,
+        context=context,
+    )
+    if solved["status"] != "ok":
+        raise ValidationError({"strategy": solved["status"]})
+
+    basket = ContributionBasket.objects.create(
+        portfolio=portfolio,
+        ownership=ownership,
+        strategy_id=solved["strategy_id"],
+        booking_date=on_date,
+        amount=Decimal(solved["amount"]),
+        reserved_cash=Decimal(solved["reserved_cash"]),
+        leftover=Decimal(solved["leftover"]),
+        source_account_id=source_account_id,
+        explanation={
+            "commitments": solved["commitments"],
+            "skipped": solved["skipped"],
+        },
+    )
+    lines = [
+        ContributionBasketLine(
+            basket=basket,
+            position_id=row["position_id"],
+            amount=Decimal(row["amount"]),
+            reason="policy",
+        )
+        for row in solved["lines"]
+    ]
+    lines.extend(
+        ContributionBasketLine(
+            basket=basket,
+            cash_account_id=row["cash_account_id"],
+            amount=Decimal(row["amount"]),
+            reason=row["reason"],
+        )
+        for row in solved["accumulate"]
+    )
+    ContributionBasketLine.objects.bulk_create(lines)
+    return basket
+
+
+def discard_basket(*, basket: ContributionBasket) -> ContributionBasket:
+    """Descartar no borra: la propuesta que no seguiste tambien es informacion."""
+    if basket.status != ContributionBasket.Status.DRAFT:
+        raise ValidationError({"status": "Solo se descarta una cesta pendiente."})
+    basket.status = ContributionBasket.Status.DISCARDED
+    basket.save(update_fields=["status"])
+    basket.lines.filter(status=ContributionBasketLine.Status.PENDING).update(
+        status=ContributionBasketLine.Status.SKIPPED
+    )
+    return basket
