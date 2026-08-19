@@ -211,9 +211,6 @@ def build_allocation(
 
 CENT = Decimal("0.01")
 MAX_REDISTRIBUTIONS = 12
-# Por encima de esto la comision se come la linea: un euro sobre doce es un 8%, mas de lo
-# que esa linea puede rendir en un ano. Por debajo, la comision es ruido.
-MAX_COST_SHARE = Decimal("0.005")
 
 
 def contributed_within(
@@ -568,7 +565,7 @@ def build_contribution(
         if candidate.key in assigned
         and candidate.operation_cost > 0
         and assigned[candidate.key] > 0
-        and candidate.operation_cost / assigned[candidate.key] > MAX_COST_SHARE
+        and candidate.operation_cost / assigned[candidate.key] > strategy.max_cost_share
         and candidate.key not in committed
     ]
     for candidate in uneconomic:

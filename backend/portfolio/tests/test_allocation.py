@@ -714,6 +714,19 @@ class ContributionCommitmentTests(AllocationFixture, TestCase):
         self.assertNotIn(self.pension.id, self.amounts(result))
         self.assertTrue(any(row["reason"] == "cost_exceeds_ticket" for row in result["skipped"]))
 
+    def test_the_fee_tolerance_is_a_policy_decision_not_a_constant(self):
+        # Quien opera sin comisiones no quiere ninguna tolerancia porque nunca aplica, y
+        # quien paga por operacion querra fijar la suya. No puede vivir en el codigo.
+        PositionAllocationRule.objects.create(position=self.pension, operation_cost=Decimal("1"))
+        strategy = AllocationStrategy.objects.get(ownership=self.mine)
+        strategy.max_cost_share = Decimal("0.5")
+        strategy.save(update_fields=["max_cost_share"])
+
+        result = self.solve("20")
+
+        # Con la tolerancia por defecto esta linea se descartaba; con esta, no.
+        self.assertIn(self.pension.id, self.amounts(result))
+
     def test_a_recurring_plan_pays_no_fee_so_the_line_stands(self):
         PositionAllocationRule.objects.create(
             position=self.pension, operation_cost=Decimal("1"), fee_free_plan=True

@@ -828,6 +828,16 @@ class AllocationStrategy(models.Model):
     )
     effective_from = models.DateField()
     note = models.TextField(blank=True, default="")
+    # Cuanta comision se tolera en una linea antes de que la operacion no merezca la
+    # pena. Es una decision de politica y no una constante del programa: quien opera con
+    # un broker sin comisiones querra cero tolerancia porque nunca aplica, y quien paga
+    # por operacion querra fijar su propio umbral.
+    max_cost_share = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal("0.005"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
