@@ -7,7 +7,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from memberships.models import FamilyMember, Ownership
+from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset, InvestmentAssetEvent
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import get_account_balance
@@ -268,6 +268,75 @@ class AllocationTests(AllocationFixture, TestCase):
         self.assertEqual(Decimal(rows["cash"]["value"]), Decimal("0.00"))
         self.assertEqual(rows["cash"]["band"], "below")
         self.assertEqual(Decimal(rows["cash"]["drift_value"]), Decimal("1000.00"))
+
+    def test_linked_cash_shows_up_as_liquidity_and_only_for_its_owner(self):
+        # El efectivo enlazado cuenta en el valor de la cartera, así que tiene que contar
+        # también en la composición: sin esto la clase Liquidez marcaba cero teniendo
+        # dinero, y el total de la tabla no cuadraba con el hero.
+        self.create_position("Fondo global", Decimal("9000"))
+        wallet_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo bróker",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000"),
+            start_date=date(2024, 1, 1),
+        )
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=self.mine,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=wallet_asset.id,
+        )
+        wallet = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo bróker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=wallet_asset,
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Apertura",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 1, 1),
+            value_date=date(2024, 1, 1),
+            description="Saldo",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=wallet,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        ContainerCashAccount.objects.create(
+            container=self.container, ledger_account=wallet, currency="EUR"
+        )
+
+        mine = self.classes(
+            build_allocation(portfolio=self.portfolio, ownership=self.mine, on_date=TODAY)
+        )
+        his = self.classes(
+            build_allocation(portfolio=self.portfolio, ownership=self.his, on_date=TODAY)
+        )
+
+        self.assertEqual(Decimal(mine["cash"]["value"]), Decimal("1000.00"))
+        # El efectivo no lleva titularidad propia pero su activo sí: sumarlo a todos los
+        # ámbitos lo contaría varias veces.
+        self.assertNotIn("cash", his)
 
     def test_a_mixed_position_lands_in_its_parts_not_in_its_dominant_class(self):
         position = self.create_position("Roboadvisor", Decimal("10000"))

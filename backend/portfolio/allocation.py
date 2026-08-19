@@ -23,7 +23,7 @@ from django.utils import timezone
 from accounting.models import LedgerAccount, LedgerTransaction
 from accounting.services_quick_entry import create_quick_transaction
 
-from memberships.models import Ownership
+from memberships.models import Ownership, OwnershipLink
 
 from .operations import confirm_operation
 from .models import (
@@ -37,7 +37,9 @@ from .models import (
 )
 from .performance import (
     PerformanceContext,
+    _balance_at,
     _position_value_base,
+    _to_base,
     load_performance_context,
     timeline_context_start,
 )
@@ -118,6 +120,41 @@ def scope_slices(
     return slices
 
 
+def scope_cash(*, context: PerformanceContext, ownership: Ownership, on_date: date) -> Decimal:
+    """El efectivo de contenedor que pertenece a este ambito.
+
+    El efectivo no lleva titularidad propia, pero su activo en Patrimonio si: es de quien
+    sea la cuenta. Sin esto la liquidez o no aparecia en ninguna parte —la clase marcaba
+    cero teniendo dinero— o habria que sumarla a todos los ambitos y contarla varias
+    veces.
+    """
+    asset_ids = [
+        link.ledger_account.asset_id
+        for link in context.cash_accounts
+        if link.ledger_account.asset_id
+    ]
+    if not asset_ids:
+        return ZERO
+    owned = set(
+        OwnershipLink.objects.filter(
+            user=context.portfolio.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id__in=asset_ids,
+            ownership=ownership,
+        ).values_list("target_id", flat=True)
+    )
+    total = ZERO
+    for link in context.cash_accounts:
+        if link.ledger_account.asset_id not in owned:
+            continue
+        balance = _balance_at(context, link.ledger_account_id, on_date)
+        converted = _to_base(
+            context=context, amount=balance, currency=link.currency, target=on_date
+        )
+        total += converted or ZERO
+    return total
+
+
 def _band_state(actual: Decimal, target: AllocationTarget | None) -> str:
     if target is None:
         return "unplanned"
@@ -148,7 +185,11 @@ def build_allocation(
     strategy = resolve_strategy(portfolio=portfolio, ownership=ownership, on_date=on_date)
     positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
     slices = scope_slices(context=context, positions=positions, on_date=on_date)
-    total = sum((row.value for row in slices), ZERO)
+    # El efectivo enlazado a un contenedor es liquidez de la cartera: cuenta en el valor,
+    # asi que tiene que contar tambien en la composicion. Sin esto la clase Liquidez
+    # marcaba cero teniendo dinero, y el total de la tabla no cuadraba con el hero.
+    cash_value = scope_cash(context=context, ownership=ownership, on_date=on_date)
+    total = sum((row.value for row in slices), ZERO) + cash_value
 
     targets_by_class: dict[str, AllocationTarget] = {}
     targets_by_position: dict[int, AllocationTarget] = {}
@@ -161,6 +202,8 @@ def build_allocation(
 
     by_class: dict[str, Decimal] = {}
     by_position: dict[int, Decimal] = {}
+    if cash_value:
+        by_class["cash"] = cash_value
     for row in slices:
         by_class[row.asset_class] = by_class.get(row.asset_class, ZERO) + row.value
         by_position[row.position.id] = by_position.get(row.position.id, ZERO) + row.value
