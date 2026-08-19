@@ -7,10 +7,12 @@ from django.test import TestCase
 
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentAssetEvent
-from accounting.models import LedgerAccount, LedgerTransaction
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+from accounting.services_ledger import get_account_balance
 from portfolio.allocation import (
     build_allocation,
     build_contribution,
+    confirm_basket,
     create_basket,
     discard_basket,
     resolve_strategy,
@@ -904,3 +906,168 @@ class ContributionBasketTests(AllocationFixture, TestCase):
 
         placed = sum((line.amount for line in basket.lines.all()), Decimal("0"))
         self.assertEqual(placed + basket.reserved_cash + basket.leftover, Decimal("1000"))
+
+
+class ContributionConfirmTests(AllocationFixture, TestCase):
+    """Confirmar es lo unico que toca la contabilidad, y puede ser parcial."""
+
+    def setUp(self):
+        super().setUp()
+        self.bank = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        equity_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Apertura",
+            account_type=LedgerAccount.AccountType.EQUITY,
+            currency="EUR",
+        )
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 1, 1),
+            value_date=date(2024, 1, 1),
+            description="Saldo inicial",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=self.bank,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("5000"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=equity_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("5000"),
+            currency="EUR",
+        )
+        self.equity = self.create_position("Fondo global", Decimal("10000"))
+        self.equity.ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Fondo global",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        self.equity.save(update_fields=["ledger_account"])
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+    def basket(self, amount: str = "1000") -> ContributionBasket:
+        return create_basket(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal(amount),
+            on_date=TODAY,
+            source_account_id=self.bank.id,
+        )
+
+    def test_confirming_moves_the_money_for_real(self):
+        basket = self.basket()
+
+        confirm_basket(basket=basket)
+
+        basket.refresh_from_db()
+        self.assertEqual(basket.status, ContributionBasket.Status.CONFIRMED)
+        line = basket.lines.get()
+        self.assertEqual(line.status, ContributionBasketLine.Status.CONFIRMED)
+        self.assertIsNotNone(line.ledger_transaction_id)
+        self.assertEqual(get_account_balance(account=self.bank, status="posted"), Decimal("4000"))
+
+    def test_a_basket_can_be_confirmed_line_by_line(self):
+        # Una cesta puede tener una linea que hoy no quieres ejecutar y el resto si.
+        other = self.create_position(
+            "Oro", Decimal("1000"), asset_class=Instrument.AssetClass.COMMODITIES
+        )
+        other.ledger_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Oro",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        other.save(update_fields=["ledger_account"])
+        # Las dos con hueco, para que la cesta tenga dos lineas que decidir.
+        PositionValuation.objects.create(
+            position=self.equity,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("1000"),
+            currency="EUR",
+        )
+        AllocationTarget.objects.filter(strategy__ownership=self.mine).update(
+            target_percent=Decimal("50")
+        )
+        AllocationTarget.objects.create(
+            strategy=AllocationStrategy.objects.get(ownership=self.mine),
+            asset_class=Instrument.AssetClass.COMMODITIES,
+            target_percent=Decimal("50"),
+        )
+        basket = self.basket("1000")
+        first = basket.lines.first()
+
+        confirm_basket(basket=basket, line_ids=[first.id])
+
+        basket.refresh_from_db()
+        # Queda algo por decidir, asi que la cesta sigue abierta.
+        self.assertEqual(basket.status, ContributionBasket.Status.DRAFT)
+        self.assertEqual(
+            basket.lines.filter(status=ContributionBasketLine.Status.CONFIRMED).count(), 1
+        )
+        self.assertEqual(
+            basket.lines.filter(status=ContributionBasketLine.Status.PENDING).count(), 1
+        )
+
+    def test_accumulating_into_platform_cash_is_a_transfer_not_a_purchase(self):
+        platform = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Urbanitae",
+            container_type=InvestmentContainer.ContainerType.PLATFORM,
+        )
+        wallet = LedgerAccount.objects.create(
+            user=self.user,
+            name="Urbanitae efectivo",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        ContainerCashAccount.objects.create(
+            container=platform, ledger_account=wallet, currency="EUR"
+        )
+        crowd = self.create_position(
+            "Crowdfunding", Decimal("1000"), asset_class=Instrument.AssetClass.REAL_ESTATE
+        )
+        crowd.container = platform
+        crowd.save(update_fields=["container"])
+        PositionAllocationRule.objects.create(position=crowd, min_contribution=Decimal("500"))
+        AllocationTarget.objects.filter(strategy__ownership=self.mine).update(
+            target_percent=Decimal("70")
+        )
+        AllocationTarget.objects.create(
+            strategy=AllocationStrategy.objects.get(ownership=self.mine),
+            asset_class=Instrument.AssetClass.REAL_ESTATE,
+            target_percent=Decimal("30"),
+        )
+        basket = self.basket("200")
+
+        confirm_basket(basket=basket)
+
+        # El dinero espera en el monedero de la plataforma: todavia no se ha invertido.
+        self.assertGreater(get_account_balance(account=wallet, status="posted"), Decimal("0"))
+
+    def test_a_basket_without_a_funding_account_cannot_be_confirmed(self):
+        basket = create_basket(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal("500"),
+            on_date=TODAY,
+        )
+
+        with self.assertRaises(DjangoValidationError):
+            confirm_basket(basket=basket)
+
+    def test_a_discarded_basket_cannot_be_confirmed(self):
+        basket = self.basket()
+        discard_basket(basket=basket)
+
+        with self.assertRaises(DjangoValidationError):
+            confirm_basket(basket=basket)

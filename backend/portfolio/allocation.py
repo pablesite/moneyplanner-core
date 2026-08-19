@@ -18,9 +18,14 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction as db_transaction
+from django.utils import timezone
+
+from accounting.models import LedgerAccount, LedgerTransaction
+from accounting.services_quick_entry import create_quick_transaction
 
 from memberships.models import Ownership
 
+from .operations import confirm_operation
 from .models import (
     AllocationStrategy,
     AllocationTarget,
@@ -738,4 +743,78 @@ def discard_basket(*, basket: ContributionBasket) -> ContributionBasket:
     basket.lines.filter(status=ContributionBasketLine.Status.PENDING).update(
         status=ContributionBasketLine.Status.SKIPPED
     )
+    return basket
+
+
+@db_transaction.atomic
+def confirm_basket(
+    *,
+    basket: ContributionBasket,
+    line_ids: list[int] | None = None,
+    source_account_id: int | None = None,
+) -> ContributionBasket:
+    """Convierte en operaciones reales las lineas que decidas, no necesariamente todas.
+
+    La confirmacion es parcial a proposito: una cesta puede tener una linea que hoy no
+    quieres ejecutar y el resto si. Lo que no confirmas se queda pendiente, y la cesta
+    solo se cierra cuando no queda nada por decidir.
+
+    Cada linea toma una de las dos rutas segun donde vaya: al efectivo de un contenedor
+    —un traspaso, porque es cargar el monedero de la plataforma— o a una posicion —una
+    compra financiada desde la cuenta que declares.
+    """
+    if basket.status != ContributionBasket.Status.DRAFT:
+        raise ValidationError({"status": "Solo se confirma una cesta pendiente."})
+    source_id = source_account_id or basket.source_account_id
+    if source_id is None:
+        raise ValidationError({"source_account_id": "Indica de donde sale el dinero."})
+
+    pending = basket.lines.filter(status=ContributionBasketLine.Status.PENDING)
+    if line_ids is not None:
+        pending = pending.filter(id__in=line_ids)
+    pending = list(pending.select_related("position", "cash_account__ledger_account"))
+    if not pending:
+        raise ValidationError({"lines": "No hay lineas pendientes que confirmar."})
+
+    source = LedgerAccount.objects.get(id=source_id, user=basket.portfolio.user)
+    now = timezone.now()
+    for line in pending:
+        if line.cash_account_id is not None:
+            # Cargar el monedero de la plataforma es un traspaso entre cuentas propias,
+            # no una compra: todavia no se ha invertido en nada.
+            transaction = create_quick_transaction(
+                user=basket.portfolio.user,
+                movement_type="transfer",
+                booking_date=basket.booking_date,
+                value_date=basket.booking_date,
+                description=f"Aportacion a {line.cash_account.container.name}",
+                amount=line.amount,
+                account=source,
+                counterparty_account=line.cash_account.ledger_account,
+                status=LedgerTransaction.Status.POSTED,
+                origin=LedgerTransaction.Origin.MANUAL,
+            )
+        else:
+            result = confirm_operation(
+                portfolio=basket.portfolio,
+                payload={
+                    "operation_type": "buy",
+                    "position_id": line.position_id,
+                    "source_account_id": source.id,
+                    "booking_date": basket.booking_date.isoformat(),
+                    "amount": str(line.amount),
+                    "fee": "0",
+                },
+                require_preview=False,
+            )
+            transaction = LedgerTransaction.objects.get(id=result["ledger_transaction_id"])
+        line.ledger_transaction = transaction
+        line.status = ContributionBasketLine.Status.CONFIRMED
+        line.confirmed_at = now
+        line.save(update_fields=["ledger_transaction", "status", "confirmed_at"])
+
+    if not basket.lines.filter(status=ContributionBasketLine.Status.PENDING).exists():
+        basket.status = ContributionBasket.Status.CONFIRMED
+        basket.confirmed_at = now
+        basket.save(update_fields=["status", "confirmed_at"])
     return basket
