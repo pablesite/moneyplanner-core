@@ -38,6 +38,7 @@ from .models import (
 from .performance import (
     PerformanceContext,
     _balance_at,
+    _cash_value_base,
     _position_value_base,
     _to_base,
     load_performance_context,
@@ -118,6 +119,14 @@ def scope_slices(
                 ScopeSlice(position, row.asset_class, value * row.percent / Decimal("100"))
             )
     return slices
+
+
+def build_cash_value(
+    *, context: PerformanceContext, on_date: date, member_id: int | None
+) -> Decimal:
+    """Todo el efectivo de contenedor de la cartera, en moneda base."""
+    value, _ = _cash_value_base(context=context, target=on_date, member_id=member_id)
+    return value or ZERO
 
 
 def scope_cash(*, context: PerformanceContext, ownership: Ownership, on_date: date) -> Decimal:

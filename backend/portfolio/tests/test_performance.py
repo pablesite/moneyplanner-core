@@ -686,6 +686,65 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(row["holding_currency"], "BTC")
         self.assertEqual(row["native_currency"], "EUR")
 
+    def test_the_workspace_publishes_container_cash_so_composition_matches_the_hero(self):
+        # La composicion se dibuja desde las posiciones, y el efectivo enlazado no es
+        # ninguna: el grafico sumaba menos que el valor de la cartera y la liquidez no
+        # salia por ningun lado. Con un filtro de inventario queda fuera, porque no
+        # pertenece a ninguna clase concreta.
+        cash_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("300"),
+            start_date=date(2024, 1, 1),
+        )
+        cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=cash_asset,
+        )
+        ContainerCashAccount.objects.create(
+            container=self.container, ledger_account=cash_account, currency="EUR"
+        )
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 1, 1),
+            description="Saldo inicial",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=cash_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("300"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=LedgerAccount.objects.create(
+                user=self.user,
+                name="Aportacion",
+                account_type=LedgerAccount.AccountType.EQUITY,
+                currency="EUR",
+            ),
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("300"),
+            currency="EUR",
+        )
+        query = "?date_from=2024-01-01&date_to=2024-12-31"
+
+        whole = self.client.get(f"/api/portfolio/workspace/{query}")
+        scoped = self.client.get(f"/api/portfolio/workspace/{query}&asset_class=equity")
+
+        self.assertEqual(whole.status_code, status.HTTP_200_OK, whole.data)
+        # 170 de la posicion mas 300 de efectivo: lo mismo que declara el hero.
+        self.assertEqual(Decimal(whole.data["cash"]["value"]), Decimal("300.00"))
+        self.assertEqual(Decimal(whole.data["overview"]["value"]), Decimal("470"))
+        self.assertEqual(Decimal(scoped.data["cash"]["value"]), Decimal("0.00"))
+
     def test_a_personal_expense_from_container_cash_is_a_withdrawal_not_a_cost(self):
         # La compra del supermercado pagada desde la cuenta enlazada no es un coste de
         # invertir: es dinero que sale de la cartera. Contarla como coste hundia la

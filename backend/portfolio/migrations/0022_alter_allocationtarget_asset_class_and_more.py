@@ -4,30 +4,93 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('portfolio', '0021_allocationstrategy_min_line_amount'),
+        ("portfolio", "0021_allocationstrategy_min_line_amount"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='allocationtarget',
-            name='asset_class',
-            field=models.CharField(blank=True, choices=[('equity', 'Renta variable'), ('fixed_income', 'Renta fija'), ('real_estate', 'Inmobiliario'), ('private_debt', 'Deuda privada'), ('commodities', 'Materias primas'), ('private_equity', 'Capital privado'), ('crypto', 'Criptoactivos'), ('cash', 'Liquidez'), ('trading', 'Trading'), ('other', 'Otros'), ('unclassified', 'Sin clasificar')], default='', max_length=24),
+            model_name="allocationtarget",
+            name="asset_class",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("equity", "Renta variable"),
+                    ("fixed_income", "Renta fija"),
+                    ("real_estate", "Inmobiliario"),
+                    ("private_debt", "Deuda privada"),
+                    ("commodities", "Materias primas"),
+                    ("private_equity", "Capital privado"),
+                    ("crypto", "Criptoactivos"),
+                    ("cash", "Liquidez"),
+                    ("trading", "Trading"),
+                    ("other", "Otros"),
+                    ("unclassified", "Sin clasificar"),
+                ],
+                default="",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='instrument',
-            name='asset_class',
-            field=models.CharField(choices=[('equity', 'Renta variable'), ('fixed_income', 'Renta fija'), ('real_estate', 'Inmobiliario'), ('private_debt', 'Deuda privada'), ('commodities', 'Materias primas'), ('private_equity', 'Capital privado'), ('crypto', 'Criptoactivos'), ('cash', 'Liquidez'), ('trading', 'Trading'), ('other', 'Otros'), ('unclassified', 'Sin clasificar')], max_length=24),
+            model_name="instrument",
+            name="asset_class",
+            field=models.CharField(
+                choices=[
+                    ("equity", "Renta variable"),
+                    ("fixed_income", "Renta fija"),
+                    ("real_estate", "Inmobiliario"),
+                    ("private_debt", "Deuda privada"),
+                    ("commodities", "Materias primas"),
+                    ("private_equity", "Capital privado"),
+                    ("crypto", "Criptoactivos"),
+                    ("cash", "Liquidez"),
+                    ("trading", "Trading"),
+                    ("other", "Otros"),
+                    ("unclassified", "Sin clasificar"),
+                ],
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='portfolioposition',
-            name='asset_class_override',
-            field=models.CharField(blank=True, choices=[('equity', 'Renta variable'), ('fixed_income', 'Renta fija'), ('real_estate', 'Inmobiliario'), ('private_debt', 'Deuda privada'), ('commodities', 'Materias primas'), ('private_equity', 'Capital privado'), ('crypto', 'Criptoactivos'), ('cash', 'Liquidez'), ('trading', 'Trading'), ('other', 'Otros'), ('unclassified', 'Sin clasificar')], default='', max_length=24),
+            model_name="portfolioposition",
+            name="asset_class_override",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("equity", "Renta variable"),
+                    ("fixed_income", "Renta fija"),
+                    ("real_estate", "Inmobiliario"),
+                    ("private_debt", "Deuda privada"),
+                    ("commodities", "Materias primas"),
+                    ("private_equity", "Capital privado"),
+                    ("crypto", "Criptoactivos"),
+                    ("cash", "Liquidez"),
+                    ("trading", "Trading"),
+                    ("other", "Otros"),
+                    ("unclassified", "Sin clasificar"),
+                ],
+                default="",
+                max_length=24,
+            ),
         ),
         migrations.AlterField(
-            model_name='positionclassbreakdown',
-            name='asset_class',
-            field=models.CharField(choices=[('equity', 'Renta variable'), ('fixed_income', 'Renta fija'), ('real_estate', 'Inmobiliario'), ('private_debt', 'Deuda privada'), ('commodities', 'Materias primas'), ('private_equity', 'Capital privado'), ('crypto', 'Criptoactivos'), ('cash', 'Liquidez'), ('trading', 'Trading'), ('other', 'Otros'), ('unclassified', 'Sin clasificar')], max_length=24),
+            model_name="positionclassbreakdown",
+            name="asset_class",
+            field=models.CharField(
+                choices=[
+                    ("equity", "Renta variable"),
+                    ("fixed_income", "Renta fija"),
+                    ("real_estate", "Inmobiliario"),
+                    ("private_debt", "Deuda privada"),
+                    ("commodities", "Materias primas"),
+                    ("private_equity", "Capital privado"),
+                    ("crypto", "Criptoactivos"),
+                    ("cash", "Liquidez"),
+                    ("trading", "Trading"),
+                    ("other", "Otros"),
+                    ("unclassified", "Sin clasificar"),
+                ],
+                max_length=24,
+            ),
         ),
     ]

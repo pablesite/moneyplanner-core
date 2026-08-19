@@ -19,6 +19,7 @@ from core.market_data import MarketDataSyncError
 
 from .allocation import (
     build_allocation,
+    build_cash_value,
     build_scopes,
     build_contribution,
     confirm_basket,
@@ -585,6 +586,20 @@ class PortfolioWorkspaceView(APIView):
                     "member_id": member_id,
                     "currency": portfolio.base_currency,
                     "results": build_portfolio_timeline(**shared, context=context, **scoped),
+                },
+                # El efectivo enlazado cuenta en el valor de la cartera, asi que la
+                # composicion tiene que poder incluirlo: sin esto el grafico sumaba menos
+                # que el hero y la liquidez no aparecia por ninguna parte. Con un filtro
+                # de inventario activo queda fuera, porque no es de ninguna clase ni de
+                # ninguna posicion concreta.
+                "cash": {
+                    "value": str(
+                        (
+                            build_cash_value(context=context, on_date=end_date, member_id=member_id)
+                            if scope_ids is None
+                            else Decimal("0")
+                        ).quantize(Decimal("0.01"))
+                    ),
                 },
                 "quality": build_portfolio_quality(
                     **shared, context=context, **scoped, performance=performance
