@@ -22,6 +22,8 @@ from django.utils import timezone
 
 from accounting.models import LedgerAccount, LedgerTransaction
 from accounting.services_quick_entry import create_quick_transaction
+from budget.models import AnnualExpenseEntry
+from budget.services import planned_expense_monthly_distribution
 
 from memberships.models import Ownership, OwnershipLink
 
@@ -266,6 +268,9 @@ def build_allocation(
         ),
         "total_value": str(total.quantize(Decimal("0.01"))),
         "position_count": len(positions),
+        "suggested_contribution": str(
+            planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
+        ),
         "by_class": rows(by_class, targets_by_class, "asset_class"),
         "by_position": rows(by_position, targets_by_position, "position_id"),
     }
@@ -273,6 +278,25 @@ def build_allocation(
 
 CENT = Decimal("0.01")
 MAX_REDISTRIBUTIONS = 12
+
+
+def planned_contribution(*, user: Any, on_date: date) -> Decimal:
+    """Lo que el presupuesto tenia previsto invertir ese mes.
+
+    Solo se lee: la cartera propone el importe que ya habias planificado, y decidir otra
+    cosa no reescribe el presupuesto. Si no hay nada planificado, no hay sugerencia y el
+    importe se escribe a mano.
+    """
+    total = ZERO
+    entries = AnnualExpenseEntry.objects.filter(
+        user=user,
+        is_active=True,
+        category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+    )
+    for entry in entries:
+        distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=on_date.year)
+        total += distribution.get(on_date.month, ZERO)
+    return total
 
 
 def contributed_within(

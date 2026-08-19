@@ -823,8 +823,14 @@ def _allocation_request(request) -> tuple[Portfolio, Ownership, date]:
 
 
 def _positive_amount(raw) -> Decimal:
+    # Se escribe a mano y en español: "1.500,50" es lo que teclea cualquiera aquí, y
+    # rechazarlo por la coma seria hacerle traducir a la maquina lo que la maquina ya
+    # sabe leer.
+    text = str(raw).strip().replace("€", "").replace(" ", "")
+    if "," in text:
+        text = text.replace(".", "").replace(",", ".")
     try:
-        amount = Decimal(str(raw))
+        amount = Decimal(text)
     except (TypeError, InvalidOperation) as exc:
         raise ValidationError({"amount": "Importe no valido."}) from exc
     if amount <= 0:

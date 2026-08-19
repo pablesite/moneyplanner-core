@@ -46,17 +46,31 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] Arquitectura Core de portfolio y frontera Budget/Plan.
-- [ ] `docs/architecture/api-registry.md`.
-- [ ] Project status de Core y SaaS.
+- [x] Arquitectura Core de portfolio y frontera Budget/Plan. Seccion "Investment Portfolio Allocation and Contribution Baskets" en `core/docs/architecture/architecture.md`, con la frontera Budget/Plan como bloque propio: la sugerencia se lee y nunca se escribe.
+- [x] `docs/architecture/api-registry.md`.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Redondeos y minimos pueden impedir el optimo. El algoritmo debe terminar, conservar el importe y explicar sobrantes/exclusiones.
 
 ## Completion Criteria
-- [ ] Targets historicos no cambian al editar estrategia.
-- [ ] Reparto respeta restricciones y conserva suma.
-- [ ] El reparto prefiere posiciones traspasables cuando dos opciones empatan.
-- [ ] El objetivo de liquidez se respeta como linea de politica, no como sobrante.
-- [ ] Una cesta no afecta ledger hasta confirmar.
-- [ ] Tests, docs y commit completados.
+- [x] Targets historicos no cambian al editar estrategia. Editar la version vigente la reescribe; una fecha efectiva nueva crea version, y la cesta guarda contra cual se resolvio.
+- [x] Reparto respeta restricciones y conserva suma. Minimos, redondeos, exclusiones, coste sobre `max_cost_share` y `min_line_amount`; lo que no cabe se explica en vez de desaparecer.
+- [x] El reparto prefiere posiciones traspasables cuando dos opciones empatan.
+- [x] El objetivo de liquidez se respeta como linea de politica, no como sobrante. El efectivo compite como candidato mas, y el enlazado a contenedor cuenta como liquidez real de la cartera.
+- [x] Una cesta no afecta ledger hasta confirmar.
+- [x] Tests, docs y commit completados. 898 tests de Core en verde.
+
+## Cierre
+
+El punto 7 del scope —sugerir importe desde Budget/Mi Plan— se resuelve leyendo el
+presupuesto: `suggested_contribution` suma lo planificado como inversion financiera para
+ese mes y abre el simulador con esa cifra. Es de solo lectura por decision de frontera:
+Budget decide cuanto puedes invertir y la cartera decide donde va. Si una cesta
+reescribiera el presupuesto, el plan describiria lo que paso en vez de lo que se decidio.
+
+Fuera de la spec, la fase dejo dos correcciones que la bloqueaban en datos reales: un
+gasto personal pagado desde efectivo enlazado se contaba como coste de invertir (hundia
+la rentabilidad con la compra del supermercado) y el `ValidationError` de Django llegaba
+al cliente como un 500 sin mensaje, asi que "falta decir de donde sale el dinero" se leia
+como una averia.

@@ -7,6 +7,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from budget.models import AnnualExpenseEntry
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset, InvestmentAssetEvent
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
@@ -1256,6 +1257,46 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         self.assertEqual(len(created.data["lines"]), 1)
         self.assertEqual(discarded.data["status"], "discarded")
 
+    def test_the_allocation_suggests_what_the_budget_planned_to_invest(self):
+        # El importe por defecto sale de lo que ya habias planificado invertir ese mes.
+        # Solo se lee: elegir otra cifra no reescribe el presupuesto.
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportacion mensual",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_input_period=AnnualExpenseEntry.AmountInputPeriod.MONTHLY,
+            amount_annual=Decimal("6000"),
+            fiscal_year=2024,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Extra de marzo",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            expense_type=AnnualExpenseEntry.ExpenseType.ONE_OFF,
+            time_profile=AnnualExpenseEntry.TimeProfile.ONE_OFF,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.INVESTMENT,
+            amount_input_period=AnnualExpenseEntry.AmountInputPeriod.ANNUAL,
+            amount_annual=Decimal("1200"),
+            fiscal_year=2024,
+            target_month=3,
+        )
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        december = self.client.get(
+            f"/api/portfolio/allocation/?ownership_id={self.mine.id}&on_date=2024-12-31"
+        )
+        march = self.client.get(
+            f"/api/portfolio/allocation/?ownership_id={self.mine.id}&on_date=2024-03-31"
+        )
+
+        self.assertEqual(december.status_code, status.HTTP_200_OK, december.data)
+        self.assertEqual(Decimal(december.data["suggested_contribution"]), Decimal("500.00"))
+        # Lo puntual solo cuenta en el mes al que se apunto, no todos los meses.
+        self.assertEqual(Decimal(march.data["suggested_contribution"]), Decimal("1700.00"))
+
     def test_the_basket_list_answers_by_scope_and_by_what_is_still_open(self):
         # La pantalla pregunta por lo que queda pendiente de decidir en un ambito, no por
         # el historico entero de propuestas de toda la cartera.
@@ -1284,6 +1325,18 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         self.assertEqual([row["id"] for row in scoped.data], [mine.data["id"]])
         self.assertEqual(pending.data, [])
         self.assertEqual(len(everything.data), 2)
+
+    def test_an_amount_written_in_spanish_is_understood(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        response = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "1.500,50", "on_date": "2024-12-31"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(Decimal(response.data["amount"]), Decimal("1500.50"))
 
     def test_an_amount_that_is_not_a_number_is_refused(self):
         self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
