@@ -396,6 +396,11 @@ class PortfolioPosition(models.Model):
         blank=True,
         default="",
     )
+    # Si la posicion admite traspaso sin peaje fiscal. En Espana los traspasos entre
+    # fondos y planes de pensiones son neutros y el resto tributa, asi que construir
+    # dentro de la bolsa traspasable deja el rebalanceo futuro gratis. No es un motor
+    # fiscal: es el unico dato sin el cual una recomendacion puede salir cara.
+    tax_transferable = models.BooleanField(default=False)
     status = models.CharField(max_length=16, choices=Status.choices)
     opened_on = models.DateField()
     closed_on = models.DateField(null=True, blank=True)
@@ -792,3 +797,142 @@ class PortfolioImportRow(models.Model):
                 fields=["batch", "row_number"], name="portfolio_import_row_number_unique"
             )
         ]
+
+
+class AllocationStrategy(models.Model):
+    """La politica de inversion de un ambito de titularidad, versionada por fecha.
+
+    El ambito es una `Ownership`, no un miembro: "lo de Pablo", "lo de Lucas" y "lo
+    compartido al 50%" son mandatos distintos, con horizontes distintos, y mezclarlos en
+    una sola politica no significa nada. Filtrar por miembro responde a otra pregunta
+    —que parte economica te toca— y sigue viviendo en el filtro de titularidad.
+
+    Se versiona en vez de editarse: juzgar una decision de marzo contra la politica de
+    hoy no dice nada. La desviacion de marzo se mide contra lo que estaba escrito en
+    marzo.
+    """
+
+    portfolio = models.ForeignKey(
+        Portfolio, on_delete=models.CASCADE, related_name="allocation_strategies"
+    )
+    ownership = models.ForeignKey(
+        "memberships.Ownership",
+        on_delete=models.PROTECT,
+        related_name="allocation_strategies",
+    )
+    effective_from = models.DateField()
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-effective_from", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["portfolio", "ownership", "effective_from"],
+                name="portfolio_strategy_version_unique",
+            )
+        ]
+        indexes = [models.Index(fields=["portfolio", "ownership", "effective_from"])]
+
+    def clean(self) -> None:
+        if self.portfolio_id and self.ownership_id:
+            if self.portfolio.user_id != self.ownership.user_id:
+                raise ValidationError("La titularidad pertenece a otro usuario.")
+
+    def __str__(self) -> str:
+        return f"{self.ownership_id}@{self.effective_from}"
+
+
+class AllocationTarget(models.Model):
+    """Un objetivo de la politica: una clase de activo o una posicion concreta.
+
+    Dos niveles, como fija el modelo conceptual. La banda es lo que dispara una
+    recomendacion; sin ella el sistema pediria rebalancear cada mes por ruido de mercado.
+    La liquidez tactica no necesita modelo aparte: es el objetivo de la clase `cash`, y
+    asi deja de ser el sobrante de la operacion para ser una linea declarada.
+    """
+
+    strategy = models.ForeignKey(
+        AllocationStrategy, on_delete=models.CASCADE, related_name="targets"
+    )
+    asset_class = models.CharField(
+        max_length=24, choices=Instrument.AssetClass.choices, blank=True, default=""
+    )
+    position = models.ForeignKey(
+        PortfolioPosition,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="allocation_targets",
+    )
+    target_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("100"))],
+    )
+    min_percent = models.DecimalField(
+        max_digits=6, decimal_places=3, null=True, blank=True
+    )
+    max_percent = models.DecimalField(
+        max_digits=6, decimal_places=3, null=True, blank=True
+    )
+
+    class Meta:
+        ordering = ["-target_percent", "asset_class", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(asset_class="", position__isnull=False)
+                    | (~Q(asset_class="") & Q(position__isnull=True))
+                ),
+                name="portfolio_target_one_level_only",
+            ),
+            models.CheckConstraint(
+                condition=Q(target_percent__gte=0) & Q(target_percent__lte=100),
+                name="portfolio_target_percent_range",
+            ),
+            models.UniqueConstraint(
+                fields=["strategy", "asset_class"],
+                condition=~Q(asset_class=""),
+                name="portfolio_target_class_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["strategy", "position"],
+                condition=Q(position__isnull=False),
+                name="portfolio_target_position_unique",
+            ),
+        ]
+
+    def clean(self) -> None:
+        floor = self.min_percent
+        ceiling = self.max_percent
+        if floor is not None and floor > self.target_percent:
+            raise ValidationError({"min_percent": "El minimo no puede superar al objetivo."})
+        if ceiling is not None and ceiling < self.target_percent:
+            raise ValidationError({"max_percent": "El maximo no puede quedar bajo el objetivo."})
+
+    @property
+    def key(self) -> str:
+        return self.asset_class or f"position:{self.position_id}"
+
+
+class PositionAllocationRule(models.Model):
+    """Como puede recibir dinero una posicion.
+
+    Sin esto el reparto propone importes que no se pueden ejecutar: un fondo con minimo
+    de suscripcion, una posicion archivada que no deberia recibir nada nunca, o un
+    producto que solo admite participaciones enteras.
+    """
+
+    position = models.OneToOneField(
+        PortfolioPosition, on_delete=models.CASCADE, related_name="allocation_rule"
+    )
+    excluded = models.BooleanField(default=False)
+    min_contribution = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    rounding_step = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"rule:{self.position_id}"
