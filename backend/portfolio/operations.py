@@ -608,8 +608,12 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
             }
             for row in portfolio.containers.order_by("name")
         ],
+        # "Sin clasificar" no se ofrece: es la ausencia de respuesta, no una respuesta
+        # que se pueda elegir. Para "no encaja en ninguna" ya esta "Otros".
         "asset_classes": [
-            {"value": value, "label": label} for value, label in Instrument.AssetClass.choices
+            {"value": value, "label": label}
+            for value, label in Instrument.AssetClass.choices
+            if value != Instrument.AssetClass.UNCLASSIFIED
         ],
         "container_types": [
             {"value": value, "label": label}

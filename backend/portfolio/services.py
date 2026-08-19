@@ -82,7 +82,7 @@ def _instrument_defaults(asset: Asset) -> dict:
     return {
         "identity_kind": Instrument.IdentityKind.CUSTOM,
         "asset_class": ASSET_CLASS_BY_SUBCATEGORY.get(
-            asset.subcategory, Instrument.AssetClass.OTHER
+            asset.subcategory, Instrument.AssetClass.UNCLASSIFIED
         ),
         "instrument_type": INSTRUMENT_TYPE_BY_SUBCATEGORY.get(
             asset.subcategory, Instrument.InstrumentType.OTHER

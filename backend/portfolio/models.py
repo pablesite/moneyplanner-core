@@ -119,6 +119,12 @@ class Instrument(models.Model):
         CRYPTO = "crypto", "Criptoactivos"
         CASH = "cash", "Liquidez"
         OTHER = "other", "Otros"
+        # "Otros" es una respuesta: has mirado el activo y no encaja en ninguna clase.
+        # Esto es la ausencia de respuesta, y son cosas distintas. El vehiculo determina
+        # la clase en cripto o crowdlending, pero un fondo, un ETF, un plan o un
+        # roboadvisor pueden ser cualquier cosa, asi que ahi nadie ha contestado todavia
+        # y meterlo en "Otros" lo hacia parecer decidido.
+        UNCLASSIFIED = "unclassified", "Sin clasificar"
 
     class InstrumentType(models.TextChoices):
         CASH = "cash", "Efectivo"

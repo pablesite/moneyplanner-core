@@ -323,6 +323,39 @@ class PortfolioBootstrapTests(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.container_id, container.id)
 
+    def test_a_vehicle_that_does_not_determine_its_class_is_left_unanswered(self):
+        # "Otros" es una respuesta: lo miraste y no encaja. Un fondo puede ser renta
+        # variable, renta fija o mixto, asi que nadie ha contestado todavia y meterlo en
+        # "Otros" lo hacia parecer decidido.
+        fund = self.create_asset(name="Fondo mixto", subcategory=Asset.Subcategory.FUNDS)
+        crypto = self.create_asset(name="Bitcoin", subcategory=Asset.Subcategory.CRYPTOCURRENCIES)
+        bootstrap_portfolio_for_user(user=self.user)
+
+        self.assertEqual(
+            PortfolioPosition.objects.get(asset=fund).effective_asset_class,
+            Instrument.AssetClass.UNCLASSIFIED,
+        )
+        # El vehiculo si determina la clase en cripto, asi que ahi no se pregunta.
+        self.assertEqual(
+            PortfolioPosition.objects.get(asset=crypto).effective_asset_class,
+            Instrument.AssetClass.CRYPTO,
+        )
+
+    def test_unclassified_is_not_offered_as_something_you_can_choose(self):
+        # No es una respuesta elegible: para "no encaja en ninguna" ya esta "Otros".
+        from portfolio.operations import operation_options
+
+        self.create_asset(name="Fondo mixto", subcategory=Asset.Subcategory.FUNDS)
+        bootstrap_portfolio_for_user(user=self.user)
+
+        offered = {
+            row["value"]
+            for row in operation_options(portfolio=Portfolio.objects.get())["asset_classes"]
+        }
+
+        self.assertIn(Instrument.AssetClass.OTHER, offered)
+        self.assertNotIn(Instrument.AssetClass.UNCLASSIFIED, offered)
+
     def test_canonical_instrument_requires_confirmed_identity(self):
         instrument = Instrument(
             identity_kind=Instrument.IdentityKind.CANONICAL,
