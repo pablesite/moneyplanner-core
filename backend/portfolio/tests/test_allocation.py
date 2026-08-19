@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset
-from portfolio.allocation import build_allocation, resolve_strategy
+from portfolio.allocation import build_allocation, build_contribution, resolve_strategy
 from portfolio.models import (
     AllocationStrategy,
     AllocationTarget,
@@ -14,6 +14,7 @@ from portfolio.models import (
     InvestmentContainer,
     Portfolio,
     PortfolioPosition,
+    PositionAllocationRule,
     PositionClassBreakdown,
     PositionOwnershipPeriod,
     PositionOwnershipShare,
@@ -263,3 +264,310 @@ class AllocationTests(TestCase):
 
         self.assertEqual(result["position_count"], 1)
         self.assertEqual(Decimal(result["total_value"]), Decimal("9000.00"))
+
+
+class ContributionSolverTests(AllocationTests):
+    def contribution(self, amount: str, ownership: Ownership | None = None):
+        return build_contribution(
+            portfolio=self.portfolio,
+            ownership=ownership or self.mine,
+            amount=Decimal(amount),
+            on_date=TODAY,
+        )
+
+    def amounts(self, result) -> dict[int, Decimal]:
+        return {row["position_id"]: Decimal(row["amount"]) for row in result["lines"]}
+
+    def test_the_money_goes_where_the_gap_is_not_spread_evenly(self):
+        # Esto es lo que sustituye al DCA: mismo importe, dirigido a lo que va corto en
+        # vez de repartido a partes iguales.
+        equity = self.create_position("Fondo global", Decimal("9000"))
+        gold = self.create_position(
+            "Oro", Decimal("1000"), asset_class=Instrument.AssetClass.COMMODITIES
+        )
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("60", None, None), "commodities": ("40", None, None)},
+        )
+
+        result = self.contribution("1000")
+
+        amounts = self.amounts(result)
+        self.assertEqual(result["status"], "ok")
+        # Con 11.000 tras aportar, el oro deberia valer 4.400 y tiene 1.000: se lleva
+        # todo, y la renta variable no recibe nada porque ya va sobrada.
+        self.assertEqual(amounts[gold.id], Decimal("1000.00"))
+        self.assertNotIn(equity.id, amounts)
+
+    def test_it_never_proposes_selling_what_is_overweight(self):
+        equity = self.create_position("Fondo global", Decimal("9000"))
+        self.create_position("Oro", Decimal("1000"), asset_class=Instrument.AssetClass.COMMODITIES)
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("10", None, None), "commodities": ("90", None, None)},
+        )
+
+        result = self.contribution("500")
+
+        self.assertNotIn(equity.id, self.amounts(result))
+        self.assertTrue(all(Decimal(row["amount"]) > 0 for row in result["lines"]))
+
+    def test_the_whole_amount_is_placed_or_explained(self):
+        self.create_position("Fondo global", Decimal("5000"))
+        self.create_position("Oro", Decimal("5000"), asset_class=Instrument.AssetClass.COMMODITIES)
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("50", None, None), "commodities": ("50", None, None)},
+        )
+
+        result = self.contribution("1000")
+
+        placed = sum(self.amounts(result).values(), Decimal("0"))
+        total = placed + Decimal(result["reserved_cash"]) + Decimal(result["leftover"])
+        self.assertEqual(total, Decimal("1000.00"))
+
+    def test_tactical_cash_is_a_policy_line_that_competes_for_the_money(self):
+        # La liquidez tactica no es lo que sobra al final de la operacion, pero tampoco
+        # tiene prioridad: compite por el hueco como una clase mas. Reservarla antes que
+        # nada hacia que una aportacion entera se fuera a efectivo mientras el resto de
+        # la cartera seguia fuera de banda.
+        self.create_position("Fondo global", Decimal("9000"))
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("90", None, None), "cash": ("10", None, None)},
+        )
+
+        result = self.contribution("1000")
+
+        self.assertEqual(Decimal(result["reserved_cash"]), Decimal("1000.00"))
+        self.assertEqual(result["lines"], [])
+
+    def test_a_minimum_that_cannot_be_met_hands_its_money_to_the_others(self):
+        big = self.create_position("Fondo global", Decimal("5000"))
+        small = self.create_position(
+            "Fondo con minimo",
+            Decimal("4900"),
+            asset_class=Instrument.AssetClass.FIXED_INCOME,
+        )
+        PositionAllocationRule.objects.create(position=small, min_contribution=Decimal("500"))
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("50", None, None), "fixed_income": ("50", None, None)},
+        )
+
+        result = self.contribution("200")
+
+        amounts = self.amounts(result)
+        self.assertNotIn(small.id, amounts)
+        self.assertEqual(amounts[big.id], Decimal("200.00"))
+
+    def test_an_excluded_position_never_receives_money(self):
+        equity = self.create_position("Fondo global", Decimal("5000"))
+        closed = self.create_position(
+            "Fondo cerrado a nuevas aportaciones",
+            Decimal("1000"),
+            asset_class=Instrument.AssetClass.FIXED_INCOME,
+        )
+        PositionAllocationRule.objects.create(position=closed, excluded=True)
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("50", None, None), "fixed_income": ("50", None, None)},
+        )
+
+        result = self.contribution("1000")
+
+        amounts = self.amounts(result)
+        self.assertNotIn(closed.id, amounts)
+        self.assertIn({"position_id": closed.id, "reason": "excluded"}, result["skipped"])
+        # Y su dinero no se queda parado: va entero a la que si puede recibirlo.
+        self.assertEqual(amounts[equity.id], Decimal("1000.00"))
+        self.assertEqual(Decimal(result["leftover"]), Decimal("0.00"))
+
+    def test_rounding_never_proposes_more_money_than_there_is(self):
+        position = self.create_position("Fondo por participaciones", Decimal("1000"))
+        PositionAllocationRule.objects.create(position=position, rounding_step=Decimal("100"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        result = self.contribution("250")
+
+        self.assertEqual(self.amounts(result)[position.id], Decimal("200.00"))
+        self.assertEqual(Decimal(result["leftover"]), Decimal("50.00"))
+
+    def test_an_incomplete_policy_is_refused_instead_of_normalised(self):
+        # Normalizar en silencio calcularia el ideal sobre una cartera que no es la tuya
+        # y el reparto seria inventado.
+        self.create_position("Fondo global", Decimal("1000"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("60", None, None)})
+
+        result = self.contribution("500")
+
+        self.assertEqual(result["status"], "incomplete_strategy")
+        self.assertEqual(result["lines"], [])
+
+    def test_without_a_policy_there_is_nothing_to_recommend(self):
+        self.create_position("Fondo global", Decimal("1000"))
+
+        result = self.contribution("500")
+
+        self.assertEqual(result["status"], "no_strategy")
+
+    def test_a_class_yet_to_be_built_is_built_where_rebalancing_will_be_free(self):
+        # Aportar no paga peaje hoy, asi que la eleccion no es fiscal ahora: es de
+        # manana. Construir la clase en lo traspasable deja gratis el rebalanceo futuro,
+        # y la exposicion es la misma porque son la misma clase.
+        self.create_position("Fondo global", Decimal("10000"))
+        etf = self.create_position(
+            "ETF de bonos", Decimal("0"), asset_class=Instrument.AssetClass.FIXED_INCOME
+        )
+        fund = self.create_position(
+            "Fondo de bonos", Decimal("0"), asset_class=Instrument.AssetClass.FIXED_INCOME
+        )
+        fund.tax_transferable = True
+        fund.save(update_fields=["tax_transferable"])
+
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("80", None, None), "fixed_income": ("20", None, None)},
+        )
+
+        amounts = self.amounts(self.contribution("2000"))
+
+        self.assertIn(fund.id, amounts)
+        self.assertNotIn(etf.id, amounts)
+
+    def test_with_nothing_transferable_an_empty_class_is_split_evenly(self):
+        self.create_position("Fondo global", Decimal("10000"))
+        first = self.create_position(
+            "ETF de bonos A", Decimal("0"), asset_class=Instrument.AssetClass.FIXED_INCOME
+        )
+        second = self.create_position(
+            "ETF de bonos B", Decimal("0"), asset_class=Instrument.AssetClass.FIXED_INCOME
+        )
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("80", None, None), "fixed_income": ("20", None, None)},
+        )
+
+        amounts = self.amounts(self.contribution("2000"))
+
+        self.assertEqual(amounts[first.id], amounts[second.id])
+
+    def test_each_ownership_solves_against_its_own_policy(self):
+        self.create_position("Fondo global", Decimal("1000"))
+        self.create_position(
+            "Cripto del niño",
+            Decimal("1000"),
+            asset_class=Instrument.AssetClass.CRYPTO,
+            ownership=self.his,
+        )
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        self.strategy(self.his, date(2024, 1, 1), {"crypto": ("100", None, None)})
+
+        mine = self.contribution("500")
+        his = self.contribution("500", ownership=self.his)
+
+        self.assertEqual(len(mine["lines"]), 1)
+        self.assertEqual(mine["lines"][0]["asset_class"], "equity")
+        self.assertEqual(his["lines"][0]["asset_class"], "crypto")
+
+
+class ContributionInvariantTests(AllocationTests):
+    """Lo que tiene que cumplirse siempre, sea cual sea la cartera y el importe.
+
+    Un solver falla en los bordes, no en el caso de ejemplo: importes diminutos, clases
+    ya pasadas de largo, minimos que no se alcanzan y escalones que no dividen.
+    """
+
+    HALVES = {"equity": ("50", None, None), "fixed_income": ("50", None, None)}
+
+    def build(self, currents, targets, amount, rules=None):
+        positions = [
+            self.create_position(f"P{index}", Decimal(value), asset_class=asset_class)
+            for index, (asset_class, value) in enumerate(currents)
+        ]
+        for index, rule in (rules or {}).items():
+            PositionAllocationRule.objects.create(position=positions[index], **rule)
+        self.strategy(self.mine, date(2024, 1, 1), targets)
+        return positions, build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal(amount),
+            on_date=TODAY,
+        )
+
+    def assert_conserves(self, result, amount: str) -> Decimal:
+        placed = sum((Decimal(row["amount"]) for row in result["lines"]), Decimal("0"))
+        total = placed + Decimal(result["reserved_cash"]) + Decimal(result["leftover"])
+        self.assertEqual(total, Decimal(amount))
+        self.assertLessEqual(placed, Decimal(amount))
+        self.assertTrue(all(Decimal(row["amount"]) > 0 for row in result["lines"]))
+        return placed
+
+    def test_a_contribution_of_one_cent_is_conserved(self):
+        _, result = self.build([("equity", "1000"), ("fixed_income", "9000")], self.HALVES, "0.01")
+
+        self.assert_conserves(result, "0.01")
+
+    def test_an_awkward_amount_is_conserved(self):
+        _, result = self.build([("equity", "1000"), ("fixed_income", "9000")], self.HALVES, "7.77")
+
+        self.assert_conserves(result, "7.77")
+
+    def test_an_empty_portfolio_is_conserved(self):
+        _, result = self.build([("equity", "0"), ("fixed_income", "0")], self.HALVES, "1000")
+
+        self.assertEqual(self.assert_conserves(result, "1000"), Decimal("1000.00"))
+
+    def test_a_lopsided_portfolio_is_conserved(self):
+        _, result = self.build(
+            [("equity", "9999.99"), ("fixed_income", "0.01")], self.HALVES, "333.33"
+        )
+
+        self.assert_conserves(result, "333.33")
+
+    def test_a_rounding_step_is_always_respected(self):
+        positions, result = self.build(
+            [("equity", "1000"), ("fixed_income", "1000")],
+            self.HALVES,
+            "1000",
+            rules={0: {"rounding_step": Decimal("250")}},
+        )
+
+        amounts = {row["position_id"]: Decimal(row["amount"]) for row in result["lines"]}
+        self.assertEqual(amounts.get(positions[0].id, Decimal("0")) % Decimal("250"), 0)
+        self.assert_conserves(result, "1000")
+
+    def test_an_already_overshot_policy_still_invests_the_money(self):
+        # Todas las clases pasadas de largo: no hay hueco que cerrar y aun asi el dinero
+        # se coloca a peso de politica, en vez de quedarse en efectivo sin decidirlo.
+        _, result = self.build([("equity", "8000"), ("fixed_income", "2000")], self.HALVES, "100")
+
+        self.assertEqual(self.assert_conserves(result, "100"), Decimal("100.00"))
+
+    def test_the_solver_is_deterministic(self):
+        _, first = self.build(
+            [("equity", "1000"), ("fixed_income", "3000"), ("crypto", "500")],
+            {
+                "equity": ("40", None, None),
+                "fixed_income": ("40", None, None),
+                "crypto": ("20", None, None),
+            },
+            "777.77",
+        )
+
+        second = build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal("777.77"),
+            on_date=TODAY,
+        )
+
+        self.assertEqual(first["lines"], second["lines"])

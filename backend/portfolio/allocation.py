@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 from memberships.models import Ownership
@@ -200,4 +200,278 @@ def build_allocation(
         "position_count": len(positions),
         "by_class": rows(by_class, targets_by_class, "asset_class"),
         "by_position": rows(by_position, targets_by_position, "position_id"),
+    }
+
+
+CENT = Decimal("0.01")
+MAX_REDISTRIBUTIONS = 12
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """Algo que puede recibir dinero, con su hueco hasta el objetivo.
+
+    La liquidez tactica es una candidata mas, sin posicion detras: es una linea de la
+    politica y compite por el dinero como cualquier clase. Reservarla antes que nada le
+    daba prioridad absoluta y una aportacion entera podia irse a efectivo mientras el
+    resto de la cartera seguia fuera de banda.
+    """
+
+    key: int | None
+    position: PortfolioPosition | None
+    asset_class: str
+    current: Decimal
+    target_percent: Decimal
+    gap: Decimal
+    tax_transferable: bool
+    minimum: Decimal
+    step: Decimal
+
+
+def _effective_targets(
+    *,
+    strategy: AllocationStrategy,
+    positions: list[PortfolioPosition],
+    current_by_position: dict[int, Decimal],
+) -> tuple[dict[int, Decimal], Decimal]:
+    """Objetivo de cada posicion en % de la cartera, y el que reserva la liquidez.
+
+    Una posicion con objetivo propio manda sobre el de su clase. El resto heredan el de
+    la clase repartido entre ellas por su peso actual, porque el reparto dentro de una
+    clase ya lo decidiste al construirla: la politica dice cuanta renta variable quieres,
+    no en cual de tus tres fondos.
+    """
+    class_targets: dict[str, Decimal] = {}
+    position_targets: dict[int, Decimal] = {}
+    cash_target = ZERO
+    for target in strategy.targets.all():
+        if target.position_id:
+            position_targets[target.position_id] = target.target_percent
+        elif target.asset_class == "cash":
+            cash_target = target.target_percent
+        else:
+            class_targets[target.asset_class] = target.target_percent
+
+    resolved = dict(position_targets)
+    by_class: dict[str, list[PortfolioPosition]] = {}
+    for position in positions:
+        if position.id in position_targets:
+            continue
+        by_class.setdefault(position.effective_asset_class, []).append(position)
+
+    for asset_class, members in by_class.items():
+        share = class_targets.get(asset_class)
+        if share is None:
+            continue
+        weights = {p.id: current_by_position.get(p.id, ZERO) for p in members}
+        total_weight = sum(weights.values(), ZERO)
+        if total_weight > 0:
+            for position in members:
+                resolved[position.id] = share * weights[position.id] / total_weight
+            continue
+        # Clase planeada y todavia vacia: no hay historia de la que deducir un peso, asi
+        # que aqui si se elige donde construir. Se construye en lo traspasable, porque
+        # esa parte se podra rebalancear manana sin pagar peaje y la otra no. Si ninguna
+        # lo admite, a partes iguales, que es lo unico neutral.
+        preferred = [row for row in members if row.tax_transferable] or members
+        for position in members:
+            resolved[position.id] = (
+                share / Decimal(len(preferred)) if position in preferred else ZERO
+            )
+    return resolved, cash_target
+
+
+def _distribute(amount: Decimal, candidates: list[Candidate]) -> dict[int, Decimal]:
+    """Reparte la aportacion: primero cierra huecos, luego mantiene el rumbo.
+
+    Dos pasadas, que es como se rebalancea con aportaciones. La primera lleva dinero a lo
+    que va corto, proporcional al hueco y sin pasarse de largo. Si aun sobra —porque los
+    huecos eran pequenos o porque alguna quedo fuera— la segunda lo reparte a peso de la
+    politica, que deja la cartera justo en el objetivo en vez de dejar el dinero parado
+    en efectivo sin que nadie lo haya decidido.
+
+    Los minimos obligan a iterar en la primera pasada: al descartar una posicion su parte
+    vuelve al bote y puede hacer que otra cruce su propio minimo. El bucle esta acotado y
+    termina porque cada vuelta descarta al menos una candidata o se estabiliza.
+    """
+    eligible = [row for row in candidates if row.gap > 0]
+    raw: dict[int | None, Decimal] = {}
+    for _ in range(MAX_REDISTRIBUTIONS):
+        if not eligible:
+            break
+        total_gap = sum((row.gap for row in eligible), ZERO)
+        if total_gap <= 0:
+            eligible = []
+            break
+        raw = {row.key: min(amount * row.gap / total_gap, row.gap) for row in eligible}
+        dropped = [row for row in eligible if raw[row.key] < row.minimum]
+        if not dropped:
+            break
+        eligible = [row for row in eligible if row not in dropped]
+
+    assigned: dict[int | None, Decimal] = {}
+    for row in eligible:
+        assigned[row.key] = _step_down(raw[row.key], row)
+
+    # Segunda pasada: lo que no cupo en los huecos se reparte a peso de politica entre
+    # las que pueden recibirlo. Las descartadas por minimo o exclusion no vuelven a
+    # entrar: su dinero se reparte, que es lo que significa quedarse fuera.
+    open_slots = [row for row in candidates if row.key in assigned] or [
+        row for row in candidates if row.minimum <= 0
+    ]
+    remaining = amount - sum(assigned.values(), ZERO)
+    if remaining > 0 and open_slots:
+        total_target = sum((row.target_percent for row in open_slots), ZERO)
+        if total_target > 0:
+            for row in open_slots:
+                extra = _step_down(remaining * row.target_percent / total_target, row)
+                if extra > 0:
+                    assigned[row.key] = assigned.get(row.key, ZERO) + extra
+
+    # El residuo de cuantizar se coloca de a poco. Se prefiere lo traspasable, porque
+    # construir donde luego se puede rebalancear sin peaje deja gratis el rebalanceo.
+    residual = amount - sum(assigned.values(), ZERO)
+    if residual >= CENT and open_slots:
+        for row in sorted(
+            open_slots,
+            key=lambda row: (not row.tax_transferable, -row.gap, row.key is None, row.key or 0),
+        ):
+            if residual < CENT or row.step > 0:
+                continue
+            assigned[row.key] = assigned.get(row.key, ZERO) + residual
+            residual = ZERO
+            break
+    return {key: value for key, value in assigned.items() if value > 0}
+
+
+def _step_down(value: Decimal, row: Candidate) -> Decimal:
+    """A la baja siempre: nunca se propone mas dinero del que hay."""
+    if row.step > 0:
+        value = (value // row.step) * row.step
+    return value.quantize(CENT, rounding=ROUND_DOWN)
+
+
+def build_contribution(
+    *,
+    portfolio: Portfolio,
+    ownership: Ownership,
+    amount: Decimal,
+    on_date: date,
+    context: PerformanceContext | None = None,
+) -> dict[str, Any]:
+    """Reparte una aportacion hacia donde mas falta para la politica del ambito.
+
+    Solo aportaciones: no propone ventas. Mientras la cartera siga creciendo por
+    aportacion, dirigirla sostiene las bandas sin pagar peaje fiscal, que es justo lo que
+    una venta de rebalanceo si cuesta.
+    """
+    context = context or load_performance_context(
+        portfolio=portfolio,
+        start_date=timeline_context_start(portfolio=portfolio, start_date=on_date),
+        end_date=on_date,
+    )
+    strategy = resolve_strategy(portfolio=portfolio, ownership=ownership, on_date=on_date)
+    if strategy is None:
+        return {"status": "no_strategy", "lines": [], "amount": str(amount)}
+
+    declared = sum((row.target_percent for row in strategy.targets.all()), ZERO)
+    if abs(declared - Decimal("100")) > Decimal("0.01"):
+        # No se normaliza en silencio: con una politica incompleta el ideal se calcula
+        # sobre una cartera que no es la tuya y el reparto resultante seria inventado.
+        return {
+            "status": "incomplete_strategy",
+            "declared_percent": str(declared),
+            "lines": [],
+            "amount": str(amount),
+        }
+
+    positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
+    slices = scope_slices(context=context, positions=positions, on_date=on_date)
+    current_by_position: dict[int, Decimal] = {}
+    for row in slices:
+        current_by_position[row.position.id] = (
+            current_by_position.get(row.position.id, ZERO) + row.value
+        )
+    total = sum(current_by_position.values(), ZERO)
+    post_total = total + amount
+
+    resolved, cash_target = _effective_targets(
+        strategy=strategy, positions=positions, current_by_position=current_by_position
+    )
+
+    candidates: list[Candidate] = []
+    skipped: list[dict[str, Any]] = []
+    for position in sorted(positions, key=lambda row: row.id):
+        rule = getattr(position, "allocation_rule", None)
+        target_percent = resolved.get(position.id, ZERO)
+        if rule is not None and rule.excluded:
+            skipped.append({"position_id": position.id, "reason": "excluded"})
+            continue
+        if target_percent <= 0:
+            skipped.append({"position_id": position.id, "reason": "no_target"})
+            continue
+        current = current_by_position.get(position.id, ZERO)
+        ideal = target_percent / Decimal("100") * post_total
+        candidates.append(
+            Candidate(
+                key=position.id,
+                position=position,
+                asset_class=position.effective_asset_class,
+                current=current,
+                target_percent=target_percent,
+                gap=max(ideal - current, ZERO),
+                tax_transferable=position.tax_transferable,
+                minimum=rule.min_contribution if rule else ZERO,
+                step=rule.rounding_step if rule else ZERO,
+            )
+        )
+
+    if cash_target > 0:
+        # La liquidez entra como una candidata mas y compite por el hueco. El efectivo
+        # del contenedor no es de ninguna posicion, asi que dentro del ambito parte de
+        # cero y su hueco es su objetivo entero.
+        candidates.append(
+            Candidate(
+                key=None,
+                position=None,
+                asset_class="cash",
+                current=ZERO,
+                target_percent=cash_target,
+                gap=cash_target / Decimal("100") * post_total,
+                tax_transferable=False,
+                minimum=ZERO,
+                step=ZERO,
+            )
+        )
+
+    assigned = _distribute(amount, candidates)
+    reserved_cash = assigned.pop(None, ZERO)
+    placed = sum(assigned.values(), ZERO)
+    leftover = (amount - reserved_cash - placed).quantize(CENT)
+
+    by_position = {row.key: row for row in candidates if row.position is not None}
+    return {
+        "status": "ok",
+        "ownership_id": ownership.id,
+        "on_date": on_date.isoformat(),
+        "currency": portfolio.base_currency,
+        "strategy_id": strategy.id,
+        "amount": str(amount.quantize(CENT)),
+        "reserved_cash": str(reserved_cash),
+        "leftover": str(leftover),
+        "lines": [
+            {
+                "position_id": position_id,
+                "name": by_position[position_id].position.asset.name,
+                "asset_class": by_position[position_id].asset_class,
+                "amount": str(value),
+                "tax_transferable": by_position[position_id].tax_transferable,
+                "target_percent": str(
+                    by_position[position_id].target_percent.quantize(Decimal("0.001"))
+                ),
+                "gap_before": str(by_position[position_id].gap.quantize(CENT)),
+            }
+            for position_id, value in sorted(assigned.items(), key=lambda item: -item[1])
+        ],
+        "skipped": skipped,
     }
