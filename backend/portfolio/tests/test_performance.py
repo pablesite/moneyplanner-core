@@ -686,6 +686,71 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(row["holding_currency"], "BTC")
         self.assertEqual(row["native_currency"], "EUR")
 
+    def test_a_personal_expense_from_container_cash_is_a_withdrawal_not_a_cost(self):
+        # La compra del supermercado pagada desde la cuenta enlazada no es un coste de
+        # invertir: es dinero que sale de la cartera. Contarla como coste hundia la
+        # rentabilidad con gasto corriente. La categoria contable ya lo distingue.
+        cash_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("1000"),
+            start_date=date(2024, 1, 1),
+        )
+        cash_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=cash_asset,
+        )
+        ContainerCashAccount.objects.create(
+            container=self.container, ledger_account=cash_account, currency="EUR"
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Compra",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        for category, amount in (("consumption_expenses", "200"), ("financial_investments", "50")):
+            transaction = LedgerTransaction.objects.create(
+                user=self.user,
+                booking_date=date(2024, 6, 1),
+                value_date=date(2024, 6, 1),
+                description="Gasto",
+                quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE,
+                status=LedgerTransaction.Status.POSTED,
+            )
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=cash_account,
+                side=LedgerEntry.Side.CREDIT,
+                amount=Decimal(amount),
+                currency="EUR",
+            )
+            LedgerEntry.objects.create(
+                transaction=transaction,
+                account=expense_account,
+                side=LedgerEntry.Side.DEBIT,
+                amount=Decimal(amount),
+                currency="EUR",
+                flow_family=LedgerEntry.FlowFamily.EXPENSE,
+                category_key=category,
+            )
+
+        response = self.client.get(
+            "/api/portfolio/performance/?date_from=2024-01-01&date_to=2024-12-31"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        # Solo los 50 con categoria de inversion son coste; los 200 de consumo salen de
+        # la cartera y se restan de la aportacion de 50 que ya traia el escenario.
+        self.assertEqual(Decimal(response.data["costs"]), Decimal("50"))
+        self.assertEqual(Decimal(response.data["net_contributed"]), Decimal("-150"))
+
     def test_quality_keeps_stale_values_and_partial_unit_detail_explicit(self):
         missing = self.create_position("Crypto sin precio", Decimal("1"), Decimal("1"))
         missing.tracking_style = PortfolioPosition.TrackingStyle.UNITS_BASED

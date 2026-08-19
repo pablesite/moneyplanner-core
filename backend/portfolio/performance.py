@@ -37,6 +37,9 @@ from .performance_math import (
 from .valuations import stale_days_for_position
 
 ZERO = Decimal("0")
+# La categoria contable que marca un gasto como coste de invertir. Cualquier otra cosa
+# pagada desde el efectivo de un contenedor es dinero que sale de la cartera.
+INVESTMENT_EXPENSE_CATEGORY = "financial_investments"
 MAX_TIMELINE_DAYS = 366 * 20
 
 
@@ -357,16 +360,31 @@ def _load_ledger_flows(
                     )
                 )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.EXPENSE:
+                # Un gasto pagado desde el efectivo de un contenedor solo es coste de la
+                # cartera si es un coste de invertir —una comision de custodia lo es—. La
+                # compra del supermercado pagada desde esa cuenta es dinero que sale de la
+                # cartera, y contarla como coste hundia la rentabilidad con gasto
+                # corriente: sobre datos reales, 3.349 EUR de gastos personales figuraban
+                # como costes de inversion. La categoria contable ya distingue una cosa de
+                # la otra, asi que se le pregunta a ella.
+                expense_entry = next(
+                    (row for row in entries if row.flow_family == LedgerEntry.FlowFamily.EXPENSE),
+                    None,
+                )
+                is_investment_cost = (
+                    expense_entry is not None
+                    and expense_entry.category_key == INVESTMENT_EXPENSE_CATEGORY
+                )
                 rows.append(
                     FlowRecord(
                         None,
                         transaction.booking_date,
-                        ZERO,
+                        ZERO if is_investment_cost else -cash_entry.amount,
                         cash_entry.currency,
-                        "cash_cost",
+                        "cash_cost" if is_investment_cost else "cash_withdrawal",
                         "ledger",
-                        False,
-                        cost=cash_entry.amount,
+                        not is_investment_cost,
+                        cost=cash_entry.amount if is_investment_cost else ZERO,
                     )
                 )
     return rows, covered_dates
