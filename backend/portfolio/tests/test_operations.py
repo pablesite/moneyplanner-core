@@ -675,6 +675,21 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertIn("performance_coverage", row)
         self.assertIn("position_detail_coverage", row)
 
+    def test_the_options_offer_every_own_cash_account_as_a_funding_source(self):
+        # Enlazar una cuenta como efectivo de un contenedor la sacaba de la lista de
+        # enlazables, que es justo la que se usaba para elegir de donde sale el dinero:
+        # no se podia pagar una compra desde el monedero de la propia plataforma.
+        options = self.client.get("/api/portfolio/operations/options/")
+
+        self.assertEqual(options.status_code, status.HTTP_200_OK, options.data)
+        funding = {row["id"]: row for row in options.data["funding_accounts"]}
+        self.assertIn(self.cash_account.id, funding)
+        self.assertNotIn(
+            self.cash_account.id,
+            {row["id"] for row in options.data["linkable_cash_accounts"]},
+        )
+        self.assertEqual(Decimal(funding[self.cash_account.id]["balance"]), Decimal("1000"))
+
     def test_csv_requires_preview_and_reimport_is_idempotent(self):
         csv_content = self.fixture("broker_standard.csv")
         upload = self.client.post(

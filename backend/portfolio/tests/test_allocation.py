@@ -1256,6 +1256,35 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         self.assertEqual(len(created.data["lines"]), 1)
         self.assertEqual(discarded.data["status"], "discarded")
 
+    def test_the_basket_list_answers_by_scope_and_by_what_is_still_open(self):
+        # La pantalla pregunta por lo que queda pendiente de decidir en un ambito, no por
+        # el historico entero de propuestas de toda la cartera.
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        self.create_position("Cripto del niño", Decimal("100"), ownership=self.his)
+        self.strategy(self.his, date(2024, 1, 1), {"equity": ("100", None, None)})
+        mine = self.client.post(
+            "/api/portfolio/baskets/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+        self.client.post(
+            "/api/portfolio/baskets/",
+            {"ownership_id": self.his.id, "amount": "100", "on_date": "2024-12-31"},
+            format="json",
+        )
+        self.client.post(f"/api/portfolio/baskets/{mine.data['id']}/discard/", {}, format="json")
+
+        scoped = self.client.get(f"/api/portfolio/baskets/?ownership_id={self.mine.id}")
+        pending = self.client.get(
+            f"/api/portfolio/baskets/?ownership_id={self.mine.id}&status=draft"
+        )
+        everything = self.client.get("/api/portfolio/baskets/")
+
+        self.assertEqual(scoped.status_code, status.HTTP_200_OK, scoped.data)
+        self.assertEqual([row["id"] for row in scoped.data], [mine.data["id"]])
+        self.assertEqual(pending.data, [])
+        self.assertEqual(len(everything.data), 2)
+
     def test_an_amount_that_is_not_a_number_is_refused(self):
         self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
 
@@ -1266,6 +1295,24 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_a_basket_without_a_source_account_is_refused_with_a_readable_message(self):
+        # Confirmar sin decir de donde sale el dinero es una condicion prevista, no una
+        # averia: antes salia por la API como un 500 sin mensaje que leer.
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        created = self.client.post(
+            "/api/portfolio/baskets/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/portfolio/baskets/{created.data['id']}/confirm/", {}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+        self.assertIn("source_account_id", response.data["error"]["details"])
 
     def test_another_users_ownership_is_not_reachable(self):
         stranger = get_user_model().objects.create_user(username="otra", password="pass")

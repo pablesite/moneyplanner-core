@@ -676,6 +676,24 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
             .exclude(portfolio_cash_link__isnull=False)
             .order_by("name")
         ],
+        # De donde puede salir el dinero al confirmar una cesta: cualquier cuenta de
+        # liquidez propia, este enlazada a un contenedor o no. La lista de enlazables no
+        # sirve para esto, porque excluye justo las que ya son efectivo de un contenedor,
+        # que son las que financian una compra dentro de esa plataforma.
+        "funding_accounts": [
+            {
+                "id": account.id,
+                "name": account.name,
+                "currency": account.currency,
+                "balance": str(get_account_balance(account=account, status="posted")),
+            }
+            for account in LedgerAccount.objects.filter(
+                user=portfolio.user,
+                account_type=LedgerAccount.AccountType.ASSET,
+                asset__category=Asset.Category.CASH,
+                is_active=True,
+            ).order_by("name")
+        ],
         "container_types": [
             {"value": value, "label": label}
             for value, label in InvestmentContainer.ContainerType.choices

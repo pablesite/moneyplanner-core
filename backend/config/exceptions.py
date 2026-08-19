@@ -6,8 +6,11 @@ External consumers can mirror this module without cross-repo imports.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from rest_framework import status
 from rest_framework.exceptions import APIException, ErrorDetail, ValidationError
+from rest_framework.serializers import as_serializer_error
 from rest_framework.views import exception_handler
 
 
@@ -50,6 +53,11 @@ def _infer_message(status_code: int, details) -> str:
 
 
 def custom_exception_handler(exc, context):
+    # Una regla de negocio que se valida en el servicio lanza el ValidationError de
+    # Django, que DRF no reconoce: llegaba al cliente como un 500 sin mensaje, y una
+    # condicion prevista se leia como una averia. Se traduce al contrato de siempre.
+    if isinstance(exc, DjangoValidationError):
+        exc = ValidationError(detail=as_serializer_error(exc))
     response = exception_handler(exc, context)
     if response is None:
         return None

@@ -758,11 +758,24 @@ class ContributionBasketViewSet(
     serializer_class = ContributionBasketSerializer
 
     def get_queryset(self):
-        return (
+        rows = (
             ContributionBasket.objects.filter(portfolio__user=self.request.user)
             .select_related("ownership", "strategy")
             .prefetch_related("lines__position__asset", "lines__cash_account__container")
         )
+        # La pantalla pregunta por un ambito y por lo que queda pendiente de decidir; el
+        # historico completo de propuestas descartadas no es lo que se va a mirar.
+        ownership_id = self.request.query_params.get("ownership_id")
+        if str(ownership_id or "").isdigit():
+            rows = rows.filter(ownership_id=int(ownership_id))
+        wanted = [
+            value
+            for value in str(self.request.query_params.get("status") or "").split(",")
+            if value in ContributionBasket.Status.values
+        ]
+        if wanted:
+            rows = rows.filter(status__in=wanted)
+        return rows
 
     def create(self, request):
         portfolio, ownership, on_date = _allocation_request(request)
