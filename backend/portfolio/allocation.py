@@ -818,3 +818,52 @@ def confirm_basket(
         basket.confirmed_at = now
         basket.save(update_fields=["status", "confirmed_at"])
     return basket
+
+
+def build_scopes(*, portfolio: Portfolio, on_date: date) -> list[dict[str, Any]]:
+    """Que ambitos de titularidad tienen algo, para no obligar a adivinar.
+
+    Sin esto la interfaz aterriza en el primero que le llega, que puede ser el de un
+    menor con cuatrocientos euros o el de alguien sin ninguna posicion. El ambito con mas
+    dinero es casi siempre el que vienes a mirar.
+    """
+    context = load_performance_context(
+        portfolio=portfolio,
+        start_date=timeline_context_start(portfolio=portfolio, start_date=on_date),
+        end_date=on_date,
+    )
+    strategies = {
+        row.ownership_id
+        for row in portfolio.allocation_strategies.filter(effective_from__lte=on_date)
+    }
+    scopes = []
+    for ownership in Ownership.objects.filter(user=portfolio.user).prefetch_related(
+        "splits__member"
+    ):
+        positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
+        if not positions:
+            continue
+        value = sum(
+            (
+                row.value
+                for row in scope_slices(context=context, positions=positions, on_date=on_date)
+            ),
+            ZERO,
+        )
+        scopes.append(
+            {
+                "ownership_id": ownership.id,
+                "kind": ownership.kind,
+                "label": (
+                    ownership.member.name
+                    if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member
+                    else " + ".join(
+                        f"{row.member.name} {row.percent:g}%" for row in ownership.splits.all()
+                    )
+                ),
+                "position_count": len(positions),
+                "value": str(value.quantize(CENT)),
+                "has_strategy": ownership.id in strategies,
+            }
+        )
+    return sorted(scopes, key=lambda row: Decimal(row["value"]), reverse=True)

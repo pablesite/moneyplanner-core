@@ -19,6 +19,7 @@ from core.market_data import MarketDataSyncError
 
 from .allocation import (
     build_allocation,
+    build_scopes,
     build_contribution,
     confirm_basket,
     create_basket,
@@ -811,6 +812,22 @@ class PortfolioAllocationView(APIView):
     def get(self, request):
         portfolio, ownership, on_date = _allocation_request(request)
         return Response(build_allocation(portfolio=portfolio, ownership=ownership, on_date=on_date))
+
+
+class AllocationScopesView(APIView):
+    """Los ambitos que tienen posiciones, de mayor a menor."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio = Portfolio.objects.filter(user=request.user).first()
+        if portfolio is None:
+            return Response([])
+        raw = request.query_params.get("on_date")
+        on_date = parse_date(str(raw)) if raw else timezone.localdate()
+        if on_date is None:
+            raise ValidationError({"on_date": "Fecha no valida."})
+        return Response(build_scopes(portfolio=portfolio, on_date=on_date))
 
 
 class ContributionSolveView(APIView):

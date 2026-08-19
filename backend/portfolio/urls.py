@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AllocationScopesView,
     AllocationStrategyViewSet,
     ContainerCashAccountViewSet,
     ContributionBasketViewSet,
@@ -64,6 +65,7 @@ urlpatterns = [
     path("bootstrap/", PortfolioBootstrapView.as_view(), name="portfolio-bootstrap"),
     path("readiness/", PortfolioReadinessView.as_view(), name="portfolio-readiness"),
     path("allocation/", PortfolioAllocationView.as_view(), name="portfolio-allocation"),
+    path("allocation/scopes/", AllocationScopesView.as_view(), name="portfolio-allocation-scopes"),
     path("contribution/solve/", ContributionSolveView.as_view(), name="portfolio-contribution"),
     path("overview/", PortfolioOverviewView.as_view(), name="portfolio-overview"),
     path("timeline/", PortfolioTimelineView.as_view(), name="portfolio-timeline"),
