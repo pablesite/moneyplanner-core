@@ -871,12 +871,8 @@ class AllocationTarget(models.Model):
         decimal_places=3,
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("100"))],
     )
-    min_percent = models.DecimalField(
-        max_digits=6, decimal_places=3, null=True, blank=True
-    )
-    max_percent = models.DecimalField(
-        max_digits=6, decimal_places=3, null=True, blank=True
-    )
+    min_percent = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    max_percent = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
 
     class Meta:
         ordering = ["-target_percent", "asset_class", "id"]

@@ -166,3 +166,38 @@ def investment_saved(sender, instance: LedgerTransaction, created: bool, **kwarg
     # surrounding block commits.
     transaction_id = instance.pk
     db_transaction.on_commit(lambda: _record_trade_from_investment(transaction_id))
+
+
+@receiver(post_save, sender="net_worth.Asset")
+def investment_asset_saved(sender, instance, **kwargs) -> None:
+    """Un activo de inversion creado en Patrimonio tiene que llegar a la cartera.
+
+    Hasta ahora solo aparecia si alguien reejecutaba el arranque, y no habia nada en la
+    interfaz que lo hiciera: el boton de actualizar resincroniza valoraciones de las
+    posiciones que ya existen, no descubre activos nuevos. El resultado era un activo con
+    sus movimientos ya contabilizados que no salia en la cartera de ninguna manera.
+
+    Cae en el contenedor neutro y queda pendiente de configurar, porque en que broker
+    esta no se puede adivinar.
+    """
+    from net_worth.models import Asset
+
+    if instance.category != Asset.Category.INVESTMENTS:
+        return
+
+    def run() -> None:
+        from .models import Portfolio
+        from .services import ensure_position_for_asset, fallback_container
+
+        portfolio = Portfolio.objects.filter(user_id=instance.user_id).first()
+        if portfolio is None:
+            # Sin cartera todavia no hay nada que sincronizar: el arranque la creara y
+            # recogera este activo con todos los demas.
+            return
+        ensure_position_for_asset(
+            portfolio=portfolio,
+            container=fallback_container(portfolio=portfolio),
+            asset=instance,
+        )
+
+    db_transaction.on_commit(run)

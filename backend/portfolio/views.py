@@ -52,7 +52,11 @@ from .performance import (
     timeline_context_start,
     timeline_dates,
 )
-from .services import bootstrap_portfolio_for_user, build_portfolio_readiness
+from .services import (
+    bootstrap_portfolio_for_user,
+    build_portfolio_readiness,
+    discover_missing_positions,
+)
 from .valuations import (
     build_valuation_health,
     resolve_position_valuation,
@@ -268,18 +272,25 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="resync-valuations")
     def resync_valuations(self, request):
-        """Pull into the portfolio any revaluation the ledger already has.
+        """Pull into the portfolio whatever the rest of the app already knows.
 
         Revaluations booked through the app sync themselves on commit, but data that
         reaches the database underneath the ORM (a restore, a bulk load) fires no signal
         and leaves positions frozen. This is the explicit way out of that drift.
+
+        It also picks up investment assets created in Patrimonio that never became a
+        position. That used to require re-running the bootstrap, which nothing in the UI
+        did, so an asset with its movements already booked simply never showed up in the
+        portfolio and the button that promised to update it did not.
         """
+        discovered = discover_missing_positions(user=request.user)
         positions = list(self.get_queryset())
         created = sum(sync_ledger_valuations(position=position) for position in positions)
         return Response(
             {
                 "positions_checked": len(positions),
                 "valuations_created": created,
+                "positions_created": discovered,
             }
         )
 

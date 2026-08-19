@@ -252,6 +252,114 @@ def sync_position_ownership_for_asset(*, user, asset_id: int) -> bool:
     return True
 
 
+FALLBACK_CONTAINER_NAME = "Sin asignar"
+
+
+def fallback_container(*, portfolio: Portfolio) -> InvestmentContainer:
+    """Donde aterriza una posicion descubierta despues del arranque.
+
+    No se puede adivinar en que broker esta un activo nuevo, asi que cae en un contenedor
+    neutro y queda pendiente de configurar, que es justo lo que el contador de "posiciones
+    pendientes" ya sabe senalar. El contenedor del arranque es otra cosa —la migracion
+    inicial— y se deja como estaba.
+    """
+    container, _ = InvestmentContainer.objects.get_or_create(
+        portfolio=portfolio,
+        name=FALLBACK_CONTAINER_NAME,
+        defaults={"container_type": InvestmentContainer.ContainerType.PLATFORM},
+    )
+    return container
+
+
+def ensure_position_for_asset(
+    *, portfolio: Portfolio, container: InvestmentContainer, asset: Asset
+) -> tuple[PortfolioPosition, bool]:
+    """Crea o pone al dia la posicion de un activo de inversion.
+
+    Extraido del arranque para que un activo creado en Patrimonio despues del arranque
+    llegue tambien a la cartera: hasta ahora solo aparecia si alguien reejecutaba el
+    bootstrap, y no habia nada en la interfaz que lo hiciera.
+    """
+    user = portfolio.user
+    instrument, _ = Instrument.objects.get_or_create(
+        user=user,
+        name=asset.name,
+        quote_currency=asset.currency,
+        defaults=_instrument_defaults(asset),
+    )
+    ledger_account = _resolve_ledger_account(portfolio=portfolio, asset=asset)
+    position, created = PortfolioPosition.objects.get_or_create(
+        asset=asset,
+        defaults={
+            "portfolio": portfolio,
+            "container": container,
+            "instrument": instrument,
+            "ledger_account": ledger_account,
+            "tracking_style": classify_tracking_style(asset),
+            "status": (
+                PortfolioPosition.Status.ACTIVE
+                if asset.is_active
+                else PortfolioPosition.Status.ARCHIVED
+            ),
+            "opened_on": asset.start_date,
+            "closed_on": None if asset.is_active else asset.updated_at.date(),
+        },
+    )
+    if not created:
+        update_fields: list[str] = []
+        if position.ledger_account_id is None and ledger_account is not None:
+            position.ledger_account = ledger_account
+            update_fields.append("ledger_account")
+        expected_status = (
+            PortfolioPosition.Status.ACTIVE
+            if asset.is_active
+            else PortfolioPosition.Status.ARCHIVED
+        )
+        if position.status != expected_status:
+            position.status = expected_status
+            update_fields.append("status")
+        if update_fields:
+            update_fields.append("updated_at")
+            position.save(update_fields=update_fields)
+    _bootstrap_ownership(portfolio=portfolio, position=position)
+    from .market_data import ensure_confirmed_crypto_mapping
+    from .valuations import import_legacy_position_valuations
+
+    ensure_confirmed_crypto_mapping(position=position)
+    import_legacy_position_valuations(position=position)
+    return position, created
+
+
+def discover_missing_positions(*, user) -> int:
+    """Crea la posicion de los activos de inversion que no la tienen todavia.
+
+    Mas estrecho que el arranque a proposito: reejecutar el arranque entero reimporta
+    valoraciones legacy y mapeos de todas las posiciones, que en una cartera real es caro
+    y ademas pisa el trabajo de la resincronizacion. Aqui solo se toca lo que falta.
+    """
+    portfolio = Portfolio.objects.filter(user=user).first()
+    if portfolio is None:
+        return 0
+    placed = set(
+        PortfolioPosition.objects.filter(portfolio=portfolio).values_list("asset_id", flat=True)
+    )
+    missing = (
+        Asset.objects.filter(user=user, category=Asset.Category.INVESTMENTS)
+        .exclude(id__in=placed)
+        .order_by("id")
+    )
+    if not missing.exists():
+        return 0
+    container = fallback_container(portfolio=portfolio)
+    created = 0
+    for asset in missing:
+        _, was_created = ensure_position_for_asset(
+            portfolio=portfolio, container=container, asset=asset
+        )
+        created += int(was_created)
+    return created
+
+
 @transaction.atomic
 def bootstrap_portfolio_for_user(*, user) -> BootstrapResult:
     portfolio, _ = Portfolio.objects.get_or_create(
@@ -267,55 +375,13 @@ def bootstrap_portfolio_for_user(*, user) -> BootstrapResult:
     existing_positions = 0
     assets = Asset.objects.filter(user=user, category=Asset.Category.INVESTMENTS).order_by("id")
     for asset in assets:
-        instrument, _ = Instrument.objects.get_or_create(
-            user=user,
-            name=asset.name,
-            quote_currency=asset.currency,
-            defaults=_instrument_defaults(asset),
-        )
-        ledger_account = _resolve_ledger_account(portfolio=portfolio, asset=asset)
-        position, created = PortfolioPosition.objects.get_or_create(
-            asset=asset,
-            defaults={
-                "portfolio": portfolio,
-                "container": container,
-                "instrument": instrument,
-                "ledger_account": ledger_account,
-                "tracking_style": classify_tracking_style(asset),
-                "status": (
-                    PortfolioPosition.Status.ACTIVE
-                    if asset.is_active
-                    else PortfolioPosition.Status.ARCHIVED
-                ),
-                "opened_on": asset.start_date,
-                "closed_on": None if asset.is_active else asset.updated_at.date(),
-            },
+        _, created = ensure_position_for_asset(
+            portfolio=portfolio, container=container, asset=asset
         )
         if created:
             created_positions += 1
         else:
             existing_positions += 1
-            update_fields: list[str] = []
-            if position.ledger_account_id is None and ledger_account is not None:
-                position.ledger_account = ledger_account
-                update_fields.append("ledger_account")
-            expected_status = (
-                PortfolioPosition.Status.ACTIVE
-                if asset.is_active
-                else PortfolioPosition.Status.ARCHIVED
-            )
-            if position.status != expected_status:
-                position.status = expected_status
-                update_fields.append("status")
-            if update_fields:
-                update_fields.append("updated_at")
-                position.save(update_fields=update_fields)
-        _bootstrap_ownership(portfolio=portfolio, position=position)
-        from .market_data import ensure_confirmed_crypto_mapping
-        from .valuations import import_legacy_position_valuations
-
-        ensure_confirmed_crypto_mapping(position=position)
-        import_legacy_position_valuations(position=position)
 
     return BootstrapResult(
         portfolio_id=portfolio.id,

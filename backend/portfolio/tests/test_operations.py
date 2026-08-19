@@ -485,6 +485,28 @@ class PortfolioOperationApiTests(APITestCase):
         )
         self.assertEqual(derived.value, Decimal("250"))
 
+    def test_resync_also_picks_up_an_asset_that_never_became_a_position(self):
+        # El boton prometia actualizar la cartera y no descubria activos nuevos: un activo
+        # creado en Patrimonio con sus movimientos ya contabilizados no salia de ninguna
+        # manera. Se comprueba aqui ademas del signal porque es la via de reparacion para
+        # los que ya se quedaron fuera.
+        orphan = Asset.objects.create(
+            user=self.user,
+            name="Cripto - Bitcoin (Pionex)",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("100"),
+            start_date=date(2024, 1, 1),
+        )
+        PortfolioPosition.objects.filter(asset=orphan).delete()
+
+        response = self.client.post("/api/portfolio/positions/resync-valuations/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["positions_created"], 1)
+        self.assertTrue(PortfolioPosition.objects.filter(asset=orphan).exists())
+
     def test_setup_reassigns_container_and_asset_class(self):
         other = InvestmentContainer.objects.create(
             portfolio=self.portfolio,

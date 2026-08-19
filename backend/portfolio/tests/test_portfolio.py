@@ -17,6 +17,7 @@ from net_worth.models import Asset, AssetValuation, InvestmentAssetEvent
 from portfolio.models import (
     Instrument,
     InstrumentPrice,
+    InvestmentContainer,
     InstrumentProviderMapping,
     Portfolio,
     PortfolioMigrationIssue,
@@ -287,6 +288,40 @@ class PortfolioBootstrapTests(TestCase):
         self.assertEqual(moved["Goldman Sachs Real Estate"], "real_estate")
         self.assertEqual(moved["ETF - REIT Real Global Real State"], "real_estate")
         self.assertEqual(moved["ETF - Water"], "equity")
+
+    def test_an_asset_created_after_the_bootstrap_reaches_the_portfolio(self):
+        # El caso real: se crea el activo en Patrimonio, se le contabilizan movimientos y
+        # en la cartera no aparece. Solo llegaba reejecutando el arranque, y nada en la
+        # interfaz lo hacia: el boton de actualizar resincroniza valoraciones de las
+        # posiciones existentes, no descubre activos nuevos.
+        bootstrap_portfolio_for_user(user=self.user)
+        before = PortfolioPosition.objects.count()
+
+        # El signal corre `on_commit`, que en un TestCase no llega a dispararse solo.
+        with self.captureOnCommitCallbacks(execute=True):
+            asset = self.create_asset(name="Cripto - Bitcoin (Pionex)")
+
+        self.assertEqual(PortfolioPosition.objects.count(), before + 1)
+        position = PortfolioPosition.objects.get(asset=asset)
+        self.assertEqual(position.container.name, "Sin asignar")
+        # Queda pendiente de configurar: en que broker esta no se puede adivinar.
+        self.assertIsNone(position.setup_confirmed_at)
+
+    def test_discovering_an_asset_does_not_disturb_the_ones_already_placed(self):
+        self.create_asset(name="Fondo previo")
+        bootstrap_portfolio_for_user(user=self.user)
+        existing = PortfolioPosition.objects.first()
+        container = InvestmentContainer.objects.create(
+            portfolio=existing.portfolio, name="Trade Republic", container_type="broker"
+        )
+        existing.container = container
+        existing.save(update_fields=["container"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.create_asset(name="Cripto - ETH (Pionex)")
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.container_id, container.id)
 
     def test_canonical_instrument_requires_confirmed_identity(self):
         instrument = Instrument(
