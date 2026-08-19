@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.44.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.43.0...moneyplanner-core-v0.44.0) (2026-08-19)
+
+
+### Features
+
+* **portfolio:** add the allocation policy, scoped by ownership ([c2f0bc3](https://github.com/pablesite/moneyplanner-core/commit/c2f0bc3f6f2a28551481029b9a0207ef799391ba))
+* **portfolio:** add Trading as the satellite sleeve ([75a851a](https://github.com/pablesite/moneyplanner-core/commit/75a851a15acdbd9e3dd2c12440ccc2ca9b08528a))
+* **portfolio:** confirm a basket into real operations, line by line ([31ff1cb](https://github.com/pablesite/moneyplanner-core/commit/31ff1cbfd7e1648b38dd2c82721cc3dbdfb6b916))
+* **portfolio:** expose the allocation policy, the solver and the baskets over the API ([7ec80a8](https://github.com/pablesite/moneyplanner-core/commit/7ec80a8dceb7b4dbf933835a49677733725a38a0))
+* **portfolio:** let an operation be funded straight from your own account ([c05b970](https://github.com/pablesite/moneyplanner-core/commit/c05b970ef5e64f3a29b81ab4aecc51bb46a0915b))
+* **portfolio:** list the ownership scopes that actually hold something ([c0f1068](https://github.com/pablesite/moneyplanner-core/commit/c0f10685878714586bffbeb1775ff856839cbf62))
+* **portfolio:** make the solver respect what costs real money ([814a90f](https://github.com/pablesite/moneyplanner-core/commit/814a90f1fd2229f54cfd65fa27b1816cf4f1d7df))
+* **portfolio:** manage saved baskets and answer with a readable error ([0d9f1bd](https://github.com/pablesite/moneyplanner-core/commit/0d9f1bdcc9a5e36426581cf4c323eab2ab2ef652))
+* **portfolio:** move the fee tolerance out of the code and into the policy ([840c9e7](https://github.com/pablesite/moneyplanner-core/commit/840c9e71bf57f91eaef956964d5311fdf94c7467))
+* **portfolio:** offer only real cash accounts when linking a container's cash ([c618c58](https://github.com/pablesite/moneyplanner-core/commit/c618c582488dccc3a9bd2880253eb64ee2404095))
+* **portfolio:** persist the contribution as a basket, with real accumulation ([020eb1c](https://github.com/pablesite/moneyplanner-core/commit/020eb1c43aecdac4e03e9d0804dca6ad15beb094))
+* **portfolio:** solve a contribution against the policy instead of splitting it evenly ([ed597b9](https://github.com/pablesite/moneyplanner-core/commit/ed597b90f65794dbc594ad6fc4237bd859546d4b))
+* **portfolio:** suggest what the budget planned to invest, and close phase 6 ([6f96266](https://github.com/pablesite/moneyplanner-core/commit/6f962663ccfa7f1e63b5bd30d11ae8cc18eefd29))
+* **portfolio:** tell an unanswered class apart from a deliberate "Otros" ([1c2c93a](https://github.com/pablesite/moneyplanner-core/commit/1c2c93a95d49ea02e0a7b602e172d90c8ce58593))
+* **portfolio:** the composition counts the liquidity it already values ([b907209](https://github.com/pablesite/moneyplanner-core/commit/b90720978b8a19e7690d73f995b46ccd66d6c8d9))
+
+
+### Bug Fixes
+
+* **portfolio:** a personal expense from container cash is a withdrawal, not a cost ([5be2671](https://github.com/pablesite/moneyplanner-core/commit/5be2671964ee57202e1eb9fde451b4b0806ebc59))
+* **portfolio:** let an asset created after the bootstrap reach the portfolio ([200ff2e](https://github.com/pablesite/moneyplanner-core/commit/200ff2e4028d424d3cc05d94abb77adf43b326bb))
+* **portfolio:** show linked cash as liquidity in the allocation ([c56123a](https://github.com/pablesite/moneyplanner-core/commit/c56123aaae1b3f0b07f3ea28520d44612b5e7be1))
+
 ## [0.43.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.42.0...moneyplanner-core-v0.43.0) (2026-08-18)
 
 
