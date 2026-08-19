@@ -118,6 +118,13 @@ class Instrument(models.Model):
         PRIVATE_EQUITY = "private_equity", "Capital privado"
         CRYPTO = "crypto", "Criptoactivos"
         CASH = "cash", "Liquidez"
+        # El satélite: la bolsa acotada donde se experimenta y donde el dinero puede
+        # perderse. No es una clase de riesgo sino un mandato, y es la única excepción
+        # deliberada al eje único: de una bolsa así lo que importa es cuánto pesa, no de
+        # qué está hecha, porque su contenido es provisional por naturaleza. El precio es
+        # que lo que hay dentro no muestra su riesgo real, y por eso conviene que sea
+        # pequeña.
+        TRADING = "trading", "Trading"
         OTHER = "other", "Otros"
         # "Otros" es una respuesta: has mirado el activo y no encaja en ninguna clase.
         # Esto es la ausencia de respuesta, y son cosas distintas. El vehiculo determina
