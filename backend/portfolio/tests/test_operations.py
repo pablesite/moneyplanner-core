@@ -507,6 +507,66 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(response.data["positions_created"], 1)
         self.assertTrue(PortfolioPosition.objects.filter(asset=orphan).exists())
 
+    def test_an_etf_can_be_paid_straight_from_a_bank_account(self):
+        # En un banco no hay monedero de inversion: compras el ETF y el dinero sale de tu
+        # cuenta corriente. Exigir efectivo de contenedor obligaba a inventarse una
+        # cuenta que no existe, y a meter en la cartera el dinero del gasto corriente.
+        bank = LedgerAccount.objects.create(
+            user=self.user,
+            name="Banco",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        equity = LedgerAccount.objects.get(user=self.user, name="Apertura")
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2025, 1, 1),
+            value_date=date(2025, 1, 1),
+            description="Saldo banco",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=bank,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=equity,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("1000"),
+            currency="EUR",
+        )
+        payload = {
+            "operation_type": "buy",
+            "position_id": self.position.id,
+            "source_account_id": bank.id,
+            "booking_date": "2024-06-01",
+            "amount": "300.00",
+            "fee": "0",
+        }
+
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        confirm = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+
+        self.assertEqual(preview.status_code, status.HTTP_200_OK, preview.data)
+        self.assertEqual(confirm.status_code, status.HTTP_201_CREATED, confirm.data)
+        self.assertEqual(get_account_balance(account=bank, status="posted"), Decimal("700"))
+
+    def test_an_operation_must_say_where_the_money_comes_from(self):
+        payload = {
+            "operation_type": "buy",
+            "position_id": self.position.id,
+            "booking_date": "2024-06-01",
+            "amount": "300.00",
+        }
+
+        response = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
     def test_setup_reassigns_container_and_asset_class(self):
         other = InvestmentContainer.objects.create(
             portfolio=self.portfolio,

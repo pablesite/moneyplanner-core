@@ -91,6 +91,40 @@ def _cash_link(portfolio: Portfolio, raw_id: Any, field: str) -> ContainerCashAc
         raise ValidationError({field: "La cuenta de efectivo no pertenece a la cartera."}) from exc
 
 
+def _funding_account(portfolio: Portfolio, payload: dict[str, Any]):
+    """De donde sale (o a donde entra) el dinero de una operacion.
+
+    Dos rutas, porque hay dos realidades. En una plataforma con monedero propio el dinero
+    espera alli y ese efectivo es parte de la cartera, asi que el origen es la cuenta del
+    contenedor. En un banco no existe tal monedero: compras el ETF y el dinero sale de tu
+    cuenta corriente directamente. Exigir un contenedor con efectivo en ese caso obligaba
+    a inventarse una cuenta que no existe, y a meter en la cartera el dinero del gasto
+    corriente.
+
+    Devuelve la cuenta contable y, si la hay, el enlace de contenedor.
+    """
+    raw_cash = payload.get("cash_account_id")
+    if raw_cash not in (None, ""):
+        link = _cash_link(portfolio, raw_cash, "cash_account_id")
+        return link.ledger_account, link
+    raw_source = payload.get("source_account_id")
+    if raw_source in (None, ""):
+        raise ValidationError(
+            {"cash_account_id": "Indica de donde sale el dinero de la operacion."}
+        )
+    try:
+        return (
+            LedgerAccount.objects.get(
+                id=int(raw_source),
+                user=portfolio.user,
+                account_type=LedgerAccount.AccountType.ASSET,
+            ),
+            None,
+        )
+    except (TypeError, ValueError, LedgerAccount.DoesNotExist) as exc:
+        raise ValidationError({"source_account_id": "La cuenta no es tuya."}) from exc
+
+
 def _system_account(*, portfolio: Portfolio, account_type: str, currency: str, name: str):
     account, _ = LedgerAccount.objects.get_or_create(
         user=portfolio.user,
@@ -224,8 +258,8 @@ def _validate_payload(  # noqa: C901
         )
         return normalized
     if operation_type in {"buy", "sell", "dividend", "interest", "fee"}:
-        cash = _cash_link(portfolio, payload.get("cash_account_id"), "cash_account_id")
-        if cash.container_id != position.container_id:
+        cash_account, cash = _funding_account(portfolio, payload)
+        if cash is not None and cash.container_id != position.container_id:
             raise ValidationError({"cash_account_id": "La cuenta debe pertenecer al contenedor."})
         amount = _decimal(payload.get("amount"), "amount", required=True)
         if amount is None or amount <= 0:
@@ -239,12 +273,19 @@ def _validate_payload(  # noqa: C901
             raise ValidationError({"fee": "No puede ser negativa."})
         if (
             operation_type == "buy"
-            and get_account_balance(account=cash.ledger_account, status="posted") < amount + fee
+            and get_account_balance(account=cash_account, status="posted") < amount + fee
         ):
             raise ValidationError({"amount": "El efectivo disponible no cubre compra y comisión."})
         if position.ledger_account_id is None and operation_type in {"buy", "sell"}:
             raise ValidationError({"position_id": "La posición no tiene cuenta contable enlazada."})
-        normalized.update(cash=cash, amount=amount, units=units, unit_price=price, fee=fee)
+        normalized.update(
+            cash=cash,
+            cash_account=cash_account,
+            amount=amount,
+            units=units,
+            unit_price=price,
+            fee=fee,
+        )
         return normalized
 
     if position.ledger_account_id is None:
@@ -403,7 +444,7 @@ def confirm_operation(
 
     position = data["position"]
     if kind in {"buy", "sell", "dividend", "interest", "fee"}:
-        cash_account = data["cash"].ledger_account
+        cash_account = data["cash_account"]
         fee_tx = None
         if kind in {"buy", "sell"}:
             direction = (
@@ -496,7 +537,7 @@ def confirm_operation(
             operation_type=kind,
             units=data["units"],
             unit_price=data["unit_price"],
-            trade_currency=str(payload.get("currency") or data["cash"].currency).upper(),
+            trade_currency=str(payload.get("currency") or data["cash_account"].currency).upper(),
             gross_amount=data["amount"],
             fee=data["fee"],
             external_id=str(payload.get("external_id") or ""),
