@@ -919,6 +919,48 @@ class AllocationTarget(models.Model):
         return self.asset_class or f"position:{self.position_id}"
 
 
+class ContributionCommitment(models.Model):
+    """Dinero que hay que llevar a un sitio pase lo que pase con la desviacion.
+
+    No todo lo que se optimiza es la asignacion. Un plan de pensiones con 1.500 EUR al
+    ano de tope deducible vale, a tipo marginal alto, varios cientos de euros seguros; la
+    ganancia de rebalancear es una fraccion de punto. Cuando compiten, gana la deduccion,
+    asi que esto se atiende antes que la politica y no en competencia con ella.
+
+    Cubre dos formas del mismo compromiso: un suelo que se repite cada mes —mantener una
+    aportacion periodica para conservar una ventaja del broker— y un cupo anual que hay
+    que llenar antes de que acabe el ano.
+    """
+
+    class Period(models.TextChoices):
+        MONTH = "month", "Mensual"
+        YEAR = "year", "Anual"
+
+    position = models.ForeignKey(
+        PortfolioPosition, on_delete=models.CASCADE, related_name="commitments"
+    )
+    period = models.CharField(max_length=8, choices=Period.choices)
+    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    reason = models.CharField(max_length=200, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position_id", "period"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "period"], name="portfolio_commitment_unique"
+            ),
+            models.CheckConstraint(
+                condition=Q(amount__gt=0), name="portfolio_commitment_amount_positive"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.position_id}:{self.period}:{self.amount}"
+
+
 class PositionAllocationRule(models.Model):
     """Como puede recibir dinero una posicion.
 
@@ -933,6 +975,13 @@ class PositionAllocationRule(models.Model):
     excluded = models.BooleanField(default=False)
     min_contribution = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
     rounding_step = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    # Lo que cuesta una compra suelta. Un euro de comision sobre una linea de doce es un
+    # 8%: mucho mas de lo que la propia linea puede aportar en un ano. El reparto tiene
+    # que saberlo para no proponer operaciones que se comen a si mismas.
+    operation_cost = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
+    # Una aportacion periodica del broker suele estar exenta de comision, asi que esa
+    # linea no paga peaje aunque el resto si.
+    fee_free_plan = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -5,10 +5,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from memberships.models import FamilyMember, Ownership
-from net_worth.models import Asset
+from net_worth.models import Asset, InvestmentAssetEvent
 from portfolio.allocation import build_allocation, build_contribution, resolve_strategy
 from portfolio.models import (
     AllocationStrategy,
+    ContributionCommitment,
     AllocationTarget,
     Instrument,
     InvestmentContainer,
@@ -24,7 +25,14 @@ from portfolio.models import (
 TODAY = date(2024, 12, 31)
 
 
-class AllocationTests(TestCase):
+class AllocationFixture:
+    """Cartera de prueba compartida.
+
+    Mixin y no `TestCase`: heredar de una clase de tests hace que cada subclase vuelva a
+    ejecutar los tests del padre, que ademas fallan en cuanto la subclase cambia el
+    fixture.
+    """
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="allocation", password="pass")
         self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
@@ -97,6 +105,16 @@ class AllocationTests(TestCase):
         )
         return position
 
+    def contribute(self, position: PortfolioPosition, amount: Decimal, on_date: date) -> None:
+        """Una aportacion real a la posicion, para que el cupo sepa lo que ya llevas."""
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=position.asset,
+            event_date=on_date,
+            event_type=InvestmentAssetEvent.EventType.CONTRIBUTION,
+            amount=amount,
+        )
+
     def strategy(self, ownership: Ownership, effective_from: date, targets: dict):
         strategy = AllocationStrategy.objects.create(
             portfolio=self.portfolio, ownership=ownership, effective_from=effective_from
@@ -114,6 +132,8 @@ class AllocationTests(TestCase):
     def classes(self, result) -> dict[str, dict]:
         return {row["asset_class"]: row for row in result["by_class"]}
 
+
+class AllocationTests(AllocationFixture, TestCase):
     def test_each_ownership_gets_its_own_portfolio(self):
         # Lo de Pablo y lo de Lucas son mandatos distintos: el niño tiene año y medio y
         # su horizonte no es el del padre. Una politica unica para los dos no diria nada.
@@ -266,7 +286,7 @@ class AllocationTests(TestCase):
         self.assertEqual(Decimal(result["total_value"]), Decimal("9000.00"))
 
 
-class ContributionSolverTests(AllocationTests):
+class ContributionSolverTests(AllocationFixture, TestCase):
     def contribution(self, amount: str, ownership: Ownership | None = None):
         return build_contribution(
             portfolio=self.portfolio,
@@ -479,7 +499,7 @@ class ContributionSolverTests(AllocationTests):
         self.assertEqual(his["lines"][0]["asset_class"], "crypto")
 
 
-class ContributionInvariantTests(AllocationTests):
+class ContributionInvariantTests(AllocationFixture, TestCase):
     """Lo que tiene que cumplirse siempre, sea cual sea la cartera y el importe.
 
     Un solver falla en los bordes, no en el caso de ejemplo: importes diminutos, clases
@@ -571,3 +591,148 @@ class ContributionInvariantTests(AllocationTests):
         )
 
         self.assertEqual(first["lines"], second["lines"])
+
+
+class ContributionCommitmentTests(AllocationFixture, TestCase):
+    """Lo que hay que llevar a un sitio pase lo que pase con la desviacion.
+
+    Casos reales: el tope deducible de un plan de pensiones, la aportacion periodica que
+    conserva una cuenta remunerada, el minimo de entrada de una plataforma y la comision
+    de una compra suelta.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.equity = self.create_position("Fondo global", Decimal("10000"))
+        self.pension = self.create_position(
+            "Plan de pensiones", Decimal("2000"), asset_class=Instrument.AssetClass.EQUITY
+        )
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+    def solve(self, amount: str, on_date: date = TODAY):
+        return build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal(amount),
+            on_date=on_date,
+        )
+
+    def amounts(self, result) -> dict[int, Decimal]:
+        return {row["position_id"]: Decimal(row["amount"]) for row in result["lines"]}
+
+    def test_an_annual_tax_quota_is_served_before_the_policy(self):
+        # 1.500 al ano de tope deducible valen, a tipo marginal alto, varios cientos de
+        # euros seguros. La ganancia de rebalancear es una fraccion de punto: cuando
+        # compiten, gana la deduccion.
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+            reason="Tope deducible",
+        )
+
+        result = self.solve("2000")
+
+        self.assertEqual(self.amounts(result)[self.pension.id], Decimal("1500.00"))
+        self.assertEqual(Decimal(result["commitments"][0]["amount"]), Decimal("1500.00"))
+
+    def test_the_quota_only_claims_what_is_left_of_the_year(self):
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+        )
+        self.contribute(self.pension, Decimal("900"), date(2024, 3, 1))
+
+        result = self.solve("2000")
+
+        # Ya van 900 en el ano: lo pendiente son 600, no 1.500.
+        self.assertEqual(Decimal(result["commitments"][0]["amount"]), Decimal("600.00"))
+
+    def test_a_quota_is_a_ceiling_too_not_only_a_floor(self):
+        # Meter mas de 1.500 en el plan no desgrava: pasarse no es un extra, es dinero
+        # mal colocado. Lo que sobra va a las demas.
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+        )
+
+        result = self.solve("2000")
+
+        amounts = self.amounts(result)
+        self.assertEqual(amounts[self.pension.id], Decimal("1500.00"))
+        self.assertEqual(amounts[self.equity.id], Decimal("500.00"))
+
+    def test_a_filled_quota_stops_claiming(self):
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+        )
+        self.contribute(self.pension, Decimal("1500"), date(2024, 3, 1))
+
+        result = self.solve("2000")
+
+        self.assertEqual(result["commitments"], [])
+        # Y sigue siendo techo: lleno el cupo, la posicion se aparta del reparto.
+        self.assertNotIn(self.pension.id, self.amounts(result))
+
+    def test_a_monthly_floor_keeps_the_perk_alive(self):
+        # La cuenta remunerada al 2,5% depende de mantener la aportacion periodica.
+        # Perderla por un mes que el reparto decidio no financiar sale caro.
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.MONTH,
+            amount=Decimal("50"),
+            reason="Cuenta remunerada",
+        )
+
+        result = self.solve("200")
+
+        self.assertGreaterEqual(self.amounts(result)[self.pension.id], Decimal("50.00"))
+
+    def test_a_commitment_bigger_than_the_contribution_takes_what_there_is(self):
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+        )
+
+        result = self.solve("300")
+
+        self.assertEqual(self.amounts(result), {self.pension.id: Decimal("300.00")})
+        self.assertEqual(Decimal(result["leftover"]), Decimal("0.00"))
+
+    def test_a_line_that_cannot_pay_its_own_fee_is_not_proposed(self):
+        # Un euro de comision sobre una linea de doce es un 8%: mas de lo que esa linea
+        # puede rendir en un ano. Mejor acumular para la siguiente.
+        PositionAllocationRule.objects.create(position=self.pension, operation_cost=Decimal("1"))
+
+        result = self.solve("20")
+
+        self.assertNotIn(self.pension.id, self.amounts(result))
+        self.assertTrue(any(row["reason"] == "cost_exceeds_ticket" for row in result["skipped"]))
+
+    def test_a_recurring_plan_pays_no_fee_so_the_line_stands(self):
+        PositionAllocationRule.objects.create(
+            position=self.pension, operation_cost=Decimal("1"), fee_free_plan=True
+        )
+
+        result = self.solve("20")
+
+        self.assertIn(self.pension.id, self.amounts(result))
+
+    def test_a_commitment_is_honoured_even_if_the_fee_looks_expensive(self):
+        # La deduccion vale mucho mas que el euro de comision, asi que aqui no se
+        # descarta la linea.
+        PositionAllocationRule.objects.create(position=self.pension, operation_cost=Decimal("1"))
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+        )
+
+        result = self.solve("20")
+
+        self.assertIn(self.pension.id, self.amounts(result))

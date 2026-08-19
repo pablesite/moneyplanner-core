@@ -18,7 +18,13 @@ from typing import Any
 
 from memberships.models import Ownership
 
-from .models import AllocationStrategy, AllocationTarget, Portfolio, PortfolioPosition
+from .models import (
+    AllocationStrategy,
+    AllocationTarget,
+    ContributionCommitment,
+    Portfolio,
+    PortfolioPosition,
+)
 from .performance import (
     PerformanceContext,
     _position_value_base,
@@ -205,6 +211,60 @@ def build_allocation(
 
 CENT = Decimal("0.01")
 MAX_REDISTRIBUTIONS = 12
+# Por encima de esto la comision se come la linea: un euro sobre doce es un 8%, mas de lo
+# que esa linea puede rendir en un ano. Por debajo, la comision es ruido.
+MAX_COST_SHARE = Decimal("0.005")
+
+
+def contributed_within(
+    *, context: PerformanceContext, position_id: int, since: date, until: date
+) -> Decimal:
+    """Lo aportado a una posicion en una ventana, para saber cuanto queda de un cupo."""
+    return sum(
+        (
+            flow.amount
+            for flow in context.flows
+            if flow.position_id == position_id
+            and flow.external
+            and since <= flow.on_date <= until
+            and flow.amount > 0
+        ),
+        ZERO,
+    )
+
+
+def resolve_commitments(
+    *, context: PerformanceContext, positions: list[PortfolioPosition], on_date: date
+) -> dict[int, dict[str, Any]]:
+    """Cuanto hay que llevar a cada posicion antes de mirar la desviacion.
+
+    El cupo anual descuenta lo que ya se aporto en el ano: si el tope deducible son 1.500
+    y llevas 900, lo pendiente son 600, no 1.500. El suelo mensual descuenta lo del mes
+    en curso por el mismo motivo.
+    """
+    by_position = {position.id: position for position in positions}
+    pending: dict[int, dict[str, Any]] = {}
+    for commitment in ContributionCommitment.objects.filter(
+        position_id__in=list(by_position), is_active=True
+    ):
+        if commitment.period == ContributionCommitment.Period.YEAR:
+            since = date(on_date.year, 1, 1)
+        else:
+            since = date(on_date.year, on_date.month, 1)
+        done = contributed_within(
+            context=context, position_id=commitment.position_id, since=since, until=on_date
+        )
+        outstanding = max(commitment.amount - done, ZERO)
+        if outstanding <= 0:
+            continue
+        current = pending.get(commitment.position_id)
+        if current is None or outstanding > current["amount"]:
+            pending[commitment.position_id] = {
+                "amount": outstanding,
+                "period": commitment.period,
+                "reason": commitment.reason,
+            }
+    return pending
 
 
 @dataclass(frozen=True)
@@ -226,6 +286,7 @@ class Candidate:
     tax_transferable: bool
     minimum: Decimal
     step: Decimal
+    operation_cost: Decimal = ZERO
 
 
 def _effective_targets(
@@ -423,6 +484,9 @@ def build_contribution(
                 tax_transferable=position.tax_transferable,
                 minimum=rule.min_contribution if rule else ZERO,
                 step=rule.rounding_step if rule else ZERO,
+                operation_cost=(
+                    ZERO if rule is None or rule.fee_free_plan else rule.operation_cost
+                ),
             )
         )
 
@@ -444,7 +508,80 @@ def build_contribution(
             )
         )
 
-    assigned = _distribute(amount, candidates)
+    # Los compromisos se atienden antes que la politica: una deduccion fiscal o una
+    # ventaja del broker valen, en euros, mucho mas que la desviacion que se corrige.
+    commitments = resolve_commitments(context=context, positions=positions, on_date=on_date)
+    # Un cupo lleno sigue siendo un techo: la posicion no debe recibir mas aunque su
+    # compromiso ya no reclame nada.
+    _year_capped = set(
+        ContributionCommitment.objects.filter(
+            position_id__in=[position.id for position in positions],
+            is_active=True,
+            period=ContributionCommitment.Period.YEAR,
+        ).values_list("position_id", flat=True)
+    )
+    committed: dict[int | None, Decimal] = {}
+    budget = amount
+    honoured: list[dict[str, Any]] = []
+    for candidate in candidates:
+        claim = commitments.get(candidate.key) if candidate.key is not None else None
+        if claim is None or budget <= 0:
+            continue
+        take = _step_down(min(claim["amount"], budget), candidate)
+        if take <= 0:
+            continue
+        committed[candidate.key] = take
+        budget -= take
+        honoured.append(
+            {
+                "position_id": candidate.key,
+                "amount": str(take),
+                "period": claim["period"],
+                "reason": claim["reason"],
+            }
+        )
+
+    # Un cupo anual es tambien un techo: pasarse no desgrava. La posicion se financia
+    # con su compromiso y se aparta del reparto, asi que el resto del dinero va a las
+    # demas en vez de acabar donde ya no aporta nada.
+    capped = {
+        position_id
+        for position_id, claim in commitments.items()
+        if claim["period"] == ContributionCommitment.Period.YEAR
+    }
+    capped.update(
+        candidate.key
+        for candidate in candidates
+        if candidate.key is not None and candidate.key in _year_capped
+    )
+    open_candidates = [row for row in candidates if row.key not in capped]
+
+    assigned = _distribute(budget, open_candidates) if budget > 0 else {}
+    for key, value in committed.items():
+        assigned[key] = assigned.get(key, ZERO) + value
+
+    # Una linea cuya comision se lleva mas de lo tolerable no se propone: la operacion se
+    # come a si misma y es mejor acumular para la siguiente.
+    uneconomic = [
+        candidate
+        for candidate in candidates
+        if candidate.key in assigned
+        and candidate.operation_cost > 0
+        and assigned[candidate.key] > 0
+        and candidate.operation_cost / assigned[candidate.key] > MAX_COST_SHARE
+        and candidate.key not in committed
+    ]
+    for candidate in uneconomic:
+        skipped.append(
+            {
+                "position_id": candidate.key,
+                "reason": "cost_exceeds_ticket",
+                "operation_cost": str(candidate.operation_cost),
+                "amount": str(assigned[candidate.key]),
+            }
+        )
+        assigned.pop(candidate.key, None)
+
     reserved_cash = assigned.pop(None, ZERO)
     placed = sum(assigned.values(), ZERO)
     leftover = (amount - reserved_cash - placed).quantize(CENT)
@@ -473,5 +610,6 @@ def build_contribution(
             }
             for position_id, value in sorted(assigned.items(), key=lambda item: -item[1])
         ],
+        "commitments": honoured,
         "skipped": skipped,
     }
