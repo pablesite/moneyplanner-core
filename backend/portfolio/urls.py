@@ -2,7 +2,13 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AllocationStrategyViewSet,
     ContainerCashAccountViewSet,
+    ContributionBasketViewSet,
+    ContributionCommitmentViewSet,
+    ContributionSolveView,
+    PortfolioAllocationView,
+    PositionAllocationRuleViewSet,
     InstrumentViewSet,
     InstrumentPriceViewSet,
     InstrumentProviderMappingViewSet,
@@ -46,11 +52,19 @@ router.register(
     basename="portfolio-ownership-periods",
 )
 router.register(r"issues", PortfolioMigrationIssueViewSet, basename="portfolio-issues")
+router.register(r"strategies", AllocationStrategyViewSet, basename="portfolio-strategies")
+router.register(
+    r"allocation-rules", PositionAllocationRuleViewSet, basename="portfolio-allocation-rules"
+)
+router.register(r"commitments", ContributionCommitmentViewSet, basename="portfolio-commitments")
+router.register(r"baskets", ContributionBasketViewSet, basename="portfolio-baskets")
 
 urlpatterns = [
     path("", include(router.urls)),
     path("bootstrap/", PortfolioBootstrapView.as_view(), name="portfolio-bootstrap"),
     path("readiness/", PortfolioReadinessView.as_view(), name="portfolio-readiness"),
+    path("allocation/", PortfolioAllocationView.as_view(), name="portfolio-allocation"),
+    path("contribution/solve/", ContributionSolveView.as_view(), name="portfolio-contribution"),
     path("overview/", PortfolioOverviewView.as_view(), name="portfolio-overview"),
     path("timeline/", PortfolioTimelineView.as_view(), name="portfolio-timeline"),
     path("performance/", PortfolioPerformanceView.as_view(), name="portfolio-performance"),

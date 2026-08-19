@@ -13,6 +13,12 @@ from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset
 
 from .models import (
+    AllocationStrategy,
+    AllocationTarget,
+    ContributionBasket,
+    ContributionBasketLine,
+    ContributionCommitment,
+    PositionAllocationRule,
     ContainerCashAccount,
     Instrument,
     InstrumentPrice,
@@ -487,3 +493,186 @@ class PortfolioMigrationIssueSerializer(serializers.ModelSerializer):
         model = PortfolioMigrationIssue
         fields = ["id", "asset_id", "code", "status", "detail", "created_at", "updated_at"]
         read_only_fields = fields
+
+
+class AllocationTargetSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position",
+        queryset=PortfolioPosition.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = AllocationTarget
+        fields = [
+            "id",
+            "asset_class",
+            "position_id",
+            "target_percent",
+            "min_percent",
+            "max_percent",
+        ]
+        read_only_fields = ["id"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        return fields
+
+    def validate(self, attrs: dict) -> dict:
+        asset_class = attrs.get("asset_class") or ""
+        position = attrs.get("position")
+        if bool(asset_class) == bool(position):
+            raise serializers.ValidationError(
+                "Un objetivo es de una clase o de una posición, no de las dos."
+            )
+        # "Sin clasificar" es la ausencia de respuesta: no se le pone objetivo.
+        if asset_class == Instrument.AssetClass.UNCLASSIFIED:
+            raise serializers.ValidationError(
+                {"asset_class": "Clasifica el activo antes de ponerle objetivo."}
+            )
+        return attrs
+
+
+class AllocationStrategySerializer(serializers.ModelSerializer):
+    ownership_id = serializers.PrimaryKeyRelatedField(
+        source="ownership", queryset=Ownership.objects.all()
+    )
+    targets = AllocationTargetSerializer(many=True)
+    target_total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AllocationStrategy
+        fields = [
+            "id",
+            "ownership_id",
+            "effective_from",
+            "note",
+            "max_cost_share",
+            "min_line_amount",
+            "targets",
+            "target_total",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def get_target_total(self, obj: AllocationStrategy) -> str:
+        return str(sum((row.target_percent for row in obj.targets.all()), Decimal("0")))
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["ownership_id"].queryset = Ownership.objects.filter(user=user)
+        return fields
+
+    def _write_targets(self, strategy: AllocationStrategy, targets: list[dict]) -> None:
+        strategy.targets.all().delete()
+        AllocationTarget.objects.bulk_create(
+            [AllocationTarget(strategy=strategy, **row) for row in targets]
+        )
+
+    @transaction.atomic
+    def create(self, validated_data: dict) -> AllocationStrategy:
+        targets = validated_data.pop("targets", [])
+        portfolio = Portfolio.objects.get(user=_request_user(self.context))
+        strategy = AllocationStrategy.objects.create(portfolio=portfolio, **validated_data)
+        self._write_targets(strategy, targets)
+        return strategy
+
+    @transaction.atomic
+    def update(self, instance: AllocationStrategy, validated_data: dict) -> AllocationStrategy:
+        targets = validated_data.pop("targets", None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if targets is not None:
+            self._write_targets(instance, targets)
+        return instance
+
+
+class PositionAllocationRuleSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position", queryset=PortfolioPosition.objects.all()
+    )
+
+    class Meta:
+        model = PositionAllocationRule
+        fields = [
+            "id",
+            "position_id",
+            "excluded",
+            "min_contribution",
+            "rounding_step",
+            "operation_cost",
+            "fee_free_plan",
+        ]
+        read_only_fields = ["id"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        return fields
+
+
+class ContributionCommitmentSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position", queryset=PortfolioPosition.objects.all()
+    )
+
+    class Meta:
+        model = ContributionCommitment
+        fields = ["id", "position_id", "period", "amount", "reason", "is_active"]
+        read_only_fields = ["id"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        return fields
+
+
+class ContributionBasketLineSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ContributionBasketLine
+        fields = [
+            "id",
+            "position_id",
+            "cash_account_id",
+            "name",
+            "amount",
+            "reason",
+            "status",
+            "confirmed_at",
+        ]
+
+    def get_name(self, obj: ContributionBasketLine) -> str:
+        if obj.position_id:
+            return obj.position.asset.name
+        return f"Efectivo · {obj.cash_account.container.name}"
+
+
+class ContributionBasketSerializer(serializers.ModelSerializer):
+    lines = ContributionBasketLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ContributionBasket
+        fields = [
+            "id",
+            "ownership_id",
+            "strategy_id",
+            "booking_date",
+            "amount",
+            "reserved_cash",
+            "leftover",
+            "status",
+            "source_account_id",
+            "explanation",
+            "lines",
+            "created_at",
+            "confirmed_at",
+        ]

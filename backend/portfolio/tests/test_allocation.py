@@ -4,6 +4,8 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentAssetEvent
@@ -1071,3 +1073,161 @@ class ContributionConfirmTests(AllocationFixture, TestCase):
 
         with self.assertRaises(DjangoValidationError):
             confirm_basket(basket=basket)
+
+
+class AllocationApiTests(AllocationFixture, APITestCase):
+    """El contrato que va a consumir la interfaz."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.user)
+        self.equity = self.create_position("Fondo global", Decimal("10000"))
+
+    def test_a_policy_is_written_with_its_targets_in_one_call(self):
+        response = self.client.post(
+            "/api/portfolio/strategies/",
+            {
+                "ownership_id": self.mine.id,
+                "effective_from": "2024-01-01",
+                "targets": [
+                    {"asset_class": "equity", "target_percent": "60", "min_percent": "55"},
+                    {"asset_class": "cash", "target_percent": "40"},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["target_total"], "100.000")
+        self.assertEqual(len(response.data["targets"]), 2)
+
+    def test_a_target_belongs_to_a_class_or_to_a_position_but_not_both(self):
+        response = self.client.post(
+            "/api/portfolio/strategies/",
+            {
+                "ownership_id": self.mine.id,
+                "effective_from": "2024-01-01",
+                "targets": [
+                    {
+                        "asset_class": "equity",
+                        "position_id": self.equity.id,
+                        "target_percent": "100",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_you_cannot_set_a_target_for_what_is_not_classified_yet(self):
+        response = self.client.post(
+            "/api/portfolio/strategies/",
+            {
+                "ownership_id": self.mine.id,
+                "effective_from": "2024-01-01",
+                "targets": [{"asset_class": "unclassified", "target_percent": "100"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_editing_a_policy_replaces_its_targets(self):
+        strategy = self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        response = self.client.patch(
+            f"/api/portfolio/strategies/{strategy.id}/",
+            {"targets": [{"asset_class": "cash", "target_percent": "100"}]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual([row["asset_class"] for row in response.data["targets"]], ["cash"])
+
+    def test_the_allocation_reads_actual_against_target(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("60", "55", "65")})
+
+        response = self.client.get(
+            f"/api/portfolio/allocation/?ownership_id={self.mine.id}&on_date=2024-12-31"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        row = next(r for r in response.data["by_class"] if r["asset_class"] == "equity")
+        self.assertEqual(row["actual_percent"], "100.00")
+        self.assertEqual(row["band"], "above")
+
+    def test_solving_a_contribution_saves_nothing(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        response = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["status"], "ok")
+        self.assertEqual(ContributionBasket.objects.count(), 0)
+
+    def test_a_basket_is_created_from_a_solve_and_can_be_discarded(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        created = self.client.post(
+            "/api/portfolio/baskets/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+        discarded = self.client.post(
+            f"/api/portfolio/baskets/{created.data['id']}/discard/", {}, format="json"
+        )
+
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        self.assertEqual(created.data["status"], "draft")
+        self.assertEqual(len(created.data["lines"]), 1)
+        self.assertEqual(discarded.data["status"], "discarded")
+
+    def test_an_amount_that_is_not_a_number_is_refused(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        response = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "mucho"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_another_users_ownership_is_not_reachable(self):
+        stranger = get_user_model().objects.create_user(username="otra", password="pass")
+        member = FamilyMember.objects.create(
+            user=stranger, name="Ajena", role=FamilyMember.Role.ADULT
+        )
+        theirs = Ownership.objects.create(
+            user=stranger, kind=Ownership.Kind.INDIVIDUAL, member=member
+        )
+
+        response = self.client.get(f"/api/portfolio/allocation/?ownership_id={theirs.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_a_rule_and_a_commitment_are_editable(self):
+        rule = self.client.post(
+            "/api/portfolio/allocation-rules/",
+            {"position_id": self.equity.id, "min_contribution": "500"},
+            format="json",
+        )
+        commitment = self.client.post(
+            "/api/portfolio/commitments/",
+            {
+                "position_id": self.equity.id,
+                "period": "year",
+                "amount": "1500",
+                "reason": "Tope deducible",
+            },
+            format="json",
+        )
+
+        self.assertEqual(rule.status_code, status.HTTP_201_CREATED, rule.data)
+        self.assertEqual(commitment.status_code, status.HTTP_201_CREATED, commitment.data)
+        self.assertEqual(commitment.data["amount"], "1500.00")

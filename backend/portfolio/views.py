@@ -5,17 +5,31 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction as db_transaction
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.dateparse import parse_date
+
+from memberships.models import Ownership
 
 from core.market_data import MarketDataSyncError
 
+from .allocation import (
+    build_allocation,
+    build_contribution,
+    confirm_basket,
+    create_basket,
+    discard_basket,
+)
 from .models import (
+    AllocationStrategy,
     ContainerCashAccount,
+    ContributionBasket,
+    ContributionCommitment,
+    PositionAllocationRule,
     Instrument,
     InstrumentPrice,
     InstrumentProviderMapping,
@@ -29,7 +43,11 @@ from .models import (
     PositionOwnershipPeriod,
 )
 from .serializers import (
+    AllocationStrategySerializer,
     ContainerCashAccountSerializer,
+    ContributionBasketSerializer,
+    ContributionCommitmentSerializer,
+    PositionAllocationRuleSerializer,
     InstrumentSerializer,
     InstrumentPriceSerializer,
     InstrumentProviderMappingSerializer,
@@ -671,3 +689,142 @@ class PortfolioImportConfirmView(PortfolioImportDetailView):
             raise ValidationError({"row_ids": "Debe ser una lista."})
         confirm_import(portfolio=batch.portfolio, batch=batch, row_ids=row_ids)
         return Response(serialize_batch(self._batch(request, batch_id)))
+
+
+class AllocationStrategyViewSet(viewsets.ModelViewSet):
+    """La politica de cada ambito de titularidad."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = AllocationStrategySerializer
+
+    def get_queryset(self):
+        queryset = (
+            AllocationStrategy.objects.filter(portfolio__user=self.request.user)
+            .select_related("ownership")
+            .prefetch_related("targets")
+        )
+        ownership_id = str(self.request.query_params.get("ownership_id") or "").strip()
+        if ownership_id:
+            if not ownership_id.isdigit():
+                raise ValidationError({"ownership_id": "Debe ser un entero."})
+            queryset = queryset.filter(ownership_id=int(ownership_id))
+        return queryset
+
+
+class PositionAllocationRuleViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PositionAllocationRuleSerializer
+
+    def get_queryset(self):
+        return PositionAllocationRule.objects.filter(
+            position__portfolio__user=self.request.user
+        ).select_related("position")
+
+
+class ContributionCommitmentViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContributionCommitmentSerializer
+
+    def get_queryset(self):
+        return ContributionCommitment.objects.filter(
+            position__portfolio__user=self.request.user
+        ).select_related("position")
+
+
+class ContributionBasketViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Cestas de aportacion. Se crean resolviendo, no escribiendo lineas a mano."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContributionBasketSerializer
+
+    def get_queryset(self):
+        return (
+            ContributionBasket.objects.filter(portfolio__user=self.request.user)
+            .select_related("ownership", "strategy")
+            .prefetch_related("lines__position__asset", "lines__cash_account__container")
+        )
+
+    def create(self, request):
+        portfolio, ownership, on_date = _allocation_request(request)
+        amount = _positive_amount(request.data.get("amount"))
+        basket = create_basket(
+            portfolio=portfolio,
+            ownership=ownership,
+            amount=amount,
+            on_date=on_date,
+            source_account_id=request.data.get("source_account_id") or None,
+        )
+        return Response(self.get_serializer(basket).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request, pk=None):
+        basket = confirm_basket(
+            basket=self.get_object(),
+            line_ids=request.data.get("line_ids") or None,
+            source_account_id=request.data.get("source_account_id") or None,
+        )
+        return Response(self.get_serializer(basket).data)
+
+    @action(detail=True, methods=["post"])
+    def discard(self, request, pk=None):
+        return Response(self.get_serializer(discard_basket(basket=self.get_object())).data)
+
+
+def _allocation_request(request) -> tuple[Portfolio, Ownership, date]:
+    """Ambito y fecha de una peticion de asignacion."""
+    portfolio = Portfolio.objects.filter(user=request.user).first()
+    if portfolio is None:
+        raise ValidationError({"portfolio": "Todavia no hay cartera."})
+    raw = request.query_params.get("ownership_id") or request.data.get("ownership_id")
+    if not str(raw or "").strip().isdigit():
+        raise ValidationError({"ownership_id": "Indica el ambito de titularidad."})
+    try:
+        ownership = Ownership.objects.get(id=int(raw), user=request.user)
+    except Ownership.DoesNotExist as exc:
+        raise ValidationError({"ownership_id": "La titularidad no es tuya."}) from exc
+    raw_date = request.query_params.get("on_date") or request.data.get("on_date")
+    on_date = parse_date(str(raw_date)) if raw_date else timezone.localdate()
+    if on_date is None:
+        raise ValidationError({"on_date": "Fecha no valida."})
+    return portfolio, ownership, on_date
+
+
+def _positive_amount(raw) -> Decimal:
+    try:
+        amount = Decimal(str(raw))
+    except (TypeError, InvalidOperation) as exc:
+        raise ValidationError({"amount": "Importe no valido."}) from exc
+    if amount <= 0:
+        raise ValidationError({"amount": "Debe ser mayor que cero."})
+    return amount
+
+
+class PortfolioAllocationView(APIView):
+    """Actual frente a objetivo para un ambito, por clase y por posicion."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, ownership, on_date = _allocation_request(request)
+        return Response(build_allocation(portfolio=portfolio, ownership=ownership, on_date=on_date))
+
+
+class ContributionSolveView(APIView):
+    """Simula el reparto de una aportacion sin guardar nada."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        portfolio, ownership, on_date = _allocation_request(request)
+        return Response(
+            build_contribution(
+                portfolio=portfolio,
+                ownership=ownership,
+                amount=_positive_amount(request.data.get("amount")),
+                on_date=on_date,
+            )
+        )
