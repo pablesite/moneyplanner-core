@@ -13,6 +13,7 @@ from rest_framework.exceptions import ValidationError
 
 from accounting.models import LedgerAccount, LedgerTransaction
 from accounting.services_ledger import get_account_balance, get_or_create_system_account
+from net_worth.models import Asset
 from accounting.services_quick_entry import create_quick_transaction
 
 from .models import (
@@ -655,6 +656,25 @@ def operation_options(*, portfolio: Portfolio) -> dict[str, Any]:
             {"value": value, "label": label}
             for value, label in Instrument.AssetClass.choices
             if value != Instrument.AssetClass.UNCLASSIFIED
+        ],
+        # Cuentas que pueden enlazarse como efectivo de un contenedor: solo las de
+        # liquidez, y solo las que no lo estan ya. Ofrecer todas las cuentas de activo
+        # dejaba elegir la cuenta contable de una posicion, que no es efectivo de nada.
+        "linkable_cash_accounts": [
+            {
+                "id": account.id,
+                "name": account.name,
+                "currency": account.currency,
+                "balance": str(get_account_balance(account=account, status="posted")),
+            }
+            for account in LedgerAccount.objects.filter(
+                user=portfolio.user,
+                account_type=LedgerAccount.AccountType.ASSET,
+                asset__category=Asset.Category.CASH,
+                is_active=True,
+            )
+            .exclude(portfolio_cash_link__isnull=False)
+            .order_by("name")
         ],
         "container_types": [
             {"value": value, "label": label}
