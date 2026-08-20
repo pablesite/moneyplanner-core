@@ -993,6 +993,67 @@ class CommitmentPriorityTests(AllocationFixture, TestCase):
         self.assertEqual(result["unmet_commitments"], [])
 
 
+class MinimumWithoutCashTests(AllocationFixture, TestCase):
+    """Un minimo de entrada sin sitio donde esperar tiene que decirse."""
+
+    def setUp(self):
+        super().setUp()
+        self.big = self.create_position("Fondo global", Decimal("9000"))
+        self.urbanitae = self.create_position(
+            "Crowdfunding", Decimal("1000"), asset_class=Instrument.AssetClass.REAL_ESTATE
+        )
+        PositionAllocationRule.objects.create(
+            position=self.urbanitae, min_contribution=Decimal("500")
+        )
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("50", None, None), "real_estate": ("50", None, None)},
+        )
+
+    def test_a_position_below_its_minimum_without_container_cash_says_so(self):
+        # 25 EUR no llegan al minimo de 500, y el contenedor no tiene efectivo enlazado
+        # donde esperar. Antes su parte volvia al reparto en silencio y la posicion
+        # desaparecia de la propuesta sin explicacion.
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("25"), on_date=TODAY
+        )
+
+        reasons = {row["position_id"]: row for row in result["skipped"]}
+        self.assertEqual(reasons[self.urbanitae.id]["reason"], "below_minimum_no_cash")
+        self.assertEqual(Decimal(reasons[self.urbanitae.id]["minimum"]), Decimal("500"))
+        # El dinero no se pierde: se coloca en lo que si puede recibirlo.
+        self.assertEqual(sum(Decimal(row["amount"]) for row in result["lines"]), Decimal("25"))
+
+    def test_with_container_cash_it_waits_there_instead(self):
+        cash_asset = Asset.objects.create(
+            user=self.user,
+            name="Monedero Urbanitae",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("0"),
+        )
+        ContainerCashAccount.objects.create(
+            container=self.container,
+            ledger_account=LedgerAccount.objects.create(
+                user=self.user,
+                name="Monedero Urbanitae",
+                account_type=LedgerAccount.AccountType.ASSET,
+                currency="EUR",
+                asset=cash_asset,
+            ),
+            currency="EUR",
+        )
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("25"), on_date=TODAY
+        )
+
+        self.assertTrue(result["accumulate"])
+        self.assertEqual(result["accumulate"][0]["reason"], "below_minimum")
+
+
 class ContainerFloorTests(AllocationFixture, TestCase):
     """El minimo de una plataforma es de la plataforma, no de un producto suyo."""
 

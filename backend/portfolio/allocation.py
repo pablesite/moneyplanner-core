@@ -528,10 +528,13 @@ def _effective_targets(
 
 def _distribute(
     amount: Decimal, candidates: list[Candidate]
-) -> tuple[dict[int | None, Decimal], dict[int | None, Decimal]]:
+) -> tuple[dict[int | None, Decimal], dict[int | None, Decimal], dict[int | None, Decimal]]:
     """Reparte la aportacion: primero cierra huecos, luego mantiene el rumbo.
 
-    Devuelve lo repartido y, aparte, lo reservado para acumular. Son tres fases:
+    Devuelve lo repartido, lo reservado para acumular y lo que se quedo sin sitio: una
+    posicion que no alcanza su minimo y cuyo contenedor no tiene efectivo donde esperar.
+    Eso ultimo se aparta igual, pero hay que decirlo o la posicion desaparece de la
+    propuesta sin explicacion. Son tres fases:
 
     1. Quien no llega a su minimo se aparta. Si su contenedor tiene efectivo, su parte se
        reserva ahi en vez de volver al bote: repartirla entre las demas condenaria a una
@@ -546,6 +549,7 @@ def _distribute(
     """
     eligible = [row for row in candidates if row.gap > 0]
     reserved: dict[int | None, Decimal] = {}
+    homeless: dict[int | None, Decimal] = {}
     budget = amount
     raw: dict[int | None, Decimal] = {}
     for _ in range(MAX_REDISTRIBUTIONS):
@@ -561,6 +565,7 @@ def _distribute(
             break
         for row in dropped:
             if not row.accumulates:
+                homeless[row.key] = raw[row.key].quantize(CENT, rounding=ROUND_DOWN)
                 continue
             # Va a una cuenta de efectivo, asi que el escalon de la posicion no aplica.
             take = min(raw[row.key], budget).quantize(CENT, rounding=ROUND_DOWN)
@@ -605,7 +610,7 @@ def _distribute(
             assigned[row.key] = assigned.get(row.key, ZERO) + residual
             residual = ZERO
             break
-    return {key: value for key, value in assigned.items() if value > 0}, reserved
+    return {key: value for key, value in assigned.items() if value > 0}, reserved, homeless
 
 
 def _step_down(value: Decimal, row: Candidate) -> Decimal:
@@ -888,7 +893,23 @@ def build_contribution(
     )
     open_candidates = [row for row in candidates if row.key not in capped]
 
-    assigned, short = _distribute(budget, open_candidates) if budget > 0 else ({}, {})
+    assigned, short, homeless = _distribute(budget, open_candidates) if budget > 0 else ({}, {}, {})
+    # Una posicion que no llega a su minimo y no tiene efectivo de contenedor donde
+    # esperar se aparta igual, pero se dice: si no, desaparece de la propuesta y parece
+    # que el reparto la ignora sin motivo.
+    for key, value in homeless.items():
+        candidate = next((row for row in open_candidates if row.key == key), None)
+        if candidate is None or candidate.position is None:
+            continue
+        skipped.append(
+            {
+                "position_id": key,
+                "reason": "below_minimum_no_cash",
+                "amount": str(value),
+                "minimum": str(candidate.minimum),
+                "container": candidate.position.container.name,
+            }
+        )
     for key, value in committed.items():
         assigned[key] = assigned.get(key, ZERO) + value
 
