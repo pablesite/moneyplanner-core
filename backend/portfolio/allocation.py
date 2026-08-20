@@ -12,6 +12,7 @@ parte economica te toca de cada posicion— y sigue siendo el filtro de titulari
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import groupby
 from datetime import date
 from decimal import ROUND_DOWN, ROUND_UP, Decimal
 from typing import Any
@@ -620,6 +621,69 @@ def _step_down(value: Decimal, row: Candidate) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_DOWN)
 
 
+def _serve_position_commitments(
+    *,
+    candidates: list[Candidate],
+    commitments: dict[int, dict[str, Any]],
+    committed: dict[int | None, Decimal],
+    budget: Decimal,
+) -> tuple[Decimal, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Atiende los compromisos de posicion, y reparte cuando la aportacion no llega.
+
+    Primero el que mas cuesta romper: dejar la aportacion periodica que conserva una
+    ventaja del banco puede costar mucho mas que la aportacion misma. Pero **a igualdad
+    de coste se reparte a prorrata**, no en orden hasta agotar. Servir uno entero y dejar
+    al otro a cero solo se justifica si romperlos cuesta distinto; si cuestan lo mismo,
+    vaciar el cupo de uno y no tocar el del otro es una decision que no ha tomado nadie.
+    """
+    honoured: list[dict[str, Any]] = []
+    unmet: list[dict[str, Any]] = []
+    claimants = [row for row in candidates if row.key is not None and row.key in commitments]
+    claimants.sort(key=lambda row: commitments[row.key]["breach_cost"], reverse=True)
+
+    for _, group in groupby(claimants, key=lambda row: commitments[row.key]["breach_cost"]):
+        tier = list(group)
+        wanted = sum((commitments[row.key]["amount"] for row in tier), ZERO)
+        if wanted <= 0:
+            continue
+        # Con presupuesto de sobra cada uno cobra lo suyo; si no llega, cada uno cobra su
+        # parte proporcional de lo que reclama.
+        share = min(budget, wanted)
+        for index, candidate in enumerate(tier):
+            claim = commitments[candidate.key]
+            portion = (
+                claim["amount"]
+                if share >= wanted
+                else (share * claim["amount"] / wanted).quantize(CENT)
+            )
+            take = _step_down(min(portion, budget), candidate) if budget > 0 else ZERO
+            del index
+            if take > 0:
+                committed[candidate.key] = committed.get(candidate.key, ZERO) + take
+                budget -= take
+                honoured.append(
+                    {
+                        "position_id": candidate.key,
+                        "amount": str(take),
+                        "period": claim["period"],
+                        "reason": claim["reason"],
+                    }
+                )
+            if take < claim["amount"]:
+                # Cumplido a medias es incumplido para lo que depende de el: la ventaja
+                # del banco no se conserva por aportar la mitad del minimo.
+                unmet.append(
+                    {
+                        "position_id": candidate.key,
+                        "amount": str(claim["amount"] - take),
+                        "period": claim["period"],
+                        "reason": claim["reason"],
+                        "breach_cost": str(claim["breach_cost"]),
+                    }
+                )
+    return budget, honoured, unmet
+
+
 def _serve_container_floors(
     *,
     candidates: list[Candidate],
@@ -819,54 +883,9 @@ def build_contribution(
     budget = amount
     honoured: list[dict[str, Any]] = []
     unmet: list[dict[str, Any]] = []
-    # Cuando la aportacion no llega para todos los compromisos, se atiende primero al que
-    # mas cuesta romper: dejar la aportacion periodica del roboadvisor puede tirar la
-    # remuneracion de toda la cuenta del banco, y eso es mucho mas dinero que la propia
-    # aportacion. A igualdad de coste, primero el compromiso mayor. Antes decidia el id.
-    claimants = [row for row in candidates if row.key is not None and row.key in commitments]
-    claimants.sort(
-        key=lambda row: (
-            commitments[row.key]["breach_cost"],
-            commitments[row.key]["amount"],
-        ),
-        reverse=True,
+    budget, honoured, unmet = _serve_position_commitments(
+        candidates=candidates, commitments=commitments, committed=committed, budget=budget
     )
-    for candidate in claimants:
-        claim = commitments[candidate.key]
-        take = _step_down(min(claim["amount"], budget), candidate) if budget > 0 else ZERO
-        if take <= 0:
-            unmet.append(
-                {
-                    "position_id": candidate.key,
-                    "amount": str(claim["amount"]),
-                    "period": claim["period"],
-                    "reason": claim["reason"],
-                    "breach_cost": str(claim["breach_cost"]),
-                }
-            )
-            continue
-        committed[candidate.key] = take
-        budget -= take
-        honoured.append(
-            {
-                "position_id": candidate.key,
-                "amount": str(take),
-                "period": claim["period"],
-                "reason": claim["reason"],
-            }
-        )
-        if take < claim["amount"]:
-            # Cumplido a medias es incumplido para lo que depende de el: la ventaja del
-            # banco no se conserva por aportar la mitad del minimo.
-            unmet.append(
-                {
-                    "position_id": candidate.key,
-                    "amount": str(claim["amount"] - take),
-                    "period": claim["period"],
-                    "reason": claim["reason"],
-                    "breach_cost": str(claim["breach_cost"]),
-                }
-            )
 
     # Un cupo anual es tambien un techo: pasarse no desgrava. La posicion se financia
     # con su compromiso y se aparta del reparto, asi que el resto del dinero va a las

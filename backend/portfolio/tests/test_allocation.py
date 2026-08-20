@@ -970,6 +970,38 @@ class CommitmentPriorityTests(AllocationFixture, TestCase):
             [row["position_id"] for row in result["unmet_commitments"]], [self.pension.id]
         )
 
+    def test_commitments_that_cost_the_same_to_break_share_what_there_is(self):
+        # Con 1.500 y 2.100 al ano pendientes, una aportacion de 300 se reparte 125 y 175:
+        # cada uno recibe su parte de lo que reclama. Antes se servia en orden hasta
+        # agotar, asi que el mayor se llevaba los 300 enteros y el otro se quedaba a cero
+        # sin que nadie hubiera decidido eso.
+        self.commit(self.pension, "1500", "0", period="year")
+        self.commit(self.robo, "2100", "0", period="year")
+
+        result = build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal("300"),
+            on_date=date(2024, 1, 31),
+        )
+
+        served = {row["position_id"]: Decimal(row["amount"]) for row in result["commitments"]}
+        self.assertEqual(served[self.pension.id], Decimal("125.00"))
+        self.assertEqual(served[self.robo.id], Decimal("175.00"))
+
+    def test_a_costlier_breach_still_goes_first(self):
+        # Repartir a prorrata es solo entre iguales: si romper uno cuesta mas, ese cobra
+        # entero antes de que el otro vea un euro.
+        self.commit(self.pension, "300", "0")
+        self.commit(self.robo, "300", "250")
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("300"), on_date=TODAY
+        )
+
+        served = {row["position_id"]: Decimal(row["amount"]) for row in result["commitments"]}
+        self.assertEqual(served, {self.robo.id: Decimal("300.00")})
+
     def test_what_the_contribution_cannot_cover_is_reported_with_its_cost(self):
         self.commit(self.robo, "500", "250")
 
