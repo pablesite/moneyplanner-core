@@ -105,15 +105,19 @@ class ContainerCashAccountSerializer(serializers.ModelSerializer):
         return value.strip().upper()
 
     def validate(self, attrs: dict) -> dict:
-        instance = ContainerCashAccount(
-            container=attrs.get("container", getattr(self.instance, "container", None)),
-            ledger_account=attrs.get(
-                "ledger_account", getattr(self.instance, "ledger_account", None)
-            ),
-            currency=attrs.get("currency", getattr(self.instance, "currency", "")),
-        )
+        # Al editar se valida sobre una copia de la fila existente, no sobre una nueva
+        # con el mismo pk: Django solo se excluye a si misma de las unicidades cuando la
+        # instancia no esta en estado "adding", asi que cambiar la cuenta de efectivo de
+        # un contenedor chocaba contra su propio enlace.
         if self.instance is not None:
-            instance.pk = self.instance.pk
+            instance = ContainerCashAccount.objects.get(pk=self.instance.pk)
+        else:
+            instance = ContainerCashAccount()
+        instance.container = attrs.get("container", getattr(self.instance, "container", None))
+        instance.ledger_account = attrs.get(
+            "ledger_account", getattr(self.instance, "ledger_account", None)
+        )
+        instance.currency = attrs.get("currency", getattr(self.instance, "currency", ""))
         _raise_model_validation(instance)
         return attrs
 

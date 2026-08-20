@@ -10,8 +10,12 @@ from rest_framework.test import APITestCase
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from accounting.services_ledger import get_account_balance
 from net_worth.models import Asset
+from memberships.models import FamilyMember, Ownership
 from portfolio.models import (
+    AllocationStrategy,
     ContainerCashAccount,
+    ContributionBasket,
+    ContributionBasketLine,
     Instrument,
     InvestmentContainer,
     Portfolio,
@@ -674,6 +678,68 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(row["history_mode"], "cutoff")
         self.assertIn("performance_coverage", row)
         self.assertIn("position_detail_coverage", row)
+
+    def test_moving_a_container_cash_to_another_platform_changes_the_account(self):
+        # Mudar el efectivo de Binance a Pionex es cambiar la cuenta del contenedor, no
+        # desenlazar y volver a enlazar: desenlazar choca con las cestas que ya apuntan a
+        # ese efectivo, y volver a enlazar choca con el unico enlace por moneda.
+        other_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo Pionex",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.BANK_ACCOUNT,
+            currency="EUR",
+            amount=Decimal("50"),
+        )
+        other = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo Pionex",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=other_asset,
+        )
+
+        response = self.client.patch(
+            f"/api/portfolio/cash-accounts/{self.cash_link.id}/",
+            {"ledger_account_id": other.id, "currency": "EUR"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.cash_link.refresh_from_db()
+        self.assertEqual(self.cash_link.ledger_account_id, other.id)
+        self.assertEqual(self.cash_link.container_id, self.container.id)
+
+    def test_unlinking_cash_used_by_a_saved_basket_explains_itself(self):
+        # Antes salia como un 500 sin mensaje: una condicion prevista leida como averia.
+        strategy = AllocationStrategy.objects.create(
+            portfolio=self.portfolio,
+            ownership=Ownership.objects.create(
+                user=self.user,
+                kind=Ownership.Kind.INDIVIDUAL,
+                member=FamilyMember.objects.create(
+                    user=self.user, name="Pablo", role=FamilyMember.Role.ADULT
+                ),
+            ),
+            effective_from=date(2025, 1, 1),
+        )
+        basket = ContributionBasket.objects.create(
+            portfolio=self.portfolio,
+            ownership=strategy.ownership,
+            strategy=strategy,
+            booking_date=date(2025, 3, 1),
+            amount=Decimal("100"),
+            reserved_cash=Decimal("0"),
+            leftover=Decimal("0"),
+        )
+        ContributionBasketLine.objects.create(
+            basket=basket, cash_account=self.cash_link, amount=Decimal("100")
+        )
+
+        response = self.client.delete(f"/api/portfolio/cash-accounts/{self.cash_link.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("cambia la cuenta del contenedor", response.data["error"]["message"])
 
     def test_the_options_offer_every_own_cash_account_as_a_funding_source(self):
         # Enlazar una cuenta como efectivo de un contenedor la sacaba de la lista de

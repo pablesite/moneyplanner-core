@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction as db_transaction
+from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -118,6 +119,32 @@ class ContainerCashAccountViewSet(viewsets.ModelViewSet):
         return ContainerCashAccount.objects.filter(
             container__portfolio__user=self.request.user
         ).select_related("container", "container__portfolio", "ledger_account")
+
+    def perform_destroy(self, instance: ContainerCashAccount) -> None:
+        # Una cesta guardada apunta a este efectivo, asi que borrarlo dejaria la
+        # propuesta hablando de algo que ya no existe. Antes salia como un 500 sin
+        # mensaje y el usuario se quedaba sin saber que hacer: cambiar la cuenta del
+        # contenedor resuelve el caso real, que es mudar el efectivo de plataforma.
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            baskets = sorted(
+                {
+                    line.basket.booking_date.isoformat()
+                    for line in instance.basket_lines.select_related("basket")
+                }
+            )
+            raise ValidationError(
+                {
+                    "detail": (
+                        "Este efectivo aparece en cestas ya guardadas ("
+                        + ", ".join(baskets)
+                        + "), asi que desenlazarlo dejaria esas propuestas sin destino. "
+                        "Si has movido el dinero a otra plataforma, cambia la cuenta del "
+                        "contenedor en vez de desenlazarla."
+                    )
+                }
+            ) from exc
 
 
 class InstrumentViewSet(viewsets.ModelViewSet):
