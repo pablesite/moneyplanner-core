@@ -151,6 +151,17 @@ class LedgerTransaction(models.Model):
         null=True,
         blank=True,
     )
+    # Una comisión de broker es un gasto por derecho propio —sale de la cuenta y no vuelve—,
+    # pero nace pegada al movimiento de inversión que la provocó. Sin ese vínculo, borrar la
+    # inversión dejaba la comisión huérfana y la cartera no tenía forma de saber cuánto costó
+    # ejecutar la operación.
+    fee_for = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="fee_movements",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -681,6 +681,13 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         allow_null=True,
         required=False,
     )
+    # La comisión del broker, que se registra como gasto propio vinculado al movimiento.
+    fee_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
     flow_family = serializers.ChoiceField(
         choices=LedgerEntry.FlowFamily.choices,
         allow_blank=True,
@@ -846,6 +853,10 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             movement_type=movement_type,
             realized_cost_basis=realized_cost_basis,
             realized_gain_loss=realized_gain_loss,
+        )
+        self._validate_investment_fee(
+            movement_type=movement_type,
+            fee_amount=attrs.get("fee_amount"),
         )
         self._validate_destination_amount_contract(
             movement_type=movement_type,
@@ -1021,6 +1032,21 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"realized_gain_loss": "Solo aplica a movimientos de inversion."}
             )
+
+    def _validate_investment_fee(
+        self,
+        *,
+        movement_type: str,
+        fee_amount: Decimal | None,
+    ) -> None:
+        if fee_amount is None:
+            return
+        if movement_type != "investment":
+            raise serializers.ValidationError(
+                {"fee_amount": "Solo aplica a movimientos de inversion."}
+            )
+        if fee_amount < 0:
+            raise serializers.ValidationError({"fee_amount": "Debe ser mayor o igual que cero."})
 
     def _infer_flow_family(self, *, movement_type: str, interest_amount: Decimal | None) -> str:
         if movement_type == "income":

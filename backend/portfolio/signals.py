@@ -12,6 +12,8 @@ loses the trail of how many units each operation moved.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import transaction as db_transaction
 from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
@@ -141,10 +143,12 @@ def _record_trade_from_investment(transaction_id: int) -> None:
     )
     if gross is None:
         return
+    fee_transaction, fee = _fee_of(transaction_row)
     PortfolioTrade.objects.create(
         portfolio=position.portfolio,
         position=position,
         ledger_transaction=transaction_row,
+        fee_transaction=fee_transaction,
         operation_type=(
             PortfolioTrade.OperationType.SELL if outflow else PortfolioTrade.OperationType.BUY
         ),
@@ -152,10 +156,32 @@ def _record_trade_from_investment(transaction_id: int) -> None:
         unit_price=transaction_row.investment_unit_price,
         trade_currency=position.ledger_account.currency,
         gross_amount=gross,
+        fee=fee,
         source=PortfolioTrade.Source.MANUAL,
         fingerprint=f"accounting:{transaction_row.pk}",
         note=transaction_row.description[:240],
     )
+
+
+def _fee_of(transaction_row: LedgerTransaction) -> tuple[LedgerTransaction | None, Decimal]:
+    """Lo que costó ejecutar la operación, si se registró comisión al contabilizarla.
+
+    El coste ya vive en el libro como gasto propio, así que la cartera no lo recalcula:
+    lo copia a su registro de operación, que es donde el formulario de la cartera lo
+    dejaba antes de que registrar dinero pasara a Contabilidad.
+    """
+    fee_transaction = transaction_row.fee_movements.first()
+    if fee_transaction is None:
+        return None, Decimal("0")
+    fee_entry = next(
+        (
+            entry
+            for entry in LedgerEntry.objects.filter(transaction_id=fee_transaction.pk)
+            if entry.side == LedgerEntry.Side.DEBIT
+        ),
+        None,
+    )
+    return fee_transaction, abs(fee_entry.amount) if fee_entry is not None else Decimal("0")
 
 
 @receiver(post_save, sender=LedgerTransaction, dispatch_uid="portfolio_investment_saved")

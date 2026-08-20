@@ -3124,6 +3124,125 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(debit_entry["side"], "debit")
         self.assertEqual(credit_entry["side"], "credit")
 
+    def investment_account_for_fees(self) -> LedgerAccount:
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo con comision",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        return LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker con comision",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+
+    def book_investment_with_fee(self, fee_amount, investment_account, **overrides):
+        payload = {
+            "movement_type": "investment",
+            "investment_direction": "inflow",
+            "booking_date": "2026-04-12",
+            "value_date": "2026-04-12",
+            "description": "Compra fondo abril",
+            "amount": "250.00",
+            "account_id": self.cash_account.id,
+            "counterparty_account_id": investment_account.id,
+            "fee_amount": fee_amount,
+        }
+        payload.update(overrides)
+        return self.client.post("/api/accounting/transactions/quick-entry/", payload, format="json")
+
+    def test_quick_entry_investment_fee_is_booked_as_its_own_linked_expense(self):
+        # El importe invertido y lo que cuesta invertirlo son dos hechos distintos: meter la
+        # comision dentro del movimiento desviaria hacia el coste el capital que llega a la
+        # posicion, y dejarla fuera descuadraria la cuenta que paga las dos cosas.
+        investment_account = self.investment_account_for_fees()
+
+        response = self.book_investment_with_fee("3.50", investment_account)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        investment = LedgerTransaction.objects.get(id=response.data["id"])
+        self.assertEqual(len(response.data["entries"]), 2)
+        self.assertEqual(get_account_balance(account=investment_account), Decimal("250.00"))
+
+        fee = investment.fee_movements.get()
+        self.assertEqual(fee.quick_entry_kind, "expense")
+        self.assertEqual(fee.description, "Comisión · Compra fondo abril")
+        self.assertEqual(fee.booking_date, date(2026, 4, 12))
+        fee_expense_entry = fee.entries.get(side=LedgerEntry.Side.DEBIT)
+        self.assertEqual(fee_expense_entry.amount, Decimal("3.50"))
+        self.assertEqual(fee_expense_entry.category_key, "consumption_expenses")
+        self.assertEqual(fee_expense_entry.subcategory_key, "financial_commitments")
+        self.assertEqual(fee_expense_entry.account.name, "Comisiones de inversión")
+        self.assertEqual(
+            fee.entries.get(side=LedgerEntry.Side.CREDIT).account_id, self.cash_account.id
+        )
+
+    def test_quick_entry_investment_fee_leaves_the_funding_account_paying_both(self):
+        investment_account = self.investment_account_for_fees()
+        opening = get_account_balance(account=self.cash_account)
+
+        self.book_investment_with_fee("3.50", investment_account)
+
+        self.assertEqual(
+            get_account_balance(account=self.cash_account), opening - Decimal("253.50")
+        )
+
+    def test_quick_entry_investment_without_fee_books_nothing_extra(self):
+        investment_account = self.investment_account_for_fees()
+
+        response = self.book_investment_with_fee("0", investment_account)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        investment = LedgerTransaction.objects.get(id=response.data["id"])
+        self.assertFalse(investment.fee_movements.exists())
+
+    def test_deleting_an_investment_takes_its_fee_with_it(self):
+        # La comision no se sostiene sola: si el movimiento que la provoco desaparece,
+        # dejarla suelta obligaria a acordarse de borrarla a mano.
+        investment_account = self.investment_account_for_fees()
+        response = self.book_investment_with_fee("3.50", investment_account)
+        investment_id = response.data["id"]
+        fee_id = LedgerTransaction.objects.get(id=investment_id).fee_movements.get().id
+
+        deleted = self.client.delete(f"/api/accounting/transactions/{investment_id}/")
+
+        self.assertIn(deleted.status_code, {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT})
+        self.assertFalse(LedgerTransaction.objects.filter(id=fee_id).exists())
+
+    def test_quick_entry_rejects_a_fee_outside_an_investment(self):
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Gasto con comision",
+                "amount": "20.00",
+                "account_id": self.cash_account.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "leisure_lifestyle",
+                "fee_amount": "1.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("fee_amount", response.data["error"]["details"])
+
+    def test_quick_entry_rejects_a_negative_fee(self):
+        investment_account = self.investment_account_for_fees()
+
+        response = self.book_investment_with_fee("-1.00", investment_account)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("fee_amount", response.data["error"]["details"])
+
     def test_quick_entry_investment_deposit_forces_deposit_budget_subcategory(self):
         deposit_asset = Asset.objects.create(
             user=self.user,

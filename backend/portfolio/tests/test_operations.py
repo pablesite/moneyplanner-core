@@ -947,6 +947,58 @@ class PortfolioOperationApiTests(APITestCase):
             PortfolioTrade.objects.filter(ledger_transaction_id=response.data["id"]).exists()
         )
 
+    def test_fee_booked_with_the_investment_reaches_the_operation_record(self):
+        # Lo que costó ejecutar la compra vivía solo en el formulario de la cartera, que ya
+        # no registra dinero. Si Contabilidad no lo traslada, la operación queda registrada
+        # como si hubiera salido gratis.
+        response = self.book_investment(fee_amount="2.50")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
+        self.assertEqual(trade.fee, Decimal("2.50"))
+        self.assertIsNotNone(trade.fee_transaction_id)
+        self.assertEqual(
+            trade.fee_transaction_id,
+            LedgerTransaction.objects.get(fee_for_id=response.data["id"]).id,
+        )
+
+    def test_investment_without_fee_records_the_operation_at_no_cost(self):
+        response = self.book_investment()
+
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
+        self.assertEqual(trade.fee, Decimal("0"))
+        self.assertIsNone(trade.fee_transaction_id)
+
+    def test_deleting_an_investment_booked_in_accounting_removes_its_operation_record(self):
+        # La operación es la huella del movimiento, no su dueña: mientras lo protegía, una
+        # compra registrada en Movimientos ya no se podía borrar desde Movimientos.
+        response = self.book_investment(fee_amount="2.50")
+        transaction_id = response.data["id"]
+
+        with self.captureOnCommitCallbacks(execute=True):
+            deleted = self.client.delete(f"/api/accounting/transactions/{transaction_id}/")
+
+        self.assertIn(
+            deleted.status_code, {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT}, deleted.data
+        )
+        self.assertFalse(
+            PortfolioTrade.objects.filter(ledger_transaction_id=transaction_id).exists()
+        )
+        self.assertFalse(LedgerTransaction.objects.filter(fee_for_id=transaction_id).exists())
+
+    def test_deleting_only_the_fee_keeps_the_operation_record(self):
+        response = self.book_investment(fee_amount="2.50")
+        fee_id = LedgerTransaction.objects.get(fee_for_id=response.data["id"]).id
+
+        with self.captureOnCommitCallbacks(execute=True):
+            deleted = self.client.delete(f"/api/accounting/transactions/{fee_id}/")
+
+        self.assertIn(
+            deleted.status_code, {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT}, deleted.data
+        )
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
+        self.assertIsNone(trade.fee_transaction_id)
+
     def fixture(self, filename: str) -> bytes:
         content = (self.fixtures_path / filename).read_text(encoding="utf-8")
         return (

@@ -765,14 +765,18 @@ class PortfolioTrade(models.Model):
 
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name="trades")
     position = models.ForeignKey(PortfolioPosition, on_delete=models.PROTECT, related_name="trades")
+    # La operación es la huella de un movimiento del libro, no su dueña: desde que los
+    # aportes y retiradas se registran en Contabilidad, proteger el movimiento hacía
+    # imborrable desde Movimientos cualquier inversión que hubiera llegado a la cartera.
+    # Mismo criterio que `PositionValuation.legacy_ledger_transaction`.
     ledger_transaction = models.OneToOneField(
         "accounting.LedgerTransaction",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="portfolio_trade",
     )
     fee_transaction = models.OneToOneField(
         "accounting.LedgerTransaction",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="portfolio_trade_fee",

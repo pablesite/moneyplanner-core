@@ -8,11 +8,17 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from .models import LedgerAccount, LedgerEntry, LedgerTransaction
-from .services_ledger import ZERO
+from .services_ledger import ZERO, get_or_create_system_account
 from .services_start_dates import sync_position_start_dates_for_transaction
 from .services_transactions import validate_booking_and_value_dates, validate_transaction_entries
 
 ROTATORY_DEPOSIT_ASSET_SUBCATEGORIES = {"deposits", "short_term_deposit"}
+INVESTMENT_FEE_ACCOUNT_NAME = "Comisiones de inversión"
+# La comisión no es capital colocado: el dinero se consume, no se convierte en patrimonio.
+# Clasificarla como inversión la contaría como ahorro en el cierre mensual y dejaría un
+# residuo de conciliación por el importe exacto de la comisión.
+INVESTMENT_FEE_CATEGORY_KEY = "consumption_expenses"
+INVESTMENT_FEE_SUBCATEGORY_KEY = "financial_commitments"
 
 
 @transaction.atomic
@@ -46,6 +52,8 @@ def create_quick_transaction(
     realized_gain_loss: Decimal | None = None,
     investment_units: Decimal | None = None,
     investment_unit_price: Decimal | None = None,
+    fee_amount: Decimal | None = None,
+    fee_for: LedgerTransaction | None = None,
 ) -> LedgerTransaction:
     normalized_movement_type = _normalize_quick_movement_type(movement_type)
     normalized_direction = _normalize_investment_direction(
@@ -100,11 +108,66 @@ def create_quick_transaction(
         investment_unit_price=(
             investment_unit_price if normalized_movement_type == "investment" else None
         ),
+        fee_for=fee_for,
     )
     for entry_data in payload:
         LedgerEntry.objects.create(transaction=transaction_row, **entry_data)
     sync_position_start_dates_for_transaction(transaction=transaction_row)
+    if normalized_movement_type == "investment" and fee_amount is not None:
+        create_investment_fee_transaction(
+            user=user,
+            investment_transaction=transaction_row,
+            account=account,
+            fee_amount=Decimal(fee_amount),
+        )
     return transaction_row
+
+
+def create_investment_fee_transaction(
+    *,
+    user,
+    investment_transaction: LedgerTransaction,
+    account: LedgerAccount,
+    fee_amount: Decimal,
+) -> LedgerTransaction | None:
+    """Registra la comisión de una operación de inversión como gasto propio y vinculado.
+
+    La comisión no puede ir dentro del propio movimiento de inversión: todo lo que lee un
+    aporte o una retirada —cartera, patrimonio, cierre— cuenta con dos apuntes, uno por
+    cuenta, y un tercero desviaría el importe invertido hacia el coste. Va aparte, contra
+    la misma cuenta que financia el movimiento, y queda enlazada para que borrar la
+    inversión se lleve su comisión y para que la cartera pueda copiarla a su operación.
+    """
+    if fee_amount <= ZERO:
+        return None
+    fee_account = get_or_create_system_account(
+        user_id=user.id,
+        account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+        currency=account.currency,
+        name=INVESTMENT_FEE_ACCOUNT_NAME,
+    )
+    fingerprint = investment_transaction.import_fingerprint
+    return create_quick_transaction(
+        user=user,
+        movement_type="expense",
+        booking_date=investment_transaction.booking_date,
+        value_date=investment_transaction.value_date,
+        description=f"Comisión · {investment_transaction.description}"[:240],
+        amount=fee_amount,
+        account=account,
+        counterparty_account=fee_account,
+        status=investment_transaction.status,
+        origin=investment_transaction.origin,
+        import_source=investment_transaction.import_source,
+        # El fingerprint es único por usuario y origen, así que la comisión necesita el suyo.
+        import_fingerprint=f"{fingerprint[:59]}:fee" if fingerprint else "",
+        member_tag=investment_transaction.member_tag,
+        ownership=investment_transaction.ownership,
+        flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
+        category_key=INVESTMENT_FEE_CATEGORY_KEY,
+        subcategory_key=INVESTMENT_FEE_SUBCATEGORY_KEY,
+        fee_for=investment_transaction,
+    )
 
 
 def _build_quick_entry_payload(
