@@ -1140,6 +1140,24 @@ class ContainerFloorTests(AllocationFixture, TestCase):
         self.assertEqual(total, Decimal("300"))
         self.assertEqual(result["unmet_commitments"], [])
 
+    def test_one_line_per_position_even_when_two_reasons_feed_it(self):
+        # El cupo del plan y el suelo de MyInvestor son dos motivos del mismo dinero. En
+        # dos lineas se leian como dos destinos distintos —"114 al plan" y "36 de
+        # compromiso"— cuando son 150 al plan.
+        ContributionCommitment.objects.filter(position=self.robo).delete()
+
+        result = self.january("300")
+
+        served = {row["position_id"]: Decimal(row["amount"]) for row in result["commitments"]}
+        pension = next(
+            row for row in result["commitments"] if row["position_id"] == self.pension.id
+        )
+
+        # Una fila por posicion, aunque la alimenten dos motivos.
+        self.assertEqual(len(result["commitments"]), len(served))
+        self.assertEqual(pension["reason"], "Tope deducible · Minimo de MyInvestor")
+        self.assertEqual(sum(served.values()), Decimal("300"))
+
     def test_a_contribution_below_the_floor_says_what_is_missing(self):
         result = self.january("200")
 

@@ -419,6 +419,11 @@ def resolve_commitments(
         row = {
             "amount": min(claim, outstanding),
             "outstanding": outstanding,
+            # Lo que pide el compromiso y lo que ya llevas puesto en su periodo. Sin
+            # esto, una propuesta de 150 sobre un minimo de 300 parece que incumple
+            # cuando en realidad los otros 150 ya estaban dentro.
+            "target": commitment.amount,
+            "contributed": done,
             "period": commitment.period,
             "reason": commitment.reason,
             "breach_cost": commitment.breach_cost,
@@ -621,6 +626,28 @@ def _step_down(value: Decimal, row: Candidate) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_DOWN)
 
 
+def _merge_commitment_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Una posicion, una linea. Su cupo propio y el suelo de su plataforma son dos motivos
+    del mismo dinero, y publicarlos por separado hacia leer "114 al plan" y "36 de
+    compromiso" como si fueran dos destinos distintos.
+    """
+    merged: dict[int | None, dict[str, Any]] = {}
+    for row in rows:
+        current = merged.get(row["position_id"])
+        if current is None:
+            merged[row["position_id"]] = dict(row)
+            continue
+        current["amount"] = str(Decimal(current["amount"]) + Decimal(row["amount"]))
+        reasons = [text for text in (current["reason"], row["reason"]) if text]
+        current["reason"] = " · ".join(dict.fromkeys(reasons))
+        # Al fusionar se queda el compromiso mas grande de los dos: es el que el usuario
+        # reconoce cuando lee la linea.
+        if Decimal(row["target"]) > Decimal(current["target"]):
+            current["target"] = row["target"]
+            current["contributed"] = row["contributed"]
+    return sorted(merged.values(), key=lambda row: Decimal(row["amount"]), reverse=True)
+
+
 def _serve_position_commitments(
     *,
     candidates: list[Candidate],
@@ -667,6 +694,8 @@ def _serve_position_commitments(
                         "amount": str(take),
                         "period": claim["period"],
                         "reason": claim["reason"],
+                        "target": str(claim["target"]),
+                        "contributed": str(claim["contributed"]),
                     }
                 )
             if take < claim["amount"]:
@@ -720,7 +749,11 @@ def _serve_container_floors(
         weights: dict[int | None, Decimal] = {}
         for member in members:
             quota = commitments.get(member.key)
-            room = (quota["outstanding"] - committed.get(member.key, ZERO)) if quota else member.gap
+            # Sitio que le queda para recibir, en euros las dos formas: lo que falta de
+            # su cupo, o lo que le falta para llegar a su objetivo. Un producto que va
+            # sobrado y no tiene cupo no tiene sitio, y entonces el suelo se lo lleva
+            # entero el que si lo tiene, que es la respuesta correcta aunque sorprenda.
+            room = quota["outstanding"] - committed.get(member.key, ZERO) if quota else member.gap
             weights[member.key] = max(room, ZERO)
         total_weight = sum(weights.values(), ZERO)
         if total_weight <= 0:
@@ -745,6 +778,8 @@ def _serve_container_floors(
                     "amount": str(take),
                     "period": claim["period"],
                     "reason": claim["reason"] or "Minimo de la plataforma",
+                    "target": str(claim["target"]),
+                    "contributed": str(claim["contributed"]),
                 }
             )
         if placed < missing:
@@ -897,7 +932,7 @@ def build_contribution(
         committed=committed,
         budget=budget,
     )
-    honoured.extend(container_honoured)
+    honoured = _merge_commitment_rows(honoured + container_honoured)
     unmet.extend(container_unmet)
 
     capped = {
