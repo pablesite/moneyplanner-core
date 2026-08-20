@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.45.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.44.0...moneyplanner-core-v0.45.0) (2026-08-20)
+
+
+### Features
+
+* **portfolio:** a commitment declares what breaking it costs ([e4e878a](https://github.com/pablesite/moneyplanner-core/commit/e4e878a69a1b95a5bdbde41bc3bf6c4527350990))
+* **portfolio:** a platform minimum belongs to the platform, and a quota is paced ([f2497d1](https://github.com/pablesite/moneyplanner-core/commit/f2497d1ff7978a69e34128910ab9a8162c7fe395))
+* **portfolio:** second-level allocation, honest gaps and one price per asset ([eaa85ab](https://github.com/pablesite/moneyplanner-core/commit/eaa85abefc2e4eb5f2091112457b3112348ce1b9))
+
+
+### Bug Fixes
+
+* **portfolio:** let a container's cash move to another platform ([a04e072](https://github.com/pablesite/moneyplanner-core/commit/a04e0724b5f59c551b7b53e020313f79eee8e59f))
+
 ## [0.44.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.43.0...moneyplanner-core-v0.44.0) (2026-08-19)
 
 
