@@ -650,7 +650,15 @@ class ContributionCommitmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ContributionCommitment
-        fields = ["id", "position_id", "period", "amount", "reason", "is_active"]
+        fields = [
+            "id",
+            "position_id",
+            "period",
+            "amount",
+            "reason",
+            "breach_cost",
+            "is_active",
+        ]
         read_only_fields = ["id"]
 
     def get_fields(self):

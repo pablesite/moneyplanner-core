@@ -935,6 +935,64 @@ class ContributionCommitmentTests(AllocationFixture, TestCase):
         self.assertIn(self.pension.id, self.amounts(result))
 
 
+class CommitmentPriorityTests(AllocationFixture, TestCase):
+    """Cuando la aportacion no llega para todos los compromisos, quien cobra primero."""
+
+    def setUp(self):
+        super().setUp()
+        self.robo = self.create_position("Roboadvisor", Decimal("5000"))
+        self.pension = self.create_position("Plan de pensiones", Decimal("5000"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+    def commit(self, position, amount: str, breach: str, period="month"):
+        return ContributionCommitment.objects.create(
+            position=position,
+            period=period,
+            amount=Decimal(amount),
+            breach_cost=Decimal(breach),
+            reason="prueba",
+        )
+
+    def test_the_costliest_commitment_to_break_is_served_first(self):
+        # Dejar la aportacion periodica del roboadvisor tira la remuneracion de toda la
+        # cuenta del banco: son 250 EUR al ano frente a los 30 de la otra. Antes decidia
+        # el orden en que estuvieran guardados, que no significa nada.
+        self.commit(self.pension, "300", "30")
+        self.commit(self.robo, "300", "250")
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("300"), on_date=TODAY
+        )
+
+        served = [row["position_id"] for row in result["commitments"]]
+        self.assertEqual(served, [self.robo.id])
+        self.assertEqual(
+            [row["position_id"] for row in result["unmet_commitments"]], [self.pension.id]
+        )
+
+    def test_what_the_contribution_cannot_cover_is_reported_with_its_cost(self):
+        self.commit(self.robo, "500", "250")
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("200"), on_date=TODAY
+        )
+
+        unmet = result["unmet_commitments"]
+        self.assertEqual(len(unmet), 1)
+        # Se aportan 200 de los 500: faltan 300, y romperlo cuesta 250 al ano.
+        self.assertEqual(Decimal(unmet[0]["amount"]), Decimal("300"))
+        self.assertEqual(Decimal(unmet[0]["breach_cost"]), Decimal("250"))
+
+    def test_a_covered_commitment_reports_nothing_pending(self):
+        self.commit(self.robo, "100", "250")
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("500"), on_date=TODAY
+        )
+
+        self.assertEqual(result["unmet_commitments"], [])
+
+
 class ContributionBasketTests(AllocationFixture, TestCase):
     """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""
 

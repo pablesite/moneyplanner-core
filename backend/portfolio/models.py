@@ -1076,6 +1076,12 @@ class ContributionCommitment(models.Model):
     period = models.CharField(max_length=8, choices=Period.choices)
     amount = models.DecimalField(max_digits=18, decimal_places=2)
     reason = models.CharField(max_length=200, blank=True, default="")
+    # Lo que cuesta al ano no cumplirlo. Un compromiso no vale por su importe sino por lo
+    # que se pierde al romperlo: dejar la aportacion periodica del roboadvisor puede
+    # tirar la remuneracion de toda la cuenta del banco, que es mucho mas dinero que la
+    # aportacion. Cuando la aportacion no llega para todos, decide esto y no el orden en
+    # que estan guardados.
+    breach_cost = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0"))
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1088,6 +1094,9 @@ class ContributionCommitment(models.Model):
             ),
             models.CheckConstraint(
                 condition=Q(amount__gt=0), name="portfolio_commitment_amount_positive"
+            ),
+            models.CheckConstraint(
+                condition=Q(breach_cost__gte=0), name="portfolio_commitment_breach_cost_positive"
             ),
         ]
 

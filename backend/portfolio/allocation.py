@@ -392,6 +392,7 @@ def resolve_commitments(
                 "amount": outstanding,
                 "period": commitment.period,
                 "reason": commitment.reason,
+                "breach_cost": commitment.breach_cost,
             }
     return pending
 
@@ -698,12 +699,32 @@ def build_contribution(
     committed: dict[int | None, Decimal] = {}
     budget = amount
     honoured: list[dict[str, Any]] = []
-    for candidate in candidates:
-        claim = commitments.get(candidate.key) if candidate.key is not None else None
-        if claim is None or budget <= 0:
-            continue
-        take = _step_down(min(claim["amount"], budget), candidate)
+    unmet: list[dict[str, Any]] = []
+    # Cuando la aportacion no llega para todos los compromisos, se atiende primero al que
+    # mas cuesta romper: dejar la aportacion periodica del roboadvisor puede tirar la
+    # remuneracion de toda la cuenta del banco, y eso es mucho mas dinero que la propia
+    # aportacion. A igualdad de coste, primero el compromiso mayor. Antes decidia el id.
+    claimants = [row for row in candidates if row.key is not None and row.key in commitments]
+    claimants.sort(
+        key=lambda row: (
+            commitments[row.key]["breach_cost"],
+            commitments[row.key]["amount"],
+        ),
+        reverse=True,
+    )
+    for candidate in claimants:
+        claim = commitments[candidate.key]
+        take = _step_down(min(claim["amount"], budget), candidate) if budget > 0 else ZERO
         if take <= 0:
+            unmet.append(
+                {
+                    "position_id": candidate.key,
+                    "amount": str(claim["amount"]),
+                    "period": claim["period"],
+                    "reason": claim["reason"],
+                    "breach_cost": str(claim["breach_cost"]),
+                }
+            )
             continue
         committed[candidate.key] = take
         budget -= take
@@ -715,6 +736,18 @@ def build_contribution(
                 "reason": claim["reason"],
             }
         )
+        if take < claim["amount"]:
+            # Cumplido a medias es incumplido para lo que depende de el: la ventaja del
+            # banco no se conserva por aportar la mitad del minimo.
+            unmet.append(
+                {
+                    "position_id": candidate.key,
+                    "amount": str(claim["amount"] - take),
+                    "period": claim["period"],
+                    "reason": claim["reason"],
+                    "breach_cost": str(claim["breach_cost"]),
+                }
+            )
 
     # Un cupo anual es tambien un techo: pasarse no desgrava. La posicion se financia
     # con su compromiso y se aparta del reparto, asi que el resto del dinero va a las
@@ -810,6 +843,9 @@ def build_contribution(
             for position_id, value in sorted(assigned.items(), key=lambda item: -item[1])
         ],
         "commitments": honoured,
+        # Compromisos que esta aportacion no cubre. Con lo que cuesta romperlos delante,
+        # porque esa es la cifra que decide si merece la pena aportar mas este mes.
+        "unmet_commitments": unmet,
         "accumulate": accumulate,
         "skipped": skipped,
         # Clases con objetivo escrito y ningun producto donde colocarlo: la propuesta
@@ -856,6 +892,7 @@ def create_basket(
             "commitments": solved["commitments"],
             "skipped": solved["skipped"],
             "unreachable": solved["unreachable"],
+            "unmet_commitments": solved["unmet_commitments"],
         },
     )
     lines = [
