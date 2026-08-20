@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.46.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.45.0...moneyplanner-core-v0.46.0) (2026-08-20)
+
+
+### Features
+
+* **portfolio:** declared exposure, concentration and overlap ([32a3884](https://github.com/pablesite/moneyplanner-core/commit/32a3884998b54cfc91bd50b1b9fa8637e4e3bc3d))
+* **portfolio:** seed the declared exposure from the Morningstar X-Rays ([da054c4](https://github.com/pablesite/moneyplanner-core/commit/da054c426e95e358027dc920793ee987e572a102))
+* **portfolio:** seed the ETF exposure from their published factsheets ([785d3fd](https://github.com/pablesite/moneyplanner-core/commit/785d3fd7991e68d57d7a156e5ed0e5f59d37cf11))
+
+
+### Bug Fixes
+
+* **portfolio:** a minimum with nowhere to wait has to be said ([d223729](https://github.com/pablesite/moneyplanner-core/commit/d22372902631f6fd610ff755bbd5e9ed82a38e4c))
+* **portfolio:** commitments that cost the same to break share what there is ([c262289](https://github.com/pablesite/moneyplanner-core/commit/c262289667378e0b93effbe492f9c59b1c0c6a09))
+* **portfolio:** one line per position, and say how much of the minimum is already in ([6d13333](https://github.com/pablesite/moneyplanner-core/commit/6d13333f4898875a050a30d5867b773e01e11484))
+
 ## [0.45.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.44.0...moneyplanner-core-v0.45.0) (2026-08-20)
 
 
