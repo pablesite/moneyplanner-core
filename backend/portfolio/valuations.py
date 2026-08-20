@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from accounting.models import LedgerEntry, LedgerTransaction
 from accounting.services_ledger import get_account_balance
+from core.models import FxRate
 from net_worth.models import AssetValuation
 
 from .models import (
@@ -164,6 +165,33 @@ def _latest_instrument_price(
     )
 
 
+def _fresher_fx_quote(
+    *, position: PortfolioPosition, as_of_date: date, price: InstrumentPrice
+) -> FxRate | None:
+    """La misma cotizacion, si llego por el otro camino y es mas reciente.
+
+    Un bitcoin tiene un unico precio, pero entra en Core por dos puertas: como precio de
+    instrumento del proveedor de mercado y como tipo de cambio BTC->EUR. Actualizar el
+    cambio desde Patrimonio solo escribia la segunda, asi que la misma posicion valia una
+    cosa en Patrimonio y otra en Cartera hasta que el worker pasaba. Se toma la mas
+    fresca de las dos y se dice de donde vino.
+    """
+    unit = position.ledger_account.currency if position.ledger_account is not None else ""
+    if not unit or unit == price.currency:
+        return None
+    row = (
+        FxRate.objects.filter(
+            from_currency=unit,
+            to_currency=price.currency,
+            rate_date__lte=as_of_date,
+            rate_date__gt=price.price_date,
+        )
+        .order_by("-rate_date")
+        .first()
+    )
+    return row
+
+
 def _ledger_carrying_value(
     *, position: PortfolioPosition, as_of_date: date
 ) -> tuple[Decimal, date] | None:
@@ -219,24 +247,33 @@ def resolve_position_valuation(
             as_of_date=resolved_date,
             status=cast(str, LedgerTransaction.Status.POSTED),
         )
-        observed_on = price.price_date
+        fx = _fresher_fx_quote(position=position, as_of_date=resolved_date, price=price)
+        close = fx.rate if fx is not None else price.close
+        observed_on = fx.rate_date if fx is not None else price.price_date
         age_days = (resolved_date - observed_on).days
+        fetched_at = (
+            (fx.last_synced_at or fx.updated_at).isoformat()
+            if fx is not None
+            else price.fetched_at.isoformat()
+        )
         return {
             "status": "fresh" if age_days <= threshold_days else "stale",
-            "value": str(units * price.close),
+            "value": str(units * close),
             "currency": price.currency,
             "observed_on": observed_on.isoformat(),
             "age_days": age_days,
             "stale_after_days": threshold_days,
             "provenance": {
                 "kind": "automatic_price",
-                "source": price.source,
-                "source_key": price.source_key,
-                "source_market": price.source_market or None,
-                "fetched_at": price.fetched_at.isoformat(),
+                "source": fx.source if fx is not None else price.source,
+                "source_key": (
+                    f"{fx.from_currency}->{fx.to_currency}" if fx is not None else price.source_key
+                ),
+                "source_market": None if fx is not None else (price.source_market or None),
+                "fetched_at": fetched_at,
                 "calculation": "ledger_units_x_close",
                 "units": str(units),
-                "close": str(price.close),
+                "close": str(close),
             },
         }
     if total_valuation is not None:

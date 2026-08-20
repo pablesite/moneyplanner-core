@@ -223,8 +223,9 @@ class AllocationTests(AllocationFixture, TestCase):
         # 70/30 con bandas 55-65 y 35-45: las dos fuera, y en direcciones opuestas.
         self.assertEqual(rows["equity"]["band"], "above")
         self.assertEqual(rows["commodities"]["band"], "below")
-        self.assertEqual(Decimal(rows["equity"]["drift_value"]), Decimal("-1000.00"))
-        self.assertEqual(Decimal(rows["commodities"]["drift_value"]), Decimal("1000.00"))
+        # Positivo es ir sobrado; negativo, quedarse corto.
+        self.assertEqual(Decimal(rows["equity"]["drift_value"]), Decimal("1000.00"))
+        self.assertEqual(Decimal(rows["commodities"]["drift_value"]), Decimal("-1000.00"))
 
     def test_a_class_inside_its_band_is_not_flagged_even_if_it_misses_the_target(self):
         self.create_position("Fondo global", Decimal("6200"))
@@ -268,7 +269,7 @@ class AllocationTests(AllocationFixture, TestCase):
 
         self.assertEqual(Decimal(rows["cash"]["value"]), Decimal("0.00"))
         self.assertEqual(rows["cash"]["band"], "below")
-        self.assertEqual(Decimal(rows["cash"]["drift_value"]), Decimal("1000.00"))
+        self.assertEqual(Decimal(rows["cash"]["drift_value"]), Decimal("-1000.00"))
 
     def test_linked_cash_shows_up_as_liquidity_and_only_for_its_owner(self):
         # El efectivo enlazado cuenta en el valor de la cartera, así que tiene que contar
@@ -369,6 +370,83 @@ class AllocationTests(AllocationFixture, TestCase):
 
         self.assertEqual(result["position_count"], 1)
         self.assertEqual(Decimal(result["total_value"]), Decimal("9000.00"))
+
+
+class SecondLevelAllocationTests(AllocationFixture, TestCase):
+    """El reparto dentro de una clase: cual de tus fondos, no cuanta renta variable."""
+
+    def setUp(self):
+        super().setUp()
+        self.indexed = self.create_position("Indexado global", Decimal("6000"))
+        self.small_caps = self.create_position("Small caps", Decimal("2000"))
+        self.gold = self.create_position(
+            "Oro", Decimal("2000"), asset_class=Instrument.AssetClass.COMMODITIES
+        )
+
+    def with_position_target(self, position, percent: str):
+        strategy = self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("80", None, None), "commodities": ("20", None, None)},
+        )
+        AllocationTarget.objects.create(
+            strategy=strategy, position=position, target_percent=Decimal(percent)
+        )
+        return strategy
+
+    def positions(self, result) -> dict[int, dict]:
+        return {row["position_id"]: row for row in result["by_position"]}
+
+    def test_a_position_target_is_a_share_of_its_class_not_of_the_portfolio(self):
+        # "De mi renta variable, un 75% al indexado". Sobre la cartera eso es un 60%,
+        # porque la renta variable pesa un 80%. Declararlo sobre la cartera obligaria a
+        # rehacer todas las lineas cada vez que cambia el objetivo de la clase.
+        self.with_position_target(self.indexed, "75")
+
+        rows = self.positions(
+            build_allocation(portfolio=self.portfolio, ownership=self.mine, on_date=TODAY)
+        )
+
+        self.assertEqual(Decimal(rows[self.indexed.id]["target_percent"]), Decimal("60.00"))
+        self.assertEqual(rows[self.indexed.id]["class_share"], "75.000")
+        # Lo que queda de la clase se lo reparte el resto: aqui solo hay una posicion mas.
+        self.assertEqual(Decimal(rows[self.small_caps.id]["target_percent"]), Decimal("20.00"))
+
+    def test_a_position_without_a_line_of_its_own_still_has_a_target(self):
+        # Heredar el trozo de su clase no es no tener objetivo: sin esto el segundo nivel
+        # solo sabia hablar de las posiciones que alguien habia escrito a mano.
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("80", None, None), "commodities": ("20", None, None)},
+        )
+
+        rows = self.positions(
+            build_allocation(portfolio=self.portfolio, ownership=self.mine, on_date=TODAY)
+        )
+
+        # 6000 y 2000 dentro de una clase que quiere el 80%: 60 y 20.
+        self.assertEqual(Decimal(rows[self.indexed.id]["target_percent"]), Decimal("60.00"))
+        self.assertEqual(Decimal(rows[self.small_caps.id]["target_percent"]), Decimal("20.00"))
+        self.assertEqual(rows[self.indexed.id]["band"], "derived")
+        self.assertIsNone(rows[self.indexed.id]["class_share"])
+
+    def test_the_contribution_follows_the_second_level(self):
+        # Con el indexado ya en su sitio y las small caps cortas, la aportacion va a las
+        # small caps aunque la clase entera este en su objetivo.
+        self.with_position_target(self.indexed, "75")
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("1000"), on_date=TODAY
+        )
+
+        amounts = {row["position_id"]: Decimal(row["amount"]) for row in result["lines"]}
+
+        self.assertEqual(result["status"], "ok")
+        # 80% de renta variable repartido 75/25: el indexado quiere 6.600 y tiene 6.000;
+        # las small caps quieren 2.200 y tienen 2.000. Cada una recibe su hueco.
+        self.assertEqual(amounts[self.indexed.id], Decimal("600.00"))
+        self.assertEqual(amounts[self.small_caps.id], Decimal("200.00"))
 
 
 class ContributionSolverTests(AllocationFixture, TestCase):
@@ -582,6 +660,27 @@ class ContributionSolverTests(AllocationFixture, TestCase):
         self.assertEqual(len(mine["lines"]), 1)
         self.assertEqual(mine["lines"][0]["asset_class"], "equity")
         self.assertEqual(his["lines"][0]["asset_class"], "crypto")
+
+    def test_a_planned_class_with_nothing_to_buy_is_reported_not_ignored(self):
+        # Objetivo escrito para una clase de la que no tienes ningun producto: el dinero
+        # no tiene donde ir. Antes desaparecia en silencio y su parte se la repartian las
+        # demas clases, asi que la propuesta parecia ignorar la politica.
+        self.create_position("Fondo global", Decimal("9000"))
+        self.strategy(
+            self.mine,
+            date(2024, 1, 1),
+            {"equity": ("80", None, None), "private_equity": ("20", None, None)},
+        )
+
+        result = build_contribution(
+            portfolio=self.portfolio, ownership=self.mine, amount=Decimal("1000"), on_date=TODAY
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual([row["asset_class"] for row in result["unreachable"]], ["private_equity"])
+        self.assertEqual(result["unreachable"][0]["reason"], "no_position")
+        # El dinero sigue colocandose: no se queda en el limbo por no poder cumplir esa linea.
+        self.assertEqual(sum(Decimal(row["amount"]) for row in result["lines"]), Decimal("1000"))
 
 
 class ContributionInvariantTests(AllocationFixture, TestCase):

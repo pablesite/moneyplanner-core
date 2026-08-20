@@ -559,13 +559,35 @@ class AllocationStrategySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
     def get_target_total(self, obj: AllocationStrategy) -> str:
-        return str(sum((row.target_percent for row in obj.targets.all()), Decimal("0")))
+        # Solo las lineas de clase: una linea de posicion reparte dentro de su clase y no
+        # suma sobre la cartera.
+        return str(
+            sum((row.target_percent for row in obj.targets.all() if row.asset_class), Decimal("0"))
+        )
 
     def get_fields(self):
         fields = super().get_fields()
         user = _request_user(self.context)
         fields["ownership_id"].queryset = Ownership.objects.filter(user=user)
         return fields
+
+    def validate_targets(self, value: list[dict]) -> list[dict]:
+        # Una linea de posicion reparte dentro de su clase, asi que varias de la misma
+        # clase no pueden pedir mas del 100%: seria repartir un pastel que no existe.
+        claimed: dict[str, Decimal] = {}
+        for row in value:
+            position = row.get("position")
+            if position is None:
+                continue
+            asset_class = position.effective_asset_class
+            claimed[asset_class] = claimed.get(asset_class, Decimal("0")) + row["target_percent"]
+        excess = [name for name, total in claimed.items() if total > Decimal("100")]
+        if excess:
+            raise serializers.ValidationError(
+                "Dentro de una clase los objetivos por producto no pueden pasar del 100%: "
+                + ", ".join(sorted(excess))
+            )
+        return value
 
     def _write_targets(self, strategy: AllocationStrategy, targets: list[dict]) -> None:
         strategy.targets.all().delete()

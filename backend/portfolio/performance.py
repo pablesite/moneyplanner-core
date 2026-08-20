@@ -534,6 +534,30 @@ def _balance_at(context: PerformanceContext, account_id: int, target: date) -> D
     return context.balance_values[account_id][index] if index >= 0 else ZERO
 
 
+def _fresher_fx_close(
+    *, context: PerformanceContext, position: PortfolioPosition, price, target: date
+) -> tuple[date, Decimal] | None:
+    """La misma cotizacion, si llego como tipo de cambio y es mas reciente que el precio.
+
+    Un bitcoin tiene un solo precio, pero entra en Core por dos puertas: el precio de
+    instrumento del proveedor de mercado y el tipo de cambio BTC->EUR. Actualizar el
+    cambio desde Patrimonio solo escribia la segunda, asi que la misma posicion valia una
+    cosa alli y otra en Cartera hasta que pasaba el worker.
+    """
+    unit = (
+        position.ledger_account.currency
+        if position.ledger_account is not None
+        else position.asset.currency
+    )
+    if not unit or unit == price.currency:
+        return None
+    # `build_fx_cache` deja cada par ordenado de mas reciente a mas antiguo.
+    for rate_date, rate in context.fx_cache.get((unit, price.currency), []):
+        if rate_date <= target:
+            return (rate_date, rate) if rate_date > price.price_date else None
+    return None
+
+
 def resolve_preloaded_value(
     *, context: PerformanceContext, position: PortfolioPosition, target: date
 ) -> ResolvedValue | None:
@@ -562,12 +586,15 @@ def resolve_preloaded_value(
         and (total is None or price.price_date >= total.valuation_date)
     ):
         units = _balance_at(context, int(position.ledger_account_id), target)
+        fresher = _fresher_fx_close(context=context, position=position, price=price, target=target)
+        close = fresher[1] if fresher is not None else price.close
+        observed_on = fresher[0] if fresher is not None else price.price_date
         return ResolvedValue(
-            units * price.close,
+            units * close,
             price.currency,
-            price.price_date,
-            price.price_date == target,
-            f"price:{price.source}",
+            observed_on,
+            observed_on == target,
+            "price:fx_rate" if fresher is not None else f"price:{price.source}",
         )
     if total is not None:
         divested = _divested_at(

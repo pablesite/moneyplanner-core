@@ -239,13 +239,59 @@ def build_allocation(
                     "max_percent": str(target.max_percent)
                     if target and target.max_percent is not None
                     else None,
-                    "drift_value": str((ideal - value).quantize(Decimal("0.01")))
+                    # Positivo es ir sobrado y negativo es quedarse corto, como en
+                    # cualquier desviacion: el exceso suma. Al reves obligaba a traducir
+                    # el signo cada vez que se leia la tabla.
+                    "drift_value": str((value - ideal).quantize(Decimal("0.01")))
                     if ideal is not None
                     else None,
                     "band": _band_state(share, target),
                 }
             )
         return sorted(result, key=lambda row: Decimal(row["value"]), reverse=True)
+
+    # El segundo nivel: dentro de cada clase, que le toca a cada producto. El objetivo
+    # de una posicion sin linea propia no es cero, es el trozo que hereda de su clase,
+    # asi que se calcula con el mismo resolutor que usa el reparto.
+    effective: dict[int, Decimal] = {}
+    if strategy is not None:
+        effective, _, _ = _effective_targets(
+            strategy=strategy, positions=positions, current_by_position=by_position
+        )
+    names = {position.id: position.asset.name for position in positions}
+    classes = {position.id: position.effective_asset_class for position in positions}
+    position_rows = []
+    for position_id, value in by_position.items():
+        share = (value / total * Decimal("100")) if total else ZERO
+        target_percent = effective.get(position_id)
+        explicit = targets_by_position.get(position_id)
+        ideal = (target_percent / Decimal("100") * total) if target_percent is not None else None
+        position_rows.append(
+            {
+                "position_id": position_id,
+                "name": names.get(position_id, ""),
+                "asset_class": classes.get(position_id, "other"),
+                "value": str(value.quantize(Decimal("0.01"))),
+                "actual_percent": str(share.quantize(Decimal("0.01"))),
+                "target_percent": str(target_percent.quantize(Decimal("0.01")))
+                if target_percent is not None
+                else None,
+                # Lo escrito a mano se declara dentro de la clase, que es como se piensa
+                # y como se edita; el efectivo de arriba ya esta en % de cartera.
+                "class_share": str(explicit.target_percent) if explicit else None,
+                "min_percent": str(explicit.min_percent)
+                if explicit and explicit.min_percent is not None
+                else None,
+                "max_percent": str(explicit.max_percent)
+                if explicit and explicit.max_percent is not None
+                else None,
+                "drift_value": str((value - ideal).quantize(Decimal("0.01")))
+                if ideal is not None
+                else None,
+                "band": _band_state(share, explicit) if explicit else "derived",
+            }
+        )
+    position_rows.sort(key=lambda row: Decimal(row["value"]), reverse=True)
 
     return {
         "ownership_id": ownership.id,
@@ -272,7 +318,7 @@ def build_allocation(
             planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
         ),
         "by_class": rows(by_class, targets_by_class, "asset_class"),
-        "by_position": rows(by_position, targets_by_position, "position_id"),
+        "by_position": position_rows,
     }
 
 
@@ -379,13 +425,14 @@ def _effective_targets(
     strategy: AllocationStrategy,
     positions: list[PortfolioPosition],
     current_by_position: dict[int, Decimal],
-) -> tuple[dict[int, Decimal], Decimal]:
-    """Objetivo de cada posicion en % de la cartera, y el que reserva la liquidez.
+) -> tuple[dict[int, Decimal], Decimal, list[dict[str, Any]]]:
+    """Objetivo de cada posicion en % de la cartera, el de la liquidez, y lo inalcanzable.
 
-    Una posicion con objetivo propio manda sobre el de su clase. El resto heredan el de
-    la clase repartido entre ellas por su peso actual, porque el reparto dentro de una
-    clase ya lo decidiste al construirla: la politica dice cuanta renta variable quieres,
-    no en cual de tus tres fondos.
+    El objetivo de una posicion se declara **dentro de su clase**, no sobre la cartera:
+    "de mi renta variable, un 60% al indexado global". Es la unidad en la que se piensa
+    el segundo nivel, y ademas es la unica que no se descuadra sola cuando el objetivo de
+    la clase cambia. Lo que no se reparta a mano se hereda repartido por peso actual,
+    porque el reparto dentro de una clase ya lo decidiste al construirla.
     """
     class_targets: dict[str, Decimal] = {}
     position_targets: dict[int, Decimal] = {}
@@ -398,33 +445,50 @@ def _effective_targets(
         else:
             class_targets[target.asset_class] = target.target_percent
 
-    resolved = dict(position_targets)
+    resolved: dict[int, Decimal] = {}
     by_class: dict[str, list[PortfolioPosition]] = {}
     for position in positions:
-        if position.id in position_targets:
-            continue
         by_class.setdefault(position.effective_asset_class, []).append(position)
 
     for asset_class, members in by_class.items():
         share = class_targets.get(asset_class)
         if share is None:
             continue
-        weights = {p.id: current_by_position.get(p.id, ZERO) for p in members}
+        # Lo declarado a mano dentro de la clase se sirve primero; el resto de la clase
+        # se reparte entre las demas posiciones.
+        declared = [row for row in members if row.id in position_targets]
+        for position in declared:
+            resolved[position.id] = share * position_targets[position.id] / Decimal("100")
+        claimed = sum((position_targets[row.id] for row in declared), ZERO)
+        rest = [row for row in members if row.id not in position_targets]
+        remaining = share * max(Decimal("100") - claimed, ZERO) / Decimal("100")
+        if not rest or remaining <= 0:
+            continue
+        weights = {p.id: current_by_position.get(p.id, ZERO) for p in rest}
         total_weight = sum(weights.values(), ZERO)
         if total_weight > 0:
-            for position in members:
-                resolved[position.id] = share * weights[position.id] / total_weight
+            for position in rest:
+                resolved[position.id] = remaining * weights[position.id] / total_weight
             continue
         # Clase planeada y todavia vacia: no hay historia de la que deducir un peso, asi
         # que aqui si se elige donde construir. Se construye en lo traspasable, porque
         # esa parte se podra rebalancear manana sin pagar peaje y la otra no. Si ninguna
         # lo admite, a partes iguales, que es lo unico neutral.
-        preferred = [row for row in members if row.tax_transferable] or members
-        for position in members:
+        preferred = [row for row in rest if row.tax_transferable] or rest
+        for position in rest:
             resolved[position.id] = (
-                share / Decimal(len(preferred)) if position in preferred else ZERO
+                remaining / Decimal(len(preferred)) if position in preferred else ZERO
             )
-    return resolved, cash_target
+
+    # Una clase con objetivo y sin ninguna posicion no es un reparto de cero: es dinero
+    # que no tiene donde ir. Antes desaparecia en silencio y su parte se la repartian las
+    # demas, asi que la propuesta se alejaba del objetivo sin decir por que.
+    unreachable = [
+        {"asset_class": asset_class, "target_percent": str(share), "reason": "no_position"}
+        for asset_class, share in sorted(class_targets.items())
+        if share > 0 and asset_class not in by_class
+    ]
+    return resolved, cash_target, unreachable
 
 
 def _distribute(
@@ -539,7 +603,9 @@ def build_contribution(
     if strategy is None:
         return {"status": "no_strategy", "lines": [], "amount": str(amount)}
 
-    declared = sum((row.target_percent for row in strategy.targets.all()), ZERO)
+    # Solo las lineas de clase: las de posicion son un reparto *dentro* de su clase, y
+    # sumarlas aqui hacia que anadir un segundo nivel rompiera la validacion del 100%.
+    declared = sum((row.target_percent for row in strategy.targets.all() if row.asset_class), ZERO)
     if abs(declared - Decimal("100")) > Decimal("0.01"):
         # No se normaliza en silencio: con una politica incompleta el ideal se calcula
         # sobre una cartera que no es la tuya y el reparto resultante seria inventado.
@@ -560,7 +626,7 @@ def build_contribution(
     total = sum(current_by_position.values(), ZERO)
     post_total = total + amount
 
-    resolved, cash_target = _effective_targets(
+    resolved, cash_target, unreachable = _effective_targets(
         strategy=strategy, positions=positions, current_by_position=current_by_position
     )
 
@@ -746,6 +812,9 @@ def build_contribution(
         "commitments": honoured,
         "accumulate": accumulate,
         "skipped": skipped,
+        # Clases con objetivo escrito y ningun producto donde colocarlo: la propuesta
+        # tiene que decirlo, porque si no parece que las ignora sin motivo.
+        "unreachable": unreachable,
     }
 
 
@@ -786,6 +855,7 @@ def create_basket(
         explanation={
             "commitments": solved["commitments"],
             "skipped": solved["skipped"],
+            "unreachable": solved["unreachable"],
         },
     )
     lines = [

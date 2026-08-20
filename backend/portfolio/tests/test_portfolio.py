@@ -11,7 +11,7 @@ from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from core.market_data import sync_market_data
-from core.models import MarketDataSyncState
+from core.models import FxRate, MarketDataSyncState
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset, AssetValuation, InvestmentAssetEvent
 from portfolio.models import (
@@ -549,6 +549,38 @@ class PortfolioValuationTests(TestCase):
 
         self.assertEqual(result["value"], "100000.00000000000000000000")
         self.assertEqual(result["provenance"]["calculation"], "ledger_units_x_close")
+        self.assertEqual(result["provenance"]["source"], "coingecko")
+
+    def test_a_fresher_exchange_rate_beats_a_stale_instrument_price(self):
+        # El mismo bitcoin entra en Core por dos puertas: precio de instrumento y tipo de
+        # cambio BTC->EUR. Actualizar el cambio desde Patrimonio solo escribia la segunda,
+        # asi que la posicion valia una cosa alli y otra en Cartera.
+        self.create_price(on_date=date(2025, 1, 3), close="50000")
+        FxRate.objects.create(
+            rate_date=date(2025, 1, 5),
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("60000"),
+        )
+
+        result = resolve_position_valuation(position=self.position, as_of_date=date(2025, 1, 5))
+
+        self.assertEqual(Decimal(result["value"]), Decimal("120000"))
+        self.assertEqual(result["observed_on"], "2025-01-05")
+        self.assertEqual(result["provenance"]["source_key"], "BTC->EUR")
+
+    def test_a_stale_exchange_rate_does_not_override_the_market_price(self):
+        self.create_price(on_date=date(2025, 1, 5), close="50000")
+        FxRate.objects.create(
+            rate_date=date(2025, 1, 3),
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("60000"),
+        )
+
+        result = resolve_position_valuation(position=self.position, as_of_date=date(2025, 1, 5))
+
+        self.assertEqual(result["value"], "100000.00000000000000000000")
         self.assertEqual(result["provenance"]["source"], "coingecko")
 
     def test_newer_manual_total_is_safe_fallback(self):
