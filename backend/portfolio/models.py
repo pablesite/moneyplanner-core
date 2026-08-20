@@ -474,6 +474,91 @@ class PortfolioPosition(models.Model):
             raise ValidationError(errors)
 
 
+class PositionExposure(models.Model):
+    """Como se reparte por dentro una posicion, en las dimensiones que importan.
+
+    La clase de activo dice de que depende que suba o baje; esto dice donde esta metido
+    de verdad. Un indexado global y el fondo US de un roboadvisor son los dos renta
+    variable y pueden ser casi el mismo riesgo, y eso solo se ve mirando dentro.
+
+    Los pesos se declaran a mano y con su fecha de referencia: el dato vive en la ficha
+    del fondo, cambia despacio y ningun proveedor lo regala a partir del ISIN. Lo que
+    aporta el sistema no es capturarlo sino sumarlo —exposicion de toda la cartera,
+    concentracion, solapamiento— y decir cuanta cartera queda sin declarar en vez de
+    dibujar un grafico incompleto como si fuera completo.
+    """
+
+    class Dimension(models.TextChoices):
+        GEOGRAPHY = "geography", "Geografía"
+        SECTOR = "sector", "Sector"
+        VEHICLE = "vehicle", "Vehículo"
+
+    class Bucket(models.TextChoices):
+        # Geografia: los bloques que usan las fichas de fondo, mas Espana aparte porque
+        # el inmobiliario y el crowdlending de esta cartera son espanoles y mezclarlos
+        # con Europa esconderia justo la concentracion que interesa ver.
+        NORTH_AMERICA = "north_america", "Norteamérica"
+        EUROPE = "europe", "Europa"
+        SPAIN = "spain", "España"
+        JAPAN = "japan", "Japón"
+        ASIA_PACIFIC = "asia_pacific", "Asia-Pacífico"
+        EMERGING = "emerging", "Emergentes"
+        GLOBAL = "global", "Global"
+        # Sector: la clasificacion estandar de las fichas.
+        TECHNOLOGY = "technology", "Tecnología"
+        FINANCIALS = "financials", "Financiero"
+        HEALTH_CARE = "health_care", "Salud"
+        CONSUMER_DISCRETIONARY = "consumer_discretionary", "Consumo discrecional"
+        CONSUMER_STAPLES = "consumer_staples", "Consumo básico"
+        INDUSTRIALS = "industrials", "Industrial"
+        ENERGY = "energy", "Energía"
+        MATERIALS = "materials", "Materiales"
+        UTILITIES = "utilities", "Servicios públicos"
+        REAL_ESTATE_SECTOR = "real_estate_sector", "Inmobiliario"
+        COMMUNICATION = "communication", "Comunicación"
+        # Vehiculo: en que envoltorio esta, que no es la clase pero condiciona coste,
+        # fiscalidad y liquidez.
+        INDEX_FUND = "index_fund", "Fondo indexado"
+        ACTIVE_FUND = "active_fund", "Fondo activo"
+        ETF = "etf", "ETF"
+        PENSION_PLAN = "pension_plan", "Plan de pensiones"
+        DIRECT_EQUITY = "direct_equity", "Acciones directas"
+        CROWDFUNDING = "crowdfunding", "Crowdfunding"
+        CRYPTO = "crypto", "Criptoactivo"
+        DEPOSIT = "deposit", "Depósito"
+        OTHER = "other", "Otros"
+
+    position = models.ForeignKey(
+        PortfolioPosition,
+        on_delete=models.CASCADE,
+        related_name="exposures",
+    )
+    dimension = models.CharField(max_length=16, choices=Dimension.choices)
+    bucket = models.CharField(max_length=32, choices=Bucket.choices)
+    percent = models.DecimalField(max_digits=6, decimal_places=3)
+    # La ficha de la que salio el dato. Una exposicion sin fecha envejece sin avisar, y
+    # una desactualizada engana mas que no tenerla.
+    observed_on = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["dimension", "-percent", "bucket"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "dimension", "bucket"],
+                name="portfolio_exposure_unique",
+            ),
+            models.CheckConstraint(
+                condition=Q(percent__gt=0) & Q(percent__lte=100),
+                name="portfolio_exposure_percent_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.position_id}:{self.dimension}:{self.bucket}={self.percent}"
+
+
 class PositionClassBreakdown(models.Model):
     """Reparto interno de una posición entre varias clases de activo.
 

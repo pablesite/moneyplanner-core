@@ -9,6 +9,8 @@ from .views import (
     ContributionCommitmentViewSet,
     ContributionSolveView,
     PortfolioAllocationView,
+    PortfolioExposureView,
+    PositionExposureViewSet,
     PositionAllocationRuleViewSet,
     InstrumentViewSet,
     InstrumentPriceViewSet,
@@ -40,6 +42,7 @@ router = DefaultRouter()
 router.register(r"portfolios", PortfolioViewSet, basename="portfolios")
 router.register(r"containers", InvestmentContainerViewSet, basename="portfolio-containers")
 router.register(r"cash-accounts", ContainerCashAccountViewSet, basename="portfolio-cash-accounts")
+router.register(r"exposures", PositionExposureViewSet, basename="portfolio-exposures")
 router.register(r"instruments", InstrumentViewSet, basename="portfolio-instruments")
 router.register(
     r"provider-mappings", InstrumentProviderMappingViewSet, basename="portfolio-mappings"
@@ -66,6 +69,7 @@ urlpatterns = [
     path("readiness/", PortfolioReadinessView.as_view(), name="portfolio-readiness"),
     path("allocation/", PortfolioAllocationView.as_view(), name="portfolio-allocation"),
     path("allocation/scopes/", AllocationScopesView.as_view(), name="portfolio-allocation-scopes"),
+    path("exposure/", PortfolioExposureView.as_view(), name="portfolio-exposure"),
     path("contribution/solve/", ContributionSolveView.as_view(), name="portfolio-contribution"),
     path("overview/", PortfolioOverviewView.as_view(), name="portfolio-overview"),
     path("timeline/", PortfolioTimelineView.as_view(), name="portfolio-timeline"),

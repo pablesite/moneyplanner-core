@@ -18,6 +18,7 @@ from memberships.models import Ownership
 
 from core.market_data import MarketDataSyncError
 
+from .exposure import build_exposure
 from .allocation import (
     build_allocation,
     build_cash_value,
@@ -33,6 +34,7 @@ from .models import (
     ContributionBasket,
     ContributionCommitment,
     PositionAllocationRule,
+    PositionExposure,
     Instrument,
     InstrumentPrice,
     InstrumentProviderMapping,
@@ -51,6 +53,7 @@ from .serializers import (
     ContributionBasketSerializer,
     ContributionCommitmentSerializer,
     PositionAllocationRuleSerializer,
+    PositionExposureSerializer,
     InstrumentSerializer,
     InstrumentPriceSerializer,
     InstrumentProviderMappingSerializer,
@@ -876,6 +879,38 @@ class PortfolioAllocationView(APIView):
     def get(self, request):
         portfolio, ownership, on_date = _allocation_request(request)
         return Response(build_allocation(portfolio=portfolio, ownership=ownership, on_date=on_date))
+
+
+class PositionExposureViewSet(viewsets.ModelViewSet):
+    """Como se reparte por dentro cada posicion. Se declara a mano, con su fecha."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = PositionExposureSerializer
+
+    def get_queryset(self):
+        rows = PositionExposure.objects.filter(
+            position__portfolio__user=self.request.user
+        ).select_related("position")
+        position_id = self.request.query_params.get("position_id")
+        if str(position_id or "").isdigit():
+            rows = rows.filter(position_id=int(position_id))
+        return rows
+
+
+class PortfolioExposureView(APIView):
+    """Exposicion agregada de la cartera, con lo que queda sin declarar."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio = Portfolio.objects.filter(user=request.user).first()
+        if portfolio is None:
+            raise ValidationError({"portfolio": "Todavia no hay cartera."})
+        raw = request.query_params.get("on_date")
+        on_date = parse_date(str(raw)) if raw else timezone.localdate()
+        if on_date is None:
+            raise ValidationError({"on_date": "Fecha no valida."})
+        return Response(build_exposure(portfolio=portfolio, on_date=on_date))
 
 
 class AllocationScopesView(APIView):

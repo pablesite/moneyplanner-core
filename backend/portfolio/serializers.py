@@ -19,6 +19,7 @@ from .models import (
     ContributionBasketLine,
     ContributionCommitment,
     PositionAllocationRule,
+    PositionExposure,
     ContainerCashAccount,
     Instrument,
     InstrumentPrice,
@@ -641,6 +642,39 @@ class PositionAllocationRuleSerializer(serializers.ModelSerializer):
         user = _request_user(self.context)
         fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
         return fields
+
+
+class PositionExposureSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position", queryset=PortfolioPosition.objects.all()
+    )
+
+    class Meta:
+        model = PositionExposure
+        fields = ["id", "position_id", "dimension", "bucket", "percent", "observed_on"]
+        read_only_fields = ["id"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        return fields
+
+    def validate(self, attrs: dict) -> dict:
+        position = attrs.get("position", getattr(self.instance, "position", None))
+        dimension = attrs.get("dimension", getattr(self.instance, "dimension", ""))
+        percent = attrs.get("percent", getattr(self.instance, "percent", Decimal("0")))
+        rows = PositionExposure.objects.filter(position=position, dimension=dimension)
+        if self.instance is not None:
+            rows = rows.exclude(pk=self.instance.pk)
+        declared = sum((row.percent for row in rows), Decimal("0")) + percent
+        # Dentro de una dimension no se puede repartir mas del 100%: seria declarar mas
+        # cartera de la que hay. Menos si vale: lo que falte se declara sin cubrir.
+        if declared > Decimal("100"):
+            raise serializers.ValidationError(
+                {"percent": f"En {dimension} ya llevas declarado el {declared - percent}%."}
+            )
+        return attrs
 
 
 class ContributionCommitmentSerializer(serializers.ModelSerializer):
