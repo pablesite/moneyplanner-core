@@ -33,6 +33,9 @@ READY_COVERAGE = Decimal("80")
 # Dos productos por debajo de esto comparten lo que comparte cualquier par: no es una
 # senal, es ruido.
 OVERLAP_FLOOR = Decimal("25")
+# El envoltorio no es riesgo compartido: dos ETFs coinciden en el 100% de su vehiculo por
+# definicion, y publicarlo llenaria la lista de hallazgos que no dicen nada.
+RISK_DIMENSIONS: tuple[str, ...] = ("geography", "sector")
 
 
 def _values(*, context: PerformanceContext, on_date: date) -> dict[int, Decimal]:
@@ -209,7 +212,9 @@ def _overlap(
     ordered = sorted(values, key=lambda key: values[key], reverse=True)
     for index, left in enumerate(ordered):
         for right in ordered[index + 1 :]:
-            for dimension, _ in PositionExposure.Dimension.choices:
+            # El vehiculo queda fuera: dos ETFs comparten el 100% de su vehiculo por
+            # definicion, y eso no es un solapamiento de riesgo sino de envoltorio.
+            for dimension in RISK_DIMENSIONS:
                 left_rows = rows_by_position.get(left, {}).get(dimension, [])
                 right_rows = rows_by_position.get(right, {}).get(dimension, [])
                 if not left_rows or not right_rows:

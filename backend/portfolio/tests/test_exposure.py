@@ -159,6 +159,18 @@ class ExposureTests(ExposureFixture, TestCase):
 
         self.assertEqual(result["overlap"], [])
 
+    def test_sharing_a_wrapper_is_not_an_overlap(self):
+        # Dos ETFs comparten el 100% de su vehiculo por definicion. Publicarlo llenaba la
+        # lista de hallazgos que no dicen nada y tapaba los que si.
+        left = self.create_position("ETF uno", Decimal("5000"))
+        right = self.create_position("ETF dos", Decimal("5000"))
+        self.declare(left, PositionExposure.Dimension.VEHICLE, {"etf": "100"})
+        self.declare(right, PositionExposure.Dimension.VEHICLE, {"etf": "100"})
+
+        result = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+
+        self.assertEqual(result["overlap"], [])
+
     def test_concentration_reports_the_weight_of_the_biggest_positions(self):
         self.create_position("Grande", Decimal("8000"))
         self.create_position("Pequena", Decimal("2000"))
