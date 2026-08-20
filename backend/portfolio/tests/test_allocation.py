@@ -993,6 +993,80 @@ class CommitmentPriorityTests(AllocationFixture, TestCase):
         self.assertEqual(result["unmet_commitments"], [])
 
 
+class ContainerFloorTests(AllocationFixture, TestCase):
+    """El minimo de una plataforma es de la plataforma, no de un producto suyo."""
+
+    def setUp(self):
+        super().setUp()
+        self.robo = self.create_position("Roboadvisor", Decimal("5000"))
+        self.pension = self.create_position("Plan de pensiones", Decimal("5000"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        ContributionCommitment.objects.create(
+            container=self.container,
+            period=ContributionCommitment.Period.MONTH,
+            amount=Decimal("300"),
+            breach_cost=Decimal("300"),
+            reason="Minimo de MyInvestor",
+        )
+        ContributionCommitment.objects.create(
+            position=self.pension,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("1500"),
+            reason="Tope deducible",
+        )
+        ContributionCommitment.objects.create(
+            position=self.robo,
+            period=ContributionCommitment.Period.YEAR,
+            amount=Decimal("2100"),
+            reason="Resto del minimo anual",
+        )
+
+    def january(self, amount: str):
+        return build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal(amount),
+            on_date=date(2024, 1, 31),
+        )
+
+    def test_the_year_quota_is_paced_instead_of_emptied_in_january(self):
+        # Meter los 1.500 del plan en enero deja los once meses siguientes sin nada que
+        # aportar ahi, y con un minimo mensual de plataforma por medio eso es perderlo.
+        result = self.january("300")
+
+        served = {row["position_id"]: Decimal(row["amount"]) for row in result["commitments"]}
+        self.assertEqual(served[self.pension.id], Decimal("125.00"))
+        self.assertEqual(served[self.robo.id], Decimal("175.00"))
+
+    def test_the_floor_is_covered_between_the_products_of_its_container(self):
+        # 300 al mes en la plataforma, repartidos a proporcion de lo que le queda a cada
+        # cupo: 1.500 y 2.100 son 5 y 7 de cada 12.
+        result = self.january("300")
+
+        total = sum(Decimal(row["amount"]) for row in result["lines"])
+        self.assertEqual(total, Decimal("300"))
+        self.assertEqual(result["unmet_commitments"], [])
+
+    def test_a_contribution_below_the_floor_says_what_is_missing(self):
+        result = self.january("200")
+
+        unmet = result["unmet_commitments"]
+        self.assertTrue(any(row.get("container_id") == self.container.id for row in unmet))
+
+    def test_in_december_the_quota_claims_what_is_left(self):
+        # Con un solo mes por delante, repartir por los meses que quedan es reclamarlo
+        # todo: el cupo se pierde si no se llena antes de que acabe el ano.
+        result = build_contribution(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            amount=Decimal("5000"),
+            on_date=date(2024, 12, 31),
+        )
+
+        served = {row["position_id"]: Decimal(row["amount"]) for row in result["commitments"]}
+        self.assertEqual(served[self.pension.id], Decimal("1500.00"))
+
+
 class ContributionBasketTests(AllocationFixture, TestCase):
     """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""
 

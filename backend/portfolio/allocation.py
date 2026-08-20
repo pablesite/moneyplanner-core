@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_UP, Decimal
 from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction as db_transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounting.models import LedgerAccount, LedgerTransaction
@@ -364,37 +365,70 @@ def contributed_within(
 
 def resolve_commitments(
     *, context: PerformanceContext, positions: list[PortfolioPosition], on_date: date
-) -> dict[int, dict[str, Any]]:
-    """Cuanto hay que llevar a cada posicion antes de mirar la desviacion.
+) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Cuanto hay que llevar a cada sitio antes de mirar la desviacion.
 
-    El cupo anual descuenta lo que ya se aporto en el ano: si el tope deducible son 1.500
-    y llevas 900, lo pendiente son 600, no 1.500. El suelo mensual descuenta lo del mes
-    en curso por el mismo motivo.
+    Devuelve lo pendiente por posicion y lo pendiente por contenedor, que son dos cosas
+    distintas: el plan de pensiones tiene su cupo anual, y la plataforma entera tiene un
+    minimo mensual que da igual como se reparta por dentro.
+
+    Lo ya aportado se descuenta: si el tope deducible son 1.500 y llevas 900, lo
+    pendiente son 600, no 1.500. Y un cupo anual se **reparte por los meses que quedan**
+    en vez de reclamarse entero: vaciarlo en enero deja los meses siguientes sin nada que
+    aportar, y con un minimo mensual de plataforma por medio eso significa perderlo.
     """
     by_position = {position.id: position for position in positions}
+    by_container: dict[int, list[int]] = {}
+    for position in positions:
+        by_container.setdefault(position.container_id, []).append(position.id)
+
     pending: dict[int, dict[str, Any]] = {}
+    containers: dict[int, dict[str, Any]] = {}
     for commitment in ContributionCommitment.objects.filter(
-        position_id__in=list(by_position), is_active=True
+        Q(position_id__in=list(by_position)) | Q(container_id__in=list(by_container)),
+        is_active=True,
     ):
-        if commitment.period == ContributionCommitment.Period.YEAR:
-            since = date(on_date.year, 1, 1)
-        else:
-            since = date(on_date.year, on_date.month, 1)
-        done = contributed_within(
-            context=context, position_id=commitment.position_id, since=since, until=on_date
+        annual = commitment.period == ContributionCommitment.Period.YEAR
+        since = date(on_date.year, 1, 1) if annual else date(on_date.year, on_date.month, 1)
+        targets = (
+            [commitment.position_id]
+            if commitment.position_id
+            else by_container.get(commitment.container_id, [])
+        )
+        done = sum(
+            (
+                contributed_within(
+                    context=context, position_id=position_id, since=since, until=on_date
+                )
+                for position_id in targets
+            ),
+            ZERO,
         )
         outstanding = max(commitment.amount - done, ZERO)
         if outstanding <= 0:
             continue
-        current = pending.get(commitment.position_id)
-        if current is None or outstanding > current["amount"]:
-            pending[commitment.position_id] = {
-                "amount": outstanding,
-                "period": commitment.period,
-                "reason": commitment.reason,
-                "breach_cost": commitment.breach_cost,
-            }
-    return pending
+        # Un cupo anual va a su ritmo: lo que queda dividido entre los meses que faltan,
+        # diciembre incluido. En diciembre eso es todo lo pendiente.
+        months_left = 13 - on_date.month
+        claim = (
+            (outstanding / Decimal(months_left)).quantize(CENT, rounding=ROUND_UP)
+            if annual
+            else outstanding
+        )
+        row = {
+            "amount": min(claim, outstanding),
+            "outstanding": outstanding,
+            "period": commitment.period,
+            "reason": commitment.reason,
+            "breach_cost": commitment.breach_cost,
+        }
+        if commitment.position_id:
+            current = pending.get(commitment.position_id)
+            if current is None or row["amount"] > current["amount"]:
+                pending[commitment.position_id] = row
+        else:
+            containers[commitment.container_id] = row
+    return pending, containers
 
 
 @dataclass(frozen=True)
@@ -581,6 +615,88 @@ def _step_down(value: Decimal, row: Candidate) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_DOWN)
 
 
+def _serve_container_floors(
+    *,
+    candidates: list[Candidate],
+    container_commitments: dict[int, dict[str, Any]],
+    commitments: dict[int, dict[str, Any]],
+    committed: dict[int | None, Decimal],
+    budget: Decimal,
+) -> tuple[Decimal, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Cubre el minimo de cada plataforma repartiendolo entre sus posiciones.
+
+    El minimo de una plataforma es de la plataforma entera: da igual si los 300 EUR de
+    MyInvestor van al plan de pensiones o al roboadvisor. Se cuenta lo que ya se les ha
+    comprometido en esta misma aportacion y solo se completa la diferencia, repartida a
+    proporcion del cupo anual que le queda a cada una: con 1.500 y 2.100 pendientes, de
+    300 salen 125 y 175. Asi el cupo del ano llega hasta diciembre en vez de gastarse en
+    enero y dejar los meses siguientes por debajo del minimo de la plataforma.
+    """
+    honoured: list[dict[str, Any]] = []
+    unmet: list[dict[str, Any]] = []
+    for container_id, claim in sorted(
+        container_commitments.items(), key=lambda item: -item[1]["breach_cost"]
+    ):
+        members = [
+            member
+            for member in candidates
+            if member.position is not None and member.position.container_id == container_id
+        ]
+        already = sum((committed.get(member.key, ZERO) for member in members), ZERO)
+        missing = min(claim["amount"] - already, budget)
+        if not members or missing <= 0:
+            if claim["amount"] > already:
+                unmet.append(_container_breach(container_id, claim, claim["amount"] - already))
+            continue
+        weights: dict[int | None, Decimal] = {}
+        for member in members:
+            quota = commitments.get(member.key)
+            room = (
+                (quota["outstanding"] - committed.get(member.key, ZERO)) if quota else member.gap
+            )
+            weights[member.key] = max(room, ZERO)
+        total_weight = sum(weights.values(), ZERO)
+        if total_weight <= 0:
+            weights = {member.key: Decimal("1") for member in members}
+            total_weight = Decimal(len(members))
+        placed = ZERO
+        for index, member in enumerate(members):
+            share = (
+                missing - placed
+                if index == len(members) - 1
+                else (missing * weights[member.key] / total_weight).quantize(CENT)
+            )
+            take = _step_down(min(share, budget), member)
+            if take <= 0:
+                continue
+            committed[member.key] = committed.get(member.key, ZERO) + take
+            budget -= take
+            placed += take
+            honoured.append(
+                {
+                    "position_id": member.key,
+                    "amount": str(take),
+                    "period": claim["period"],
+                    "reason": claim["reason"] or "Minimo de la plataforma",
+                }
+            )
+        if placed < missing:
+            unmet.append(_container_breach(container_id, claim, missing - placed))
+    return budget, honoured, unmet
+
+
+def _container_breach(
+    container_id: int, claim: dict[str, Any], amount: Decimal
+) -> dict[str, Any]:
+    return {
+        "container_id": container_id,
+        "amount": str(amount),
+        "period": claim["period"],
+        "reason": claim["reason"],
+        "breach_cost": str(claim["breach_cost"]),
+    }
+
+
 def build_contribution(
     *,
     portfolio: Portfolio,
@@ -686,7 +802,9 @@ def build_contribution(
 
     # Los compromisos se atienden antes que la politica: una deduccion fiscal o una
     # ventaja del broker valen, en euros, mucho mas que la desviacion que se corrige.
-    commitments = resolve_commitments(context=context, positions=positions, on_date=on_date)
+    commitments, container_commitments = resolve_commitments(
+        context=context, positions=positions, on_date=on_date
+    )
     # Un cupo lleno sigue siendo un techo: la posicion no debe recibir mas aunque su
     # compromiso ya no reclame nada.
     _year_capped = set(
@@ -752,6 +870,16 @@ def build_contribution(
     # Un cupo anual es tambien un techo: pasarse no desgrava. La posicion se financia
     # con su compromiso y se aparta del reparto, asi que el resto del dinero va a las
     # demas en vez de acabar donde ya no aporta nada.
+    budget, container_honoured, container_unmet = _serve_container_floors(
+        candidates=candidates,
+        container_commitments=container_commitments,
+        commitments=commitments,
+        committed=committed,
+        budget=budget,
+    )
+    honoured.extend(container_honoured)
+    unmet.extend(container_unmet)
+
     capped = {
         position_id
         for position_id, claim in commitments.items()

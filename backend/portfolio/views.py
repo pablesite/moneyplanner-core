@@ -769,9 +769,12 @@ class ContributionCommitmentViewSet(viewsets.ModelViewSet):
     serializer_class = ContributionCommitmentSerializer
 
     def get_queryset(self):
+        # Un compromiso puede colgar de una posicion o de un contenedor: filtrar solo por
+        # la primera dejaba fuera de la lista los minimos de plataforma.
         return ContributionCommitment.objects.filter(
-            position__portfolio__user=self.request.user
-        ).select_related("position")
+            Q(position__portfolio__user=self.request.user)
+            | Q(container__portfolio__user=self.request.user)
+        ).select_related("position", "container")
 
 
 class ContributionBasketViewSet(

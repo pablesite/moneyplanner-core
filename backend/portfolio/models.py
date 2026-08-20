@@ -1071,7 +1071,23 @@ class ContributionCommitment(models.Model):
         YEAR = "year", "Anual"
 
     position = models.ForeignKey(
-        PortfolioPosition, on_delete=models.CASCADE, related_name="commitments"
+        PortfolioPosition,
+        on_delete=models.CASCADE,
+        related_name="commitments",
+        null=True,
+        blank=True,
+    )
+    # Un minimo puede ser del contenedor y no de un producto: MyInvestor pide 300 EUR al
+    # mes en la plataforma, y da igual si van al plan de pensiones o al roboadvisor. Sin
+    # esto habia que repartirlo a mano entre las posiciones, y entonces cada una tiraba
+    # de su propio cupo cuando le convenia y algun mes el minimo de la plataforma se
+    # quedaba sin cubrir.
+    container = models.ForeignKey(
+        InvestmentContainer,
+        on_delete=models.CASCADE,
+        related_name="commitments",
+        null=True,
+        blank=True,
     )
     period = models.CharField(max_length=8, choices=Period.choices)
     amount = models.DecimalField(max_digits=18, decimal_places=2)
@@ -1087,10 +1103,20 @@ class ContributionCommitment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["position_id", "period"]
+        ordering = ["position_id", "container_id", "period"]
         constraints = [
             models.UniqueConstraint(
                 fields=["position", "period"], name="portfolio_commitment_unique"
+            ),
+            models.UniqueConstraint(
+                fields=["container", "period"], name="portfolio_commitment_container_unique"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(position__isnull=False, container__isnull=True)
+                    | Q(position__isnull=True, container__isnull=False)
+                ),
+                name="portfolio_commitment_one_target",
             ),
             models.CheckConstraint(
                 condition=Q(amount__gt=0), name="portfolio_commitment_amount_positive"
@@ -1101,7 +1127,8 @@ class ContributionCommitment(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.position_id}:{self.period}:{self.amount}"
+        target = self.position_id or f"c{self.container_id}"
+        return f"{target}:{self.period}:{self.amount}"
 
 
 class PositionAllocationRule(models.Model):

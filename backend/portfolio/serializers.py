@@ -644,8 +644,22 @@ class PositionAllocationRuleSerializer(serializers.ModelSerializer):
 
 
 class ContributionCommitmentSerializer(serializers.ModelSerializer):
+    # `default=None` y no solo `required=False`: las restricciones de unicidad del
+    # modelo generan un validador que exige todos sus campos, y sin default el que no se
+    # envia se pedia como obligatorio.
     position_id = serializers.PrimaryKeyRelatedField(
-        source="position", queryset=PortfolioPosition.objects.all()
+        source="position",
+        queryset=PortfolioPosition.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    container_id = serializers.PrimaryKeyRelatedField(
+        source="container",
+        queryset=InvestmentContainer.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
     )
 
     class Meta:
@@ -653,6 +667,7 @@ class ContributionCommitmentSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "position_id",
+            "container_id",
             "period",
             "amount",
             "reason",
@@ -665,7 +680,19 @@ class ContributionCommitmentSerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         user = _request_user(self.context)
         fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        fields["container_id"].queryset = InvestmentContainer.objects.filter(portfolio__user=user)
         return fields
+
+    def validate(self, attrs: dict) -> dict:
+        position = attrs.get("position", getattr(self.instance, "position", None))
+        container = attrs.get("container", getattr(self.instance, "container", None))
+        # O es de un producto o es de la plataforma entera: mezclarlo dejaria el minimo
+        # contado dos veces.
+        if bool(position) == bool(container):
+            raise serializers.ValidationError(
+                {"position_id": "Indica un producto o una plataforma, pero no las dos."}
+            )
+        return attrs
 
 
 class ContributionBasketLineSerializer(serializers.ModelSerializer):
