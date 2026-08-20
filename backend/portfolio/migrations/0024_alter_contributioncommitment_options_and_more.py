@@ -5,32 +5,52 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('portfolio', '0023_contributioncommitment_breach_cost_and_more'),
+        ("portfolio", "0023_contributioncommitment_breach_cost_and_more"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='contributioncommitment',
-            options={'ordering': ['position_id', 'container_id', 'period']},
+            name="contributioncommitment",
+            options={"ordering": ["position_id", "container_id", "period"]},
         ),
         migrations.AddField(
-            model_name='contributioncommitment',
-            name='container',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='commitments', to='portfolio.investmentcontainer'),
+            model_name="contributioncommitment",
+            name="container",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="commitments",
+                to="portfolio.investmentcontainer",
+            ),
         ),
         migrations.AlterField(
-            model_name='contributioncommitment',
-            name='position',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='commitments', to='portfolio.portfolioposition'),
+            model_name="contributioncommitment",
+            name="position",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="commitments",
+                to="portfolio.portfolioposition",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='contributioncommitment',
-            constraint=models.UniqueConstraint(fields=('container', 'period'), name='portfolio_commitment_container_unique'),
+            model_name="contributioncommitment",
+            constraint=models.UniqueConstraint(
+                fields=("container", "period"), name="portfolio_commitment_container_unique"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='contributioncommitment',
-            constraint=models.CheckConstraint(condition=models.Q(models.Q(('container__isnull', True), ('position__isnull', False)), models.Q(('container__isnull', False), ('position__isnull', True)), _connector='OR'), name='portfolio_commitment_one_target'),
+            model_name="contributioncommitment",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("container__isnull", True), ("position__isnull", False)),
+                    models.Q(("container__isnull", False), ("position__isnull", True)),
+                    _connector="OR",
+                ),
+                name="portfolio_commitment_one_target",
+            ),
         ),
     ]

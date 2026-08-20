@@ -651,9 +651,7 @@ def _serve_container_floors(
         weights: dict[int | None, Decimal] = {}
         for member in members:
             quota = commitments.get(member.key)
-            room = (
-                (quota["outstanding"] - committed.get(member.key, ZERO)) if quota else member.gap
-            )
+            room = (quota["outstanding"] - committed.get(member.key, ZERO)) if quota else member.gap
             weights[member.key] = max(room, ZERO)
         total_weight = sum(weights.values(), ZERO)
         if total_weight <= 0:
@@ -685,9 +683,7 @@ def _serve_container_floors(
     return budget, honoured, unmet
 
 
-def _container_breach(
-    container_id: int, claim: dict[str, Any], amount: Decimal
-) -> dict[str, Any]:
+def _container_breach(container_id: int, claim: dict[str, Any], amount: Decimal) -> dict[str, Any]:
     return {
         "container_id": container_id,
         "amount": str(amount),
