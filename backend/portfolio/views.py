@@ -68,6 +68,7 @@ from .serializers import (
 )
 from .market_data import refresh_confirmed_mapping
 from .performance import (
+    build_holding_threads,
     build_portfolio_overview,
     build_portfolio_performance,
     build_portfolio_positions,
@@ -554,6 +555,23 @@ class PortfolioQualityView(APIView):
         )
 
 
+class PortfolioHoldingThreadsView(APIView):
+    """Los hilos economicos: el mismo activo bajo la misma titularidad, cambie o no de custodio."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, start_date, end_date, _member_id = _performance_request(request)
+        return Response(
+            build_holding_threads(
+                portfolio=portfolio,
+                start_date=start_date,
+                end_date=end_date,
+                context=None,
+            )
+        )
+
+
 def _holding_currency(position) -> str:
     """En qué está denominada la posición, que es por lo que filtra la cartera."""
     account = position.ledger_account if position.ledger_account_id else None
@@ -641,12 +659,21 @@ class PortfolioWorkspaceView(APIView):
 
     @staticmethod
     def _scope_ids(request, *, context) -> set[int] | None:
-        """Las posiciones que el filtro de inventario deja dentro, o None si no hay filtro."""
+        """Las posiciones que el filtro de inventario deja dentro, o None si no hay filtro.
+
+        `instrument_id` + `ownership_id` componen el hilo economico: el mismo activo bajo la
+        misma titularidad, aunque haya cambiado de custodio. Un traspaso entre dos custodios
+        del hilo es interno al scope y se anula solo, que es lo que devuelve la serie
+        continua en lugar de una historia que empieza el dia de la ultima mudanza.
+        """
         container_id = str(request.query_params.get("container_id") or "").strip()
         asset_class = str(request.query_params.get("asset_class") or "").strip()
         currency = str(request.query_params.get("currency") or "").strip().upper()
+        instrument_id = str(request.query_params.get("instrument_id") or "").strip()
+        ownership_id = str(request.query_params.get("ownership_id") or "").strip()
         if not container_id and not asset_class and not currency:
-            return None
+            if not instrument_id and not ownership_id:
+                return None
         selected = context.positions
         if container_id:
             if not container_id.isdigit():
@@ -658,6 +685,22 @@ class PortfolioWorkspaceView(APIView):
             selected = [row for row in selected if row.effective_asset_class == asset_class]
         if currency:
             selected = [row for row in selected if _holding_currency(row) == currency]
+        if instrument_id:
+            if not instrument_id.isdigit():
+                raise ValidationError({"instrument_id": "Debe ser un entero."})
+            selected = [row for row in selected if row.instrument_id == int(instrument_id)]
+        if ownership_id:
+            if not ownership_id.isdigit():
+                raise ValidationError({"ownership_id": "Debe ser un entero."})
+            wanted = int(ownership_id)
+            selected = [
+                row
+                for row in selected
+                if any(
+                    period.ownership_id == wanted
+                    for period in context.ownership_periods.get(row.id, [])
+                )
+            ]
         return {row.id for row in selected}
 
 

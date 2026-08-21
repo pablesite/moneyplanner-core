@@ -24,6 +24,7 @@ from .views import (
     PortfolioOverviewView,
     PortfolioPerformanceView,
     PortfolioPositionViewSet,
+    PortfolioHoldingThreadsView,
     PortfolioQualityView,
     PortfolioWorkspaceView,
     PortfolioOperationConfirmView,
@@ -81,6 +82,7 @@ urlpatterns = [
     path("timeline/", PortfolioTimelineView.as_view(), name="portfolio-timeline"),
     path("performance/", PortfolioPerformanceView.as_view(), name="portfolio-performance"),
     path("quality/", PortfolioQualityView.as_view(), name="portfolio-quality"),
+    path("threads/", PortfolioHoldingThreadsView.as_view(), name="portfolio-threads"),
     path("workspace/", PortfolioWorkspaceView.as_view(), name="portfolio-workspace"),
     path(
         "operations/options/",

@@ -13,7 +13,8 @@ from django.utils import timezone
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from core.models import InflationIndex
 from core.services import build_fx_cache, convert_currency_cached
-from net_worth.models import InvestmentAssetEvent
+from memberships.models import Ownership, OwnershipLink
+from net_worth.models import Asset, InvestmentAssetEvent
 
 from .models import (
     ContainerCashAccount,
@@ -56,6 +57,9 @@ class FlowRecord:
     cost: Decimal = ZERO
     income: Decimal = ZERO
     realized_pnl: Decimal | None = None
+    # Solo en flujos de efectivo de contenedor: la cuenta que lo movio, para poder
+    # repartirlo por titularidad igual que se reparte su saldo.
+    cash_account_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,10 @@ class PerformanceContext:
     balance_values: dict[int, list[Decimal]]
     flows: list[FlowRecord]
     ownership_periods: dict[int, list[Any]]
+    # Reparto del efectivo de contenedor por miembro, resuelto desde el OwnershipLink del
+    # activo de Patrimonio que respalda cada cuenta. Una cuenta ausente de este mapa es
+    # efectivo que no se puede atribuir, no efectivo de nadie.
+    cash_ownership: dict[int, dict[int, Decimal]]
     fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]]
     inflation_rows: list[tuple[date, Decimal]]
     fx_issues: set[str] = field(default_factory=set)
@@ -199,6 +207,11 @@ def _load_ledger_flows(
     for transaction in transactions:
         entries = list(transaction.entries.all())
         by_account = _first_entry_by_account(entries)
+        # Un asiento que toca dos posiciones es una mudanza entre ellas. La direccion vive
+        # en el asiento, asi que ambas patas la leian igual y la de salida se perdia por no
+        # encontrar contrapartida: el traspaso entraba dos veces como aportacion y nunca
+        # salia. Con dos posiciones implicadas manda el lado de cada anotacion.
+        moves_between_positions = sum(1 for key in account_to_position if key in by_account) > 1
         for account_id, position in account_to_position.items():
             position_entry = by_account.get(account_id)
             if position_entry is None:
@@ -229,10 +242,15 @@ def _load_ledger_flows(
                     )
                     continue
                 is_inflow = (
-                    transaction.investment_direction == LedgerTransaction.InvestmentDirection.INFLOW
-                    or (
-                        not transaction.investment_direction
-                        and position_entry.side == LedgerEntry.Side.DEBIT
+                    position_entry.side == LedgerEntry.Side.DEBIT
+                    if moves_between_positions
+                    else (
+                        transaction.investment_direction
+                        == LedgerTransaction.InvestmentDirection.INFLOW
+                        or (
+                            not transaction.investment_direction
+                            and position_entry.side == LedgerEntry.Side.DEBIT
+                        )
                     )
                 )
                 counterpart = _counterpart_entry(
@@ -344,6 +362,7 @@ def _load_ledger_flows(
                         "cash_contribution" if is_inflow else "cash_withdrawal",
                         "ledger",
                         True,
+                        cash_account_id=cash_account_id,
                     )
                 )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.INCOME:
@@ -499,6 +518,7 @@ def load_performance_context(
     ownership_periods = {
         position.id: list(position.ownership_periods.all()) for position in positions
     }
+    cash_ownership = _load_cash_ownership(portfolio=portfolio, cash_accounts=cash_accounts)
     inflation_rows = list(
         InflationIndex.objects.filter(region=InflationIndex.Region.ES, period__lte=end_date)
         .order_by("period")
@@ -518,9 +538,75 @@ def load_performance_context(
         balance_values=balance_values,
         flows=flows,
         ownership_periods=ownership_periods,
+        cash_ownership=cash_ownership,
         fx_cache=build_fx_cache(currencies),
         inflation_rows=[(row_date, Decimal(index)) for row_date, index in inflation_rows],
     )
+
+
+def _load_cash_ownership(
+    *, portfolio: Portfolio, cash_accounts: list[ContainerCashAccount]
+) -> dict[int, dict[int, Decimal]]:
+    """Quien es dueno del efectivo de cada contenedor, segun Patrimonio.
+
+    Una cuenta de efectivo no lleva titularidad propia, pero el activo que la respalda si:
+    es el mismo `OwnershipLink` que ya usa `_bootstrap_ownership` para las posiciones. Leer
+    de ahi evita pedir al usuario que declare dos veces la misma titularidad.
+
+    Una cuenta sin activo, sin enlace o con titularidad dinamica se queda fuera del mapa:
+    su reparto no se puede fijar sin congelar participaciones historicas, y publicarla como
+    reparto exacto seria inventarlo.
+    """
+    account_ids = [row.ledger_account_id for row in cash_accounts]
+    if not account_ids:
+        return {}
+    asset_by_account = {
+        asset.accounting_account_id: asset
+        for asset in Asset.objects.filter(
+            user=portfolio.user, accounting_account_id__in=account_ids
+        )
+    }
+    links = {
+        link.target_id: link
+        for link in OwnershipLink.objects.filter(
+            user=portfolio.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id__in=[asset.id for asset in asset_by_account.values()],
+        )
+        .select_related("ownership__member")
+        .prefetch_related("ownership__splits")
+    }
+    resolved: dict[int, dict[int, Decimal]] = {}
+    for account_id in account_ids:
+        asset = asset_by_account.get(account_id)
+        link = links.get(asset.id) if asset else None
+        if link is None:
+            continue
+        ownership = link.ownership
+        if ownership.allocation_basis == Ownership.AllocationBasis.RECURRING_INCOME_12M:
+            continue
+        if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member_id:
+            shares = [(ownership.member_id, Decimal("100"))]
+        else:
+            shares = [(row.member_id, row.percent) for row in ownership.splits.all()]
+        if not shares or sum(percent for _, percent in shares) != Decimal("100"):
+            continue
+        resolved[account_id] = {
+            member_id: percent / Decimal("100") for member_id, percent in shares
+        }
+    return resolved
+
+
+def _cash_ownership_factor(
+    *, context: PerformanceContext, account_id: int, member_id: int | None
+) -> Decimal | None:
+    """La parte del efectivo de esta cuenta que toca a este miembro, o None si no consta."""
+    if member_id is None:
+        return Decimal("1")
+    shares = context.cash_ownership.get(account_id)
+    if shares is None:
+        return None
+    return shares.get(member_id, ZERO)
 
 
 def _latest_before(rows: list, keys: list[date], target: date):
@@ -873,21 +959,34 @@ def _position_value_base(
     )
 
 
-def _flow_base(
+def _flow_factor(
     *, context: PerformanceContext, flow: FlowRecord, member_id: int | None
-) -> Decimal | None:
-    factor = (
-        Decimal("1")
-        if flow.position_id is None and member_id is None
-        else ZERO
-        if flow.position_id is None
-        else _ownership_factor(
+) -> Decimal:
+    """La parte de este flujo que toca al miembro filtrado.
+
+    Un flujo sin posicion es efectivo de contenedor: se reparte por la titularidad de su
+    cuenta. Sin cuenta conocida o sin titularidad resoluble queda fuera del filtro en lugar
+    de atribuirse entero a quien mire.
+    """
+    if flow.position_id is not None:
+        return _ownership_factor(
             context=context,
             position_id=flow.position_id,
             target=flow.on_date,
             member_id=member_id,
         )
+    if flow.cash_account_id is None:
+        return Decimal("1") if member_id is None else ZERO
+    factor = _cash_ownership_factor(
+        context=context, account_id=flow.cash_account_id, member_id=member_id
     )
+    return factor if factor is not None else ZERO
+
+
+def _flow_base(
+    *, context: PerformanceContext, flow: FlowRecord, member_id: int | None
+) -> Decimal | None:
+    factor = _flow_factor(context=context, flow=flow, member_id=member_id)
     return _to_base(
         context=context,
         amount=flow.amount * factor,
@@ -902,11 +1001,20 @@ def _cash_value_base(
     total = ZERO
     for link in context.cash_accounts:
         balance = _balance_at(context, link.ledger_account_id, target)
-        if member_id is not None and balance != 0:
-            return None, False
+        factor = _cash_ownership_factor(
+            context=context, account_id=link.ledger_account_id, member_id=member_id
+        )
+        if factor is None:
+            # Sin titularidad resoluble el efectivo no es de nadie en concreto. Con saldo
+            # cero no hay nada que repartir y la lectura sigue siendo exacta.
+            if balance != 0:
+                return None, False
+            continue
+        if factor == 0:
+            continue
         converted = _to_base(
             context=context,
-            amount=balance,
+            amount=balance * factor,
             currency=link.currency,
             target=target,
         )
@@ -1111,18 +1219,7 @@ def _metric_block(
     flow_rows = []
     for flow in selected_flows:
         base_amount = _flow_base(context=context, flow=flow, member_id=member_id)
-        factor = (
-            Decimal("1")
-            if flow.position_id is None and member_id is None
-            else ZERO
-            if flow.position_id is None
-            else _ownership_factor(
-                context=context,
-                position_id=flow.position_id,
-                target=flow.on_date,
-                member_id=member_id,
-            )
-        )
+        factor = _flow_factor(context=context, flow=flow, member_id=member_id)
         cost_base = _to_base(
             context=context,
             amount=flow.cost * factor,
@@ -1596,9 +1693,15 @@ def build_portfolio_quality(
         member_id=member_id,
         scope_ids=scope_ids,
     )
+    # Solo es trabajo del usuario el efectivo con saldo cuya titularidad no consta en
+    # Patrimonio. Antes bastaba con tener efectivo para que el aviso saltara en todas las
+    # titularidades, que es ruido: la cuenta si tenia dueno, solo que nadie lo miraba.
     cash_ownership_missing = member_id is not None and any(
-        _balance_at(context, link.ledger_account_id, end_date) != 0
-        or _balance_at(context, link.ledger_account_id, start_date) != 0
+        link.ledger_account_id not in context.cash_ownership
+        and (
+            _balance_at(context, link.ledger_account_id, end_date) != 0
+            or _balance_at(context, link.ledger_account_id, start_date) != 0
+        )
         for link in context.cash_accounts
     )
     fresh = stale = missing = at_cost = ownership_missing = scoped_total = 0
@@ -1656,6 +1759,88 @@ def build_portfolio_quality(
         "fx_issues": sorted(context.fx_issues),
         "cache": {"strategy": "none", "read_model": "rebuildable"},
     }
+
+
+def build_holding_threads(
+    *, portfolio: Portfolio, start_date: date, end_date: date, context: PerformanceContext | None
+) -> list[dict[str, Any]]:
+    """El mismo activo bajo la misma titularidad, aunque haya cambiado de custodio.
+
+    Una posicion vive en un solo contenedor, asi que mudar un activo de un exchange a otro
+    abre una posicion nueva y parte su historia en dos. Leido por posicion, lo que entra
+    desde el custodio anterior es una aportacion y la rentabilidad arranca el dia de la
+    mudanza. Agrupar por (instrumento, titularidad) devuelve el hilo entero: el traspaso
+    queda dentro del ambito y se anula solo.
+
+    La titularidad forma parte de la clave a proposito. Pasar bitcoin propio a compartido no
+    es una mudanza sino una cesion de la mitad, y debe seguir contando como salida del hilo
+    de quien lo cede.
+    """
+    context = context or load_performance_context(
+        portfolio=portfolio, start_date=start_date, end_date=end_date
+    )
+    grouped: dict[tuple[int, int], dict[str, Any]] = {}
+    for position in context.positions:
+        for period in context.ownership_periods.get(position.id, []):
+            key = (position.instrument_id, period.ownership_id)
+            thread = grouped.setdefault(
+                key,
+                {
+                    "instrument_id": position.instrument_id,
+                    "instrument_name": position.instrument.name,
+                    "asset_class": position.effective_asset_class,
+                    "ownership_id": period.ownership_id,
+                    "position_ids": set(),
+                    "containers": {},
+                    "since": period.start_date,
+                },
+            )
+            thread["position_ids"].add(position.id)
+            thread["containers"][position.container_id] = position.container.name
+            thread["since"] = min(thread["since"], period.start_date)
+    ownerships = {
+        row.id: row
+        for row in Ownership.objects.filter(id__in={key[1] for key in grouped}).prefetch_related(
+            "splits__member", "member"
+        )
+    }
+    rows = []
+    for thread in grouped.values():
+        ownership = ownerships.get(thread["ownership_id"])
+        scope_ids = cast(set[int], thread["position_ids"])
+        value, _, _ = _aggregate_value(
+            context=context, target=end_date, member_id=None, scope_ids=scope_ids
+        )
+        label = ""
+        if ownership is not None:
+            label = (
+                ownership.member.name
+                if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member
+                else " + ".join(
+                    f"{row.member.name} {row.percent:g}%" for row in ownership.splits.all()
+                )
+            )
+        containers = cast(dict[int, str], thread["containers"])
+        rows.append(
+            {
+                "instrument_id": thread["instrument_id"],
+                "instrument_name": thread["instrument_name"],
+                "asset_class": thread["asset_class"],
+                "ownership_id": thread["ownership_id"],
+                "ownership_kind": ownership.kind if ownership else "",
+                "ownership_label": label,
+                "position_ids": sorted(scope_ids),
+                "containers": [containers[key] for key in sorted(containers)],
+                # Un hilo repartido entre custodios es justo el que se leia mal por
+                # posicion, asi que la interfaz necesita distinguirlo de un vistazo.
+                "spans_custodians": len(containers) > 1,
+                "since": cast(date, thread["since"]).isoformat(),
+                "value_base": _quantize(value) if value is not None else None,
+                "currency": portfolio.base_currency,
+            }
+        )
+    rows.sort(key=lambda row: (row["instrument_name"], row["ownership_label"]))
+    return rows
 
 
 def build_portfolio_overview(

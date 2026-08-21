@@ -11,7 +11,7 @@ from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from core.models import FxRate, InflationIndex
-from memberships.models import FamilyMember, Ownership
+from memberships.models import FamilyMember, Ownership, OwnershipLink, OwnershipSplit
 from net_worth.models import Asset, InvestmentAssetEvent
 from portfolio.models import (
     ContainerCashAccount,
@@ -909,3 +909,280 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(response.data["net_contributed"], "-110.00000000")
         self.assertEqual(response.data["monetary_result"], "10.00000000")
         self.assertEqual(ownership_flow["amount_base"], "-160.00000000")
+
+
+class ContainerCashOwnershipTests(APITestCase):
+    """El efectivo del contenedor tiene dueno: el del activo que lo respalda."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="cashowner", password="pass")
+        self.client.force_authenticate(self.user)
+        self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        self.container = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Broker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        self.member = FamilyMember.objects.create(
+            user=self.user, name="Titular", role=FamilyMember.Role.ADULT
+        )
+        self.other = FamilyMember.objects.create(
+            user=self.user, name="Otra", role=FamilyMember.Role.ADULT
+        )
+        self.ownership = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=self.member
+        )
+        self.cash_ledger = LedgerAccount.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        self.cash_asset = Asset.objects.create(
+            user=self.user,
+            name="Efectivo broker",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0"),
+            start_date=date(2024, 1, 1),
+            accounting_account_id=self.cash_ledger.id,
+        )
+        ContainerCashAccount.objects.create(
+            container=self.container, ledger_account=self.cash_ledger, currency="EUR"
+        )
+        self.fund_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Origen",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 3, 1),
+            value_date=date(2024, 3, 1),
+            description="Entra efectivo",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.cash_ledger,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.fund_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+
+    def link_cash_to(self, ownership):
+        OwnershipLink.objects.update_or_create(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=self.cash_asset.id,
+            defaults={"ownership": ownership},
+        )
+
+    def quality_for(self, member):
+        response = self.client.get(
+            f"/api/portfolio/quality/?date_from=2024-01-01&date_to=2024-12-31&member_id={member.id}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data
+
+    def test_cash_with_ownership_is_not_reported_as_missing(self):
+        # Antes bastaba con tener efectivo para que el aviso saltara en todas las
+        # titularidades, aunque la cuenta tuviera dueno declarado en Patrimonio.
+        self.link_cash_to(self.ownership)
+
+        self.assertFalse(self.quality_for(self.member)["cash_ownership_missing"])
+        self.assertFalse(self.quality_for(self.other)["cash_ownership_missing"])
+
+    def test_cash_without_ownership_is_still_reported(self):
+        # Sin enlace no se puede atribuir, y eso si es trabajo del usuario.
+        self.assertTrue(self.quality_for(self.member)["cash_ownership_missing"])
+
+    def test_cash_value_follows_the_owner_of_its_account(self):
+        self.link_cash_to(self.ownership)
+
+        mine = self.client.get(
+            "/api/portfolio/performance/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.member.id}"
+        )
+        theirs = self.client.get(
+            "/api/portfolio/performance/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.other.id}"
+        )
+
+        self.assertEqual(mine.data["closing_value"], "100.00000000")
+        self.assertEqual(theirs.data["closing_value"], "0E-8")
+
+    def test_shared_cash_splits_by_declared_percentages(self):
+        shared = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        OwnershipSplit.objects.create(ownership=shared, member=self.member, percent=Decimal("50"))
+        OwnershipSplit.objects.create(ownership=shared, member=self.other, percent=Decimal("50"))
+        self.link_cash_to(shared)
+
+        mine = self.client.get(
+            "/api/portfolio/performance/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.member.id}"
+        )
+
+        self.assertEqual(mine.data["closing_value"], "50.00000000")
+        self.assertFalse(self.quality_for(self.member)["cash_ownership_missing"])
+
+
+class HoldingThreadTests(APITestCase):
+    """El mismo activo bajo la misma titularidad, aunque cambie de custodio."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="threads", password="pass")
+        self.client.force_authenticate(self.user)
+        self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        self.old_custodian = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Exchange viejo",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        self.new_custodian = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Exchange nuevo",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        self.member = FamilyMember.objects.create(
+            user=self.user, name="Titular", role=FamilyMember.Role.ADULT
+        )
+        self.ownership = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=self.member
+        )
+        # Un unico instrumento que vive primero en un custodio y luego en otro.
+        self.instrument = Instrument.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            asset_class=Instrument.AssetClass.CRYPTO,
+            instrument_type=Instrument.InstrumentType.CRYPTO,
+            quote_currency="EUR",
+        )
+        self.old_position = self.create_position(
+            "BTC viejo", self.old_custodian, opening=Decimal("100"), closing=Decimal("0")
+        )
+        self.new_position = self.create_position(
+            "BTC nuevo", self.new_custodian, opening=Decimal("0"), closing=Decimal("150")
+        )
+        self.move_between_custodians(Decimal("120"))
+
+    def create_position(self, name, container, *, opening, closing):
+        asset = Asset.objects.create(
+            user=self.user,
+            name=name,
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=closing,
+            start_date=date(2024, 1, 1),
+        )
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name=name,
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=container,
+            instrument=self.instrument,
+            asset=asset,
+            ledger_account=account,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2024, 1, 1),
+        )
+        PositionValuation.objects.create(
+            position=position, valuation_date=date(2024, 1, 1), value=opening, currency="EUR"
+        )
+        PositionValuation.objects.create(
+            position=position, valuation_date=date(2024, 12, 31), value=closing, currency="EUR"
+        )
+        period = PositionOwnershipPeriod.objects.create(
+            position=position, ownership=self.ownership, start_date=date(2024, 1, 1)
+        )
+        PositionOwnershipShare.objects.create(
+            period=period, member=self.member, percent=Decimal("100")
+        )
+        return position
+
+    def move_between_custodians(self, amount):
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 7, 1),
+            value_date=date(2024, 7, 1),
+            description="Mudanza de exchange",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.new_position.ledger_account,
+            asset=self.new_position.asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.old_position.ledger_account,
+            asset=self.old_position.asset,
+            side=LedgerEntry.Side.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+
+    def performance(self, query=""):
+        # El scope de inventario lo resuelve el workspace, que es el que sirve `/cartera`.
+        response = self.client.get(
+            f"/api/portfolio/workspace/?date_from=2024-01-01&date_to=2024-12-31{query}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data["performance"]
+
+    def test_the_move_is_a_contribution_for_the_arriving_position_alone(self):
+        # Leida sola, la posicion nueva empieza el dia de la mudanza y lo que llega es
+        # dinero nuevo: es justo la lectura que hace ilegible la historia del activo.
+        alone = self.performance(f"&container_id={self.new_custodian.id}")
+
+        self.assertEqual(alone["net_contributed"], "120.00000000")
+
+    def test_the_thread_nets_out_the_move_between_custodians(self):
+        thread = self.performance(
+            f"&instrument_id={self.instrument.id}&ownership_id={self.ownership.id}"
+        )
+
+        # Dentro del hilo la mudanza es interna: no entra ni sale dinero, y el resultado
+        # es el del activo entero (100 -> 150) en lugar del de media historia.
+        self.assertEqual(thread["net_contributed"], "0E-8")
+        self.assertEqual(thread["opening_value"], "100.00000000")
+        self.assertEqual(thread["closing_value"], "150.00000000")
+        self.assertEqual(thread["monetary_result"], "50.00000000")
+
+    def test_threads_endpoint_flags_the_one_that_changed_custodian(self):
+        response = self.client.get(
+            "/api/portfolio/threads/?date_from=2024-01-01&date_to=2024-12-31"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(len(response.data), 1)
+        thread = response.data[0]
+        self.assertEqual(thread["instrument_name"], "Bitcoin")
+        self.assertEqual(thread["ownership_id"], self.ownership.id)
+        self.assertTrue(thread["spans_custodians"])
+        self.assertEqual(
+            sorted(thread["position_ids"]),
+            sorted([self.old_position.id, self.new_position.id]),
+        )
+        self.assertEqual(thread["containers"], ["Exchange viejo", "Exchange nuevo"])
