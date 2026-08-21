@@ -28,16 +28,16 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] Arquitectura Core, roadmap y project status.
-- [ ] Docs de portable import si cambia cobertura.
-- [ ] `docs/architecture/core-saas-boundaries.md`, capabilities y API registry.
+- [x] Arquitectura Core, roadmap y project status.
+- [x] Docs de portable import: no cambia cobertura porque alertas/adaptador no persisten datos.
+- [x] `docs/architecture/core-saas-boundaries.md`, capabilities y API registry.
 
 ## Risks
 Mi Plan ya infiere inversiones desde Patrimonio; introducir Portfolio sin precedencia explicita puede duplicar capital productivo. Añadir tests de reconciliacion end-to-end.
 
 ## Completion Criteria
-- [ ] Alertas deterministas y explicables.
-- [ ] Mi Plan usa Cartera sin doble conteo.
-- [ ] Backup/restore y aislamiento verificados.
-- [ ] Tests, docs y commit completados.
-- [ ] Spec movida a `terminados/`.
+- [x] Alertas deterministas y explicables.
+- [x] Mi Plan usa Cartera sin doble conteo.
+- [x] Backup/restore y aislamiento verificados: no hay modelos nuevos; el endpoint se resuelve por `request.user`.
+- [x] Tests y docs completados; commit pendiente de cierre.
+- [x] Spec movida a `terminados/`.

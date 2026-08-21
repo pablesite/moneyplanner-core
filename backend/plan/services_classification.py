@@ -33,6 +33,7 @@ class ClassifiedAsset:
     associated_liabilities: Decimal
     net_value: Decimal
     currency: str
+    valuation_source: str
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class ClassificationSummary:
     # deuda asociada). La proyección la necesita para no restarla dos veces.
     associated_liabilities: Decimal
     net_worth: Decimal
+    portfolio_valuation: dict
 
 
 class AssetClassificationService:
@@ -67,6 +69,10 @@ class AssetClassificationService:
         return UNKNOWN
 
     def summarize(self, *, user, base_currency: str) -> ClassificationSummary:
+        # Import perezoso: Plan consume el read-model de Cartera, pero Cartera no debe
+        # depender del modulo de Plan para seguir funcionando de forma independiente.
+        from portfolio.plan import portfolio_plan_valuations
+
         assets = list(Asset.objects.filter(user=user, is_active=True).order_by("id"))
         liabilities = list(
             Liability.objects.filter(user=user, is_active=True).select_related("financed_asset")
@@ -80,6 +86,12 @@ class AssetClassificationService:
         liabilities_by_asset: dict[int, Decimal] = {}
         total_liabilities = Decimal("0")
         as_of = timezone.localdate()
+        portfolio_valuation = portfolio_plan_valuations(
+            user=user,
+            base_currency=base_currency,
+            on_date=as_of,
+        )
+        portfolio_values = portfolio_valuation["values"]
         # Mismo resolutor de valor efectivo que Patrimonio (saldos contables,
         # override de mercado, amortización...); Asset.amount crudo puede ser 0
         # para activos con tracking_mode=accounting.
@@ -115,16 +127,21 @@ class AssetClassificationService:
             inferred = self.infer_function(asset)
             override = overrides.get(asset.id)
             function = str(override or inferred)
-            gross_value = self._convert(
-                get_effective_asset_amount(
-                    asset=asset,
-                    as_of_date=as_of,
-                    position_cache=position_cache,
-                ),
-                asset.currency,
-                base_currency,
-                as_of=as_of,
-            )
+            if asset.id in portfolio_values:
+                gross_value = portfolio_values[asset.id]
+                valuation_source = "portfolio"
+            else:
+                gross_value = self._convert(
+                    get_effective_asset_amount(
+                        asset=asset,
+                        as_of_date=as_of,
+                        position_cache=position_cache,
+                    ),
+                    asset.currency,
+                    base_currency,
+                    as_of=as_of,
+                )
+                valuation_source = "net_worth"
             associated_liabilities = liabilities_by_asset.get(asset.id, Decimal("0"))
             net_value = gross_value - associated_liabilities
             total_assets += gross_value
@@ -142,6 +159,7 @@ class AssetClassificationService:
                     associated_liabilities=associated_liabilities,
                     net_value=net_value,
                     currency=base_currency,
+                    valuation_source=valuation_source,
                 )
             )
 
@@ -156,6 +174,9 @@ class AssetClassificationService:
             total_liabilities=total_liabilities,
             associated_liabilities=sum(liabilities_by_asset.values(), Decimal("0")),
             net_worth=total_assets - total_liabilities,
+            portfolio_valuation={
+                key: value for key, value in portfolio_valuation.items() if key != "values"
+            },
         )
 
     def _convert(

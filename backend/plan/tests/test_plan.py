@@ -13,6 +13,13 @@ from rest_framework.test import APITestCase
 from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentContributionInterval, Liability
+from portfolio.models import (
+    Instrument,
+    InvestmentContainer,
+    Portfolio,
+    PortfolioPosition,
+    PositionValuation,
+)
 
 from plan.models import (
     AssumptionSet,
@@ -174,6 +181,83 @@ class AssetClassificationTests(TestCase):
         self.assertEqual(summary.productive_capital, Decimal("1500.00"))
         etf_row = next(row for row in summary.assets if row.asset_id == etf.id)
         self.assertEqual(etf_row.gross_value, Decimal("1500.00"))
+
+    def test_portfolio_valuation_replaces_linked_asset_once_when_it_is_fresh(self):
+        asset = create_investment(self.user, Decimal("100.00"), name="ETF en cartera")
+        portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        container = InvestmentContainer.objects.create(
+            portfolio=portfolio,
+            name="Broker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        instrument = Instrument.objects.create(
+            user=self.user,
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            name="ETF en cartera",
+            asset_class=Instrument.AssetClass.EQUITY,
+            instrument_type=Instrument.InstrumentType.ETF,
+            quote_currency="EUR",
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=portfolio,
+            container=container,
+            instrument=instrument,
+            asset=asset,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=timezone.localdate(),
+        )
+        PositionValuation.objects.create(
+            position=position,
+            valuation_date=timezone.localdate(),
+            value=Decimal("150.00"),
+            currency="EUR",
+        )
+
+        summary = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
+
+        self.assertEqual(summary.productive_capital, Decimal("150.00"))
+        self.assertEqual(summary.total_assets, Decimal("150.00"))
+        self.assertEqual(summary.portfolio_valuation["status"], "ready")
+        self.assertEqual(summary.assets[0].valuation_source, "portfolio")
+
+    def test_stale_portfolio_valuation_keeps_net_worth_value_and_marks_partial(self):
+        asset = create_investment(self.user, Decimal("100.00"), name="ETF sin cierre")
+        portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        container = InvestmentContainer.objects.create(
+            portfolio=portfolio,
+            name="Broker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        instrument = Instrument.objects.create(
+            user=self.user,
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            name="ETF sin cierre",
+            asset_class=Instrument.AssetClass.EQUITY,
+            instrument_type=Instrument.InstrumentType.ETF,
+            quote_currency="EUR",
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=portfolio,
+            container=container,
+            instrument=instrument,
+            asset=asset,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2024, 1, 1),
+        )
+        PositionValuation.objects.create(
+            position=position,
+            valuation_date=date(2024, 1, 1),
+            value=Decimal("150.00"),
+            currency="EUR",
+        )
+
+        summary = AssetClassificationService().summarize(user=self.user, base_currency="EUR")
+
+        self.assertEqual(summary.productive_capital, Decimal("100.00"))
+        self.assertEqual(summary.portfolio_valuation["status"], "partial")
+        self.assertEqual(summary.assets[0].valuation_source, "net_worth")
 
 
 class ProjectionFinancialCasesTests(TestCase):

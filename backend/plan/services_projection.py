@@ -1697,6 +1697,7 @@ def serialize_classification(classification: ClassificationSummary) -> dict[str,
         "total_assets": decimal_str(classification.total_assets),
         "total_liabilities": decimal_str(classification.total_liabilities),
         "net_worth": decimal_str(classification.net_worth),
+        "portfolio_valuation": classification.portfolio_valuation,
         "assets": [
             {
                 "asset_id": row.asset_id,
@@ -1710,6 +1711,7 @@ def serialize_classification(classification: ClassificationSummary) -> dict[str,
                 "associated_liabilities": decimal_str(row.associated_liabilities),
                 "net_value": decimal_str(row.net_value),
                 "currency": row.currency,
+                "valuation_source": row.valuation_source,
             }
             for row in classification.assets
         ],

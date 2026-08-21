@@ -19,6 +19,7 @@ from memberships.models import Ownership
 from core.market_data import MarketDataSyncError
 
 from .benchmark import build_portfolio_benchmark, build_portfolio_risk
+from .alerts import build_portfolio_alerts
 from .decisions import build_decision_log
 from .exposure import build_exposure
 from .allocation import (
@@ -553,6 +554,22 @@ class PortfolioQualityView(APIView):
                 member_id=member_id,
             )
         )
+
+
+class PortfolioAlertsView(APIView):
+    """Señales accionables de calidad, estructura y ejecución dentro de Cartera."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio = Portfolio.objects.filter(user=request.user).first()
+        if portfolio is None:
+            raise ValidationError({"portfolio": "Todavía no hay cartera."})
+        raw = request.query_params.get("on_date")
+        on_date = parse_date(str(raw)) if raw else timezone.localdate()
+        if on_date is None:
+            raise ValidationError({"on_date": "Fecha no válida."})
+        return Response(build_portfolio_alerts(portfolio=portfolio, on_date=on_date))
 
 
 class PortfolioHoldingThreadsView(APIView):

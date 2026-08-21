@@ -28,8 +28,8 @@ Conventions:
 1. One consolidated family portfolio, with ownership filters and dated ownership history.
 2. Core owns instruments, positions, hybrid valuations, performance, allocation, benchmark and risk; the first complete UI lives in the SaaS frontend at `/cartera`.
 3. Existing `Asset`, `LedgerAccount` and `LedgerTransaction` remain the monetary and net-worth foundations; portfolio metadata never creates a second ledger.
-4. Delivery is incremental: domain -> valuation -> performance -> read workspace -> operations/import -> allocation/rebalancing -> benchmark/risk -> product integration.
-5. Explicitly deferred: fiscal FIFO/reporting, broker credentials/connectors, trading, product recommendations and advanced risk.
+4. ✅ Delivery 1-8 complete: domain -> valuation -> performance -> read workspace -> operations/import -> allocation/rebalancing -> benchmark/risk -> product integration (deterministic alerts and Plan valuation precedence).
+5. Explicitly deferred: fiscal FIFO/reporting, broker credentials/connectors, trading, product recommendations, automatic holdings look-through and advanced risk.
 
 ---
 
