@@ -552,6 +552,20 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertFalse(funded["external"])
         self.assertEqual(position_row["net_contributed"], "50.00000000")
 
+        # Para una clase aislada, el efectivo del contenedor queda fuera del alcance. La
+        # evolución debe tratar esta compra como aporte igual que el resumen, no dejar la
+        # línea de capital en cero por seguir usando la semántica de cartera completa.
+        scoped = self.client.get(
+            "/api/portfolio/workspace/"
+            "?date_from=2024-01-01&date_to=2024-12-31&asset_class=private_equity"
+        )
+
+        self.assertEqual(scoped.status_code, status.HTTP_200_OK, scoped.data)
+        self.assertEqual(scoped.data["performance"]["net_contributed"], "50.00000000")
+        self.assertEqual(
+            scoped.data["timeline"]["results"][-1]["contributed_to_date"], "50.00000000"
+        )
+
     def test_legacy_directionless_cashback_is_income_not_withdrawal(self):
         investment_account = LedgerAccount.objects.create(
             user=self.user,

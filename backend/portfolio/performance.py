@@ -1749,7 +1749,8 @@ def build_portfolio_timeline(
     external = [
         flow
         for flow in context.flows
-        if flow.external and (scope_ids is None or flow.position_id in scope_ids)
+        if (flow.position_external if scope_ids is not None else flow.external)
+        and (scope_ids is None or flow.position_id in scope_ids)
     ]
     opening_value, opening_complete, _ = _aggregate_value(
         context=context, target=start_date, member_id=member_id, scope_ids=scope_ids
