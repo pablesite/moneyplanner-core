@@ -3372,6 +3372,121 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(fee.entries.get(side=LedgerEntry.Side.CREDIT).account_id, origin.id)
         self.assertEqual(fee.entries.get(side=LedgerEntry.Side.DEBIT).amount, Decimal("4.00"))
 
+    def test_a_traspaso_keeps_its_two_commissions_apart(self):
+        # Cada lado lo cobra una posicion distinta: sumarlas en una sola atribuiria a la
+        # compra lo que costo la venta, y las dos posiciones quedarian mal.
+        origin = self.investment_account_for_fees()
+        destination_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo destino dos",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        destination = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker destino dos",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=destination_asset,
+        )
+        opening_origin = get_account_balance(account=origin)
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "reinvestment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Traspaso entre fondos",
+                "amount": "700.00",
+                "account_id": origin.id,
+                "counterparty_account_id": destination.id,
+                "fee_amount": "1.20",
+                "destination_fee_amount": "0.80",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["fee_amount"], "1.20000000")
+        self.assertEqual(response.data["destination_fee_amount"], "0.80000000")
+        # Sale el importe más su comisión de venta; llega el importe menos la de compra.
+        self.assertEqual(get_account_balance(account=origin), opening_origin - Decimal("701.20"))
+        self.assertEqual(get_account_balance(account=destination), Decimal("699.20"))
+        descriptions = sorted(
+            LedgerTransaction.objects.get(id=response.data["id"]).fee_movements.values_list(
+                "description", flat=True
+            )
+        )
+        self.assertEqual(
+            descriptions,
+            [
+                "Comisión de compra · Traspaso entre fondos",
+                "Comisión de venta · Traspaso entre fondos",
+            ],
+        )
+
+    def test_editing_a_traspaso_corrects_each_commission_on_its_own_side(self):
+        origin = self.investment_account_for_fees()
+        destination_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo destino tres",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        destination = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker destino tres",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=destination_asset,
+        )
+        created = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "reinvestment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Traspaso entre fondos",
+                "amount": "700.00",
+                "account_id": origin.id,
+                "counterparty_account_id": destination.id,
+                "fee_amount": "1.20",
+                "destination_fee_amount": "0.80",
+            },
+            format="json",
+        )
+        investment = LedgerTransaction.objects.get(id=created.data["id"])
+
+        response = self.client.put(
+            f"/api/accounting/transactions/{investment.id}/",
+            self.edit_payload(investment, fee_amount="2.00", destination_fee_amount="0"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["fee_amount"], "2.00000000")
+        self.assertIsNone(response.data["destination_fee_amount"])
+        self.assertEqual(investment.fee_movements.count(), 1)
+
+    def test_a_purchase_commission_outside_a_traspaso_is_rejected(self):
+        investment_account = self.investment_account_for_fees()
+
+        response = self.book_investment_with_fee(
+            "1.00", investment_account, destination_fee_amount="0.50"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("destination_fee_amount", response.data["error"]["details"])
+
     def test_expense_can_be_charged_to_an_investment_account(self):
         # Un exchange cobra su comision en cripto, del propio saldo. Sin esto no habia
         # forma de registrarlo y la cuenta se quedaba descuadrada para siempre.

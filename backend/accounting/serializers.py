@@ -28,6 +28,7 @@ from .services_ledger import (
 )
 from .services_quick_entry import (
     create_quick_transaction,
+    investment_destination_fee_amount,
     investment_fee_amount,
     sync_investment_fee,
 )
@@ -336,6 +337,12 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    destination_fee_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
     ownership_id = serializers.PrimaryKeyRelatedField(
         source="ownership",
         queryset=Ownership.objects.all(),
@@ -364,6 +371,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "realized_cost_basis",
             "realized_gain_loss",
             "fee_amount",
+            "destination_fee_amount",
             "activity_kind",
             "account_balance_after",
             "needs_review",
@@ -407,6 +415,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     def to_representation(self, instance: LedgerTransaction) -> dict:
         data = super().to_representation(instance)
         data["fee_amount"] = investment_fee_amount(instance)
+        data["destination_fee_amount"] = investment_destination_fee_amount(instance)
         return data
 
     def validate(self, attrs: dict) -> dict:
@@ -439,19 +448,25 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             allow_unbalanced_multicurrency=allow_unbalanced_multicurrency,
         )
         fee_amount = validated_data.pop("fee_amount", None)
+        destination_fee_amount = validated_data.pop("destination_fee_amount", None)
         transaction = LedgerTransaction.objects.create(user=request.user, **validated_data)
         for entry_data in entries_data:
             payload = {**entry_data}
             payload["currency"] = payload.get("currency") or payload["account"].currency
             LedgerEntry.objects.create(transaction=transaction, **payload)
         sync_position_start_dates_for_transaction(transaction=transaction)
-        sync_investment_fee(transaction_row=transaction, fee_amount=fee_amount)
+        sync_investment_fee(
+            transaction_row=transaction,
+            fee_amount=fee_amount,
+            destination_fee_amount=destination_fee_amount,
+        )
         return transaction
 
     @transaction.atomic
     def update(self, instance: LedgerTransaction, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries", None)
         fee_amount = validated_data.pop("fee_amount", None)
+        destination_fee_amount = validated_data.pop("destination_fee_amount", None)
         target_quick_entry_kind = validated_data.get("quick_entry_kind", instance.quick_entry_kind)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -479,7 +494,11 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         # Despues de reescribir los apuntes: la cuenta que paga la comision se deduce de
         # ellos, asi que editarlos recoloca la comision donde toque.
         instance.refresh_from_db()
-        sync_investment_fee(transaction_row=instance, fee_amount=fee_amount)
+        sync_investment_fee(
+            transaction_row=instance,
+            fee_amount=fee_amount,
+            destination_fee_amount=destination_fee_amount,
+        )
         return instance
 
     @staticmethod
@@ -708,7 +727,15 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         required=False,
     )
     # La comisión del broker, que se registra como gasto propio vinculado al movimiento.
+    # Un traspaso entre fondos paga dos —la de la venta y la de la compra—, y cada una la
+    # paga una posición distinta, así que no se pueden sumar en una sola.
     fee_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
+    destination_fee_amount = serializers.DecimalField(
         max_digits=20,
         decimal_places=8,
         allow_null=True,
@@ -882,7 +909,9 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         )
         self._validate_investment_fee(
             movement_type=movement_type,
+            investment_direction=investment_direction,
             fee_amount=attrs.get("fee_amount"),
+            destination_fee_amount=attrs.get("destination_fee_amount"),
         )
         self._validate_destination_amount_contract(
             movement_type=movement_type,
@@ -1063,16 +1092,31 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
         self,
         *,
         movement_type: str,
+        investment_direction: str,
         fee_amount: Decimal | None,
+        destination_fee_amount: Decimal | None = None,
     ) -> None:
-        if fee_amount is None:
-            return
-        if movement_type != "investment":
+        for field, value in (
+            ("fee_amount", fee_amount),
+            ("destination_fee_amount", destination_fee_amount),
+        ):
+            if value is None:
+                continue
+            if movement_type != "investment":
+                raise serializers.ValidationError(
+                    {field: "Solo aplica a movimientos de inversion."}
+                )
+            if value < 0:
+                raise serializers.ValidationError({field: "Debe ser mayor o igual que cero."})
+        # Un aporte y una retirada mueven dinero contra una sola cuenta, asi que solo hay
+        # un lado que pueda cobrar.
+        if (
+            destination_fee_amount is not None
+            and investment_direction != LedgerTransaction.InvestmentDirection.REINVESTMENT
+        ):
             raise serializers.ValidationError(
-                {"fee_amount": "Solo aplica a movimientos de inversion."}
+                {"destination_fee_amount": "La comision de compra solo aplica a una reinversion."}
             )
-        if fee_amount < 0:
-            raise serializers.ValidationError({"fee_amount": "Debe ser mayor o igual que cero."})
 
     def _infer_flow_family(self, *, movement_type: str, interest_amount: Decimal | None) -> str:
         if movement_type == "income":
