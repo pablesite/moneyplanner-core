@@ -16,7 +16,8 @@ Current feature status by area. Update this file whenever functionality status c
 
 | Module | Type | Description | Spec |
 |--------|------|-------------|------|
-| _(none)_ | — | — | — |
+| Ownership lots — bitcoin ledger repair | Manual | The commingled-pot split is agreed, verified and applied **locally only**; production still carries the old history. Needs a dry-run against production and `--apply`. Edits real accounting history: take a dump first. | `tasks/ownership-lots/spec.md` (task 1) |
+| Ownership lots — threads read pockets | Agent | `build_holding_threads` groups by declared period, so a commingled pot publishes one thread and its shared side has no life of its own. The member filter already reads pockets correctly; the thread view does not. | `tasks/ownership-lots/spec.md` (task 2) |
 
 ### Next available task
 
