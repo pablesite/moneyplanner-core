@@ -39,5 +39,5 @@ Mi Plan ya infiere inversiones desde Patrimonio; introducir Portfolio sin preced
 - [x] Alertas deterministas y explicables.
 - [x] Mi Plan usa Cartera sin doble conteo.
 - [x] Backup/restore y aislamiento verificados: no hay modelos nuevos; el endpoint se resuelve por `request.user`.
-- [x] Tests y docs completados; commit pendiente de cierre.
+- [x] Tests, docs y commit completados.
 - [x] Spec movida a `terminados/`.
