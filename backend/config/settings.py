@@ -202,3 +202,9 @@ if AUTH_ACCEPT_EXTERNAL_TOKENS:
     validate_secret("EXTERNAL_JWT_SIGNING_KEY", EXTERNAL_JWT_SIGNING_KEY)
 if CORE_LINKING_SHARED_SECRET:
     validate_secret("CORE_LINKING_SHARED_SECRET", CORE_LINKING_SHARED_SECRET)
+
+# Tasa sin riesgo anual (tanto por uno) con la que la cartera calcula el Sharpe. No es una
+# constante del mundo: describe una letra a corto plazo en la moneda base, asi que cambia
+# con el entorno monetario y se configura sin tocar codigo. Se publica junto a cada cifra
+# que la usa, que es lo unico que permite comparar un Sharpe con otro.
+PORTFOLIO_RISK_FREE_RATE = os.getenv("PORTFOLIO_RISK_FREE_RATE", "0.02").strip()

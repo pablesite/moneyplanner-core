@@ -924,6 +924,17 @@ class AllocationStrategy(models.Model):
     )
     effective_from = models.DateField()
     note = models.TextField(blank=True, default="")
+    # Benchmark secundario: un indice contra el que mirarse ademas de la propia politica.
+    # Queda preparado y opcional a proposito —la comparacion principal es la estrategica,
+    # que mide si desviarse del plan ayudo— y solo se calcula si el instrumento tiene
+    # precios en la moneda base de la cartera.
+    benchmark_instrument = models.ForeignKey(
+        Instrument,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="benchmark_for_strategies",
+    )
     # Cuanta comision se tolera en una linea antes de que la operacion no merezca la
     # pena. Es una decision de politica y no una constante del programa: quien opera con
     # un broker sin comisiones querra cero tolerancia porque nunca aplica, y quien paga

@@ -18,6 +18,8 @@ from memberships.models import Ownership
 
 from core.market_data import MarketDataSyncError
 
+from .benchmark import build_portfolio_benchmark, build_portfolio_risk
+from .decisions import build_decision_log
 from .exposure import build_exposure
 from .allocation import (
     build_allocation,
@@ -855,6 +857,25 @@ def _allocation_request(request) -> tuple[Portfolio, Ownership, date]:
     return portfolio, ownership, on_date
 
 
+def _benchmark_period(request, portfolio: Portfolio) -> tuple[date, date, int | None]:
+    """El periodo de una lectura de benchmark o riesgo.
+
+    Comparte contrato con rendimiento —`date_from`, `date_to`, `member_id`— para que la
+    vista pueda pedir las tres cosas con los mismos parametros y el usuario no vea dos
+    periodos distintos en la misma pantalla.
+    """
+    raw_from = request.query_params.get("date_from")
+    raw_to = request.query_params.get("date_to")
+    default_from, default_to = default_performance_period(portfolio)
+    start_date = parse_date(str(raw_from)) if raw_from else default_from
+    end_date = parse_date(str(raw_to)) if raw_to else default_to
+    if start_date is None or end_date is None:
+        raise ValidationError({"date_from": "Fecha no valida."})
+    raw_member = request.query_params.get("member_id")
+    member_id = int(raw_member) if str(raw_member or "").isdigit() else None
+    return start_date, end_date, member_id
+
+
 def _positive_amount(raw) -> Decimal:
     # Se escribe a mano y en español: "1.500,50" es lo que teclea cualquiera aquí, y
     # rechazarlo por la coma seria hacerle traducir a la maquina lo que la maquina ya
@@ -879,6 +900,61 @@ class PortfolioAllocationView(APIView):
     def get(self, request):
         portfolio, ownership, on_date = _allocation_request(request)
         return Response(build_allocation(portfolio=portfolio, ownership=ownership, on_date=on_date))
+
+
+class PortfolioBenchmarkView(APIView):
+    """La cartera contra su propia politica, mes a mes.
+
+    El benchmark principal es estrategico: responde a "desviarme del plan, ayudo o no",
+    que es la pregunta que el usuario puede accionar. Un indice global responde a otra
+    —si merecio la pena elegir estos productos— y viaja como secundario opcional.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, ownership, _ = _allocation_request(request)
+        start_date, end_date, member_id = _benchmark_period(request, portfolio)
+        return Response(
+            build_portfolio_benchmark(
+                portfolio=portfolio,
+                ownership=ownership,
+                start_date=start_date,
+                end_date=end_date,
+                member_id=member_id,
+            )
+        )
+
+
+class PortfolioRiskView(APIView):
+    """Volatilidad, caida maxima, mejor/peor mes y Sharpe, cada uno con su cobertura."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, ownership, _ = _allocation_request(request)
+        start_date, end_date, member_id = _benchmark_period(request, portfolio)
+        return Response(
+            build_portfolio_risk(
+                portfolio=portfolio,
+                ownership=ownership,
+                start_date=start_date,
+                end_date=end_date,
+                member_id=member_id,
+            )
+        )
+
+
+class PortfolioDecisionsView(APIView):
+    """Que propuso el sistema, que se hizo y como quedo la desviacion."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        portfolio, ownership, on_date = _allocation_request(request)
+        return Response(
+            build_decision_log(portfolio=portfolio, ownership=ownership, on_date=on_date)
+        )
 
 
 class PositionExposureViewSet(viewsets.ModelViewSet):

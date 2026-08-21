@@ -87,7 +87,7 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 | 4 | `/cartera` de lectura mobile-first | raiz `docs/tasks/investment-portfolio/phase-4-portfolio-workspace/frontend.md` |
 | 5 | Operaciones completas, historico e importador | ✅ `phase-5-operations-import/terminados/backend.md` + raiz `terminados/frontend.md` + `terminados/qa.md` |
 | 6 | Estrategia y rebalanceo con aportaciones | `phase-6-allocation-rebalancing/backend.md` + raiz `frontend.md` |
-| 7 | Benchmark compuesto y riesgo progresivo | `phase-7-benchmark-risk/backend.md` + raiz `frontend.md` + `qa.md` |
+| 7 | Benchmark compuesto y riesgo progresivo | ✅ `phase-7-benchmark-risk/terminados/backend.md` + raiz `terminados/frontend.md` + `terminados/qa.md` |
 | 8 | Alertas, Mi Plan y cierre funcional | `phase-8-product-integration/backend.md` + raiz `frontend.md` |
 
 ## Orden y gate
