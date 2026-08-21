@@ -1178,6 +1178,73 @@ class ContainerFloorTests(AllocationFixture, TestCase):
         self.assertEqual(served[self.pension.id], Decimal("1500.00"))
 
 
+class SuggestedContributionTests(AllocationFixture, TestCase):
+    """Lo que queda por aportar este mes, no el mes entero cada vez que se mira."""
+
+    def setUp(self):
+        super().setUp()
+        self.position = self.create_position("Fondo global", Decimal("10000"))
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aportacion mensual",
+            category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
+            subcategory="index_funds",
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=TODAY.year,
+            currency="EUR",
+        )
+
+    def withdraw(self, amount: Decimal, on_date: date) -> None:
+        InvestmentAssetEvent.objects.create(
+            user=self.user,
+            asset=self.position.asset,
+            event_date=on_date,
+            event_type=InvestmentAssetEvent.EventType.WITHDRAWAL,
+            amount=amount,
+        )
+
+    def solved(self) -> dict:
+        return build_allocation(portfolio=self.portfolio, ownership=self.mine, on_date=TODAY)
+
+    def test_what_is_already_in_this_month_is_discounted(self):
+        self.contribute(self.position, Decimal("40"), TODAY)
+
+        result = self.solved()
+
+        self.assertEqual(result["planned_contribution"], "100.00")
+        self.assertEqual(result["contributed_this_month"], "40.00")
+        self.assertEqual(result["suggested_contribution"], "60.00")
+
+    def test_selling_to_buy_elsewhere_is_not_contributing(self):
+        # Vender un fondo para comprar otro no es dinero nuevo: contando solo las entradas,
+        # una recolocacion se comia el presupuesto del mes sin salir un euro del bolsillo.
+        self.contribute(self.position, Decimal("700"), TODAY)
+        self.withdraw(Decimal("700"), TODAY)
+
+        result = self.solved()
+
+        self.assertEqual(result["contributed_this_month"], "0.00")
+        self.assertEqual(result["suggested_contribution"], "100.00")
+
+    def test_a_month_already_covered_suggests_nothing(self):
+        self.contribute(self.position, Decimal("250"), TODAY)
+
+        result = self.solved()
+
+        self.assertEqual(result["contributed_this_month"], "250.00")
+        self.assertEqual(result["suggested_contribution"], "0.00")
+
+    def test_last_month_does_not_count_against_this_one(self):
+        self.contribute(self.position, Decimal("90"), date(TODAY.year, TODAY.month - 1, 15))
+
+        result = self.solved()
+
+        self.assertEqual(result["contributed_this_month"], "0.00")
+        self.assertEqual(result["suggested_contribution"], "100.00")
+
+
 class ContributionBasketTests(AllocationFixture, TestCase):
     """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""
 
@@ -1388,6 +1455,35 @@ class ContributionConfirmTests(AllocationFixture, TestCase):
         line = basket.lines.get()
         self.assertEqual(line.status, ContributionBasketLine.Status.CONFIRMED)
         self.assertIsNotNone(line.ledger_transaction_id)
+        self.assertEqual(get_account_balance(account=self.bank, status="posted"), Decimal("4000"))
+
+    def test_confirming_books_the_commission_the_rule_declares(self):
+        # Lo que cuesta ejecutar la linea ya esta escrito en la regla de la posicion, que
+        # es el numero con el que el reparto decide si la operacion se sostiene.
+        PositionAllocationRule.objects.create(position=self.equity, operation_cost=Decimal("1.50"))
+        basket = self.basket()
+
+        confirm_basket(basket=basket)
+
+        line = basket.lines.get()
+        transaction = LedgerTransaction.objects.get(id=line.ledger_transaction_id)
+        fee = transaction.fee_movements.get()
+        self.assertEqual(fee.entries.get(side=LedgerEntry.Side.DEBIT).amount, Decimal("1.50"))
+        # La comision sale de la misma cuenta que financia la compra, ademas del importe.
+        self.assertEqual(
+            get_account_balance(account=self.bank, status="posted"), Decimal("3998.50")
+        )
+
+    def test_a_fee_free_plan_is_confirmed_without_commission(self):
+        PositionAllocationRule.objects.create(
+            position=self.equity, operation_cost=Decimal("1.50"), fee_free_plan=True
+        )
+        basket = self.basket()
+
+        confirm_basket(basket=basket)
+
+        transaction = LedgerTransaction.objects.get(id=basket.lines.get().ledger_transaction_id)
+        self.assertFalse(transaction.fee_movements.exists())
         self.assertEqual(get_account_balance(account=self.bank, status="posted"), Decimal("4000"))
 
     def test_a_basket_can_be_confirmed_line_by_line(self):

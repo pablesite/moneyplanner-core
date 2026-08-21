@@ -183,7 +183,10 @@ class LedgerTransactionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = LedgerTransaction.objects.filter(user=self.request.user).prefetch_related(
-            Prefetch("entries", queryset=LedgerEntry.objects.select_related("account"))
+            Prefetch("entries", queryset=LedgerEntry.objects.select_related("account")),
+            # La comision cuelga del movimiento y se publica con el, asi que se trae con
+            # la lista en vez de una consulta por fila.
+            "fee_movements__entries",
         )
         fiscal_year = parse_optional_int_query_param(self.request.query_params, "year")
         month = parse_optional_int_query_param(self.request.query_params, "month")

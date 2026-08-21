@@ -294,6 +294,13 @@ def build_allocation(
             }
         )
     position_rows.sort(key=lambda row: Decimal(row["value"]), reverse=True)
+    planned = planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
+    contributed = net_contributed_within(
+        context=context,
+        position_ids=[position.id for position in positions],
+        since=date(on_date.year, on_date.month, 1),
+        until=on_date,
+    ).quantize(CENT)
 
     return {
         "ownership_id": ownership.id,
@@ -316,9 +323,11 @@ def build_allocation(
         ),
         "total_value": str(total.quantize(Decimal("0.01"))),
         "position_count": len(positions),
-        "suggested_contribution": str(
-            planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
-        ),
+        "planned_contribution": str(planned),
+        "contributed_this_month": str(contributed),
+        # Lo que queda del plan del mes, que es lo que se puede aportar sin pasarse. Antes
+        # sugeria el mes entero cada vez que se abria, hubieras aportado ya o no.
+        "suggested_contribution": str(max(planned - contributed, ZERO).quantize(CENT)),
         "by_class": rows(by_class, targets_by_class, "asset_class"),
         "by_position": position_rows,
     }
@@ -359,6 +368,30 @@ def contributed_within(
             and flow.external
             and since <= flow.on_date <= until
             and flow.amount > 0
+        ),
+        ZERO,
+    )
+
+
+def net_contributed_within(
+    *, context: PerformanceContext, position_ids: list[int], since: date, until: date
+) -> Decimal:
+    """Dinero nuevo que ha entrado en esas posiciones, ya descontado el que salio.
+
+    Vender un fondo para comprar otro no es aportar: ese dinero ya estaba dentro. Contando
+    solo las entradas, una recolocacion consumia el presupuesto de inversion del mes sin
+    que hubiera salido un euro de tu bolsillo, y la propuesta de aportacion se calculaba
+    sobre un mes que parecia ya gastado.
+
+    Los movimientos de efectivo de contenedor quedan fuera porque no llevan posicion y no
+    se pueden atribuir a un ambito de titularidad.
+    """
+    wanted = set(position_ids)
+    return sum(
+        (
+            flow.amount
+            for flow in context.flows
+            if flow.position_id in wanted and flow.external and since <= flow.on_date <= until
         ),
         ZERO,
     )
@@ -1154,7 +1187,9 @@ def confirm_basket(
     pending = basket.lines.filter(status=ContributionBasketLine.Status.PENDING)
     if line_ids is not None:
         pending = pending.filter(id__in=line_ids)
-    pending = list(pending.select_related("position", "cash_account__ledger_account"))
+    pending = list(
+        pending.select_related("position__allocation_rule", "cash_account__ledger_account")
+    )
     if not pending:
         raise ValidationError({"lines": "No hay lineas pendientes que confirmar."})
 
@@ -1177,6 +1212,11 @@ def confirm_basket(
                 origin=LedgerTransaction.Origin.MANUAL,
             )
         else:
+            # Lo que cuesta ejecutar la linea ya esta escrito en la regla de la posicion
+            # —es el numero con el que el reparto decide si la operacion se sostiene—, asi
+            # que contabilizarla a coste cero contaba una compra que no ocurrio asi.
+            rule = getattr(line.position, "allocation_rule", None)
+            fee = ZERO if rule is None or rule.fee_free_plan else rule.operation_cost
             result = confirm_operation(
                 portfolio=basket.portfolio,
                 payload={
@@ -1185,7 +1225,7 @@ def confirm_basket(
                     "source_account_id": source.id,
                     "booking_date": basket.booking_date.isoformat(),
                     "amount": str(line.amount),
-                    "fee": "0",
+                    "fee": str(fee),
                 },
                 require_preview=False,
             )

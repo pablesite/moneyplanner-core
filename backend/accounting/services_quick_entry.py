@@ -123,6 +123,99 @@ def create_quick_transaction(
     return transaction_row
 
 
+def investment_fee_amount(transaction_row: LedgerTransaction) -> str | None:
+    """Lo que costo ejecutar el movimiento, leido de la comision que cuelga de el."""
+    fee = next(iter(transaction_row.fee_movements.all()), None)
+    if fee is None:
+        return None
+    entry = next(
+        (row for row in fee.entries.all() if row.side == LedgerEntry.Side.DEBIT),
+        None,
+    )
+    return str(entry.amount) if entry is not None else None
+
+
+def resolve_investment_funding_account(
+    transaction_row: LedgerTransaction,
+) -> LedgerAccount | None:
+    """La cuenta que paga el movimiento, que es la que paga tambien su comision.
+
+    En un aporte y en una reinversion es la que suelta el dinero; en una retirada, la que
+    lo recibe, porque el broker descuenta su comision de lo que te abona. Se deduce de los
+    apuntes para que editar un movimiento recoloque su comision donde toque, aunque hayan
+    cambiado las cuentas.
+    """
+    if transaction_row.quick_entry_kind != "investment":
+        return None
+    side = (
+        LedgerEntry.Side.DEBIT
+        if transaction_row.investment_direction == LedgerTransaction.InvestmentDirection.OUTFLOW
+        else LedgerEntry.Side.CREDIT
+    )
+    entry = next(
+        (row for row in transaction_row.entries.all() if row.side == side),
+        None,
+    )
+    return entry.account if entry is not None else None
+
+
+@transaction.atomic
+def sync_investment_fee(
+    *,
+    transaction_row: LedgerTransaction,
+    fee_amount: Decimal | None,
+) -> LedgerTransaction | None:
+    """Deja la comision de un movimiento en el importe indicado, sea cual sea su estado.
+
+    Omitir el importe no toca nada: quien edita un movimiento sin hablar de comision no
+    esta pidiendo que desaparezca. Cero la borra, y un importe nuevo la crea o la corrige
+    en el sitio, conservando su identidad para que la operacion de cartera que la apunta
+    no se quede sin referencia.
+    """
+    existing = transaction_row.fee_movements.first()
+    if fee_amount is None:
+        return existing
+    if fee_amount <= ZERO:
+        if existing is not None:
+            existing.delete()
+        return None
+    account = resolve_investment_funding_account(transaction_row)
+    if account is None:
+        raise ValidationError({"fee_amount": "Solo los movimientos de inversion admiten comision."})
+    if existing is None:
+        return create_investment_fee_transaction(
+            user=transaction_row.user,
+            investment_transaction=transaction_row,
+            account=account,
+            fee_amount=fee_amount,
+        )
+    fee_account = get_or_create_system_account(
+        user_id=transaction_row.user_id,
+        account_type=cast(str, LedgerAccount.AccountType.EXPENSE),
+        currency=account.currency,
+        name=INVESTMENT_FEE_ACCOUNT_NAME,
+    )
+    existing.booking_date = transaction_row.booking_date
+    existing.value_date = transaction_row.value_date
+    existing.description = f"Comisión · {transaction_row.description}"[:240]
+    existing.ownership = transaction_row.ownership
+    existing.save(
+        update_fields=["booking_date", "value_date", "description", "ownership", "updated_at"]
+    )
+    existing.entries.all().delete()
+    for entry_data in _build_quick_entry_payload(
+        movement_type="expense",
+        amount=fee_amount,
+        account=account,
+        counterparty_account=fee_account,
+        flow_family=cast(str, LedgerEntry.FlowFamily.EXPENSE),
+        category_key=INVESTMENT_FEE_CATEGORY_KEY,
+        subcategory_key=INVESTMENT_FEE_SUBCATEGORY_KEY,
+    ):
+        LedgerEntry.objects.create(transaction=existing, **entry_data)
+    return existing
+
+
 def create_investment_fee_transaction(
     *,
     user,

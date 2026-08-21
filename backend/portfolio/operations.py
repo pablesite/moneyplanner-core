@@ -14,7 +14,11 @@ from rest_framework.exceptions import ValidationError
 from accounting.models import LedgerAccount, LedgerTransaction
 from accounting.services_ledger import get_account_balance, get_or_create_system_account
 from net_worth.models import Asset
-from accounting.services_quick_entry import create_quick_transaction
+from accounting.services_quick_entry import (
+    INVESTMENT_FEE_CATEGORY_KEY,
+    INVESTMENT_FEE_SUBCATEGORY_KEY,
+    create_quick_transaction,
+)
 
 from .models import (
     ContainerCashAccount,
@@ -477,7 +481,11 @@ def confirm_operation(
                 realized_gain_loss=_decimal(
                     payload.get("realized_gain_loss"), "realized_gain_loss"
                 ),
+                # La comision la registra Contabilidad, que es quien sabe como se clasifica
+                # y la deja colgada del movimiento; aqui solo se dice cuanto fue.
+                fee_amount=data["fee"] if data["fee"] > 0 else None,
             )
+            fee_tx = tx.fee_movements.first()
         else:
             account_type = "income" if kind in {"dividend", "interest"} else "expense"
             counterpart = _system_account(
@@ -503,32 +511,12 @@ def confirm_operation(
                 flow_family="income"
                 if account_type == LedgerAccount.AccountType.INCOME
                 else "expense",
-                category_key="financial_investments",
+                category_key="financial_investments"
+                if account_type == LedgerAccount.AccountType.INCOME
+                else INVESTMENT_FEE_CATEGORY_KEY,
                 subcategory_key="investment_income"
                 if account_type == LedgerAccount.AccountType.INCOME
-                else "investment_fees",
-            )
-        if data["fee"] > 0 and kind in {"buy", "sell"}:
-            fee_account = _system_account(
-                portfolio=portfolio,
-                account_type="expense",
-                currency=cash_account.currency,
-                name="Comisiones de inversión",
-            )
-            fee_tx = create_quick_transaction(
-                user=portfolio.user,
-                movement_type="expense",
-                booking_date=data["booking_date"],
-                value_date=data["booking_date"],
-                description=f"Comisión · {position.instrument.name}",
-                amount=data["fee"],
-                account=cash_account,
-                counterparty_account=fee_account,
-                status=LedgerTransaction.Status.POSTED,
-                origin=origin,
-                flow_family="expense",
-                category_key="financial_investments",
-                subcategory_key="investment_fees",
+                else INVESTMENT_FEE_SUBCATEGORY_KEY,
             )
         trade = PortfolioTrade.objects.create(
             portfolio=portfolio,

@@ -3235,6 +3235,217 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
         self.assertIn("fee_amount", response.data["error"]["details"])
 
+    def edit_payload(self, transaction: LedgerTransaction, **overrides) -> dict:
+        payload = {
+            "booking_date": transaction.booking_date.isoformat(),
+            "value_date": transaction.value_date.isoformat(),
+            "description": transaction.description,
+            "quick_entry_kind": transaction.quick_entry_kind,
+            "investment_direction": transaction.investment_direction,
+            "entries": [
+                {
+                    "account_id": entry.account_id,
+                    "side": entry.side,
+                    "amount": str(entry.amount),
+                    "currency": entry.currency,
+                    "flow_family": entry.flow_family,
+                    "category_key": entry.category_key,
+                    "subcategory_key": entry.subcategory_key,
+                }
+                for entry in transaction.entries.all()
+            ],
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_transaction_publishes_the_fee_it_carries(self):
+        investment_account = self.investment_account_for_fees()
+        created = self.book_investment_with_fee("3.50", investment_account)
+
+        response = self.client.get(f"/api/accounting/transactions/{created.data['id']}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["fee_amount"], "3.50000000")
+
+    def test_editing_an_investment_corrects_its_fee_in_place(self):
+        # La comision se corrige donde se registro. Borrarla y rehacerla dejaria sin
+        # referencia a la operacion de cartera que la apunta.
+        investment_account = self.investment_account_for_fees()
+        created = self.book_investment_with_fee("3.50", investment_account)
+        investment = LedgerTransaction.objects.get(id=created.data["id"])
+        fee_id = investment.fee_movements.get().id
+
+        response = self.client.put(
+            f"/api/accounting/transactions/{investment.id}/",
+            self.edit_payload(investment, fee_amount="5.25"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        fee = investment.fee_movements.get()
+        self.assertEqual(fee.id, fee_id)
+        self.assertEqual(fee.entries.get(side=LedgerEntry.Side.DEBIT).amount, Decimal("5.25"))
+        self.assertEqual(response.data["fee_amount"], "5.25000000")
+
+    def test_editing_an_investment_to_zero_fee_removes_it(self):
+        investment_account = self.investment_account_for_fees()
+        created = self.book_investment_with_fee("3.50", investment_account)
+        investment = LedgerTransaction.objects.get(id=created.data["id"])
+
+        response = self.client.put(
+            f"/api/accounting/transactions/{investment.id}/",
+            self.edit_payload(investment, fee_amount="0"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(investment.fee_movements.exists())
+        self.assertIsNone(response.data["fee_amount"])
+
+    def test_editing_an_investment_without_mentioning_the_fee_keeps_it(self):
+        # Editar la descripcion de una compra no es pedir que su comision desaparezca.
+        investment_account = self.investment_account_for_fees()
+        created = self.book_investment_with_fee("3.50", investment_account)
+        investment = LedgerTransaction.objects.get(id=created.data["id"])
+
+        response = self.client.put(
+            f"/api/accounting/transactions/{investment.id}/",
+            self.edit_payload(investment, description="Compra fondo abril revisada"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["fee_amount"], "3.50000000")
+
+    def test_adding_a_fee_to_an_investment_that_had_none(self):
+        investment_account = self.investment_account_for_fees()
+        created = self.book_investment_with_fee("0", investment_account)
+        investment = LedgerTransaction.objects.get(id=created.data["id"])
+
+        response = self.client.put(
+            f"/api/accounting/transactions/{investment.id}/",
+            self.edit_payload(investment, fee_amount="2.00"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(investment.fee_movements.get().entries.count(), 2)
+        self.assertEqual(response.data["fee_amount"], "2.00000000")
+
+    def test_reinvestment_charges_its_fee_to_the_account_it_leaves(self):
+        origin = self.investment_account_for_fees()
+        destination_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo destino",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        destination = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker destino",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=destination_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "investment",
+                "investment_direction": "reinvestment",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Traspaso entre fondos",
+                "amount": "300.00",
+                "account_id": origin.id,
+                "counterparty_account_id": destination.id,
+                "fee_amount": "4.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        fee = LedgerTransaction.objects.get(id=response.data["id"]).fee_movements.get()
+        self.assertEqual(fee.entries.get(side=LedgerEntry.Side.CREDIT).account_id, origin.id)
+        self.assertEqual(fee.entries.get(side=LedgerEntry.Side.DEBIT).amount, Decimal("4.00"))
+
+    def test_expense_can_be_charged_to_an_investment_account(self):
+        # Un exchange cobra su comision en cripto, del propio saldo. Sin esto no habia
+        # forma de registrarlo y la cuenta se quedaba descuadrada para siempre.
+        crypto_asset = Asset.objects.create(
+            user=self.user,
+            name="Bitcoin",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="BTC",
+            amount=Decimal("1.00"),
+            is_active=True,
+        )
+        crypto_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Bitcoin cuenta",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="BTC",
+            asset=crypto_asset,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Comision de retirada del exchange",
+                "amount": "0.00012000",
+                "account_id": crypto_account.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "financial_commitments",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(get_account_balance(account=crypto_account), Decimal("-0.00012000"))
+
+    def test_expense_still_rejects_a_non_investment_asset_account(self):
+        house = Asset.objects.create(
+            user=self.user,
+            name="Piso",
+            category=Asset.Category.REAL_ESTATE,
+            subcategory=Asset.Subcategory.PRIMARY_HOME,
+            currency="EUR",
+            amount=Decimal("200000.00"),
+            is_active=True,
+        )
+        house_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Piso cuenta",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=house,
+        )
+
+        response = self.client.post(
+            "/api/accounting/transactions/quick-entry/",
+            {
+                "movement_type": "expense",
+                "booking_date": "2026-04-12",
+                "value_date": "2026-04-12",
+                "description": "Gasto imposible",
+                "amount": "10.00",
+                "account_id": house_account.id,
+                "category_key": "consumption_expenses",
+                "subcategory_key": "housing_home",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("account_id", response.data["error"]["details"])
+
     def test_quick_entry_rejects_a_negative_fee(self):
         investment_account = self.investment_account_for_fees()
 

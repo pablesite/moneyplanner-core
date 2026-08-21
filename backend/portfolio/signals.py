@@ -184,6 +184,46 @@ def _fee_of(transaction_row: LedgerTransaction) -> tuple[LedgerTransaction | Non
     return fee_transaction, abs(fee_entry.amount) if fee_entry is not None else Decimal("0")
 
 
+def _sync_trade_fee(fee_transaction_id: int) -> None:
+    """Deja en la operacion lo que ahora cuesta, cuando su comision se corrige o se crea.
+
+    La comision se puede editar despues —o anadirse a un movimiento que ya existia—, y sin
+    esto la operacion de cartera se quedaba con la cifra del dia que se registro.
+    """
+    from .models import PortfolioTrade
+
+    fee_transaction = LedgerTransaction.objects.filter(pk=fee_transaction_id).first()
+    if fee_transaction is None or fee_transaction.fee_for_id is None:
+        return
+    trade = PortfolioTrade.objects.filter(ledger_transaction_id=fee_transaction.fee_for_id).first()
+    if trade is None:
+        return
+    _, fee = _fee_of(fee_transaction.fee_for)
+    trade.fee = fee
+    trade.fee_transaction = fee_transaction
+    trade.save(update_fields=["fee", "fee_transaction"])
+
+
+@receiver(post_save, sender=LedgerTransaction, dispatch_uid="portfolio_trade_fee_saved")
+def trade_fee_saved(sender, instance: LedgerTransaction, **kwargs) -> None:
+    if instance.fee_for_id is None:
+        return
+    # Los apuntes de la comision se reescriben despues de su fila, asi que el importe solo
+    # se puede leer cuando el bloque que la guarda ha terminado.
+    fee_transaction_id = instance.pk
+    db_transaction.on_commit(lambda: _sync_trade_fee(fee_transaction_id))
+
+
+@receiver(pre_delete, sender=LedgerTransaction, dispatch_uid="portfolio_trade_fee_deleted")
+def trade_fee_deleted(sender, instance: LedgerTransaction, **kwargs) -> None:
+    """Una operacion sin comision cuesta cero, no lo que costaba antes de borrarla."""
+    if instance.fee_for_id is None:
+        return
+    from .models import PortfolioTrade
+
+    PortfolioTrade.objects.filter(fee_transaction_id=instance.pk).update(fee=Decimal("0"))
+
+
 @receiver(post_save, sender=LedgerTransaction, dispatch_uid="portfolio_investment_saved")
 def investment_saved(sender, instance: LedgerTransaction, created: bool, **kwargs) -> None:
     if not created or instance.quick_entry_kind != LedgerTransaction.QuickEntryKind.INVESTMENT:

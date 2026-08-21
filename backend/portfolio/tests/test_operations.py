@@ -998,6 +998,81 @@ class PortfolioOperationApiTests(APITestCase):
         )
         trade = PortfolioTrade.objects.get(ledger_transaction_id=response.data["id"])
         self.assertIsNone(trade.fee_transaction_id)
+        # Una operacion sin comision cuesta cero, no lo que costaba antes de borrarla.
+        self.assertEqual(trade.fee, Decimal("0"))
+
+    def test_correcting_the_fee_updates_what_the_operation_says_it_cost(self):
+        response = self.book_investment(fee_amount="2.50")
+        transaction_id = response.data["id"]
+        transaction = LedgerTransaction.objects.get(id=transaction_id)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            edited = self.client.put(
+                f"/api/accounting/transactions/{transaction_id}/",
+                {
+                    "booking_date": transaction.booking_date.isoformat(),
+                    "value_date": transaction.value_date.isoformat(),
+                    "description": transaction.description,
+                    "quick_entry_kind": "investment",
+                    "investment_direction": transaction.investment_direction,
+                    "fee_amount": "4.00",
+                    "entries": [
+                        {
+                            "account_id": entry.account_id,
+                            "side": entry.side,
+                            "amount": str(entry.amount),
+                            "currency": entry.currency,
+                            "flow_family": entry.flow_family,
+                            "category_key": entry.category_key,
+                            "subcategory_key": entry.subcategory_key,
+                        }
+                        for entry in transaction.entries.all()
+                    ],
+                },
+                format="json",
+            )
+
+        self.assertEqual(edited.status_code, status.HTTP_200_OK, edited.data)
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=transaction_id)
+        self.assertEqual(trade.fee, Decimal("4.00"))
+        self.assertEqual(
+            trade.fee_transaction_id,
+            LedgerTransaction.objects.get(fee_for_id=transaction_id).id,
+        )
+
+    def test_a_fee_added_later_reaches_the_operation_record(self):
+        response = self.book_investment()
+        transaction_id = response.data["id"]
+        transaction = LedgerTransaction.objects.get(id=transaction_id)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.put(
+                f"/api/accounting/transactions/{transaction_id}/",
+                {
+                    "booking_date": transaction.booking_date.isoformat(),
+                    "value_date": transaction.value_date.isoformat(),
+                    "description": transaction.description,
+                    "quick_entry_kind": "investment",
+                    "investment_direction": transaction.investment_direction,
+                    "fee_amount": "1.25",
+                    "entries": [
+                        {
+                            "account_id": entry.account_id,
+                            "side": entry.side,
+                            "amount": str(entry.amount),
+                            "currency": entry.currency,
+                            "flow_family": entry.flow_family,
+                            "category_key": entry.category_key,
+                            "subcategory_key": entry.subcategory_key,
+                        }
+                        for entry in transaction.entries.all()
+                    ],
+                },
+                format="json",
+            )
+
+        trade = PortfolioTrade.objects.get(ledger_transaction_id=transaction_id)
+        self.assertEqual(trade.fee, Decimal("1.25"))
 
     def fixture(self, filename: str) -> bytes:
         content = (self.fixtures_path / filename).read_text(encoding="utf-8")

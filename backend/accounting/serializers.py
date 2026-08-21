@@ -26,7 +26,11 @@ from .services_ledger import (
     validate_counterparty_account_type,
     validate_liquidity_account,
 )
-from .services_quick_entry import create_quick_transaction
+from .services_quick_entry import (
+    create_quick_transaction,
+    investment_fee_amount,
+    sync_investment_fee,
+)
 from .services_start_dates import sync_position_start_dates_for_transaction
 from .services_transactions import (
     classify_transaction_activity_kind,
@@ -323,6 +327,15 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     activity_kind = serializers.SerializerMethodField()
     account_balance_after = serializers.SerializerMethodField()
     needs_review = serializers.SerializerMethodField()
+    # La comision vive en su propio movimiento, pero se lee y se escribe desde el que la
+    # provoco: quien edita una compra espera corregir ahi lo que le costo, no buscar otra
+    # fila. Omitirla no la toca; cero la borra.
+    fee_amount = serializers.DecimalField(
+        max_digits=20,
+        decimal_places=8,
+        allow_null=True,
+        required=False,
+    )
     ownership_id = serializers.PrimaryKeyRelatedField(
         source="ownership",
         queryset=Ownership.objects.all(),
@@ -350,6 +363,7 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             "investment_unit_price",
             "realized_cost_basis",
             "realized_gain_loss",
+            "fee_amount",
             "activity_kind",
             "account_balance_after",
             "needs_review",
@@ -390,6 +404,11 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
     def get_needs_review(self, obj: LedgerTransaction) -> bool:
         return transaction_needs_review(obj)
 
+    def to_representation(self, instance: LedgerTransaction) -> dict:
+        data = super().to_representation(instance)
+        data["fee_amount"] = investment_fee_amount(instance)
+        return data
+
     def validate(self, attrs: dict) -> dict:
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -419,17 +438,20 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
             user_id=request.user.id,
             allow_unbalanced_multicurrency=allow_unbalanced_multicurrency,
         )
+        fee_amount = validated_data.pop("fee_amount", None)
         transaction = LedgerTransaction.objects.create(user=request.user, **validated_data)
         for entry_data in entries_data:
             payload = {**entry_data}
             payload["currency"] = payload.get("currency") or payload["account"].currency
             LedgerEntry.objects.create(transaction=transaction, **payload)
         sync_position_start_dates_for_transaction(transaction=transaction)
+        sync_investment_fee(transaction_row=transaction, fee_amount=fee_amount)
         return transaction
 
     @transaction.atomic
     def update(self, instance: LedgerTransaction, validated_data: dict) -> LedgerTransaction:
         entries_data = validated_data.pop("entries", None)
+        fee_amount = validated_data.pop("fee_amount", None)
         target_quick_entry_kind = validated_data.get("quick_entry_kind", instance.quick_entry_kind)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -454,6 +476,10 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
                 payload["currency"] = payload.get("currency") or payload["account"].currency
                 LedgerEntry.objects.create(transaction=instance, **payload)
         sync_position_start_dates_for_transaction(transaction=instance)
+        # Despues de reescribir los apuntes: la cuenta que paga la comision se deduce de
+        # ellos, asi que editarlos recoloca la comision donde toque.
+        instance.refresh_from_db()
+        sync_investment_fee(transaction_row=instance, fee_amount=fee_amount)
         return instance
 
     @staticmethod
@@ -1109,6 +1135,16 @@ class QuickLedgerTransactionSerializer(serializers.Serializer):
 
         # Income can also target accounting investment assets for reinvested yield.
         if movement_type == "income" and account.asset_id is not None:
+            return
+
+        # Y un gasto puede salir de una cuenta de inversion: un exchange cobra su comision
+        # en cripto, del propio saldo, y un broker la descuenta de la posicion. Sin esto no
+        # habia forma de registrarlo, y la cuenta se quedaba descuadrada para siempre.
+        if (
+            movement_type == "expense"
+            and account.asset_id is not None
+            and account.asset.category == Asset.Category.INVESTMENTS
+        ):
             return
 
         validate_liquidity_account(account=account, user_id=user_id, field_name="account_id")
