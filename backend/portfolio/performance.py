@@ -376,6 +376,7 @@ def _load_ledger_flows(
                         "ledger",
                         False,
                         income=cash_entry.amount,
+                        cash_account_id=cash_account_id,
                     )
                 )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.EXPENSE:
@@ -404,6 +405,7 @@ def _load_ledger_flows(
                         "ledger",
                         not is_investment_cost,
                         cost=cash_entry.amount if is_investment_cost else ZERO,
+                        cash_account_id=cash_account_id,
                     )
                 )
     return rows, covered_dates
@@ -1089,8 +1091,22 @@ def _append_ownership_flows(
         return True
     complete = True
     for position in positions:
-        for period in context.ownership_periods.get(position.id, []):
+        periods = context.ownership_periods.get(position.id, [])
+        for period in periods:
             if not (start_date < period.start_date <= end_date):
+                continue
+            # Solo un *cambio* de titularidad mueve valor sin mover dinero. El primer tramo
+            # de una posicion no cambia nada: la posicion nace, y lo que la trajo ya esta
+            # contado como compra. Emitir tambien ahi metia el valor entero de cada
+            # posicion abierta dentro de la ventana como si fuese una aportacion nueva, y
+            # por eso lo aportado por un miembro llegaba a superar lo aportado a la cartera
+            # entera, de la que es una parte.
+            has_previous = any(
+                row.start_date < period.start_date
+                and (row.end_date is None or row.end_date >= period.start_date - timedelta(days=1))
+                for row in periods
+            )
+            if not has_previous:
                 continue
             before = _ownership_factor(
                 context=context,
@@ -1704,6 +1720,16 @@ def build_portfolio_quality(
         )
         for link in context.cash_accounts
     )
+    # Una posicion sin titularidad no aparece en la vista de nadie, pero su historia sigue
+    # dentro del total. Filtrando por titular eso hace que las partes no sumen el todo sin
+    # que nada lo explique, y archivada o no da igual: lo que descuadra son sus flujos
+    # pasados. Por eso se cuenta aparte de `ownership_missing`, que solo mira lo vivo.
+    unattributed = sum(
+        1
+        for position in context.positions
+        if not context.ownership_periods.get(position.id)
+        and (scope_ids is None or position.id in scope_ids)
+    )
     fresh = stale = missing = at_cost = ownership_missing = scoped_total = 0
     for position in context.positions:
         if scope_ids is not None and position.id not in scope_ids:
@@ -1741,7 +1767,13 @@ def build_portfolio_quality(
         "period": metrics["period"],
         "status": (
             "needs_review"
-            if missing or ownership_missing or cash_ownership_missing or context.fx_issues
+            # Lo no atribuido solo pide revision cuando se esta mirando por titular: es ahi
+            # donde descuadra la lectura. Sin filtro no sobra nada y marcarlo seria ruido.
+            if missing
+            or ownership_missing
+            or (member_id is not None and unattributed)
+            or cash_ownership_missing
+            or context.fx_issues
             else "stale"
             if stale
             else "ready"
@@ -1754,6 +1786,7 @@ def build_portfolio_quality(
             "at_cost": at_cost,
         },
         "ownership_missing": ownership_missing,
+        "ownership_unattributed": unattributed,
         "cash_ownership_missing": cash_ownership_missing,
         "metric_coverage": metrics["coverage"],
         "fx_issues": sorted(context.fx_issues),

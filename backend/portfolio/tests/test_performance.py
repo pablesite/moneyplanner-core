@@ -1186,3 +1186,170 @@ class HoldingThreadTests(APITestCase):
             sorted([self.old_position.id, self.new_position.id]),
         )
         self.assertEqual(thread["containers"], ["Exchange viejo", "Exchange nuevo"])
+
+
+class OwnershipSplitConsistencyTests(APITestCase):
+    """Filtrar por titular reparte la cartera; no puede crear ni destruir dinero."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="split", password="pass")
+        self.client.force_authenticate(self.user)
+        self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        self.container = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Broker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        self.one = FamilyMember.objects.create(
+            user=self.user, name="Uno", role=FamilyMember.Role.ADULT
+        )
+        self.two = FamilyMember.objects.create(
+            user=self.user, name="Dos", role=FamilyMember.Role.ADULT
+        )
+        self.owned_by_one = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=self.one
+        )
+        self.owned_by_two = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=self.two
+        )
+        InflationIndex.objects.create(
+            region=InflationIndex.Region.ES, period=date(2024, 1, 1), index=Decimal("100")
+        )
+        # Dos posiciones nacidas *dentro* de la ventana: es el caso que inventaba una
+        # aportacion por el valor entero al filtrar por titular.
+        self.first = self.build_position("Fondo uno", self.owned_by_one, Decimal("300"))
+        self.second = self.build_position("Fondo dos", self.owned_by_two, Decimal("100"))
+
+    def build_position(self, name, ownership, closing):
+        asset = Asset.objects.create(
+            user=self.user,
+            name=name,
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=closing,
+            start_date=date(2024, 6, 1),
+        )
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name=name,
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=self.container,
+            instrument=Instrument.objects.create(
+                user=self.user,
+                name=name,
+                identity_kind=Instrument.IdentityKind.CUSTOM,
+                asset_class=Instrument.AssetClass.PRIVATE_EQUITY,
+                instrument_type=Instrument.InstrumentType.FUND,
+                quote_currency="EUR",
+            ),
+            asset=asset,
+            ledger_account=account,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2024, 6, 1),
+        )
+        PositionValuation.objects.create(
+            position=position, valuation_date=date(2024, 12, 31), value=closing, currency="EUR"
+        )
+        period = PositionOwnershipPeriod.objects.create(
+            position=position, ownership=ownership, start_date=date(2024, 6, 1)
+        )
+        PositionOwnershipShare.objects.create(
+            period=period,
+            member=ownership.member,
+            percent=Decimal("100"),
+        )
+        self.contribute(position, account, asset, closing)
+        return position
+
+    def contribute(self, position, account, asset, amount):
+        outside = LedgerAccount.objects.create(
+            user=self.user,
+            name=f"Banco {position.id}",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 6, 1),
+            value_date=date(2024, 6, 1),
+            description="Compra",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=account,
+            asset=asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=outside,
+            side=LedgerEntry.Side.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+
+    def performance(self, member=None):
+        suffix = f"&member_id={member.id}" if member else ""
+        response = self.client.get(
+            f"/api/portfolio/performance/?date_from=2024-01-01&date_to=2024-12-31{suffix}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data
+
+    def test_a_new_position_is_not_a_contribution_to_its_owner(self):
+        # El primer tramo de titularidad no cambia nada: la posicion nace y su compra ya
+        # esta contada. Emitiendo tambien ahi, lo aportado por un miembro superaba lo
+        # aportado a la cartera entera.
+        mine = self.performance(self.one)
+
+        self.assertEqual(mine["net_contributed"], "300.00000000")
+        self.assertFalse(
+            [row for row in mine["flows"] if row["kind"] == "ownership_transfer"],
+        )
+
+    def test_the_members_add_up_to_the_whole_portfolio(self):
+        whole = self.performance()
+        first = self.performance(self.one)
+        second = self.performance(self.two)
+
+        self.assertEqual(whole["net_contributed"], "400.00000000")
+        self.assertEqual(
+            Decimal(first["net_contributed"]) + Decimal(second["net_contributed"]),
+            Decimal(whole["net_contributed"]),
+        )
+        self.assertEqual(
+            Decimal(first["closing_value"]) + Decimal(second["closing_value"]),
+            Decimal(whole["closing_value"]),
+        )
+
+    def test_a_real_change_of_ownership_still_moves_value_between_members(self):
+        # Ceder la mitad no mueve dinero, pero si cambia la posicion economica de cada uno,
+        # y eso tiene que seguir contando.
+        shared = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        OwnershipSplit.objects.create(ownership=shared, member=self.one, percent=Decimal("50"))
+        OwnershipSplit.objects.create(ownership=shared, member=self.two, percent=Decimal("50"))
+        previous = self.first.ownership_periods.get()
+        previous.end_date = date(2024, 8, 31)
+        previous.save(update_fields=["end_date"])
+        period = PositionOwnershipPeriod.objects.create(
+            position=self.first, ownership=shared, start_date=date(2024, 9, 1)
+        )
+        PositionOwnershipShare.objects.create(period=period, member=self.one, percent=Decimal("50"))
+        PositionOwnershipShare.objects.create(period=period, member=self.two, percent=Decimal("50"))
+
+        giver = self.performance(self.one)
+
+        transfers = [row for row in giver["flows"] if row["kind"] == "ownership_transfer"]
+        self.assertEqual(len(transfers), 1)
+        self.assertTrue(Decimal(transfers[0]["amount_base"]) < 0)
