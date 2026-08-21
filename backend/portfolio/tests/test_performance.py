@@ -1464,6 +1464,38 @@ class CommingledPositionTests(APITestCase):
             currency="EUR",
         )
 
+    def sell(self, day, amount, ownership):
+        outside = LedgerAccount.objects.create(
+            user=self.user,
+            name=f"Banco venta {day}",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=day,
+            value_date=day,
+            description="Venta",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.OUTFLOW,
+            ownership=ownership,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.account,
+            asset=self.asset,
+            side=LedgerEntry.Side.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=outside,
+            side=LedgerEntry.Side.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+
     def value_for(self, member):
         response = self.client.get(
             "/api/portfolio/performance/"
@@ -1487,3 +1519,17 @@ class CommingledPositionTests(APITestCase):
             self.value_for(self.her) + self.value_for(self.him),
             Decimal(whole.data["closing_value"]),
         )
+
+    def test_a_sale_uses_its_ledger_ownership_not_the_end_of_day_pocket(self):
+        # Tras vender lo compartido el bolsillo compartido queda vacio. Si el flujo mira
+        # ese saldo final, atribuye la venta entera a el y deja las aportaciones de ella
+        # sin su retirada correspondiente.
+        self.sell(date(2024, 4, 1), Decimal("200"), self.shared)
+
+        response = self.client.get(
+            "/api/portfolio/performance/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.her.id}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["net_contributed"], "0E-8")

@@ -61,6 +61,9 @@ class FlowRecord:
     # Solo en flujos de efectivo de contenedor: la cuenta que lo movio, para poder
     # repartirlo por titularidad igual que se reparte su saldo.
     cash_account_id: int | None = None
+    # En un bote mezclado la titularidad del asiento, no el saldo al cierre del dia,
+    # decide a quien pertenece una compra o una venta concreta.
+    ownership_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -243,6 +246,7 @@ def _load_ledger_flows(
                             False,
                             position_external=True,
                             realized_pnl=transaction.realized_gain_loss,
+                            ownership_id=transaction.ownership_id,
                         )
                     )
                     continue
@@ -296,6 +300,7 @@ def _load_ledger_flows(
                         cost=counterpart.amount if is_return_cost else ZERO,
                         income=counterpart.amount if is_return_income else ZERO,
                         realized_pnl=transaction.realized_gain_loss,
+                        ownership_id=transaction.ownership_id,
                     )
                 )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.EXPENSE:
@@ -319,6 +324,7 @@ def _load_ledger_flows(
                             False,
                             position_external=False,
                             cost=expense.amount,
+                            ownership_id=transaction.ownership_id,
                         )
                     )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.INCOME:
@@ -342,6 +348,7 @@ def _load_ledger_flows(
                             False,
                             position_external=False,
                             income=income.amount,
+                            ownership_id=transaction.ownership_id,
                         )
                     )
         if transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.INVESTMENT:
@@ -1064,6 +1071,10 @@ def _flow_factor(
     de atribuirse entero a quien mire.
     """
     if flow.position_id is not None:
+        if flow.position_id in context.pockets and flow.ownership_id is not None:
+            if member_id is None:
+                return Decimal("1")
+            return context.ownership_shares.get(flow.ownership_id, {}).get(member_id, ZERO)
         return _ownership_factor(
             context=context,
             position_id=flow.position_id,
