@@ -1353,3 +1353,137 @@ class OwnershipSplitConsistencyTests(APITestCase):
         transfers = [row for row in giver["flows"] if row["kind"] == "ownership_transfer"]
         self.assertEqual(len(transfers), 1)
         self.assertTrue(Decimal(transfers[0]["amount_base"]) < 0)
+
+
+class CommingledPositionTests(APITestCase):
+    """Un bote con monedas de dos titularidades se reparte por unidades, no por porcentaje."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="pot", password="pass")
+        self.client.force_authenticate(self.user)
+        self.portfolio = Portfolio.objects.create(user=self.user, base_currency="EUR")
+        self.container = InvestmentContainer.objects.create(
+            portfolio=self.portfolio,
+            name="Exchange",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        self.her = FamilyMember.objects.create(
+            user=self.user, name="Ella", role=FamilyMember.Role.ADULT
+        )
+        self.him = FamilyMember.objects.create(
+            user=self.user, name="El", role=FamilyMember.Role.ADULT
+        )
+        self.his_own = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=self.him
+        )
+        self.shared = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        OwnershipSplit.objects.create(ownership=self.shared, member=self.her, percent=Decimal("50"))
+        OwnershipSplit.objects.create(ownership=self.shared, member=self.him, percent=Decimal("50"))
+        InflationIndex.objects.create(
+            region=InflationIndex.Region.ES, period=date(2024, 1, 1), index=Decimal("100")
+        )
+        self.asset = Asset.objects.create(
+            user=self.user,
+            name="Cripto",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("800"),
+            start_date=date(2024, 1, 1),
+        )
+        self.account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Cripto",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=self.asset,
+        )
+        self.position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=self.container,
+            instrument=Instrument.objects.create(
+                user=self.user,
+                name="Cripto",
+                identity_kind=Instrument.IdentityKind.CUSTOM,
+                asset_class=Instrument.AssetClass.CRYPTO,
+                instrument_type=Instrument.InstrumentType.CRYPTO,
+                quote_currency="EUR",
+            ),
+            asset=self.asset,
+            ledger_account=self.account,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2024, 1, 1),
+        )
+        PositionValuation.objects.create(
+            position=self.position,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("800"),
+            currency="EUR",
+        )
+        # El tramo declara la posicion entera del que la lleva hoy: es justo la simplificacion
+        # que el bote tiene que corregir.
+        period = PositionOwnershipPeriod.objects.create(
+            position=self.position, ownership=self.his_own, start_date=date(2024, 1, 1)
+        )
+        PositionOwnershipShare.objects.create(
+            period=period, member=self.him, percent=Decimal("100")
+        )
+        self.buy(date(2024, 2, 1), Decimal("200"), self.shared)
+        self.buy(date(2024, 3, 1), Decimal("200"), self.his_own)
+
+    def buy(self, day, amount, ownership):
+        outside = LedgerAccount.objects.create(
+            user=self.user,
+            name=f"Banco {day}",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=day,
+            value_date=day,
+            description="Compra",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+            ownership=ownership,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=self.account,
+            asset=self.asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=amount,
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=outside,
+            side=LedgerEntry.Side.CREDIT,
+            amount=amount,
+            currency="EUR",
+        )
+
+    def value_for(self, member):
+        response = self.client.get(
+            "/api/portfolio/performance/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={member.id}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return Decimal(response.data["closing_value"])
+
+    def test_the_pot_is_split_by_what_each_ownership_put_in(self):
+        # Mitad comprada en comun y mitad propia: de los 800, 200 son de ella (la mitad de
+        # la mitad comun) y 600 de el. El tramo, que lo daba todo a el, no sabia esto.
+        self.assertEqual(self.value_for(self.her), Decimal("200.00000000"))
+        self.assertEqual(self.value_for(self.him), Decimal("600.00000000"))
+
+    def test_the_two_members_still_add_up_to_the_whole_position(self):
+        whole = self.client.get(
+            "/api/portfolio/performance/?date_from=2024-01-01&date_to=2024-12-31"
+        )
+
+        self.assertEqual(
+            self.value_for(self.her) + self.value_for(self.him),
+            Decimal(whole.data["closing_value"]),
+        )

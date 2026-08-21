@@ -35,6 +35,7 @@ from .performance_math import (
     real_return,
     xirr,
 )
+from .lots import OwnershipPockets, UnitMovement, build_pockets, member_share_at
 from .valuations import stale_days_for_position
 
 ZERO = Decimal("0")
@@ -91,6 +92,10 @@ class PerformanceContext:
     # activo de Patrimonio que respalda cada cuenta. Una cuenta ausente de este mapa es
     # efectivo que no se puede atribuir, no efectivo de nadie.
     cash_ownership: dict[int, dict[int, Decimal]]
+    # Solo para posiciones mezcladas: cuantas unidades tiene cada titularidad dentro del
+    # bote, dia a dia. Una posicion ausente se reparte por sus tramos, como siempre.
+    pockets: dict[int, OwnershipPockets]
+    ownership_shares: dict[int, dict[int, Decimal]]
     fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]]
     inflation_rows: list[tuple[date, Decimal]]
     fx_issues: set[str] = field(default_factory=set)
@@ -521,6 +526,7 @@ def load_performance_context(
         position.id: list(position.ownership_periods.all()) for position in positions
     }
     cash_ownership = _load_cash_ownership(portfolio=portfolio, cash_accounts=cash_accounts)
+    pockets, ownership_shares = _load_position_pockets(portfolio=portfolio, positions=positions)
     inflation_rows = list(
         InflationIndex.objects.filter(region=InflationIndex.Region.ES, period__lte=end_date)
         .order_by("period")
@@ -541,6 +547,8 @@ def load_performance_context(
         flows=flows,
         ownership_periods=ownership_periods,
         cash_ownership=cash_ownership,
+        pockets=pockets,
+        ownership_shares=ownership_shares,
         fx_cache=build_fx_cache(currencies),
         inflation_rows=[(row_date, Decimal(index)) for row_date, index in inflation_rows],
     )
@@ -584,19 +592,91 @@ def _load_cash_ownership(
         link = links.get(asset.id) if asset else None
         if link is None:
             continue
-        ownership = link.ownership
-        if ownership.allocation_basis == Ownership.AllocationBasis.RECURRING_INCOME_12M:
+        resolved_shares = _shares_of_ownership(link.ownership)
+        if resolved_shares is None:
             continue
-        if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member_id:
-            shares = [(ownership.member_id, Decimal("100"))]
-        else:
-            shares = [(row.member_id, row.percent) for row in ownership.splits.all()]
-        if not shares or sum(percent for _, percent in shares) != Decimal("100"):
-            continue
-        resolved[account_id] = {
-            member_id: percent / Decimal("100") for member_id, percent in shares
-        }
+        resolved[account_id] = resolved_shares
     return resolved
+
+
+def _load_position_pockets(
+    *, portfolio: Portfolio, positions: list[PortfolioPosition]
+) -> tuple[dict[int, OwnershipPockets], dict[int, dict[int, Decimal]]]:
+    """Reconstruye el bote de las posiciones que mezclan titularidades.
+
+    Solo se molesta con las que de verdad estan mezcladas: si todas las entradas de una
+    posicion vienen de la misma titularidad, sus tramos ya la describen y contarla por
+    unidades no cambiaria nada mientras si podria introducir diferencias de redondeo.
+    """
+    account_to_position = {
+        int(position.ledger_account_id): position.id
+        for position in positions
+        if position.ledger_account_id
+    }
+    if not account_to_position:
+        return {}, {}
+    rows = (
+        LedgerEntry.objects.filter(
+            account_id__in=list(account_to_position),
+            transaction__status=cast(str, LedgerTransaction.Status.POSTED),
+        )
+        .values_list(
+            "account_id",
+            "transaction__booking_date",
+            "transaction__ownership_id",
+            "side",
+            "amount",
+        )
+        .order_by("transaction__booking_date", "transaction_id", "id")
+    )
+    movements: dict[int, list[UnitMovement]] = {}
+    owners_seen: dict[int, set[int | None]] = {}
+    for account_id, booking_date, ownership_id, side, amount in rows:
+        position_id = account_to_position[int(account_id)]
+        signed = amount if side == LedgerEntry.Side.DEBIT else -amount
+        movements.setdefault(position_id, []).append(
+            UnitMovement(on_date=booking_date, units=signed, ownership_id=ownership_id)
+        )
+        if signed > ZERO:
+            owners_seen.setdefault(position_id, set()).add(ownership_id)
+    mixed = {
+        position_id
+        for position_id, owners in owners_seen.items()
+        if len({owner for owner in owners if owner is not None}) > 1
+    }
+    if not mixed:
+        return {}, {}
+    ownership_ids = {
+        movement.ownership_id
+        for position_id in mixed
+        for movement in movements[position_id]
+        if movement.ownership_id is not None
+    }
+    shares: dict[int, dict[int, Decimal]] = {}
+    for ownership in Ownership.objects.filter(id__in=ownership_ids).prefetch_related(
+        "splits", "member"
+    ):
+        resolved = _shares_of_ownership(ownership)
+        if resolved is not None:
+            shares[ownership.id] = resolved
+    return {position_id: build_pockets(movements[position_id]) for position_id in mixed}, shares
+
+
+def _shares_of_ownership(ownership: Ownership) -> dict[int, Decimal] | None:
+    """Que fraccion toca a cada miembro en esta titularidad, o None si no se puede fijar.
+
+    Una titularidad dinamica se queda fuera: su reparto depende de los ingresos de cada mes
+    y publicarlo como fraccion exacta seria inventarlo.
+    """
+    if ownership.allocation_basis == Ownership.AllocationBasis.RECURRING_INCOME_12M:
+        return None
+    if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member_id:
+        shares = [(ownership.member_id, Decimal("100"))]
+    else:
+        shares = [(row.member_id, row.percent) for row in ownership.splits.all()]
+    if not shares or sum(percent for _, percent in shares) != Decimal("100"):
+        return None
+    return {member_id: percent / Decimal("100") for member_id, percent in shares}
 
 
 def _cash_ownership_factor(
@@ -902,6 +982,19 @@ def _ownership_factor(
 ) -> Decimal:
     if member_id is None:
         return Decimal("1")
+    # Un bote mezclado no se describe con un porcentaje: lo que es de cada uno son unidades,
+    # y su peso cambia con cada compra. Donde hay bote manda el bote; el resto sigue con sus
+    # tramos, que para una posicion de un solo dueno dicen exactamente lo mismo.
+    pockets = context.pockets.get(position_id)
+    if pockets is not None:
+        share = member_share_at(
+            pockets=pockets,
+            target=target,
+            member_id=member_id,
+            shares_by_ownership=context.ownership_shares,
+        )
+        if share is not None:
+            return share
     period = next(
         (
             row
