@@ -172,7 +172,14 @@ def build_benchmark_series(
             end_date=current,
             member_id=member_id,
         )
-        strategy = resolve_strategy(portfolio=portfolio, ownership=ownership, on_date=current)
+        # Un cierre mensual solo tiene una politica comparable: la vigente cuando empezo
+        # el intervalo. Una version creada a mitad de mes no puede reescribir el objetivo
+        # contra el que se juzgan los dias anteriores; entra en el siguiente mes completo.
+        strategy = resolve_strategy(
+            portfolio=portfolio,
+            ownership=ownership,
+            on_date=previous + date.resolution,
+        )
         if strategy is None:
             points.append(
                 SeriesPoint(label, previous, current, portfolio_return, None, "no_strategy")

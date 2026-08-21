@@ -116,6 +116,8 @@ class RiskMetricsTests(TestCase):
         self.assertEqual(volatility(short)["status"], "insufficient")
         self.assertEqual(volatility(short)["reason"], "not_enough_observations")
         self.assertEqual(volatility(short)["required"], MIN_ANNUALIZED_OBSERVATIONS)
+        self.assertEqual(annualized_return(short)["status"], "insufficient")
+        self.assertEqual(annualized_return(short)["required"], MIN_ANNUALIZED_OBSERVATIONS)
         self.assertEqual(
             sharpe(series=short, risk_free_rate=Decimal("0.02"))["status"], "insufficient"
         )

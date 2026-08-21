@@ -1752,6 +1752,21 @@ def build_portfolio_timeline(
         if (flow.position_external if scope_ids is not None else flow.external)
         and (scope_ids is None or flow.position_id in scope_ids)
     ]
+    selected_positions = (
+        [position for position in context.positions if position.id in scope_ids]
+        if scope_ids is not None
+        else context.positions
+    )
+    ownership_external: list[DatedAmount] = []
+    ownership_flow_complete = _append_ownership_flows(
+        context=context,
+        positions=selected_positions,
+        start_date=date.min,
+        end_date=end_date,
+        member_id=member_id,
+        external=ownership_external,
+        flow_rows=[],
+    )
     opening_value, opening_complete, _ = _aggregate_value(
         context=context, target=start_date, member_id=member_id, scope_ids=scope_ids
     )
@@ -1762,7 +1777,7 @@ def build_portfolio_timeline(
             if flow.on_date <= start_date
         ),
         ZERO,
-    )
+    ) + sum((flow.amount for flow in ownership_external if flow.on_date <= start_date), ZERO)
     for target in dates:
         value, complete, _ = _aggregate_value(
             context=context, target=target, member_id=member_id, scope_ids=scope_ids
@@ -1774,7 +1789,11 @@ def build_portfolio_timeline(
                 if start_date < flow.on_date <= target
             ),
             ZERO,
+        ) + sum(
+            (flow.amount for flow in ownership_external if start_date < flow.on_date <= target),
+            ZERO,
         )
+        complete = complete and ownership_flow_complete
         rows.append(
             {
                 "date": target.isoformat(),

@@ -118,6 +118,15 @@ class StrategicBenchmarkTests(BenchmarkFixture, TestCase):
         self.assertAlmostEqual(float(self.point(result, "2025-06")["benchmark"]), 0.01, places=4)
         self.assertAlmostEqual(float(self.point(result, "2025-08")["benchmark"]), 0.015, places=4)
 
+    def test_a_midmonth_policy_does_not_rewrite_that_month(self):
+        self.strategy_version(date(2024, 1, 1), {"equity": "100"})
+        self.strategy_version(date(2025, 7, 15), {"equity": "50", "crypto": "50"})
+
+        result = self.benchmark()
+
+        self.assertAlmostEqual(float(self.point(result, "2025-07")["benchmark"]), 0.01, places=4)
+        self.assertAlmostEqual(float(self.point(result, "2025-08")["benchmark"]), 0.015, places=4)
+
     def test_cash_stays_out_of_both_sides_and_it_is_said(self):
         # La serie de la cartera son sus posiciones; el efectivo de contenedor no es de
         # ninguna clase. Incluirlo solo en el benchmark compararia dos cosas distintas.

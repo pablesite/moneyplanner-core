@@ -294,7 +294,14 @@ def build_allocation(
             }
         )
     position_rows.sort(key=lambda row: Decimal(row["value"]), reverse=True)
-    planned = planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
+    # El presupuesto es global y no sabe de titularidades. Solo se puede usar como
+    # propuesta en un mandato que tenga una politica propia; repartirlo entre ambitos sin
+    # estrategia haria que cada uno pareciese tener disponible el presupuesto entero.
+    planned = (
+        planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
+        if strategy is not None
+        else ZERO.quantize(CENT)
+    )
     contributed = net_contributed_within(
         context=context,
         position_ids=[position.id for position in positions],

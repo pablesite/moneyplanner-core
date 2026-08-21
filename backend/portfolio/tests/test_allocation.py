@@ -1244,6 +1244,12 @@ class SuggestedContributionTests(AllocationFixture, TestCase):
         self.assertEqual(result["contributed_this_month"], "0.00")
         self.assertEqual(result["suggested_contribution"], "100.00")
 
+    def test_a_scope_without_strategy_does_not_inherit_the_family_budget(self):
+        result = build_allocation(portfolio=self.portfolio, ownership=self.his, on_date=TODAY)
+
+        self.assertEqual(result["planned_contribution"], "0.00")
+        self.assertEqual(result["suggested_contribution"], "0.00")
+
 
 class ContributionBasketTests(AllocationFixture, TestCase):
     """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""

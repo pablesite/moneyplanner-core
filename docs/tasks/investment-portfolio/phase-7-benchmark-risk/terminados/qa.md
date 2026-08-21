@@ -24,15 +24,15 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec saas_frontend 
 ```
 
 ## Required Documentation Updates
-- [ ] Arquitectura Core - convenciones validadas.
-- [ ] Project status de Core y SaaS.
+- [x] Arquitectura Core - convenciones validadas.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Comparar contra una libreria con convenciones distintas puede generar falsos fallos; fijar frecuencia, anualizacion y calendario antes de crear fixtures.
 
 ## Completion Criteria
-- [ ] Fixtures externos y tests de borde pasan.
-- [ ] La UI no dibuja continuidad donde faltan datos.
-- [ ] Limitaciones y cobertura quedan documentadas.
-- [ ] Commit y estado de fase completados.
-- [ ] Spec movida a `terminados/`.
+- [x] Fixtures externos y tests de borde pasan.
+- [x] La UI no dibuja continuidad donde faltan datos.
+- [x] Limitaciones y cobertura quedan documentadas.
+- [x] Commit y estado de fase completados.
+- [x] Spec movida a `terminados/`.

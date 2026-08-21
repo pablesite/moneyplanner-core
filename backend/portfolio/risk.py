@@ -166,16 +166,18 @@ def best_and_worst(series: list[PeriodReturn]) -> dict[str, Any]:
 def annualized_return(series: list[PeriodReturn]) -> dict[str, Any]:
     """Rentabilidad media anualizada de los tramos completos, encadenada."""
     values = usable_returns(series)
-    if not values:
-        return insufficient("not_enough_observations", observations=0)
     if len(values) != len(series):
         return insufficient("gaps_in_series", observations=len(values), expected=len(series))
+    if len(values) < MIN_ANNUALIZED_OBSERVATIONS:
+        return insufficient(
+            "not_enough_observations",
+            observations=len(values),
+            required=MIN_ANNUALIZED_OBSERVATIONS,
+        )
     index = ONE
     for value in values:
         index *= ONE + value
     years = Decimal(len(values)) / Decimal(PERIODS_PER_YEAR)
-    if years <= ZERO:
-        return insufficient("not_enough_observations", observations=len(values))
     if index <= ZERO:
         # Una cartera que se ha ido a cero no tiene tasa anual compuesta que la describa.
         return insufficient("non_positive_growth", observations=len(values))

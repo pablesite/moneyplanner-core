@@ -39,9 +39,9 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev exec core_backend p
 ```
 
 ## Required Documentation Updates
-- [ ] Arquitectura Core: benchmark, convenciones y limites.
-- [ ] `docs/architecture/api-registry.md`.
-- [ ] Project status de Core y SaaS.
+- [x] Arquitectura Core: benchmark, convenciones y limites.
+- [x] `docs/architecture/api-registry.md`.
+- [x] Project status de Core y SaaS.
 
 ## Risks
 Series manuales o asincronas pueden falsear riesgo. Aplicar cobertura minima, calendario comun y disclosure por metrica.
@@ -50,7 +50,7 @@ Series manuales o asincronas pueden falsear riesgo. Aplicar cobertura minima, ca
 Rentabilidad historica movil (rolling TWR) para comparar si la cartera mejora o empeora entre periodos equivalentes, con posible capa visual en el grafico de evolucion. Ver `../README.md#backlog-no-planificado`.
 
 ## Completion Criteria
-- [ ] Benchmark respeta cambios historicos de estrategia.
-- [ ] Metricas coinciden con fixtures independientes.
-- [ ] Riesgo avanzado puede anadirse sin romper API.
-- [ ] Tests, docs y commit completados.
+- [x] Benchmark respeta cambios historicos de estrategia.
+- [x] Metricas coinciden con fixtures independientes.
+- [x] Riesgo avanzado puede anadirse sin romper API.
+- [x] Tests, docs y commit completados.

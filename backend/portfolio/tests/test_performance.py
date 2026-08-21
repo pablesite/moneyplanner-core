@@ -913,6 +913,10 @@ class PortfolioPerformanceApiTests(APITestCase):
             "/api/portfolio/performance/"
             f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.member.id}"
         )
+        timeline = self.client.get(
+            "/api/portfolio/timeline/"
+            f"?date_from=2024-01-01&date_to=2024-12-31&member_id={self.member.id}"
+        )
         ownership_flow = next(
             row for row in response.data["flows"] if row["kind"] == "ownership_transfer"
         )
@@ -923,6 +927,12 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(response.data["net_contributed"], "-110.00000000")
         self.assertEqual(response.data["monetary_result"], "10.00000000")
         self.assertEqual(ownership_flow["amount_base"], "-160.00000000")
+        self.assertEqual(timeline.status_code, status.HTTP_200_OK, timeline.data)
+        self.assertEqual(timeline.data["results"][-1]["contributed_to_date"], "-110.00000000")
+        self.assertEqual(
+            timeline.data["results"][-1]["contributed_to_date"],
+            response.data["net_contributed"],
+        )
 
 
 class ContainerCashOwnershipTests(APITestCase):
