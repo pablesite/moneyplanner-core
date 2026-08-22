@@ -330,12 +330,15 @@ def build_portfolio_benchmark(
             "points": [],
             "portfolio_return": None,
             "benchmark_return": None,
+            "benchmark_annualized_return": None,
             "excess_return": None,
             "secondary": {"status": "unavailable", "reason": "not_configured", "instrument": None},
         }
     points: list[SeriesPoint] = series["points"]
     portfolio_total = _chain([row.portfolio for row in points])
     benchmark_total = _chain([row.benchmark for row in points])
+    benchmark_run = longest_complete_run([PeriodReturn(row.label, row.benchmark) for row in points])
+    benchmark_annualized = annualized_return(benchmark_run)
     excess = (
         portfolio_total - benchmark_total
         if portfolio_total is not None and benchmark_total is not None
@@ -352,6 +355,7 @@ def build_portfolio_benchmark(
         "cash_excluded": series["cash_excluded"],
         "portfolio_return": None if portfolio_total is None else str(portfolio_total),
         "benchmark_return": None if benchmark_total is None else str(benchmark_total),
+        "benchmark_annualized_return": benchmark_annualized,
         "excess_return": None if excess is None else str(excess),
         "points": [
             {

@@ -194,6 +194,16 @@ class StrategicBenchmarkTests(BenchmarkFixture, TestCase):
             places=8,
         )
 
+    def test_benchmark_publishes_annualized_return_for_the_same_months(self):
+        self.strategy_version(date(2024, 1, 1), {"equity": "100"})
+
+        result = self.benchmark()
+
+        self.assertEqual(result["benchmark_annualized_return"]["status"], "available")
+        self.assertEqual(
+            result["benchmark_annualized_return"]["observations"], len(self.boundaries) - 1
+        )
+
 
 class SecondaryBenchmarkTests(BenchmarkFixture, TestCase):
     def index_instrument(self, currency: str = "EUR") -> Instrument:
