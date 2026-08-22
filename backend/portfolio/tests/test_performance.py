@@ -416,6 +416,14 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(performance.data["return"]["method"], "linked_dietz")
         self.assertTrue(performance.data["return"]["estimated"])
         self.assertEqual(timeline.data["results"][-1]["monetary_result"], "20.00000000")
+        self.assertEqual(
+            timeline.data["results"][-1]["return"]["nominal"],
+            performance.data["return"]["nominal"],
+        )
+        self.assertEqual(
+            timeline.data["results"][-1]["return"]["method"],
+            performance.data["return"]["method"],
+        )
         self.assertEqual(len(positions.data["results"]), 1)
 
     def test_exact_twr_is_used_when_flow_date_has_a_real_valuation(self):
@@ -438,6 +446,15 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertFalse(response.data["return"]["estimated"])
         self.assertEqual(
             Decimal(response.data["return"]["twr"]),
+            expected.quantize(Decimal("0.00000001")),
+        )
+        timeline = self.client.get(
+            "/api/portfolio/timeline/?date_from=2024-01-01&date_to=2024-12-31"
+        )
+        self.assertEqual(timeline.status_code, status.HTTP_200_OK, timeline.data)
+        self.assertEqual(timeline.data["results"][-1]["return"]["method"], "twr")
+        self.assertEqual(
+            Decimal(timeline.data["results"][-1]["return"]["nominal"]),
             expected.quantize(Decimal("0.00000001")),
         )
 

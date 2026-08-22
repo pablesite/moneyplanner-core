@@ -1725,6 +1725,121 @@ def timeline_context_start(*, portfolio: Portfolio, start_date: date) -> date:
     return min(inception, start_date)
 
 
+def _timeline_returns(
+    *,
+    context: PerformanceContext,
+    start_date: date,
+    end_date: date,
+    member_id: int | None,
+    scope_ids: set[int] | None,
+    dates: list[date],
+) -> dict[date, dict[str, Any]]:
+    """Return the same TWR series as the summary without recalculating it per month.
+
+    A timeline can carry more than one hundred month ends. Calling `_metric_block` for
+    every one re-read every historical observation each time and took seventeen seconds
+    on a real eight-year portfolio. Here values are resolved once for all flow,
+    observation and display dates; each closing return only slices that cached series.
+    """
+    scope = scope_ids
+    selected_positions = (
+        [position for position in context.positions if position.id in scope]
+        if scope is not None
+        else context.positions
+    )
+    position_ids = {position.id for position in selected_positions}
+    external: list[DatedAmount] = []
+    for flow in context.flows:
+        if not (
+            ((flow.position_id in position_ids) or (scope is None and flow.position_id is None))
+            and start_date < flow.on_date <= end_date
+        ):
+            continue
+        is_external = flow.position_external if scope is not None else flow.external
+        base_amount = _flow_base(context=context, flow=flow, member_id=member_id)
+        if is_external and base_amount is not None:
+            external.append(DatedAmount(flow.on_date, base_amount))
+    ownership_complete = _append_ownership_flows(
+        context=context,
+        positions=selected_positions,
+        start_date=start_date,
+        end_date=end_date,
+        member_id=member_id,
+        external=external,
+        flow_rows=[],
+    )
+    flow_dates = {flow.on_date for flow in external}
+    observation_dates = set(
+        _observation_dates(
+            context=context,
+            positions=selected_positions,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    )
+    values = {
+        target: _aggregate_value(
+            context=context, target=target, member_id=member_id, scope_ids=scope_ids
+        )
+        for target in {start_date, *dates, *flow_dates, *observation_dates}
+    }
+    opening, opening_complete, _ = values[start_date]
+    result: dict[date, dict[str, Any]] = {}
+    for target in dates:
+        closing, closing_complete, _ = values[target]
+        period_flows = [flow for flow in external if flow.on_date <= target]
+        value_complete = (
+            ownership_complete
+            and opening_complete
+            and closing_complete
+            and opening is not None
+            and closing is not None
+        )
+        twr: Decimal | None = None
+        method = "unavailable"
+        if value_complete:
+            exact_dates = sorted({start_date, target, *(flow.on_date for flow in period_flows)})
+            exact_values = [values[row_date] for row_date in exact_dates]
+            exact = all(value is not None for value, _, _ in exact_values) and all(
+                values[row_date][2] for row_date in flow_dates if row_date <= target
+            )
+            if exact:
+                twr = chained_twr(
+                    valuations=[
+                        DatedValue(row_date, values[row_date][0]) for row_date in exact_dates
+                    ],
+                    external_flows=period_flows,
+                )
+                method = "twr" if twr is not None else "unavailable"
+            if twr is None:
+                linked_dates = sorted({start_date, target, *observation_dates})
+                linked_values = [
+                    DatedValue(row_date, values[row_date][0])
+                    for row_date in linked_dates
+                    if row_date <= target and values[row_date][0] is not None
+                ]
+                twr = linked_dietz(valuations=linked_values, external_flows=period_flows)
+                method = "linked_dietz" if twr is not None else "unavailable"
+            if twr is None:
+                twr = modified_dietz(
+                    opening_value=opening,
+                    closing_value=closing,
+                    external_flows=period_flows,
+                    start_date=start_date,
+                    end_date=target,
+                )
+                method = "modified_dietz" if twr is not None else "unavailable"
+        result[target] = {
+            "nominal": _quantize(twr),
+            "twr_annualized": _quantize(
+                annualized(total_return=twr, days=(target - start_date).days)
+            ),
+            "method": method,
+            "estimated": method in {"linked_dietz", "modified_dietz"},
+        }
+    return result
+
+
 def build_portfolio_timeline(
     *,
     portfolio: Portfolio,
@@ -1770,6 +1885,14 @@ def build_portfolio_timeline(
     opening_value, opening_complete, _ = _aggregate_value(
         context=context, target=start_date, member_id=member_id, scope_ids=scope_ids
     )
+    return_by_date = _timeline_returns(
+        context=context,
+        start_date=start_date,
+        end_date=end_date,
+        member_id=member_id,
+        scope_ids=scope_ids,
+        dates=dates,
+    )
     contributed_before = sum(
         (
             _flow_base(context=context, flow=flow, member_id=member_id) or ZERO
@@ -1805,6 +1928,9 @@ def build_portfolio_timeline(
                     if complete and opening_complete and value is not None
                     else None
                 ),
+                "return": {
+                    **return_by_date[target],
+                },
                 "coverage": "complete" if complete else "partial",
             }
         )
