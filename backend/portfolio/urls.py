@@ -14,6 +14,7 @@ from .views import (
     PortfolioRiskView,
     PortfolioExposureView,
     PositionExposureViewSet,
+    PositionHoldingViewSet,
     PositionAllocationRuleViewSet,
     InstrumentViewSet,
     InstrumentPriceViewSet,
@@ -48,6 +49,7 @@ router.register(r"portfolios", PortfolioViewSet, basename="portfolios")
 router.register(r"containers", InvestmentContainerViewSet, basename="portfolio-containers")
 router.register(r"cash-accounts", ContainerCashAccountViewSet, basename="portfolio-cash-accounts")
 router.register(r"exposures", PositionExposureViewSet, basename="portfolio-exposures")
+router.register(r"holdings", PositionHoldingViewSet, basename="portfolio-holdings")
 router.register(r"instruments", InstrumentViewSet, basename="portfolio-instruments")
 router.register(
     r"provider-mappings", InstrumentProviderMappingViewSet, basename="portfolio-mappings"

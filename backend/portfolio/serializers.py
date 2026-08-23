@@ -20,6 +20,7 @@ from .models import (
     ContributionCommitment,
     PositionAllocationRule,
     PositionExposure,
+    PositionHolding,
     ContainerCashAccount,
     Instrument,
     InstrumentPrice,
@@ -673,6 +674,99 @@ class PositionExposureSerializer(serializers.ModelSerializer):
         if declared > Decimal("100"):
             raise serializers.ValidationError(
                 {"percent": f"En {dimension} ya llevas declarado el {declared - percent}%."}
+            )
+        return attrs
+
+
+class PositionHoldingSerializer(serializers.ModelSerializer):
+    position_id = serializers.PrimaryKeyRelatedField(
+        source="position", queryset=PortfolioPosition.objects.all()
+    )
+
+    class Meta:
+        model = PositionHolding
+        fields = [
+            "id",
+            "position_id",
+            "underlying_name",
+            "underlying_identifier",
+            "asset_class",
+            "geography",
+            "sector",
+            "percent",
+            "observed_on",
+        ]
+        read_only_fields = ["id"]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        user = _request_user(self.context)
+        fields["position_id"].queryset = PortfolioPosition.objects.filter(portfolio__user=user)
+        return fields
+
+    def validate(self, attrs: dict) -> dict:
+        position = attrs.get("position", getattr(self.instance, "position", None))
+        observed_on = attrs.get("observed_on", getattr(self.instance, "observed_on", None))
+        percent = attrs.get("percent", getattr(self.instance, "percent", Decimal("0")))
+        name = attrs.get("underlying_name", getattr(self.instance, "underlying_name", ""))
+        identifier = attrs.get(
+            "underlying_identifier", getattr(self.instance, "underlying_identifier", "")
+        )
+        geography = attrs.get("geography", getattr(self.instance, "geography", ""))
+        sector = attrs.get("sector", getattr(self.instance, "sector", ""))
+        geography_buckets = {
+            PositionExposure.Bucket.NORTH_AMERICA,
+            PositionExposure.Bucket.EUROPE,
+            PositionExposure.Bucket.SPAIN,
+            PositionExposure.Bucket.JAPAN,
+            PositionExposure.Bucket.ASIA_PACIFIC,
+            PositionExposure.Bucket.EMERGING,
+            PositionExposure.Bucket.GLOBAL,
+            PositionExposure.Bucket.OTHER,
+        }
+        sector_buckets = {
+            PositionExposure.Bucket.TECHNOLOGY,
+            PositionExposure.Bucket.FINANCIALS,
+            PositionExposure.Bucket.HEALTH_CARE,
+            PositionExposure.Bucket.CONSUMER_DISCRETIONARY,
+            PositionExposure.Bucket.CONSUMER_STAPLES,
+            PositionExposure.Bucket.INDUSTRIALS,
+            PositionExposure.Bucket.ENERGY,
+            PositionExposure.Bucket.MATERIALS,
+            PositionExposure.Bucket.UTILITIES,
+            PositionExposure.Bucket.REAL_ESTATE_SECTOR,
+            PositionExposure.Bucket.COMMUNICATION,
+            PositionExposure.Bucket.OTHER,
+        }
+        if geography and geography not in geography_buckets:
+            raise serializers.ValidationError({"geography": "Geografía no válida."})
+        if sector and sector not in sector_buckets:
+            raise serializers.ValidationError({"sector": "Sector no válido."})
+        match_key = (
+            f"id:{identifier.strip().upper()}"
+            if identifier.strip()
+            else "name:" + " ".join(name.casefold().split())
+        )
+        duplicate = PositionHolding.objects.filter(
+            position=position,
+            observed_on=observed_on,
+            match_key=match_key,
+        )
+        if self.instance is not None:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError(
+                {"underlying_identifier": "Ese subyacente ya figura en esta ficha."}
+            )
+        # La ficha se escribe como snapshot: sumar más de 100% convertiría una cobertura
+        # parcial honesta en una exposición imposible.
+        rows = PositionHolding.objects.filter(position=position, observed_on=observed_on)
+        if self.instance is not None:
+            rows = rows.exclude(pk=self.instance.pk)
+        declared = sum((row.percent for row in rows), Decimal("0")) + percent
+        if declared > Decimal("100"):
+            raise serializers.ValidationError(
+                {"percent": f"En esta ficha ya llevas declarado el {declared - percent}%."}
             )
         return attrs
 

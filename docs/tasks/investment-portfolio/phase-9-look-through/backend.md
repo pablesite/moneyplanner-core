@@ -82,9 +82,9 @@ mas que no tenerla. La cobertura y su fecha tienen que viajar con el dato.
 - [x] Tests, docs y commit completados. 176 tests de portfolio en verde.
 
 ### Entrega 2
-- [ ] Una posicion con tenencias reparte su valor por ellas; sin tenencias se comporta como hoy.
-- [ ] El solapamiento por subyacente compartido es visible.
-- [ ] Tests, docs y commit completados.
+- [x] Una posicion con tenencias reparte su valor por ellas; sin tenencias se comporta como hoy.
+- [x] El solapamiento por subyacente compartido es visible.
+- [x] Tests y docs completados; el commit se crea al cerrar el bloque integrado Core/SaaS.
 
 ## Nota de alcance (2026-08-20)
 

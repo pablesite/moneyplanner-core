@@ -559,6 +559,61 @@ class PositionExposure(models.Model):
         return f"{self.position_id}:{self.dimension}:{self.bucket}={self.percent}"
 
 
+class PositionHolding(models.Model):
+    """Una tenencia declarada en la ficha de una posición agregada.
+
+    Los fondos, planes y roboadvisors no publican sus componentes en el feed de
+    precios. Esta tabla conserva la foto que el usuario copia de su ficha y, sobre
+    todo, la fecha de esa foto. Las filas con la misma fecha son un snapshot completo
+    de una posición: al llegar una ficha nueva no reescribimos la antigua, porque la
+    exposición histórica tiene que poder reconstruirse con el dato que existía entonces.
+    """
+
+    position = models.ForeignKey(
+        PortfolioPosition,
+        on_delete=models.CASCADE,
+        related_name="holdings",
+    )
+    underlying_name = models.CharField(max_length=160)
+    # ISIN cuando exista; ticker u otra referencia estable si no. El nombre queda como
+    # último recurso para fichas que solo publican sus mayores posiciones.
+    underlying_identifier = models.CharField(max_length=64, blank=True, default="")
+    match_key = models.CharField(max_length=192, editable=False)
+    asset_class = models.CharField(max_length=24, choices=Instrument.AssetClass.choices)
+    geography = models.CharField(max_length=32, blank=True, default="")
+    sector = models.CharField(max_length=32, blank=True, default="")
+    percent = models.DecimalField(max_digits=6, decimal_places=3)
+    observed_on = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position_id", "-observed_on", "-percent", "underlying_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "match_key", "observed_on"],
+                name="portfolio_holding_snapshot_unique",
+            ),
+            models.CheckConstraint(
+                condition=Q(percent__gt=0) & Q(percent__lte=100),
+                name="portfolio_holding_percent_range",
+            ),
+        ]
+
+    def save(self, *args, **kwargs) -> None:
+        identity = self.underlying_identifier.strip().upper()
+        if identity:
+            self.match_key = f"id:{identity}"
+        else:
+            # Una clave de nombre no pretende ser una identificación de mercado: solo
+            # permite detectar la coincidencia cuando dos fichas usan el mismo texto.
+            self.match_key = "name:" + " ".join(self.underlying_name.casefold().split())
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.position_id}:{self.underlying_name}={self.percent}%@{self.observed_on}"
+
+
 class PositionClassBreakdown(models.Model):
     """Reparto interno de una posición entre varias clases de activo.
 

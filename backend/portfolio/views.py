@@ -38,6 +38,7 @@ from .models import (
     ContributionCommitment,
     PositionAllocationRule,
     PositionExposure,
+    PositionHolding,
     Instrument,
     InstrumentPrice,
     InstrumentProviderMapping,
@@ -57,6 +58,7 @@ from .serializers import (
     ContributionCommitmentSerializer,
     PositionAllocationRuleSerializer,
     PositionExposureSerializer,
+    PositionHoldingSerializer,
     InstrumentSerializer,
     InstrumentPriceSerializer,
     InstrumentProviderMappingSerializer,
@@ -1025,6 +1027,22 @@ class PositionExposureViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         rows = PositionExposure.objects.filter(
+            position__portfolio__user=self.request.user
+        ).select_related("position")
+        position_id = self.request.query_params.get("position_id")
+        if str(position_id or "").isdigit():
+            rows = rows.filter(position_id=int(position_id))
+        return rows
+
+
+class PositionHoldingViewSet(viewsets.ModelViewSet):
+    """Snapshots manuales de tenencias para el look-through de una posición."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = PositionHoldingSerializer
+
+    def get_queryset(self):
+        rows = PositionHolding.objects.filter(
             position__portfolio__user=self.request.user
         ).select_related("position")
         position_id = self.request.query_params.get("position_id")

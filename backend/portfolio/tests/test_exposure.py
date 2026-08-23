@@ -15,6 +15,7 @@ from portfolio.models import (
     Portfolio,
     PortfolioPosition,
     PositionExposure,
+    PositionHolding,
     PositionValuation,
 )
 
@@ -84,6 +85,19 @@ class ExposureFixture:
                 percent=Decimal(percent),
                 observed_on=date(2024, 11, 30),
             )
+
+    def hold(self, position, *, name, percent, observed_on=TODAY, identifier="", **details):
+        return PositionHolding.objects.create(
+            position=position,
+            underlying_name=name,
+            underlying_identifier=identifier,
+            asset_class=details.pop("asset_class", Instrument.AssetClass.EQUITY),
+            geography=details.pop("geography", ""),
+            sector=details.pop("sector", ""),
+            percent=Decimal(percent),
+            observed_on=observed_on,
+            **details,
+        )
 
 
 class ExposureTests(ExposureFixture, TestCase):
@@ -192,6 +206,88 @@ class ExposureTests(ExposureFixture, TestCase):
 
         self.assertEqual(overlap_percent(weights, dict(weights)), Decimal("100.00"))
 
+    def test_latest_holding_snapshot_replaces_the_old_one_only_after_its_date(self):
+        position = self.create_position("Robo", Decimal("10000"))
+        self.hold(
+            position,
+            name="Empresa europea",
+            percent="100",
+            observed_on=date(2024, 6, 1),
+            geography="europe",
+        )
+        self.hold(
+            position,
+            name="Empresa americana",
+            percent="100",
+            observed_on=date(2024, 12, 1),
+            geography="north_america",
+        )
+        PositionValuation.objects.create(
+            position=position,
+            valuation_date=date(2024, 11, 30),
+            value=Decimal("10000"),
+            currency="EUR",
+            source=PositionValuation.Source.MANUAL,
+        )
+
+        before = build_exposure(portfolio=self.portfolio, on_date=date(2024, 11, 30))
+        after = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+        before_rows = next(row for row in before["dimensions"] if row["dimension"] == "geography")[
+            "rows"
+        ]
+        after_rows = next(row for row in after["dimensions"] if row["dimension"] == "geography")[
+            "rows"
+        ]
+
+        self.assertEqual(before_rows[0]["bucket"], "europe")
+        self.assertEqual(after_rows[0]["bucket"], "north_america")
+
+    def test_holdings_take_priority_and_keep_partial_coverage_honest(self):
+        position = self.create_position("Fondo global", Decimal("10000"))
+        self.declare(
+            position,
+            PositionExposure.Dimension.GEOGRAPHY,
+            {"north_america": "70", "europe": "30"},
+        )
+        self.hold(position, name="Acción US", percent="40", geography="north_america")
+
+        result = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+        geography = next(row for row in result["dimensions"] if row["dimension"] == "geography")
+        classes = result["classes"]
+
+        self.assertEqual(Decimal(geography["covered_percent"]), Decimal("40.00"))
+        self.assertEqual(geography["source"], "holdings")
+        self.assertEqual(classes["source"], "holdings")
+        self.assertEqual(classes["rows"][0]["asset_class"], "equity")
+
+    def test_exact_overlap_uses_the_same_identified_underlying(self):
+        left = self.create_position("ETF mundo", Decimal("8000"))
+        right = self.create_position("Robo US", Decimal("4000"))
+        self.hold(
+            left,
+            name="NVIDIA Corporation",
+            identifier="US67066G1040",
+            percent="4",
+            geography="north_america",
+            sector="technology",
+        )
+        self.hold(
+            right,
+            name="NVIDIA CORP",
+            identifier="US67066G1040",
+            percent="6",
+            geography="north_america",
+            sector="technology",
+        )
+
+        result = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+
+        self.assertEqual(len(result["holding_overlap"]), 1)
+        overlap = result["holding_overlap"][0]
+        self.assertEqual(overlap["underlying_identifier"], "US67066G1040")
+        self.assertEqual(Decimal(overlap["percent"]), Decimal("4.00"))
+        self.assertEqual(Decimal(overlap["shared_value"]), Decimal("160.00"))
+
 
 class ExposureApiTests(ExposureFixture, APITestCase):
     def setUp(self):
@@ -244,3 +340,40 @@ class ExposureApiTests(ExposureFixture, APITestCase):
         self.assertEqual(mine.status_code, status.HTTP_200_OK, mine.data)
         self.assertEqual(Decimal(mine.data["total_value"]), Decimal("10000.00"))
         self.assertEqual(Decimal(theirs.data["total_value"]), Decimal("0.00"))
+
+    def test_holding_snapshot_is_written_and_read_back(self):
+        created = self.client.post(
+            "/api/portfolio/holdings/",
+            {
+                "position_id": self.position.id,
+                "underlying_name": "NVIDIA Corporation",
+                "underlying_identifier": "US67066G1040",
+                "asset_class": "equity",
+                "geography": "north_america",
+                "sector": "technology",
+                "percent": "4",
+                "observed_on": "2024-11-30",
+            },
+            format="json",
+        )
+        listed = self.client.get(f"/api/portfolio/holdings/?position_id={self.position.id}")
+
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        self.assertEqual(len(listed.data), 1)
+
+    def test_holding_snapshot_cannot_exceed_one_hundred_percent(self):
+        self.hold(self.position, name="Uno", percent="70", observed_on=date(2024, 11, 30))
+
+        response = self.client.post(
+            "/api/portfolio/holdings/",
+            {
+                "position_id": self.position.id,
+                "underlying_name": "Dos",
+                "asset_class": "equity",
+                "percent": "40",
+                "observed_on": "2024-11-30",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)

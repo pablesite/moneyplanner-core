@@ -17,7 +17,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from .models import PositionExposure, Portfolio
+from .models import PositionClassBreakdown, PositionExposure, PositionHolding, Portfolio
 from .performance import (
     PerformanceContext,
     _position_value_base,
@@ -51,6 +51,21 @@ def _values(*, context: PerformanceContext, on_date: date) -> dict[int, Decimal]
 
 def _weights(rows: list[PositionExposure]) -> dict[str, Decimal]:
     return {row.bucket: row.percent for row in rows}
+
+
+def _current_holdings(*, position_ids: set[int], on_date: date) -> dict[int, list[PositionHolding]]:
+    """La última ficha disponible a la fecha de consulta, agrupada por posición."""
+    rows = PositionHolding.objects.filter(
+        position_id__in=position_ids,
+        observed_on__lte=on_date,
+    ).order_by("position_id", "-observed_on", "-percent", "id")
+    snapshots: dict[int, date] = {}
+    selected: dict[int, list[PositionHolding]] = {}
+    for row in rows:
+        current = snapshots.setdefault(row.position_id, row.observed_on)
+        if row.observed_on == current:
+            selected.setdefault(row.position_id, []).append(row)
+    return selected
 
 
 def overlap_percent(left: dict[str, Decimal], right: dict[str, Decimal]) -> Decimal:
@@ -88,12 +103,37 @@ def build_exposure(
     for row in PositionExposure.objects.filter(position_id__in=list(values)):
         rows_by_position.setdefault(row.position_id, {}).setdefault(row.dimension, []).append(row)
 
+    holdings_by_position = _current_holdings(position_ids=set(values), on_date=on_date)
+
     dimensions = []
     for dimension, label in PositionExposure.Dimension.choices:
         buckets: dict[str, Decimal] = {}
         covered = ZERO
         oldest: date | None = None
+        holding_positions = 0
+        manual_positions = 0
         for position_id, value in values.items():
+            holdings = holdings_by_position.get(position_id, [])
+            holding_rows = (
+                [row for row in holdings if getattr(row, dimension, "")]
+                if dimension in RISK_DIMENSIONS
+                else []
+            )
+            if holding_rows:
+                declared = sum((row.percent for row in holding_rows), ZERO)
+                covered += value * min(declared, Decimal("100")) / Decimal("100")
+                for row in holding_rows:
+                    bucket = getattr(row, dimension)
+                    buckets[bucket] = buckets.get(bucket, ZERO) + value * row.percent / Decimal(
+                        "100"
+                    )
+                oldest = (
+                    holding_rows[0].observed_on
+                    if oldest is None
+                    else min(oldest, holding_rows[0].observed_on)
+                )
+                holding_positions += 1
+                continue
             rows = rows_by_position.get(position_id, {}).get(dimension, [])
             if not rows:
                 continue
@@ -109,6 +149,7 @@ def build_exposure(
                 )
             for row in rows:
                 oldest = row.observed_on if oldest is None else min(oldest, row.observed_on)
+            manual_positions += 1
         coverage = (covered / total * Decimal("100")) if total else ZERO
         # El reparto se calcula sobre lo cubierto, no sobre el total: si no, todo sale
         # mas pequeno de lo que es y las partes no suman cien.
@@ -121,6 +162,7 @@ def build_exposure(
                 "covered_percent": str(coverage.quantize(CENT)),
                 "covered_value": str(covered.quantize(CENT)),
                 "observed_from": oldest.isoformat() if oldest else None,
+                "source": _source_label(holding_positions, manual_positions),
                 "rows": sorted(
                     (
                         {
@@ -144,8 +186,90 @@ def build_exposure(
         "total_value": str(total.quantize(CENT)),
         "position_count": len(values),
         "dimensions": dimensions,
+        "classes": _classes(
+            values=values,
+            positions={position.id: position for position in context.positions},
+            holdings_by_position=holdings_by_position,
+        ),
         "concentration": _concentration(values=values, names=names, total=total),
         "overlap": _overlap(values=values, names=names, rows_by_position=rows_by_position),
+        "holding_overlap": _holding_overlap(
+            values=values,
+            names=names,
+            holdings_by_position=holdings_by_position,
+        ),
+    }
+
+
+def _source_label(holding_positions: int, manual_positions: int) -> str:
+    if holding_positions and manual_positions:
+        return "mixed"
+    if holding_positions:
+        return "holdings"
+    return "manual"
+
+
+def _classes(
+    *,
+    values: dict[int, Decimal],
+    positions: dict[int, Any],
+    holdings_by_position: dict[int, list[PositionHolding]],
+) -> dict[str, Any]:
+    """Composición por clase: tenencias primero, desglose manual después."""
+    breakdowns: dict[int, list[PositionClassBreakdown]] = {}
+    for row in PositionClassBreakdown.objects.filter(position_id__in=list(values)):
+        breakdowns.setdefault(row.position_id, []).append(row)
+    buckets: dict[str, Decimal] = {}
+    covered = ZERO
+    holdings_positions = 0
+    manual_positions = 0
+    for position_id, value in values.items():
+        holdings = holdings_by_position.get(position_id, [])
+        if holdings:
+            declared = sum((row.percent for row in holdings), ZERO)
+            for row in holdings:
+                buckets[row.asset_class] = buckets.get(
+                    row.asset_class, ZERO
+                ) + value * row.percent / Decimal("100")
+            covered += value * min(declared, Decimal("100")) / Decimal("100")
+            holdings_positions += 1
+            continue
+        rows = breakdowns.get(position_id, [])
+        if rows:
+            for row in rows:
+                buckets[row.asset_class] = buckets.get(
+                    row.asset_class, ZERO
+                ) + value * row.percent / Decimal("100")
+            covered += value
+            manual_positions += 1
+            continue
+        buckets[positions[position_id].effective_asset_class] = (
+            buckets.get(positions[position_id].effective_asset_class, ZERO) + value
+        )
+        covered += value
+        manual_positions += 1
+    base = sum(buckets.values(), ZERO)
+    total = sum(values.values(), ZERO)
+    return {
+        "status": _coverage_status((covered / total * Decimal("100")) if total else ZERO),
+        "covered_percent": str(
+            ((covered / total * Decimal("100")) if total else ZERO).quantize(CENT)
+        ),
+        "source": _source_label(holdings_positions, manual_positions),
+        "rows": sorted(
+            (
+                {
+                    "asset_class": asset_class,
+                    "value": str(value.quantize(CENT)),
+                    "percent": str((value / base * Decimal("100")).quantize(CENT))
+                    if base
+                    else "0.00",
+                }
+                for asset_class, value in buckets.items()
+            ),
+            key=lambda item: Decimal(item["percent"]),
+            reverse=True,
+        ),
     }
 
 
@@ -240,3 +364,44 @@ def _overlap(
                     }
                 )
     return sorted(pairs, key=lambda row: Decimal(row["percent"]), reverse=True)[:12]
+
+
+def _holding_overlap(
+    *,
+    values: dict[int, Decimal],
+    names: dict[int, str],
+    holdings_by_position: dict[int, list[PositionHolding]],
+) -> list[dict[str, Any]]:
+    """Solapamiento verificable: la misma acción o bono en dos productos."""
+    by_key: dict[str, list[PositionHolding]] = {}
+    for rows in holdings_by_position.values():
+        for row in rows:
+            by_key.setdefault(row.match_key, []).append(row)
+    pairs: list[dict[str, Any]] = []
+    for key, rows in by_key.items():
+        if len(rows) < 2:
+            continue
+        for index, left in enumerate(rows):
+            for right in rows[index + 1 :]:
+                if left.position_id == right.position_id:
+                    continue
+                shared = min(left.percent, right.percent)
+                pairs.append(
+                    {
+                        "left_id": left.position_id,
+                        "left_name": names.get(left.position_id, ""),
+                        "right_id": right.position_id,
+                        "right_name": names.get(right.position_id, ""),
+                        "underlying_name": left.underlying_name,
+                        "underlying_identifier": left.underlying_identifier or None,
+                        "percent": str(shared.quantize(CENT)),
+                        "shared_value": str(
+                            (
+                                min(values[left.position_id], values[right.position_id])
+                                * shared
+                                / Decimal("100")
+                            ).quantize(CENT)
+                        ),
+                    }
+                )
+    return sorted(pairs, key=lambda row: Decimal(row["shared_value"]), reverse=True)[:12]
