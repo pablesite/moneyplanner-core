@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.47.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.46.0...moneyplanner-core-v0.47.0) (2026-08-23)
+
+
+### Features
+
+* **accounting:** a traspaso between funds pays two commissions, not one ([ac94a6a](https://github.com/pablesite/moneyplanner-core/commit/ac94a6a15d4d40dd596e45b6523e4c5be79939d8))
+* **accounting:** correct a commission where it was registered, and reconcile what drifts ([31334c6](https://github.com/pablesite/moneyplanner-core/commit/31334c64f9d21327ba543a6e7b831e1824ecf853))
+* **accounting:** register the broker fee with the investment movement ([1209583](https://github.com/pablesite/moneyplanner-core/commit/12095832551b0fab9aacfb5d6929dc33f2f41039))
+* **portfolio:** add holdings look-through ([47c5159](https://github.com/pablesite/moneyplanner-core/commit/47c51592bb1e3cffb915d1141ee5a4d5a3597875))
+* **portfolio:** clarify sector coverage ([6b2a102](https://github.com/pablesite/moneyplanner-core/commit/6b2a1029d1451bb97eedf254dc69b013d2c68241))
+* **portfolio:** count whose coins are in the pot, not what percentage of it ([7dc88d9](https://github.com/pablesite/moneyplanner-core/commit/7dc88d9982e81a2b86595927a5ec93c0cc74cc89))
+* **portfolio:** distinguish crowdlending exposure ([5daf029](https://github.com/pablesite/moneyplanner-core/commit/5daf0291f4942fe710af7e1427d07aabf3ab33d5))
+* **portfolio:** expose historical benchmark annualization ([635e426](https://github.com/pablesite/moneyplanner-core/commit/635e4262ae06f519ff4f30bcfca224df7003f0bc))
+* **portfolio:** expose historical return series ([250a1c0](https://github.com/pablesite/moneyplanner-core/commit/250a1c059a6b21fca4bc97c8e5677cfff18a5bfe))
+* **portfolio:** integrate alerts with plan ([7a4945f](https://github.com/pablesite/moneyplanner-core/commit/7a4945f1319f69bfd6313ef28c49fe20915177b6))
+* **portfolio:** measure the portfolio against its own policy, and its risk ([30186fa](https://github.com/pablesite/moneyplanner-core/commit/30186fae2814721486460d1ce18a3bedfed1ee33))
+* **portfolio:** read a holding as one thread across the custodians it lived in ([3c7dda5](https://github.com/pablesite/moneyplanner-core/commit/3c7dda56c9e878d45ee6c625d55231e90a930f0b))
+* **portfolio:** repair a commingled pot whose ledger says what did not happen ([0edfeca](https://github.com/pablesite/moneyplanner-core/commit/0edfecae86e848132b83ad9caa620b070e547581))
+
+
+### Bug Fixes
+
+* **budget:** backfill the ownership FK for shared lines left as free text ([7670ebd](https://github.com/pablesite/moneyplanner-core/commit/7670ebdfdda43a7e9d17dc66264496843b3b7fa0))
+* **portfolio:** align scoped timeline contributions ([96708d8](https://github.com/pablesite/moneyplanner-core/commit/96708d8eddf86889d38cc588c1b490b55898552c))
+* **portfolio:** attribute mixed-pot flows to their ledger owner ([fce9223](https://github.com/pablesite/moneyplanner-core/commit/fce92238b503c07e6841121983b0443efb5e2e66))
+* **portfolio:** backfill pablesite policy history ([dc14340](https://github.com/pablesite/moneyplanner-core/commit/dc1434018b21739791c67b731be8ed8dcbb4953f))
+* **portfolio:** filtering by member splits the portfolio instead of inventing money ([e06b25e](https://github.com/pablesite/moneyplanner-core/commit/e06b25ed9ed600374e172989b1d74dd952b922c5))
+* **portfolio:** harden decision metrics ([78fdc84](https://github.com/pablesite/moneyplanner-core/commit/78fdc847cc8cb0b3bdd024f6136ef3681dbf546a))
+* **portfolio:** model pablesite liquidity transition ([3f69aeb](https://github.com/pablesite/moneyplanner-core/commit/3f69aeb2b09b7feaf8ee2a577491d3c03effa38a))
+
 ## [0.46.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.45.0...moneyplanner-core-v0.46.0) (2026-08-20)
 
 
