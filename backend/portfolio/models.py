@@ -524,6 +524,7 @@ class PositionExposure(models.Model):
         PENSION_PLAN = "pension_plan", "Plan de pensiones"
         DIRECT_EQUITY = "direct_equity", "Acciones directas"
         CROWDFUNDING = "crowdfunding", "Crowdfunding"
+        CROWDLENDING = "crowdlending", "Crowdlending"
         CRYPTO = "crypto", "Criptoactivo"
         DEPOSIT = "deposit", "Depósito"
         OTHER = "other", "Otros"
