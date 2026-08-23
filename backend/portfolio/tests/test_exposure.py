@@ -34,7 +34,13 @@ class ExposureFixture:
             container_type=InvestmentContainer.ContainerType.BANK,
         )
 
-    def create_position(self, name: str, value: Decimal) -> PortfolioPosition:
+    def create_position(
+        self,
+        name: str,
+        value: Decimal,
+        *,
+        asset_class: str = Instrument.AssetClass.EQUITY,
+    ) -> PortfolioPosition:
         asset = Asset.objects.create(
             user=self.user,
             name=name,
@@ -48,7 +54,7 @@ class ExposureFixture:
             user=self.user,
             name=name,
             identity_kind=Instrument.IdentityKind.CUSTOM,
-            asset_class=Instrument.AssetClass.EQUITY,
+            asset_class=asset_class,
             instrument_type=Instrument.InstrumentType.FUND,
             quote_currency="EUR",
         )
@@ -142,6 +148,36 @@ class ExposureTests(ExposureFixture, TestCase):
         geography = next(row for row in result["dimensions"] if row["dimension"] == "geography")
 
         self.assertEqual(Decimal(geography["covered_percent"]), Decimal("90.00"))
+
+    def test_sector_coverage_also_reports_the_equity_eligible_universe(self):
+        equity = self.create_position("Indexado global", Decimal("6000"))
+        self.create_position(
+            "Bitcoin",
+            Decimal("4000"),
+            asset_class=Instrument.AssetClass.CRYPTO,
+        )
+        self.declare(equity, PositionExposure.Dimension.SECTOR, {"technology": "100"})
+
+        result = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+        sector = next(row for row in result["dimensions"] if row["dimension"] == "sector")
+
+        self.assertEqual(Decimal(sector["covered_percent"]), Decimal("60.00"))
+        self.assertEqual(Decimal(sector["applicable_percent"]), Decimal("60.00"))
+        self.assertEqual(Decimal(sector["applicable_covered_percent"]), Decimal("100.00"))
+        self.assertEqual(sector["applicable_status"], "ready")
+
+    def test_sector_eligibility_uses_the_instrument_not_the_trading_mandate(self):
+        covered = self.create_position("Indexado global", Decimal("6000"))
+        trading = self.create_position("Acciones tácticas", Decimal("4000"))
+        trading.asset_class_override = Instrument.AssetClass.TRADING
+        trading.save(update_fields=["asset_class_override"])
+        self.declare(covered, PositionExposure.Dimension.SECTOR, {"technology": "100"})
+
+        result = build_exposure(portfolio=self.portfolio, on_date=TODAY)
+        sector = next(row for row in result["dimensions"] if row["dimension"] == "sector")
+
+        self.assertEqual(Decimal(sector["applicable_percent"]), Decimal("100.00"))
+        self.assertEqual(Decimal(sector["applicable_covered_percent"]), Decimal("60.00"))
 
     def test_two_products_bought_as_different_things_show_their_overlap(self):
         # La pregunta que se hace uno mirando el indexado global y el fondo US del

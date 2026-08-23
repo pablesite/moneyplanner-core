@@ -17,7 +17,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from .models import PositionClassBreakdown, PositionExposure, PositionHolding, Portfolio
+from .models import Instrument, PositionClassBreakdown, PositionExposure, PositionHolding, Portfolio
 from .performance import (
     PerformanceContext,
     _position_value_base,
@@ -98,22 +98,35 @@ def build_exposure(
         values = {key: value for key, value in values.items() if key in scope_ids}
     total = sum(values.values(), ZERO)
     names = {position.id: position.asset.name for position in context.positions}
+    positions = {position.id: position for position in context.positions}
 
     rows_by_position: dict[int, dict[str, list[PositionExposure]]] = {}
     for row in PositionExposure.objects.filter(position_id__in=list(values)):
         rows_by_position.setdefault(row.position_id, {}).setdefault(row.dimension, []).append(row)
 
     holdings_by_position = _current_holdings(position_ids=set(values), on_date=on_date)
+    class_breakdowns: dict[int, list[PositionClassBreakdown]] = {}
+    for row in PositionClassBreakdown.objects.filter(position_id__in=list(values)):
+        class_breakdowns.setdefault(row.position_id, []).append(row)
 
     dimensions = []
     for dimension, label in PositionExposure.Dimension.choices:
         buckets: dict[str, Decimal] = {}
         covered = ZERO
+        applicable = ZERO
+        applicable_covered = ZERO
         oldest: date | None = None
         holding_positions = 0
         manual_positions = 0
         for position_id, value in values.items():
             holdings = holdings_by_position.get(position_id, [])
+            applicable_percent = _applicable_percent(
+                dimension=dimension,
+                position=positions[position_id],
+                holdings=holdings,
+                class_breakdown=class_breakdowns.get(position_id, []),
+            )
+            applicable += value * applicable_percent / Decimal("100")
             holding_rows = (
                 [row for row in holdings if getattr(row, dimension, "")]
                 if dimension in RISK_DIMENSIONS
@@ -122,6 +135,7 @@ def build_exposure(
             if holding_rows:
                 declared = sum((row.percent for row in holding_rows), ZERO)
                 covered += value * min(declared, Decimal("100")) / Decimal("100")
+                applicable_covered += value * min(declared, applicable_percent) / Decimal("100")
                 for row in holding_rows:
                     bucket = getattr(row, dimension)
                     buckets[bucket] = buckets.get(bucket, ZERO) + value * row.percent / Decimal(
@@ -143,6 +157,7 @@ def build_exposure(
             # Se cuenta como cubierto lo que el usuario declaro, no la posicion entera:
             # una ficha que reparte el 90% y calla el resto no cubre ese resto.
             covered += value * min(declared, Decimal("100")) / Decimal("100")
+            applicable_covered += value * min(declared, applicable_percent) / Decimal("100")
             for row in rows:
                 buckets[row.bucket] = buckets.get(row.bucket, ZERO) + value * row.percent / (
                     Decimal("100")
@@ -151,6 +166,9 @@ def build_exposure(
                 oldest = row.observed_on if oldest is None else min(oldest, row.observed_on)
             manual_positions += 1
         coverage = (covered / total * Decimal("100")) if total else ZERO
+        applicable_coverage = (
+            (applicable_covered / applicable * Decimal("100")) if applicable else ZERO
+        )
         # El reparto se calcula sobre lo cubierto, no sobre el total: si no, todo sale
         # mas pequeno de lo que es y las partes no suman cien.
         base = sum(buckets.values(), ZERO)
@@ -161,6 +179,29 @@ def build_exposure(
                 "status": _coverage_status(coverage),
                 "covered_percent": str(coverage.quantize(CENT)),
                 "covered_value": str(covered.quantize(CENT)),
+                # El sector solo describe renta variable. La cobertura total sigue siendo
+                # la lectura conservadora, pero esta segunda base evita castigar oro,
+                # deuda privada o cripto por no tener una clasificación sectorial.
+                "applicable_percent": (
+                    str((applicable / total * Decimal("100")).quantize(CENT))
+                    if dimension == PositionExposure.Dimension.SECTOR and total
+                    else None
+                ),
+                "applicable_value": (
+                    str(applicable.quantize(CENT))
+                    if dimension == PositionExposure.Dimension.SECTOR
+                    else None
+                ),
+                "applicable_covered_percent": (
+                    str(applicable_coverage.quantize(CENT))
+                    if dimension == PositionExposure.Dimension.SECTOR
+                    else None
+                ),
+                "applicable_status": (
+                    _coverage_status(applicable_coverage)
+                    if dimension == PositionExposure.Dimension.SECTOR
+                    else None
+                ),
                 "observed_from": oldest.isoformat() if oldest else None,
                 "source": _source_label(holding_positions, manual_positions),
                 "rows": sorted(
@@ -199,6 +240,53 @@ def build_exposure(
             holdings_by_position=holdings_by_position,
         ),
     }
+
+
+def _applicable_percent(
+    *,
+    dimension: str,
+    position: Any,
+    holdings: list[PositionHolding],
+    class_breakdown: list[PositionClassBreakdown],
+) -> Decimal:
+    """Qué parte de una posición admite una dimensión sin forzar una clasificación.
+
+    Geografía y vehículo pueden describir cualquier activo. Un sector bursátil solo
+    describe renta variable; las tenencias son la fuente prioritaria y el desglose de
+    clases conserva ese criterio en fondos mixtos sin una ficha completa.
+    """
+    if dimension != PositionExposure.Dimension.SECTOR:
+        return Decimal("100")
+    if holdings:
+        return min(
+            sum(
+                (
+                    row.percent
+                    for row in holdings
+                    if row.asset_class == Instrument.AssetClass.EQUITY
+                ),
+                ZERO,
+            ),
+            Decimal("100"),
+        )
+    if class_breakdown:
+        return min(
+            sum(
+                (
+                    row.percent
+                    for row in class_breakdown
+                    if row.asset_class == Instrument.AssetClass.EQUITY
+                ),
+                ZERO,
+            ),
+            Decimal("100"),
+        )
+    # `trading` es un mandato de composición, no la naturaleza del instrumento. Una
+    # acción mantenida como satélite sigue siendo sectorizable aunque la cartera la
+    # agrupe visualmente bajo Trading.
+    return (
+        Decimal("100") if position.instrument.asset_class == Instrument.AssetClass.EQUITY else ZERO
+    )
 
 
 def _source_label(holding_positions: int, manual_positions: int) -> str:
