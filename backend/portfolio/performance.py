@@ -64,6 +64,13 @@ class FlowRecord:
     # En un bote mezclado la titularidad del asiento, no el saldo al cierre del dia,
     # decide a quien pertenece una compra o una venta concreta.
     ownership_id: int | None = None
+    # Una compra puede llegar a la posición de un hijo desde el efectivo de su padre.
+    # Esta contrapartida permite tratarla como una aportación entre titulares, no como una
+    # reinversión de Lucas dentro de su cartera.
+    counterpart_cash_account_id: int | None = None
+    # En una reinversión, la otra posición evita que un filtro que contiene ambas patas
+    # convierta un traspaso interno en una falsa aportación por diferencias de divisa.
+    counterpart_position_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -230,6 +237,9 @@ def _load_ledger_flows(
                     transaction.investment_direction
                     == LedgerTransaction.InvestmentDirection.REINVESTMENT
                 ):
+                    counterpart = next(
+                        (entry for entry in entries if entry.account_id != account_id), None
+                    )
                     signed_amount = (
                         position_entry.amount
                         if position_entry.side == LedgerEntry.Side.DEBIT
@@ -247,6 +257,13 @@ def _load_ledger_flows(
                             position_external=True,
                             realized_pnl=transaction.realized_gain_loss,
                             ownership_id=transaction.ownership_id,
+                            counterpart_position_id=(
+                                account_to_position.get(
+                                    counterpart.account_id if counterpart else None
+                                ).id
+                                if counterpart and counterpart.account_id in account_to_position
+                                else None
+                            ),
                         )
                     )
                     continue
@@ -301,6 +318,11 @@ def _load_ledger_flows(
                         income=counterpart.amount if is_return_income else ZERO,
                         realized_pnl=transaction.realized_gain_loss,
                         ownership_id=transaction.ownership_id,
+                        counterpart_cash_account_id=(
+                            counterpart.account_id
+                            if counterpart.account_id in cash_account_ids
+                            else None
+                        ),
                     )
                 )
             elif transaction.quick_entry_kind == LedgerTransaction.QuickEntryKind.EXPENSE:
@@ -1101,6 +1123,47 @@ def _flow_base(
     )
 
 
+def _external_flow_amount(
+    *,
+    context: PerformanceContext,
+    flow: FlowRecord,
+    member_id: int | None,
+    scope: set[int] | None,
+) -> Decimal | None:
+    """El flujo externo atribuible a esta vista de cartera.
+
+    La posición determina el beneficiario de una compra. Si el efectivo de Pablo compra ETH
+    de Lucas, Lucas recibe una aportación y Pablo una salida patrimonial; el total familiar
+    se anula. Un filtro de clase describe solo la posición, no su contrapartida de efectivo.
+    """
+    if scope is not None and flow.counterpart_position_id in scope:
+        return None
+    is_external = flow.position_external if scope is not None else flow.external
+    position_amount = _flow_base(context=context, flow=flow, member_id=member_id)
+    if is_external:
+        return position_amount
+    if member_id is None or scope is not None or flow.counterpart_cash_account_id is None:
+        return None
+    cash_factor = _cash_ownership_factor(
+        context=context,
+        account_id=flow.counterpart_cash_account_id,
+        member_id=member_id,
+    )
+    if cash_factor in (None, ZERO) and position_amount is None:
+        return None
+    cash_amount = _to_base(
+        context=context,
+        amount=-flow.amount * (cash_factor or ZERO),
+        currency=flow.currency,
+        target=flow.on_date,
+    )
+    if position_amount is None:
+        return cash_amount
+    if cash_amount is None:
+        return position_amount
+    return position_amount + cash_amount
+
+
 def _cash_value_base(
     *, context: PerformanceContext, target: date, member_id: int | None
 ) -> tuple[Decimal | None, bool]:
@@ -1352,9 +1415,12 @@ def _metric_block(
             currency=flow.currency,
             target=flow.on_date,
         )
-        is_external = flow.position_external if scope is not None else flow.external
-        if is_external and base_amount is not None:
-            external.append(DatedAmount(flow.on_date, base_amount))
+        external_amount = _external_flow_amount(
+            context=context, flow=flow, member_id=member_id, scope=scope
+        )
+        is_external = external_amount is not None and external_amount != ZERO
+        if is_external:
+            external.append(DatedAmount(flow.on_date, external_amount))
         if cost_base is not None:
             costs += cost_base
         if income_base is not None:
@@ -1381,7 +1447,7 @@ def _metric_block(
                 "portfolio_external": flow.external,
                 "amount_native": _quantize(flow.amount),
                 "currency": flow.currency,
-                "amount_base": _quantize(base_amount),
+                "amount_base": _quantize(external_amount if is_external else base_amount),
             }
         )
     ownership_flow_complete = _append_ownership_flows(
@@ -1755,10 +1821,11 @@ def _timeline_returns(
             and start_date < flow.on_date <= end_date
         ):
             continue
-        is_external = flow.position_external if scope is not None else flow.external
-        base_amount = _flow_base(context=context, flow=flow, member_id=member_id)
-        if is_external and base_amount is not None:
-            external.append(DatedAmount(flow.on_date, base_amount))
+        external_amount = _external_flow_amount(
+            context=context, flow=flow, member_id=member_id, scope=scope
+        )
+        if external_amount is not None and external_amount != ZERO:
+            external.append(DatedAmount(flow.on_date, external_amount))
     ownership_complete = _append_ownership_flows(
         context=context,
         positions=selected_positions,
@@ -1861,11 +1928,8 @@ def build_portfolio_timeline(
     rows = []
     # Con un filtro de inventario activo la serie describe ese subconjunto, así que los
     # flujos del efectivo del contenedor —que no es de ninguna clase— quedan fuera.
-    external = [
-        flow
-        for flow in context.flows
-        if (flow.position_external if scope_ids is not None else flow.external)
-        and (scope_ids is None or flow.position_id in scope_ids)
+    selected_flow_rows = [
+        flow for flow in context.flows if scope_ids is None or flow.position_id in scope_ids
     ]
     selected_positions = (
         [position for position in context.positions if position.id in scope_ids]
@@ -1895,8 +1959,9 @@ def build_portfolio_timeline(
     )
     contributed_before = sum(
         (
-            _flow_base(context=context, flow=flow, member_id=member_id) or ZERO
-            for flow in external
+            _external_flow_amount(context=context, flow=flow, member_id=member_id, scope=scope_ids)
+            or ZERO
+            for flow in selected_flow_rows
             if flow.on_date <= start_date
         ),
         ZERO,
@@ -1907,8 +1972,11 @@ def build_portfolio_timeline(
         )
         cumulative = sum(
             (
-                _flow_base(context=context, flow=flow, member_id=member_id) or ZERO
-                for flow in external
+                _external_flow_amount(
+                    context=context, flow=flow, member_id=member_id, scope=scope_ids
+                )
+                or ZERO
+                for flow in selected_flow_rows
                 if start_date < flow.on_date <= target
             ),
             ZERO,

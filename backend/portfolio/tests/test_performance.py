@@ -1076,6 +1076,102 @@ class ContainerCashOwnershipTests(APITestCase):
         self.assertEqual(mine.data["closing_value"], "50.00000000")
         self.assertFalse(self.quality_for(self.member)["cash_ownership_missing"])
 
+    def test_child_purchase_paid_from_parent_cash_is_the_childs_contribution(self):
+        """El pagador del DCA no cambia quién recibe ni quién rentabiliza el activo."""
+        child = FamilyMember.objects.create(
+            user=self.user, name="Hijo", role=FamilyMember.Role.CHILD
+        )
+        child_ownership = Ownership.objects.create(
+            user=self.user, kind=Ownership.Kind.INDIVIDUAL, member=child
+        )
+        self.link_cash_to(self.ownership)
+        asset = Asset.objects.create(
+            user=self.user,
+            name="ETH del hijo",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.CRYPTOCURRENCIES,
+            currency="EUR",
+            amount=Decimal("50"),
+            start_date=date(2024, 1, 1),
+        )
+        position_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="ETH del hijo",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=asset,
+        )
+        instrument = Instrument.objects.create(
+            user=self.user,
+            name="ETH",
+            identity_kind=Instrument.IdentityKind.CUSTOM,
+            asset_class=Instrument.AssetClass.CRYPTO,
+            instrument_type=Instrument.InstrumentType.CRYPTO,
+            quote_currency="EUR",
+        )
+        position = PortfolioPosition.objects.create(
+            portfolio=self.portfolio,
+            container=self.container,
+            instrument=instrument,
+            asset=asset,
+            ledger_account=position_account,
+            tracking_style=PortfolioPosition.TrackingStyle.VALUE_BASED,
+            status=PortfolioPosition.Status.ACTIVE,
+            opened_on=date(2024, 1, 1),
+        )
+        period = PositionOwnershipPeriod.objects.create(
+            position=position, ownership=child_ownership, start_date=date(2024, 1, 1)
+        )
+        PositionOwnershipShare.objects.create(period=period, member=child, percent=Decimal("100"))
+        PositionValuation.objects.create(
+            position=position,
+            valuation_date=date(2024, 1, 1),
+            value=Decimal("0"),
+            currency="EUR",
+        )
+        PositionValuation.objects.create(
+            position=position,
+            valuation_date=date(2024, 12, 31),
+            value=Decimal("50"),
+            currency="EUR",
+        )
+        purchase = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2024, 7, 1),
+            value_date=date(2024, 7, 1),
+            description="DCA para el hijo",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+            ownership=child_ownership,
+        )
+        LedgerEntry.objects.create(
+            transaction=purchase,
+            account=position_account,
+            asset=asset,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("50"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=purchase,
+            account=self.cash_ledger,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("50"),
+            currency="EUR",
+        )
+
+        query = f"?date_from=2024-01-01&date_to=2024-12-31&member_id={child.id}"
+        total = self.client.get(f"/api/portfolio/performance/{query}")
+        crypto = self.client.get(f"/api/portfolio/workspace/{query}&asset_class=crypto")
+
+        self.assertEqual(total.status_code, status.HTTP_200_OK, total.data)
+        self.assertEqual(crypto.status_code, status.HTTP_200_OK, crypto.data)
+        self.assertEqual(total.data["net_contributed"], "50.00000000")
+        self.assertEqual(crypto.data["performance"]["net_contributed"], "50.00000000")
+        self.assertEqual(
+            crypto.data["timeline"]["results"][-1]["contributed_to_date"], "50.00000000"
+        )
+
 
 class HoldingThreadTests(APITestCase):
     """El mismo activo bajo la misma titularidad, aunque cambie de custodio."""
