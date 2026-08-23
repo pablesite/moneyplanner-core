@@ -548,6 +548,12 @@ class AllocationStrategySerializer(serializers.ModelSerializer):
     )
     targets = AllocationTargetSerializer(many=True)
     target_total = serializers.SerializerMethodField()
+    benchmark_instrument_id = serializers.PrimaryKeyRelatedField(
+        source="benchmark_instrument",
+        queryset=Instrument.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = AllocationStrategy
@@ -556,6 +562,7 @@ class AllocationStrategySerializer(serializers.ModelSerializer):
             "ownership_id",
             "effective_from",
             "note",
+            "benchmark_instrument_id",
             "max_cost_share",
             "min_line_amount",
             "targets",
@@ -575,6 +582,7 @@ class AllocationStrategySerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         user = _request_user(self.context)
         fields["ownership_id"].queryset = Ownership.objects.filter(user=user)
+        fields["benchmark_instrument_id"].queryset = Instrument.objects.filter(user=user)
         return fields
 
     def validate_targets(self, value: list[dict]) -> list[dict]:

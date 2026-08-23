@@ -204,6 +204,19 @@ class StrategicBenchmarkTests(BenchmarkFixture, TestCase):
             result["benchmark_annualized_return"]["observations"], len(self.boundaries) - 1
         )
 
+    def test_rolling_comparison_only_uses_equivalent_twelve_month_windows(self):
+        self.strategy_version(date(2024, 1, 1), {"equity": "100"})
+
+        result = self.benchmark()
+
+        rolling = result["rolling"]
+        self.assertEqual(rolling["window_months"], 12)
+        self.assertEqual(len(rolling["points"]), 1)
+        self.assertEqual(rolling["complete_windows"], 1)
+        self.assertEqual(rolling["points"][0]["period"], "2026-01")
+        self.assertIsNotNone(rolling["points"][0]["portfolio"])
+        self.assertIsNotNone(rolling["points"][0]["benchmark"])
+
 
 class SecondaryBenchmarkTests(BenchmarkFixture, TestCase):
     def index_instrument(self, currency: str = "EUR") -> Instrument:
@@ -255,6 +268,48 @@ class SecondaryBenchmarkTests(BenchmarkFixture, TestCase):
 
         self.assertEqual(result["secondary"]["reason"], "currency_mismatch")
 
+    def test_risk_uses_the_configured_index_for_beta_and_correlation(self):
+        strategy = self.strategy_version(date(2024, 1, 1), {"equity": "100"})
+        instrument = self.index_instrument()
+        strategy.benchmark_instrument = instrument
+        strategy.save(update_fields=["benchmark_instrument"])
+        close = Decimal("100")
+        factors = [
+            Decimal("1.01"),
+            Decimal("0.99"),
+            Decimal("1.02"),
+            Decimal("0.98"),
+            Decimal("1.03"),
+            Decimal("1.00"),
+            Decimal("0.97"),
+            Decimal("1.04"),
+            Decimal("1.01"),
+            Decimal("0.99"),
+            Decimal("1.02"),
+            Decimal("1.01"),
+        ]
+        for index, target in enumerate(self.boundaries):
+            InstrumentPrice.objects.create(
+                instrument=instrument,
+                price_date=target,
+                close=close,
+                currency="EUR",
+                fetched_at=timezone.now(),
+            )
+            if index < len(factors):
+                close *= factors[index]
+
+        result = build_portfolio_risk(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            start_date=START,
+            end_date=END,
+        )
+
+        self.assertEqual(result["advanced"]["beta"]["status"], "available")
+        self.assertEqual(result["advanced"]["correlation"]["status"], "available")
+        self.assertEqual(result["advanced"]["beta"]["against"]["id"], instrument.id)
+
 
 class PortfolioRiskReadTests(BenchmarkFixture, TestCase):
     def risk(self, **kwargs):
@@ -302,4 +357,4 @@ class PortfolioRiskReadTests(BenchmarkFixture, TestCase):
         result = self.risk()
 
         self.assertEqual(result["advanced"]["beta"]["status"], "unavailable")
-        self.assertEqual(result["advanced"]["value_at_risk"]["reason"], "not_implemented")
+        self.assertEqual(result["advanced"]["value_at_risk"]["reason"], "not_enough_observations")

@@ -33,6 +33,10 @@ MIN_ANNUALIZED_OBSERVATIONS = 12
 # La caida maxima es una lectura del recorrido, no un estimador estadistico, asi que se
 # sostiene con muchas menos observaciones.
 MIN_DRAWDOWN_OBSERVATIONS = 3
+# Beta, correlacion y una cola historica no son lecturas de tres o cuatro meses. El mismo
+# minimo anual evita que una coincidencia puntual se presente como una propiedad estable.
+MIN_ADVANCED_OBSERVATIONS = 12
+MIN_HISTORICAL_VAR_OBSERVATIONS = 24
 PERIODS_PER_YEAR = 12
 FLAT_SERIES_TOLERANCE = Decimal("1e-12")
 
@@ -224,17 +228,137 @@ def sharpe(
     )
 
 
-def advanced_metric_interfaces() -> dict[str, Any]:
-    """Lo que vendra, con su forma ya fijada y su motivo de ausencia.
+def paired_complete_run(
+    left: list[PeriodReturn], right: list[PeriodReturn]
+) -> list[tuple[PeriodReturn, PeriodReturn]]:
+    """Tramo comun mas largo de dos series mensuales, sin saltar meses ausentes."""
+    by_label = {row.label: row for row in right}
+    best: list[tuple[PeriodReturn, PeriodReturn]] = []
+    current: list[tuple[PeriodReturn, PeriodReturn]] = []
+    for row in left:
+        other = by_label.get(row.label)
+        if row.value is None or other is None or other.value is None:
+            current = []
+            continue
+        current.append((row, other))
+        if len(current) > len(best):
+            best = list(current)
+    return best
 
-    Se publican apagadas a proposito: quien consuma la API ve el contrato completo desde
-    el principio, y anadirlas mas adelante no rompe a nadie. Todas necesitan una serie de
-    mercado por instrumento que hoy no existe para la parte iliquida de la cartera.
+
+def _paired_values(
+    pairs: list[tuple[PeriodReturn, PeriodReturn]],
+) -> tuple[list[Decimal], list[Decimal]]:
+    return (
+        [left.value for left, _ in pairs if left.value is not None],
+        [right.value for _, right in pairs if right.value is not None],
+    )
+
+
+def beta(
+    pairs: list[tuple[PeriodReturn, PeriodReturn]], *, against: dict[str, Any]
+) -> dict[str, Any]:
+    """Beta mensual contra un indice con el mismo calendario y moneda."""
+    if len(pairs) < MIN_ADVANCED_OBSERVATIONS:
+        return insufficient(
+            "not_enough_observations",
+            observations=len(pairs),
+            required=MIN_ADVANCED_OBSERVATIONS,
+            against=against,
+        )
+    portfolio, market = _paired_values(pairs)
+    market_mean = sum(market, ZERO) / Decimal(len(market))
+    market_variance = sum(((value - market_mean) ** 2 for value in market), ZERO) / Decimal(
+        len(market) - 1
+    )
+    if market_variance <= FLAT_SERIES_TOLERANCE:
+        return insufficient("no_variation", observations=len(pairs), against=against)
+    portfolio_mean = sum(portfolio, ZERO) / Decimal(len(portfolio))
+    covariance = sum(
+        (
+            (portfolio[index] - portfolio_mean) * (market[index] - market_mean)
+            for index in range(len(portfolio))
+        ),
+        ZERO,
+    ) / Decimal(len(portfolio) - 1)
+    return available(covariance / market_variance, observations=len(pairs), against=against)
+
+
+def correlation(
+    pairs: list[tuple[PeriodReturn, PeriodReturn]], *, against: dict[str, Any]
+) -> dict[str, Any]:
+    """Correlacion de Pearson entre cartera e indice, sobre meses comparables."""
+    if len(pairs) < MIN_ADVANCED_OBSERVATIONS:
+        return insufficient(
+            "not_enough_observations",
+            observations=len(pairs),
+            required=MIN_ADVANCED_OBSERVATIONS,
+            against=against,
+        )
+    portfolio, market = _paired_values(pairs)
+    portfolio_mean = sum(portfolio, ZERO) / Decimal(len(portfolio))
+    market_mean = sum(market, ZERO) / Decimal(len(market))
+    portfolio_variance = sum(
+        ((value - portfolio_mean) ** 2 for value in portfolio), ZERO
+    ) / Decimal(len(portfolio) - 1)
+    market_variance = sum(((value - market_mean) ** 2 for value in market), ZERO) / Decimal(
+        len(market) - 1
+    )
+    denominator = _sqrt(portfolio_variance) * _sqrt(market_variance)
+    if denominator <= FLAT_SERIES_TOLERANCE:
+        return insufficient("no_variation", observations=len(pairs), against=against)
+    covariance = sum(
+        (
+            (portfolio[index] - portfolio_mean) * (market[index] - market_mean)
+            for index in range(len(portfolio))
+        ),
+        ZERO,
+    ) / Decimal(len(portfolio) - 1)
+    return available(covariance / denominator, observations=len(pairs), against=against)
+
+
+def historical_value_at_risk(
+    series: list[PeriodReturn], *, confidence: Decimal = Decimal("0.95")
+) -> dict[str, Any]:
+    """Perdida historica mensual a un nivel de confianza, expresada como porcentaje.
+
+    Es una VaR de cola empirica, no una promesa de perdida maxima. Requiere dos anos de
+    meses completos: con doce puntos el percentil 95 seria practicamente solo el peor mes.
     """
-    reason = "not_implemented"
+    values = usable_returns(series)
+    if len(values) != len(series):
+        return insufficient("gaps_in_series", observations=len(values), expected=len(series))
+    if len(values) < MIN_HISTORICAL_VAR_OBSERVATIONS:
+        return insufficient(
+            "not_enough_observations",
+            observations=len(values),
+            required=MIN_HISTORICAL_VAR_OBSERVATIONS,
+        )
+    ordered = sorted(values)
+    rank = (Decimal(len(ordered) - 1)) * (ONE - confidence)
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    quantile = ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - Decimal(lower))
+    return available(
+        max(ZERO, -quantile),
+        observations=len(values),
+        confidence=str(confidence),
+        horizon_days=21,
+        frequency="monthly",
+    )
+
+
+def advanced_metric_interfaces() -> dict[str, Any]:
+    """Forma estable para metricas que requieren un indice o series por posicion."""
+    reason = "benchmark_unavailable"
     return {
         "beta": {"status": "unavailable", "value": None, "reason": reason, "against": None},
-        "correlation": {"status": "unavailable", "matrix": None, "reason": reason},
+        "correlation": {
+            "status": "unavailable",
+            "value": None,
+            "against": None,
+            "reason": reason,
+        },
         "value_at_risk": {
             "status": "unavailable",
             "value": None,
@@ -242,5 +366,9 @@ def advanced_metric_interfaces() -> dict[str, Any]:
             "confidence": None,
             "horizon_days": None,
         },
-        "risk_contribution": {"status": "unavailable", "by_position": None, "reason": reason},
+        "risk_contribution": {
+            "status": "unavailable",
+            "by_position": None,
+            "reason": "position_return_series_unavailable",
+        },
     }

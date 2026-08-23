@@ -42,9 +42,13 @@ from .risk import (
     PeriodReturn,
     advanced_metric_interfaces,
     annualized_return,
+    beta,
     best_and_worst,
+    correlation,
+    historical_value_at_risk,
     longest_complete_run,
     max_drawdown,
+    paired_complete_run,
     sharpe,
     volatility,
 )
@@ -53,6 +57,7 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 CASH_CLASS = "cash"
 DEFAULT_RISK_FREE_RATE = Decimal("0.02")
+ROLLING_WINDOW_MONTHS = 12
 
 
 def resolve_risk_free_rate() -> Decimal:
@@ -259,6 +264,37 @@ def _chain(values: list[Decimal | None]) -> Decimal | None:
     return index - ONE
 
 
+def _rolling_comparison(points: list[SeriesPoint]) -> dict[str, Any]:
+    """Ventanas de doce meses para comparar siempre horizontes equivalentes."""
+    rows = []
+    for index in range(ROLLING_WINDOW_MONTHS - 1, len(points)):
+        window = points[index - ROLLING_WINDOW_MONTHS + 1 : index + 1]
+        portfolio_return = _chain([row.portfolio for row in window])
+        benchmark_return = _chain([row.benchmark for row in window])
+        excess = (
+            portfolio_return - benchmark_return
+            if portfolio_return is not None and benchmark_return is not None
+            else None
+        )
+        rows.append(
+            {
+                "period": window[-1].label,
+                "from": window[0].start.isoformat(),
+                "to": window[-1].end.isoformat(),
+                "portfolio": None if portfolio_return is None else str(portfolio_return),
+                "benchmark": None if benchmark_return is None else str(benchmark_return),
+                "excess": None if excess is None else str(excess),
+            }
+        )
+    return {
+        "window_months": ROLLING_WINDOW_MONTHS,
+        "complete_windows": sum(
+            1 for row in rows if row["portfolio"] is not None and row["benchmark"] is not None
+        ),
+        "points": rows,
+    }
+
+
 def _secondary_benchmark(
     *,
     portfolio: Portfolio,
@@ -294,6 +330,10 @@ def _secondary_benchmark(
         "status": "available",
         "instrument": detail,
         "cumulative_return": None if cumulative is None else str(cumulative),
+        "points": [
+            {"period": boundaries[index].strftime("%Y-%m"), "return": str(returns[index - 1])}
+            for index in range(1, len(boundaries))
+        ],
     }
 
 
@@ -332,6 +372,11 @@ def build_portfolio_benchmark(
             "benchmark_return": None,
             "benchmark_annualized_return": None,
             "excess_return": None,
+            "rolling": {
+                "window_months": ROLLING_WINDOW_MONTHS,
+                "complete_windows": 0,
+                "points": [],
+            },
             "secondary": {"status": "unavailable", "reason": "not_configured", "instrument": None},
         }
     points: list[SeriesPoint] = series["points"]
@@ -357,6 +402,7 @@ def build_portfolio_benchmark(
         "benchmark_return": None if benchmark_total is None else str(benchmark_total),
         "benchmark_annualized_return": benchmark_annualized,
         "excess_return": None if excess is None else str(excess),
+        "rolling": _rolling_comparison(points),
         "points": [
             {
                 "period": row.label,
@@ -396,6 +442,12 @@ def build_portfolio_risk(
         context=context,
     )
     risk_free = resolve_risk_free_rate()
+    secondary = _secondary_benchmark(
+        portfolio=portfolio,
+        ownership=ownership,
+        boundaries=monthly_boundaries(start_date, end_date),
+        end_date=end_date,
+    )
     base = {
         "ownership_id": ownership.id,
         "currency": portfolio.base_currency,
@@ -430,6 +482,16 @@ def build_portfolio_risk(
     run = longest_complete_run(returns)
     extremes = best_and_worst(returns)
     gaps = [row.label for row in returns if row.value is None]
+    advanced = advanced_metric_interfaces()
+    advanced["value_at_risk"] = historical_value_at_risk(run)
+    if secondary["status"] == "available":
+        market_returns = [
+            PeriodReturn(row["period"], Decimal(row["return"])) for row in secondary["points"]
+        ]
+        paired = paired_complete_run(returns, market_returns)
+        against = secondary["instrument"]
+        advanced["beta"] = beta(paired, against=against)
+        advanced["correlation"] = correlation(paired, against=against)
     return {
         **base,
         "observations": len(run),
@@ -447,4 +509,5 @@ def build_portfolio_risk(
         "best_period": extremes["best"],
         "worst_period": extremes["worst"],
         "sharpe": sharpe(series=run, risk_free_rate=risk_free),
+        "advanced": advanced,
     }

@@ -14,12 +14,17 @@ from django.test import TestCase, override_settings
 from portfolio.benchmark import DEFAULT_RISK_FREE_RATE, resolve_risk_free_rate
 from portfolio.risk import (
     MIN_ANNUALIZED_OBSERVATIONS,
+    MIN_HISTORICAL_VAR_OBSERVATIONS,
     PeriodReturn,
     advanced_metric_interfaces,
     annualized_return,
+    beta,
     best_and_worst,
+    correlation,
+    historical_value_at_risk,
     longest_complete_run,
     max_drawdown,
+    paired_complete_run,
     sharpe,
     volatility,
 )
@@ -155,7 +160,7 @@ class RiskMetricsTests(TestCase):
     def test_a_series_without_holes_is_measured_whole(self):
         self.assertEqual(len(longest_complete_run(series())), len(MONTHLY))
 
-    def test_advanced_metrics_publish_their_shape_while_unavailable(self):
+    def test_advanced_metrics_publish_their_shape_while_the_index_is_unavailable(self):
         interfaces = advanced_metric_interfaces()
 
         self.assertEqual(
@@ -163,7 +168,43 @@ class RiskMetricsTests(TestCase):
         )
         for row in interfaces.values():
             self.assertEqual(row["status"], "unavailable")
-            self.assertEqual(row["reason"], "not_implemented")
+        self.assertEqual(interfaces["beta"]["reason"], "benchmark_unavailable")
+        self.assertEqual(
+            interfaces["risk_contribution"]["reason"], "position_return_series_unavailable"
+        )
+
+    def test_beta_and_correlation_use_only_a_contiguous_common_run(self):
+        portfolio = series()
+        market = [
+            PeriodReturn(row.label, (row.value or Decimal("0")) * Decimal("0.5"))
+            for row in portfolio
+        ]
+        pairs = paired_complete_run(portfolio, market)
+
+        beta_result = beta(pairs, against={"id": 7, "name": "Indice prueba"})
+        correlation_result = correlation(pairs, against={"id": 7, "name": "Indice prueba"})
+
+        self.assertEqual(beta_result["status"], "available")
+        self.assertAlmostEqual(float(beta_result["value"]), 2.0, places=10)
+        self.assertEqual(correlation_result["status"], "available")
+        self.assertAlmostEqual(float(correlation_result["value"]), 1.0, places=10)
+        self.assertEqual(correlation_result["against"]["name"], "Indice prueba")
+
+    def test_historical_var_requires_two_full_years_and_is_a_loss_percentage(self):
+        values = [Decimal("0.01")] * (MIN_HISTORICAL_VAR_OBSERVATIONS - 1)
+        short = [PeriodReturn(f"2024-{index:02d}", value) for index, value in enumerate(values, 1)]
+        self.assertEqual(historical_value_at_risk(short)["reason"], "not_enough_observations")
+
+        full = [
+            PeriodReturn(f"2025-{index:02d}", Decimal("-0.04") if index <= 3 else Decimal("0.01"))
+            for index in range(1, MIN_HISTORICAL_VAR_OBSERVATIONS + 1)
+        ]
+        result = historical_value_at_risk(full)
+
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["confidence"], "0.95")
+        self.assertEqual(result["horizon_days"], 21)
+        self.assertGreater(float(result["value"]), 0)
 
 
 class RiskFreeRateTests(TestCase):
