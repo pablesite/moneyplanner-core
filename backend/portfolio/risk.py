@@ -348,6 +348,169 @@ def historical_value_at_risk(
     )
 
 
+def _sample_covariance(left: list[Decimal], right: list[Decimal]) -> Decimal:
+    left_mean = sum(left, ZERO) / Decimal(len(left))
+    right_mean = sum(right, ZERO) / Decimal(len(right))
+    return sum(
+        ((left[index] - left_mean) * (right[index] - right_mean) for index in range(len(left))),
+        ZERO,
+    ) / Decimal(len(left) - 1)
+
+
+def position_risk_analysis(
+    *, positions: list[dict[str, Any]], total_value: Decimal
+) -> dict[str, dict[str, Any]]:
+    """Correlacion y contribucion a volatilidad sobre el universo realmente medible.
+
+    `positions` ya llega filtrado a una ventana comun completa. La contribucion no intenta
+    repartir el P&L historico: es un modelo de volatilidad futura condicionada a los pesos
+    de cierre actuales y a la covarianza observada en esa misma ventana.
+    """
+    empty_correlation = {
+        "status": "insufficient",
+        "matrix": [],
+        "pairs": [],
+        "reason": "not_enough_positions",
+    }
+    empty_contribution = {
+        "status": "insufficient",
+        "by_position": [],
+        "reason": "not_enough_positions",
+    }
+    if not positions:
+        return {"position_correlation": empty_correlation, "risk_contribution": empty_contribution}
+
+    observations = len(positions[0]["series"])
+    included_value = sum((row["value"] for row in positions), ZERO)
+    coverage = ZERO if total_value <= ZERO else included_value / total_value
+    metadata = {
+        "observations": observations,
+        "required": MIN_ADVANCED_OBSERVATIONS,
+        "included_positions": len(positions),
+        "included_value": str(included_value),
+        "total_value": str(total_value),
+        "coverage": str(coverage),
+    }
+    if observations < MIN_ADVANCED_OBSERVATIONS:
+        reason = "not_enough_observations"
+        return {
+            "position_correlation": {**empty_correlation, **metadata, "reason": reason},
+            "risk_contribution": {**empty_contribution, **metadata, "reason": reason},
+        }
+
+    values = {row["position_id"]: [point.value for point in row["series"]] for row in positions}
+    # La entrada se construye solo con series completas; este assert protege que un cambio
+    # futuro no convierta un hueco en un cero dentro de una matriz estadistica.
+    assert all(all(value is not None for value in series) for series in values.values())
+    decimal_values: dict[int, list[Decimal]] = {
+        key: [value for value in series if value is not None] for key, series in values.items()
+    }
+    covariance = {
+        (left["position_id"], right["position_id"]): _sample_covariance(
+            decimal_values[left["position_id"]], decimal_values[right["position_id"]]
+        )
+        for left in positions
+        for right in positions
+    }
+
+    matrix = []
+    pairs = []
+    for left in positions:
+        left_id = left["position_id"]
+        left_variance = covariance[(left_id, left_id)]
+        correlations = []
+        for right in positions:
+            right_id = right["position_id"]
+            right_variance = covariance[(right_id, right_id)]
+            denominator = _sqrt(left_variance) * _sqrt(right_variance)
+            value = (
+                None
+                if denominator <= FLAT_SERIES_TOLERANCE
+                else covariance[(left_id, right_id)] / denominator
+            )
+            correlations.append(
+                {"position_id": right_id, "value": None if value is None else str(value)}
+            )
+            if right_id > left_id and value is not None:
+                pairs.append(
+                    {
+                        "left_id": left_id,
+                        "left_name": left["name"],
+                        "right_id": right_id,
+                        "right_name": right["name"],
+                        "value": str(value),
+                    }
+                )
+        matrix.append({"position_id": left_id, "name": left["name"], "correlations": correlations})
+    pairs.sort(key=lambda row: abs(Decimal(row["value"])), reverse=True)
+
+    correlation_result: dict[str, Any] = {
+        "status": "available" if len(positions) >= 2 else "insufficient",
+        "matrix": matrix,
+        "pairs": pairs,
+        **metadata,
+    }
+    if len(positions) < 2:
+        correlation_result["reason"] = "not_enough_positions"
+
+    if included_value <= ZERO:
+        return {
+            "position_correlation": correlation_result,
+            "risk_contribution": {**empty_contribution, **metadata, "reason": "no_value"},
+        }
+    weights = {row["position_id"]: row["value"] / included_value for row in positions}
+    covariance_weight = {
+        row["position_id"]: sum(
+            (
+                covariance[(row["position_id"], other["position_id"])]
+                * weights[other["position_id"]]
+                for other in positions
+            ),
+            ZERO,
+        )
+        for row in positions
+    }
+    portfolio_variance = sum(
+        (weights[row["position_id"]] * covariance_weight[row["position_id"]] for row in positions),
+        ZERO,
+    )
+    if portfolio_variance <= FLAT_SERIES_TOLERANCE:
+        return {
+            "position_correlation": correlation_result,
+            "risk_contribution": {**empty_contribution, **metadata, "reason": "no_variation"},
+        }
+    portfolio_deviation = _sqrt(portfolio_variance)
+    contributions = [
+        {
+            "position_id": row["position_id"],
+            "name": row["name"],
+            "weight": str(weights[row["position_id"]]),
+            "contribution": str(
+                weights[row["position_id"]]
+                * covariance_weight[row["position_id"]]
+                / portfolio_variance
+            ),
+            "annualized_volatility_contribution": str(
+                weights[row["position_id"]]
+                * covariance_weight[row["position_id"]]
+                / portfolio_deviation
+                * _sqrt(Decimal(PERIODS_PER_YEAR))
+            ),
+        }
+        for row in positions
+    ]
+    contributions.sort(key=lambda row: Decimal(row["contribution"]), reverse=True)
+    return {
+        "position_correlation": correlation_result,
+        "risk_contribution": {
+            "status": "available",
+            "by_position": contributions,
+            "model_volatility": str(portfolio_deviation * _sqrt(Decimal(PERIODS_PER_YEAR))),
+            **metadata,
+        },
+    }
+
+
 def advanced_metric_interfaces() -> dict[str, Any]:
     """Forma estable para metricas que requieren un indice o series por posicion."""
     reason = "benchmark_unavailable"
@@ -369,6 +532,12 @@ def advanced_metric_interfaces() -> dict[str, Any]:
         "risk_contribution": {
             "status": "unavailable",
             "by_position": None,
+            "reason": "position_return_series_unavailable",
+        },
+        "position_correlation": {
+            "status": "unavailable",
+            "matrix": [],
+            "pairs": [],
             "reason": "position_return_series_unavailable",
         },
     }

@@ -358,3 +358,16 @@ class PortfolioRiskReadTests(BenchmarkFixture, TestCase):
 
         self.assertEqual(result["advanced"]["beta"]["status"], "unavailable")
         self.assertEqual(result["advanced"]["value_at_risk"]["reason"], "not_enough_observations")
+
+    def test_position_risk_declares_the_value_covered_by_common_series(self):
+        self.strategy_version(date(2024, 1, 1), {"equity": "50", "crypto": "50"})
+
+        advanced = self.risk()["advanced"]
+
+        # Las dos posiciones del fixture tienen serie completa. Sus retornos son planos,
+        # por lo que no hay volatilidad que repartir, pero la cobertura sigue siendo un
+        # hecho del payload y no depende de que el estimador sea calculable.
+        contribution = advanced["risk_contribution"]
+        self.assertEqual(contribution["reason"], "no_variation")
+        self.assertEqual(contribution["included_positions"], 2)
+        self.assertEqual(contribution["coverage"], "1")

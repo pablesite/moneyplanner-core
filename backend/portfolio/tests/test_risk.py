@@ -25,6 +25,7 @@ from portfolio.risk import (
     longest_complete_run,
     max_drawdown,
     paired_complete_run,
+    position_risk_analysis,
     sharpe,
     volatility,
 )
@@ -164,7 +165,8 @@ class RiskMetricsTests(TestCase):
         interfaces = advanced_metric_interfaces()
 
         self.assertEqual(
-            sorted(interfaces), ["beta", "correlation", "risk_contribution", "value_at_risk"]
+            sorted(interfaces),
+            ["beta", "correlation", "position_correlation", "risk_contribution", "value_at_risk"],
         )
         for row in interfaces.values():
             self.assertEqual(row["status"], "unavailable")
@@ -172,6 +174,45 @@ class RiskMetricsTests(TestCase):
         self.assertEqual(
             interfaces["risk_contribution"]["reason"], "position_return_series_unavailable"
         )
+
+    def test_position_analysis_uses_current_weights_and_common_months(self):
+        left = series()
+        right = series([str(Decimal(value) * Decimal("0.5")) for value in MONTHLY])
+
+        result = position_risk_analysis(
+            positions=[
+                {"position_id": 1, "name": "Fondo global", "value": Decimal("60"), "series": left},
+                {"position_id": 2, "name": "Bono global", "value": Decimal("40"), "series": right},
+            ],
+            total_value=Decimal("100"),
+        )
+
+        relations = result["position_correlation"]
+        contribution = result["risk_contribution"]
+        self.assertEqual(relations["status"], "available")
+        self.assertAlmostEqual(float(relations["pairs"][0]["value"]), 1.0, places=10)
+        self.assertEqual(contribution["status"], "available")
+        self.assertEqual(contribution["coverage"], "1")
+        self.assertAlmostEqual(
+            sum(float(row["contribution"]) for row in contribution["by_position"]), 1.0, places=10
+        )
+
+    def test_position_analysis_excludes_short_series_and_declares_coverage(self):
+        result = position_risk_analysis(
+            positions=[
+                {
+                    "position_id": 1,
+                    "name": "Fondo global",
+                    "value": Decimal("60"),
+                    "series": series(MONTHLY[:6]),
+                }
+            ],
+            total_value=Decimal("100"),
+        )
+
+        self.assertEqual(result["risk_contribution"]["status"], "insufficient")
+        self.assertEqual(result["risk_contribution"]["reason"], "not_enough_observations")
+        self.assertEqual(result["risk_contribution"]["coverage"], "0.6")
 
     def test_beta_and_correlation_use_only_a_contiguous_common_run(self):
         portfolio = series()

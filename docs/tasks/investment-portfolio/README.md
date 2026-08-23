@@ -49,7 +49,7 @@ Responder, con trazabilidad y calidad explicita, a cuatro preguntas:
 6. El rebalanceo usa solo nuevas aportaciones, respeta unidades/minimos/exclusiones y deja el sobrante en efectivo.
 7. Aceptar una propuesta crea una cesta pendiente. Solo la confirmacion de ejecucion crea operaciones contables reales.
 8. El benchmark principal es estrategico y compuesto segun la asignacion vigente. Un indice global secundario queda preparado.
-9. Riesgo inicial: volatilidad, drawdown, mejor/peor periodo y Sharpe solo con cobertura suficiente. Beta, correlaciones, VaR y contribucion al riesgo quedan preparados, no implementados.
+9. Riesgo: volatilidad, drawdown, mejor/peor periodo y Sharpe solo con cobertura suficiente; VaR histórica 95% con 24 meses. Beta y correlación frente a un índice secundario requieren 12 meses comunes. La correlación entre posiciones y contribución a volatilidad usan las series mensuales completas y pesos de cierre actuales, declarando la cobertura excluida.
 
 ### UX y limites
 

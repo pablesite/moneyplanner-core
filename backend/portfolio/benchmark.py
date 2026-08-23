@@ -49,6 +49,7 @@ from .risk import (
     longest_complete_run,
     max_drawdown,
     paired_complete_run,
+    position_risk_analysis,
     sharpe,
     volatility,
 )
@@ -123,6 +124,75 @@ def _scope_return(
     )
     raw = block["return"]["twr"]
     return None if raw is None else Decimal(raw)
+
+
+def _position_risk_metrics(
+    *,
+    portfolio: Portfolio,
+    context: PerformanceContext,
+    ownership: Ownership,
+    member_id: int | None,
+    points: list[SeriesPoint],
+    run: list[PeriodReturn],
+    end_date: date,
+) -> dict[str, dict[str, Any]]:
+    """Mide posiciones sobre la misma ventana continua que el riesgo agregado.
+
+    Una posicion nueva no se rellena hacia atras para hacerla entrar en la matriz. El
+    resultado publica la parte de valor que si comparte toda la ventana, de modo que una
+    contribucion nunca aparenta describir el 100% de la cartera si no puede hacerlo.
+    """
+    run_labels = {row.label for row in run}
+    if not run_labels:
+        return position_risk_analysis(positions=[], total_value=ZERO)
+
+    scoped_positions = positions_in_scope(
+        context=context, ownership_id=ownership.id, on_date=end_date
+    )
+    total_value = ZERO
+    measurable = []
+    for position in scoped_positions:
+        scope_ids = {position.id}
+        closing = build_portfolio_performance(
+            portfolio=portfolio,
+            # El rendimiento no nos interesa aquí, solo el cierre. Aun así el bloque de
+            # performance necesita un intervalo no nulo para no pedir una TWR de cero días.
+            start_date=end_date - date.resolution,
+            end_date=end_date,
+            member_id=member_id,
+            context=context,
+            scope_ids=scope_ids,
+        )
+        closing_value = closing["closing_value"]
+        if closing_value is not None:
+            total_value += Decimal(closing_value)
+
+        position_series = [
+            PeriodReturn(
+                row.label,
+                _scope_return(
+                    portfolio=portfolio,
+                    context=context,
+                    scope_ids=scope_ids,
+                    start_date=row.start,
+                    end_date=row.end,
+                    member_id=member_id,
+                ),
+            )
+            for row in points
+            if row.label in run_labels
+        ]
+        if closing_value is None or any(row.value is None for row in position_series):
+            continue
+        measurable.append(
+            {
+                "position_id": position.id,
+                "name": position.instrument.name,
+                "value": Decimal(closing_value),
+                "series": position_series,
+            }
+        )
+    return position_risk_analysis(positions=measurable, total_value=total_value)
 
 
 def _class_weights(strategy) -> dict[str, Decimal]:
@@ -433,6 +503,11 @@ def build_portfolio_risk(
     context: PerformanceContext | None = None,
 ) -> dict[str, Any]:
     """Volatilidad, caida maxima, mejor/peor mes y Sharpe del ambito, con su cobertura."""
+    context = context or load_performance_context(
+        portfolio=portfolio,
+        start_date=timeline_context_start(portfolio=portfolio, start_date=start_date),
+        end_date=end_date,
+    )
     series = build_benchmark_series(
         portfolio=portfolio,
         ownership=ownership,
@@ -484,6 +559,17 @@ def build_portfolio_risk(
     gaps = [row.label for row in returns if row.value is None]
     advanced = advanced_metric_interfaces()
     advanced["value_at_risk"] = historical_value_at_risk(run)
+    advanced.update(
+        _position_risk_metrics(
+            portfolio=portfolio,
+            context=context,
+            ownership=ownership,
+            member_id=member_id,
+            points=series["points"],
+            run=run,
+            end_date=end_date,
+        )
+    )
     if secondary["status"] == "available":
         market_returns = [
             PeriodReturn(row["period"], Decimal(row["return"])) for row in secondary["points"]
