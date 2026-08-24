@@ -16,7 +16,7 @@ drf-spectacular>=0.30.0
 psycopg[binary]>=3.3.4
 
 # Utils
-python-dotenv>=1.0
+python-dotenv>=1.2.3
 
 # Production server
 gunicorn>=26.0.0
