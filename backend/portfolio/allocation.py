@@ -103,6 +103,27 @@ def positions_in_scope(
     return selected
 
 
+def position_ids_with_contribution_scope(
+    *, context: PerformanceContext, ownership_id: int, since: date, until: date
+) -> set[int]:
+    """Posiciones que pudieron recibir aportaciones del ownership en el periodo.
+
+    Una posicion puede archivarse al migrar el inventario y conservar sus aportaciones
+    historicas. No debe seguir contando para la composicion actual, pero si para saber
+    cuanto del presupuesto del mes ya se ejecuto.
+    """
+    selected: set[int] = set()
+    for position_id, periods in context.ownership_periods.items():
+        if any(
+            period.ownership_id == ownership_id
+            and period.start_date <= until
+            and (period.end_date is None or period.end_date >= since)
+            for period in periods
+        ):
+            selected.add(position_id)
+    return selected
+
+
 def scope_slices(
     *, context: PerformanceContext, positions: list[PortfolioPosition], on_date: date
 ) -> list[ScopeSlice]:
@@ -306,11 +327,18 @@ def build_allocation(
         if strategy is not None
         else ZERO.quantize(CENT)
     )
-    contributed = net_contributed_within(
+    contribution_position_ids = position_ids_with_contribution_scope(
         context=context,
-        position_ids=[position.id for position in positions],
+        ownership_id=ownership.id,
         since=date(on_date.year, on_date.month, 1),
         until=on_date,
+    )
+    contributed = net_contributed_within(
+        context=context,
+        position_ids=list(contribution_position_ids),
+        since=date(on_date.year, on_date.month, 1),
+        until=on_date,
+        ownership_id=ownership.id,
     ).quantize(CENT)
 
     return {
@@ -394,7 +422,12 @@ def contributed_within(
 
 
 def net_contributed_within(
-    *, context: PerformanceContext, position_ids: list[int], since: date, until: date
+    *,
+    context: PerformanceContext,
+    position_ids: list[int],
+    since: date,
+    until: date,
+    ownership_id: int | None = None,
 ) -> Decimal:
     """Dinero nuevo que ha entrado en esas posiciones, ya descontado el que salio.
 
@@ -411,7 +444,10 @@ def net_contributed_within(
         (
             flow.amount
             for flow in context.flows
-            if flow.position_id in wanted and flow.external and since <= flow.on_date <= until
+            if flow.position_id in wanted
+            and flow.external
+            and since <= flow.on_date <= until
+            and (ownership_id is None or flow.ownership_id in (None, ownership_id))
         ),
         ZERO,
     )
