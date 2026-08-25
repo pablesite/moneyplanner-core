@@ -298,7 +298,11 @@ def build_allocation(
     # propuesta en un mandato que tenga una politica propia; repartirlo entre ambitos sin
     # estrategia haria que cada uno pareciese tener disponible el presupuesto entero.
     planned = (
-        planned_contribution(user=portfolio.user, on_date=on_date).quantize(CENT)
+        planned_contribution(
+            user=portfolio.user,
+            ownership=ownership,
+            on_date=on_date,
+        ).quantize(CENT)
         if strategy is not None
         else ZERO.quantize(CENT)
     )
@@ -344,19 +348,28 @@ CENT = Decimal("0.01")
 MAX_REDISTRIBUTIONS = 12
 
 
-def planned_contribution(*, user: Any, on_date: date) -> Decimal:
+def planned_contribution(*, user: Any, ownership: Ownership, on_date: date) -> Decimal:
     """Lo que el presupuesto tenia previsto invertir ese mes.
 
     Solo se lee: la cartera propone el importe que ya habias planificado, y decidir otra
-    cosa no reescribe el presupuesto. Si no hay nada planificado, no hay sugerencia y el
-    importe se escribe a mano.
+    cosa no reescribe el presupuesto. Las lineas nuevas llevan ownership; las antiguas
+    que aun conservan solo `owner_name` se resuelven para no mezclar el presupuesto de un
+    miembro con el de otro. Una linea sin titular sigue siendo global.
     """
     total = ZERO
+    ownership_filter = Q(ownership=ownership)
+    legacy_owner_filter = Q(ownership__isnull=True, owner_name="")
+    if ownership.kind == Ownership.Kind.INDIVIDUAL and ownership.member_id:
+        legacy_owner_filter |= Q(
+            ownership__isnull=True,
+            owner_name__iexact=ownership.member.name,
+        )
+    ownership_filter |= legacy_owner_filter
     entries = AnnualExpenseEntry.objects.filter(
         user=user,
         is_active=True,
         category=AnnualExpenseEntry.Category.FINANCIAL_INVESTMENTS,
-    )
+    ).filter(ownership_filter)
     for entry in entries:
         distribution = planned_expense_monthly_distribution(entry=entry, fiscal_year=on_date.year)
         total += distribution.get(on_date.month, ZERO)

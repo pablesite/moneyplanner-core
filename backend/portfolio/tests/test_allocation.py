@@ -1250,6 +1250,38 @@ class SuggestedContributionTests(AllocationFixture, TestCase):
         self.assertEqual(result["planned_contribution"], "0.00")
         self.assertEqual(result["suggested_contribution"], "0.00")
 
+    def test_legacy_owner_name_does_not_cross_contaminate_scope_budget(self):
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aporte Pablo",
+            owner_name="Pablo",
+            category="financial_investments",
+            subcategory="index_funds",
+            amount_annual=Decimal("1200.00"),
+            fiscal_year=TODAY.year,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aporte Lucas",
+            owner_name="Lucas",
+            category="financial_investments",
+            subcategory="crypto",
+            amount_annual=Decimal("600.00"),
+            fiscal_year=TODAY.year,
+        )
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Aporte global",
+            category="financial_investments",
+            subcategory="roboadvisor",
+            amount_annual=Decimal("120.00"),
+            fiscal_year=TODAY.year,
+        )
+
+        result = build_allocation(portfolio=self.portfolio, ownership=self.mine, on_date=TODAY)
+
+        self.assertEqual(result["planned_contribution"], "210.00")
+
 
 class ContributionBasketTests(AllocationFixture, TestCase):
     """La propuesta se guarda y se revisa; nada toca la contabilidad hasta confirmar."""
