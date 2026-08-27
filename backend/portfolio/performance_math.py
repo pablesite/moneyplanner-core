@@ -143,6 +143,19 @@ def annualized(*, total_return: Decimal | None, days: int) -> Decimal | None:
         return None
 
 
+def cumulative_from_annualized(*, annual_return: Decimal | None, days: int) -> Decimal | None:
+    """Convert an annual rate into its equivalent return for the selected period."""
+    if annual_return is None or days <= 0:
+        return None
+    growth = ONE + annual_return
+    if growth <= 0:
+        return None
+    try:
+        return Decimal(str(float(growth) ** (float(days) / 365.0))) - ONE
+    except (InvalidOperation, OverflowError, ValueError, ZeroDivisionError):
+        return None
+
+
 def xirr(cash_flows: list[DatedAmount]) -> Decimal | None:
     """Solve annualized IRR with bounded bisection; investor outflows are negative."""
     if len(cash_flows) < 2:

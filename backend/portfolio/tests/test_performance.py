@@ -29,6 +29,7 @@ from portfolio.performance_math import (
     DatedValue,
     annualized,
     chained_twr,
+    cumulative_from_annualized,
     linked_dietz,
     modified_dietz,
     monetary_result,
@@ -164,6 +165,19 @@ class PerformanceGoldenMathTests(TestCase):
         self.assertIsNone(annualized(total_return=Decimal("-1"), days=365))
         self.assertIsNone(annualized(total_return=Decimal("0.1"), days=0))
         self.assertIsNone(annualized(total_return=None, days=365))
+
+    def test_cumulative_from_annualized_converts_an_annual_rate_to_the_period(self):
+        # The inverse of annualized: 10% yearly becomes 21% after two years.
+        two_years = cumulative_from_annualized(annual_return=Decimal("0.1"), days=730)
+
+        self.assertIsNotNone(two_years)
+        self.assertAlmostEqual(float(two_years), 0.21, places=6)
+        self.assertEqual(
+            cumulative_from_annualized(annual_return=Decimal("0.1"), days=365), Decimal("0.1")
+        )
+        self.assertIsNone(cumulative_from_annualized(annual_return=Decimal("-1"), days=365))
+        self.assertIsNone(cumulative_from_annualized(annual_return=Decimal("0.1"), days=0))
+        self.assertIsNone(cumulative_from_annualized(annual_return=None, days=365))
 
     def test_xirr_and_real_return_match_independent_closed_forms(self):
         result = xirr(
@@ -410,6 +424,7 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(performance.data["closing_value"], "170.00000000")
         self.assertEqual(performance.data["net_contributed"], "50.00000000")
         self.assertEqual(performance.data["monetary_result"], "20.00000000")
+        self.assertIsNotNone(performance.data["return"]["mwr_cumulative"])
         # Without a valuation on the flow date the exact chain is impossible, but the
         # subperiods the valuations do delimit are still chained; the estimate stays
         # declared instead of collapsing into a whole-period money-weighted number.

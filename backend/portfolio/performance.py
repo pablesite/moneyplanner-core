@@ -28,6 +28,7 @@ from .performance_math import (
     DatedValue,
     annualized,
     chained_twr,
+    cumulative_from_annualized,
     decompose_result,
     linked_dietz,
     modified_dietz,
@@ -1559,6 +1560,9 @@ def _metric_block(
             "real": _quantize(real),
             "twr": _quantize(twr),
             "mwr_xirr": _quantize(mwr),
+            "mwr_cumulative": _quantize(
+                cumulative_from_annualized(annual_return=mwr, days=(end_date - start_date).days)
+            ),
             # MWR/XIRR is already an annual rate; TWR is cumulative, so it needs its own
             # annualized companion before the two can sit next to each other.
             "twr_annualized": _quantize(
