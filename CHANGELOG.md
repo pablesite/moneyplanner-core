@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.47.0...moneyplanner-core-v0.48.0) (2026-08-23)
+
+
+### Features
+
+* **portfolio:** add position risk analysis ([0a5b74b](https://github.com/pablesite/moneyplanner-core/commit/0a5b74bc0ff15b9c239d4214bafc001ebe8a2769))
+* **portfolio:** add rolling benchmark risk ([4643493](https://github.com/pablesite/moneyplanner-core/commit/46434935736142b654652fc8dd2e107b92e5e813))
+
+
+### Bug Fixes
+
+* **portfolio:** attribute funded child investments ([47308a5](https://github.com/pablesite/moneyplanner-core/commit/47308a517a8ca440f73b5f25155dc935adc4e60e))
+
 ## [0.47.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.46.0...moneyplanner-core-v0.47.0) (2026-08-23)
 
 
