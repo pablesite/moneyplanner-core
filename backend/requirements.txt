@@ -1,6 +1,6 @@
 
 # Core
-Django>=6.0.7,<7.0
+Django>=6.1,<7.0
 djangorestframework>=3.15
 
 # Auth
