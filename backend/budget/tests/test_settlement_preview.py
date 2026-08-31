@@ -474,6 +474,47 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(positions["Efectivo bróker"]["observed_close"], "0.00")
         self.assertEqual(positions["ETF de Pablo"]["observed_close"], "100.00")
 
+    def test_temporary_commitment_uses_its_ownership_and_existing_allocation_fund(self):
+        fund_ownership = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        fund_ownership.splits.create(member=self.member_a, percent=Decimal("61"))
+        fund_ownership.splits.create(member=self.member_b, percent=Decimal("39"))
+        fund, _fund_ledger = self._account_asset(
+            "Fondo compromiso", Decimal("10000"), fund_ownership
+        )
+        fund_config = self._settlement_account(fund, SettlementAccount.Role.ALLOCATION_DESTINATION)
+        self._opening(fund_config, self.member_a, Decimal("6100"))
+        self._opening(fund_config, self.member_b, Decimal("3900"))
+        commitment = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso reservado",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="housing_home",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            amount_annual=Decimal("16488"),
+            fiscal_year=2026,
+            currency="EUR",
+            ownership=self.shared,
+            settlement_account=fund_config,
+        )
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        reserve = next(row for row in result["reserves"] if row["entry_id"] == commitment.id)
+        self.assertEqual(reserve["funding_mode"], "held")
+        self.assertEqual(reserve["ownership_id"], self.shared.id)
+        self.assertEqual(
+            reserve["members"],
+            [
+                {"member_id": self.member_a.id, "amount": "687.00"},
+                {"member_id": self.member_b.id, "amount": "687.00"},
+            ],
+        )
+        fund_row = next(row for row in result["accounts"] if row["account_id"] == fund_config.id)
+        self.assertEqual(fund_row["target_close"], "10000.00")
+
     def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
         wallet_a, wallet_a_ledger = self._account_asset(
             "Monedero Pablo", Decimal("0"), self.individual_a

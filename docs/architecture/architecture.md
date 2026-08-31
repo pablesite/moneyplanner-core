@@ -94,7 +94,7 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are optional planning metadata
    because one aggregate forecast may cover realized movements from several owners. Realized
    settlement flows use posted transaction ownership; future reserves use the ownership of their
-   configured operating or allocation destination account.
+   budget entry, falling back to the configured destination account only for legacy rows without one.
 4. Recurrent expenses route through nullable `settlement_account`. Asset-generated investment rows
    inherit both ownership and an allocation destination only from unambiguous structural links;
    liability-generated rows inherit ownership. Plan-managed rows remain writable only by Mi Plan.
@@ -132,6 +132,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 3. The next complete month supplies recurrent operating reserves and active temporary commitments.
    Savings and investment rows increase their explicit allocation destination; one-off and transfer
    rows are excluded, and unsupported roles are returned as warnings.
+   A temporary commitment may instead point at an allocation-destination fund that already holds the
+   money: it is reported as a retained reserve and does not add a second funding requirement.
 4. Every obligation and destination uses the same effective ownership resolver for its target month.
    Missing ownership, incompatible vectors, FX gaps, perimeter escapes and unexplained physical
    balance deltas make the result `not_ready`; the existing close can still be finalized.

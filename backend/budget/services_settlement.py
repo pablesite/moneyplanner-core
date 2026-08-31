@@ -237,6 +237,17 @@ def expected_expense_settlement_role(*, expense: AnnualExpenseEntry) -> str:
     return cast(str, SettlementAccount.Role.OPERATING)
 
 
+def is_expense_settlement_destination_compatible(
+    *, expense: AnnualExpenseEntry, destination: SettlementAccount
+) -> bool:
+    if expense.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT:
+        return destination.role in {
+            SettlementAccount.Role.OPERATING,
+            SettlementAccount.Role.ALLOCATION_DESTINATION,
+        }
+    return destination.role == expected_expense_settlement_role(expense=expense)
+
+
 def resolve_expense_settlement_destination(
     *, expense: AnnualExpenseEntry, accounts: list[SettlementAccount]
 ) -> SettlementAccount | None:
@@ -605,8 +616,7 @@ def build_settlement_readiness(
                 }
             )
             continue
-        expected_role = expected_expense_settlement_role(expense=entry)
-        if destination.role != expected_role:
+        if not is_expense_settlement_destination_compatible(expense=entry, destination=destination):
             blockers.append(
                 {
                     "code": "expense_invalid_settlement_account",

@@ -36,6 +36,7 @@ from .services_settlement import (
     _wallet_normalization_deltas,
     build_settlement_readiness,
     expected_expense_settlement_role,
+    is_expense_settlement_destination_compatible,
     resolve_expense_settlement_destination,
 )
 
@@ -800,8 +801,7 @@ def _compute_reserves(
                 },
             )
             continue
-        expected_role = expected_expense_settlement_role(expense=entry)
-        if destination.role != expected_role:
+        if not is_expense_settlement_destination_compatible(expense=entry, destination=destination):
             _append_unique(
                 blockers,
                 {
@@ -812,21 +812,22 @@ def _compute_reserves(
             )
             continue
         destination_ownership = account_ownerships.get(destination.id)
-        if destination_ownership is None:
+        reserve_ownership = entry.ownership or destination_ownership
+        if reserve_ownership is None:
             continue
-        destination_vector, destination_result = _allocation(
-            ownership=destination_ownership,
+        reserve_vector, reserve_result = _allocation(
+            ownership=reserve_ownership,
             year=target_year,
             month=target_month,
             cache=allocation_cache,
         )
-        if destination_vector is None:
+        if reserve_vector is None:
             _append_unique(
                 blockers,
                 {
                     "code": "allocation_blocked",
-                    "ownership_id": destination_result["ownership_id"],
-                    "quality_reasons": destination_result["quality_reasons"],
+                    "ownership_id": reserve_result["ownership_id"],
+                    "quality_reasons": reserve_result["quality_reasons"],
                 },
             )
             continue
@@ -842,8 +843,13 @@ def _compute_reserves(
             _append_unique(blockers, {"code": "missing_budget_fx_rate", "entry_id": entry.id})
             continue
         member_rows = []
-        for member_id, member_amount in _allocate(converted, destination_vector).items():
-            requirements[(destination.id, member_id)] += member_amount
+        held_in_allocation = (
+            entry.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+            and destination.role == SettlementAccount.Role.ALLOCATION_DESTINATION
+        )
+        for member_id, member_amount in _allocate(converted, reserve_vector).items():
+            if not held_in_allocation:
+                requirements[(destination.id, member_id)] += member_amount
             member_rows.append({"member_id": member_id, "amount": _money_string(member_amount)})
         rows.append(
             {
@@ -851,14 +857,19 @@ def _compute_reserves(
                 "name": entry.name,
                 "kind": (
                     "allocation"
-                    if expected_role == SettlementAccount.Role.ALLOCATION_DESTINATION
+                    if entry.cashflow_role
+                    in {
+                        AnnualExpenseEntry.CashflowRole.SAVINGS,
+                        AnnualExpenseEntry.CashflowRole.INVESTMENT,
+                    }
                     else "reserve"
                 ),
                 "cashflow_role": entry.cashflow_role,
-                "ownership_id": destination_ownership.id,
+                "ownership_id": reserve_ownership.id,
                 "settlement_account_id": destination.id,
                 "amount": _money_string(converted),
                 "currency": base_currency,
+                "funding_mode": "held" if held_in_allocation else "top_up",
                 "members": member_rows,
             }
         )
