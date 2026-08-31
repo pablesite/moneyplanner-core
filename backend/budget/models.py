@@ -511,6 +511,24 @@ class SettlementOpeningAdjustment(models.Model):
         ordering = ["account_id", "member_id", "id"]
 
 
+class SettlementWalletNormalization(models.Model):
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.CASCADE,
+        related_name="wallet_normalizations",
+    )
+    transaction = models.OneToOneField(
+        "accounting.LedgerTransaction",
+        on_delete=models.PROTECT,
+        related_name="settlement_wallet_normalization",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_wallet_normalization"
+        ordering = ["transaction__booking_date", "transaction_id"]
+
+
 class SettlementSnapshot(models.Model):
     class Status(models.TextChoices):
         READY = "ready", "Listo"

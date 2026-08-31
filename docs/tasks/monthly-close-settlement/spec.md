@@ -155,10 +155,14 @@ Movimientos.
 2. El saldo observado debe reconciliar con el baseline o snapshot anterior mas los asientos del
    perimetro. Una edicion manual no explicada produce `unreconciled_account_balance` en lugar de
    atribuir el delta con el ownership de la cuenta.
-3. En monederos, la diferencia aceptada al activar se mantiene como puente constante entre saldo
-   modelado y efectivo fisico; los cambios posteriores siguen necesitando movimientos trazables.
+3. En monederos, la diferencia aceptada al activar se mantiene como puente entre saldo modelado y
+   efectivo fisico. Una transferencia posterior que solo cierre el sistema virtual puede enlazarse
+   explicitamente como normalizacion: conserva su fecha y trazabilidad, reduce el puente por cuenta y
+   no se interpreta como un segundo movimiento de efectivo.
 4. Un saldo personal objetivo negativo se conserva con signo. Representa una aportacion inversa o
    financiacion necesaria y no se recorta silenciosamente a cero.
+5. La fecha publica de activacion es el primer dia incluido. El baseline corresponde al dia anterior;
+   cambiarlo exige una recalibracion explicita y queda prohibido tras un snapshot `ready` finalizado.
 
 ## Resultado validado de v1
 

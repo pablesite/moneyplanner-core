@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import status
@@ -8,21 +10,30 @@ from rest_framework.views import APIView
 from .serializers_settlement import (
     SettlementActivationSerializer,
     SettlementConfigurationWriteSerializer,
+    SettlementRebaselineSerializer,
 )
 from .services_settlement import (
     activate_settlement_profile,
     build_settlement_readiness,
+    can_rebaseline_settlement_profile,
     disable_settlement_profile,
     get_or_create_settlement_profile,
     replace_settlement_configuration,
+    rebaseline_settlement_profile,
 )
 
 
 def serialize_settlement_configuration(profile) -> dict[str, object]:
     accounts = list(profile.accounts.select_related("asset", "member").order_by("id"))
+    start_date = (
+        profile.activation_date + timedelta(days=1) if profile.activation_date is not None else None
+    )
     return {
         "is_enabled": profile.is_enabled,
         "activation_date": profile.activation_date,
+        "baseline_date": profile.activation_date,
+        "start_date": start_date,
+        "can_rebaseline": can_rebaseline_settlement_profile(profile=profile),
         "base_currency": profile.base_currency,
         "readiness_status": profile.readiness_status,
         "readiness_checked_at": profile.readiness_checked_at,
@@ -73,6 +84,16 @@ def serialize_settlement_configuration(profile) -> dict[str, object]:
             }
             for balance in profile.opening_balances.select_related("account", "member").order_by(
                 "account_id", "member_id"
+            )
+        ],
+        "normalization_transactions": [
+            {
+                "transaction_id": row.transaction_id,
+                "booking_date": row.transaction.booking_date,
+                "description": row.transaction.description,
+            }
+            for row in profile.wallet_normalizations.select_related("transaction").order_by(
+                "transaction__booking_date", "transaction_id"
             )
         ],
     }
@@ -141,9 +162,27 @@ class SettlementActivateView(APIView):
     def post(self, request):
         serializer = SettlementActivationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        profile = activate_settlement_profile(
+        start_date = serializer.validated_data.get("start_date")
+        if start_date is None:
+            legacy_baseline = serializer.validated_data.get("activation_date")
+            start_date = (
+                legacy_baseline + timedelta(days=1)
+                if legacy_baseline is not None
+                else timezone.localdate()
+            )
+        profile = activate_settlement_profile(user=request.user, start_date=start_date)
+        return Response(serialize_settlement_configuration(profile))
+
+
+class SettlementRebaselineView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SettlementRebaselineSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = rebaseline_settlement_profile(
             user=request.user,
-            activation_date=serializer.validated_data.get("activation_date", timezone.localdate()),
+            payload=serializer.validated_data,
         )
         return Response(serialize_settlement_configuration(profile))
 

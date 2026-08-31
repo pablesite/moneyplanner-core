@@ -35,10 +35,37 @@ class SettlementConfigurationWriteSerializer(serializers.Serializer):
     base_currency = serializers.CharField(min_length=3, max_length=3)
     accounts = SettlementAccountInputSerializer(many=True)
     opening_adjustments = SettlementOpeningAdjustmentInputSerializer(many=True, required=False)
+    normalization_transaction_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False
+    )
 
 
 class SettlementActivationSerializer(serializers.Serializer):
-    activation_date = serializers.DateField(required=False)
+    start_date = serializers.DateField(required=False)
+    activation_date = serializers.DateField(required=False, write_only=True)
+
+    def validate(self, attrs):
+        if attrs.get("start_date") and attrs.get("activation_date"):
+            raise serializers.ValidationError(
+                "Usa start_date; activation_date se conserva solo por compatibilidad."
+            )
+        return attrs
+
+
+class SettlementWalletBalanceInputSerializer(serializers.Serializer):
+    asset_id = serializers.IntegerField(min_value=1)
+    accepted_physical_balance = serializers.DecimalField(
+        max_digits=20, decimal_places=8, min_value=0
+    )
+
+
+class SettlementRebaselineSerializer(serializers.Serializer):
+    start_date = serializers.DateField()
+    wallet_balances = SettlementWalletBalanceInputSerializer(many=True)
+    opening_adjustments = SettlementOpeningAdjustmentInputSerializer(many=True, required=False)
+    normalization_transaction_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False
+    )
 
 
 class SettlementExecutionSerializer(serializers.Serializer):

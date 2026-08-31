@@ -22,6 +22,7 @@ from .views_settlement import (
     SettlementConfigurationView,
     SettlementDisableView,
     SettlementReadinessView,
+    SettlementRebaselineView,
 )
 
 router = DefaultRouter()
@@ -59,6 +60,11 @@ urlpatterns = [
         "settlement/disable/",
         SettlementDisableView.as_view(),
         name="settlement-disable",
+    ),
+    path(
+        "settlement/rebaseline/",
+        SettlementRebaselineView.as_view(),
+        name="settlement-rebaseline",
     ),
     path(
         "monthly-close/<int:year>/<int:month>/",

@@ -26,9 +26,11 @@ from .models import (
     SettlementProfile,
     SettlementSnapshot,
     SettlementTransferRecommendation,
+    SettlementWalletNormalization,
 )
 from .services import effective_annual_expense_entries, planned_expense_monthly_distribution
 from .services_settlement import (
+    _wallet_normalization_deltas,
     build_settlement_readiness,
     expected_expense_settlement_role,
     resolve_expense_settlement_destination,
@@ -216,6 +218,39 @@ def _append_unique(rows: list[dict], row: dict) -> None:
         rows.append(row)
 
 
+def _apply_wallet_normalization(
+    *,
+    transaction_row: LedgerTransaction,
+    settlement_by_ledger: dict[int, SettlementAccount],
+    base_currency: str,
+    fx_cache,
+    normalization_delta: dict[int, Decimal],
+    blockers: list[dict],
+) -> None:
+    for entry in transaction_row.entries.all():
+        settlement_account = settlement_by_ledger.get(entry.account_id)
+        if settlement_account is None:
+            continue
+        signed = (
+            Decimal(entry.amount)
+            if entry.side == LedgerEntry.Side.DEBIT
+            else -Decimal(entry.amount)
+        )
+        try:
+            normalization_delta[settlement_account.id] += _convert(
+                signed,
+                entry.currency,
+                base_currency,
+                transaction_row.booking_date,
+                fx_cache,
+            )
+        except DjangoValidationError:
+            _append_unique(
+                blockers,
+                {"code": "missing_fx_rate", "transaction_id": transaction_row.id},
+            )
+
+
 def _compute_movements(
     *,
     transactions: list[LedgerTransaction],
@@ -228,6 +263,8 @@ def _compute_movements(
     member_income: dict[int, Decimal],
     member_expense: dict[int, Decimal],
     physical_delta: dict[int, Decimal],
+    normalization_delta: dict[int, Decimal],
+    normalization_transaction_ids: set[int],
     blockers: list[dict],
 ) -> list[dict]:
     compensations: list[dict] = []
@@ -238,6 +275,16 @@ def _compute_movements(
     }
     fx_cache = build_fx_cache(currencies)
     for tx in transactions:
+        if tx.id in normalization_transaction_ids:
+            _apply_wallet_normalization(
+                transaction_row=tx,
+                settlement_by_ledger=settlement_by_ledger,
+                base_currency=base_currency,
+                fx_cache=fx_cache,
+                normalization_delta=normalization_delta,
+                blockers=blockers,
+            )
+            continue
         physical_by_member: dict[int, Decimal] = defaultdict(Decimal)
         participant_entries = [
             entry for entry in tx.entries.all() if entry.account_id in settlement_by_ledger
@@ -755,6 +802,7 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     )
     allocation_cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]] = {}
     physical_delta: dict[int, Decimal] = defaultdict(Decimal)
+    normalization_delta: dict[int, Decimal] = defaultdict(Decimal)
     member_income: dict[int, Decimal] = defaultdict(Decimal)
     member_expense: dict[int, Decimal] = defaultdict(Decimal)
     compensations = _compute_movements(
@@ -768,7 +816,18 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         member_income=member_income,
         member_expense=member_expense,
         physical_delta=physical_delta,
+        normalization_delta=normalization_delta,
+        normalization_transaction_ids=set(
+            SettlementWalletNormalization.objects.filter(profile=profile).values_list(
+                "transaction_id", flat=True
+            )
+        ),
         blockers=blockers,
+    )
+    cumulative_normalization_delta = _wallet_normalization_deltas(
+        profile=profile,
+        after_date=profile.activation_date or close_start - timedelta(days=1),
+        through_date=close_end,
     )
 
     reserves, requirements = _compute_reserves(
@@ -803,7 +862,8 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
             activation_gap = Decimal(account.modeled_balance_at_activation or ZERO) - Decimal(
                 account.accepted_physical_balance or ZERO
             )
-            observed = modeled - activation_gap
+            remaining_gap = activation_gap + cumulative_normalization_delta.get(account.id, ZERO)
+            observed = modeled - remaining_gap
         else:
             observed = get_effective_asset_amount(asset=account.asset, as_of_date=close_end)
         difference = _money(Decimal(observed) - expected)
@@ -834,6 +894,9 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
                 else None,
                 "opening": _money_string(opening_total),
                 "physical_delta": _money_string(physical_delta[account.id]),
+                "normalization_delta": _money_string(
+                    cumulative_normalization_delta.get(account.id, ZERO)
+                ),
                 "observed_close": _money_string(Decimal(observed)),
                 "closing_by_member": closing_members,
             }

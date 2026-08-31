@@ -96,15 +96,21 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    ambiguous operating reserve routes, movement ownership, dynamic-allocation coverage, non-zero
    opening adjustments and unnormalized wallets. It does not require ownership on budget rows;
    allocations without a destination are omitted with a warning instead of blocking activation.
-6. Activation is explicit and idempotent. It captures one member/account opening baseline using the
-   effective account ownership for the activation month. A wallet baseline uses accepted physical
-   cash while preserving its modeled balance and historical movements for audit.
+6. Activation is explicit and idempotent. The public contract receives the first included
+   `start_date`; Core captures the member/account opening baseline on the preceding `baseline_date`.
+   A wallet baseline uses accepted physical cash while preserving its modeled balance and historical
+   movements for audit. A different start date is never ignored silently: it requires an explicit
+   rebaseline, which is rejected once a ready settlement snapshot exists.
 7. Opening adjustments are signed member/account entries that must sum exactly zero. They carry
    prior fictitious wallet compensations into the economic baseline without representing liquidity.
 8. Readiness accepts an exact `balance_date` for activation previews and returns one
    `wallet_reconciliations` row per physical-cash account. Each row exposes the modeled balance,
    accepted cash and monetary difference for that same date; clients must not mix it with a current
    balance or with the first day of the selected close month.
+9. A posted transfer exclusively between configured physical wallets may be linked as an opening
+   normalization. It retains its real booking date but reduces the modeled-to-physical bridge instead
+   of moving cash or creating a second economic compensation. Candidate selection is explicit and
+   tenant-scoped.
 
 ## Monthly-close Settlement Engine
 

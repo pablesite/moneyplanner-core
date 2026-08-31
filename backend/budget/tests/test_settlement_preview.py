@@ -15,6 +15,7 @@ from budget.models import (
     SettlementOpeningBalance,
     SettlementProfile,
     SettlementSnapshot,
+    SettlementWalletNormalization,
 )
 from budget.services_monthly_close import finalize_monthly_close, reopen_monthly_close
 from budget.services_settlement_preview import (
@@ -323,6 +324,97 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(
             sum(Decimal(row["amount"]) for row in result["recommendations"]), Decimal("1850.00")
         )
+
+    def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
+        wallet_a, wallet_a_ledger = self._account_asset(
+            "Monedero Pablo", Decimal("0"), self.individual_a
+        )
+        wallet_a.subcategory = Asset.Subcategory.WALLET
+        wallet_a.save(update_fields=["subcategory"])
+        wallet_shared, wallet_shared_ledger = self._account_asset(
+            "Monedero compartido", Decimal("20"), self.shared
+        )
+        wallet_shared.subcategory = Asset.Subcategory.WALLET
+        wallet_shared.save(update_fields=["subcategory"])
+        wallet_a_config = self._settlement_account(wallet_a, SettlementAccount.Role.PHYSICAL_CASH)
+        wallet_a_config.accepted_physical_balance = Decimal("0")
+        wallet_a_config.modeled_balance_at_activation = Decimal("100")
+        wallet_a_config.save(
+            update_fields=["accepted_physical_balance", "modeled_balance_at_activation"]
+        )
+        wallet_shared_config = self._settlement_account(
+            wallet_shared, SettlementAccount.Role.PHYSICAL_CASH
+        )
+        wallet_shared_config.accepted_physical_balance = Decimal("20")
+        wallet_shared_config.modeled_balance_at_activation = Decimal("-80")
+        wallet_shared_config.save(
+            update_fields=["accepted_physical_balance", "modeled_balance_at_activation"]
+        )
+        self._opening(wallet_a_config, self.member_a, Decimal("0"))
+        self._opening(wallet_shared_config, self.member_a, Decimal("10"))
+        self._opening(wallet_shared_config, self.member_b, Decimal("10"))
+        normalization = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 5),
+            value_date=date(2026, 3, 5),
+            description="Cierre del monedero virtual",
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+        )
+        LedgerEntry.objects.create(
+            transaction=normalization,
+            account=wallet_a_ledger,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=normalization,
+            account=wallet_shared_ledger,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        SettlementWalletNormalization.objects.create(
+            profile=self.profile, transaction=normalization
+        )
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        wallets = {row["name"]: row for row in result["accounts"] if row["role"] == "physical_cash"}
+        self.assertEqual(wallets["Monedero Pablo"]["observed_close"], "0.00")
+        self.assertEqual(wallets["Monedero Pablo"]["physical_delta"], "0.00")
+        self.assertEqual(wallets["Monedero Pablo"]["normalization_delta"], "-100.00")
+        self.assertEqual(wallets["Monedero compartido"]["observed_close"], "20.00")
+
+        march_close = MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=3,
+            status=MonthlyClose.Status.FINALIZED,
+        )
+        SettlementSnapshot.objects.create(
+            monthly_close=march_close,
+            profile=self.profile,
+            status=SettlementSnapshot.Status.READY,
+            base_currency="EUR",
+            period_start=date(2026, 3, 2),
+            period_end=date(2026, 3, 31),
+            target_year=2026,
+            target_month=4,
+            opening_source="activation",
+            source_hash="wallet-normalized",
+            account_balances=result["accounts"],
+        )
+
+        april = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+        april_wallets = {
+            row["name"]: row for row in april["accounts"] if row["role"] == "physical_cash"
+        }
+        self.assertEqual(april["status"], "ready", april["quality"])
+        self.assertEqual(april_wallets["Monedero Pablo"]["observed_close"], "0.00")
+        self.assertEqual(april_wallets["Monedero compartido"]["observed_close"], "20.00")
 
     def test_dynamic_split_and_fixed_allocation_reconcile_to_cent(self):
         self.shared.allocation_basis = Ownership.AllocationBasis.RECURRING_INCOME_12M

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounts.services import get_base_currency_for_user
+from accounting.models import LedgerEntry, LedgerTransaction
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from memberships.services_allocations import resolve_ownership_allocation
 from net_worth.models import Asset
@@ -20,6 +21,8 @@ from .models import (
     SettlementOpeningAdjustment,
     SettlementOpeningBalance,
     SettlementProfile,
+    SettlementSnapshot,
+    SettlementWalletNormalization,
 )
 from .services import (
     effective_annual_expense_entries,
@@ -51,6 +54,156 @@ def _ownership_for_asset(*, user, asset_id: int) -> Ownership | None:
         .first()
     )
     return link.ownership if link is not None else None
+
+
+def _physical_wallet_accounts(profile: SettlementProfile) -> list[SettlementAccount]:
+    return list(
+        profile.accounts.filter(role=SettlementAccount.Role.PHYSICAL_CASH)
+        .select_related("asset")
+        .order_by("id")
+    )
+
+
+def _validated_wallet_normalization_transactions(
+    *, user, profile: SettlementProfile, transaction_ids: list[int]
+) -> list[LedgerTransaction]:
+    unique_ids = list(dict.fromkeys(transaction_ids))
+    if len(unique_ids) != len(transaction_ids):
+        raise ValidationError(
+            {"normalization_transaction_ids": "No repitas una transferencia de normalizacion."}
+        )
+    transactions = list(
+        LedgerTransaction.objects.filter(user=user, id__in=unique_ids)
+        .prefetch_related("entries")
+        .order_by("booking_date", "id")
+    )
+    if len(transactions) != len(unique_ids):
+        raise ValidationError(
+            {"normalization_transaction_ids": "Alguna transferencia no pertenece al usuario."}
+        )
+    wallet_ledger_ids = {
+        account.asset.accounting_account_id
+        for account in _physical_wallet_accounts(profile)
+        if account.asset.accounting_account_id is not None
+    }
+    for row in transactions:
+        entries = list(row.entries.all())
+        if (
+            row.status != LedgerTransaction.Status.POSTED
+            or row.quick_entry_kind != LedgerTransaction.QuickEntryKind.TRANSFER
+            or len(entries) < 2
+            or any(entry.account_id not in wallet_ledger_ids for entry in entries)
+        ):
+            raise ValidationError(
+                {
+                    "normalization_transaction_ids": (
+                        f"{row.id} debe ser una transferencia contabilizada exclusivamente "
+                        "entre monederos fisicos configurados."
+                    )
+                }
+            )
+    conflict = SettlementWalletNormalization.objects.filter(transaction_id__in=unique_ids).exclude(
+        profile=profile
+    )
+    if conflict.exists():
+        raise ValidationError(
+            {"normalization_transaction_ids": "Una transferencia ya pertenece a otro perfil."}
+        )
+    return transactions
+
+
+def _replace_wallet_normalizations(
+    *, user, profile: SettlementProfile, transaction_ids: list[int]
+) -> None:
+    transactions = _validated_wallet_normalization_transactions(
+        user=user, profile=profile, transaction_ids=transaction_ids
+    )
+    profile.wallet_normalizations.exclude(transaction_id__in=transaction_ids).delete()
+    for transaction_row in transactions:
+        SettlementWalletNormalization.objects.get_or_create(
+            profile=profile, transaction=transaction_row
+        )
+
+
+def _wallet_normalization_deltas(
+    *, profile: SettlementProfile, after_date: date, through_date: date | None = None
+) -> dict[int, Decimal]:
+    accounts = _physical_wallet_accounts(profile)
+    account_by_ledger = {
+        account.asset.accounting_account_id: account
+        for account in accounts
+        if account.asset.accounting_account_id is not None
+    }
+    rows = profile.wallet_normalizations.filter(
+        transaction__booking_date__gt=after_date,
+        transaction__status=LedgerTransaction.Status.POSTED,
+    )
+    if through_date is not None:
+        rows = rows.filter(transaction__booking_date__lte=through_date)
+    rows = rows.prefetch_related("transaction__entries")
+    deltas: dict[int, Decimal] = {account.id: ZERO for account in accounts}
+    for normalization in rows:
+        for entry in normalization.transaction.entries.all():
+            account = account_by_ledger.get(entry.account_id)
+            if account is None:
+                continue
+            signed = (
+                Decimal(entry.amount)
+                if entry.side == LedgerEntry.Side.DEBIT
+                else -Decimal(entry.amount)
+            )
+            deltas[account.id] += signed
+    return deltas
+
+
+def _wallet_normalization_candidates(
+    *, user, profile: SettlementProfile, after_date: date
+) -> list[dict[str, object]]:
+    accounts = _physical_wallet_accounts(profile)
+    account_by_ledger = {
+        account.asset.accounting_account_id: account
+        for account in accounts
+        if account.asset.accounting_account_id is not None
+    }
+    selected_ids = set(profile.wallet_normalizations.values_list("transaction_id", flat=True))
+    transactions = (
+        LedgerTransaction.objects.filter(
+            user=user,
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
+            booking_date__gt=after_date,
+            entries__account_id__in=account_by_ledger,
+        )
+        .distinct()
+        .prefetch_related("entries")
+        .order_by("booking_date", "id")
+    )
+    result: list[dict[str, object]] = []
+    for transaction_row in transactions:
+        entries = list(transaction_row.entries.all())
+        if len(entries) < 2 or any(entry.account_id not in account_by_ledger for entry in entries):
+            continue
+        result.append(
+            {
+                "transaction_id": transaction_row.id,
+                "booking_date": transaction_row.booking_date.isoformat(),
+                "description": transaction_row.description,
+                "selected": transaction_row.id in selected_ids,
+                "entries": [
+                    {
+                        "asset_id": account_by_ledger[entry.account_id].asset_id,
+                        "asset_name": account_by_ledger[entry.account_id].asset.name,
+                        "amount": str(
+                            Decimal(entry.amount)
+                            if entry.side == LedgerEntry.Side.DEBIT
+                            else -Decimal(entry.amount)
+                        ),
+                    }
+                    for entry in entries
+                ],
+            }
+        )
+    return result
 
 
 def derive_expense_settlement_fields(*, expense: AnnualExpenseEntry) -> dict[str, object]:
@@ -238,6 +391,11 @@ def replace_settlement_configuration(*, user, payload: dict) -> SettlementProfil
             for row in adjustments
         ]
     )
+    _replace_wallet_normalizations(
+        user=user,
+        profile=profile,
+        transaction_ids=list(payload.get("normalization_transaction_ids", [])),
+    )
     profile.base_currency = base_currency
     profile.readiness_status = SettlementProfile.ReadinessStatus.NOT_CHECKED
     profile.readiness_checked_at = None
@@ -277,6 +435,7 @@ def _check_account_readiness(
 
     account_ownerships: dict[int, Ownership] = {}
     has_opening_baseline = profile.opening_balances.exists()
+    normalization_deltas = _wallet_normalization_deltas(profile=profile, after_date=as_of_date)
     for account in accounts:
         ownership = _ownership_for_asset(user=user, asset_id=account.asset_id)
         if ownership is None:
@@ -290,7 +449,7 @@ def _check_account_readiness(
             )
             continue
         account_ownerships[account.id] = ownership
-        if account.role == SettlementAccount.Role.PHYSICAL_CASH and not has_opening_baseline:
+        if account.role == SettlementAccount.Role.PHYSICAL_CASH:
             modeled_balance = get_effective_asset_amount(asset=account.asset, as_of_date=as_of_date)
             accepted_balance = Decimal(account.accepted_physical_balance or 0)
             has_wallet_adjustment = profile.opening_adjustments.filter(
@@ -299,9 +458,10 @@ def _check_account_readiness(
             ).exists()
             # The UI and settlement are expressed in currency cents. Do not block
             # activation for an internal precision residue that displays as 0.00.
-            wallet_difference = (modeled_balance - accepted_balance).quantize(
-                MONEY_STEP, rounding=ROUND_HALF_UP
-            )
+            modeled_difference = modeled_balance - accepted_balance
+            wallet_difference = (
+                modeled_difference + normalization_deltas.get(account.id, ZERO)
+            ).quantize(MONEY_STEP, rounding=ROUND_HALF_UP)
             wallet_reconciliations.append(
                 {
                     "account_id": account.id,
@@ -312,10 +472,12 @@ def _check_account_readiness(
                     "modeled_balance": str(modeled_balance),
                     "accepted_physical_balance": str(accepted_balance),
                     "difference": str(wallet_difference),
-                    "normalization_recorded": has_wallet_adjustment,
+                    "normalization_recorded": bool(
+                        has_wallet_adjustment or normalization_deltas.get(account.id, ZERO)
+                    ),
                 }
             )
-            if wallet_difference != ZERO and not has_wallet_adjustment:
+            if wallet_difference != ZERO and not has_wallet_adjustment and not has_opening_baseline:
                 blockers.append(
                     {
                         "code": "wallet_adjustment_required",
@@ -493,11 +655,20 @@ def build_settlement_readiness(
         "status": status,
         "is_enabled": profile.is_enabled,
         "activation_date": profile.activation_date.isoformat() if profile.activation_date else None,
+        "baseline_date": (balance_date or date(fiscal_year, month, 1)).isoformat(),
+        "start_date": (profile.activation_date + timedelta(days=1)).isoformat()
+        if profile.activation_date
+        else None,
         "base_currency": profile.base_currency,
         "target_period": {"year": fiscal_year, "month": month},
         "blockers": blockers,
         "warnings": warnings,
         "wallet_reconciliations": wallet_reconciliations,
+        "wallet_normalization_candidates": _wallet_normalization_candidates(
+            user=user,
+            profile=profile,
+            after_date=balance_date or date(fiscal_year, month, 1),
+        ),
         "allocation_coverage": [
             {
                 "ownership_id": result["ownership_id"],
@@ -517,30 +688,30 @@ def build_settlement_readiness(
     }
 
 
-@transaction.atomic
-def activate_settlement_profile(*, user, activation_date: date) -> SettlementProfile:
-    profile = get_or_create_settlement_profile(user=user)
-    if profile.is_enabled:
-        return profile
-    if profile.activation_date is not None and profile.opening_balances.exists():
-        profile.is_enabled = True
-        profile.save(update_fields=["is_enabled", "updated_at"])
-        return profile
+def _capture_opening_baseline(
+    *, user, profile: SettlementProfile, baseline_date: date, start_date: date
+) -> SettlementProfile:
+    if profile.wallet_normalizations.filter(transaction__booking_date__lte=baseline_date).exists():
+        raise ValidationError(
+            {
+                "normalization_transaction_ids": (
+                    "Las normalizaciones deben estar registradas despues del baseline."
+                )
+            }
+        )
     readiness = build_settlement_readiness(
         user=user,
-        fiscal_year=activation_date.year,
-        month=activation_date.month,
+        fiscal_year=start_date.year,
+        month=start_date.month,
         persist_status=True,
-        balance_date=activation_date,
+        balance_date=baseline_date,
     )
     if readiness["status"] != SettlementProfile.ReadinessStatus.READY:
         raise ValidationError({"readiness": readiness})
 
     profile.opening_balances.all().delete()
     for account in profile.accounts.select_related("asset").order_by("id"):
-        modeled_balance = get_effective_asset_amount(
-            asset=account.asset, as_of_date=activation_date
-        )
+        modeled_balance = get_effective_asset_amount(asset=account.asset, as_of_date=baseline_date)
         account.modeled_balance_at_activation = modeled_balance
         account.save(update_fields=["modeled_balance_at_activation", "updated_at"])
         physical_balance = (
@@ -553,8 +724,8 @@ def activate_settlement_profile(*, user, activation_date: date) -> SettlementPro
             raise ValidationError({"accounts": "Una cuenta participante no tiene ownership."})
         vector, _ = _allocation_vector(
             ownership=ownership,
-            fiscal_year=activation_date.year,
-            month=activation_date.month,
+            fiscal_year=start_date.year,
+            month=start_date.month,
         )
         if vector is None:
             raise ValidationError({"accounts": "No se puede resolver el ownership de una cuenta."})
@@ -578,10 +749,126 @@ def activate_settlement_profile(*, user, activation_date: date) -> SettlementPro
             )
 
     profile.is_enabled = True
-    profile.activation_date = activation_date
+    profile.activation_date = baseline_date
     profile.readiness_status = SettlementProfile.ReadinessStatus.READY
     profile.save(update_fields=["is_enabled", "activation_date", "readiness_status", "updated_at"])
     return profile
+
+
+@transaction.atomic
+def activate_settlement_profile(*, user, start_date: date) -> SettlementProfile:
+    profile = get_or_create_settlement_profile(user=user)
+    baseline_date = start_date - timedelta(days=1)
+    if profile.activation_date is not None and profile.opening_balances.exists():
+        existing_start = profile.activation_date + timedelta(days=1)
+        if existing_start != start_date:
+            raise ValidationError(
+                {
+                    "start_date": (
+                        f"La liquidacion ya empieza el {existing_start.isoformat()}. "
+                        "Usa la recalibracion para cambiar el inicio."
+                    )
+                }
+            )
+        if not profile.is_enabled:
+            profile.is_enabled = True
+            profile.save(update_fields=["is_enabled", "updated_at"])
+        return profile
+    return _capture_opening_baseline(
+        user=user,
+        profile=profile,
+        baseline_date=baseline_date,
+        start_date=start_date,
+    )
+
+
+def can_rebaseline_settlement_profile(*, profile: SettlementProfile) -> bool:
+    return not profile.snapshots.filter(status=SettlementSnapshot.Status.READY).exists()
+
+
+@transaction.atomic
+def rebaseline_settlement_profile(*, user, payload: dict) -> SettlementProfile:
+    existing_profile = get_or_create_settlement_profile(user=user)
+    profile = SettlementProfile.objects.select_for_update().get(pk=existing_profile.pk)
+    if not can_rebaseline_settlement_profile(profile=profile):
+        raise ValidationError(
+            {
+                "detail": (
+                    "No se puede recalibrar una liquidacion con resultados validos ya finalizados."
+                )
+            }
+        )
+
+    start_date = payload["start_date"]
+    baseline_date = start_date - timedelta(days=1)
+    wallet_accounts = _physical_wallet_accounts(profile)
+    wallet_by_asset = {account.asset_id: account for account in wallet_accounts}
+    wallet_rows = payload.get("wallet_balances", [])
+    if {row["asset_id"] for row in wallet_rows} != set(wallet_by_asset):
+        raise ValidationError(
+            {"wallet_balances": "Indica el efectivo inicial de todos los monederos configurados."}
+        )
+    for row in wallet_rows:
+        account = wallet_by_asset[row["asset_id"]]
+        account.accepted_physical_balance = row["accepted_physical_balance"]
+        account.save(update_fields=["accepted_physical_balance", "updated_at"])
+
+    configuration_rows = [
+        {
+            "asset_id": account.asset_id,
+            "role": account.role,
+            "member_id": account.member_id,
+            "is_primary": account.is_primary,
+            "accepted_physical_balance": account.accepted_physical_balance,
+        }
+        for account in profile.accounts.select_related("asset", "member").order_by("id")
+    ]
+    _, adjustment_rows = _validate_configuration_payload(
+        user=user,
+        payload={
+            "accounts": configuration_rows,
+            "opening_adjustments": payload.get("opening_adjustments", []),
+        },
+    )
+    account_by_asset = {account.asset_id: account for account in profile.accounts.all()}
+    profile.opening_adjustments.all().delete()
+    SettlementOpeningAdjustment.objects.bulk_create(
+        [
+            SettlementOpeningAdjustment(
+                profile=profile,
+                account=account_by_asset[row.pop("asset_id")],
+                **row,
+            )
+            for row in adjustment_rows
+        ]
+    )
+    transaction_ids = list(payload.get("normalization_transaction_ids", []))
+    _replace_wallet_normalizations(
+        user=user,
+        profile=profile,
+        transaction_ids=transaction_ids,
+    )
+    profile.opening_balances.all().delete()
+    profile.accounts.update(modeled_balance_at_activation=None)
+    profile.is_enabled = False
+    profile.activation_date = None
+    profile.readiness_status = SettlementProfile.ReadinessStatus.NOT_CHECKED
+    profile.readiness_checked_at = None
+    profile.save(
+        update_fields=[
+            "is_enabled",
+            "activation_date",
+            "readiness_status",
+            "readiness_checked_at",
+            "updated_at",
+        ]
+    )
+    return _capture_opening_baseline(
+        user=user,
+        profile=profile,
+        baseline_date=baseline_date,
+        start_date=start_date,
+    )
 
 
 @transaction.atomic

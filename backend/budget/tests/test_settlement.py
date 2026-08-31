@@ -9,10 +9,12 @@ from rest_framework.test import APITestCase
 from budget.models import (
     AnnualExpenseEntry,
     AnnualIncomeEntry,
+    MonthlyClose,
     SettlementAccount,
     SettlementOpeningAdjustment,
     SettlementOpeningBalance,
     SettlementProfile,
+    SettlementSnapshot,
 )
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from net_worth.models import Asset, InvestmentContributionInterval
@@ -165,11 +167,79 @@ class SettlementApiTests(APITestCase):
             {"activation_date": "2026-04-01"},
             format="json",
         )
-        self.assertEqual(reactivated.status_code, status.HTTP_200_OK)
+        self.assertEqual(reactivated.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("recalibracion", str(reactivated.data).lower())
         self.assertEqual(
             list(shared_balances.values_list("amount", flat=True)),
             [Decimal("500.00000000"), Decimal("500.00000000")],
         )
+
+    def test_rebaseline_changes_the_first_included_day_when_no_ready_snapshot_exists(self):
+        self._configure()
+        self._shared_expense()
+        activated = self.client.post(
+            "/api/budget/settlement/activate/",
+            {"start_date": "2026-03-02"},
+            format="json",
+        )
+        self.assertEqual(activated.status_code, status.HTTP_200_OK, activated.data)
+
+        response = self.client.post(
+            "/api/budget/settlement/rebaseline/",
+            {
+                "start_date": "2026-04-01",
+                "wallet_balances": [],
+                "opening_adjustments": [],
+                "normalization_transaction_ids": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["baseline_date"], date(2026, 3, 31))
+        self.assertEqual(response.data["start_date"], date(2026, 4, 1))
+
+    def test_rebaseline_rejects_a_profile_with_a_ready_frozen_result(self):
+        self._configure()
+        self._shared_expense()
+        self.client.post(
+            "/api/budget/settlement/activate/",
+            {"start_date": "2026-03-02"},
+            format="json",
+        )
+        profile = SettlementProfile.objects.get(user=self.user)
+        close = MonthlyClose.objects.create(
+            user=self.user,
+            fiscal_year=2026,
+            month=3,
+            status=MonthlyClose.Status.FINALIZED,
+        )
+        SettlementSnapshot.objects.create(
+            monthly_close=close,
+            profile=profile,
+            status=SettlementSnapshot.Status.READY,
+            base_currency="EUR",
+            period_start=date(2026, 3, 2),
+            period_end=date(2026, 3, 31),
+            target_year=2026,
+            target_month=4,
+            opening_source="activation",
+            source_hash="ready",
+        )
+
+        response = self.client.post(
+            "/api/budget/settlement/rebaseline/",
+            {
+                "start_date": "2026-04-01",
+                "wallet_balances": [],
+                "opening_adjustments": [],
+                "normalization_transaction_ids": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("resultados validos", str(response.data).lower())
 
     def test_readiness_does_not_require_ownership_on_aggregate_income_budget(self):
         self._configure()
