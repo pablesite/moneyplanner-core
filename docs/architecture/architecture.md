@@ -88,6 +88,9 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    Accounting-backed credit cards are automatic settlement participants, not configured destinations:
    their negative liability balance is included whenever they carry debt or activity from the opening
    boundary, and their ownership comes from the linked liability.
+   EUR investment positions and broker-cash assets that fund them are also automatic, non-routable
+   participants. Non-base-currency positions remain outside this settlement perimeter until the
+   engine can preserve a dated FX valuation bridge.
 3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are optional planning metadata
    because one aggregate forecast may cover realized movements from several owners. Realized
    settlement flows use posted transaction ownership; future reserves use the ownership of their
@@ -124,6 +127,8 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    Internal transfers are economically neutral and only relocate the member/account position. This
    includes an automatic credit-card recharge from a participating bank account: the card purchase
    affects the month when booked, while its later payment only reduces cash and the liability together.
+   The same applies to liquid-account -> broker -> investment chains: they convert a member's
+   position rather than creating a settlement expense or transfer recommendation.
 3. The next complete month supplies recurrent operating reserves and active temporary commitments.
    Savings and investment rows increase their explicit allocation destination; one-off and transfer
    rows are excluded, and unsupported roles are returned as warnings.

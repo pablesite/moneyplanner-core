@@ -403,6 +403,77 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(balances[self.member_a.id]["expense"], "25.00")
         self.assertEqual(balances[self.member_b.id]["expense"], "25.00")
 
+    def test_broker_cash_and_investment_position_keep_funding_inside_perimeter(self):
+        broker, broker_ledger = self._account_asset(
+            "Efectivo bróker", Decimal("0"), self.individual_a
+        )
+        investment = Asset.objects.create(
+            user=self.user,
+            name="ETF de Pablo",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+            amount=Decimal("0"),
+            currency="EUR",
+            start_date=date(2020, 1, 1),
+        )
+        investment_ledger = LedgerAccount.objects.create(
+            user=self.user,
+            name=investment.name,
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment,
+        )
+        investment.accounting_account_id = investment_ledger.id
+        investment.save(update_fields=["accounting_account_id"])
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=self.individual_a,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=investment.id,
+        )
+        self._transfer(
+            amount=Decimal("100"), source=self.operating_ledger, destination=broker_ledger
+        )
+        contribution = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 20),
+            value_date=date(2026, 3, 20),
+            description="Compra ETF",
+            status=LedgerTransaction.Status.POSTED,
+            ownership=self.individual_a,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.INFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=contribution,
+            account=broker_ledger,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=contribution,
+            account=investment_ledger,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100"),
+            currency="EUR",
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="financial_investments",
+            subcategory_key="etf",
+        )
+        self.operating.amount = Decimal("900")
+        self.operating.save(update_fields=["amount"])
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        positions = {row["name"]: row for row in result["accounts"]}
+        self.assertEqual(positions["Efectivo bróker"]["role"], "investment_cash")
+        self.assertEqual(positions["ETF de Pablo"]["role"], "investment_position")
+        self.assertEqual(positions["Efectivo bróker"]["observed_close"], "0.00")
+        self.assertEqual(positions["ETF de Pablo"]["observed_close"], "100.00")
+
     def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
         wallet_a, wallet_a_ledger = self._account_asset(
             "Monedero Pablo", Decimal("0"), self.individual_a
