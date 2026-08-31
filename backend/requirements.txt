@@ -24,5 +24,5 @@ whitenoise>=6.12.0
 
 # Dev / quality (opcional pero recomendable)
 ruff>=0.16.4
-mypy>=2.3.0
+mypy>=2.3.1
 coverage>=7.15.4
