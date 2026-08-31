@@ -431,7 +431,46 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         value_date = attrs.get("value_date", getattr(self.instance, "value_date", None))
         if booking_date is not None and value_date is not None:
             validate_booking_and_value_dates(booking_date=booking_date, value_date=value_date)
+        self._validate_reinvestment_entries_are_unclassified(attrs)
         return attrs
+
+    def _validate_reinvestment_entries_are_unclassified(self, attrs: dict) -> None:
+        quick_entry_kind = attrs.get(
+            "quick_entry_kind", getattr(self.instance, "quick_entry_kind", "")
+        )
+        investment_direction = attrs.get(
+            "investment_direction", getattr(self.instance, "investment_direction", "")
+        )
+        if (
+            quick_entry_kind != LedgerTransaction.QuickEntryKind.INVESTMENT
+            or investment_direction != LedgerTransaction.InvestmentDirection.REINVESTMENT
+        ):
+            return
+
+        entries = attrs.get("entries")
+        if entries is None and self.instance is not None:
+            entries = self.instance.entries.all()
+        if entries is None:
+            return
+
+        def has_functional_classification(entry) -> bool:
+            if isinstance(entry, dict):
+                return bool(
+                    entry.get("flow_family")
+                    or entry.get("category_key")
+                    or entry.get("subcategory_key")
+                )
+            return bool(entry.flow_family or entry.category_key or entry.subcategory_key)
+
+        if any(has_functional_classification(entry) for entry in entries):
+            raise serializers.ValidationError(
+                {
+                    "entries": (
+                        "Una reinversion entre cuentas de inversion no admite "
+                        "clasificacion funcional."
+                    )
+                }
+            )
 
     @transaction.atomic
     def create(self, validated_data: dict) -> LedgerTransaction:

@@ -3258,6 +3258,73 @@ class AccountingApiTests(APITestCase):
         payload.update(overrides)
         return payload
 
+    def test_edit_rejects_reinvestment_when_existing_entries_are_classified(self):
+        source_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo origen clasificado",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("1000.00"),
+            is_active=True,
+        )
+        destination_asset = Asset.objects.create(
+            user=self.user,
+            name="Fondo destino clasificado",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.FUNDS,
+            currency="EUR",
+            amount=Decimal("0.00"),
+            is_active=True,
+        )
+        source_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker origen clasificado",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=source_asset,
+        )
+        destination_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Broker destino clasificado",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=destination_asset,
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 4, 12),
+            value_date=date(2026, 4, 12),
+            description="Venta que se intenta convertir en traspaso",
+            status=LedgerTransaction.Status.POSTED,
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+            investment_direction=LedgerTransaction.InvestmentDirection.OUTFLOW,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=destination_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("250.00"),
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=source_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("250.00"),
+            flow_family=LedgerEntry.FlowFamily.INCOME,
+            category_key="capital_gains",
+            subcategory_key="sale_financial_assets",
+        )
+
+        response = self.client.patch(
+            f"/api/accounting/transactions/{transaction.id}/",
+            {"investment_direction": "reinvestment"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("entries", response.data["error"]["details"])
+
     def test_transaction_publishes_the_fee_it_carries(self):
         investment_account = self.investment_account_for_fees()
         created = self.book_investment_with_fee("3.50", investment_account)
