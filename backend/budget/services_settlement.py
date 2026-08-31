@@ -240,6 +240,14 @@ def expected_expense_settlement_role(*, expense: AnnualExpenseEntry) -> str:
 def is_expense_settlement_destination_compatible(
     *, expense: AnnualExpenseEntry, destination: SettlementAccount
 ) -> bool:
+    if (
+        expense.ownership_id
+        and expense.ownership.kind == Ownership.Kind.INDIVIDUAL
+        and destination.role == SettlementAccount.Role.PERSONAL_DESTINATION
+        and destination.is_primary
+        and destination.member_id == expense.ownership.member_id
+    ):
+        return True
     if expense.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT:
         return destination.role in {
             SettlementAccount.Role.OPERATING,
@@ -258,6 +266,16 @@ def resolve_expense_settlement_destination(
     derived = derive_expense_settlement_fields(expense=expense).get("settlement_account")
     if isinstance(derived, SettlementAccount):
         return account_by_id.get(derived.id)
+
+    if expense.ownership_id and expense.ownership.kind == Ownership.Kind.INDIVIDUAL:
+        personal_accounts = [
+            account
+            for account in accounts
+            if account.role == SettlementAccount.Role.PERSONAL_DESTINATION
+            and account.is_primary
+            and account.member_id == expense.ownership.member_id
+        ]
+        return personal_accounts[0] if len(personal_accounts) == 1 else None
 
     if expected_expense_settlement_role(expense=expense) == SettlementAccount.Role.OPERATING:
         operating_accounts = [

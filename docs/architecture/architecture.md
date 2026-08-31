@@ -134,6 +134,9 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    rows are excluded, and unsupported roles are returned as warnings.
    A temporary commitment may instead point at an allocation-destination fund that already holds the
    money: it is reported as a retained reserve and does not add a second funding requirement.
+   Without an explicit destination, shared rows reserve in the operating account and individual rows
+   reserve in their owner's primary personal account; the engine never silently funds an individual
+   row from shared operating cash.
 4. Every obligation and destination uses the same effective ownership resolver for its target month.
    Missing ownership, incompatible vectors, FX gaps, perimeter escapes and unexplained physical
    balance deltas make the result `not_ready`; the existing close can still be finalized.
