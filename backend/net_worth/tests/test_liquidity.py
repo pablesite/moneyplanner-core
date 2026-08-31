@@ -4,6 +4,8 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
+
 from ..models import Asset, Liability, LiabilityValuation, LiquidityMonthlyCheckin
 from ..services_liquidity import build_liquidity_monthly_summary
 
@@ -59,3 +61,40 @@ class NetWorthLiquidityServicesTests(TestCase):
         self.assertEqual(summary["liquid_liability_executed_total"], "250.00")
         self.assertEqual(summary["coverage_confirmed"], 2)
         self.assertEqual([row["row_type"] for row in summary["rows"]], ["asset", "liability"])
+
+    def test_historical_summary_includes_archived_asset_with_ledger_activity(self):
+        deposit = Asset.objects.create(
+            user=self.user,
+            name="Deposito cerrado",
+            category=Asset.Category.CASH,
+            subcategory=Asset.Subcategory.SHORT_TERM_DEPOSIT,
+            amount=Decimal("0.00"),
+            currency="EUR",
+            start_date=date(2026, 1, 1),
+            is_active=False,
+            tracking_mode=Asset.TrackingMode.ACCOUNTING,
+        )
+        account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Deposito cerrado",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=deposit,
+        )
+        transaction = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 7, 1),
+            value_date=date(2026, 7, 1),
+            description="Apertura deposito",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=transaction,
+            account=account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("5000.00"),
+        )
+
+        summary = build_liquidity_monthly_summary(user=self.user, fiscal_year=2026, month=7)
+
+        self.assertEqual(summary["rows"][0]["asset_name"], "Deposito cerrado")

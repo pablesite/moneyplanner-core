@@ -224,7 +224,7 @@ def _load_liquidity_summary_inputs(
 
     summary_date = date(fiscal_year, month, last_day_of_month_fn(fiscal_year, month))
     liquid_assets = list(
-        get_liquidity_asset_queryset_for_user_fn(user=user)
+        get_liquidity_asset_queryset_for_user_fn(user=user, as_of_date=summary_date)
         .prefetch_related("improvements", "contribution_intervals")
         .order_by("subcategory", "name", "id")
     )

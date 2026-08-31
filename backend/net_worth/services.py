@@ -53,8 +53,8 @@ INTEREST_BEARING_INVESTMENT_SUBCATEGORIES = {
 }
 
 
-def get_liquidity_asset_queryset_for_user(*, user):
-    return Asset.objects.filter(user=user, is_active=True).filter(
+def get_liquidity_asset_queryset_for_user(*, user, as_of_date=None):
+    queryset = Asset.objects.filter(user=user).filter(
         models.Q(category=Asset.Category.CASH)
         | models.Q(
             category=Asset.Category.INVESTMENTS,
@@ -65,6 +65,18 @@ def get_liquidity_asset_queryset_for_user(*, user):
             subcategory__in=INTEREST_BEARING_INVESTMENT_SUBCATEGORIES,
         )
     )
+    if as_of_date is None:
+        return queryset.filter(is_active=True)
+
+    from accounting.models import LedgerAccount
+
+    historical_asset_ids = LedgerAccount.objects.filter(
+        user=user,
+        asset__isnull=False,
+        entries__transaction__status="posted",
+        entries__transaction__booking_date__lte=as_of_date,
+    ).values_list("asset_id", flat=True)
+    return queryset.filter(models.Q(is_active=True) | models.Q(id__in=historical_asset_ids))
 
 
 def get_liquid_liability_queryset_for_user(*, user):
