@@ -14,6 +14,7 @@ from budget.models import (
 from budget.services_monthly_close import (
     _build_monthly_financial_result,
     _get_liquidity_adjustments_for_month,
+    _get_non_liquidity_investment_fee_total_for_month,
     _get_uncovered_expense_entries_for_month,
     apply_distribution_to_checkins,
     compute_monthly_close_state,
@@ -648,6 +649,65 @@ class ComputeMonthlyCloseStateTests(APITestCase):
         self.assertEqual(total, Decimal("10.00"))
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["description"], "Ajuste banco")
+
+    def test_investment_fee_paid_from_non_liquidity_is_excluded_from_residual(self):
+        investment_asset = Asset.objects.create(
+            user=self.user,
+            name="ETF fuera del perimetro",
+            category=Asset.Category.INVESTMENTS,
+            subcategory=Asset.Subcategory.ETFS,
+            currency="EUR",
+            amount=Decimal("500.00"),
+        )
+        investment_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="ETF fuera del perimetro",
+            account_type=LedgerAccount.AccountType.ASSET,
+            currency="EUR",
+            asset=investment_asset,
+        )
+        expense_account = LedgerAccount.objects.create(
+            user=self.user,
+            name="Comisiones",
+            account_type=LedgerAccount.AccountType.EXPENSE,
+            currency="EUR",
+        )
+        investment = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-10",
+            value_date="2026-03-10",
+            description="Compra ETF",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.INVESTMENT,
+        )
+        fee = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date="2026-03-10",
+            value_date="2026-03-10",
+            description="Comision ETF",
+            quick_entry_kind=LedgerTransaction.QuickEntryKind.EXPENSE,
+            fee_for=investment,
+        )
+        LedgerEntry.objects.create(
+            transaction=fee,
+            account=expense_account,
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("3.50"),
+            flow_family=LedgerEntry.FlowFamily.EXPENSE,
+            category_key="consumption_expenses",
+            subcategory_key="financial_commitments",
+        )
+        LedgerEntry.objects.create(
+            transaction=fee,
+            account=investment_account,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("3.50"),
+        )
+
+        total = _get_non_liquidity_investment_fee_total_for_month(
+            user=self.user, fiscal_year=2026, month=3, base_currency="EUR"
+        )
+
+        self.assertEqual(total, Decimal("3.50"))
 
     def test_uncovered_expenses_normalize_legacy_investment_subcategory_aliases(self):
         entry = AnnualExpenseEntry.objects.create(

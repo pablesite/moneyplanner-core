@@ -169,6 +169,47 @@ def _get_liquidity_adjustments_for_month(
     return _round_money(total), details
 
 
+def _get_non_liquidity_investment_fee_total_for_month(
+    *, user, fiscal_year: int, month: int, base_currency: str
+) -> Decimal:
+    """Expenses paid from an investment position do not move close liquidity."""
+    from net_worth.services import get_liquidity_asset_queryset_for_user
+
+    liquid_asset_ids = set(
+        get_liquidity_asset_queryset_for_user(user=user).values_list("id", flat=True)
+    )
+    entries = LedgerEntry.objects.filter(
+        transaction__user=user,
+        transaction__status=LedgerTransaction.Status.POSTED,
+        transaction__booking_date__year=fiscal_year,
+        transaction__booking_date__month=month,
+        transaction__fee_for__isnull=False,
+        side=LedgerEntry.Side.CREDIT,
+    ).select_related("transaction", "account")
+    fee_entries = [entry for entry in entries if entry.account.asset_id not in liquid_asset_ids]
+    if not fee_entries:
+        return Decimal("0")
+
+    fx_cache = build_fx_cache(
+        {(entry.currency or base_currency).upper().strip() for entry in fee_entries}
+        | {base_currency}
+    )
+    total = sum(
+        (
+            _convert_to_base(
+                Decimal(entry.amount),
+                entry.currency,
+                base_currency,
+                entry.transaction.booking_date,
+                fx_cache,
+            )
+            for entry in fee_entries
+        ),
+        Decimal("0"),
+    )
+    return _round_money(total)
+
+
 def _monthly_execution_slots(
     *, summary: dict, breakdown_key: str, month: int
 ) -> list[MonthlyExecutionSlot]:
@@ -699,7 +740,16 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
     perimeter_internal_expense = Decimal(
         str(liquidity_summary.get("perimeter_internal_expense_total") or "0")
     )
-    external_expense_executed = max(Decimal("0"), expense_executed - perimeter_internal_expense)
+    non_liquidity_investment_fees = _get_non_liquidity_investment_fee_total_for_month(
+        user=user,
+        fiscal_year=fiscal_year,
+        month=month,
+        base_currency=base_currency,
+    )
+    external_expense_executed = max(
+        Decimal("0"),
+        expense_executed - perimeter_internal_expense - non_liquidity_investment_fees,
+    )
 
     liquidity_executed_raw = liquidity_summary.get("executed_total")
     liquidity_executed = (
@@ -831,6 +881,7 @@ def compute_monthly_close_state(*, user, fiscal_year: int, month: int) -> dict:
             "executed": str(expense_executed),
             "external_executed": str(external_expense_executed),
             "perimeter_internal_executed": str(perimeter_internal_expense),
+            "non_liquidity_investment_fees": str(non_liquidity_investment_fees),
             "planned": str(
                 Decimal(expense_month_data["planned"]) if expense_month_data else Decimal("0")
             ),
