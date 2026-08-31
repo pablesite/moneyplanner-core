@@ -85,6 +85,9 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
 2. A participating `SettlementAccount` references one user-owned asset and gives it one explicit
    role: operating, primary personal destination, allocation destination or physical cash. Operating
    and personal accounts are liquidity; allocation destinations may also be investment assets.
+   Accounting-backed credit cards are automatic settlement participants, not configured destinations:
+   their negative liability balance is included whenever they carry debt or activity from the opening
+   boundary, and their ownership comes from the linked liability.
 3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are optional planning metadata
    because one aggregate forecast may cover realized movements from several owners. Realized
    settlement flows use posted transaction ownership; future reserves use the ownership of their
@@ -118,16 +121,19 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    activation baseline for the first close, through posted ledger movements inside the configured
    account perimeter. It never writes ledger movements.
 2. External income and expense change each member's economic balance using transaction ownership.
-   Internal transfers are economically neutral and only relocate the member/account position.
+   Internal transfers are economically neutral and only relocate the member/account position. This
+   includes an automatic credit-card recharge from a participating bank account: the card purchase
+   affects the month when booked, while its later payment only reduces cash and the liability together.
 3. The next complete month supplies recurrent operating reserves and active temporary commitments.
    Savings and investment rows increase their explicit allocation destination; one-off and transfer
    rows are excluded, and unsupported roles are returned as warnings.
 4. Every obligation and destination uses the same effective ownership resolver for its target month.
    Missing ownership, incompatible vectors, FX gaps, perimeter escapes and unexplained physical
    balance deltas make the result `not_ready`; the existing close can still be finalized.
-5. The solver retains reserves in operating accounts, preserves existing physical cash and allocation
-   positions, adds planned allocations, and routes the remaining member balance to primary personal
-   destinations. Negative personal targets remain signed and therefore expose inverse contributions.
+5. The solver retains reserves in operating accounts, preserves existing physical cash, allocation and
+   credit-card positions, adds planned allocations, and routes the remaining member balance to primary
+   personal destinations. Credit cards are never transfer recommendation endpoints. Negative personal
+   targets remain signed and therefore expose inverse contributions.
 6. `SettlementSnapshot` freezes allocations, economic/account balances, reserves, compensations,
    reconciliation and quality when `MonthlyClose` is finalized. Recommendations are stored as
    `SettlementTransferRecommendation` route rows with an auditable lifecycle: recommended,

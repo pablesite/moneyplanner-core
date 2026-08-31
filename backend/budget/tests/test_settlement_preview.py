@@ -29,7 +29,7 @@ from memberships.models import (
     OwnershipAllocationSnapshot,
     OwnershipLink,
 )
-from net_worth.models import Asset
+from net_worth.models import Asset, Liability
 
 
 class SettlementPreviewTests(APITestCase):
@@ -324,6 +324,84 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(
             sum(Decimal(row["amount"]) for row in result["recommendations"]), Decimal("1850.00")
         )
+
+    def test_credit_card_debt_is_automatic_and_monthly_payment_is_internal(self):
+        card = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta compartida",
+            category=Liability.Category.CREDIT_CARD,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            amount=Decimal("0"),
+            currency="EUR",
+            start_date=date(2020, 1, 1),
+        )
+        card_ledger = LedgerAccount.objects.create(
+            user=self.user,
+            name=card.name,
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=card,
+        )
+        card.accounting_account_id = card_ledger.id
+        card.save(update_fields=["accounting_account_id"])
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=self.shared,
+            target_type=OwnershipLink.TargetType.LIABILITY,
+            target_id=card.id,
+        )
+
+        # Existing debt is part of the activation net position, not August spending.
+        opening = LedgerTransaction.objects.create(
+            user=self.user,
+            booking_date=date(2026, 3, 1),
+            value_date=date(2026, 3, 1),
+            description="Deuda inicial tarjeta",
+            status=LedgerTransaction.Status.POSTED,
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=card_ledger,
+            side=LedgerEntry.Side.CREDIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        LedgerEntry.objects.create(
+            transaction=opening,
+            account=LedgerAccount.objects.create(
+                user=self.user,
+                name="Contrapartida inicial tarjeta",
+                account_type=LedgerAccount.AccountType.EQUITY,
+                currency="EUR",
+            ),
+            side=LedgerEntry.Side.DEBIT,
+            amount=Decimal("100"),
+            currency="EUR",
+        )
+        self._flow(
+            booking_date=date(2026, 3, 10),
+            amount=Decimal("50"),
+            ownership=self.shared,
+            cash_account=card_ledger,
+            family=LedgerEntry.FlowFamily.EXPENSE,
+            description="Compra con tarjeta",
+        )
+        self._transfer(amount=Decimal("100"), source=self.operating_ledger, destination=card_ledger)
+        self.operating.amount = Decimal("900")
+        self.operating.save(update_fields=["amount"])
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        card_row = next(row for row in result["accounts"] if row["liability_id"] == card.id)
+        self.assertEqual(card_row["opening"], "-100.00")
+        self.assertEqual(card_row["physical_delta"], "50.00")
+        self.assertEqual(card_row["observed_close"], "-50.00")
+        self.assertEqual(result["reconciliation"]["physical_total"], "1150.00")
+        self.assertEqual(result["reconciliation"]["economic_total"], "1150.00")
+        balances = {row["member_id"]: row for row in result["economic_balances"]}
+        self.assertEqual(balances[self.member_a.id]["expense"], "25.00")
+        self.assertEqual(balances[self.member_b.id]["expense"], "25.00")
 
     def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
         wallet_a, wallet_a_ledger = self._account_asset(

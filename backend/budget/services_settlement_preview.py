@@ -4,6 +4,7 @@ import calendar
 import hashlib
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
@@ -18,6 +19,8 @@ from core.services import build_fx_cache, convert_currency_cached
 from memberships.models import Ownership, OwnershipAllocationSnapshot, OwnershipLink
 from memberships.services_allocations import resolve_ownership_allocation
 from net_worth.services_assets_core import get_effective_asset_amount
+from net_worth.services_liabilities_core import get_effective_liability_amount
+from net_worth.models import Liability
 
 from .models import (
     AnnualExpenseEntry,
@@ -39,6 +42,55 @@ from .services_settlement import (
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 MONEY_STEP = Decimal("0.01")
+
+
+@dataclass(frozen=True)
+class SettlementCreditCard:
+    """Automatic settlement participant for an accounting-backed credit card."""
+
+    liability: Liability
+
+    @property
+    def id(self) -> int:
+        # Snapshot IDs must not collide with configured SettlementAccount IDs.
+        return -self.liability.id
+
+    @property
+    def asset_id(self) -> None:
+        return None
+
+    @property
+    def liability_id(self) -> int:
+        return self.liability.id
+
+    @property
+    def name(self) -> str:
+        return self.liability.name
+
+    @property
+    def role(self) -> str:
+        return "credit_card"
+
+    @property
+    def currency(self) -> str:
+        return self.liability.currency
+
+    @property
+    def member_id(self) -> None:
+        return None
+
+    @property
+    def accounting_account_id(self) -> int | None:
+        return self.liability.accounting_account_id
+
+
+SettlementParticipant = SettlementAccount | SettlementCreditCard
+
+
+def _participant_ledger_account_id(account: SettlementParticipant) -> int | None:
+    if isinstance(account, SettlementCreditCard):
+        return account.accounting_account_id
+    return account.asset.accounting_account_id
 
 
 def _money(value: Decimal) -> Decimal:
@@ -160,18 +212,125 @@ def _opening_position(
     )
 
 
-def _account_ownerships(*, user, accounts: list[SettlementAccount]) -> dict[int, Ownership]:
+def _account_ownerships(*, user, accounts: list[SettlementParticipant]) -> dict[int, Ownership]:
+    asset_ids = [row.asset_id for row in accounts if row.asset_id is not None]
+    liability_ids = [row.liability_id for row in accounts if isinstance(row, SettlementCreditCard)]
     links = (
         OwnershipLink.objects.filter(
             user=user,
             target_type=OwnershipLink.TargetType.ASSET,
-            target_id__in=[row.asset_id for row in accounts],
+            target_id__in=asset_ids,
         )
         .select_related("ownership", "ownership__member")
         .prefetch_related("ownership__splits", "ownership__splits__member")
     )
     by_asset = {row.target_id: row.ownership for row in links}
-    return {row.id: by_asset[row.asset_id] for row in accounts if row.asset_id in by_asset}
+    liability_links = (
+        OwnershipLink.objects.filter(
+            user=user,
+            target_type=OwnershipLink.TargetType.LIABILITY,
+            target_id__in=liability_ids,
+        )
+        .select_related("ownership", "ownership__member")
+        .prefetch_related("ownership__splits", "ownership__splits__member")
+    )
+    by_liability = {row.target_id: row.ownership for row in liability_links}
+    ownerships = {
+        row.id: by_asset[row.asset_id]
+        for row in accounts
+        if row.asset_id is not None and row.asset_id in by_asset
+    }
+    ownerships.update(
+        {
+            row.id: by_liability[row.liability_id]
+            for row in accounts
+            if isinstance(row, SettlementCreditCard) and row.liability_id in by_liability
+        }
+    )
+    return ownerships
+
+
+def _credit_card_participants(
+    *,
+    user,
+    profile: SettlementProfile,
+    movement_start: date,
+    close_end: date,
+    previous: SettlementSnapshot | None,
+) -> list[SettlementCreditCard]:
+    """Return cards that carry debt or have participated since the last baseline."""
+
+    liabilities = list(
+        Liability.objects.filter(
+            user=user,
+            category=Liability.Category.CREDIT_CARD,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            accounting_account_id__isnull=False,
+        ).order_by("id")
+    )
+    if not liabilities:
+        return []
+    active_ledger_ids = set(
+        LedgerEntry.objects.filter(
+            transaction__user=user,
+            transaction__status=LedgerTransaction.Status.POSTED,
+            transaction__booking_date__gte=movement_start,
+            transaction__booking_date__lte=close_end,
+            account_id__in=[row.accounting_account_id for row in liabilities],
+        ).values_list("account_id", flat=True)
+    )
+    previous_ids = {
+        -int(row["account_id"])
+        for row in (previous.account_balances if previous is not None else [])
+        if int(row.get("account_id", 0)) < 0 and row.get("liability_id") is not None
+    }
+    baseline_date = profile.activation_date or movement_start - timedelta(days=1)
+    return [
+        SettlementCreditCard(liability=row)
+        for row in liabilities
+        if row.id in previous_ids
+        or row.accounting_account_id in active_ledger_ids
+        or get_effective_liability_amount(liability=row, as_of_date=baseline_date) != ZERO
+    ]
+
+
+def _add_credit_card_opening(
+    *,
+    cards: list[SettlementCreditCard],
+    baseline_date: date,
+    allocation_cache,
+    account_ownerships: dict[int, Ownership],
+    account_members: dict[tuple[int, int], Decimal],
+    member_totals: dict[int, Decimal],
+    blockers: list[dict],
+) -> None:
+    for card in cards:
+        ownership = account_ownerships.get(card.id)
+        if ownership is None:
+            _append_unique(blockers, {"code": "account_missing_ownership", "account_id": card.id})
+            continue
+        vector, allocation_result = _allocation(
+            ownership=ownership,
+            year=baseline_date.year,
+            month=baseline_date.month,
+            cache=allocation_cache,
+        )
+        if vector is None:
+            _append_unique(
+                blockers,
+                {
+                    "code": "allocation_blocked",
+                    "ownership_id": ownership.id,
+                    "quality_reasons": allocation_result["quality_reasons"],
+                },
+            )
+            continue
+        balance = -get_effective_liability_amount(
+            liability=card.liability, as_of_date=baseline_date
+        )
+        for member_id, amount in _allocate(balance, vector).items():
+            account_members[(card.id, member_id)] += amount
+            member_totals[member_id] += amount
 
 
 def _convert(
@@ -221,7 +380,7 @@ def _append_unique(rows: list[dict], row: dict) -> None:
 def _apply_wallet_normalization(
     *,
     transaction_row: LedgerTransaction,
-    settlement_by_ledger: dict[int, SettlementAccount],
+    settlement_by_ledger: dict[int, SettlementParticipant],
     base_currency: str,
     fx_cache,
     normalization_delta: dict[int, Decimal],
@@ -254,7 +413,7 @@ def _apply_wallet_normalization(
 def _compute_movements(
     *,
     transactions: list[LedgerTransaction],
-    settlement_by_ledger: dict[int, SettlementAccount],
+    settlement_by_ledger: dict[int, SettlementParticipant],
     account_ownerships: dict[int, Ownership],
     base_currency: str,
     allocation_cache,
@@ -566,12 +725,18 @@ def _compute_reserves(
 
 def _route_transfers(
     *,
-    accounts: list[SettlementAccount],
+    accounts: list[SettlementParticipant],
     current: dict[tuple[int, int], Decimal],
     targets: dict[tuple[int, int], Decimal],
     account_ownerships: dict[int, Ownership],
     base_currency: str,
 ) -> list[dict]:
+    reason_by_role: dict[str, str] = {
+        "operating": "next_month_reserve",
+        "allocation_destination": "planned_allocation",
+        "personal_destination": "member_residual",
+        "physical_cash": "physical_cash",
+    }
     current_total = {
         account.id: sum(
             (
@@ -618,8 +783,10 @@ def _route_transfers(
     source_index = 0
     destination_index = 0
     while source_index < len(surplus) and destination_index < len(deficit):
-        source_id, source_amount = surplus[source_index]
-        destination_id, destination_amount = deficit[destination_index]
+        source_id = int(surplus[source_index][0])
+        source_amount = Decimal(surplus[source_index][1])
+        destination_id = int(deficit[destination_index][0])
+        destination_amount = Decimal(deficit[destination_index][1])
         amount = min(source_amount, destination_amount)
         destination = account_by_id[destination_id]
         remaining = amount
@@ -638,12 +805,7 @@ def _route_transfers(
                     "ownership_id": account_ownerships[destination_id].id,
                     "amount": _money_string(routed),
                     "currency": base_currency,
-                    "reason": {
-                        SettlementAccount.Role.OPERATING: "next_month_reserve",
-                        SettlementAccount.Role.ALLOCATION_DESTINATION: "planned_allocation",
-                        SettlementAccount.Role.PERSONAL_DESTINATION: "member_residual",
-                        SettlementAccount.Role.PHYSICAL_CASH: "physical_cash",
-                    }[destination.role],
+                    "reason": reason_by_role.get(str(destination.role), "settlement"),
                 }
             )
             member_deficits[destination_id][member_id] = _money(member_amount - routed)
@@ -739,6 +901,41 @@ def _economic_balance_rows(
     return rows
 
 
+def _settlement_participants(
+    *,
+    user,
+    profile: SettlementProfile,
+    movement_start: date,
+    close_end: date,
+    previous: SettlementSnapshot | None,
+    blockers: list[dict],
+) -> tuple[list[SettlementParticipant], dict[int, SettlementAccount], dict[int, Ownership]]:
+    configured_accounts = list(profile.accounts.select_related("asset", "member").order_by("id"))
+    cards = _credit_card_participants(
+        user=user,
+        profile=profile,
+        movement_start=movement_start,
+        close_end=close_end,
+        previous=previous,
+    )
+    accounts: list[SettlementParticipant] = [*configured_accounts, *cards]
+    for account in accounts:
+        if account.currency != profile.base_currency:
+            _append_unique(
+                blockers,
+                {
+                    "code": "unsupported_settlement_currency",
+                    "account_id": account.id,
+                    "currency": account.currency,
+                },
+            )
+    return (
+        accounts,
+        {row.id: row for row in configured_accounts},
+        _account_ownerships(user=user, accounts=accounts),
+    )
+
+
 def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> dict:
     close = MonthlyClose.objects.filter(user=user, fiscal_year=fiscal_year, month=month).first()
     if close is not None and close.status in {
@@ -769,30 +966,36 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     )
     blockers = list(cast(list[dict], readiness["blockers"]))
     warnings = list(cast(list[dict], readiness["warnings"]))
-    accounts = list(profile.accounts.select_related("asset", "member").order_by("id"))
-    account_by_id = {row.id: row for row in accounts}
-    account_ownerships = _account_ownerships(user=user, accounts=accounts)
-    for account in accounts:
-        if account.currency != profile.base_currency:
-            _append_unique(
-                blockers,
-                {
-                    "code": "unsupported_settlement_currency",
-                    "account_id": account.id,
-                    "currency": account.currency,
-                },
-            )
-
     opening_source, movement_start, account_members, member_totals, previous = _opening_position(
         profile=profile, close_start=close_start
     )
+    accounts, account_by_id, account_ownerships = _settlement_participants(
+        user=user,
+        profile=profile,
+        movement_start=movement_start,
+        close_end=close_end,
+        previous=previous,
+        blockers=blockers,
+    )
+    cards = [row for row in accounts if isinstance(row, SettlementCreditCard)]
+    allocation_cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]] = {}
+    if previous is None and profile.activation_date is not None:
+        _add_credit_card_opening(
+            cards=cards,
+            baseline_date=profile.activation_date,
+            allocation_cache=allocation_cache,
+            account_ownerships=account_ownerships,
+            account_members=account_members,
+            member_totals=member_totals,
+            blockers=blockers,
+        )
     opening_totals = dict(member_totals)
     if previous is None and profile.activation_date and profile.activation_date > close_end:
         _append_unique(blockers, {"code": "settlement_not_active_for_period"})
     settlement_by_ledger = {
-        int(account.asset.accounting_account_id): account
+        int(_participant_ledger_account_id(account)): account
         for account in accounts
-        if account.asset.accounting_account_id is not None
+        if _participant_ledger_account_id(account) is not None
     }
     transactions = _load_transactions(
         user=user,
@@ -800,7 +1003,6 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         period_start=movement_start,
         period_end=close_end,
     )
-    allocation_cache: dict[tuple[int, int, int], tuple[dict[int, Decimal] | None, dict]] = {}
     physical_delta: dict[int, Decimal] = defaultdict(Decimal)
     normalization_delta: dict[int, Decimal] = defaultdict(Decimal)
     member_income: dict[int, Decimal] = defaultdict(Decimal)
@@ -864,6 +1066,10 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
             )
             remaining_gap = activation_gap + cumulative_normalization_delta.get(account.id, ZERO)
             observed = modeled - remaining_gap
+        elif isinstance(account, SettlementCreditCard):
+            observed = -get_effective_liability_amount(
+                liability=account.liability, as_of_date=close_end
+            )
         else:
             observed = get_effective_asset_amount(asset=account.asset, as_of_date=close_end)
         difference = _money(Decimal(observed) - expected)
@@ -887,7 +1093,12 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
             {
                 "account_id": account.id,
                 "asset_id": account.asset_id,
-                "name": account.asset.name,
+                "liability_id": account.liability_id
+                if isinstance(account, SettlementCreditCard)
+                else None,
+                "name": account.name
+                if isinstance(account, SettlementCreditCard)
+                else account.asset.name,
                 "role": account.role,
                 "ownership_id": account_ownerships.get(account.id).id
                 if account.id in account_ownerships
@@ -907,6 +1118,7 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         if account.role in {
             SettlementAccount.Role.PHYSICAL_CASH,
             SettlementAccount.Role.ALLOCATION_DESTINATION,
+            "credit_card",
         }:
             for (account_id, member_id), amount in current.items():
                 if account_id == account.id:
@@ -917,7 +1129,8 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
     primary_personal = {
         account.member_id: account
         for account in accounts
-        if account.role == SettlementAccount.Role.PERSONAL_DESTINATION
+        if isinstance(account, SettlementAccount)
+        and account.role == SettlementAccount.Role.PERSONAL_DESTINATION
         and account.is_primary
         and account.currency == profile.base_currency
     }
