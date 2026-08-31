@@ -799,7 +799,7 @@ class SettlementPreviewTests(APITestCase):
             )
         )
 
-    def test_next_month_includes_active_term_commitment_and_excludes_one_off(self):
+    def test_next_month_includes_active_term_commitment_and_scheduled_one_off(self):
         term = AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Prestamo temporal",
@@ -837,7 +837,7 @@ class SettlementPreviewTests(APITestCase):
 
         entry_ids = {row["entry_id"] for row in result["reserves"]}
         self.assertIn(term.id, entry_ids)
-        self.assertNotIn(one_off.id, entry_ids)
+        self.assertIn(one_off.id, entry_ids)
 
     def test_query_count_is_constant_for_ten_thousand_movements(self):
         self._ordinary_reserve()

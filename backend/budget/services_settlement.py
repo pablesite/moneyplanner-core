@@ -42,6 +42,15 @@ def get_or_create_settlement_profile(*, user) -> SettlementProfile:
     )[0]
 
 
+@transaction.atomic
+def set_operating_reserve_adjustment(*, user, amount: Decimal) -> SettlementProfile:
+    """Persist the user's explicit operating-cash override without rewriting the baseline."""
+    profile = get_or_create_settlement_profile(user=user)
+    profile.operating_reserve_adjustment = amount.quantize(MONEY_STEP, rounding=ROUND_HALF_UP)
+    profile.save(update_fields=["operating_reserve_adjustment", "updated_at"])
+    return profile
+
+
 def _ownership_for_asset(*, user, asset_id: int) -> Ownership | None:
     link = (
         OwnershipLink.objects.filter(

@@ -40,6 +40,10 @@ class SettlementConfigurationWriteSerializer(serializers.Serializer):
     )
 
 
+class SettlementReserveAdjustmentSerializer(serializers.Serializer):
+    operating_reserve_adjustment = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
 class SettlementActivationSerializer(serializers.Serializer):
     start_date = serializers.DateField(required=False)
     activation_date = serializers.DateField(required=False, write_only=True)

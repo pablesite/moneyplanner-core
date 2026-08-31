@@ -11,6 +11,7 @@ from .serializers_settlement import (
     SettlementActivationSerializer,
     SettlementConfigurationWriteSerializer,
     SettlementRebaselineSerializer,
+    SettlementReserveAdjustmentSerializer,
 )
 from .services_settlement import (
     activate_settlement_profile,
@@ -20,6 +21,7 @@ from .services_settlement import (
     get_or_create_settlement_profile,
     replace_settlement_configuration,
     rebaseline_settlement_profile,
+    set_operating_reserve_adjustment,
 )
 
 
@@ -35,6 +37,7 @@ def serialize_settlement_configuration(profile) -> dict[str, object]:
         "start_date": start_date,
         "can_rebaseline": can_rebaseline_settlement_profile(profile=profile),
         "base_currency": profile.base_currency,
+        "operating_reserve_adjustment": profile.operating_reserve_adjustment,
         "readiness_status": profile.readiness_status,
         "readiness_checked_at": profile.readiness_checked_at,
         "accounts": [
@@ -112,6 +115,19 @@ class SettlementConfigurationView(APIView):
         profile = replace_settlement_configuration(
             user=request.user,
             payload=serializer.validated_data,
+        )
+        return Response(serialize_settlement_configuration(profile))
+
+
+class SettlementReserveAdjustmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        serializer = SettlementReserveAdjustmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = set_operating_reserve_adjustment(
+            user=request.user,
+            amount=serializer.validated_data["operating_reserve_adjustment"],
         )
         return Response(serialize_settlement_configuration(profile))
 

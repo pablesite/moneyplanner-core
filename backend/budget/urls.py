@@ -23,6 +23,7 @@ from .views_settlement import (
     SettlementDisableView,
     SettlementReadinessView,
     SettlementRebaselineView,
+    SettlementReserveAdjustmentView,
 )
 
 router = DefaultRouter()
@@ -50,6 +51,11 @@ urlpatterns = [
         "settlement/readiness/",
         SettlementReadinessView.as_view(),
         name="settlement-readiness",
+    ),
+    path(
+        "settlement/reserve-adjustment/",
+        SettlementReserveAdjustmentView.as_view(),
+        name="settlement-reserve-adjustment",
     ),
     path(
         "settlement/activate/",

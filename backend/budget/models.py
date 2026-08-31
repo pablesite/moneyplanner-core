@@ -371,6 +371,12 @@ class SettlementProfile(models.Model):
     is_enabled = models.BooleanField(default=False)
     activation_date = models.DateField(null=True, blank=True)
     base_currency = models.CharField(max_length=3, default="EUR")
+    operating_reserve_adjustment = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text="Ajuste manual, positivo o negativo, sobre la reserva operativa calculada.",
+    )
     readiness_status = models.CharField(
         max_length=16,
         choices=ReadinessStatus.choices,

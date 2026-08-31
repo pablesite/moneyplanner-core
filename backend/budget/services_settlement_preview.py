@@ -741,6 +741,7 @@ def _compute_reserves(
     target_month: int,
     account_by_id: dict[int, SettlementAccount],
     account_ownerships: dict[int, Ownership],
+    profile: SettlementProfile,
     base_currency: str,
     allocation_cache,
     blockers: list[dict],
@@ -767,11 +768,7 @@ def _compute_reserves(
         amount = distribution.get(target_month)
         if not amount or amount <= ZERO:
             continue
-        if (
-            entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
-            or entry.expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
-            or entry.cashflow_role == AnnualExpenseEntry.CashflowRole.TRANSFER
-        ):
+        if entry.cashflow_role == AnnualExpenseEntry.CashflowRole.TRANSFER:
             continue
         if entry.cashflow_role not in supported:
             warnings.append(
@@ -873,6 +870,53 @@ def _compute_reserves(
                 "members": member_rows,
             }
         )
+
+    adjustment = _money(Decimal(profile.operating_reserve_adjustment or ZERO))
+    operating_accounts = [
+        account
+        for account in account_by_id.values()
+        if account.role == SettlementAccount.Role.OPERATING
+    ]
+    if adjustment and len(operating_accounts) == 1:
+        destination = operating_accounts[0]
+        ownership = account_ownerships.get(destination.id)
+        if ownership is not None:
+            vector, result = _allocation(
+                ownership=ownership,
+                year=target_year,
+                month=target_month,
+                cache=allocation_cache,
+            )
+            if vector is None:
+                _append_unique(
+                    blockers,
+                    {
+                        "code": "allocation_blocked",
+                        "ownership_id": result["ownership_id"],
+                        "quality_reasons": result["quality_reasons"],
+                    },
+                )
+            else:
+                members = _allocate(adjustment, vector)
+                for member_id, member_amount in members.items():
+                    requirements[(destination.id, member_id)] += member_amount
+                rows.append(
+                    {
+                        "entry_id": None,
+                        "name": "Ajuste manual de reserva operativa",
+                        "kind": "reserve",
+                        "cashflow_role": "operating",
+                        "ownership_id": ownership.id,
+                        "settlement_account_id": destination.id,
+                        "amount": _money_string(adjustment),
+                        "currency": base_currency,
+                        "funding_mode": "top_up",
+                        "members": [
+                            {"member_id": member_id, "amount": _money_string(member_amount)}
+                            for member_id, member_amount in sorted(members.items())
+                        ],
+                    }
+                )
     return rows, requirements
 
 
@@ -1097,7 +1141,7 @@ def _settlement_participants(
     )
 
 
-def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> dict:
+def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> dict:  # noqa: C901
     close = MonthlyClose.objects.filter(user=user, fiscal_year=fiscal_year, month=month).first()
     if close is not None and close.status in {
         MonthlyClose.Status.FINALIZED,
@@ -1209,6 +1253,7 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         target_month=target_month,
         account_by_id=account_by_id,
         account_ownerships=account_ownerships,
+        profile=profile,
         base_currency=profile.base_currency,
         allocation_cache=allocation_cache,
         blockers=blockers,
@@ -1286,21 +1331,6 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
             }
         )
 
-    targets: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
-    for account in accounts:
-        if account.role in {
-            SettlementAccount.Role.PHYSICAL_CASH,
-            SettlementAccount.Role.ALLOCATION_DESTINATION,
-            "credit_card",
-            "investment_position",
-            "investment_cash",
-        }:
-            for (account_id, member_id), amount in current.items():
-                if account_id == account.id:
-                    targets[(account.id, member_id)] += amount
-    for key, amount in requirements.items():
-        targets[key] += amount
-
     primary_personal = {
         account.member_id: account
         for account in accounts
@@ -1309,30 +1339,150 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         and account.is_primary
         and account.currency == profile.base_currency
     }
-    for member_id, economic_total in member_totals.items():
-        allocated_target = sum(
-            (
+    targets: dict[tuple[int, int], Decimal] = defaultdict(Decimal)
+    operating_accounts = [
+        account
+        for account in accounts
+        if isinstance(account, SettlementAccount)
+        and account.role == SettlementAccount.Role.OPERATING
+    ]
+    operating_by_ownership: dict[int, list[SettlementAccount]] = defaultdict(list)
+    for account in operating_accounts:
+        ownership = account_ownerships.get(account.id)
+        if ownership is not None and ownership.kind == Ownership.Kind.SHARED:
+            operating_by_ownership[ownership.id].append(account)
+    card_funding_account: dict[int, SettlementAccount] = {}
+    for account in accounts:
+        if not isinstance(account, SettlementCreditCard):
+            continue
+        ownership = account_ownerships.get(account.id)
+        matches = operating_by_ownership.get(ownership.id if ownership else -1, [])
+        if len(matches) == 1:
+            card_funding_account[account.id] = matches[0]
+
+    # A shared operating account and its automatically charged cards are one cash fund.
+    # Allocate its net surplus by member before deciding which personal account receives it.
+    compensation_totals: dict[int, Decimal] = defaultdict(Decimal)
+    if len(operating_accounts) == 1 and operating_accounts[0].id in {
+        account.id
+        for account in operating_by_ownership.get(
+            account_ownerships.get(operating_accounts[0].id).id
+            if account_ownerships.get(operating_accounts[0].id)
+            else -1,
+            [],
+        )
+    }:
+        for compensation in compensations:
+            for member in compensation["members"]:
+                compensation_totals[int(member["member_id"])] += Decimal(str(member["amount"]))
+
+    direct_recommendations: list[dict] = []
+    direct_operating_ids = {
+        account.id
+        for account in operating_accounts
+        if account.id in {funding.id for funding in card_funding_account.values()}
+    }
+    for account in operating_accounts:
+        if account.id not in direct_operating_ids:
+            continue
+        ownership = account_ownerships[account.id]
+        member_ids = {
+            member_id for (account_id, member_id) in current if account_id == account.id
+        } | {member_id for (account_id, member_id) in requirements if account_id == account.id}
+        for card_id, funding in card_funding_account.items():
+            if funding.id == account.id:
+                member_ids |= {
+                    member_id for (account_id, member_id) in current if account_id == card_id
+                }
+        for member_id in sorted(member_ids):
+            available = current.get((account.id, member_id), ZERO)
+            for card_id, funding in card_funding_account.items():
+                if funding.id == account.id:
+                    available += current.get((card_id, member_id), ZERO)
+            available += compensation_totals.get(member_id, ZERO)
+            requirement = requirements.get((account.id, member_id), ZERO)
+            delta = _money(available - requirement)
+            targets[(account.id, member_id)] += requirement
+            destination = primary_personal.get(member_id)
+            if destination is None:
+                continue
+            targets[(destination.id, member_id)] += current.get((destination.id, member_id), ZERO)
+            targets[(destination.id, member_id)] += delta
+            if delta > ZERO:
+                direct_recommendations.append(
+                    {
+                        "from_account_id": account.id,
+                        "to_account_id": destination.id,
+                        "member_id": member_id,
+                        "ownership_id": account_ownerships[destination.id].id,
+                        "amount": _money_string(delta),
+                        "currency": profile.base_currency,
+                        "reason": "member_residual",
+                    }
+                )
+            elif delta < ZERO:
+                direct_recommendations.append(
+                    {
+                        "from_account_id": destination.id,
+                        "to_account_id": account.id,
+                        "member_id": member_id,
+                        "ownership_id": ownership.id,
+                        "amount": _money_string(-delta),
+                        "currency": profile.base_currency,
+                        "reason": "next_month_reserve",
+                    }
+                )
+
+    for account in accounts:
+        if (
+            account.id in direct_operating_ids
+            or account.id in card_funding_account
+            or account.id in {row.id for row in primary_personal.values()}
+        ):
+            continue
+        for (account_id, member_id), amount in current.items():
+            if account_id == account.id:
+                targets[(account.id, member_id)] += amount
+    # Individual and allocation reserves remain visible in the preview, but they do not
+    # determine how much the shared operating fund returns to each personal account.
+
+    if not direct_operating_ids:
+        targets.clear()
+        for account in accounts:
+            if account.role in {
+                SettlementAccount.Role.PHYSICAL_CASH,
+                SettlementAccount.Role.ALLOCATION_DESTINATION,
+                "credit_card",
+                "investment_position",
+                "investment_cash",
+            }:
+                for (account_id, member_id), amount in current.items():
+                    if account_id == account.id:
+                        targets[(account.id, member_id)] += amount
+        for key, amount in requirements.items():
+            targets[key] += amount
+        for member_id, economic_total in member_totals.items():
+            allocated_target = sum(
                 amount
                 for (account_id, target_member), amount in targets.items()
                 if target_member == member_id
-            ),
-            ZERO,
+            )
+            destination = primary_personal.get(member_id)
+            if destination is not None:
+                targets[(destination.id, member_id)] += economic_total - allocated_target
+        recommendations = (
+            []
+            if blockers
+            else _route_transfers(
+                accounts=accounts,
+                current=current,
+                targets=targets,
+                account_ownerships=account_ownerships,
+                base_currency=profile.base_currency,
+            )
         )
-        destination = primary_personal.get(member_id)
-        if destination is not None:
-            targets[(destination.id, member_id)] += economic_total - allocated_target
-
-    recommendations = (
-        []
-        if blockers
-        else _route_transfers(
-            accounts=accounts,
-            current=current,
-            targets=targets,
-            account_ownerships=account_ownerships,
-            base_currency=profile.base_currency,
-        )
-    )
+    else:
+        recommendations = [] if blockers else direct_recommendations
     for row in account_rows:
         account_id = int(row["account_id"])
         row["target_close"] = _money_string(

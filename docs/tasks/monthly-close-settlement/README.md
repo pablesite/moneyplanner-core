@@ -27,12 +27,16 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 5. Cada obligacion se reparte con su propio ownership. No se calcula un porcentaje medio entre
    partidas 61/39, 50/50 o individuales.
 6. El dinero reservado o aportado termina en una cuenta con ownership compatible con la obligacion.
-7. Los gastos puntuales futuros quedan fuera de la reserva automatica de v1.
-8. Los monederos de efectivo siguen siendo activos reales. Las compensaciones ficticias dejan de
+7. Los gastos puntuales futuros con `mes objetivo` entran en la reserva de ese mes; los que no
+   tienen fecha siguen fuera para no inventar una provisión.
+8. El usuario puede aplicar un ajuste manual firmado sobre la reserva operativa calculada. Es una
+   decisión visible del cierre, no una modificación del presupuesto, y se reparte con la
+   titularidad de la cuenta operativa.
+9. Los monederos de efectivo siguen siendo activos reales. Las compensaciones ficticias dejan de
    modelarse como liquidez y se incorporan mediante un saldo de apertura o ajuste de liquidacion.
-9. La liquidacion esta desactivada por defecto. Un usuario individual, sin ownership, 50/50 para
+10. La liquidacion esta desactivada por defecto. Un usuario individual, sin ownership, 50/50 para
    todo o con bolsa comun conserva exactamente el cierre actual mientras no la active.
-10. La primera version calcula porcentajes dinamicos desde el historico disponible y recomienda
+11. La primera version calcula porcentajes dinamicos desde el historico disponible y recomienda
     transferencias; la segunda las crea o concilia en el ledger de forma idempotente y auditable.
 
 ## Boundaries
