@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.48.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.0...moneyplanner-core-v0.48.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **accounting:** reject classified reinvestments ([2b68c28](https://github.com/pablesite/moneyplanner-core/commit/2b68c28249ae5cd7beef75216c5f2fffe3f442d0))
+* **budget:** exclude non-liquid investment fees from close residual ([9bf9ed0](https://github.com/pablesite/moneyplanner-core/commit/9bf9ed04ee2e1305b97fafe8f2068d6671bf1de9))
+* **budget:** include credit cards in settlement perimeter ([1b90b11](https://github.com/pablesite/moneyplanner-core/commit/1b90b110f75c00fbd33471b59e836d205ed0b9b2))
+* **budget:** reserve individual expenses personally ([3278ff2](https://github.com/pablesite/moneyplanner-core/commit/3278ff2bc6d38822eaf71385fe41bf52f1b7de59))
+* **budget:** retain investment positions in settlement ([1bc2a54](https://github.com/pablesite/moneyplanner-core/commit/1bc2a5450db6c934e2f9f94241e58f355e73f894))
+* **budget:** retain temporary commitment funds ([8b2f1e5](https://github.com/pablesite/moneyplanner-core/commit/8b2f1e5f756fefe40544bbf2714d7cc96b8b072a))
+* **budget:** support audited settlement rebaseline ([006216b](https://github.com/pablesite/moneyplanner-core/commit/006216b3f87dcfb60718538da6436d19d76bfdf1))
+* **net-worth:** retain archived accounts in historical liquidity closes ([b50d01a](https://github.com/pablesite/moneyplanner-core/commit/b50d01a8740c03e6c819bfe7df49b514ea87a0df))
+* **settlement:** net operating cards before residual routing ([7cfc994](https://github.com/pablesite/moneyplanner-core/commit/7cfc9942f8f9e0f729a9432697f11c14a9e50b8d))
+
 ## [0.48.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.47.0...moneyplanner-core-v0.48.0) (2026-08-23)
 
 
