@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.3](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.2...moneyplanner-core-v0.48.3) (2026-09-01)
+
+
+### Bug Fixes
+
+* **settlement:** allow explicit operating commitment reserve ([53705e0](https://github.com/pablesite/moneyplanner-core/commit/53705e014f29af955ed1517bcb4fb6e87e9497d3))
+
 ## [0.48.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.1...moneyplanner-core-v0.48.2) (2026-09-01)
 
 
