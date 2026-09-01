@@ -79,3 +79,17 @@ backend este estable, pero no se cierran hasta validar contra Core real en Docke
 6. Con liquidacion desactivada, payload, lifecycle y UX actuales no sufren regresiones funcionales.
 7. Aplicar o reintentar una ruta crea exactamente una transferencia neutral; las aplicaciones
    parciales, conciliaciones y reversos conservan remanente y trazabilidad.
+
+## Reparacion puntual de reinversiones historicas
+
+Una reinversion entre posiciones de inversion no mueve caja ni admite clasificacion funcional.
+Si un asiento historico conserva por error la clasificacion de una venta, el cierre tratara el
+traspaso interno como ingreso. Revisar primero y escribir solo tras comprobar el resultado:
+
+```bash
+python manage.py repair_reinvestment_classification --transaction-id N
+python manage.py repair_reinvestment_classification --transaction-id N --apply
+```
+
+El comando no modifica importe, cuentas, fechas ni titularidad; borra exclusivamente
+`flow_family`, categoria y subcategoria de un asiento que ya sea una `reinversion`.
