@@ -246,6 +246,17 @@ def expected_expense_settlement_role(*, expense: AnnualExpenseEntry) -> str:
     return cast(str, SettlementAccount.Role.OPERATING)
 
 
+def _is_fixed_equal_split_shared_ownership(*, ownership: Ownership | None) -> bool:
+    if (
+        ownership is None
+        or ownership.kind != Ownership.Kind.SHARED
+        or ownership.allocation_basis != Ownership.AllocationBasis.EXPLICIT_SPLIT
+    ):
+        return False
+    splits = list(ownership.splits.all())
+    return len(splits) == 2 and all(split.percent == Decimal("50") for split in splits)
+
+
 def is_expense_settlement_destination_compatible(
     *, expense: AnnualExpenseEntry, destination: SettlementAccount
 ) -> bool:
@@ -258,6 +269,21 @@ def is_expense_settlement_destination_compatible(
     ):
         return True
     if expense.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT:
+        # A 50/50 commitment must stay in a 50/50 fund. Reserving it in a
+        # differently owned operating account would silently change who funds it.
+        if _is_fixed_equal_split_shared_ownership(ownership=expense.ownership):
+            destination_ownership = _ownership_for_asset(
+                user=expense.user, asset_id=destination.asset_id
+            )
+            return (
+                destination.role
+                in {
+                    SettlementAccount.Role.OPERATING,
+                    SettlementAccount.Role.ALLOCATION_DESTINATION,
+                }
+                and destination_ownership is not None
+                and destination_ownership.id == expense.ownership_id
+            )
         return destination.role in {
             SettlementAccount.Role.OPERATING,
             SettlementAccount.Role.ALLOCATION_DESTINATION,
@@ -275,6 +301,20 @@ def resolve_expense_settlement_destination(
     derived = derive_expense_settlement_fields(expense=expense).get("settlement_account")
     if isinstance(derived, SettlementAccount):
         return account_by_id.get(derived.id)
+
+    if _is_fixed_equal_split_shared_ownership(ownership=expense.ownership):
+        matching_funds = [
+            account
+            for account in accounts
+            if account.role == SettlementAccount.Role.ALLOCATION_DESTINATION
+            and _ownership_for_asset(user=expense.user, asset_id=account.asset_id)
+            == expense.ownership
+        ]
+        if len(matching_funds) == 1:
+            return matching_funds[0]
+        # Do not use a differently owned operating fund as a fallback. The
+        # readiness result will request an explicit compatible destination.
+        return None
 
     if expense.ownership_id and expense.ownership.kind == Ownership.Kind.INDIVIDUAL:
         personal_accounts = [

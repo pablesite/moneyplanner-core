@@ -497,12 +497,7 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(positions["ETF de Pablo"]["observed_close"], "100.00")
 
     def test_temporary_commitment_uses_its_ownership_and_existing_allocation_fund(self):
-        fund_ownership = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
-        fund_ownership.splits.create(member=self.member_a, percent=Decimal("61"))
-        fund_ownership.splits.create(member=self.member_b, percent=Decimal("39"))
-        fund, _fund_ledger = self._account_asset(
-            "Fondo compromiso", Decimal("10000"), fund_ownership
-        )
+        fund, _fund_ledger = self._account_asset("Fondo compromiso", Decimal("10000"), self.shared)
         fund_config = self._settlement_account(fund, SettlementAccount.Role.ALLOCATION_DESTINATION)
         self._opening(fund_config, self.member_a, Decimal("6100"))
         self._opening(fund_config, self.member_b, Decimal("3900"))
@@ -536,6 +531,47 @@ class SettlementPreviewTests(APITestCase):
         )
         fund_row = next(row for row in result["accounts"] if row["account_id"] == fund_config.id)
         self.assertEqual(fund_row["target_close"], "10000.00")
+
+    def test_equal_split_commitment_uses_matching_fund_not_different_operating_split(self):
+        operating_ownership = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        operating_ownership.splits.create(member=self.member_a, percent=Decimal("61"))
+        operating_ownership.splits.create(member=self.member_b, percent=Decimal("39"))
+        operating_link = OwnershipLink.objects.get(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=self.operating.id,
+        )
+        operating_link.ownership = operating_ownership
+        operating_link.save(update_fields=["ownership"])
+
+        fund, _fund_ledger = self._account_asset("Fondo 50/50", Decimal("10000"), self.shared)
+        fund_config = self._settlement_account(fund, SettlementAccount.Role.ALLOCATION_DESTINATION)
+        self._opening(fund_config, self.member_a, Decimal("5000"))
+        self._opening(fund_config, self.member_b, Decimal("5000"))
+        commitment = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Compromiso 50/50",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="housing_home",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            amount_annual=Decimal("1200"),
+            fiscal_year=2026,
+            currency="EUR",
+            ownership=self.shared,
+        )
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        reserve = next(row for row in result["reserves"] if row["entry_id"] == commitment.id)
+        self.assertEqual(reserve["settlement_account_id"], fund_config.id)
+        self.assertEqual(reserve["funding_mode"], "held")
+        operating_row = next(
+            row for row in result["accounts"] if row["account_id"] == self.operating_config.id
+        )
+        self.assertEqual(operating_row["target_close"], "0.00")
 
     def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
         wallet_a, wallet_a_ledger = self._account_asset(

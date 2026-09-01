@@ -26,7 +26,7 @@ implícita ni reasigna una nomina individual al ownership de la cuenta donde se 
 4. La nomina conserva el ownership individual con independencia de la cuenta receptora.
 5. Cada obligacion se reparte con su propio ownership. No se calcula un porcentaje medio entre
    partidas 61/39, 50/50 o individuales.
-6. El dinero reservado o aportado termina en una cuenta con ownership compatible con la obligacion.
+6. El dinero reservado o aportado termina en una cuenta con ownership compatible con la obligacion. En particular, un compromiso explicito 50/50 se mantiene en un fondo 50/50 compatible y no se reserva en una cuenta operativa con reparto dinamico distinto.
 7. Los gastos puntuales futuros con `mes objetivo` entran en la reserva de ese mes; los que no
    tienen fecha siguen fuera para no inventar una provisión.
 8. El usuario puede aplicar un ajuste manual firmado sobre la reserva operativa calculada. Es una
