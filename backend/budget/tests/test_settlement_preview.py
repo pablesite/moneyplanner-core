@@ -577,6 +577,46 @@ class SettlementPreviewTests(APITestCase):
         )
         self.assertEqual(operating_row["target_close"], "0.00")
 
+    def test_equal_split_commitment_can_explicitly_reserve_in_operating_cash(self):
+        operating_ownership = Ownership.objects.create(user=self.user, kind=Ownership.Kind.SHARED)
+        operating_ownership.splits.create(member=self.member_a, percent=Decimal("61"))
+        operating_ownership.splits.create(member=self.member_b, percent=Decimal("39"))
+        operating_link = OwnershipLink.objects.get(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=self.operating.id,
+        )
+        operating_link.ownership = operating_ownership
+        operating_link.save(update_fields=["ownership"])
+
+        commitment = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Hipoteca 50/50 en operativa",
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="housing_home",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.STRUCTURAL_RECURRENT,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            amount_annual=Decimal("1200"),
+            fiscal_year=2026,
+            currency="EUR",
+            ownership=self.shared,
+            settlement_account=self.operating_config,
+        )
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        reserve = next(row for row in result["reserves"] if row["entry_id"] == commitment.id)
+        self.assertEqual(reserve["settlement_account_id"], self.operating_config.id)
+        self.assertEqual(
+            reserve["members"],
+            [
+                {"member_id": self.member_a.id, "amount": "50.00"},
+                {"member_id": self.member_b.id, "amount": "50.00"},
+            ],
+        )
+
     def test_wallet_normalization_closes_the_modeled_gap_without_moving_physical_cash(self):
         wallet_a, wallet_a_ledger = self._account_asset(
             "Monedero Pablo", Decimal("0"), self.individual_a

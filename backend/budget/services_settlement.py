@@ -269,18 +269,17 @@ def is_expense_settlement_destination_compatible(
     ):
         return True
     if expense.cashflow_role == AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT:
-        # A 50/50 commitment must stay in a 50/50 fund. Reserving it in a
-        # differently owned operating account would silently change who funds it.
+        # A 50/50 commitment defaults to a matching 50/50 fund. An explicit
+        # operating destination is also valid: its physical cash can be held
+        # in a differently split account while the requirement stays 50/50.
         if _is_fixed_equal_split_shared_ownership(ownership=expense.ownership):
+            if destination.role == SettlementAccount.Role.OPERATING:
+                return True
             destination_ownership = _ownership_for_asset(
                 user=expense.user, asset_id=destination.asset_id
             )
             return (
-                destination.role
-                in {
-                    SettlementAccount.Role.OPERATING,
-                    SettlementAccount.Role.ALLOCATION_DESTINATION,
-                }
+                destination.role == SettlementAccount.Role.ALLOCATION_DESTINATION
                 and destination_ownership is not None
                 and destination_ownership.id == expense.ownership_id
             )
