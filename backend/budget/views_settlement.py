@@ -37,7 +37,8 @@ def serialize_settlement_configuration(profile) -> dict[str, object]:
         "start_date": start_date,
         "can_rebaseline": can_rebaseline_settlement_profile(profile=profile),
         "base_currency": profile.base_currency,
-        "operating_reserve_adjustment": profile.operating_reserve_adjustment,
+        # Keep the JSON contract consistent with the other money values consumed by the UI.
+        "operating_reserve_adjustment": str(profile.operating_reserve_adjustment),
         "readiness_status": profile.readiness_status,
         "readiness_checked_at": profile.readiness_checked_at,
         "accounts": [

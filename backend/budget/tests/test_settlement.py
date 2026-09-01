@@ -120,6 +120,7 @@ class SettlementApiTests(APITestCase):
         initial = self.client.get("/api/budget/settlement/configuration/")
         self.assertEqual(initial.status_code, status.HTTP_200_OK)
         self.assertFalse(initial.data["is_enabled"])
+        self.assertEqual(initial.data["operating_reserve_adjustment"], "0")
 
         first = self._configure()
         second = self._configure()
