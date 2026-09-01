@@ -16,24 +16,24 @@
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {
-    "axios": "^1.19.0",
+    "axios": "^1.20.0",
     "chart.js": "^4.5.1",
     "pinia": "^4.0.3",
-    "vue": "^3.5.41",
+    "vue": "^3.5.42",
     "vue-chartjs": "^5.3.4",
-    "vue-router": "^5.2.0"
+    "vue-router": "^5.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.3.0",
+    "@types/node": "^26.4.0",
     "@typescript-eslint/eslint-plugin": "^8.68.0",
     "@typescript-eslint/parser": "^8.24.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.11",
-    "@vue/test-utils": "^2.4.11",
+    "@vue/test-utils": "^2.5.0",
     "@vue/tsconfig": "^0.9.1",
     "autoprefixer": "^10.5.4",
     "eslint": "^10.9.1",
