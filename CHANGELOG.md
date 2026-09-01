@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.48.2](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.1...moneyplanner-core-v0.48.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* **accounting:** repair stale reinvestment classifications ([fd85953](https://github.com/pablesite/moneyplanner-core/commit/fd859531651fca688eeaf39505a8d1f242c22008))
+* **settlement:** prefer liquid matching commitment fund ([41a2a8b](https://github.com/pablesite/moneyplanner-core/commit/41a2a8b1f23aa9d61dc3a3075101db459396e13f))
+* **settlement:** route 50-50 commitments to matching funds ([b503808](https://github.com/pablesite/moneyplanner-core/commit/b503808d71a4675c400ab711c691c25954ba5028))
+* **settlement:** serialize reserve adjustments consistently ([b5ac0b8](https://github.com/pablesite/moneyplanner-core/commit/b5ac0b84fb7e12a1b5767a2e6a1f75f30c1fa5ce))
+
 ## [0.48.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.0...moneyplanner-core-v0.48.1) (2026-08-31)
 
 
