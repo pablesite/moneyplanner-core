@@ -312,6 +312,13 @@ def resolve_expense_settlement_destination(
         ]
         if len(matching_funds) == 1:
             return matching_funds[0]
+        liquid_matching_funds = [
+            account
+            for account in matching_funds
+            if account.asset.subcategory == Asset.Subcategory.BANK_ACCOUNT
+        ]
+        if len(liquid_matching_funds) == 1:
+            return liquid_matching_funds[0]
         # Do not use a differently owned operating fund as a fallback. The
         # readiness result will request an explicit compatible destination.
         return None

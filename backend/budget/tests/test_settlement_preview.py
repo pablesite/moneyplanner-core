@@ -548,6 +548,10 @@ class SettlementPreviewTests(APITestCase):
         fund_config = self._settlement_account(fund, SettlementAccount.Role.ALLOCATION_DESTINATION)
         self._opening(fund_config, self.member_a, Decimal("5000"))
         self._opening(fund_config, self.member_b, Decimal("5000"))
+        deposit, _deposit_ledger = self._account_asset("Deposito 50/50", Decimal("0"), self.shared)
+        deposit.subcategory = Asset.Subcategory.SHORT_TERM_DEPOSIT
+        deposit.save(update_fields=["subcategory"])
+        self._settlement_account(deposit, SettlementAccount.Role.ALLOCATION_DESTINATION)
         commitment = AnnualExpenseEntry.objects.create(
             user=self.user,
             name="Compromiso 50/50",
