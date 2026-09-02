@@ -809,7 +809,10 @@ def _compute_reserves(
             )
             continue
         destination_ownership = account_ownerships.get(destination.id)
-        reserve_ownership = entry.ownership or destination_ownership
+        # A reserve retains physical cash in its destination. Its funding split
+        # must therefore follow that account, while the later posted expense
+        # remains responsible for reconciling its own economic ownership.
+        reserve_ownership = destination_ownership or entry.ownership
         if reserve_ownership is None:
             continue
         reserve_vector, reserve_result = _allocation(

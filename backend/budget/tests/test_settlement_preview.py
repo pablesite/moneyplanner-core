@@ -612,8 +612,8 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(
             reserve["members"],
             [
-                {"member_id": self.member_a.id, "amount": "50.00"},
-                {"member_id": self.member_b.id, "amount": "50.00"},
+                {"member_id": self.member_a.id, "amount": "61.00"},
+                {"member_id": self.member_b.id, "amount": "39.00"},
             ],
         )
 

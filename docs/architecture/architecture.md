@@ -93,8 +93,9 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    engine can preserve a dated FX valuation bridge.
 3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are optional planning metadata
    because one aggregate forecast may cover realized movements from several owners. Realized
-   settlement flows use posted transaction ownership; future reserves use the ownership of their
-   budget entry, falling back to the configured destination account only for legacy rows without one.
+   settlement flows use posted transaction ownership; future reserves follow the ownership of the
+   account that physically holds the cash. A later realized flow is reconciled from that account
+   ownership to its transaction ownership; internal transfers remain economically neutral.
 4. Recurrent expenses route through nullable `settlement_account`. Asset-generated investment rows
    inherit both ownership and an allocation destination only from unambiguous structural links;
    liability-generated rows inherit ownership. Plan-managed rows remain writable only by Mi Plan.
