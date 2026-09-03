@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.4](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.3...moneyplanner-core-v0.48.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **settlement:** fund reserves by destination ownership ([80fa0f5](https://github.com/pablesite/moneyplanner-core/commit/80fa0f553f3f74b59293871d97a5bd695ea1e3fd))
+
 ## [0.48.3](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.2...moneyplanner-core-v0.48.3) (2026-09-01)
 
 
