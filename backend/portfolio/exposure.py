@@ -17,6 +17,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from .composition import ClassComposition, class_compositions, current_holdings
 from .models import Instrument, PositionClassBreakdown, PositionExposure, PositionHolding, Portfolio
 from .performance import (
     PerformanceContext,
@@ -51,21 +52,6 @@ def _values(*, context: PerformanceContext, on_date: date) -> dict[int, Decimal]
 
 def _weights(rows: list[PositionExposure]) -> dict[str, Decimal]:
     return {row.bucket: row.percent for row in rows}
-
-
-def _current_holdings(*, position_ids: set[int], on_date: date) -> dict[int, list[PositionHolding]]:
-    """La última ficha disponible a la fecha de consulta, agrupada por posición."""
-    rows = PositionHolding.objects.filter(
-        position_id__in=position_ids,
-        observed_on__lte=on_date,
-    ).order_by("position_id", "-observed_on", "-percent", "id")
-    snapshots: dict[int, date] = {}
-    selected: dict[int, list[PositionHolding]] = {}
-    for row in rows:
-        current = snapshots.setdefault(row.position_id, row.observed_on)
-        if row.observed_on == current:
-            selected.setdefault(row.position_id, []).append(row)
-    return selected
 
 
 def overlap_percent(left: dict[str, Decimal], right: dict[str, Decimal]) -> Decimal:
@@ -104,7 +90,12 @@ def build_exposure(
     for row in PositionExposure.objects.filter(position_id__in=list(values)):
         rows_by_position.setdefault(row.position_id, {}).setdefault(row.dimension, []).append(row)
 
-    holdings_by_position = _current_holdings(position_ids=set(values), on_date=on_date)
+    holdings_by_position = current_holdings(position_ids=set(values), on_date=on_date)
+    compositions = class_compositions(
+        positions=[positions[pk] for pk in values],
+        on_date=on_date,
+        holdings_by_position=holdings_by_position,
+    )
     class_breakdowns: dict[int, list[PositionClassBreakdown]] = {}
     for row in PositionClassBreakdown.objects.filter(position_id__in=list(values)):
         class_breakdowns.setdefault(row.position_id, []).append(row)
@@ -227,11 +218,7 @@ def build_exposure(
         "total_value": str(total.quantize(CENT)),
         "position_count": len(values),
         "dimensions": dimensions,
-        "classes": _classes(
-            values=values,
-            positions={position.id: position for position in context.positions},
-            holdings_by_position=holdings_by_position,
-        ),
+        "classes": _classes(values=values, compositions=compositions),
         "concentration": _concentration(values=values, names=names, total=total),
         "overlap": _overlap(values=values, names=names, rows_by_position=rows_by_position),
         "holding_overlap": _holding_overlap(
@@ -298,59 +285,32 @@ def _source_label(holding_positions: int, manual_positions: int) -> str:
 
 
 def _classes(
-    *,
-    values: dict[int, Decimal],
-    positions: dict[int, Any],
-    holdings_by_position: dict[int, list[PositionHolding]],
+    *, values: dict[int, Decimal], compositions: dict[int, ClassComposition]
 ) -> dict[str, Any]:
-    """Composición por clase: tenencias primero, desglose manual después."""
-    breakdowns: dict[int, list[PositionClassBreakdown]] = {}
-    for row in PositionClassBreakdown.objects.filter(position_id__in=list(values)):
-        breakdowns.setdefault(row.position_id, []).append(row)
+    """Reparto sobre el valor completo, incluida la fracción sin clasificar."""
     buckets: dict[str, Decimal] = {}
     covered = ZERO
     holdings_positions = 0
-    manual_positions = 0
     for position_id, value in values.items():
-        holdings = holdings_by_position.get(position_id, [])
-        if holdings:
-            declared = sum((row.percent for row in holdings), ZERO)
-            for row in holdings:
-                buckets[row.asset_class] = buckets.get(
-                    row.asset_class, ZERO
-                ) + value * row.percent / Decimal("100")
-            covered += value * min(declared, Decimal("100")) / Decimal("100")
-            holdings_positions += 1
-            continue
-        rows = breakdowns.get(position_id, [])
-        if rows:
-            for row in rows:
-                buckets[row.asset_class] = buckets.get(
-                    row.asset_class, ZERO
-                ) + value * row.percent / Decimal("100")
-            covered += value
-            manual_positions += 1
-            continue
-        buckets[positions[position_id].effective_asset_class] = (
-            buckets.get(positions[position_id].effective_asset_class, ZERO) + value
-        )
-        covered += value
-        manual_positions += 1
-    base = sum(buckets.values(), ZERO)
+        composition = compositions[position_id]
+        for asset_class, percent in composition.weights.items():
+            buckets[asset_class] = buckets.get(asset_class, ZERO) + value * percent / Decimal("100")
+        covered += value * composition.covered_percent / Decimal("100")
+        holdings_positions += composition.source == "holdings"
     total = sum(values.values(), ZERO)
+    coverage = covered / total * Decimal("100") if total else ZERO
     return {
-        "status": _coverage_status((covered / total * Decimal("100")) if total else ZERO),
-        "covered_percent": str(
-            ((covered / total * Decimal("100")) if total else ZERO).quantize(CENT)
-        ),
-        "source": _source_label(holdings_positions, manual_positions),
+        "status": _coverage_status(coverage),
+        "covered_percent": str(coverage.quantize(CENT)),
+        "source": _source_label(holdings_positions, len(values) - holdings_positions),
+        "percent_basis": "positions_total",
         "rows": sorted(
             (
                 {
                     "asset_class": asset_class,
                     "value": str(value.quantize(CENT)),
-                    "percent": str((value / base * Decimal("100")).quantize(CENT))
-                    if base
+                    "percent": str((value / total * Decimal("100")).quantize(CENT))
+                    if total
                     else "0.00",
                 }
                 for asset_class, value in buckets.items()

@@ -29,6 +29,7 @@ from budget.services import planned_expense_monthly_distribution
 
 from memberships.models import Ownership, OwnershipLink
 
+from .composition import ClassComposition, class_compositions
 from .operations import confirm_operation
 from .models import (
     AllocationStrategy,
@@ -125,9 +126,18 @@ def position_ids_with_contribution_scope(
 
 
 def scope_slices(
-    *, context: PerformanceContext, positions: list[PortfolioPosition], on_date: date
+    *,
+    context: PerformanceContext,
+    positions: list[PortfolioPosition],
+    on_date: date,
+    compositions: dict[int, ClassComposition] | None = None,
 ) -> list[ScopeSlice]:
     """Valor de cada posicion repartido por clase, aplicando el look-through si lo tiene."""
+    compositions = (
+        class_compositions(positions=positions, on_date=on_date)
+        if compositions is None
+        else compositions
+    )
     slices: list[ScopeSlice] = []
     for position in positions:
         value, _ = _position_value_base(
@@ -135,14 +145,8 @@ def scope_slices(
         )
         if value is None:
             continue
-        breakdown = list(position.class_breakdown.all())
-        if not breakdown:
-            slices.append(ScopeSlice(position, position.effective_asset_class, value))
-            continue
-        for row in breakdown:
-            slices.append(
-                ScopeSlice(position, row.asset_class, value * row.percent / Decimal("100"))
-            )
+        for asset_class, percent in compositions[position.id].weights.items():
+            slices.append(ScopeSlice(position, asset_class, value * percent / Decimal("100")))
     return slices
 
 
@@ -218,7 +222,10 @@ def build_allocation(
     )
     strategy = resolve_strategy(portfolio=portfolio, ownership=ownership, on_date=on_date)
     positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
-    slices = scope_slices(context=context, positions=positions, on_date=on_date)
+    compositions = class_compositions(positions=positions, on_date=on_date)
+    slices = scope_slices(
+        context=context, positions=positions, on_date=on_date, compositions=compositions
+    )
     # El efectivo enlazado a un contenedor es liquidez de la cartera: cuenta en el valor,
     # asi que tiene que contar tambien en la composicion. Sin esto la clase Liquidez
     # marcaba cero teniendo dinero, y el total de la tabla no cuadraba con el hero.
@@ -294,6 +301,24 @@ def build_allocation(
                 "position_id": position_id,
                 "name": names.get(position_id, ""),
                 "asset_class": classes.get(position_id, "other"),
+                "class_breakdown": [
+                    {
+                        "asset_class": row.asset_class,
+                        "value": str(row.value.quantize(CENT)),
+                        "actual_percent": str(
+                            (row.value / total * Decimal("100") if total else ZERO).quantize(CENT)
+                        ),
+                    }
+                    for row in slices
+                    if row.position.id == position_id
+                ],
+                "composition_source": compositions[position_id].source,
+                "composition_observed_on": (
+                    compositions[position_id].observed_on.isoformat()
+                    if compositions[position_id].observed_on
+                    else None
+                ),
+                "class_covered_percent": str(compositions[position_id].covered_percent),
                 "value": str(value.quantize(Decimal("0.01"))),
                 "actual_percent": str(share.quantize(Decimal("0.01"))),
                 "target_percent": str(target_percent.quantize(Decimal("0.01")))

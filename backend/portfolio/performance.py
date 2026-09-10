@@ -37,6 +37,7 @@ from .performance_math import (
     xirr,
 )
 from .lots import OwnershipPockets, UnitMovement, build_pockets, member_share_at
+from .composition import class_compositions
 from .valuations import stale_days_for_position
 
 ZERO = Decimal("0")
@@ -1628,6 +1629,7 @@ def _build_positions_from_context(
     end_date: date,
     member_id: int | None,
 ) -> list[dict[str, Any]]:
+    compositions = class_compositions(positions=context.positions, on_date=end_date)
     rows = []
     for position in context.positions:
         if member_id is not None and not any(
@@ -1719,11 +1721,10 @@ def _build_positions_from_context(
                 # made the same holding read differently in the two views.
                 "instrument_name": position.asset.name,
                 "asset_class": position.effective_asset_class,
-                # Reparto interno cuando la posición no es de una sola clase (una cartera
-                # de roboadvisor, un fondo mixto). Solo lo usa la composición.
+                # Misma ficha y misma cobertura que Diversificación y Asignación.
                 "class_breakdown": [
-                    {"asset_class": row.asset_class, "percent": str(row.percent)}
-                    for row in position.class_breakdown.all()
+                    {"asset_class": asset_class, "percent": str(percent)}
+                    for asset_class, percent in compositions[position.id].weights.items()
                 ],
                 "container_id": position.container_id,
                 "container_name": position.container.name,

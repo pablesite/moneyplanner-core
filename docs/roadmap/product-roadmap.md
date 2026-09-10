@@ -23,6 +23,8 @@ Conventions:
 
 ## INVESTMENT PORTFOLIO
 
+Evolución 2026-09-10: [sistema de decisión](../tasks/portfolio-decision-system/README.md). Tarea 1 completada; pendientes liquidez/calidad, UX, aportaciones por exposición, reducciones, comparación DCA/buy & hold y patrimonio completo.
+
 > Planned 2026-08-16. Canonical decisions and phased specs: `../tasks/investment-portfolio/README.md`.
 
 1. One consolidated family portfolio, with ownership filters and dated ownership history.

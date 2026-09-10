@@ -294,7 +294,10 @@ class ExposureTests(ExposureFixture, TestCase):
         self.assertEqual(Decimal(geography["covered_percent"]), Decimal("40.00"))
         self.assertEqual(geography["source"], "holdings")
         self.assertEqual(classes["source"], "holdings")
-        self.assertEqual(classes["rows"][0]["asset_class"], "equity")
+        self.assertEqual(
+            {row["asset_class"]: Decimal(row["percent"]) for row in classes["rows"]},
+            {"equity": Decimal("40"), "unclassified": Decimal("60")},
+        )
 
     def test_exact_overlap_uses_the_same_identified_underlying(self):
         left = self.create_position("ETF mundo", Decimal("8000"))
