@@ -26,9 +26,11 @@ from net_worth.models import (
 )
 from .services import (
     FxConversion,
+    _cache_lookup,
     _get_inflation_index,
     _normalize_month_start,
     adjust_for_inflation,
+    build_fx_cache,
     convert_currency,
     convert_currency_detailed,
     get_latest_inflation_period,
@@ -110,6 +112,28 @@ class CoreServicesTests(TestCase):
 
         amount = convert_currency(Decimal("100"), "USD", "EUR", date=date(2016, 2, 21))
         self.assertEqual(amount, Decimal("80.00"))
+
+    def test_fx_cache_uses_its_date_index_for_historical_rate_lookup(self):
+        for rate_date, rate in (
+            (date(2024, 1, 1), Decimal("0.80")),
+            (date(2024, 2, 1), Decimal("0.90")),
+            (date(2024, 3, 1), Decimal("1.00")),
+        ):
+            FxRate.objects.create(
+                from_currency="USD",
+                to_currency="EUR",
+                rate=rate,
+                rate_date=rate_date,
+            )
+
+        cache = build_fx_cache({"USD", "EUR"})
+        with patch("core.services.bisect_right", return_value=2) as binary_search:
+            rate = _cache_lookup(cache, "USD", "EUR", date(2024, 2, 15))
+
+        self.assertEqual(rate, Decimal("0.90"))
+        binary_search.assert_called_once_with(
+            [date(2024, 1, 1), date(2024, 2, 1), date(2024, 3, 1)], date(2024, 2, 15)
+        )
 
     @override_settings()
     def test_convert_currency_uses_pivot_triangulation(self):

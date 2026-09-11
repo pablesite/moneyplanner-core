@@ -1,5 +1,6 @@
 import os
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
@@ -339,12 +340,18 @@ def refresh_currency_rate(
 # ---------------------------------------------------------------------------
 
 
+class FxRateSeries(list[tuple[date, Decimal]]):
+    """Reverse-chronological FX rows with a chronological date index for lookup."""
+
+    dates: list[date]
+
+
 def build_fx_cache(currencies: set[str]) -> dict[tuple[str, str], list[tuple[date, Decimal]]]:
     """
     Bulk-load all FxRate rows involving the given currencies into an in-memory
-    lookup.  Returns ``{(from, to): [(rate_date, rate), ...]}`` sorted
-    descending by ``rate_date`` so that a linear scan finds the latest rate
-    <= a target date quickly.
+    lookup. Returns ``{(from, to): [(rate_date, rate), ...]}`` sorted descending
+    by ``rate_date``. Each series also keeps an ascending date index, so large
+    timeline calculations resolve a rate by binary search.
     """
     if not currencies:
         return {}
@@ -355,7 +362,10 @@ def build_fx_cache(currencies: set[str]) -> dict[tuple[str, str], list[tuple[dat
     )
     cache: dict[tuple[str, str], list[tuple[date, Decimal]]] = {}
     for from_c, to_c, rd, rate in rows:
-        cache.setdefault((from_c, to_c), []).append((rd, Decimal(rate)))
+        cache.setdefault((from_c, to_c), FxRateSeries()).append((rd, Decimal(rate)))
+    for entries in cache.values():
+        if isinstance(entries, FxRateSeries):
+            entries.dates = [row_date for row_date, _ in reversed(entries)]
     return cache
 
 
@@ -375,7 +385,11 @@ def _cache_lookup(
     entries = cache.get((from_c, to_c))
     if not entries:
         return None
-    # entries are sorted descending by date
+    dates = getattr(entries, "dates", None)
+    if dates is not None:
+        index = bisect_right(dates, rate_date) - 1
+        return entries[-index - 1][1] if index >= 0 else entries[-1][1]
+    # Preserve compatibility for callers that provide a hand-built list.
     for rd, rate in entries:
         if rd <= rate_date:
             return rate
