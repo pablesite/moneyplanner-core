@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.49.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.3...moneyplanner-core-v0.49.0) (2026-09-11)
+
+
+### Features
+
+* **portfolio:** bind reviewed contribution proposals ([3a9869f](https://github.com/pablesite/moneyplanner-core/commit/3a9869f6ce695ad74df4f89842cc510d9cdf71ea))
+* **portfolio:** gate contributions on cash and data quality ([9d1ef2c](https://github.com/pablesite/moneyplanner-core/commit/9d1ef2cae328b1ce4898894a955c82201193acce))
+
+
+### Bug Fixes
+
+* **portfolio:** share dated class composition across portfolio reads ([6e3243e](https://github.com/pablesite/moneyplanner-core/commit/6e3243ec810cbd92ca35d543b5ce1b1075d87938))
+* **settlement:** fund reserves by destination ownership ([80fa0f5](https://github.com/pablesite/moneyplanner-core/commit/80fa0f553f3f74b59293871d97a5bd695ea1e3fd))
+
+
+### Performance Improvements
+
+* **core:** index cached FX rate lookups ([69018e6](https://github.com/pablesite/moneyplanner-core/commit/69018e6d092e24b2085f67e697274975a4539db1))
+* **portfolio:** defer position performance details ([d968ff7](https://github.com/pablesite/moneyplanner-core/commit/d968ff774f6506fb4f83b5cfb9ab52c51dc62be5))
+* **portfolio:** defer workspace timeline ([f9f85f2](https://github.com/pablesite/moneyplanner-core/commit/f9f85f292ca9f8ec6f513262288bebfc11feda46))
+* **portfolio:** index FX close lookups ([b24eb3f](https://github.com/pablesite/moneyplanner-core/commit/b24eb3f7e3cb59339642d2c7316eed2cd23ce385))
+* **portfolio:** omit unrendered flow rows ([d9bc19a](https://github.com/pablesite/moneyplanner-core/commit/d9bc19af0a78cbd2db44df8f804afc462ed91e46))
+
 ## [0.48.3](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.2...moneyplanner-core-v0.48.3) (2026-09-01)
 
 
