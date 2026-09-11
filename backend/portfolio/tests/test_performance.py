@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -24,7 +25,7 @@ from portfolio.models import (
     PositionOwnershipShare,
     PositionValuation,
 )
-from portfolio.performance import build_portfolio_timeline
+from portfolio.performance import _fresher_fx_close, build_portfolio_timeline
 from portfolio.performance_math import (
     DatedAmount,
     DatedValue,
@@ -428,6 +429,28 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["performance"]["flows"], [])
         self.assertEqual(response.data["positions"]["results"][0]["performance"]["flows"], [])
+
+    def test_fresher_fx_close_uses_the_date_index(self):
+        context = SimpleNamespace(
+            fx_cache={
+                ("EUR", "USD"): [
+                    (date(2024, 12, 31), Decimal("1.20")),
+                    (date(2024, 1, 1), Decimal("1.10")),
+                ]
+            },
+            fx_dates={("EUR", "USD"): [date(2024, 1, 1), date(2024, 12, 31)]},
+        )
+        price = SimpleNamespace(currency="USD", price_date=date(2024, 3, 1))
+
+        self.assertEqual(
+            _fresher_fx_close(
+                context=context,
+                position=self.position,
+                price=price,
+                target=date(2024, 12, 31),
+            ),
+            (date(2024, 12, 31), Decimal("1.20")),
+        )
 
     def test_currency_filter_scopes_by_denomination(self):
         self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")

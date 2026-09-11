@@ -109,6 +109,10 @@ class PerformanceContext:
     pockets: dict[int, OwnershipPockets]
     ownership_shares: dict[int, dict[int, Decimal]]
     fx_cache: dict[tuple[str, str], list[tuple[date, Decimal]]]
+    # `fx_cache` remains reverse chronological for the shared currency resolver. These
+    # keys mirror it chronologically so a fresher close can be found without scanning
+    # every historical FX rate.
+    fx_dates: dict[tuple[str, str], list[date]]
     inflation_rows: list[tuple[date, Decimal]]
     fx_issues: set[str] = field(default_factory=set)
 
@@ -563,6 +567,7 @@ def load_performance_context(
         .order_by("period")
         .values_list("period", "index")
     )
+    fx_cache = build_fx_cache(currencies)
     return PerformanceContext(
         portfolio=portfolio,
         positions=positions,
@@ -580,7 +585,10 @@ def load_performance_context(
         cash_ownership=cash_ownership,
         pockets=pockets,
         ownership_shares=ownership_shares,
-        fx_cache=build_fx_cache(currencies),
+        fx_cache=fx_cache,
+        fx_dates={
+            pair: [row_date for row_date, _ in reversed(rows)] for pair, rows in fx_cache.items()
+        },
         inflation_rows=[(row_date, Decimal(index)) for row_date, index in inflation_rows],
     )
 
@@ -750,11 +758,15 @@ def _fresher_fx_close(
     )
     if not unit or unit == price.currency:
         return None
-    # `build_fx_cache` deja cada par ordenado de mas reciente a mas antiguo.
-    for rate_date, rate in context.fx_cache.get((unit, price.currency), []):
-        if rate_date <= target:
-            return (rate_date, rate) if rate_date > price.price_date else None
-    return None
+    pair = (unit, price.currency)
+    dates = context.fx_dates.get(pair, [])
+    index = bisect_right(dates, target) - 1
+    if index < 0:
+        return None
+    # `build_fx_cache` remains reverse chronological for `convert_currency_cached`.
+    # Translate the chronological index back to the matching rate row.
+    rate_date, rate = context.fx_cache[pair][-index - 1]
+    return (rate_date, rate) if rate_date > price.price_date else None
 
 
 def resolve_preloaded_value(
