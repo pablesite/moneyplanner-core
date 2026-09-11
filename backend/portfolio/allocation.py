@@ -27,9 +27,10 @@ from accounting.services_quick_entry import create_quick_transaction
 from budget.models import AnnualExpenseEntry
 from budget.services import planned_expense_monthly_distribution
 
-from memberships.models import Ownership, OwnershipLink
+from memberships.models import Ownership
 
 from .composition import ClassComposition, class_compositions
+from .decision_data import cash_snapshot, decision_quality, funding_source, issue
 from .operations import confirm_operation
 from .models import (
     AllocationStrategy,
@@ -42,10 +43,8 @@ from .models import (
 )
 from .performance import (
     PerformanceContext,
-    _balance_at,
     _cash_value_base,
     _position_value_base,
-    _to_base,
     load_performance_context,
     timeline_context_start,
 )
@@ -159,38 +158,8 @@ def build_cash_value(
 
 
 def scope_cash(*, context: PerformanceContext, ownership: Ownership, on_date: date) -> Decimal:
-    """El efectivo de contenedor que pertenece a este ambito.
-
-    El efectivo no lleva titularidad propia, pero su activo en Patrimonio si: es de quien
-    sea la cuenta. Sin esto la liquidez o no aparecia en ninguna parte —la clase marcaba
-    cero teniendo dinero— o habria que sumarla a todos los ambitos y contarla varias
-    veces.
-    """
-    asset_ids = [
-        link.ledger_account.asset_id
-        for link in context.cash_accounts
-        if link.ledger_account.asset_id
-    ]
-    if not asset_ids:
-        return ZERO
-    owned = set(
-        OwnershipLink.objects.filter(
-            user=context.portfolio.user,
-            target_type=OwnershipLink.TargetType.ASSET,
-            target_id__in=asset_ids,
-            ownership=ownership,
-        ).values_list("target_id", flat=True)
-    )
-    total = ZERO
-    for link in context.cash_accounts:
-        if link.ledger_account.asset_id not in owned:
-            continue
-        balance = _balance_at(context, link.ledger_account_id, on_date)
-        converted = _to_base(
-            context=context, amount=balance, currency=link.currency, target=on_date
-        )
-        total += converted or ZERO
-    return total
+    """Efectivo conocido del mismo perímetro usado por las propuestas."""
+    return Decimal(cash_snapshot(context=context, ownership=ownership, on_date=on_date)["total"])
 
 
 def _band_state(actual: Decimal, target: AllocationTarget | None) -> str:
@@ -387,6 +356,10 @@ def build_allocation(
         ),
         "total_value": str(total.quantize(Decimal("0.01"))),
         "position_count": len(positions),
+        "cash": (cash := cash_snapshot(context=context, ownership=ownership, on_date=on_date)),
+        "quality": decision_quality(
+            context=context, positions=positions, on_date=on_date, cash=cash
+        ),
         "planned_contribution": str(planned),
         "contributed_this_month": str(contributed),
         # Lo que queda del plan del mes, que es lo que se puede aportar sin pasarse. Antes
@@ -918,6 +891,7 @@ def build_contribution(
     amount: Decimal,
     on_date: date,
     context: PerformanceContext | None = None,
+    source_account_id: int | None = None,
 ) -> dict[str, Any]:
     """Reparte una aportacion hacia donde mas falta para la politica del ambito.
 
@@ -948,14 +922,36 @@ def build_contribution(
         }
 
     positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
+    cash = cash_snapshot(context=context, ownership=ownership, on_date=on_date)
+    quality = decision_quality(context=context, positions=positions, on_date=on_date, cash=cash)
+    funding, funding_issues = funding_source(
+        context=context,
+        cash=cash,
+        source_account_id=source_account_id,
+        amount=amount,
+        on_date=on_date,
+    )
+    quality["issues"].extend(funding_issues)
+    if funding_issues:
+        quality["status"] = "blocked"
+    evidence = {"quality": quality, "cash": cash, "funding": funding}
+    if quality["status"] == "blocked":
+        return {"status": "blocked", "amount": str(amount), "lines": [], **evidence}
+    internal = funding["kind"] == "internal"
+    cash_value = Decimal(cash["total"])
+    eligible_cash = {
+        row["cash_account_id"]: row
+        for row in cash["accounts"]
+        if row["currency"] == portfolio.base_currency
+    }
     slices = scope_slices(context=context, positions=positions, on_date=on_date)
     current_by_position: dict[int, Decimal] = {}
     for row in slices:
         current_by_position[row.position.id] = (
             current_by_position.get(row.position.id, ZERO) + row.value
         )
-    total = sum(current_by_position.values(), ZERO)
-    post_total = total + amount
+    total = sum(current_by_position.values(), ZERO) + cash_value
+    post_total = total if internal else total + amount
 
     resolved, cash_target, unreachable = _effective_targets(
         strategy=strategy, positions=positions, current_by_position=current_by_position
@@ -992,22 +988,24 @@ def build_contribution(
                 operation_cost=(
                     ZERO if rule is None or rule.fee_free_plan else rule.operation_cost
                 ),
-                accumulates=position.container.cash_accounts.exists(),
+                accumulates=any(
+                    row["container_id"] == position.container_id for row in eligible_cash.values()
+                ),
             )
         )
 
     if cash_target > 0:
-        # La liquidez entra como una candidata mas y compite por el hueco. El efectivo
-        # del contenedor no es de ninguna posicion, asi que dentro del ambito parte de
-        # cero y su hueco es su objetivo entero.
+        # El presupuesto interno ya está en el saldo: descontarlo aquí permite
+        # conservar la reserva sin contarlo como una nueva aportación.
+        retained_cash = cash_value - amount if internal else cash_value
         candidates.append(
             Candidate(
                 key=None,
                 position=None,
                 asset_class="cash",
-                current=ZERO,
+                current=retained_cash,
                 target_percent=cash_target,
-                gap=cash_target / Decimal("100") * post_total,
+                gap=max(cash_target / Decimal("100") * post_total - retained_cash, ZERO),
                 tax_transferable=False,
                 minimum=ZERO,
                 step=ZERO,
@@ -1019,6 +1017,9 @@ def build_contribution(
     commitments, container_commitments = resolve_commitments(
         context=context, positions=positions, on_date=on_date
     )
+    if internal:
+        # Recolocar el efectivo existente no satisface compromisos de dinero nuevo.
+        commitments, container_commitments = {}, {}
     # Un cupo lleno sigue siendo un techo: la posicion no debe recibir mas aunque su
     # compromiso ya no reclame nada.
     _year_capped = set(
@@ -1113,12 +1114,23 @@ def build_contribution(
         candidate = by_key.get(key)
         if candidate is None or candidate.position is None or value <= 0:
             continue
-        cash = candidate.position.container.cash_accounts.first()
-        if cash is None:
+        destination = next(
+            (
+                row
+                for row in eligible_cash.values()
+                if row["container_id"] == candidate.position.container_id
+            ),
+            None,
+        )
+        if destination is None:
             continue
         accumulate.append(
             {
-                "cash_account_id": cash.id,
+                "cash_account_id": destination["cash_account_id"],
+                "ledger_account_id": destination["ledger_account_id"],
+                "movement": "retain"
+                if destination["ledger_account_id"] == source_account_id
+                else "transfer",
                 "container": candidate.position.container.name,
                 "position_id": key,
                 "amount": str(value),
@@ -1131,9 +1143,41 @@ def build_contribution(
     accumulated = sum((Decimal(row["amount"]) for row in accumulate), ZERO)
     leftover = (amount - reserved_cash - placed - accumulated).quantize(CENT)
 
+    reserve_destination = next(iter(eligible_cash.values()), None) if not internal else None
+    if reserved_cash > ZERO and not internal and reserve_destination is None:
+        quality["issues"].append(
+            issue(
+                "reserve_destination",
+                "La reserva táctica no tiene cuenta de destino en este ámbito.",
+                "Enlaza una cuenta de efectivo en Configuración de cartera y asigna su titularidad en Patrimonio.",
+            )
+        )
+        quality["status"] = "blocked"
+    liquidity = {
+        "existing_cash": str(cash_value),
+        "portfolio_before": str(total),
+        "portfolio_after": str(post_total),
+        "tactical_reserve": str(reserved_cash),
+        "reserve_movement": "retain" if internal else "transfer",
+        "reserve_cash_account_id": reserve_destination["cash_account_id"]
+        if reserve_destination
+        else None,
+        "reserve_destination": funding["name"]
+        if internal
+        else reserve_destination["name"]
+        if reserve_destination
+        else None,
+        "accumulated": str(accumulated),
+        "operating_remainder": str(leftover),
+        "source_account_id": source_account_id,
+    }
+    # El remanente exterior no entra en la cartera; el interior permanece en su efectivo.
+    liquidity["portfolio_after"] = str(post_total - (leftover if not internal else ZERO))
     by_position = {row.key: row for row in candidates if row.position is not None}
     return {
-        "status": "ok",
+        "status": "blocked" if quality["status"] == "blocked" else "ok",
+        **evidence,
+        "liquidity": liquidity,
         "ownership_id": ownership.id,
         "on_date": on_date.isoformat(),
         "currency": portfolio.base_currency,
@@ -1188,9 +1232,18 @@ def create_basket(
         amount=amount,
         on_date=on_date,
         context=context,
+        source_account_id=source_account_id,
     )
     if solved["status"] != "ok":
-        raise ValidationError({"strategy": solved["status"]})
+        raise ValidationError(
+            {
+                "proposal": [
+                    row["message"] + " " + row["action"]
+                    for row in solved.get("quality", {}).get("issues", [])
+                ]
+                or [solved["status"]]
+            }
+        )
 
     basket = ContributionBasket.objects.create(
         portfolio=portfolio,
@@ -1202,6 +1255,9 @@ def create_basket(
         leftover=Decimal(solved["leftover"]),
         source_account_id=source_account_id,
         explanation={
+            "funding": solved["funding"],
+            "quality": solved["quality"],
+            "liquidity": solved["liquidity"],
             "commitments": solved["commitments"],
             "skipped": solved["skipped"],
             "unreachable": solved["unreachable"],
@@ -1225,7 +1281,20 @@ def create_basket(
             reason=row["reason"],
         )
         for row in solved["accumulate"]
+        if row["movement"] != "retain"
     )
+    if (
+        Decimal(solved["reserved_cash"]) > ZERO
+        and solved["liquidity"]["reserve_movement"] == "transfer"
+    ):
+        lines.append(
+            ContributionBasketLine(
+                basket=basket,
+                cash_account_id=solved["liquidity"]["reserve_cash_account_id"],
+                amount=Decimal(solved["reserved_cash"]),
+                reason="tactical_reserve",
+            )
+        )
     ContributionBasketLine.objects.bulk_create(lines)
     return basket
 
@@ -1274,6 +1343,74 @@ def confirm_basket(
     if not pending:
         raise ValidationError({"lines": "No hay lineas pendientes que confirmar."})
 
+    context = load_performance_context(
+        portfolio=basket.portfolio,
+        start_date=timeline_context_start(
+            portfolio=basket.portfolio, start_date=basket.booking_date
+        ),
+        end_date=basket.booking_date,
+    )
+    cash = cash_snapshot(context=context, ownership=basket.ownership, on_date=basket.booking_date)
+    quality = decision_quality(
+        context=context,
+        positions=positions_in_scope(
+            context=context, ownership_id=basket.ownership_id, on_date=basket.booking_date
+        ),
+        on_date=basket.booking_date,
+        cash=cash,
+    )
+    required = sum(
+        (
+            line.amount
+            + (
+                ZERO
+                if line.cash_account_id
+                or not getattr(line.position, "allocation_rule", None)
+                or line.position.allocation_rule.fee_free_plan
+                else line.position.allocation_rule.operation_cost
+            )
+            for line in pending
+        ),
+        ZERO,
+    )
+    funding, issues = funding_source(
+        context=context,
+        cash=cash,
+        source_account_id=source_id,
+        amount=required,
+        on_date=basket.booking_date,
+    )
+    issues += [row for row in quality["issues"] if row["severity"] == "blocker"]
+    previous = basket.explanation.get("funding", {}).get("kind", "unspecified")
+    if (previous == "internal") != (funding["kind"] == "internal"):
+        issues.append(
+            issue(
+                "funding_changed",
+                "El origen cambia el perímetro del reparto.",
+                "Calcula una nueva cesta con esa cuenta.",
+            )
+        )
+    destinations = {
+        row["cash_account_id"]
+        for row in cash["accounts"]
+        if row["currency"] == basket.portfolio.base_currency
+    }
+    for line in pending:
+        if line.cash_account_id and (
+            line.cash_account_id not in destinations
+            or line.cash_account.ledger_account_id == source_id
+        ):
+            issues.append(
+                issue(
+                    "invalid_destination",
+                    "El destino de efectivo ya no es válido.",
+                    "Revisa la titularidad y calcula una nueva cesta.",
+                )
+            )
+    if issues:
+        raise ValidationError(
+            {"proposal": [row["message"] + " " + row["action"] for row in issues]}
+        )
     source = LedgerAccount.objects.get(id=source_id, user=basket.portfolio.user)
     now = timezone.now()
     for line in pending:
@@ -1344,9 +1481,10 @@ def build_scopes(*, portfolio: Portfolio, on_date: date) -> list[dict[str, Any]]
         "splits__member"
     ):
         positions = positions_in_scope(context=context, ownership_id=ownership.id, on_date=on_date)
-        if not positions:
+        cash = scope_cash(context=context, ownership=ownership, on_date=on_date)
+        if not positions and not cash:
             continue
-        value = sum(
+        value = cash + sum(
             (
                 row.value
                 for row in scope_slices(context=context, positions=positions, on_date=on_date)

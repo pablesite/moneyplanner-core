@@ -17,6 +17,9 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from memberships.models import Ownership
+
+from .decision_data import cash_snapshot
 from .composition import ClassComposition, class_compositions, current_holdings
 from .models import Instrument, PositionClassBreakdown, PositionExposure, PositionHolding, Portfolio
 from .performance import (
@@ -72,6 +75,7 @@ def build_exposure(
     on_date: date,
     context: PerformanceContext | None = None,
     scope_ids: set[int] | None = None,
+    ownership: Ownership | None = None,
 ) -> dict[str, Any]:
     """Exposicion agregada de la cartera por cada dimension, con lo que no se sabe."""
     context = context or load_performance_context(
@@ -79,10 +83,22 @@ def build_exposure(
         start_date=timeline_context_start(portfolio=portfolio, start_date=on_date),
         end_date=on_date,
     )
+    if ownership is not None:
+        from .allocation import positions_in_scope
+
+        scope_ids = {
+            row.id
+            for row in positions_in_scope(
+                context=context, ownership_id=ownership.id, on_date=on_date
+            )
+        }
     values = _values(context=context, on_date=on_date)
     if scope_ids is not None:
         values = {key: value for key, value in values.items() if key in scope_ids}
     total = sum(values.values(), ZERO)
+    cash = cash_snapshot(context=context, ownership=ownership, on_date=on_date)
+    # Un subconjunto arbitrario de posiciones no define la titularidad del efectivo.
+    cash_value = Decimal(cash["total"]) if scope_ids is None or ownership else ZERO
     names = {position.id: position.asset.name for position in context.positions}
     positions = {position.id: position for position in context.positions}
 
@@ -218,7 +234,9 @@ def build_exposure(
         "total_value": str(total.quantize(CENT)),
         "position_count": len(values),
         "dimensions": dimensions,
-        "classes": _classes(values=values, compositions=compositions),
+        "cash": cash if scope_ids is None or ownership else None,
+        "composition_total": str((total + cash_value).quantize(CENT)),
+        "classes": _classes(values=values, compositions=compositions, cash_value=cash_value),
         "concentration": _concentration(values=values, names=names, total=total),
         "overlap": _overlap(values=values, names=names, rows_by_position=rows_by_position),
         "holding_overlap": _holding_overlap(
@@ -285,7 +303,10 @@ def _source_label(holding_positions: int, manual_positions: int) -> str:
 
 
 def _classes(
-    *, values: dict[int, Decimal], compositions: dict[int, ClassComposition]
+    *,
+    values: dict[int, Decimal],
+    compositions: dict[int, ClassComposition],
+    cash_value: Decimal = ZERO,
 ) -> dict[str, Any]:
     """Reparto sobre el valor completo, incluida la fracción sin clasificar."""
     buckets: dict[str, Decimal] = {}
@@ -297,13 +318,16 @@ def _classes(
             buckets[asset_class] = buckets.get(asset_class, ZERO) + value * percent / Decimal("100")
         covered += value * composition.covered_percent / Decimal("100")
         holdings_positions += composition.source == "holdings"
-    total = sum(values.values(), ZERO)
+    if cash_value:
+        buckets["cash"] = buckets.get("cash", ZERO) + cash_value
+        covered += cash_value
+    total = sum(values.values(), ZERO) + cash_value
     coverage = covered / total * Decimal("100") if total else ZERO
     return {
         "status": _coverage_status(coverage),
         "covered_percent": str(coverage.quantize(CENT)),
         "source": _source_label(holdings_positions, len(values) - holdings_positions),
-        "percent_basis": "positions_total",
+        "percent_basis": "positions_and_cash" if cash_value else "positions_total",
         "rows": sorted(
             (
                 {

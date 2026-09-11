@@ -109,6 +109,11 @@ class AllocationFixture:
         PositionValuation.objects.create(
             position=position, valuation_date=date(2024, 1, 1), value=value, currency="EUR"
         )
+        # Las pruebas del solver requieren precios vigentes en sus fechas de decisión.
+        for observed_on in (date(2024, 1, 31), TODAY):
+            PositionValuation.objects.create(
+                position=position, valuation_date=observed_on, value=value, currency="EUR"
+            )
         period = PositionOwnershipPeriod.objects.create(
             position=position,
             ownership=ownership or self.mine,
@@ -120,6 +125,24 @@ class AllocationFixture:
             percent=Decimal("100"),
         )
         return position
+
+    def own_cash(self, account):
+        if account.asset_id is None:
+            account.asset = Asset.objects.create(
+                user=self.user,
+                name=account.name,
+                category=Asset.Category.CASH,
+                subcategory=Asset.Subcategory.BANK_ACCOUNT,
+                currency=account.currency,
+                amount=Decimal("0"),
+            )
+            account.save(update_fields=["asset"])
+        OwnershipLink.objects.get_or_create(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=account.asset_id,
+            defaults={"ownership": self.mine},
+        )
 
     def contribute(self, position: PortfolioPosition, amount: Decimal, on_date: date) -> None:
         """Una aportacion real a la posicion, para que el cupo sepa lo que ya llevas."""
@@ -524,6 +547,13 @@ class ContributionSolverTests(AllocationFixture, TestCase):
             {"equity": ("90", None, None), "cash": ("10", None, None)},
         )
 
+        account = LedgerAccount.objects.create(
+            user=self.user, name="Reserva", account_type="asset", currency="EUR"
+        )
+        self.own_cash(account)
+        ContainerCashAccount.objects.create(
+            container=self.container, ledger_account=account, currency="EUR"
+        )
         result = self.contribution("1000")
 
         self.assertEqual(Decimal(result["reserved_cash"]), Decimal("1000.00"))
@@ -1066,6 +1096,12 @@ class MinimumWithoutCashTests(AllocationFixture, TestCase):
             currency="EUR",
             amount=Decimal("0"),
         )
+        OwnershipLink.objects.create(
+            user=self.user,
+            target_type=OwnershipLink.TargetType.ASSET,
+            target_id=cash_asset.id,
+            ownership=self.mine,
+        )
         ContainerCashAccount.objects.create(
             container=self.container,
             ledger_account=LedgerAccount.objects.create(
@@ -1377,6 +1413,7 @@ class ContributionBasketTests(AllocationFixture, TestCase):
             account_type=LedgerAccount.AccountType.ASSET,
             currency="EUR",
         )
+        self.own_cash(cash)
         ContainerCashAccount.objects.create(container=platform, ledger_account=cash, currency="EUR")
         crowd = self.create_position(
             "Crowdfunding", Decimal("1000"), asset_class=Instrument.AssetClass.REAL_ESTATE
@@ -1547,11 +1584,8 @@ class ContributionConfirmTests(AllocationFixture, TestCase):
         )
         other.save(update_fields=["ledger_account"])
         # Las dos con hueco, para que la cesta tenga dos lineas que decidir.
-        PositionValuation.objects.create(
-            position=self.equity,
-            valuation_date=date(2024, 12, 31),
-            value=Decimal("1000"),
-            currency="EUR",
+        PositionValuation.objects.filter(position=self.equity, valuation_date=TODAY).update(
+            value=Decimal("1000")
         )
         AllocationTarget.objects.filter(strategy__ownership=self.mine).update(
             target_percent=Decimal("50")
@@ -1588,6 +1622,7 @@ class ContributionConfirmTests(AllocationFixture, TestCase):
             account_type=LedgerAccount.AccountType.ASSET,
             currency="EUR",
         )
+        self.own_cash(wallet)
         ContainerCashAccount.objects.create(
             container=platform, ledger_account=wallet, currency="EUR"
         )

@@ -1064,7 +1064,10 @@ class PortfolioExposureView(APIView):
         on_date = parse_date(str(raw)) if raw else timezone.localdate()
         if on_date is None:
             raise ValidationError({"on_date": "Fecha no valida."})
-        return Response(build_exposure(portfolio=portfolio, on_date=on_date))
+        ownership = None
+        if request.query_params.get("ownership_id"):
+            _, ownership, _ = _allocation_request(request)
+        return Response(build_exposure(portfolio=portfolio, on_date=on_date, ownership=ownership))
 
 
 class AllocationScopesView(APIView):
@@ -1096,5 +1099,6 @@ class ContributionSolveView(APIView):
                 ownership=ownership,
                 amount=_positive_amount(request.data.get("amount")),
                 on_date=on_date,
+                source_account_id=request.data.get("source_account_id") or None,
             )
         )
