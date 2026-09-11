@@ -1764,9 +1764,20 @@ class AllocationApiTests(AllocationFixture, APITestCase):
     def test_a_basket_is_created_from_a_solve_and_can_be_discarded(self):
         self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
 
+        reviewed = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+
         created = self.client.post(
             "/api/portfolio/baskets/",
-            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            {
+                "ownership_id": self.mine.id,
+                "amount": "500",
+                "on_date": "2024-12-31",
+                "review_token": reviewed.data["review_token"],
+            },
             format="json",
         )
         discarded = self.client.post(
@@ -1777,6 +1788,18 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         self.assertEqual(created.data["status"], "draft")
         self.assertEqual(len(created.data["lines"]), 1)
         self.assertEqual(discarded.data["status"], "discarded")
+
+    def test_saving_a_basket_requires_the_reviewed_token(self):
+        self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+
+        response = self.client.post(
+            "/api/portfolio/baskets/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("review_token", response.data["error"]["details"])
 
     def test_the_allocation_suggests_what_the_budget_planned_to_invest(self):
         # El importe por defecto sale de lo que ya habias planificado invertir ese mes.
@@ -1824,14 +1847,34 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
         self.create_position("Cripto del niño", Decimal("100"), ownership=self.his)
         self.strategy(self.his, date(2024, 1, 1), {"equity": ("100", None, None)})
+        mine_review = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
+        his_review = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.his.id, "amount": "100", "on_date": "2024-12-31"},
+            format="json",
+        )
         mine = self.client.post(
             "/api/portfolio/baskets/",
-            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            {
+                "ownership_id": self.mine.id,
+                "amount": "500",
+                "on_date": "2024-12-31",
+                "review_token": mine_review.data["review_token"],
+            },
             format="json",
         )
         self.client.post(
             "/api/portfolio/baskets/",
-            {"ownership_id": self.his.id, "amount": "100", "on_date": "2024-12-31"},
+            {
+                "ownership_id": self.his.id,
+                "amount": "100",
+                "on_date": "2024-12-31",
+                "review_token": his_review.data["review_token"],
+            },
             format="json",
         )
         self.client.post(f"/api/portfolio/baskets/{mine.data['id']}/discard/", {}, format="json")
@@ -1874,9 +1917,19 @@ class AllocationApiTests(AllocationFixture, APITestCase):
         # Confirmar sin decir de donde sale el dinero es una condicion prevista, no una
         # averia: antes salia por la API como un 500 sin mensaje que leer.
         self.strategy(self.mine, date(2024, 1, 1), {"equity": ("100", None, None)})
+        reviewed = self.client.post(
+            "/api/portfolio/contribution/solve/",
+            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            format="json",
+        )
         created = self.client.post(
             "/api/portfolio/baskets/",
-            {"ownership_id": self.mine.id, "amount": "500", "on_date": "2024-12-31"},
+            {
+                "ownership_id": self.mine.id,
+                "amount": "500",
+                "on_date": "2024-12-31",
+                "review_token": reviewed.data["review_token"],
+            },
             format="json",
         )
 

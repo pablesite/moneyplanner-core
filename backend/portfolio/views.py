@@ -877,12 +877,16 @@ class ContributionBasketViewSet(
     def create(self, request):
         portfolio, ownership, on_date = _allocation_request(request)
         amount = _positive_amount(request.data.get("amount"))
+        review_token = str(request.data.get("review_token") or "")
+        if not review_token:
+            raise ValidationError({"review_token": "Revisa el reparto antes de guardarlo."})
         basket = create_basket(
             portfolio=portfolio,
             ownership=ownership,
             amount=amount,
             on_date=on_date,
             source_account_id=request.data.get("source_account_id") or None,
+            review_token=review_token,
         )
         return Response(self.get_serializer(basket).data, status=status.HTTP_201_CREATED)
 

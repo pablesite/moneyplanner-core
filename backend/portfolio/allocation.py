@@ -11,6 +11,8 @@ parte economica te toca de cada posicion— y sigue siendo el filtro de titulari
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from itertools import groupby
 from datetime import date
@@ -1174,7 +1176,7 @@ def build_contribution(
     # El remanente exterior no entra en la cartera; el interior permanece en su efectivo.
     liquidity["portfolio_after"] = str(post_total - (leftover if not internal else ZERO))
     by_position = {row.key: row for row in candidates if row.position is not None}
-    return {
+    result = {
         "status": "blocked" if quality["status"] == "blocked" else "ok",
         **evidence,
         "liquidity": liquidity,
@@ -1209,6 +1211,107 @@ def build_contribution(
         # tiene que decirlo, porque si no parece que las ignora sin motivo.
         "unreachable": unreachable,
     }
+    result["impact"] = _contribution_impact(
+        portfolio=portfolio,
+        ownership=ownership,
+        on_date=on_date,
+        context=context,
+        before=build_allocation(
+            portfolio=portfolio, ownership=ownership, on_date=on_date, context=context
+        ),
+        lines=result["lines"],
+        reserved_cash=reserved_cash,
+        accumulated=accumulated,
+        internal=internal,
+        portfolio_after=Decimal(liquidity["portfolio_after"]),
+    )
+    result["review_token"] = _review_token(result)
+    return result
+
+
+def _contribution_impact(
+    *,
+    portfolio: Portfolio,
+    ownership: Ownership,
+    on_date: date,
+    context: PerformanceContext,
+    before: dict[str, Any],
+    lines: list[dict[str, Any]],
+    reserved_cash: Decimal,
+    accumulated: Decimal,
+    internal: bool,
+    portfolio_after: Decimal,
+) -> dict[str, Any]:
+    """Efecto verificable de la propuesta, sin fingir que ya se ha ejecutado."""
+    values = {row["asset_class"]: Decimal(row["value"]) for row in before["by_class"]}
+    targets = {row["asset_class"]: row for row in before["by_class"]}
+    placed = sum((Decimal(row["amount"]) for row in lines), ZERO)
+    for line in lines:
+        key = line["asset_class"]
+        values[key] = values.get(key, ZERO) + Decimal(line["amount"])
+    cash_delta = accumulated + reserved_cash if not internal else -placed
+    values["cash"] = values.get("cash", ZERO) + cash_delta
+
+    def band(row: dict[str, Any], share: Decimal) -> str:
+        minimum = Decimal(row["min_percent"]) if row.get("min_percent") is not None else None
+        maximum = Decimal(row["max_percent"]) if row.get("max_percent") is not None else None
+        if row.get("target_percent") is None:
+            return "unplanned"
+        if minimum is not None and share < minimum:
+            return "below"
+        if maximum is not None and share > maximum:
+            return "above"
+        return "within"
+
+    rows = []
+    for key in sorted(set(values) | set(targets)):
+        prior = targets.get(key, {})
+        before_value = Decimal(prior.get("value", ZERO))
+        after_value = values.get(key, ZERO)
+        before_total = Decimal(before["total_value"])
+        before_percent = before_value / before_total * Decimal("100") if before_total else ZERO
+        after_percent = after_value / portfolio_after * Decimal("100") if portfolio_after else ZERO
+        rows.append(
+            {
+                "asset_class": key,
+                "before_value": str(before_value.quantize(CENT)),
+                "after_value": str(after_value.quantize(CENT)),
+                "before_percent": str(before_percent.quantize(CENT)),
+                "after_percent": str(after_percent.quantize(CENT)),
+                "before_band": prior.get("band", "unplanned"),
+                "after_band": band(prior, after_percent),
+                "target_percent": prior.get("target_percent"),
+            }
+        )
+    return {
+        "before_total": before["total_value"],
+        "after_total": str(portfolio_after.quantize(CENT)),
+        "rows": sorted(rows, key=lambda row: Decimal(row["after_value"]), reverse=True),
+    }
+
+
+def _review_token(result: dict[str, Any]) -> str:
+    """Huella del cálculo revisado; cualquier supuesto distinto exige revisarlo otra vez."""
+    snapshot = {
+        key: result.get(key)
+        for key in (
+            "ownership_id",
+            "on_date",
+            "strategy_id",
+            "amount",
+            "quality",
+            "cash",
+            "funding",
+            "liquidity",
+            "lines",
+            "accumulate",
+            "reserved_cash",
+            "leftover",
+            "impact",
+        )
+    }
+    encoded = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 @db_transaction.atomic
@@ -1220,6 +1323,7 @@ def create_basket(
     on_date: date,
     source_account_id: int | None = None,
     context: PerformanceContext | None = None,
+    review_token: str | None = None,
 ) -> ContributionBasket:
     """Guarda un reparto como propuesta pendiente, sin efecto contable.
 
@@ -1244,6 +1348,10 @@ def create_basket(
                 or [solved["status"]]
             }
         )
+    if review_token is not None and review_token != solved["review_token"]:
+        raise ValidationError(
+            {"proposal": "La cartera, la política o el importe han cambiado. Revisa el reparto."}
+        )
 
     basket = ContributionBasket.objects.create(
         portfolio=portfolio,
@@ -1255,6 +1363,8 @@ def create_basket(
         leftover=Decimal(solved["leftover"]),
         source_account_id=source_account_id,
         explanation={
+            "review_token": solved["review_token"],
+            "impact": solved["impact"],
             "funding": solved["funding"],
             "quality": solved["quality"],
             "liquidity": solved["liquidity"],
@@ -1380,6 +1490,24 @@ def confirm_basket(
         amount=required,
         on_date=basket.booking_date,
     )
+    reviewed_token = basket.explanation.get("review_token")
+    if reviewed_token:
+        current = build_contribution(
+            portfolio=basket.portfolio,
+            ownership=basket.ownership,
+            amount=basket.amount,
+            on_date=basket.booking_date,
+            context=context,
+            source_account_id=source_id,
+        )
+        if current.get("review_token") != reviewed_token:
+            issues.append(
+                issue(
+                    "proposal_changed",
+                    "La política, el importe o los datos ya no coinciden con la cesta revisada.",
+                    "Calcula y guarda una cesta nueva antes de contabilizar.",
+                )
+            )
     issues += [row for row in quality["issues"] if row["severity"] == "blocker"]
     previous = basket.explanation.get("funding", {}).get("kind", "unspecified")
     if (previous == "internal") != (funding["kind"] == "internal"):

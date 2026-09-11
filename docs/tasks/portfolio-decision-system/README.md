@@ -1,6 +1,6 @@
 # Cartera como sistema de decisión
 
-Plan solicitado el 2026-09-10. Tareas 1–2 completadas y validadas; las tareas 3–7 quedan pendientes. Continúa [investment-portfolio](../investment-portfolio/README.md).
+Plan solicitado el 2026-09-10. Tareas 1–3 completadas y validadas; las tareas 4–7 quedan pendientes. Continúa [investment-portfolio](../investment-portfolio/README.md).
 
 ## Objetivo
 Conectar exposición real, política, decisiones, ejecución y evaluación con el patrimonio completo. La mejora de rentabilidad ajustada a riesgo se debe medir; no es un resultado garantizado.
@@ -11,7 +11,7 @@ Conectar exposición real, política, decisiones, ejecución y evaluación con e
 | --- | --- | --- | --- | --- |
 | 1 | Composición coherente | [backend](phase-1-class-composition/terminados/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-1-class-composition/terminados/frontend.md) | ✅ |
 | 2 | Liquidez y calidad de decisión | [backend](phase-2-cash-data-quality/terminados/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-2-cash-data-quality/terminados/frontend.md) | ✅ |
-| 3 | Revisión y contexto UX | [backend](phase-3-decision-review-ux/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-3-decision-review-ux/frontend.md) | ⚪ |
+| 3 | Revisión y contexto UX | [backend](phase-3-decision-review-ux/terminados/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-3-decision-review-ux/terminados/frontend.md) | ✅ |
 | 4 | Aportaciones por exposición real | [backend](phase-4-exposure-contributions/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-4-exposure-contributions/frontend.md) | ⚪ |
 | 5 | Rebalanceo y reducciones | [backend](phase-5-rebalancing-actions/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-5-rebalancing-actions/frontend.md) | ⚪ |
 | 6 | Evaluación DCA y buy & hold | [backend](phase-6-strategy-evaluation/backend.md) | [frontend](../../../../docs/tasks/portfolio-decision-system/phase-6-strategy-evaluation/frontend.md) | ⚪ |
@@ -22,6 +22,9 @@ La composición por clases usa tenencias vigentes > desglose manual > clase efec
 
 ## Contrato de la segunda entrega
 El efectivo de contenedor comparte el perímetro fechado de titularidad de la asignación, exposición con ámbito y propuesta. El origen se declara como externo o interno para evitar doble conteo. La respuesta separa reserva táctica, efectivo acumulado para mínimos y remanente operativo, con origen y destino. Valoraciones, FX, titularidad, efectivo, cobertura de clases y antigüedad se comprueban antes de proponer y otra vez antes de confirmar; cada bloqueo conserva la fecha, explicación y acción correctiva.
+
+## Contrato de la tercera entrega
+La simulación devuelve una huella revisable de importe, fecha, titularidad, política, evidencia y destinos, y el guardado por API la exige. Guardar o confirmar recalcula la huella y rechaza una propuesta que ya no representa sus supuestos. La respuesta y la cesta conservan el impacto previsto por clase: importe, peso y banda antes/después. La interfaz diferencia filtros de inventario, mandato de asignación y fecha de la foto, y explica la diferencia entre corregir una versión vigente y crear una versión nueva.
 
 ## Decisiones de alcance
 Los límites anteriores de solo aportaciones y sin comparación DCA describen el MVP, no el objetivo de este plan: las tareas 5 y 6 los amplían por petición del usuario. No hay ejecución automática de broker, motor fiscal ni garantía de rentabilidad. No se rellenan tenencias con estimaciones ni se modifican datos de producción. No incluye refactors generales.

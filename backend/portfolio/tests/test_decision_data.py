@@ -242,3 +242,42 @@ class DecisionDataTests(AllocationFixture, TestCase):
         )
         with self.assertRaisesMessage(ValidationError, "perímetro"):
             confirm_basket(basket=basket, source_account_id=inside.id)
+
+    def test_review_token_binds_the_saved_basket_to_its_exact_preview(self):
+        source = self.account("2000")
+        self.account(internal=True)
+        reviewed = self.solve(source=source)
+
+        basket = create_basket(
+            portfolio=self.portfolio,
+            ownership=self.mine,
+            on_date=TODAY,
+            amount=Decimal("1000"),
+            source_account_id=source.id,
+            review_token=reviewed["review_token"],
+        )
+
+        self.assertEqual(basket.explanation["review_token"], reviewed["review_token"])
+        self.assertEqual(basket.explanation["impact"]["before_total"], "9000.00")
+        with self.assertRaisesMessage(ValidationError, "han cambiado"):
+            create_basket(
+                portfolio=self.portfolio,
+                ownership=self.mine,
+                on_date=TODAY,
+                amount=Decimal("900"),
+                source_account_id=source.id,
+                review_token=reviewed["review_token"],
+            )
+
+    def test_impact_publishes_weights_and_band_before_and_after(self):
+        source = self.account("2000")
+        self.account(internal=True)
+        result = self.solve(source=source)
+
+        impact = result["impact"]
+        equity = next(row for row in impact["rows"] if row["asset_class"] == "equity")
+        cash = next(row for row in impact["rows"] if row["asset_class"] == "cash")
+        self.assertEqual(impact["before_total"], "9000.00")
+        self.assertEqual(impact["after_total"], "10000.00")
+        self.assertEqual(equity["before_percent"], "100.00")
+        self.assertEqual(cash["after_percent"], "10.00")
