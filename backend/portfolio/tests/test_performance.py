@@ -402,6 +402,24 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(response.data["timeline"]["results"], [])
         build_timeline.assert_not_called()
 
+    def test_workspace_can_defer_position_returns_for_the_summary(self):
+        with patch("portfolio.views.build_portfolio_positions") as build_positions:
+            response = self.client.get(
+                "/api/portfolio/workspace/?date_from=2024-01-01&date_to=2024-12-31"
+                "&include_position_details=false"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(response.data["position_details"])
+        self.assertEqual(
+            response.data["positions"]["results"][0]["performance"].keys(),
+            {
+                "closing_value",
+                "covered_closing_value",
+            },
+        )
+        build_positions.assert_not_called()
+
     def test_currency_filter_scopes_by_denomination(self):
         self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")
         FxRate.objects.create(

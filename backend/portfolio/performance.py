@@ -1785,6 +1785,77 @@ def build_portfolio_positions(
     )
 
 
+def build_portfolio_position_summaries(
+    *,
+    portfolio: Portfolio,
+    start_date: date,
+    end_date: date,
+    member_id: int | None = None,
+    context: PerformanceContext | None = None,
+) -> list[dict[str, Any]]:
+    """Values and classification for Resumen, without per-position returns or flows."""
+    context = context or load_performance_context(
+        portfolio=portfolio, start_date=start_date, end_date=end_date
+    )
+    compositions = class_compositions(positions=context.positions, on_date=end_date)
+    rows = []
+    for position in context.positions:
+        if member_id is not None and not any(
+            period.start_date <= end_date
+            and (period.end_date is None or period.end_date >= start_date)
+            and any(share.member_id == member_id for share in period.shares.all())
+            for period in context.ownership_periods.get(position.id, [])
+        ):
+            continue
+        base_value, native = _position_value_base(
+            context=context,
+            position=position,
+            target=end_date,
+            member_id=member_id,
+        )
+        factor = _ownership_factor(
+            context=context, position_id=position.id, target=end_date, member_id=member_id
+        )
+        # `performance.closing_value` preserves the existing composition value contract.
+        # It is deliberately the only metric in a reduced row.
+        rows.append(
+            {
+                "position_id": position.id,
+                "instrument_id": position.instrument_id,
+                "instrument_name": position.asset.name,
+                "asset_class": position.effective_asset_class,
+                "class_breakdown": [
+                    {"asset_class": asset_class, "percent": str(percent)}
+                    for asset_class, percent in compositions[position.id].weights.items()
+                ],
+                "container_id": position.container_id,
+                "container_name": position.container.name,
+                "status": position.status,
+                "tracking_style": position.tracking_style,
+                "native_value": _quantize(native.value * factor) if native else None,
+                "native_currency": native.currency if native else None,
+                "holding_currency": (
+                    position.ledger_account.currency
+                    if position.ledger_account_id and position.ledger_account
+                    else position.asset.currency
+                ),
+                "observed_on": native.observed_on.isoformat() if native else None,
+                "value_status": _value_status(position=position, native=native, target=end_date),
+                "performance": {
+                    "closing_value": _quantize(base_value),
+                    "covered_closing_value": _quantize(base_value),
+                },
+                "attribution": {
+                    "asset": None,
+                    "fx": None,
+                    "total": None,
+                    "method": "unavailable",
+                },
+            }
+        )
+    return rows
+
+
 def timeline_context_start(*, portfolio: Portfolio, start_date: date) -> date:
     """Desde dónde tiene que cargarse el contexto para que el timeline sea correcto.
 

@@ -75,6 +75,7 @@ from .performance import (
     build_portfolio_overview,
     build_portfolio_performance,
     build_portfolio_positions,
+    build_portfolio_position_summaries,
     build_portfolio_quality,
     build_portfolio_timeline,
     default_performance_period,
@@ -604,7 +605,9 @@ class PortfolioWorkspaceView(APIView):
     real portfolio — so changing a filter paid for it five times over. Loading it once
     here avoids that duplication. The optional timeline is the expensive part because
     its contributed series runs from inception; callers that do not render it can opt
-    out with ``include_timeline=false``.
+    out with ``include_timeline=false``. Position-level return details are likewise
+    optional: Resumen needs values for composition, while Posiciones asks for the full
+    rows with ``include_position_details=true``.
     """
 
     permission_classes = [IsAuthenticated]
@@ -616,6 +619,9 @@ class PortfolioWorkspaceView(APIView):
             "false",
             "no",
         }
+        include_position_details = request.query_params.get(
+            "include_position_details", "true"
+        ).lower() not in {"0", "false", "no"}
         # La evolución necesita el origen completo para la serie de capital aportado. El
         # resumen no la muestra, por lo que puede limitar el contexto a su propio periodo.
         context = load_performance_context(
@@ -642,7 +648,11 @@ class PortfolioWorkspaceView(APIView):
         # El bloque de métricas y la lista de posiciones los consumen dos salidas cada uno:
         # se calculan una vez y se reparten.
         performance = build_portfolio_performance(**shared, context=context, **scoped)
-        position_rows = build_portfolio_positions(**shared, context=context)
+        position_rows = (
+            build_portfolio_positions(**shared, context=context)
+            if include_position_details
+            else build_portfolio_position_summaries(**shared, context=context)
+        )
         return Response(
             {
                 "scope": None if scope_ids is None else sorted(scope_ids),
@@ -659,6 +669,7 @@ class PortfolioWorkspaceView(APIView):
                     "member_id": member_id,
                     "results": position_rows,
                 },
+                "position_details": include_position_details,
                 "timeline": {
                     "period": period,
                     "member_id": member_id,
