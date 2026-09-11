@@ -607,7 +607,8 @@ class PortfolioWorkspaceView(APIView):
     its contributed series runs from inception; callers that do not render it can opt
     out with ``include_timeline=false``. Position-level return details are likewise
     optional: Resumen needs values for composition, while Posiciones asks for the full
-    rows with ``include_position_details=true``.
+    rows with ``include_position_details=true``. The individual flow ledger is optional
+    too; summary consumers can avoid serializing it with ``include_flows=false``.
     """
 
     permission_classes = [IsAuthenticated]
@@ -622,6 +623,11 @@ class PortfolioWorkspaceView(APIView):
         include_position_details = request.query_params.get(
             "include_position_details", "true"
         ).lower() not in {"0", "false", "no"}
+        include_flows = request.query_params.get("include_flows", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
         # La evolución necesita el origen completo para la serie de capital aportado. El
         # resumen no la muestra, por lo que puede limitar el contexto a su propio periodo.
         context = load_performance_context(
@@ -647,9 +653,14 @@ class PortfolioWorkspaceView(APIView):
         scoped = {"scope_ids": scope_ids} if scope_ids is not None else {}
         # El bloque de métricas y la lista de posiciones los consumen dos salidas cada uno:
         # se calculan una vez y se reparten.
-        performance = build_portfolio_performance(**shared, context=context, **scoped)
+        performance = build_portfolio_performance(
+            **shared,
+            context=context,
+            include_flows=include_flows,
+            **scoped,
+        )
         position_rows = (
-            build_portfolio_positions(**shared, context=context)
+            build_portfolio_positions(**shared, context=context, include_flows=include_flows)
             if include_position_details
             else build_portfolio_position_summaries(**shared, context=context)
         )

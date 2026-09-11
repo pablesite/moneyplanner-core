@@ -1326,6 +1326,7 @@ def _metric_block(
     member_id: int | None,
     position_id: int | None = None,
     scope_ids: set[int] | None = None,
+    include_flows: bool = True,
 ) -> dict[str, Any]:
     # A scope can be one position or a set of them (a class, a container). Both read
     # flows as external to the scope rather than to the portfolio, which is what makes a
@@ -1403,7 +1404,6 @@ def _metric_block(
     realized_complete = True
     flow_rows = []
     for flow in selected_flows:
-        base_amount = _flow_base(context=context, flow=flow, member_id=member_id)
         factor = _flow_factor(context=context, flow=flow, member_id=member_id)
         cost_base = _to_base(
             context=context,
@@ -1439,19 +1439,21 @@ def _metric_block(
             )
             if realized_base is not None:
                 realized += realized_base
-        flow_rows.append(
-            {
-                "date": flow.on_date.isoformat(),
-                "position_id": flow.position_id,
-                "kind": flow.kind,
-                "source": flow.source,
-                "external": is_external,
-                "portfolio_external": flow.external,
-                "amount_native": _quantize(flow.amount),
-                "currency": flow.currency,
-                "amount_base": _quantize(external_amount if is_external else base_amount),
-            }
-        )
+        if include_flows:
+            base_amount = _flow_base(context=context, flow=flow, member_id=member_id)
+            flow_rows.append(
+                {
+                    "date": flow.on_date.isoformat(),
+                    "position_id": flow.position_id,
+                    "kind": flow.kind,
+                    "source": flow.source,
+                    "external": is_external,
+                    "portfolio_external": flow.external,
+                    "amount_native": _quantize(flow.amount),
+                    "currency": flow.currency,
+                    "amount_base": _quantize(external_amount if is_external else base_amount),
+                }
+            )
     ownership_flow_complete = _append_ownership_flows(
         context=context,
         positions=selected_positions,
@@ -1594,7 +1596,7 @@ def _metric_block(
             "realized_pnl": "complete" if realized_complete else "partial",
             "fx": "complete" if not context.fx_issues else "partial",
         },
-        "flows": flow_rows,
+        "flows": flow_rows if include_flows else [],
     }
 
 
@@ -1606,6 +1608,7 @@ def build_portfolio_performance(
     member_id: int | None = None,
     context: PerformanceContext | None = None,
     scope_ids: set[int] | None = None,
+    include_flows: bool = True,
 ) -> dict[str, Any]:
     context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
@@ -1616,6 +1619,7 @@ def build_portfolio_performance(
         end_date=end_date,
         member_id=member_id,
         scope_ids=scope_ids,
+        include_flows=include_flows,
     )
     result["member_id"] = member_id
     result["fx_issues"] = sorted(context.fx_issues)
@@ -1628,6 +1632,7 @@ def _build_positions_from_context(
     start_date: date,
     end_date: date,
     member_id: int | None,
+    include_flows: bool = True,
 ) -> list[dict[str, Any]]:
     compositions = class_compositions(positions=context.positions, on_date=end_date)
     rows = []
@@ -1645,6 +1650,7 @@ def _build_positions_from_context(
             end_date=end_date,
             member_id=member_id,
             position_id=position.id,
+            include_flows=include_flows,
         )
         native = resolve_preloaded_value(context=context, position=position, target=end_date)
         result_base = Decimal(metrics["monetary_result"]) if metrics["monetary_result"] else None
@@ -1773,6 +1779,7 @@ def build_portfolio_positions(
     end_date: date,
     member_id: int | None = None,
     context: PerformanceContext | None = None,
+    include_flows: bool = True,
 ) -> list[dict[str, Any]]:
     context = context or load_performance_context(
         portfolio=portfolio, start_date=start_date, end_date=end_date
@@ -1782,6 +1789,7 @@ def build_portfolio_positions(
         start_date=start_date,
         end_date=end_date,
         member_id=member_id,
+        include_flows=include_flows,
     )
 
 

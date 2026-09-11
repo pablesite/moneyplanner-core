@@ -420,6 +420,15 @@ class PortfolioPerformanceApiTests(APITestCase):
         )
         build_positions.assert_not_called()
 
+    def test_workspace_can_omit_unrendered_flow_rows(self):
+        response = self.client.get(
+            "/api/portfolio/workspace/?date_from=2024-01-01&date_to=2024-12-31&include_flows=false"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["performance"]["flows"], [])
+        self.assertEqual(response.data["positions"]["results"][0]["performance"]["flows"], [])
+
     def test_currency_filter_scopes_by_denomination(self):
         self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")
         FxRate.objects.create(
