@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -389,6 +390,17 @@ class PortfolioPerformanceApiTests(APITestCase):
         self.assertEqual(Decimal(scoped.data["overview"]["value"]), Decimal("300"))
         self.assertEqual(Decimal(scoped.data["timeline"]["results"][-1]["value"]), Decimal("300"))
         self.assertEqual(scoped.data["quality"]["positions"]["total"], 1)
+
+    def test_workspace_can_skip_the_timeline_for_non_evolution_views(self):
+        with patch("portfolio.views.build_portfolio_timeline") as build_timeline:
+            response = self.client.get(
+                "/api/portfolio/workspace/?date_from=2024-01-01&date_to=2024-12-31"
+                "&include_timeline=false"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["timeline"]["results"], [])
+        build_timeline.assert_not_called()
 
     def test_currency_filter_scopes_by_denomination(self):
         self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")

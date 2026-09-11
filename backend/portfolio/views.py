@@ -602,20 +602,29 @@ class PortfolioWorkspaceView(APIView):
 
     The five read endpoints each rebuilt the whole context — 0.6s of queries apiece on a
     real portfolio — so changing a filter paid for it five times over. Loading it once
-    here cuts that to two: the timeline needs its own, because its contributed series
-    runs from inception while the rest is scoped to the selected window.
+    here avoids that duplication. The optional timeline is the expensive part because
+    its contributed series runs from inception; callers that do not render it can opt
+    out with ``include_timeline=false``.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         portfolio, start_date, end_date, member_id = _performance_request(request)
-        # Un solo contexto, ancho hasta el origen: el timeline lo necesita así y el resto
-        # de constructores acota por ventana al usar los flujos, de modo que cargarlo dos
-        # veces solo servía para pagar el doble.
+        include_timeline = request.query_params.get("include_timeline", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        # La evolución necesita el origen completo para la serie de capital aportado. El
+        # resumen no la muestra, por lo que puede limitar el contexto a su propio periodo.
         context = load_performance_context(
             portfolio=portfolio,
-            start_date=timeline_context_start(portfolio=portfolio, start_date=start_date),
+            start_date=(
+                timeline_context_start(portfolio=portfolio, start_date=start_date)
+                if include_timeline
+                else start_date
+            ),
             end_date=end_date,
         )
         shared = {
@@ -654,7 +663,11 @@ class PortfolioWorkspaceView(APIView):
                     "period": period,
                     "member_id": member_id,
                     "currency": portfolio.base_currency,
-                    "results": build_portfolio_timeline(**shared, context=context, **scoped),
+                    "results": (
+                        build_portfolio_timeline(**shared, context=context, **scoped)
+                        if include_timeline
+                        else []
+                    ),
                 },
                 # El efectivo enlazado cuenta en el valor de la cartera, asi que la
                 # composicion tiene que poder incluirlo: sin esto el grafico sumaba menos
