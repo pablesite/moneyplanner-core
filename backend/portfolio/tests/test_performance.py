@@ -451,6 +451,16 @@ class PortfolioPerformanceApiTests(APITestCase):
             ),
             (date(2024, 12, 31), Decimal("1.20")),
         )
+        same_day_price = SimpleNamespace(currency="USD", price_date=date(2024, 12, 31))
+        self.assertEqual(
+            _fresher_fx_close(
+                context=context,
+                position=self.position,
+                price=same_day_price,
+                target=date(2024, 12, 31),
+            ),
+            (date(2024, 12, 31), Decimal("1.20")),
+        )
 
     def test_currency_filter_scopes_by_denomination(self):
         self.create_position("US Fund", Decimal("100"), Decimal("110"), currency="USD")

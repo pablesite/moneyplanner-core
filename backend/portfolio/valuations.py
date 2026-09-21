@@ -174,7 +174,8 @@ def _fresher_fx_quote(
     instrumento del proveedor de mercado y como tipo de cambio BTC->EUR. Actualizar el
     cambio desde Patrimonio solo escribia la segunda, asi que la misma posicion valia una
     cosa en Patrimonio y otra en Cartera hasta que el worker pasaba. Se toma la mas
-    fresca de las dos y se dice de donde vino.
+    fresca de las dos y se dice de donde vino. En la misma fecha manda el cambio: el precio
+    de instrumento es una copia de el, y refrescarlo en Patrimonio reescribe la fila del dia.
     """
     unit = position.ledger_account.currency if position.ledger_account is not None else ""
     if not unit or unit == price.currency:
@@ -184,7 +185,7 @@ def _fresher_fx_quote(
             from_currency=unit,
             to_currency=price.currency,
             rate_date__lte=as_of_date,
-            rate_date__gt=price.price_date,
+            rate_date__gte=price.price_date,
         )
         .order_by("-rate_date")
         .first()

@@ -749,7 +749,9 @@ def _fresher_fx_close(
     Un bitcoin tiene un solo precio, pero entra en Core por dos puertas: el precio de
     instrumento del proveedor de mercado y el tipo de cambio BTC->EUR. Actualizar el
     cambio desde Patrimonio solo escribia la segunda, asi que la misma posicion valia una
-    cosa alli y otra en Cartera hasta que pasaba el worker.
+    cosa alli y otra en Cartera hasta que pasaba el worker. En la misma fecha manda el
+    cambio: el precio de instrumento es una copia de el, y refrescarlo en Patrimonio
+    reescribe la fila del dia.
     """
     unit = (
         position.ledger_account.currency
@@ -766,7 +768,7 @@ def _fresher_fx_close(
     # `build_fx_cache` remains reverse chronological for `convert_currency_cached`.
     # Translate the chronological index back to the matching rate row.
     rate_date, rate = context.fx_cache[pair][-index - 1]
-    return (rate_date, rate) if rate_date > price.price_date else None
+    return (rate_date, rate) if rate_date >= price.price_date else None
 
 
 def resolve_preloaded_value(

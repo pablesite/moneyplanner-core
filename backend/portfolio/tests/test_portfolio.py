@@ -569,6 +569,22 @@ class PortfolioValuationTests(TestCase):
         self.assertEqual(result["observed_on"], "2025-01-05")
         self.assertEqual(result["provenance"]["source_key"], "BTC->EUR")
 
+    def test_a_same_day_exchange_rate_beats_the_copied_instrument_price(self):
+        # El worker copia el cambio del dia al precio de instrumento; refrescarlo despues
+        # desde Patrimonio reescribe solo el cambio, con la misma fecha.
+        self.create_price(on_date=date(2025, 1, 5), close="50000")
+        FxRate.objects.create(
+            rate_date=date(2025, 1, 5),
+            from_currency="BTC",
+            to_currency="EUR",
+            rate=Decimal("60000"),
+        )
+
+        result = resolve_position_valuation(position=self.position, as_of_date=date(2025, 1, 5))
+
+        self.assertEqual(Decimal(result["value"]), Decimal("120000"))
+        self.assertEqual(result["provenance"]["source_key"], "BTC->EUR")
+
     def test_a_stale_exchange_rate_does_not_override_the_market_price(self):
         self.create_price(on_date=date(2025, 1, 5), close="50000")
         FxRate.objects.create(
