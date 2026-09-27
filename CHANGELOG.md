@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.49.0...moneyplanner-core-v0.49.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **portfolio:** persist zero opening valuations ([173ed94](https://github.com/pablesite/moneyplanner-core/commit/173ed94fd9067401e3e00d709aa142536b2400a0))
+
 ## [0.49.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.48.3...moneyplanner-core-v0.49.0) (2026-09-21)
 
 
