@@ -323,10 +323,11 @@ def ensure_position_for_asset(
             position.save(update_fields=update_fields)
     _bootstrap_ownership(portfolio=portfolio, position=position)
     from .market_data import ensure_confirmed_crypto_mapping
-    from .valuations import import_legacy_position_valuations
+    from .valuations import ensure_initial_zero_valuation, import_legacy_position_valuations
 
     ensure_confirmed_crypto_mapping(position=position)
     import_legacy_position_valuations(position=position)
+    ensure_initial_zero_valuation(position=position)
     return position, created
 
 

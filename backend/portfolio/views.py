@@ -90,6 +90,7 @@ from .services import (
 )
 from .valuations import (
     build_valuation_health,
+    ensure_initial_zero_valuation,
     resolve_position_valuation,
     sync_ledger_valuations,
 )
@@ -342,7 +343,11 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
         """
         discovered = discover_missing_positions(user=request.user)
         positions = list(self.get_queryset())
-        created = sum(sync_ledger_valuations(position=position) for position in positions)
+        created = sum(
+            sync_ledger_valuations(position=position)
+            + int(ensure_initial_zero_valuation(position=position))
+            for position in positions
+        )
         return Response(
             {
                 "positions_checked": len(positions),

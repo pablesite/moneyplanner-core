@@ -52,6 +52,7 @@ class PortfolioBootstrapTests(TestCase):
         name: str,
         currency: str = "EUR",
         subcategory: str = Asset.Subcategory.FUNDS,
+        amount: Decimal = Decimal("1000"),
         is_active: bool = True,
         with_ownership: bool = True,
     ) -> Asset:
@@ -61,7 +62,7 @@ class PortfolioBootstrapTests(TestCase):
             category=Asset.Category.INVESTMENTS,
             subcategory=subcategory,
             currency=currency,
-            amount=Decimal("1000"),
+            amount=amount,
             start_date=date(2020, 1, 1),
             is_active=is_active,
         )
@@ -306,6 +307,23 @@ class PortfolioBootstrapTests(TestCase):
         self.assertEqual(position.container.name, "Sin asignar")
         # Queda pendiente de configurar: en que broker esta no se puede adivinar.
         self.assertIsNone(position.setup_confirmed_at)
+
+    def test_zero_initial_value_is_a_dated_valuation_not_missing_data(self):
+        """A zero opening value anchors later interest and performance correctly."""
+        bootstrap_portfolio_for_user(user=self.user)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            asset = self.create_asset(name="Stocks - IBRK", amount=Decimal("0"))
+
+        position = PortfolioPosition.objects.get(asset=asset)
+        valuation = PositionValuation.objects.get(position=position)
+        self.assertEqual(valuation.valuation_date, asset.start_date)
+        self.assertEqual(valuation.value, Decimal("0"))
+        self.assertEqual(valuation.source, PositionValuation.Source.MANUAL)
+        resolved = resolve_position_valuation(position=position)
+        self.assertNotEqual(resolved["status"], "missing")
+        self.assertEqual(Decimal(resolved["value"]), Decimal("0"))
+        self.assertEqual(build_valuation_health(user=self.user)["counts"]["missing"], 0)
 
     def test_discovering_an_asset_does_not_disturb_the_ones_already_placed(self):
         self.create_asset(name="Fondo previo")

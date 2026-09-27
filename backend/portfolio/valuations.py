@@ -105,6 +105,33 @@ def import_legacy_position_valuations(*, position: PortfolioPosition) -> int:
     return created
 
 
+def ensure_initial_zero_valuation(*, position: PortfolioPosition) -> bool:
+    """Persist an explicit zero supplied when an investment asset was opened.
+
+    `Asset.amount == 0` is a fact, not an unknown valuation.  Without a dated
+    `PositionValuation`, a newly created zero-valued position is reported as missing
+    and its later flows cannot form a complete performance series.  Restrict this to
+    positions with no valuation whatsoever: an existing history must never be guessed
+    or overwritten from the mutable Asset amount.
+    """
+    if (
+        Decimal(position.asset.amount) != 0
+        or PositionValuation.objects.filter(position=position).exists()
+    ):
+        return False
+    _, created = PositionValuation.objects.get_or_create(
+        position=position,
+        valuation_date=position.opened_on,
+        source=PositionValuation.Source.MANUAL,
+        defaults={
+            "value": Decimal("0"),
+            "currency": position.asset.currency,
+            "note": "Valor inicial cero declarado al crear el activo.",
+        },
+    )
+    return created
+
+
 def sync_ledger_valuations(*, position: PortfolioPosition) -> int:
     """Rebuild the derived valuations of a position from its current ledger revaluations.
 
