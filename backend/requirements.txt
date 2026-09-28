@@ -17,7 +17,7 @@ psycopg[binary]>=3.3.4
 
 # Utils
 python-dotenv>=1.2.3
-msgpack>=1.2.1
+msgpack>=1.2.2
 
 # Production server
 gunicorn>=26.2.0
