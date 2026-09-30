@@ -30,6 +30,7 @@ from memberships.models import (
     OwnershipLink,
 )
 from net_worth.models import Asset, Liability
+from portfolio.models import ContainerCashAccount, InvestmentContainer, Portfolio
 
 
 class SettlementPreviewTests(APITestCase):
@@ -1015,6 +1016,65 @@ class SettlementPreviewTests(APITestCase):
         self.assertEqual(result["status"], "ready", result["quality"])
         self.assertEqual(result["period"]["start"], "2026-04-01")
         self.assertEqual(result["reconciliation"]["economic_total"], "1400.00")
+
+    def test_half_cent_member_balances_carry_into_the_next_close(self):
+        self._ordinary_reserve()
+        self.operating.amount = Decimal("1000.01")
+        self.operating.save(update_fields=["amount"])
+        SettlementOpeningBalance.objects.filter(account=self.operating_config).update(
+            amount=Decimal("500.005")
+        )
+        march = MonthlyClose.objects.create(user=self.user, fiscal_year=2026, month=3)
+        finalize_monthly_close(monthly_close=march, user=self.user)
+
+        snapshot = SettlementSnapshot.objects.get(monthly_close=march)
+        operating_row = next(
+            row
+            for row in snapshot.account_balances
+            if row["account_id"] == self.operating_config.id
+        )
+        self.assertEqual(
+            [share["amount"] for share in operating_row["closing_by_member"]],
+            ["500.01", "500.00"],
+        )
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+        self.assertEqual(result["status"], "ready", result["quality"])
+
+        # Snapshots frozen before the rounding fix rounded every member on its own.
+        for share in operating_row["closing_by_member"]:
+            share["amount"] = "500.01"
+        snapshot.save(update_fields=["account_balances"])
+        legacy = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+        self.assertEqual(legacy["status"], "ready", legacy["quality"])
+        self.assertEqual(legacy["reconciliation"]["economic_total"], "1300.01")
+
+    def test_linked_broker_cash_is_inside_perimeter_before_its_first_purchase(self):
+        broker, broker_ledger = self._account_asset(
+            "Liquidez bróker", Decimal("0"), self.individual_a
+        )
+        broker.tracking_mode = Asset.TrackingMode.ACCOUNTING
+        broker.save(update_fields=["tracking_mode"])
+        portfolio = Portfolio.objects.create(user=self.user)
+        container = InvestmentContainer.objects.create(
+            portfolio=portfolio,
+            name="Bróker",
+            container_type=InvestmentContainer.ContainerType.BROKER,
+        )
+        ContainerCashAccount.objects.create(
+            container=container, ledger_account=broker_ledger, currency="EUR"
+        )
+        self._transfer(
+            amount=Decimal("100"), source=self.personal_a_ledger, destination=broker_ledger
+        )
+        self.personal_a.amount = Decimal("0")
+        self.personal_a.save(update_fields=["amount"])
+
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        positions = {row["name"]: row for row in result["accounts"]}
+        self.assertEqual(positions["Liquidez bróker"]["role"], "investment_cash")
+        self.assertEqual(positions["Liquidez bróker"]["observed_close"], "100.00")
 
     def test_not_ready_settlement_does_not_block_finalize(self):
         self.operating_config.delete()

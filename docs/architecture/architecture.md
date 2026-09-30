@@ -89,8 +89,10 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    their negative liability balance is included whenever they carry debt or activity from the opening
    boundary, and their ownership comes from the linked liability.
    EUR investment positions and broker-cash assets that fund them are also automatic, non-routable
-   participants. Non-base-currency positions remain outside this settlement perimeter until the
-   engine can preserve a dated FX valuation bridge.
+   participants. A cash asset counts as broker cash once it has an investment movement or is linked
+   to a portfolio container (`ContainerCashAccount`), so funding a new broker stays inside the
+   perimeter before its first purchase. Non-base-currency positions remain outside this settlement
+   perimeter until the engine can preserve a dated FX valuation bridge.
 3. `AnnualIncomeEntry.ownership` and `AnnualExpenseEntry.ownership` are optional planning metadata
    because one aggregate forecast may cover realized movements from several owners. Realized
    settlement flows use posted transaction ownership; future reserves follow the ownership of the
@@ -146,7 +148,9 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    personal destinations. Credit cards are never transfer recommendation endpoints. Negative personal
    targets remain signed and therefore expose inverse contributions.
 6. `SettlementSnapshot` freezes allocations, economic/account balances, reserves, compensations,
-   reconciliation and quality when `MonthlyClose` is finalized. Recommendations are stored as
+   reconciliation and quality when `MonthlyClose` is finalized. Member balances per account are
+   frozen in cents with the last stable member absorbing the rounding, so they always add up to the
+   account balance the next close opens from. Recommendations are stored as
    `SettlementTransferRecommendation` route rows with an auditable lifecycle: recommended,
    accepted, partially applied, applied or cancelled.
 7. `compute_monthly_close_state` exposes the additive `ownership_settlement` object with status

@@ -14,7 +14,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from accounting.models import LedgerEntry, LedgerTransaction
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from core.services import build_fx_cache, convert_currency_cached
 from memberships.models import Ownership, OwnershipAllocationSnapshot, OwnershipLink
 from memberships.services_allocations import resolve_ownership_allocation
@@ -139,6 +139,19 @@ def _money_string(value: Decimal) -> str:
     return str(_money(value))
 
 
+def _member_rows(amounts: dict[int, Decimal]) -> list[dict]:
+    """Serialize member amounts in cents; the last stable member absorbs the rounding."""
+    total = _money(sum(amounts.values(), ZERO))
+    rows = sorted(amounts.items())
+    allocated = ZERO
+    result: list[dict] = []
+    for index, (member_id, amount) in enumerate(rows):
+        share = total - allocated if index == len(rows) - 1 else _money(amount)
+        allocated += share
+        result.append({"member_id": member_id, "amount": str(share)})
+    return result
+
+
 def _next_period(year: int, month: int) -> tuple[int, int]:
     return (year + 1, 1) if month == 12 else (year, month + 1)
 
@@ -216,11 +229,19 @@ def _opening_position(
     member_totals: dict[int, Decimal] = defaultdict(Decimal)
     if previous is not None:
         for row in previous.account_balances:
-            for share in row.get("closing_by_member", []):
-                amount = Decimal(str(share["amount"]))
-                key = (int(row["account_id"]), int(share["member_id"]))
-                account_members[key] += amount
-                member_totals[key[1]] += amount
+            shares = {
+                int(share["member_id"]): Decimal(str(share["amount"]))
+                for share in row.get("closing_by_member", [])
+            }
+            # Snapshots frozen before member rows absorbed their rounding can be a cent
+            # away from the account balance they reconciled against.
+            if shares and row.get("observed_close") is not None:
+                residue = Decimal(str(row["observed_close"])) - sum(shares.values(), ZERO)
+                if abs(residue) < MONEY_STEP * len(shares):
+                    shares[max(shares)] += residue
+            for member_id, amount in shares.items():
+                account_members[(int(row["account_id"]), member_id)] += amount
+                member_totals[member_id] += amount
         return (
             "previous_close",
             previous.period_end + timedelta(days=1),
@@ -358,6 +379,16 @@ def _investment_participants(
         )
         .exclude(account__asset__category=Asset.Category.INVESTMENTS)
         .values_list("account__asset_id", flat=True)
+    )
+    # A broker cash account linked in the portfolio is funded before its first purchase.
+    broker_asset_ids |= set(
+        LedgerAccount.objects.filter(
+            user=user,
+            portfolio_cash_link__isnull=False,
+            asset_id__isnull=False,
+        )
+        .exclude(asset__category=Asset.Category.INVESTMENTS)
+        .values_list("asset_id", flat=True)
     )
     role_by_asset = {
         **{asset_id: "investment_position" for asset_id in investment_asset_ids},
@@ -1305,11 +1336,13 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
                     "difference": _money_string(difference),
                 },
             )
-        closing_members = [
-            {"member_id": member_id, "amount": _money_string(amount)}
-            for (account_id, member_id), amount in sorted(current.items())
-            if account_id == account.id
-        ]
+        closing_members = _member_rows(
+            {
+                member_id: amount
+                for (account_id, member_id), amount in current.items()
+                if account_id == account.id
+            }
+        )
         account_rows.append(
             {
                 "account_id": account.id,
