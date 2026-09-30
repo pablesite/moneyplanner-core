@@ -26,6 +26,7 @@ from .services_settlement_execution import (
     reconcile_settlement_recommendation,
     reverse_settlement_recommendation,
     settlement_reconciliation_candidates,
+    sweep_personal_wallets,
 )
 
 
@@ -181,6 +182,14 @@ class MonthlyCloseSettlementApplyAllView(APIView):
             execution_date=serializer.validated_data["execution_date"],
         )
         return Response({"recommendations": rows}, status=status.HTTP_200_OK)
+
+
+class MonthlyCloseSettlementWalletSweepView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int) -> Response:
+        rows = sweep_personal_wallets(user=request.user, close_id=pk)
+        return Response({"transactions": rows}, status=status.HTTP_200_OK)
 
 
 class MonthlyCloseSettlementRecommendationActionView(APIView):

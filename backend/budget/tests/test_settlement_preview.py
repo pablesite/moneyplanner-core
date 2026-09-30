@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
 from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
@@ -19,6 +20,7 @@ from budget.models import (
 )
 from budget.services_monthly_close import finalize_monthly_close, reopen_monthly_close
 from budget.services_settlement import add_settlement_account
+from budget.services_settlement_execution import sweep_personal_wallets
 from budget.services_settlement_preview import (
     _allocate,
     _month_end,
@@ -1123,6 +1125,113 @@ class SettlementPreviewTests(APITestCase):
             [share["amount"] for share in row["closing_by_member"]], ["20.00", "20.00"]
         )
         self.assertEqual(result["reconciliation"]["economic_total"], "1340.00")
+
+    def _wallet(self, name, ownership):
+        asset, ledger = self._account_asset(name, Decimal("0"), ownership)
+        asset.subcategory = Asset.Subcategory.WALLET
+        asset.tracking_mode = Asset.TrackingMode.ACCOUNTING
+        asset.save(update_fields=["subcategory", "tracking_mode"])
+        config = self._settlement_account(asset, SettlementAccount.Role.PHYSICAL_CASH)
+        config.accepted_physical_balance = Decimal("0")
+        config.modeled_balance_at_activation = Decimal("0")
+        config.save(update_fields=["accepted_physical_balance", "modeled_balance_at_activation"])
+        return config, ledger
+
+    def test_wallet_sweep_moves_personal_cash_and_compensates_the_owner(self):
+        self._ordinary_reserve()
+        card = Liability.objects.create(
+            user=self.user,
+            name="Tarjeta compartida",
+            category=Liability.Category.CREDIT_CARD,
+            tracking_mode=Liability.TrackingMode.ACCOUNTING,
+            amount=Decimal("0"),
+            currency="EUR",
+            start_date=date(2020, 1, 1),
+        )
+        card_ledger = LedgerAccount.objects.create(
+            user=self.user,
+            name=card.name,
+            account_type=LedgerAccount.AccountType.LIABILITY,
+            currency="EUR",
+            liability=card,
+        )
+        card.accounting_account_id = card_ledger.id
+        card.save(update_fields=["accounting_account_id"])
+        OwnershipLink.objects.create(
+            user=self.user,
+            ownership=self.shared,
+            target_type=OwnershipLink.TargetType.LIABILITY,
+            target_id=card.id,
+        )
+        self._flow(
+            booking_date=date(2026, 3, 10),
+            amount=Decimal("50"),
+            ownership=self.shared,
+            cash_account=card_ledger,
+            family=LedgerEntry.FlowFamily.EXPENSE,
+            description="Compra con tarjeta",
+        )
+        personal_wallet, personal_wallet_ledger = self._wallet("Monedero Pablo", self.individual_a)
+        shared_wallet, _shared_wallet_ledger = self._wallet("Monedero compartido", self.shared)
+        self._flow(
+            booking_date=date(2026, 3, 12),
+            amount=Decimal("80"),
+            ownership=self.individual_a,
+            cash_account=personal_wallet_ledger,
+            family=LedgerEntry.FlowFamily.INCOME,
+            description="Efectivo de Pablo",
+        )
+        close = MonthlyClose.objects.create(user=self.user, fiscal_year=2026, month=3)
+
+        def routed(result):
+            return {
+                row["to_account_id"]: Decimal(row["amount"]) for row in result["recommendations"]
+            }
+
+        before = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+        self.assertEqual(before["status"], "ready", before["quality"])
+        self.assertEqual(
+            before["wallet_sweep"],
+            [
+                {
+                    "account_id": personal_wallet.id,
+                    "name": "Monedero Pablo",
+                    "to_account_id": shared_wallet.id,
+                    "to_name": "Monedero compartido",
+                    "amount": "80.00",
+                }
+            ],
+        )
+
+        created = sweep_personal_wallets(user=self.user, close_id=close.id)
+        after = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=3)
+
+        self.assertEqual(after["status"], "ready", after["quality"])
+        self.assertEqual(after["wallet_sweep"], [])
+        self.assertEqual(
+            LedgerTransaction.objects.get(id=created[0]["transaction_id"]).booking_date,
+            date(2026, 3, 31),
+        )
+        wallets = {row["name"]: row for row in after["accounts"] if row["role"] == "physical_cash"}
+        self.assertEqual(wallets["Monedero Pablo"]["observed_close"], "0.00")
+        self.assertEqual(wallets["Monedero compartido"]["observed_close"], "80.00")
+        self.assertEqual(
+            after["compensations"][-1]["members"],
+            [
+                {"member_id": self.member_a.id, "amount": "40.00"},
+                {"member_id": self.member_b.id, "amount": "-40.00"},
+            ],
+        )
+        self.assertEqual(
+            routed(after)[self.personal_a_config.id] - routed(before)[self.personal_a_config.id],
+            Decimal("40.00"),
+        )
+        self.assertEqual(
+            routed(after)[self.personal_b_config.id] - routed(before)[self.personal_b_config.id],
+            Decimal("-40.00"),
+        )
+        with self.assertRaises(ValidationError):
+            sweep_personal_wallets(user=self.user, close_id=close.id)
 
     def test_not_ready_settlement_does_not_block_finalize(self):
         self.operating_config.delete()

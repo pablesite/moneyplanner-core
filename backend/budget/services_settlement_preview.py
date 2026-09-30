@@ -30,6 +30,7 @@ from .models import (
     SettlementSnapshot,
     SettlementTransferRecommendation,
     SettlementWalletNormalization,
+    SettlementWalletSweep,
 )
 from .services import effective_annual_expense_entries, planned_expense_monthly_distribution
 from .services_settlement import (
@@ -584,6 +585,31 @@ def _apply_wallet_normalization(
             )
 
 
+def _wallet_sweep_compensation(
+    tx: LedgerTransaction,
+    physical_by_member: dict[int, Decimal],
+    sweep_transaction_ids: set[int],
+) -> list[dict]:
+    """A wallet sweep hands one member's cash to the shared wallet: the others owe their part."""
+
+    members = [
+        {"member_id": member_id, "amount": _money_string(-amount)}
+        for member_id, amount in sorted(physical_by_member.items())
+        if tx.id in sweep_transaction_ids and _money(amount)
+    ]
+    if not members:
+        return []
+    return [
+        {
+            "transaction_id": tx.id,
+            "booking_date": tx.booking_date.isoformat(),
+            "description": tx.description,
+            "ownership_id": tx.ownership_id,
+            "members": members,
+        }
+    ]
+
+
 def _compute_movements(
     *,
     transactions: list[LedgerTransaction],
@@ -598,6 +624,7 @@ def _compute_movements(
     physical_delta: dict[int, Decimal],
     normalization_delta: dict[int, Decimal],
     normalization_transaction_ids: set[int],
+    sweep_transaction_ids: set[int],
     blockers: list[dict],
 ) -> list[dict]:
     compensations: list[dict] = []
@@ -675,6 +702,9 @@ def _compute_movements(
             and _money(participant_total) == ZERO
         )
         if internal:
+            compensations.extend(
+                _wallet_sweep_compensation(tx, physical_by_member, sweep_transaction_ids)
+            )
             continue
         if (
             tx.quick_entry_kind
@@ -1132,6 +1162,38 @@ def _economic_balance_rows(
     return rows
 
 
+def _wallet_sweep_rows(
+    *,
+    accounts: list[SettlementParticipant],
+    account_ownerships: dict[int, Ownership],
+    account_rows: list[dict],
+) -> list[dict]:
+    """Personal wallet balances that can move into the only shared wallet."""
+
+    wallets = [
+        row
+        for row in accounts
+        if row.role == SettlementAccount.Role.PHYSICAL_CASH and row.id in account_ownerships
+    ]
+    shared = [row for row in wallets if account_ownerships[row.id].kind == Ownership.Kind.SHARED]
+    if len(shared) != 1:
+        return []
+    observed = {int(row["account_id"]): Decimal(str(row["observed_close"])) for row in account_rows}
+    names = {int(row["account_id"]): row["name"] for row in account_rows}
+    return [
+        {
+            "account_id": wallet.id,
+            "name": names[wallet.id],
+            "to_account_id": shared[0].id,
+            "to_name": names[shared[0].id],
+            "amount": _money_string(observed[wallet.id]),
+        }
+        for wallet in wallets
+        if account_ownerships[wallet.id].kind == Ownership.Kind.INDIVIDUAL
+        and _money(observed[wallet.id])
+    ]
+
+
 def _settlement_participants(
     *,
     user,
@@ -1282,6 +1344,11 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         normalization_delta=normalization_delta,
         normalization_transaction_ids=set(
             SettlementWalletNormalization.objects.filter(profile=profile).values_list(
+                "transaction_id", flat=True
+            )
+        ),
+        sweep_transaction_ids=set(
+            SettlementWalletSweep.objects.filter(profile=profile).values_list(
                 "transaction_id", flat=True
             )
         ),
@@ -1586,6 +1653,9 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         "compensations": compensations,
         "recommendations": recommendations if not blockers else [],
         "reconciliation": reconciliation,
+        "wallet_sweep": _wallet_sweep_rows(
+            accounts=accounts, account_ownerships=account_ownerships, account_rows=account_rows
+        ),
         "quality": {"blockers": blockers, "warnings": warnings},
     }
     result["source_hash"] = hashlib.sha256(

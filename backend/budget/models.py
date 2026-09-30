@@ -535,6 +535,31 @@ class SettlementWalletNormalization(models.Model):
         ordering = ["transaction__booking_date", "transaction_id"]
 
 
+class SettlementWalletSweep(models.Model):
+    """Transfer that moved a personal wallet balance into the shared wallet for a close."""
+
+    profile = models.ForeignKey(
+        SettlementProfile,
+        on_delete=models.CASCADE,
+        related_name="wallet_sweeps",
+    )
+    monthly_close = models.ForeignKey(
+        MonthlyClose,
+        on_delete=models.CASCADE,
+        related_name="settlement_wallet_sweeps",
+    )
+    transaction = models.OneToOneField(
+        "accounting.LedgerTransaction",
+        on_delete=models.CASCADE,
+        related_name="settlement_wallet_sweep",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "budget_settlement_wallet_sweep"
+        ordering = ["transaction__booking_date", "transaction_id"]
+
+
 class SettlementSnapshot(models.Model):
     class Status(models.TextChoices):
         READY = "ready", "Listo"

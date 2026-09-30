@@ -125,6 +125,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    normalization. It retains its real booking date but reduces the modeled-to-physical bridge instead
    of moving cash or creating a second economic compensation. Candidate selection is explicit and
    tenant-scoped.
+10. While a close is a draft, `wallet_sweep` lists each individually owned wallet that still holds
+    cash and the single shared wallet that would receive it. The sweep endpoint posts one system
+    transfer per wallet on the period end and links it as a `SettlementWalletSweep`. Unlike any
+    other internal transfer, a linked sweep emits a compensation: the cash leaves one member and
+    is re-attributed by the shared wallet's ownership, so the other members owe their part.
 
 ## Monthly-close Settlement Engine
 

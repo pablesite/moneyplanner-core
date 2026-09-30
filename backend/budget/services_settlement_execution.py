@@ -16,8 +16,10 @@ from accounting.services_quick_entry import create_quick_transaction
 from .models import (
     MonthlyClose,
     SettlementAccount,
+    SettlementProfile,
     SettlementSnapshot,
     SettlementTransferRecommendation,
+    SettlementWalletSweep,
 )
 
 ZERO = Decimal("0")
@@ -533,3 +535,64 @@ def apply_all_settlement_recommendations(
             )
         )
     return rows
+
+
+@transaction.atomic
+def sweep_personal_wallets(*, user, close_id: int) -> list[dict]:
+    """Move every personal wallet balance of an open close into the shared wallet."""
+
+    from .services_settlement_preview import compute_monthly_close_settlement
+
+    try:
+        close = MonthlyClose.objects.select_for_update().get(id=close_id, user=user)
+    except MonthlyClose.DoesNotExist as exc:
+        raise ValidationError({"monthly_close": "El cierre no existe."}) from exc
+    if close.status != MonthlyClose.Status.DRAFT:
+        raise ValidationError(
+            {"monthly_close": "Los monederos solo se concilian con el cierre en borrador."}
+        )
+    profile = SettlementProfile.objects.filter(user=user, is_enabled=True).first()
+    if profile is None:
+        raise ValidationError({"settlement": "La liquidación no está activa."})
+    preview = compute_monthly_close_settlement(
+        user=user, fiscal_year=close.fiscal_year, month=close.month
+    )
+    rows = preview.get("wallet_sweep") or []
+    if not rows:
+        raise ValidationError({"wallet_sweep": "No hay efectivo personal que traspasar."})
+
+    accounts = {row.id: row for row in profile.accounts.select_related("asset")}
+    booking_date = date.fromisoformat(preview["period"]["end"])
+    created = []
+    for row in rows:
+        amount = Decimal(row["amount"])
+        personal, shared = accounts[row["account_id"]], accounts[row["to_account_id"]]
+        source, destination = (personal, shared) if amount > ZERO else (shared, personal)
+        ledger_transaction = create_quick_transaction(
+            user=user,
+            movement_type=LedgerTransaction.QuickEntryKind.TRANSFER,
+            booking_date=booking_date,
+            value_date=booking_date,
+            description=(
+                f"Conciliación de monederos {close.fiscal_year}-{close.month:02d}: "
+                f"{source.asset.name} → {destination.asset.name}"
+            ),
+            amount=abs(amount),
+            account=_ledger_account(account=source, user=user),
+            counterparty_account=_ledger_account(account=destination, user=user),
+            status=LedgerTransaction.Status.POSTED,
+            origin=LedgerTransaction.Origin.SYSTEM,
+            notes=f"Settlement wallet sweep for close #{close.id}",
+        )
+        SettlementWalletSweep.objects.create(
+            profile=profile, monthly_close=close, transaction=ledger_transaction
+        )
+        created.append(
+            {
+                "transaction_id": ledger_transaction.id,
+                "from_account_id": source.id,
+                "to_account_id": destination.id,
+                "amount": _money_string(abs(amount)),
+            }
+        )
+    return created

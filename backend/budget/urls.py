@@ -15,6 +15,7 @@ from .views_monthly_close import (
     MonthlyCloseSettlementApplyAllView,
     MonthlyCloseSettlementCandidatesView,
     MonthlyCloseSettlementRecommendationActionView,
+    MonthlyCloseSettlementWalletSweepView,
     MonthlyCloseView,
 )
 from .views_settlement import (
@@ -107,6 +108,11 @@ urlpatterns = [
         "monthly-closes/<int:pk>/settlement/apply/",
         MonthlyCloseSettlementApplyAllView.as_view(),
         name="monthly-close-settlement-apply-all",
+    ),
+    path(
+        "monthly-closes/<int:pk>/settlement/wallet-sweep/",
+        MonthlyCloseSettlementWalletSweepView.as_view(),
+        name="monthly-close-settlement-wallet-sweep",
     ),
     path(
         "monthly-closes/<int:pk>/settlement/recommendations/<int:recommendation_id>/candidates/",
