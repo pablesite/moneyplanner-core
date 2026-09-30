@@ -437,7 +437,8 @@ def net_contributed_within(
     sobre un mes que parecia ya gastado.
 
     Los movimientos de efectivo de contenedor quedan fuera porque no llevan posicion y no
-    se pueden atribuir a un ambito de titularidad.
+    se pueden atribuir a un ambito de titularidad. Un dividendo cobrado fuera tampoco es
+    retirar capital: descontarlo encogia el cupo del mes por haber cobrado.
     """
     wanted = set(position_ids)
     return sum(
@@ -446,6 +447,7 @@ def net_contributed_within(
             for flow in context.flows
             if flow.position_id in wanted
             and flow.external
+            and flow.kind != "income_distribution"
             and since <= flow.on_date <= until
             and (ownership_id is None or flow.ownership_id in (None, ownership_id))
         ),

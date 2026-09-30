@@ -94,6 +94,7 @@ from .valuations import (
     resolve_position_valuation,
     sync_ledger_valuations,
 )
+from .income_links import income_links, link_income, unlink_income
 from .imports import confirm_import, preview_import, serialize_batch, upload_csv
 from .operations import confirm_operation, operation_options, preview_operation
 
@@ -242,6 +243,28 @@ class PortfolioPositionViewSet(viewsets.ModelViewSet):
         position.asset.save(update_fields=["is_active", "updated_at"])
         position.save(update_fields=["status", "closed_on", "updated_at"])
         return Response(self.get_serializer(position).data)
+
+    @action(detail=True, methods=["get"], url_path="income-links")
+    def list_income_links(self, request, pk=None):
+        """Dividends and interest linked to the position, and those that could be."""
+        include_all = request.query_params.get("all") in {"1", "true"}
+        return Response(income_links(position=self.get_object(), include_all=include_all))
+
+    @action(detail=True, methods=["post"], url_path="income-links/link")
+    def link_income_movements(self, request, pk=None):
+        position = self.get_object()
+        link_income(
+            position=position,
+            transaction_ids=list(request.data.get("transaction_ids") or []),
+            operation_type=str(request.data.get("operation_type") or "dividend"),
+        )
+        return Response(income_links(position=position), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="income-links/unlink")
+    def unlink_income_movement(self, request, pk=None):
+        position = self.get_object()
+        unlink_income(position=position, transaction_id=request.data.get("transaction_id"))
+        return Response(income_links(position=position))
 
     @action(detail=True, methods=["post"], url_path="confirm-setup")
     def confirm_setup(self, request, pk=None):

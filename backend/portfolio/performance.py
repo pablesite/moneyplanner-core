@@ -21,6 +21,7 @@ from .models import (
     InstrumentPrice,
     Portfolio,
     PortfolioPosition,
+    PortfolioTrade,
     PositionValuation,
 )
 from .performance_math import (
@@ -505,6 +506,84 @@ def _load_legacy_flows(
     return rows
 
 
+def _load_linked_income_flows(
+    *,
+    positions: list[PortfolioPosition],
+    portfolio_account_ids: set[int],
+    start_date: date,
+    end_date: date,
+) -> list[FlowRecord]:
+    """Dividends and interest a position earned but that were paid outside the portfolio.
+
+    A stock can pay its dividends into a current account the portfolio does not hold, so
+    the ledger flows never see them: the position looked worse than it was. The link lives
+    in `PortfolioTrade`. The money leaves the portfolio as it arrives, so it is an external
+    outflow of the position (the result rises by what was cashed) and the gross dividend
+    is income, with any withholding booked alongside as cost. Rows touching a portfolio
+    account are skipped: the ledger flows already count them.
+    """
+    position_by_id = {position.id: position for position in positions}
+    trades = (
+        PortfolioTrade.objects.filter(
+            position_id__in=position_by_id,
+            operation_type__in=[
+                PortfolioTrade.OperationType.DIVIDEND,
+                PortfolioTrade.OperationType.INTEREST,
+            ],
+            ledger_transaction__status=cast(str, LedgerTransaction.Status.POSTED),
+            ledger_transaction__booking_date__gte=start_date,
+            ledger_transaction__booking_date__lte=end_date,
+        )
+        .select_related("ledger_transaction")
+        .prefetch_related("ledger_transaction__entries__account")
+        .order_by("ledger_transaction__booking_date", "id")
+    )
+    rows: list[FlowRecord] = []
+    for trade in trades:
+        transaction = trade.ledger_transaction
+        entries = list(transaction.entries.all())
+        if any(entry.account_id in portfolio_account_ids for entry in entries):
+            continue
+        income_entries = [
+            entry
+            for entry in entries
+            if entry.account.account_type == LedgerAccount.AccountType.INCOME
+        ]
+        if not income_entries:
+            continue
+        income = sum(
+            (
+                entry.amount if entry.side == LedgerEntry.Side.CREDIT else -entry.amount
+                for entry in income_entries
+            ),
+            ZERO,
+        )
+        cost = sum(
+            (
+                entry.amount if entry.side == LedgerEntry.Side.DEBIT else -entry.amount
+                for entry in entries
+                if entry.account.account_type == LedgerAccount.AccountType.EXPENSE
+            ),
+            ZERO,
+        )
+        rows.append(
+            FlowRecord(
+                trade.position_id,
+                transaction.booking_date,
+                -(income - cost),
+                income_entries[0].currency,
+                "income_distribution",
+                "ledger",
+                True,
+                position_external=True,
+                cost=cost,
+                income=income,
+                ownership_id=transaction.ownership_id,
+            )
+        )
+    return rows
+
+
 def load_performance_context(
     *, portfolio: Portfolio, start_date: date, end_date: date
 ) -> PerformanceContext:
@@ -546,11 +625,20 @@ def load_performance_context(
         start_date=start_date,
         end_date=end_date,
     )
-    flows = ledger_flows + _load_legacy_flows(
-        positions=positions,
-        ledger_covered_dates=ledger_covered_dates,
-        start_date=start_date,
-        end_date=end_date,
+    flows = (
+        ledger_flows
+        + _load_linked_income_flows(
+            positions=positions,
+            portfolio_account_ids=account_ids,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        + _load_legacy_flows(
+            positions=positions,
+            ledger_covered_dates=ledger_covered_dates,
+            start_date=start_date,
+            end_date=end_date,
+        )
     )
     currencies = {portfolio.base_currency, "USD"}
     currencies.update(position.asset.currency for position in positions)
