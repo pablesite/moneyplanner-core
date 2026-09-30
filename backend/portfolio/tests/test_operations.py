@@ -378,6 +378,32 @@ class PortfolioOperationApiTests(APITestCase):
         self.assertEqual(Decimal(row["native_value"]), Decimal("300"))
         self.assertNotEqual(row["value_status"], "missing")
 
+    def test_opening_zero_does_not_swallow_a_same_day_contribution(self):
+        PositionValuation.objects.create(
+            position=self.position,
+            valuation_date=self.position.opened_on,
+            value=Decimal("0"),
+            currency="EUR",
+            note="Valor inicial cero declarado al crear el activo.",
+        )
+        payload = self.operation_payload(amount="300.00", fee="0", booking_date="2025-01-01")
+        preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")
+        payload["preview_token"] = preview.data["preview_token"]
+        confirmed = self.client.post("/api/portfolio/operations/confirm/", payload, format="json")
+        self.assertEqual(confirmed.status_code, status.HTTP_201_CREATED, confirmed.data)
+
+        resolved = self.client.get(f"/api/portfolio/positions/{self.position.id}/valuation/")
+        self.assertEqual(Decimal(resolved.data["value"]), Decimal("300"))
+        self.assertEqual(resolved.data["status"], "at_cost")
+
+        response = self.client.get(
+            "/api/portfolio/positions/performance/",
+            {"date_from": "2025-01-01", "date_to": "2025-12-31"},
+        )
+        row = next(r for r in response.data["results"] if r["position_id"] == self.position.id)
+        self.assertEqual(Decimal(row["native_value"]), Decimal("300"))
+        self.assertEqual(Decimal(row["performance"]["monetary_result"]), Decimal("0"))
+
     def test_period_starting_before_a_position_opened_counts_zero_not_unknown(self):
         payload = self.operation_payload(amount="100.00", fee="0")
         preview = self.client.post("/api/portfolio/operations/preview/", payload, format="json")

@@ -132,6 +132,22 @@ def ensure_initial_zero_valuation(*, position: PortfolioPosition) -> bool:
     return created
 
 
+def is_opening_zero(*, position: PortfolioPosition, valuation: PositionValuation) -> bool:
+    """Whether a valuation is the zero declared when the position was opened.
+
+    That zero describes the position before its first flow, but a same-day valuation is
+    anchored on the end-of-day balance, which already holds the opening contribution: the
+    anchor then subtracts it for good. On real data a crowdlending position lost its first
+    300 EUR and read -91.50 EUR of result instead of +208.50 EUR. Once the ledger has
+    movement, the balance is the better carrying value, so both read paths skip this row.
+    """
+    return (
+        valuation.source == PositionValuation.Source.MANUAL
+        and valuation.value == 0
+        and valuation.valuation_date == position.opened_on
+    )
+
+
 def sync_ledger_valuations(*, position: PortfolioPosition) -> int:
     """Rebuild the derived valuations of a position from its current ledger revaluations.
 
@@ -304,6 +320,12 @@ def resolve_position_valuation(
                 "close": str(close),
             },
         }
+    if (
+        total_valuation is not None
+        and is_opening_zero(position=position, valuation=total_valuation)
+        and _ledger_carrying_value(position=position, as_of_date=resolved_date) is not None
+    ):
+        total_valuation = None
     if total_valuation is not None:
         carrying = _ledger_carrying_value(position=position, as_of_date=resolved_date)
         if (

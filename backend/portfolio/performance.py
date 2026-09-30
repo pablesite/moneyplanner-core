@@ -38,7 +38,7 @@ from .performance_math import (
 )
 from .lots import OwnershipPockets, UnitMovement, build_pockets, member_share_at
 from .composition import class_compositions
-from .valuations import stale_days_for_position
+from .valuations import is_opening_zero, stale_days_for_position
 
 ZERO = Decimal("0")
 # La categoria contable que marca un gasto como coste de invertir. Cualquier otra cosa
@@ -809,6 +809,10 @@ def resolve_preloaded_value(
             observed_on == target,
             "price:fx_rate" if fresher is not None else f"price:{price.source}",
         )
+    if total is not None and is_opening_zero(position=position, valuation=total):
+        carrying = _carrying_value_at(context=context, position=position, target=target)
+        if carrying is not None:
+            return carrying
     if total is not None:
         divested = _divested_at(
             context=context,
