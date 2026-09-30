@@ -251,15 +251,20 @@ class SettlementApiTests(APITestCase):
         )
         url = "/api/budget/settlement/accounts/"
 
+        initial = self.client.get("/api/budget/settlement/configuration/")
+        self.assertEqual(initial.data["joinable_asset_ids"], [])
         before_baseline = self.client.post(url, {"asset_id": other.id}, format="json")
         self.assertEqual(before_baseline.status_code, status.HTTP_400_BAD_REQUEST)
 
         self.client.post(
             "/api/budget/settlement/activate/", {"start_date": "2026-03-02"}, format="json"
         )
+        configuration = self.client.get("/api/budget/settlement/configuration/")
+        self.assertEqual(configuration.data["joinable_asset_ids"], [other.id])
         response = self.client.post(url, {"asset_id": other.id}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["joinable_asset_ids"], [])
         added = next(row for row in response.data["accounts"] if row["asset_id"] == other.id)
         self.assertEqual(added["role"], SettlementAccount.Role.ALLOCATION_DESTINATION)
         self.assertEqual(

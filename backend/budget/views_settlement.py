@@ -21,6 +21,7 @@ from .services_settlement import (
     can_rebaseline_settlement_profile,
     disable_settlement_profile,
     get_or_create_settlement_profile,
+    joinable_settlement_asset_ids,
     replace_settlement_configuration,
     rebaseline_settlement_profile,
     set_operating_reserve_adjustment,
@@ -38,6 +39,7 @@ def serialize_settlement_configuration(profile) -> dict[str, object]:
         "baseline_date": profile.activation_date,
         "start_date": start_date,
         "can_rebaseline": can_rebaseline_settlement_profile(profile=profile),
+        "joinable_asset_ids": joinable_settlement_asset_ids(user=profile.user, profile=profile),
         "base_currency": profile.base_currency,
         # Keep the JSON contract consistent with the other money values consumed by the UI.
         "operating_reserve_adjustment": str(profile.operating_reserve_adjustment),

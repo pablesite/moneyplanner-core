@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounts.services import get_base_currency_for_user
-from accounting.models import LedgerEntry, LedgerTransaction
+from accounting.models import LedgerAccount, LedgerEntry, LedgerTransaction
 from memberships.models import FamilyMember, Ownership, OwnershipLink
 from memberships.services_allocations import resolve_ownership_allocation
 from net_worth.models import Asset
@@ -979,6 +979,50 @@ def disable_settlement_profile(*, user) -> SettlementProfile:
     return profile
 
 
+def _participating_asset_ids(*, user, profile: SettlementProfile) -> set[int]:
+    """Assets the settlement already counts: configured, frozen in the last close or broker cash."""
+
+    last_ready = (
+        profile.snapshots.filter(status=SettlementSnapshot.Status.READY)
+        .order_by("-period_end", "-id")
+        .first()
+    )
+    return {
+        *profile.accounts.values_list("asset_id", flat=True),
+        *(
+            int(row["asset_id"])
+            for row in (last_ready.account_balances if last_ready is not None else [])
+            if row.get("asset_id") is not None
+        ),
+        *LedgerAccount.objects.filter(
+            user=user, portfolio_cash_link__isnull=False, asset_id__isnull=False
+        ).values_list("asset_id", flat=True),
+    }
+
+
+def joinable_settlement_asset_ids(*, user, profile: SettlementProfile) -> list[int]:
+    """Liquidity accounts that `add_settlement_account` would accept right now."""
+
+    if profile.activation_date is None or not profile.opening_balances.exists():
+        return []
+    owned_asset_ids = OwnershipLink.objects.filter(
+        user=user, target_type=OwnershipLink.TargetType.ASSET
+    ).values_list("target_id", flat=True)
+    return list(
+        Asset.objects.filter(
+            user=user,
+            is_active=True,
+            category=Asset.Category.CASH,
+            currency__iexact=profile.base_currency,
+            id__in=owned_asset_ids,
+        )
+        .exclude(subcategory=Asset.Subcategory.WALLET)
+        .exclude(id__in=_participating_asset_ids(user=user, profile=profile))
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+
+
 @transaction.atomic
 def add_settlement_account(*, user, asset_id: int) -> SettlementProfile:
     """Add a liquidity account to a settlement whose opening baseline already exists.
@@ -1005,16 +1049,7 @@ def add_settlement_account(*, user, asset_id: int) -> SettlementProfile:
         )
     if _ownership_for_asset(user=user, asset_id=asset.id) is None:
         raise ValidationError({"asset_id": f"Asigna titularidad a {asset.name}."})
-    last_ready = (
-        profile.snapshots.filter(status=SettlementSnapshot.Status.READY)
-        .order_by("-period_end", "-id")
-        .first()
-    )
-    already_participates = profile.accounts.filter(asset=asset).exists() or any(
-        row.get("asset_id") == asset.id
-        for row in (last_ready.account_balances if last_ready is not None else [])
-    )
-    if already_participates:
+    if asset.id in _participating_asset_ids(user=user, profile=profile):
         raise ValidationError({"asset_id": f"{asset.name} ya participa en la liquidacion."})
 
     account = SettlementAccount.objects.create(
