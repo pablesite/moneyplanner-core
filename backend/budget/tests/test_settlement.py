@@ -242,6 +242,41 @@ class SettlementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("resultados validos", str(response.data).lower())
 
+    def test_active_settlement_accepts_a_new_liquidity_account(self):
+        self._configure()
+        self._shared_expense()
+        other = self._asset("Otra compartida", Decimal("40.00"), self.shared)
+        wallet = self._asset(
+            "Monedero", Decimal("10.00"), self.shared, subcategory=Asset.Subcategory.WALLET
+        )
+        url = "/api/budget/settlement/accounts/"
+
+        before_baseline = self.client.post(url, {"asset_id": other.id}, format="json")
+        self.assertEqual(before_baseline.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.client.post(
+            "/api/budget/settlement/activate/", {"start_date": "2026-03-02"}, format="json"
+        )
+        response = self.client.post(url, {"asset_id": other.id}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        added = next(row for row in response.data["accounts"] if row["asset_id"] == other.id)
+        self.assertEqual(added["role"], SettlementAccount.Role.ALLOCATION_DESTINATION)
+        self.assertEqual(
+            list(
+                SettlementOpeningBalance.objects.filter(account__asset=other)
+                .order_by("member_id")
+                .values_list("amount", flat=True)
+            ),
+            [Decimal("20.00000000"), Decimal("20.00000000")],
+        )
+        repeated = self.client.post(url, {"asset_id": other.id}, format="json")
+        self.assertEqual(repeated.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ya participa", str(repeated.data))
+        rejected_wallet = self.client.post(url, {"asset_id": wallet.id}, format="json")
+        self.assertEqual(rejected_wallet.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(SettlementAccount.objects.filter(profile__user=self.user).count(), 4)
+
     def test_readiness_does_not_require_ownership_on_aggregate_income_budget(self):
         self._configure()
         self._shared_expense()

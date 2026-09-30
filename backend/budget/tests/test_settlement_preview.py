@@ -18,6 +18,7 @@ from budget.models import (
     SettlementWalletNormalization,
 )
 from budget.services_monthly_close import finalize_monthly_close, reopen_monthly_close
+from budget.services_settlement import add_settlement_account
 from budget.services_settlement_preview import (
     _allocate,
     _month_end,
@@ -180,11 +181,11 @@ class SettlementPreviewTests(APITestCase):
         )
         return tx
 
-    def _transfer(self, *, amount, source, destination):
+    def _transfer(self, *, amount, source, destination, booking_date=date(2026, 3, 20)):
         tx = LedgerTransaction.objects.create(
             user=self.user,
-            booking_date=date(2026, 3, 20),
-            value_date=date(2026, 3, 20),
+            booking_date=booking_date,
+            value_date=booking_date,
             description="Transferencia interna",
             status=LedgerTransaction.Status.POSTED,
             quick_entry_kind=LedgerTransaction.QuickEntryKind.TRANSFER,
@@ -1075,6 +1076,53 @@ class SettlementPreviewTests(APITestCase):
         positions = {row["name"]: row for row in result["accounts"]}
         self.assertEqual(positions["Liquidez bróker"]["role"], "investment_cash")
         self.assertEqual(positions["Liquidez bróker"]["observed_close"], "100.00")
+
+    def test_account_added_after_a_close_brings_its_transfers_inside_the_perimeter(self):
+        self._ordinary_reserve()
+        march = MonthlyClose.objects.create(user=self.user, fiscal_year=2026, month=3)
+        finalize_monthly_close(monthly_close=march, user=self.user)
+        other, other_ledger = self._account_asset("Otra compartida", Decimal("0"), self.shared)
+        other.tracking_mode = Asset.TrackingMode.ACCOUNTING
+        other.save(update_fields=["tracking_mode"])
+        self._transfer(
+            amount=Decimal("100"),
+            source=self.operating_ledger,
+            destination=other_ledger,
+            booking_date=date(2026, 4, 10),
+        )
+        self.operating.amount = Decimal("900")
+        self.operating.save(update_fields=["amount"])
+
+        outside = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+        self.assertIn(
+            "transaction_outside_perimeter",
+            [row["code"] for row in outside["quality"]["blockers"]],
+        )
+
+        add_settlement_account(user=self.user, asset_id=other.id)
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        row = next(row for row in result["accounts"] if row["name"] == "Otra compartida")
+        self.assertEqual(row["role"], "allocation_destination")
+        self.assertEqual((row["opening"], row["observed_close"]), ("0.00", "100.00"))
+        self.assertEqual(result["reconciliation"]["economic_total"], "1300.00")
+
+    def test_account_added_after_a_close_joins_with_the_balance_it_held_on_it(self):
+        self._ordinary_reserve()
+        march = MonthlyClose.objects.create(user=self.user, fiscal_year=2026, month=3)
+        finalize_monthly_close(monthly_close=march, user=self.user)
+        other, _other_ledger = self._account_asset("Otra compartida", Decimal("40"), self.shared)
+
+        add_settlement_account(user=self.user, asset_id=other.id)
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+
+        self.assertEqual(result["status"], "ready", result["quality"])
+        row = next(row for row in result["accounts"] if row["name"] == "Otra compartida")
+        self.assertEqual(
+            [share["amount"] for share in row["closing_by_member"]], ["20.00", "20.00"]
+        )
+        self.assertEqual(result["reconciliation"]["economic_total"], "1340.00")
 
     def test_not_ready_settlement_does_not_block_finalize(self):
         self.operating_config.delete()

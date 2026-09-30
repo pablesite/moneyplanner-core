@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers_settlement import (
+    SettlementAccountAddSerializer,
     SettlementActivationSerializer,
     SettlementConfigurationWriteSerializer,
     SettlementRebaselineSerializer,
@@ -15,6 +16,7 @@ from .serializers_settlement import (
 )
 from .services_settlement import (
     activate_settlement_profile,
+    add_settlement_account,
     build_settlement_readiness,
     can_rebaseline_settlement_profile,
     disable_settlement_profile,
@@ -116,6 +118,19 @@ class SettlementConfigurationView(APIView):
         profile = replace_settlement_configuration(
             user=request.user,
             payload=serializer.validated_data,
+        )
+        return Response(serialize_settlement_configuration(profile))
+
+
+class SettlementAccountAddView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SettlementAccountAddSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = add_settlement_account(
+            user=request.user,
+            asset_id=serializer.validated_data["asset_id"],
         )
         return Response(serialize_settlement_configuration(profile))
 

@@ -40,6 +40,10 @@ class SettlementConfigurationWriteSerializer(serializers.Serializer):
     )
 
 
+class SettlementAccountAddSerializer(serializers.Serializer):
+    asset_id = serializers.IntegerField(min_value=1)
+
+
 class SettlementReserveAdjustmentSerializer(serializers.Serializer):
     operating_reserve_adjustment = serializers.DecimalField(max_digits=14, decimal_places=2)
 

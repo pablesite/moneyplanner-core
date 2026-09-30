@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
-from typing import cast
+from typing import Sequence, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -470,7 +470,7 @@ def _add_credit_card_opening(
 
 def _add_investment_opening(
     *,
-    positions: list[SettlementInvestmentPosition],
+    positions: Sequence[SettlementInvestmentPosition | SettlementAccount],
     baseline_date: date,
     allocation_cache,
     account_ownerships: dict[int, Ownership],
@@ -1232,6 +1232,18 @@ def compute_monthly_close_settlement(*, user, fiscal_year: int, month: int) -> d
         _add_investment_opening(
             positions=investments,
             baseline_date=profile.activation_date,
+            allocation_cache=allocation_cache,
+            account_ownerships=account_ownerships,
+            account_members=account_members,
+            member_totals=member_totals,
+            blockers=blockers,
+        )
+    if previous is not None:
+        # An account configured after the last close joins with the balance it held on it.
+        frozen_account_ids = {int(row["account_id"]) for row in previous.account_balances}
+        _add_investment_opening(
+            positions=[row for row in account_by_id.values() if row.id not in frozen_account_ids],
+            baseline_date=previous.period_end,
             allocation_cache=allocation_cache,
             account_ownerships=account_ownerships,
             account_members=account_members,

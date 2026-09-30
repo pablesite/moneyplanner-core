@@ -771,6 +771,52 @@ def build_settlement_readiness(
     }
 
 
+def _capture_account_opening(
+    *,
+    user,
+    profile: SettlementProfile,
+    account: SettlementAccount,
+    baseline_date: date,
+    start_date: date,
+) -> None:
+    modeled_balance = get_effective_asset_amount(asset=account.asset, as_of_date=baseline_date)
+    account.modeled_balance_at_activation = modeled_balance
+    account.save(update_fields=["modeled_balance_at_activation", "updated_at"])
+    physical_balance = (
+        Decimal(account.accepted_physical_balance)
+        if account.role == SettlementAccount.Role.PHYSICAL_CASH
+        else Decimal(modeled_balance)
+    )
+    ownership = _ownership_for_asset(user=user, asset_id=account.asset_id)
+    if ownership is None:
+        raise ValidationError({"accounts": "Una cuenta participante no tiene ownership."})
+    vector, _ = _allocation_vector(
+        ownership=ownership,
+        fiscal_year=start_date.year,
+        month=start_date.month,
+    )
+    if vector is None:
+        raise ValidationError({"accounts": "No se puede resolver el ownership de una cuenta."})
+    allocated = ZERO
+    vector_rows = sorted(vector.items())
+    for index, (member_id, percent) in enumerate(vector_rows):
+        amount = (
+            physical_balance - allocated
+            if index == len(vector_rows) - 1
+            else (physical_balance * percent / Decimal("100")).quantize(
+                AMOUNT_STEP, rounding=ROUND_HALF_UP
+            )
+        )
+        allocated += amount
+        SettlementOpeningBalance.objects.create(
+            profile=profile,
+            account=account,
+            member_id=member_id,
+            amount=amount,
+            currency=account.currency,
+        )
+
+
 def _capture_opening_baseline(
     *, user, profile: SettlementProfile, baseline_date: date, start_date: date
 ) -> SettlementProfile:
@@ -794,42 +840,13 @@ def _capture_opening_baseline(
 
     profile.opening_balances.all().delete()
     for account in profile.accounts.select_related("asset").order_by("id"):
-        modeled_balance = get_effective_asset_amount(asset=account.asset, as_of_date=baseline_date)
-        account.modeled_balance_at_activation = modeled_balance
-        account.save(update_fields=["modeled_balance_at_activation", "updated_at"])
-        physical_balance = (
-            Decimal(account.accepted_physical_balance)
-            if account.role == SettlementAccount.Role.PHYSICAL_CASH
-            else Decimal(modeled_balance)
+        _capture_account_opening(
+            user=user,
+            profile=profile,
+            account=account,
+            baseline_date=baseline_date,
+            start_date=start_date,
         )
-        ownership = _ownership_for_asset(user=user, asset_id=account.asset_id)
-        if ownership is None:
-            raise ValidationError({"accounts": "Una cuenta participante no tiene ownership."})
-        vector, _ = _allocation_vector(
-            ownership=ownership,
-            fiscal_year=start_date.year,
-            month=start_date.month,
-        )
-        if vector is None:
-            raise ValidationError({"accounts": "No se puede resolver el ownership de una cuenta."})
-        allocated = ZERO
-        vector_rows = sorted(vector.items())
-        for index, (member_id, percent) in enumerate(vector_rows):
-            amount = (
-                physical_balance - allocated
-                if index == len(vector_rows) - 1
-                else (physical_balance * percent / Decimal("100")).quantize(
-                    AMOUNT_STEP, rounding=ROUND_HALF_UP
-                )
-            )
-            allocated += amount
-            SettlementOpeningBalance.objects.create(
-                profile=profile,
-                account=account,
-                member_id=member_id,
-                amount=amount,
-                currency=account.currency,
-            )
 
     profile.is_enabled = True
     profile.activation_date = baseline_date
@@ -959,4 +976,58 @@ def disable_settlement_profile(*, user) -> SettlementProfile:
     profile = get_or_create_settlement_profile(user=user)
     profile.is_enabled = False
     profile.save(update_fields=["is_enabled", "updated_at"])
+    return profile
+
+
+@transaction.atomic
+def add_settlement_account(*, user, asset_id: int) -> SettlementProfile:
+    """Add a liquidity account to a settlement whose opening baseline already exists.
+
+    The account joins as an allocation destination: it is counted and keeps its balance, but it
+    never changes how the operating reserve or the personal destinations are routed.
+    """
+
+    existing_profile = get_or_create_settlement_profile(user=user)
+    profile = SettlementProfile.objects.select_for_update().get(pk=existing_profile.pk)
+    if profile.activation_date is None or not profile.opening_balances.exists():
+        raise ValidationError(
+            {"detail": "La liquidacion aun no tiene saldo de apertura: usa la configuracion."}
+        )
+    asset = Asset.objects.filter(user=user, id=asset_id).first()
+    if asset is None:
+        raise ValidationError({"asset_id": "La cuenta no pertenece al usuario."})
+    if asset.category != Asset.Category.CASH or asset.subcategory == Asset.Subcategory.WALLET:
+        raise ValidationError({"asset_id": f"{asset.name} no es una cuenta de liquidez."})
+    currency = asset.currency.strip().upper()
+    if currency != profile.base_currency:
+        raise ValidationError(
+            {"asset_id": f"{asset.name} no usa la moneda base de la liquidacion."}
+        )
+    if _ownership_for_asset(user=user, asset_id=asset.id) is None:
+        raise ValidationError({"asset_id": f"Asigna titularidad a {asset.name}."})
+    last_ready = (
+        profile.snapshots.filter(status=SettlementSnapshot.Status.READY)
+        .order_by("-period_end", "-id")
+        .first()
+    )
+    already_participates = profile.accounts.filter(asset=asset).exists() or any(
+        row.get("asset_id") == asset.id
+        for row in (last_ready.account_balances if last_ready is not None else [])
+    )
+    if already_participates:
+        raise ValidationError({"asset_id": f"{asset.name} ya participa en la liquidacion."})
+
+    account = SettlementAccount.objects.create(
+        profile=profile,
+        asset=asset,
+        role=SettlementAccount.Role.ALLOCATION_DESTINATION,
+        currency=currency,
+    )
+    _capture_account_opening(
+        user=user,
+        profile=profile,
+        account=account,
+        baseline_date=profile.activation_date,
+        start_date=profile.activation_date + timedelta(days=1),
+    )
     return profile

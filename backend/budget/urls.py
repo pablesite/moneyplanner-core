@@ -18,6 +18,7 @@ from .views_monthly_close import (
     MonthlyCloseView,
 )
 from .views_settlement import (
+    SettlementAccountAddView,
     SettlementActivateView,
     SettlementConfigurationView,
     SettlementDisableView,
@@ -46,6 +47,11 @@ urlpatterns = [
         "settlement/configuration/",
         SettlementConfigurationView.as_view(),
         name="settlement-configuration",
+    ),
+    path(
+        "settlement/accounts/",
+        SettlementAccountAddView.as_view(),
+        name="settlement-account-add",
     ),
     path(
         "settlement/readiness/",

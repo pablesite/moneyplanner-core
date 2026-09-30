@@ -110,6 +110,11 @@ Describe the current architecture of `MoneyPlanner Core` as a self-contained ope
    A wallet baseline uses accepted physical cash while preserving its modeled balance and historical
    movements for audit. A different start date is never ignored silently: it requires an explicit
    rebaseline, which is rejected once a ready settlement snapshot exists.
+   The one change an existing baseline accepts is additive: a base-currency liquidity account (not
+   a wallet) with ownership can join as an allocation destination. It gets its own opening rows on
+   the activation baseline and, when a ready snapshot already exists, the next close opens it with
+   the balance it held at that snapshot's period end. It never changes reserve or personal routing
+   and cannot be removed afterwards.
 7. Opening adjustments are signed member/account entries that must sum exactly zero. They carry
    prior fictitious wallet compensations into the economic baseline without representing liquidity.
 8. Readiness accepts an exact `balance_date` for activation previews and returns one
