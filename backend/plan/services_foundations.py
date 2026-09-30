@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from budget.models import AnnualExpenseEntry
+from budget.services import planned_expense_monthly_distribution
 from net_worth.models import Asset, Liability
 from net_worth.services import get_effective_asset_amount, get_effective_liability_amount
 
 from .models import FinancialPlan
-from .services_projection import planned_contribution_amount
+from .services_projection import planned_contribution_amount, temporary_commitment_schedule
 from .services_quality import DataQualityService
 from .services_inputs import (
     annual_expense_entries,
@@ -176,8 +178,88 @@ def structural_operating_expense(plan: FinancialPlan) -> Decimal:
     return expense_buckets(annual_expense_entries(plan)).operating
 
 
+def _commitment_window(fiscal_year: int, today: date) -> list[int]:
+    """Months of the fiscal year that still lie ahead, as the projection reads them.
+
+    From next month on: the current month is usually settled already. December has
+    nothing ahead in the year, so it falls back to itself rather than to nothing.
+    """
+    if fiscal_year != today.year:
+        return list(range(1, 13))
+    return list(range(today.month + 1, 13)) or [12]
+
+
+def _commitment_true_ends(plan: FinancialPlan, groups: set[str]) -> dict[str, tuple]:
+    """Last month of each commitment across fiscal years.
+
+    System commitments come sliced per year, so the row of this year ends in December
+    even when the loan behind it runs for decades: read that way, a 30-year mortgage
+    looked like it vanished next January.
+    """
+    ends: dict[str, tuple] = {}
+    rows = AnnualExpenseEntry.objects.filter(
+        user=plan.user,
+        is_active=True,
+        cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        event_group__in=groups,
+    ).values_list("event_group", "term_end_year", "term_end_month")
+    for group, end_year, end_month in rows:
+        key = (end_year or 9999, end_month or 12)
+        if group not in ends or key > ends[group]:
+            ends[group] = key
+    return ends
+
+
+def active_temporary_commitments(
+    plan: FinancialPlan, today: date | None = None
+) -> list[dict[str, Any]]:
+    """Temporary commitments still running, each at its current monthly instalment.
+
+    Dividing the whole fiscal year by twelve kept a commitment paid off in September
+    weighing on the monthly flow until December, and spread a two-month instalment
+    over twelve. Only the months ahead count, averaged over the months each
+    commitment actually runs in them. `annual` is that instalment times twelve, so it
+    adds up with the rest of the annual cash-flow figures.
+    """
+    fiscal_year = plan_fiscal_year(plan)
+    window = _commitment_window(fiscal_year, today or date.today())
+    rows = list(
+        annual_expense_entries(plan).filter(
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
+        )
+    )
+    true_ends = _commitment_true_ends(plan, {row.event_group for row in rows if row.event_group})
+    active = []
+    for row in rows:
+        distribution = planned_expense_monthly_distribution(entry=row, fiscal_year=fiscal_year)
+        amounts = [
+            distribution[month] for month in window if distribution.get(month, Decimal("0")) > 0
+        ]
+        if not amounts:
+            continue
+        monthly = sum(amounts, Decimal("0")) / Decimal(len(amounts))
+        end = true_ends.get(row.event_group) if row.event_group else None
+        end_year, end_month = (
+            (None if end[0] == 9999 else end[0], end[1])
+            if end is not None
+            else (row.term_end_year, row.term_end_month)
+        )
+        active.append(
+            {
+                "name": row.name,
+                "annual": monthly * Decimal("12"),
+                "end_year": end_year,
+                "end_month": end_month,
+            }
+        )
+    return active
+
+
 def temporary_commitment_expense(plan: FinancialPlan) -> Decimal:
-    return expense_buckets(annual_expense_entries(plan)).temporary_commitment
+    return sum(
+        (row["annual"] for row in active_temporary_commitments(plan)),
+        Decimal("0"),
+    )
 
 
 def committed_recovery_year(
@@ -187,42 +269,41 @@ def committed_recovery_year(
     a ser >= 0 según van venciendo los compromisos temporales.
 
     En euros de hoy, sin inflación: es una clasificación del esfuerzo, no una
-    proyección. Un compromiso con `term_end_year = Y` sigue activo durante `Y` y
-    desaparece en `Y+1`; los de `term_end_year` nulo se tratan como indefinidos.
-    Devuelve `None` si la base operativa no cubre lo permanente (nunca recupera
-    estructuralmente) o si no recupera dentro del horizonte.
+    proyección. El año en curso se mide con los compromisos vigentes; los siguientes,
+    con lo que el presupuesto ya tiene previsto para cada uno, incluidas las cuotas de
+    una Decisión financiada: la hipoteca de una compra sigue pesando después de que
+    venza la entrada. Devuelve `None` si la base operativa no cubre lo permanente
+    (nunca recupera estructuralmente) o si no recupera dentro del horizonte.
     """
     if operating_surplus < 0:
         return None
-    commitments = list(
-        annual_expense_entries(plan)
-        .filter(cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT)
-        .values_list("amount_annual", "term_end_year")
-    )
-    for year in range(start_year, start_year + 21):
-        active = sum(
-            (Decimal(amount) for amount, end in commitments if end is None or end >= year),
-            Decimal("0"),
+    if operating_surplus - temporary_commitment_expense(plan) >= 0:
+        return start_year
+    horizon = start_year + 20
+    by_year = {
+        int(row["year"]): Decimal(str(row["amount"]))
+        for row in temporary_commitment_schedule(
+            plan=plan, start_year=start_year, end_year=horizon, excluded_event_groups=set()
         )
-        if operating_surplus - active >= 0:
+    }
+    for year in range(start_year + 1, horizon + 1):
+        if operating_surplus - by_year.get(year, Decimal("0")) >= 0:
             return year
     return None
 
 
 def temporary_commitment_breakdown(plan: FinancialPlan) -> list[dict[str, Any]]:
-    """Compromisos temporales con su importe y vencimiento, del más próximo al más
-    lejano. Alimenta la UI de "esfuerzo temporal" (para ver cuándo se libera cada uno)."""
-    rows = annual_expense_entries(plan).filter(
-        cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT
-    )
+    """Compromisos vigentes con su importe anualizado y su vencimiento real, del más
+    próximo al más lejano. Alimenta la UI de "esfuerzo temporal" (para ver cuándo se
+    libera cada uno) y suma exactamente `temporary_commitment_expense`."""
     breakdown = [
         {
-            "name": row.name,
-            "amount": money(Decimal(row.amount_annual)),
-            "end_year": row.term_end_year,
-            "end_month": row.term_end_month,
+            "name": row["name"],
+            "amount": money(row["annual"]),
+            "end_year": row["end_year"],
+            "end_month": row["end_month"],
         }
-        for row in rows
+        for row in active_temporary_commitments(plan)
     ]
     # Sin fin conocido va al final; dentro del año, por mes.
     breakdown.sort(

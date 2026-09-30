@@ -33,7 +33,13 @@ from plan.models import (
 )
 from plan.services_classification import AssetClassificationService
 from plan.services_findings import FindingService
-from plan.services_foundations import FoundationService, health_grade, health_status
+from plan.services_foundations import (
+    FoundationService,
+    active_temporary_commitments,
+    committed_recovery_year,
+    health_grade,
+    health_status,
+)
 from plan.services_quality import DataQualityService
 from plan.services_events import (
     close_plan_event,
@@ -636,6 +642,72 @@ class ProjectionInputCorrectnessTests(TestCase):
             if f.code == Finding.Code.NEGATIVE_CASH_FLOW
         )
         self.assertEqual(finding.severity, Finding.Severity.WARNING)
+
+    def _commitment(self, name, amount, fiscal_year, **extra):
+        return AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name=name,
+            category=AnnualExpenseEntry.Category.CONSUMPTION_EXPENSES,
+            subcategory="financial_commitments",
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            amount_annual=Decimal(amount),
+            fiscal_year=fiscal_year,
+            **extra,
+        )
+
+    def test_commitments_weigh_at_their_current_instalment(self):
+        """Lo ya pagado este año deja de pesar y una cuota de dos meses no se reparte
+        entre doce: el flujo mensual es el de ahora, no la media del ejercicio."""
+        year = plan_fiscal_year(self.plan)
+        self._commitment("Cuotas pagadas", "12000.00", year, term_end_year=year, term_end_month=9)
+        self._commitment(
+            "Financiación",
+            "2000.00",
+            year,
+            term_start_month=11,
+            term_end_year=year,
+            term_end_month=12,
+            is_system_generated=True,
+            event_group="plan_event:9",
+        )
+        self._commitment(
+            "Financiación",
+            "12000.00",
+            year + 1,
+            term_end_year=year + 30,
+            term_end_month=10,
+            is_system_generated=True,
+            event_group="plan_event:9",
+        )
+
+        active = active_temporary_commitments(self.plan, today=date(year, 9, 30))
+
+        self.assertEqual([row["name"] for row in active], ["Financiación"])
+        self.assertEqual(active[0]["annual"], Decimal("12000.00"))
+        # El vencimiento es el del préstamo, no el de la rebanada de este año.
+        self.assertEqual((active[0]["end_year"], active[0]["end_month"]), (year + 30, 10))
+
+    def test_recovery_year_counts_instalments_of_later_years(self):
+        """Una cuota que el presupuesto ya prevé para años siguientes retrasa la
+        recuperación aunque la línea de este año venza en diciembre."""
+        year = plan_fiscal_year(self.plan)
+        self._commitment("Entrada", "48000.00", year, term_end_year=year)
+        for offset, amount in ((1, "24000.00"), (2, "24000.00"), (3, "6000.00")):
+            self._commitment(
+                "Hipoteca",
+                amount,
+                year + offset,
+                term_end_year=year + offset,
+                is_system_generated=True,
+                event_group="plan_event:7",
+            )
+
+        recovery = committed_recovery_year(
+            plan=self.plan, operating_surplus=Decimal("18000.00"), start_year=year
+        )
+
+        self.assertEqual(recovery, year + 3)
 
     def test_committed_squeeze_structural_keeps_finding_critical(self):
         """Base operativa negativa (los gastos permanentes ya no caben): déficit
