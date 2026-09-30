@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.50.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.49.1...moneyplanner-core-v0.50.0) (2026-09-30)
+
+
+### Features
+
+* **plan:** overview names the month the capital is ready ([28b62a6](https://github.com/pablesite/moneyplanner-core/commit/28b62a63c9f2e81c92349bceb8b1b8083ad01dcc))
+* **portfolio:** count dividends paid outside the portfolio as position income ([8c1c451](https://github.com/pablesite/moneyplanner-core/commit/8c1c451be6758fe8a93c43afb0c07ada98d03857))
+* **settlement:** add a liquidity account to a settlement that is already active ([c20fe53](https://github.com/pablesite/moneyplanner-core/commit/c20fe53b6223cbef120b660ae9289ae054b040df))
+* **settlement:** list the accounts an active settlement can still add ([507d40a](https://github.com/pablesite/moneyplanner-core/commit/507d40adf04a2b892e4413c87e9db375ba120a16))
+* **settlement:** sweep personal wallets into the shared wallet at the close ([3a37d32](https://github.com/pablesite/moneyplanner-core/commit/3a37d320f620a944019e8871145baf52b482ec9f))
+
+
+### Bug Fixes
+
+* **plan:** cash flow counts only the commitments still running ([a36c9c6](https://github.com/pablesite/moneyplanner-core/commit/a36c9c6756ff47f2b4c09c6678682f07486b69ff))
+* **portfolio:** opening zero no longer swallows the first contribution ([bbc234d](https://github.com/pablesite/moneyplanner-core/commit/bbc234d996c654055046df5d4bd664bc72cf94e8))
+* **security:** harden core backend image ([50c3de5](https://github.com/pablesite/moneyplanner-core/commit/50c3de518793f52abcc8e0999d11140681744279))
+* **settlement:** keep member cents and new broker cash inside the close perimeter ([74b9d1c](https://github.com/pablesite/moneyplanner-core/commit/74b9d1c83a5b2a561681013cc3cb7bc6046237ab))
+
 ## [0.49.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.49.0...moneyplanner-core-v0.49.1) (2026-09-27)
 
 
